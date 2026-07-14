@@ -17,6 +17,8 @@ mod ceph_rocksdb_sst_inventory;
 mod ceph_rocksdb_sst_locator;
 mod ceph_rocksdb_sst_reader;
 mod ceph_rocksdb_sst_records;
+mod ceph_rocksdb_wal_inventory;
+mod ceph_rocksdb_wal_locator;
 mod context;
 mod emit;
 mod execute;

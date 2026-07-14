@@ -10,7 +10,8 @@ use super::tags::{
     COLUMN_FAMILY, COLUMN_FAMILY_ADD, COLUMN_FAMILY_DROP, COMPACT_CURSOR, COMPARATOR, DELETED_FILE,
     FILE_NUMBER_MASK, IN_ATOMIC_GROUP, LAST_SEQUENCE, LOG_NUMBER, MAX_COLUMN_FAMILY,
     MAX_SEQUENCE_NUMBER, MIN_LOG_NUMBER_TO_KEEP, NEW_FILE, NEW_FILE2, NEW_FILE3, NEW_FILE4,
-    NEXT_FILE_NUMBER, PREVIOUS_LOG_NUMBER, SAFE_IGNORE_MASK,
+    NEXT_FILE_NUMBER, PREVIOUS_LOG_NUMBER, SAFE_IGNORE_MASK, WAL_ADDITION, WAL_ADDITION2,
+    WAL_DELETION, WAL_DELETION2,
 };
 
 #[derive(Debug, Default)]
@@ -131,6 +132,9 @@ fn decode_tag(
             ensure_once(&mut seen.atomic_group, "atomic group")?;
             edit.atomic_group_remaining =
                 Some(cursor.read_varint_u32("atomic group remaining entries")?);
+        }
+        WAL_ADDITION | WAL_DELETION | WAL_ADDITION2 | WAL_DELETION2 => {
+            return Err(RocksDbWireError::UnsupportedTrackedWalEdit { tag });
         }
         _ if tag & SAFE_IGNORE_MASK != 0 => {
             let field = cursor.read_length_prefixed(

@@ -51,6 +51,14 @@ struct BluestoreOracle {
     rocksdb_log_number: u64,
     rocksdb_sst_data_block_count: u64,
     rocksdb_sst_entry_count: u64,
+    rocksdb_wal_number: u64,
+    rocksdb_wal_file_size: u64,
+    rocksdb_wal_record_count: u32,
+    rocksdb_wal_empty_batch_count: u32,
+    rocksdb_wal_mutation_count: u64,
+    rocksdb_wal_payload_bytes: u64,
+    rocksdb_wal_first_sequence: u64,
+    rocksdb_wal_last_sequence: u64,
     representative_sst: Option<RepresentativeSstOracle>,
 }
 
@@ -700,6 +708,65 @@ fn assert_rocksdb_inventory(
     assert_eq!(bluefs_sst_count as usize, oracle.rocksdb_live_sst_count);
     assert_eq!(missing_manifest_records, 0);
     assert_sst_structure_inventory(source_conn, data_source_id, oracle);
+    assert_wal_inventory(source_conn, data_source_id, oracle);
+}
+
+fn assert_wal_inventory(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &str,
+    oracle: &BluestoreOracle,
+) {
+    let actual: (u64, String, bool, u64, u32, u32, u64, u64, u64, u64) = source_conn
+        .query_row(
+            "SELECT w.wal_number, w.bluefs_path, w.post_manifest, w.file_size,
+                    w.logical_record_count, w.empty_batch_count, w.mutation_count,
+                    w.logical_payload_bytes, w.first_sequence, w.last_sequence
+             FROM ceph_rocksdb_wal_files w
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = w.inventory_id
+             WHERE m.data_source_id = ?1",
+            [data_source_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                ))
+            },
+        )
+        .expect("query RocksDB WAL inventory");
+    assert_eq!(
+        actual,
+        (
+            oracle.rocksdb_wal_number,
+            oracle.wal_path.to_string(),
+            false,
+            oracle.rocksdb_wal_file_size,
+            oracle.rocksdb_wal_record_count,
+            oracle.rocksdb_wal_empty_batch_count,
+            oracle.rocksdb_wal_mutation_count,
+            oracle.rocksdb_wal_payload_bytes,
+            oracle.rocksdb_wal_first_sequence,
+            oracle.rocksdb_wal_last_sequence,
+        )
+    );
+    let record_count: u32 = source_conn
+        .query_row(
+            "SELECT COUNT(*)
+             FROM ceph_rocksdb_wal_records r
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = r.inventory_id
+             WHERE m.data_source_id = ?1",
+            [data_source_id],
+            |row| row.get(0),
+        )
+        .expect("count RocksDB WAL logical records");
+    assert_eq!(record_count, oracle.rocksdb_wal_record_count);
 }
 
 fn assert_sst_structure_inventory(
@@ -932,6 +999,14 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_log_number: 127,
             rocksdb_sst_data_block_count: 9_994,
             rocksdb_sst_entry_count: 159_439,
+            rocksdb_wal_number: 142,
+            rocksdb_wal_file_size: 3_921_274,
+            rocksdb_wal_record_count: 3_710,
+            rocksdb_wal_empty_batch_count: 1_107,
+            rocksdb_wal_mutation_count: 9_338,
+            rocksdb_wal_payload_bytes: 3_894_471,
+            rocksdb_wal_first_sequence: 1_077_118,
+            rocksdb_wal_last_sequence: 1_086_455,
             representative_sst: Some(RepresentativeSstOracle {
                 file_number: 146,
                 data_block_count: 148,
@@ -962,6 +1037,14 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_log_number: 105,
             rocksdb_sst_data_block_count: 10_152,
             rocksdb_sst_entry_count: 160_791,
+            rocksdb_wal_number: 120,
+            rocksdb_wal_file_size: 4_142_839,
+            rocksdb_wal_record_count: 3_782,
+            rocksdb_wal_empty_batch_count: 1_084,
+            rocksdb_wal_mutation_count: 9_644,
+            rocksdb_wal_payload_bytes: 4_115_489,
+            rocksdb_wal_first_sequence: 1_052_659,
+            rocksdb_wal_last_sequence: 1_062_302,
             representative_sst: None,
         },
         "server03-disk02.e01" => BluestoreOracle {
@@ -982,6 +1065,14 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_log_number: 110,
             rocksdb_sst_data_block_count: 9_954,
             rocksdb_sst_entry_count: 158_744,
+            rocksdb_wal_number: 127,
+            rocksdb_wal_file_size: 4_145_432,
+            rocksdb_wal_record_count: 3_812,
+            rocksdb_wal_empty_batch_count: 1_112,
+            rocksdb_wal_mutation_count: 9_644,
+            rocksdb_wal_payload_bytes: 4_117_873,
+            rocksdb_wal_first_sequence: 1_061_240,
+            rocksdb_wal_last_sequence: 1_070_883,
             representative_sst: None,
         },
         _ => panic!(

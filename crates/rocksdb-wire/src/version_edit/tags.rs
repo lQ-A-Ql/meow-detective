@@ -16,6 +16,10 @@ pub(crate) const COLUMN_FAMILY_DROP: u32 = 202;
 pub(crate) const MAX_COLUMN_FAMILY: u32 = 203;
 pub(crate) const IN_ATOMIC_GROUP: u32 = 300;
 pub(crate) const SAFE_IGNORE_MASK: u32 = 1 << 13;
+pub(crate) const WAL_ADDITION: u32 = SAFE_IGNORE_MASK + 4;
+pub(crate) const WAL_DELETION: u32 = SAFE_IGNORE_MASK + 5;
+pub(crate) const WAL_ADDITION2: u32 = SAFE_IGNORE_MASK + 7;
+pub(crate) const WAL_DELETION2: u32 = SAFE_IGNORE_MASK + 8;
 
 pub(crate) const CUSTOM_TERMINATE: u32 = 1;
 pub(crate) const CUSTOM_NEED_COMPACTION: u32 = 2;

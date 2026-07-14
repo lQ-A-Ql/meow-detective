@@ -5,8 +5,9 @@
 > 后续成员，并在最终 cluster/job 中保存 ready/failed partial 计数。真实样本通过
 > `FORENSICS_PVE_CLUSTER_ROOT` opt-in；BlueStore label、BlueFS
 > superblock/layout、bounded transaction-log metadata replay，以及 RocksDB
-> CURRENT/IDENTITY/活动 MANIFEST control-plane inventory 与 live-SST 物理结构库存已完成。
-> WAL/latest-state、BlueStore onode/blob/value、RADOS/PG/object reconstruction、
+> CURRENT/IDENTITY/活动 MANIFEST control-plane inventory、live-SST 物理结构库存，
+> 以及 active WAL/WriteBatch metadata 恢复已完成。
+> RocksDB latest-state、BlueStore onode/blob/value、RADOS/PG/object reconstruction、
 > VM disk reconstruction 和跨节点语义分析仍保持 unsupported。
 >
 > 同轮结构债务从 17 个模块基线降至 0；另有 5 个
@@ -33,6 +34,7 @@
 | 2026-07-13 | Linux/Ceph | BlueStore / BlueFS Stage 3 | Metadata replay completed / content and object reconstruction unsupported | 三个真实 `disk02` 完成有界 BlueFS transaction replay，原子持久化 4 个事务、5 个目录及 44/49/42 个文件 metadata；保持 `ready_metadata` 和零普通文件行 | 后续为 RocksDB 内容解析、RADOS/PG/object 与 VM disk reconstruction |
 | 2026-07-13 | Linux/Ceph | BlueStore Stage 4 | RocksDB control-plane inventory completed / SST and object content unsupported | 三个真实 `disk02` 读取 CURRENT/IDENTITY/活动 MANIFEST，完成 39 个 VersionEdit、12 个 column family 和 35/40/33 个 live SST metadata 的确定性回放与原子持久化 | 后续为 SST/WAL 内容、BlueStore object key/value、RADOS/PG/RBD reconstruction |
 | 2026-07-14 | Linux/Ceph | BlueStore Stage 5 | Live-SST structure inventory completed / semantic reconstruction unsupported | 三个真实 `disk02` 的 35/40/33 个 live SST 全部完成 BlueFS identity、footer v5、XXH3、LZ4、properties、index、data-block/entry 计数和有界脱敏 key-space census，并与 OSD/BlueFS/MANIFEST 在 source DB 中原子持久化 | 后续为 WAL/latest-state、onode/blob/value、RADOS/PG/RBD/VM reconstruction |
+| 2026-07-14 | Linux/Ceph | BlueStore Stage 6.1 | WAL/WriteBatch metadata recovery completed / latest-state unsupported | 三个真实 `disk02` 完成 active WAL 定位、physical log/WriteBatch 解码和 source-local provenance 持久化；WAL 142/120/127 与独立 `ldb` oracle 闭合，六成员串行门禁通过 | 后续为 SST entry stream、RocksDB latest-state reducer、onode/blob/value 与 RADOS/RBD/VM reconstruction |
 
 ## 代码里程碑
 
@@ -57,7 +59,7 @@
 |---|---|---|---|
 | `D:\獬豸杯\检材2.E01` + `D:\獬豸杯\检材3.E01` | Windows/Linux 双顺序串行导入、独立 source DB、分区、文件树、预览、分析 ID 隔离 | 通过，Windows -> Linux 96.92s；Linux -> Windows 94.63s | `docs/real-sample-regression/2026-07-11-backend-refactor-stage2.md` |
 | `D:\獬豸杯\检材3.E01` | LVM direct LV -> XFS -> 文件树/预览/Linux artifacts | 通过私有 Stage 0 baseline | `docs/real-sample-regression/2026-07-05-linux-stage0-jiancai3.md` |
-| `E:\pangushi\服务器` | 6 成员发现、PVE root EXT4、LVM/Ceph 边界 | 宿主文件系统通过；三个 BlueStore OSD 完成 BlueFS metadata replay、RocksDB control-plane replay 与 35/40/33 live-SST 结构库存；WAL/latest-state 和对象重建 unsupported | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage5.md` |
+| `E:\pangushi\服务器` | 6 成员发现、PVE root EXT4、LVM/Ceph 边界 | 宿主文件系统通过；三个 BlueStore OSD 完成 BlueFS metadata replay、RocksDB control-plane、35/40/33 live-SST 结构库存及 WAL 142/120/127 metadata 恢复；latest-state 和对象重建 unsupported | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage6-wal.md` |
 
 样本路径只用于本地 opt-in 回归，不得进入生产逻辑。
 
@@ -68,7 +70,7 @@
 - `fs-ext4` 32 项单元/文档测试通过，`fs-lvm` 75 项测试通过。
 - 代表 PVE 宿主导入结果为 `files=56471`、`dirs=5931`、`totalBytes=5250350224`。
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
-- BlueStore label、BlueFS superblock/layout、bounded transaction-log metadata replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane replay，以及 live-SST 物理结构库存已完成；WAL/latest-state、BlueStore onode/blob/value、RADOS/PG/object reconstruction、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
+- BlueStore label、BlueFS superblock/layout、bounded transaction-log metadata replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane replay、live-SST 物理结构库存，以及 active WAL/WriteBatch metadata 恢复已完成；RocksDB latest-state、BlueStore onode/blob/value、RADOS/PG/object reconstruction、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
 - Stage 7 后续清理事实：模块 baseline 0 行、正式临时例外 5 行、函数 baseline 9 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 

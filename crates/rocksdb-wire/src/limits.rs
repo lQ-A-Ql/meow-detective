@@ -18,6 +18,27 @@ impl Default for LogDecodeLimits {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WriteBatchLimits {
+    pub max_batch_bytes: usize,
+    pub max_mutations: usize,
+    pub max_auxiliary_records: usize,
+    pub max_key_bytes: usize,
+    pub max_value_bytes: usize,
+}
+
+impl Default for WriteBatchLimits {
+    fn default() -> Self {
+        Self {
+            max_batch_bytes: 16 * MIB,
+            max_mutations: 1_000_000,
+            max_auxiliary_records: 100_000,
+            max_key_bytes: MIB,
+            max_value_bytes: 64 * MIB,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VersionEditLimits {
     pub max_edit_bytes: usize,
     pub max_tags: usize,

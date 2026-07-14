@@ -6,6 +6,7 @@ use rusqlite::{params, Connection};
 use super::ceph_bluefs_repo::{self, CephBluefsAggregate, CephBluefsSuperblockRecord};
 use super::ceph_rocksdb_repo::{self, CephRocksdbAggregate};
 use super::ceph_rocksdb_sst_repo::{self, CephRocksdbSstRecord};
+use super::ceph_rocksdb_wal_repo::{self, CephRocksdbWalAggregate};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephOsdInventoryRecord {
@@ -51,6 +52,33 @@ pub struct CephOsdLabelReplicaRecord {
     pub struct_compat_version: u8,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CephRocksdbMetadataSnapshot<'a> {
+    pub bluefs: &'a CephBluefsAggregate,
+    pub rocksdb: &'a CephRocksdbAggregate,
+    pub ssts: &'a [CephRocksdbSstRecord],
+    pub wals: &'a CephRocksdbWalAggregate,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct CephAggregateReplacement<'a> {
+    bluefs: Option<&'a CephBluefsAggregate>,
+    rocksdb: Option<&'a CephRocksdbAggregate>,
+    ssts: Option<&'a [CephRocksdbSstRecord]>,
+    wals: Option<&'a CephRocksdbWalAggregate>,
+}
+
+impl<'a> From<CephRocksdbMetadataSnapshot<'a>> for CephAggregateReplacement<'a> {
+    fn from(value: CephRocksdbMetadataSnapshot<'a>) -> Self {
+        Self {
+            bluefs: Some(value.bluefs),
+            rocksdb: Some(value.rocksdb),
+            ssts: Some(value.ssts),
+            wals: Some(value.wals),
+        }
+    }
+}
+
 pub struct CephOsdRepo<'a> {
     conn: &'a Connection,
 }
@@ -66,7 +94,12 @@ impl<'a> CephOsdRepo<'a> {
         inventory: &[CephOsdInventoryRecord],
         replicas: &[CephOsdLabelReplicaRecord],
     ) -> DbResult<()> {
-        self.replace_aggregate(data_source_id, inventory, replicas, None, None, None)
+        self.replace_aggregate(
+            data_source_id,
+            inventory,
+            replicas,
+            CephAggregateReplacement::default(),
+        )
     }
 
     pub fn replace_for_data_source_with_bluefs(
@@ -76,7 +109,15 @@ impl<'a> CephOsdRepo<'a> {
         replicas: &[CephOsdLabelReplicaRecord],
         bluefs: Option<&CephBluefsAggregate>,
     ) -> DbResult<()> {
-        self.replace_aggregate(data_source_id, inventory, replicas, bluefs, None, None)
+        self.replace_aggregate(
+            data_source_id,
+            inventory,
+            replicas,
+            CephAggregateReplacement {
+                bluefs,
+                ..CephAggregateReplacement::default()
+            },
+        )
     }
 
     pub fn replace_for_data_source_with_rocksdb_metadata(
@@ -84,18 +125,9 @@ impl<'a> CephOsdRepo<'a> {
         data_source_id: &str,
         inventory: &[CephOsdInventoryRecord],
         replicas: &[CephOsdLabelReplicaRecord],
-        bluefs: &CephBluefsAggregate,
-        rocksdb: &CephRocksdbAggregate,
-        ssts: &[CephRocksdbSstRecord],
+        metadata: CephRocksdbMetadataSnapshot<'_>,
     ) -> DbResult<()> {
-        self.replace_aggregate(
-            data_source_id,
-            inventory,
-            replicas,
-            Some(bluefs),
-            Some(rocksdb),
-            Some(ssts),
-        )
+        self.replace_aggregate(data_source_id, inventory, replicas, metadata.into())
     }
 
     fn replace_aggregate(
@@ -103,13 +135,18 @@ impl<'a> CephOsdRepo<'a> {
         data_source_id: &str,
         inventory: &[CephOsdInventoryRecord],
         replicas: &[CephOsdLabelReplicaRecord],
-        bluefs: Option<&CephBluefsAggregate>,
-        rocksdb: Option<&CephRocksdbAggregate>,
-        ssts: Option<&[CephRocksdbSstRecord]>,
+        metadata: CephAggregateReplacement<'_>,
     ) -> DbResult<()> {
-        if rocksdb.is_some() != ssts.is_some() {
+        let CephAggregateReplacement {
+            bluefs,
+            rocksdb,
+            ssts,
+            wals,
+        } = metadata;
+        if rocksdb.is_some() != ssts.is_some() || rocksdb.is_some() != wals.is_some() {
             return Err(DbError::System(
-                "RocksDB manifest and complete SST inventory must be replaced together".to_string(),
+                "RocksDB manifest, complete SST inventory, and WAL inventory must be replaced together"
+                    .to_string(),
             ));
         }
         validate_replacement(data_source_id, inventory, replicas)?;
@@ -124,17 +161,25 @@ impl<'a> CephOsdRepo<'a> {
         if let (Some(rocksdb), Some(records)) = (rocksdb, ssts) {
             ceph_rocksdb_sst_repo::validate_replacement(rocksdb, records)?;
         }
+        if let (Some(bluefs), Some(rocksdb), Some(wals)) = (bluefs, rocksdb, wals) {
+            ceph_rocksdb_wal_repo::validate_replacement(bluefs, rocksdb, wals)?;
+        }
         let tx = self.conn.unchecked_transaction()?;
         replace_for_data_source_on(&tx, data_source_id, inventory, replicas)?;
         if let Some(records) = bluefs {
             ceph_bluefs_repo::replace_for_inventory_on(&tx, records)?;
         }
-        if let (Some(records), Some(ssts)) = (rocksdb, ssts) {
+        if let (Some(records), Some(ssts), Some(wals)) = (rocksdb, ssts, wals) {
             ceph_rocksdb_repo::replace_for_inventory_on(&tx, records)?;
             ceph_rocksdb_sst_repo::replace_for_inventory_on(
                 &tx,
                 &records.manifest.inventory_id,
                 ssts,
+            )?;
+            ceph_rocksdb_wal_repo::replace_for_inventory_on(
+                &tx,
+                &records.manifest.inventory_id,
+                wals,
             )?;
         }
         tx.commit()?;

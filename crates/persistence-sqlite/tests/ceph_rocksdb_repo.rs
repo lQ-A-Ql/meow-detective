@@ -6,12 +6,15 @@ use persistence_sqlite::{
             CephBluefsReplayRecord,
         },
         ceph_bluefs_repo::{CephBluefsAggregate, CephBluefsSuperblockRecord},
-        ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo},
+        ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo, CephRocksdbMetadataSnapshot},
         ceph_rocksdb_repo::{
             CephRocksdbAggregate, CephRocksdbColumnFamilyRecord, CephRocksdbLiveSstRecord,
             CephRocksdbManifestRecord, CephRocksdbRepo,
         },
         ceph_rocksdb_sst_repo::CephRocksdbSstRecord,
+        ceph_rocksdb_wal_repo::{
+            CephRocksdbWalAggregate, CephRocksdbWalFileRecord, CephRocksdbWalRecord,
+        },
     },
     runner,
 };
@@ -99,13 +102,20 @@ fn bluefs(
                 logical_bytes: 0x22_000,
                 stop_reason: "invalidTail".to_string(),
             },
-            directories: vec![CephBluefsDirectoryRecord {
-                inventory_id: inventory_id.to_string(),
-                path: "db".to_string(),
-            }],
+            directories: vec![
+                CephBluefsDirectoryRecord {
+                    inventory_id: inventory_id.to_string(),
+                    path: "db".to_string(),
+                },
+                CephBluefsDirectoryRecord {
+                    inventory_id: inventory_id.to_string(),
+                    path: "db.wal".to_string(),
+                },
+            ],
             files: vec![
                 bluefs_file(inventory_id, "db/CURRENT", 2, 16),
                 bluefs_file(inventory_id, "db/MANIFEST-000143", 3, 4096),
+                bluefs_file(inventory_id, "db.wal/000142.log", 4, 1024),
             ],
             file_extents: Vec::new(),
         },
@@ -167,6 +177,7 @@ fn column_family(
         name: name.to_string(),
         comparator_name: "leveldb.BytewiseComparator".to_string(),
         dropped,
+        log_number: Some(142),
     }
 }
 
@@ -205,9 +216,12 @@ fn persist(
                 &osd.data_source_id,
                 std::slice::from_ref(osd),
                 &[],
-                bluefs,
-                rocksdb,
-                &ssts,
+                CephRocksdbMetadataSnapshot {
+                    bluefs,
+                    rocksdb,
+                    ssts: &ssts,
+                    wals: &wals(rocksdb),
+                },
             )
         }
         None => repo.replace_for_data_source_with_bluefs(
@@ -216,6 +230,42 @@ fn persist(
             &[],
             Some(bluefs),
         ),
+    }
+}
+
+fn wals(rocksdb: &CephRocksdbAggregate) -> CephRocksdbWalAggregate {
+    let first_sequence = rocksdb.manifest.last_sequence + 1;
+    CephRocksdbWalAggregate {
+        files: vec![CephRocksdbWalFileRecord {
+            inventory_id: rocksdb.manifest.inventory_id.clone(),
+            wal_number: 142,
+            bluefs_path: "db.wal/000142.log".to_string(),
+            post_manifest: false,
+            file_size: 1024,
+            logical_record_count: 1,
+            empty_batch_count: 0,
+            mutation_count: 2,
+            auxiliary_record_count: 1,
+            logical_payload_bytes: 64,
+            fragment_count: 1,
+            first_sequence: Some(first_sequence),
+            last_sequence: Some(first_sequence + 1),
+            first_record_offset: Some(0),
+            last_record_offset: Some(0),
+        }],
+        records: vec![CephRocksdbWalRecord {
+            inventory_id: rocksdb.manifest.inventory_id.clone(),
+            wal_number: 142,
+            record_ordinal: 0,
+            physical_offset: 0,
+            fragment_count: 1,
+            recyclable_log_number: Some(142),
+            batch_sequence: first_sequence,
+            mutation_count: 2,
+            auxiliary_record_count: 1,
+            first_mutation_sequence: Some(first_sequence),
+            last_mutation_sequence: Some(first_sequence + 1),
+        }],
     }
 }
 
@@ -275,7 +325,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_009_ceph_sst_inventory"
+        "source_010_ceph_wal_inventory"
     );
     for table in [
         "ceph_rocksdb_manifests",
@@ -304,6 +354,15 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
     assert!(columns.contains(&"largest_internal_key_length".to_string()));
     assert!(!columns.contains(&"smallest_internal_key".to_string()));
     assert!(!columns.contains(&"largest_internal_key".to_string()));
+
+    let column_family_columns = conn
+        .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_column_families') ORDER BY cid")
+        .expect("prepare column family column query")
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("query column family columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect column family columns");
+    assert!(column_family_columns.contains(&"log_number".to_string()));
 }
 
 #[test]
@@ -389,6 +448,8 @@ fn deleting_osd_inventory_cascades_the_entire_rocksdb_snapshot() {
         "ceph_rocksdb_manifests",
         "ceph_rocksdb_column_families",
         "ceph_rocksdb_live_files",
+        "ceph_rocksdb_wal_files",
+        "ceph_rocksdb_wal_records",
     ] {
         let count: u32 = conn
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {

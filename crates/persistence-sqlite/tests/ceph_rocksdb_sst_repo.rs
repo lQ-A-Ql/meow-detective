@@ -6,12 +6,15 @@ use persistence_sqlite::{
             CephBluefsReplayRecord,
         },
         ceph_bluefs_repo::{CephBluefsAggregate, CephBluefsSuperblockRecord},
-        ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo},
+        ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo, CephRocksdbMetadataSnapshot},
         ceph_rocksdb_repo::{
             CephRocksdbAggregate, CephRocksdbColumnFamilyRecord, CephRocksdbLiveSstRecord,
             CephRocksdbManifestRecord,
         },
         ceph_rocksdb_sst_repo::{CephRocksdbSstRecord, CephRocksdbSstRepo},
+        ceph_rocksdb_wal_repo::{
+            CephRocksdbWalAggregate, CephRocksdbWalFileRecord, CephRocksdbWalRecord,
+        },
     },
     runner,
 };
@@ -100,20 +103,38 @@ fn bluefs_with_file_number(file_number: u64) -> CephBluefsAggregate {
                 logical_bytes: 4096,
                 stop_reason: "boundedTail".to_string(),
             },
-            directories: vec![CephBluefsDirectoryRecord {
-                inventory_id: INVENTORY_ID.to_string(),
-                path: "db".to_string(),
-            }],
-            files: vec![CephBluefsFileRecord {
-                inventory_id: INVENTORY_ID.to_string(),
-                path: format!("db/{file_number:06}.sst"),
-                inode: 2,
-                size: 8192,
-                mtime_seconds: 1,
-                mtime_nanoseconds: 0,
-                encoding: 0,
-                content_size: 8192,
-            }],
+            directories: vec![
+                CephBluefsDirectoryRecord {
+                    inventory_id: INVENTORY_ID.to_string(),
+                    path: "db".to_string(),
+                },
+                CephBluefsDirectoryRecord {
+                    inventory_id: INVENTORY_ID.to_string(),
+                    path: "db.wal".to_string(),
+                },
+            ],
+            files: vec![
+                CephBluefsFileRecord {
+                    inventory_id: INVENTORY_ID.to_string(),
+                    path: format!("db/{file_number:06}.sst"),
+                    inode: 2,
+                    size: 8192,
+                    mtime_seconds: 1,
+                    mtime_nanoseconds: 0,
+                    encoding: 0,
+                    content_size: 8192,
+                },
+                CephBluefsFileRecord {
+                    inventory_id: INVENTORY_ID.to_string(),
+                    path: "db.wal/000127.log".to_string(),
+                    inode: 3,
+                    size: 1024,
+                    mtime_seconds: 1,
+                    mtime_nanoseconds: 0,
+                    encoding: 0,
+                    content_size: 1024,
+                },
+            ],
             file_extents: Vec::new(),
         },
     }
@@ -147,6 +168,7 @@ fn rocksdb_with_file_number(file_number: u64) -> CephRocksdbAggregate {
             name: "default".to_string(),
             comparator_name: "leveldb.BytewiseComparator".to_string(),
             dropped: false,
+            log_number: Some(127),
         }],
         live_ssts: vec![CephRocksdbLiveSstRecord {
             inventory_id: INVENTORY_ID.to_string(),
@@ -207,6 +229,42 @@ fn sst_with_file_number(file_number: u64) -> CephRocksdbSstRecord {
     }
 }
 
+fn wals(rocksdb: &CephRocksdbAggregate) -> CephRocksdbWalAggregate {
+    let first_sequence = rocksdb.manifest.last_sequence + 1;
+    CephRocksdbWalAggregate {
+        files: vec![CephRocksdbWalFileRecord {
+            inventory_id: INVENTORY_ID.to_string(),
+            wal_number: 127,
+            bluefs_path: "db.wal/000127.log".to_string(),
+            post_manifest: false,
+            file_size: 1024,
+            logical_record_count: 1,
+            empty_batch_count: 0,
+            mutation_count: 1,
+            auxiliary_record_count: 0,
+            logical_payload_bytes: 32,
+            fragment_count: 1,
+            first_sequence: Some(first_sequence),
+            last_sequence: Some(first_sequence),
+            first_record_offset: Some(0),
+            last_record_offset: Some(0),
+        }],
+        records: vec![CephRocksdbWalRecord {
+            inventory_id: INVENTORY_ID.to_string(),
+            wal_number: 127,
+            record_ordinal: 0,
+            physical_offset: 0,
+            fragment_count: 1,
+            recyclable_log_number: Some(127),
+            batch_sequence: first_sequence,
+            mutation_count: 1,
+            auxiliary_record_count: 0,
+            first_mutation_sequence: Some(first_sequence),
+            last_mutation_sequence: Some(first_sequence),
+        }],
+    }
+}
+
 fn persist(conn: &Connection, ssts: &[CephRocksdbSstRecord]) -> persistence_sqlite::DbResult<()> {
     persist_with_file_number(conn, ssts, 146)
 }
@@ -223,9 +281,12 @@ fn persist_with_file_number(
         DATA_SOURCE_ID,
         std::slice::from_ref(&osd),
         &[],
-        &bluefs,
-        &rocksdb,
-        ssts,
+        CephRocksdbMetadataSnapshot {
+            bluefs: &bluefs,
+            rocksdb: &rocksdb,
+            ssts,
+            wals: &wals(&rocksdb),
+        },
     )
 }
 
@@ -234,7 +295,7 @@ fn source_migration_installs_sst_inventory_without_raw_key_or_value_columns() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_009_ceph_sst_inventory"
+        "source_010_ceph_wal_inventory"
     );
     let mut statement = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_sst_inventory') ORDER BY cid")
@@ -390,9 +451,12 @@ fn sqlite_write_failure_rolls_back_the_complete_ceph_aggregate() {
         DATA_SOURCE_ID,
         std::slice::from_ref(&changed_osd),
         &[],
-        &bluefs,
-        &rocksdb,
-        std::slice::from_ref(&expected),
+        CephRocksdbMetadataSnapshot {
+            bluefs: &bluefs,
+            rocksdb: &rocksdb,
+            ssts: std::slice::from_ref(&expected),
+            wals: &wals(&rocksdb),
+        },
     );
 
     assert!(result.is_err());

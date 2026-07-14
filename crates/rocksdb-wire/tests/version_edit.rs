@@ -198,6 +198,18 @@ fn rejects_unknown_mandatory_tags_and_accepts_safe_unknowns() {
 }
 
 #[test]
+fn fails_closed_on_tracked_wal_manifest_edits() {
+    for tag in [8196, 8197, 8199, 8200] {
+        let mut encoded = Vec::new();
+        put_varint(tag, &mut encoded);
+        assert_eq!(
+            parse_version_edit(&encoded, VersionEditLimits::default()),
+            Err(RocksDbWireError::UnsupportedTrackedWalEdit { tag: tag as u32 })
+        );
+    }
+}
+
+#[test]
 fn preserves_non_utf8_comparator_and_column_family_names() {
     let mut encoded = Vec::new();
     put_tag_bytes(1, &[0xff, 0x00], &mut encoded);

@@ -105,6 +105,24 @@ pub enum RocksDbWireError {
         context: &'static str,
     },
 
+    #[error("WriteBatch length {length} exceeds limit {limit}")]
+    WriteBatchLengthLimit { length: usize, limit: usize },
+
+    #[error("WriteBatch mutation count {count} exceeds limit {limit}")]
+    WriteBatchMutationLimit { count: u32, limit: usize },
+
+    #[error("WriteBatch auxiliary record count exceeds limit {limit}")]
+    WriteBatchAuxiliaryRecordLimit { limit: usize },
+
+    #[error("WriteBatch declared {declared} mutations but decoded {decoded}")]
+    WriteBatchCountMismatch { declared: u32, decoded: u32 },
+
+    #[error("unsupported RocksDB WriteBatch tag {tag:#04x} at offset {offset}")]
+    UnsupportedWriteBatchTag { offset: usize, tag: u8 },
+
+    #[error("invalid RocksDB WriteBatch tag {tag:#04x} at offset {offset}")]
+    InvalidWriteBatchTag { offset: usize, tag: u8 },
+
     #[error("VersionEdit length {length} exceeds limit {limit}")]
     VersionEditLengthLimit { length: usize, limit: usize },
 
@@ -123,6 +141,9 @@ pub enum RocksDbWireError {
 
     #[error("unknown mandatory VersionEdit tag {tag}")]
     UnknownMandatoryTag { tag: u32 },
+
+    #[error("tracked WAL VersionEdit tag {tag} is unsupported")]
+    UnsupportedTrackedWalEdit { tag: u32 },
 
     #[error("unknown mandatory NewFile4 custom tag {tag}")]
     UnknownMandatoryCustomTag { tag: u32 },

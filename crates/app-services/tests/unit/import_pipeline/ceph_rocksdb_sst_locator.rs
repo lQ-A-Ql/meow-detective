@@ -63,6 +63,7 @@ fn rocksdb(file_number: u64, file_size: u64, path_id: u32) -> CephRocksdbAggrega
             column_family_id: 0,
             name: "default".to_string(),
             comparator_name: "leveldb.BytewiseComparator".to_string(),
+            log_number: Some(127),
             dropped: false,
         }],
         live_ssts: vec![CephRocksdbLiveSstRecord {

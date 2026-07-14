@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicBool;
 
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
 use persistence_sqlite::repositories::ceph_rocksdb_sst_repo::CephRocksdbSstRecord;
+use persistence_sqlite::repositories::ceph_rocksdb_wal_repo::CephRocksdbWalAggregate;
 use transport::CommandError;
 
 use super::ceph_bluefs_file_reader::BluefsExtentReader;
@@ -35,21 +36,32 @@ pub(super) fn inventory_rocksdb_manifest(
         &located,
         cancel_token,
     )?;
+    let wal_selection =
+        super::ceph_rocksdb_wal_locator::locate_active_rocksdb_wals(replay, &aggregate)?;
+    let wals = super::ceph_rocksdb_wal_inventory::inventory_active_rocksdb_wals(
+        reader,
+        &wal_selection,
+        &aggregate,
+        cancel_token,
+    )?;
     Ok(RocksdbInventoryAggregate {
         manifest: aggregate,
         ssts,
+        wals,
     })
 }
 
 pub(super) struct RocksdbInventoryAggregate {
     pub(super) manifest: CephRocksdbAggregate,
     pub(super) ssts: Vec<CephRocksdbSstRecord>,
+    pub(super) wals: CephRocksdbWalAggregate,
 }
 
 fn map_manifest_error(error: rocksdb_wire::RocksDbWireError) -> CommandError {
     let message = format!("RocksDB MANIFEST decode failed: {error}");
     match error {
         rocksdb_wire::RocksDbWireError::UnsupportedWalCompressionRecord { .. }
+        | rocksdb_wire::RocksDbWireError::UnsupportedTrackedWalEdit { .. }
         | rocksdb_wire::RocksDbWireError::UnknownMandatoryTag { .. }
         | rocksdb_wire::RocksDbWireError::UnknownMandatoryCustomTag { .. } => {
             CommandError::unsupported(message)

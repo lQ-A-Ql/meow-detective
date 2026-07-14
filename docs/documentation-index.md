@@ -49,6 +49,8 @@
 | Ceph BlueStore Stage 4 | `docs/ceph-bluestore-stage4-design.md` | BlueFS extent reader、RocksDB CURRENT/IDENTITY/MANIFEST、VersionEdit replay 与 source-local control-plane inventory |
 | Ceph BlueStore Stage 5 | `docs/ceph-bluestore-stage5-design.md` | RocksDB live SST footer/checksum/properties/index、BlueFS identity 闭合、有界键空间统计与真实 PVE oracle |
 | Ceph BlueStore Stage 5 real sample | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage5.md` | 六成员串行导入、35/40/33 live-SST 完整库存、代表 SST 独立 oracle 与剩余 unsupported 边界 |
+| Ceph BlueStore Stage 6 | `docs/ceph-bluestore-stage6-design.md` | RocksDB WAL/latest-state、BlueStore onode/blob、RADOS/RBD、VM 文件系统重建边界与真实 PVE 门禁 |
+| Ceph BlueStore Stage 6.1 real sample | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage6-wal.md` | 三 OSD WAL/WriteBatch oracle、source-local metadata 持久化、真实 fnode 语义纠偏与剩余 latest-state 边界 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |
@@ -71,8 +73,8 @@
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 98 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 21 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo) |
-| SQLite migration scripts | 46 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0036 + source_001-source_009 + staging_001) |
+| SQLite repositories | 22 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo) |
+| SQLite migration scripts | 47 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0036 + source_001-source_010 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 86 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
@@ -89,7 +91,7 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 46 | SQLite migration 脚本 (0001-0036 + source_001-source_009 + staging_001) |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 47 | SQLite migration 脚本 (0001-0036 + source_001-source_010 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |

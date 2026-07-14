@@ -2,6 +2,7 @@ use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
 use persistence_sqlite::repositories::ceph_rocksdb_sst_repo::CephRocksdbSstRecord;
+use persistence_sqlite::repositories::ceph_rocksdb_wal_repo::CephRocksdbWalAggregate;
 
 use super::context::ImportJobContext;
 
@@ -9,6 +10,7 @@ pub(super) struct CephMetadataAggregate {
     pub(super) bluefs: CephBluefsAggregate,
     pub(super) rocksdb: CephRocksdbAggregate,
     pub(super) ssts: Vec<CephRocksdbSstRecord>,
+    pub(super) wals: CephRocksdbWalAggregate,
 }
 
 pub(super) fn audit_bluefs_inventory(
@@ -27,6 +29,17 @@ pub(super) fn audit_bluefs_inventory(
     };
     let Some(data_bytes) = checked_sst_sum(&records.ssts, |record| record.data_size) else {
         audit_sum_overflow(data_source, "data bytes");
+        return;
+    };
+    let Some(wal_record_count) = checked_wal_sum(&records.wals, |record| {
+        u64::from(record.logical_record_count)
+    }) else {
+        audit_sum_overflow(data_source, "WAL logical record count");
+        return;
+    };
+    let Some(wal_mutation_count) = checked_wal_sum(&records.wals, |record| record.mutation_count)
+    else {
+        audit_sum_overflow(data_source, "WAL mutation count");
         return;
     };
     let details = serde_json::json!({
@@ -49,6 +62,9 @@ pub(super) fn audit_bluefs_inventory(
         "rocksdbSstEntryCount": entry_count,
         "rocksdbSstDataBytes": data_bytes,
         "rocksdbLastSequence": records.rocksdb.manifest.last_sequence,
+        "rocksdbRecoveryWalCount": records.wals.files.len(),
+        "rocksdbRecoveryWalRecordCount": wal_record_count,
+        "rocksdbRecoveryWalMutationCount": wal_mutation_count,
         "layout": "singleSharedDevice",
     })
     .to_string();
@@ -65,6 +81,18 @@ pub(super) fn audit_bluefs_inventory(
             "Failed to record BlueFS inventory audit entry"
         );
     }
+}
+
+fn checked_wal_sum(
+    records: &CephRocksdbWalAggregate,
+    value: impl Fn(
+        &persistence_sqlite::repositories::ceph_rocksdb_wal_repo::CephRocksdbWalFileRecord,
+    ) -> u64,
+) -> Option<u64> {
+    records
+        .files
+        .iter()
+        .try_fold(0u64, |total, record| total.checked_add(value(record)))
 }
 
 fn checked_sst_sum(

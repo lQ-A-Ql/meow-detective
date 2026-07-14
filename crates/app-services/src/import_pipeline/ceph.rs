@@ -7,7 +7,7 @@ use ceph_wire::{
     BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_POSITIONS, BLUEFS_SUPER_BLOCK_SIZE, BLUEFS_SUPER_OFFSET,
 };
 use persistence_sqlite::repositories::ceph_osd_repo::{
-    CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo,
+    CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo, CephRocksdbMetadataSnapshot,
 };
 use transport::CommandError;
 
@@ -103,9 +103,12 @@ pub(crate) fn persist_bluestore_probe(
             &data_source.id.0,
             std::slice::from_ref(&inventory),
             &replica_records,
-            &records.bluefs,
-            &records.rocksdb,
-            &records.ssts,
+            CephRocksdbMetadataSnapshot {
+                bluefs: &records.bluefs,
+                rocksdb: &records.rocksdb,
+                ssts: &records.ssts,
+                wals: &records.wals,
+            },
         ),
         None => repo.replace_for_data_source(
             &data_source.id.0,
@@ -240,6 +243,7 @@ fn read_bluefs_inventory(
         bluefs,
         rocksdb: rocksdb.manifest,
         ssts: rocksdb.ssts,
+        wals: rocksdb.wals,
     })
 }
 

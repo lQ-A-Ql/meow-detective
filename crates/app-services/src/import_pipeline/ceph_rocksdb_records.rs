@@ -77,6 +77,7 @@ fn map_column_family(
         column_family_id,
         name,
         comparator_name,
+        log_number: column_family.log_number,
         dropped: column_family.dropped,
     })
 }

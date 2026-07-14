@@ -6,10 +6,13 @@ mod log;
 mod replay;
 mod sst;
 mod version_edit;
+mod write_batch;
 
 pub use crc32c::{crc32c, extend_crc32c, mask_crc32c, unmask_crc32c};
 pub use error::{Result, RocksDbWireError};
-pub use limits::{LogDecodeLimits, ManifestDecodeLimits, ReplayLimits, VersionEditLimits};
+pub use limits::{
+    LogDecodeLimits, ManifestDecodeLimits, ReplayLimits, VersionEditLimits, WriteBatchLimits,
+};
 pub use log::{
     decode_log, LogDecodeOptions, LogicalLogRecord, ROCKSDB_LOG_BLOCK_SIZE,
     ROCKSDB_LOG_HEADER_SIZE, ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE,
@@ -24,6 +27,11 @@ pub use sst::{
 pub use version_edit::{
     parse_version_edit, ColumnFamilyAction, CompactCursor, DeletedFile, IgnoredField,
     InternalKeyMetadata, NewFile, NewFileFormat, NewFileMetadata, VersionEdit,
+};
+pub use write_batch::{
+    decode_write_batch, WriteBatch, WriteBatchAuxiliaryKind, WriteBatchAuxiliaryRecord,
+    WriteBatchMutation, WriteBatchMutationKind, ROCKSDB_MAX_SEQUENCE_NUMBER,
+    WRITE_BATCH_HEADER_SIZE,
 };
 
 pub fn decode_manifest(input: &[u8], limits: ManifestDecodeLimits) -> Result<ManifestSnapshot> {

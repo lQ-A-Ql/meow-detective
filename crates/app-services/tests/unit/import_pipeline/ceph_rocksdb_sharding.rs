@@ -32,6 +32,7 @@ fn rocksdb(names: &[&str]) -> CephRocksdbAggregate {
                 column_family_id: id as u32,
                 name: (*name).to_string(),
                 comparator_name: "leveldb.BytewiseComparator".to_string(),
+                log_number: Some(127),
                 dropped: false,
             })
             .collect(),

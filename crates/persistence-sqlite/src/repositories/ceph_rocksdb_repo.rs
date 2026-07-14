@@ -29,6 +29,7 @@ pub struct CephRocksdbColumnFamilyRecord {
     pub name: String,
     pub comparator_name: String,
     pub dropped: bool,
+    pub log_number: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,7 +101,8 @@ impl<'a> CephRocksdbRepo<'a> {
         inventory_id: &str,
     ) -> DbResult<Vec<CephRocksdbColumnFamilyRecord>> {
         let mut statement = self.conn.prepare(
-            "SELECT inventory_id, column_family_id, name, comparator_name, dropped
+            "SELECT inventory_id, column_family_id, name, comparator_name, dropped,
+                    log_number
              FROM ceph_rocksdb_column_families
              WHERE inventory_id = ?1
              ORDER BY column_family_id",
@@ -152,7 +154,7 @@ pub(super) fn validate_replacement(records: &CephRocksdbAggregate) -> DbResult<(
     let inventory_id = records.manifest.inventory_id.as_str();
     let mut column_family_states = HashMap::new();
     for record in &records.column_families {
-        validate_column_family(inventory_id, record)?;
+        validate_column_family(inventory_id, records.manifest.next_file_number, record)?;
         if column_family_states
             .insert(record.column_family_id, record.dropped)
             .is_some()
@@ -218,9 +220,16 @@ fn validate_manifest(record: &CephRocksdbManifestRecord) -> DbResult<()> {
 
 fn validate_column_family(
     inventory_id: &str,
+    next_file_number: u64,
     record: &CephRocksdbColumnFamilyRecord,
 ) -> DbResult<()> {
-    if record.inventory_id != inventory_id || record.name.is_empty() || record.name.contains('\0') {
+    if record.inventory_id != inventory_id
+        || record.name.is_empty()
+        || record.name.contains('\0')
+        || record
+            .log_number
+            .is_some_and(|value| value >= next_file_number)
+    {
         return Err(DbError::System(
             "RocksDB column family metadata is invalid".to_string(),
         ));
@@ -334,8 +343,8 @@ fn insert_column_families(
 ) -> DbResult<()> {
     let mut statement = conn.prepare_cached(
         "INSERT INTO ceph_rocksdb_column_families (
-            inventory_id, column_family_id, name, comparator_name, dropped
-         ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            inventory_id, column_family_id, name, comparator_name, dropped, log_number
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )?;
     for record in records {
         statement.execute(params![
@@ -344,6 +353,7 @@ fn insert_column_families(
             record.name,
             record.comparator_name,
             record.dropped,
+            record.log_number,
         ])?;
     }
     Ok(())
@@ -401,6 +411,7 @@ fn map_column_family(row: &rusqlite::Row<'_>) -> rusqlite::Result<CephRocksdbCol
         name: row.get(2)?,
         comparator_name: row.get(3)?,
         dropped: row.get(4)?,
+        log_number: row.get(5)?,
     })
 }
 

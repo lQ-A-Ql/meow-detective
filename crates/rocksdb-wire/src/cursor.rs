@@ -62,6 +62,16 @@ impl<'a> WireCursor<'a> {
         })?))
     }
 
+    pub(crate) fn read_fixed_u32(&mut self, context: &'static str) -> Result<u32> {
+        let bytes = self.read_exact(4, context)?;
+        Ok(u32::from_le_bytes(bytes.try_into().map_err(|_| {
+            RocksDbWireError::InvalidField {
+                context,
+                reason: "fixed32 width",
+            }
+        })?))
+    }
+
     pub(crate) fn read_varint_u32(&mut self, context: &'static str) -> Result<u32> {
         let value = self.read_varint(context, 5, 0x0f)?;
         u32::try_from(value).map_err(|_| RocksDbWireError::VarintOverflow {
