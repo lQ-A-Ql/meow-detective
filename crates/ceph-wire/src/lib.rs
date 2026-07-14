@@ -3,6 +3,7 @@
 pub mod bluefs;
 pub mod bluefs_transaction;
 pub mod bluestore;
+pub mod bluestore_semantic;
 pub mod codec;
 pub mod crc32c;
 pub mod cursor;
@@ -20,6 +21,16 @@ pub use bluestore::{
     decode_bdev_label_block, select_bdev_label, select_bdev_labels, BdevLabel, BdevLabelCandidate,
     BdevLabelSelection, BDEV_FIRST_LABEL_POSITION, BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_MAGIC,
     BDEV_LABEL_POSITIONS, BDEV_LABEL_PREFIX_LENGTH,
+};
+pub use bluestore_semantic::{
+    decode_bluestore_latest_value, BlueStoreAllocationHints, BlueStoreAttributeSummary,
+    BlueStoreCnode, BlueStoreCollectionId, BlueStoreCollectionKind, BlueStoreCollectionRecord,
+    BlueStoreDecodedRecord, BlueStoreDeferred, BlueStoreDeferredReason, BlueStoreExtentPayload,
+    BlueStoreExtentShardDescriptor, BlueStoreExtentStorage, BlueStoreKeySpace, BlueStoreObjectId,
+    BlueStoreObjectRecord, BlueStoreOmapMode, BlueStoreOnodeFlags, BlueStoreOnodeHeader,
+    BlueStoreOnodeTail, BlueStorePayloadStatus, BlueStoreSemanticLimits,
+    BlueStoreSharedBlobExtentRef, BlueStoreSharedBlobRecord, BlueStoreSuperRecord,
+    BlueStoreZoneOffsetRef,
 };
 pub use codec::{
     decode_lba_u64, decode_varint_lowz_u64, decode_varint_u64, CephDecode, CephEncode,

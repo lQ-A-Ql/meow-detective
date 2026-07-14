@@ -99,6 +99,33 @@ pub enum CephWireError {
 
     #[error("no valid BlueStore bdev label matched the requested UUID")]
     NoValidLabel,
+
+    #[error("invalid BlueStore semantic key in {key_space}: {reason}")]
+    InvalidBlueStoreSemanticKey {
+        key_space: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("invalid BlueStore semantic value in {context}: {reason}")]
+    InvalidBlueStoreSemanticValue {
+        context: &'static str,
+        reason: &'static str,
+    },
+
+    #[error(
+        "unsupported BlueStore DENC version {encoded_version} for {context}; supported versions are {supported_versions}"
+    )]
+    UnsupportedBlueStoreDencVersion {
+        context: &'static str,
+        encoded_version: u8,
+        supported_versions: &'static str,
+    },
+
+    #[error("trailing bytes after {context}: {remaining} bytes remain")]
+    BlueStoreTrailingBytes {
+        context: &'static str,
+        remaining: usize,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;
