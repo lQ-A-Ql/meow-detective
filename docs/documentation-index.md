@@ -51,6 +51,7 @@
 | Ceph BlueStore Stage 5 real sample | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage5.md` | 六成员串行导入、35/40/33 live-SST 完整库存、代表 SST 独立 oracle 与剩余 unsupported 边界 |
 | Ceph BlueStore Stage 6 | `docs/ceph-bluestore-stage6-design.md` | RocksDB WAL/latest-state、BlueStore onode/blob、RADOS/RBD、VM 文件系统重建边界与真实 PVE 门禁 |
 | Ceph BlueStore Stage 6.1 real sample | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage6-wal.md` | 三 OSD WAL/WriteBatch oracle、source-local metadata 持久化、真实 fnode 语义纠偏与剩余 latest-state 边界 |
+| Ceph BlueStore Stage 6.2 real sample | `docs/real-sample-regression/2026-07-14-pve-rocksdb-stage6-sst-stream.md` | 代表 live SST 的逐 block entry-stream foundation、独立 oracle、资源边界与全 live-set/latest-state 剩余边界 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |

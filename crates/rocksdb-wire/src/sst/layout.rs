@@ -24,6 +24,19 @@ pub(super) fn read_layout<R: RangeReader>(
     file_size: u64,
     options: SstReadOptions,
 ) -> Result<ParsedLayout> {
+    read_layout_with_property_validation(reader, file_size, options, |_| Ok(()))
+}
+
+pub(super) fn read_layout_with_property_validation<R, F>(
+    reader: &mut R,
+    file_size: u64,
+    options: SstReadOptions,
+    validate_for_caller: F,
+) -> Result<ParsedLayout>
+where
+    R: RangeReader,
+    F: FnOnce(&TableProperties) -> Result<()>,
+{
     if file_size < FOOTER_LENGTH as u64 {
         return Err(RocksDbWireError::SstFileTooShort {
             file_size,
@@ -53,6 +66,7 @@ pub(super) fn read_layout<R: RangeReader>(
     let properties = parse_properties(&properties_block.data, options)?;
     validate_properties(&properties)?;
     validate_supported_table_shape(&properties)?;
+    validate_for_caller(&properties)?;
     validate_census_entry_budget(&properties, options)?;
     validate_metadata_ranges(&footer, &metaindex)?;
     let compression_dictionary = read_compression_dictionary(reader, &footer, &metaindex, options)?;

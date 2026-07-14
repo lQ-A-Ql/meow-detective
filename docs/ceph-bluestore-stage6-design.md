@@ -1,8 +1,8 @@
 # Ceph BlueStore Stage 6 设计
 
-**开发基线**: `2f541a7e`
+**开发基线**: `2c54429c`
 **设计日期**: 2026-07-14
-**当前实现切片**: RocksDB WAL / WriteBatch 恢复基础
+**当前实现切片**: RocksDB live-SST entry stream foundation
 **最终目标**: BlueStore OSD -> RocksDB latest state -> RADOS object -> RBD image -> VM 文件系统
 
 ## Summary
@@ -19,9 +19,11 @@ RBD 重建所需的可信基础。
 - CephFS 依赖 MDS 元数据池和数据池。只有真实样本证明存在 CephFS 时才进入
   独立设计，不把 RBD 对象误报为 CephFS 文件树。
 
-本次首个实现切片交付 active WAL 选择、物理日志恢复、WriteBatch wire
-decoder 和 source-local metadata 持久化。它不持久化 raw key/value，不解释
-BlueStore 结构，也不改变三个 `disk02` 数据源的 `ready_metadata` 状态。
+Stage 6.1 已交付 active WAL 选择、物理日志恢复、WriteBatch wire decoder
+和 source-local metadata 持久化。当前 Stage 6.2 在 Stage 5 的结构校验基础上
+交付 live-SST entry stream：逐 block 解压并借用访问 key/value，不建立整表
+entry vector，不持久化 raw key/value，不解释 BlueStore 结构，也不改变三个
+`disk02` 数据源的 `ready_metadata` 状态。
 
 ## 开发基线与事实源
 
@@ -53,7 +55,7 @@ version:  7.9.2
 Ceph 语义基线：
 
 ```text
-Ceph Reef v19.2.3
+Ceph Squid v19.2.3 (`c92aebb279828e9c3c1f5d24613efca272649e62`)
 ```
 
 ### 上游源码证据
@@ -238,16 +240,42 @@ Stage 5 已验证全部 live SST 的物理结构。Stage 6.2 在相同 block rea
 Tasks:
 
 - 逐 data block 流式访问 internal key、sequence、type 和 value。
-- range tombstone 走独立 visitor。
+- range tombstone 走独立 visitor；raw block 允许上游合法的未排序记录，
+  `start == end` 保留为空区间，只有 `start > end` 非法。
 - raw key/value 只在 callback 生命周期内有效。
 - caller 可按 column family 和批准的 BlueStore prefix 过滤。
 - 不建立全 SST key/value vector。
 - 保留 checksum、compression、restart 和 count 的现有校验。
+- 按 RocksDB bytewise comparator 校验 point data 跨 block 的 internal-key 全局顺序：
+  user key 升序，同 user key 的 sequence/type trailer 降序。
+- range block 要求官方 writer 的 no-compression 与每 entry restart 形状。
+- external SST version/global-sequence property 首版 typed fail closed，不能把
+  encoded sequence `0` 当作真实 sequence。
+- point/range callback 暴露 raw internal key、block handle、block ordinal 和
+  entry ordinal，供后续 spool 建立可审计 provenance。
+- 使用独立的 data-block、total-entry、range-delete 和累计解压预算；超限时
+  在触发对应 callback 前失败。
+- visitor error 保留调用方错误类型并立即停止，不读取后续 data block。
 
 Expected result:
 
-- 为 latest-state reducer 提供已验证的 SST mutation stream。
+- 为 latest-state reducer 提供有界、带 provenance 的 SST mutation stream
+  foundation。
 - Stage 5 的全部 properties/count oracle 保持不变。
+- 常驻内存保持为 layout/index、单个解压 block 和当前 reconstructed key，
+  不随 SST entry 总数线性增长。
+
+Implemented validation:
+
+- synthetic valid/invalid/edge tests 覆盖 value/delete/merge/range、空/反向
+  range、external-SST global sequence、typed visitor stop、跨 block key
+  regression 和四类独立预算。
+- 代表 live SST `000146.sst` 以真实只读导出 fixture 验证：
+  `148` 个 data block、`23,364` 条 entry、`420,609 / 298,145`
+  raw key/value bytes，与 `inspect_sst` 的 count、sequence 和解压字节精确一致。
+- Stage 6.2 当前只提供 parser foundation，尚未对全部 `35/40/33` live SST
+  建立 entry digest 门禁，未在 source DB 持久化 raw key/value，也未合并
+  SST/WAL latest state。range-only SST 仍 typed unsupported。
 
 ### Stage 6.3 - RocksDB Latest-State Reducer
 
@@ -272,15 +300,18 @@ Expected result:
 
 Tasks:
 
-- 固定并验证 Ceph key-space prefix 与 column-family sharding 映射。
+- 固定并验证 Ceph key-space prefix 与 column-family sharding 映射；专用
+  column family 的 logical key 不带 default-CF 的 `prefix + NUL` 包装。
 - 先实现 `S/C/O/X`：
   super、collection、object onode、shared blob。
-- 解码 object key 为 collection/PG/ghobject identity。
+- `O` key 只直接恢复 `ghobject_t`；collection/PG membership 必须结合 `C`
+  value 的 `bits` 与 collection containment 规则，不从 object key 猜测。
 - 解码 onode size、attrs、extent-map shard、blob 和 logical extent。
 - 解码 physical extent、compression、checksum、shared blob 引用。
 - onode shard 必须闭合；缺失 shard、重叠 logical extent、越界 physical
   extent和未知 DENC version typed fail。
-- `T/B/b/L/M/P/m/p` 后续按读取需求分批实现，不一次性扩大攻击面。
+- `M/P/m/p` OMAP family 是 RBD directory/header metadata 的硬前置，必须作为
+  Stage 6.4b 在 RADOS/RBD 前完成；`T/B/b/L` 再按读取需求分批实现。
 
 Expected result:
 
@@ -296,7 +327,10 @@ Tasks:
 - replicated pool 首版要求至少一个完整、校验通过的副本。
 - 对多个有效副本计算内容摘要并验证一致性。
 - EC pool 在 profile、k/m 和 shard index 未闭合前保持 unsupported。
-- 不依赖在线 monitor/OSD map；缺失必要 map 时只输出可证明的 object 集合。
+- 无 OSD map 时只输出已观察到的 local collection/object 与候选副本集合，
+  不声明 intended replica count、acting set、primary 或 CRUSH placement。
+- 若恢复 `osd_superblock` 与连续 offline OSDMap epoch，则结果必须绑定历史
+  epoch，不能称为在线当前状态。
 
 Expected result:
 
@@ -307,10 +341,12 @@ Expected result:
 
 Tasks:
 
-- 从 RBD directory、id、header 和 metadata object 发现镜像。
+- 从 RBD directory OMAP、双向 name/id 映射、`rbd_id.<name>` body、
+  `rbd_header.<id>` OMAP 交叉发现镜像。
 - 解析 image size、order、object prefix、features、striping unit/count。
 - 将 RBD logical offset 映射为 object number 和 object-local range。
-- 支持缺失对象的零填充语义，但只在 RBD metadata 证明该范围合法时启用。
+- 支持缺失对象的零填充语义，但只在 image size 内且 active parent overlap
+  不要求回读 parent 时启用。
 - unsupported feature、parent/clone、encryption、journal 或 snapshot
   必须显式暴露，不能默认为普通 head image。
 - 实现 `RbdEvidenceReader: Read + Seek + EvidenceReader`，不生成完整磁盘副本。
@@ -360,7 +396,7 @@ Expected result:
 | Sequence | monotonic non-overlap | regression/overlap/56-bit overflow | valid gaps、zero mutation batch |
 | WAL log | full/fragmented/recyclable | CRC/fragment/log-number mismatch | block trailer、preallocated zero tail |
 | WAL selection | active numbered files | malformed/duplicate/unknown CF | min-log boundary、legacy db、post-MANIFEST、number gaps |
-| SST stream | value/delete/range | checksum/restart/type | all `35/40/33` live SST |
+| SST stream | value/delete/range/provenance | checksum/restart/type/external-seq | representative SST；全 `35/40/33` digest 为 6.3 前置 |
 | Latest state | SST + WAL | sequence regression/conflict | deterministic digest |
 | BlueStore | onode/blob/shard | DENC version/extent overlap | three OSD replica comparison |
 | RADOS | replicated object | divergent replicas | missing-but-redundant OSD |
@@ -410,7 +446,7 @@ RBD 门禁建立后：
 | 单 value / operand | `<=64 MiB` |
 | 单 WAL file | `<=64 MiB`，超过需显式提升并记录 |
 | WAL 解析内存 | WAL 文件 bytes + 重组后的 logical-record bytes + O(mutation metadata)，受 file/record limits 约束；WriteBatch 不再复制 key/value |
-| SST 访问 | 单解压 block 常驻 |
+| SST 访问 | 单解压 block 常驻，累计解压默认 `<=1 GiB` |
 | latest-state | 外部排序/spool，有界内存 |
 | OSD IO | 串行 range read，不并发争用同一 E01 reader |
 | RBD preview | 仅读取请求覆盖的 objects |
@@ -455,6 +491,21 @@ RBD 门禁建立后：
 - transaction/blob/wide/timestamp tag typed unsupported。
 - tests 位于 `crates/rocksdb-wire/tests/`。
 - `cargo fmt`、`cargo test -p rocksdb-wire`、clippy 和结构 guard 通过。
+
+### Stage 6.2
+
+- live SST 以 visitor 逐 block 流式读取，不建立整表 key/value 集合。
+- data entry 与 range tombstone 使用不同 callback，raw slices 不越过 callback。
+- point internal-key 顺序、range no-compression/restart、value type、external
+  global sequence、properties count 和独立资源预算全部 fail closed。
+- callback 带 raw internal key、block/entry ordinal；输出在最终 properties
+  校验前属于 provisional，只能进入可回滚 spool。
+- visitor error 不被字符串化，且不会继续读取后续 block。
+- 代表 `000146.sst` 的 `148 / 23,364 / 420,609 / 298,145` oracle 精确闭合。
+- `inspect_sst`、Stage 5 `35/40/33` live-SST inventory、Stage 6.1 WAL 和
+  `ready_metadata` 状态保持不变。
+- 当前验收等级为 parser foundation；全 live-set digest、range-only SST 和
+  reducer publish/rollback 门禁完成前，不进入 semantic completion。
 
 ### 最终重建目标
 

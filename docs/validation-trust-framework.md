@@ -268,6 +268,10 @@ cargo test -p rocksdb-wire --test sst_real_sample -- --ignored
 ```
 
 该测试缺少环境变量或文件时必须失败，不允许以 early return 伪装为通过。
+除 Stage 5 结构 oracle 外，它还必须逐 block 访问全部 `23,364` 条 entry，
+并断言 count、raw key/value bytes、sequence boundary 和累计解压字节与
+`inspect_sst` 一致。该 fixture 只证明代表 SST；全部 `35/40/33` live SST 的
+确定性 entry digest 仍是 Stage 6.3 的前置门禁。
 
 该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS superblock/bounded transaction log、RocksDB CURRENT/IDENTITY 与活动 MANIFEST，并对 `35/40/33` 个 live SST 完成 BlueFS identity、footer/checksum/properties/index/data-block 结构验证和有界脱敏 key-space census。OSD、BlueFS replay、RocksDB control-plane 与 SST inventory 原子写入 source DB，保持零普通文件行且不伪装为 POSIX 文件系统。
 
@@ -278,8 +282,8 @@ cargo test -p rocksdb-wire --test sst_real_sample -- --ignored
   - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
 - 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
 - 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
-- 当前不保证：PVE 集群级语义分析、RocksDB WAL/latest-state、Ceph BlueStore onode/blob/value 与 RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取、单个共享设备布局 BlueStore LV 的 label/superblock + metadata-log replay、CURRENT 指向的活动 MANIFEST control-plane replay，以及 block-based live-SST 物理结构库存；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
-- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-14 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，BlueFS 文件数分别为 `44/49/42`；每个活动 MANIFEST 均包含 39 个 VersionEdit 和 12 个 column family，最终 live SST 数分别为 `35/40/33`，last sequence 为 `1077117/1052658/1061239`。全部 live SST 均完成 v5 block-based footer、XXH3、LZ4、properties、index、data-block/entry 计数和脱敏 census 校验；代表 `000146.sst` 与独立 `sst_dump` oracle 的 148 个 data block、23,364 条 entry、raw key/value size 和 data/index/filter size 精确一致。OSD、BlueFS replay、RocksDB control-plane 与 SST inventory 同事务写入独立 `ready_metadata` source DB，普通 `file_entries` 保持为零。
+- 当前不保证：PVE 集群级语义分析、完整 live-SST entry digest、RocksDB latest-state、Ceph BlueStore onode/blob/value 与 RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取、单个共享设备布局 BlueStore LV 的 label/superblock + metadata-log replay、CURRENT 指向的活动 MANIFEST control-plane replay、block-based live-SST 物理结构库存、active WAL/WriteBatch metadata 和代表 SST entry-stream foundation；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
+- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-14 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，BlueFS 文件数分别为 `44/49/42`；每个活动 MANIFEST 均包含 39 个 VersionEdit 和 12 个 column family，最终 live SST 数分别为 `35/40/33`，last sequence 为 `1077117/1052658/1061239`。全部 live SST 均完成 v5 block-based footer、XXH3、LZ4、properties、index、data-block/entry 计数和脱敏 census 校验；代表 `000146.sst` 与独立 `sst_dump` oracle 的 148 个 data block、23,364 条 entry、raw key/value size 和 data/index/filter size 精确一致，entry visitor 的 count、sequence boundary 与累计解压字节同时闭合。OSD、BlueFS replay、RocksDB control-plane、SST inventory 与 WAL metadata 同事务写入独立 `ready_metadata` source DB；raw SST key/value 未持久化，普通 `file_entries` 保持为零。
 
 ### 4.10 Backend Stage 7 final run
 

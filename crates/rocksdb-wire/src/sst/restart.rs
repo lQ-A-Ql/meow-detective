@@ -8,6 +8,12 @@ const HASH_INDEX_FLAG: u32 = 1 << 31;
 pub(crate) struct RestartEntry<'a> {
     pub key: &'a [u8],
     pub value: &'a [u8],
+    pub at_restart: bool,
+}
+
+pub(crate) enum RestartVisitError<E> {
+    Wire(RocksDbWireError),
+    Visitor(E),
 }
 
 pub(crate) enum ValueEncoding {
@@ -23,13 +29,22 @@ pub(crate) fn visit_restart_block<F>(
 where
     F: FnMut(RestartEntry<'_>) -> Result<()>,
 {
-    let layout = RestartLayout::decode(block, options.max_entries_per_block)?;
-    if layout.hash_index {
-        return Err(RocksDbWireError::UnsupportedSstFeature {
-            feature: "data block hash index",
-            value: 1,
-        });
+    match try_visit_restart_block(block, encoding, options, &mut visit) {
+        Ok(count) => Ok(count),
+        Err(RestartVisitError::Wire(error) | RestartVisitError::Visitor(error)) => Err(error),
     }
+}
+
+pub(crate) fn try_visit_restart_block<F, E>(
+    block: &[u8],
+    encoding: ValueEncoding,
+    options: SstReadOptions,
+    mut visit: F,
+) -> std::result::Result<usize, RestartVisitError<E>>
+where
+    F: FnMut(RestartEntry<'_>) -> std::result::Result<(), E>,
+{
+    let layout = RestartLayout::decode(block, options.max_entries_per_block)?;
     if layout.entries_end == 0 {
         return Ok(0);
     }
@@ -39,9 +54,9 @@ where
     let mut restart_index = 0usize;
     while position < layout.entries_end {
         if entry_count >= options.max_entries_per_block {
-            return Err(RocksDbWireError::SstEntryLimit {
+            return Err(RestartVisitError::Wire(RocksDbWireError::SstEntryLimit {
                 limit: options.max_entries_per_block,
-            });
+            }));
         }
         let at_restart =
             restart_index < layout.restarts.len() && layout.restarts[restart_index] == position;
@@ -51,28 +66,39 @@ where
             at_restart,
             &encoding,
             options,
-        )?;
+        )
+        .map_err(RestartVisitError::Wire)?;
         visit(RestartEntry {
             key: &entry.key,
             value: entry.value,
-        })?;
+            at_restart,
+        })
+        .map_err(RestartVisitError::Visitor)?;
         previous_key = entry.key;
         position = position
             .checked_add(consumed)
-            .ok_or(RocksDbWireError::LengthOverflow {
+            .ok_or(RestartVisitError::Wire(RocksDbWireError::LengthOverflow {
                 context: "restart block entry offset",
-            })?;
+            }))?;
         entry_count += 1;
         if at_restart {
             restart_index += 1;
         }
     }
     if position != layout.entries_end || restart_index != layout.restarts.len() {
-        return Err(RocksDbWireError::InvalidRestartBlock {
-            reason: "restart offsets do not align with decoded entries",
-        });
+        return Err(RestartVisitError::Wire(
+            RocksDbWireError::InvalidRestartBlock {
+                reason: "restart offsets do not align with decoded entries",
+            },
+        ));
     }
     Ok(entry_count)
+}
+
+impl<E> From<RocksDbWireError> for RestartVisitError<E> {
+    fn from(error: RocksDbWireError) -> Self {
+        Self::Wire(error)
+    }
 }
 
 struct DecodedEntry<'a> {
@@ -126,7 +152,6 @@ fn decode_entry<'a>(
 struct RestartLayout {
     entries_end: usize,
     restarts: Vec<usize>,
-    hash_index: bool,
 }
 
 impl RestartLayout {
@@ -138,6 +163,12 @@ impl RestartLayout {
         }
         let footer = read_fixed32(block, block.len() - 4)?;
         let hash_index = footer & HASH_INDEX_FLAG != 0;
+        if hash_index {
+            return Err(RocksDbWireError::UnsupportedSstFeature {
+                feature: "data block hash index",
+                value: 1,
+            });
+        }
         let restart_count = (footer & !HASH_INDEX_FLAG) as usize;
         if restart_count == 0 {
             return Err(RocksDbWireError::InvalidRestartBlock {
@@ -181,7 +212,6 @@ impl RestartLayout {
         Ok(Self {
             entries_end,
             restarts,
-            hash_index,
         })
     }
 }

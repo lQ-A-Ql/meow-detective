@@ -2,17 +2,25 @@ mod block;
 mod block_handle;
 mod census;
 mod data;
+mod entry;
 mod footer;
 mod index;
+mod internal_key;
 mod inventory;
 mod layout;
 mod metaindex;
 mod model;
 mod properties;
 mod restart;
+mod stream_totals;
+mod visitor;
 
 pub use block_handle::BlockHandle;
 pub use census::{KeySpaceCensusContext, KeySpacePrefixRule};
+pub use entry::{
+    SstDataEntry, SstEntryKind, SstEntryStreamSummary, SstEntryVisitor, SstRangeDeletionEntry,
+    SstVisitError, SstVisitOptions,
+};
 pub use footer::{Footer, BLOCK_BASED_TABLE_MAGIC, FOOTER_LENGTH};
 pub use inventory::inspect_sst;
 pub use model::{
@@ -20,6 +28,7 @@ pub use model::{
     IndexKeyMetadata, KeySpaceBucket, KeySpaceCensus, SstInspection, SstReadOptions,
     TableProperties, BLOCK_TRAILER_LENGTH, KEY_SPACE_SUMMARY_VERSION,
 };
+pub use visitor::visit_sst_entries;
 
 pub trait RangeReader {
     type Error: std::error::Error + Send + Sync + 'static;

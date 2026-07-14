@@ -19,10 +19,12 @@ pub use log::{
 };
 pub use replay::{replay_version_edits, ColumnFamilyState, LiveFile, ManifestSnapshot};
 pub use sst::{
-    inspect_sst, BlockCompression, BlockHandle, ChecksumType, DataBlockStats, EntryTypeCounts,
-    Footer, IndexKeyKind, IndexKeyMetadata, KeySpaceBucket, KeySpaceCensus, KeySpaceCensusContext,
-    KeySpacePrefixRule, RangeReader, SstInspection, SstReadOptions, TableProperties,
-    BLOCK_BASED_TABLE_MAGIC, BLOCK_TRAILER_LENGTH, FOOTER_LENGTH, KEY_SPACE_SUMMARY_VERSION,
+    inspect_sst, visit_sst_entries, BlockCompression, BlockHandle, ChecksumType, DataBlockStats,
+    EntryTypeCounts, Footer, IndexKeyKind, IndexKeyMetadata, KeySpaceBucket, KeySpaceCensus,
+    KeySpaceCensusContext, KeySpacePrefixRule, RangeReader, SstDataEntry, SstEntryKind,
+    SstEntryStreamSummary, SstEntryVisitor, SstInspection, SstRangeDeletionEntry, SstReadOptions,
+    SstVisitError, SstVisitOptions, TableProperties, BLOCK_BASED_TABLE_MAGIC, BLOCK_TRAILER_LENGTH,
+    FOOTER_LENGTH, KEY_SPACE_SUMMARY_VERSION,
 };
 pub use version_edit::{
     parse_version_edit, ColumnFamilyAction, CompactCursor, DeletedFile, IgnoredField,

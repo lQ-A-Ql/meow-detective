@@ -4,7 +4,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use rocksdb_wire::{
-    inspect_sst, ChecksumType, IndexKeyKind, KeySpaceCensusContext, RangeReader, SstReadOptions,
+    inspect_sst, visit_sst_entries, ChecksumType, IndexKeyKind, KeySpaceCensusContext, RangeReader,
+    SstDataEntry, SstEntryVisitor, SstRangeDeletionEntry, SstReadOptions, SstVisitOptions,
     BLOCK_BASED_TABLE_MAGIC,
 };
 
@@ -74,6 +75,51 @@ fn representative_pve_sst_matches_independent_sst_dump_oracle() {
     assert_eq!(inspected.first_index_key.sequence, None);
     assert_eq!(inspected.last_index_key.kind, IndexKeyKind::User);
     assert!(inspected.census.complete);
+
+    let mut reader = FileRangeReader::open(&path).expect("reopen representative SST");
+    let mut visitor = CountingVisitor::default();
+    let streamed = visit_sst_entries(
+        &mut reader,
+        file_size,
+        SstVisitOptions::default(),
+        &mut visitor,
+    )
+    .expect("stream real SST entries");
+    assert_eq!(streamed.data_block_count, 148);
+    assert_eq!(
+        streamed.scanned_decompressed_bytes,
+        inspected.census.scanned_decompressed_bytes
+    );
+    assert_eq!(streamed.counts, inspected.counts);
+    assert_eq!(streamed.raw_key_size, 420_609);
+    assert_eq!(streamed.raw_value_size, 298_145);
+    assert_eq!(streamed.smallest_sequence, inspected.smallest_sequence);
+    assert_eq!(streamed.largest_sequence, inspected.largest_sequence);
+    assert_eq!(visitor.data_entries, 23_364);
+    assert_eq!(visitor.range_deletions, 0);
+}
+
+#[derive(Default)]
+struct CountingVisitor {
+    data_entries: u64,
+    range_deletions: u64,
+}
+
+impl SstEntryVisitor for CountingVisitor {
+    type Error = std::convert::Infallible;
+
+    fn visit_data(&mut self, _entry: SstDataEntry<'_>) -> Result<(), Self::Error> {
+        self.data_entries += 1;
+        Ok(())
+    }
+
+    fn visit_range_deletion(
+        &mut self,
+        _entry: SstRangeDeletionEntry<'_>,
+    ) -> Result<(), Self::Error> {
+        self.range_deletions += 1;
+        Ok(())
+    }
 }
 
 fn representative_sst_path() -> std::path::PathBuf {

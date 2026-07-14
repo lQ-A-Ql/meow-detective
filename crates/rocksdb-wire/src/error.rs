@@ -318,6 +318,18 @@ pub enum RocksDbWireError {
     #[error("SST key-space census decompressed bytes exceed limit {limit}")]
     SstCensusDecompressedLimit { limit: u64 },
 
+    #[error("SST entry stream data block count {count} exceeds limit {limit}")]
+    SstStreamDataBlockLimit { count: u64, limit: u64 },
+
+    #[error("SST entry stream total entry count exceeds limit {limit}")]
+    SstStreamEntryLimit { limit: u64 },
+
+    #[error("SST entry stream range deletion count exceeds limit {limit}")]
+    SstStreamRangeDeletionLimit { limit: u64 },
+
+    #[error("SST entry stream decompressed bytes exceed limit {limit}")]
+    SstStreamDecompressedLimit { limit: u64 },
+
     #[error("SST block key length {length} exceeds limit {limit}")]
     SstKeyLengthLimit { length: usize, limit: usize },
 

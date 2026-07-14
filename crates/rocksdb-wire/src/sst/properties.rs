@@ -28,6 +28,8 @@ const COMPRESSION: &[u8] = b"rocksdb.compression";
 const DB_IDENTITY: &[u8] = b"rocksdb.creating.db.identity";
 const DB_SESSION_IDENTITY: &[u8] = b"rocksdb.creating.session.identity";
 const INDEX_TYPE: &[u8] = b"rocksdb.block.based.table.index.type";
+const EXTERNAL_SST_VERSION: &[u8] = b"rocksdb.external_sst_file.version";
+const EXTERNAL_SST_GLOBAL_SEQUENCE: &[u8] = b"rocksdb.external_sst_file.global_seqno";
 
 pub(crate) fn parse_properties(block: &[u8], options: SstReadOptions) -> Result<TableProperties> {
     let options = SstReadOptions {
@@ -108,6 +110,12 @@ impl PropertyBuilder {
             DB_IDENTITY => self.db_identity = Some(text(name, value)?),
             DB_SESSION_IDENTITY => self.db_session_identity = Some(text(name, value)?),
             INDEX_TYPE => self.index_type = Some(fixed32(name, value)?),
+            EXTERNAL_SST_VERSION | EXTERNAL_SST_GLOBAL_SEQUENCE => {
+                return Err(RocksDbWireError::UnsupportedSstFeature {
+                    feature: "external SST global sequence",
+                    value: 1,
+                });
+            }
             _ if !name.starts_with(b"rocksdb.") => self.ignored_user_property_count += 1,
             _ => {}
         }

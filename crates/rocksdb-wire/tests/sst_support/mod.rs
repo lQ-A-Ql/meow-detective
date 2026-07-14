@@ -38,6 +38,7 @@ pub struct FixtureOptions {
     pub index_keys_are_user: bool,
     pub properties_format_version: u64,
     pub range_tombstone_only: bool,
+    pub external_sst_properties: bool,
     pub additional_unknown_meta_blocks: usize,
 }
 
@@ -49,6 +50,7 @@ impl Default for FixtureOptions {
             index_keys_are_user: true,
             properties_format_version: 0,
             range_tombstone_only: false,
+            external_sst_properties: false,
             additional_unknown_meta_blocks: 0,
         }
     }
@@ -57,6 +59,8 @@ impl Default for FixtureOptions {
 pub struct BuiltSst {
     pub bytes: Vec<u8>,
     pub data_handles: Vec<BlockHandle>,
+    #[allow(dead_code)]
+    pub range_handle: BlockHandle,
     pub unknown_meta_handle: BlockHandle,
     pub unknown_meta_handles: Vec<BlockHandle>,
     pub index_handle: BlockHandle,
@@ -155,6 +159,7 @@ pub fn build_sst(options: FixtureOptions) -> BuiltSst {
     BuiltSst {
         bytes,
         data_handles,
+        range_handle,
         unknown_meta_handle: unknown_handles[0],
         unknown_meta_handles: unknown_handles,
         index_handle,
@@ -250,6 +255,13 @@ fn properties_block(
         fixed32_property("rocksdb.block.based.table.index.type", 0),
         string_property("user.private.raw", "ignored"),
     ];
+    if options.external_sst_properties {
+        properties.push(fixed32_property("rocksdb.external_sst_file.version", 2));
+        properties.push(fixed64_property(
+            "rocksdb.external_sst_file.global_seqno",
+            42,
+        ));
+    }
     properties.sort_by(|left, right| left.0.cmp(&right.0));
     let refs = properties
         .iter()
@@ -373,6 +385,10 @@ fn numeric_property(name: &str, value: u64) -> (Vec<u8>, Vec<u8>) {
 }
 
 fn fixed32_property(name: &str, value: u32) -> (Vec<u8>, Vec<u8>) {
+    (name.as_bytes().to_vec(), value.to_le_bytes().to_vec())
+}
+
+fn fixed64_property(name: &str, value: u64) -> (Vec<u8>, Vec<u8>) {
     (name.as_bytes().to_vec(), value.to_le_bytes().to_vec())
 }
 
