@@ -14,6 +14,7 @@ const MAX_SHARDS_PER_PREFIX: usize = 64;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RocksdbShardingDefinition {
     routes: BTreeMap<String, RocksdbColumnFamilyRoute>,
+    digest_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,10 @@ pub(super) struct RocksdbColumnFamilyRoute {
 impl RocksdbShardingDefinition {
     pub(super) fn route(&self, physical_name: &str) -> Option<&RocksdbColumnFamilyRoute> {
         self.routes.get(physical_name)
+    }
+
+    pub(super) fn digest_sha256(&self) -> &str {
+        &self.digest_sha256
     }
 
     pub(super) fn census_context(
@@ -174,7 +179,10 @@ pub(super) fn parse_rocksdb_sharding_definition(
             }
         }
     }
-    Ok(RocksdbShardingDefinition { routes })
+    Ok(RocksdbShardingDefinition {
+        routes,
+        digest_sha256: super::ceph_rocksdb_digest::sharding_sha256(text.as_bytes()),
+    })
 }
 
 fn split_column_definitions(text: &str) -> Result<Vec<&str>, CommandError> {

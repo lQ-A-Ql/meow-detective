@@ -85,6 +85,7 @@ pub(crate) fn persist_bluestore_probe(
             read_bluefs_inventory(
                 &mut *reader,
                 data_source,
+                ctx.case_root,
                 &inventory_id,
                 selection.label.osd_uuid,
                 selection.label.size,
@@ -98,29 +99,44 @@ pub(crate) fn persist_bluestore_probe(
             "Import cancelled before BlueStore metadata persistence",
         ));
     }
-    match &metadata {
+    persist_probe_records(
+        &repo,
+        &data_source.id.0,
+        &inventory,
+        &replica_records,
+        metadata.as_ref(),
+    )?;
+    if let Some(records) = &metadata {
+        audit_bluefs_inventory(ctx, data_source, records);
+    }
+    Ok(())
+}
+
+fn persist_probe_records(
+    repo: &CephOsdRepo<'_>,
+    data_source_id: &str,
+    inventory: &CephOsdInventoryRecord,
+    replicas: &[CephOsdLabelReplicaRecord],
+    metadata: Option<&CephMetadataAggregate>,
+) -> Result<(), CommandError> {
+    match metadata {
         Some(records) => repo.replace_for_data_source_with_rocksdb_metadata(
-            &data_source.id.0,
-            std::slice::from_ref(&inventory),
-            &replica_records,
+            data_source_id,
+            std::slice::from_ref(inventory),
+            replicas,
             CephRocksdbMetadataSnapshot {
                 bluefs: &records.bluefs,
                 rocksdb: &records.rocksdb,
                 ssts: &records.ssts,
                 wals: &records.wals,
+                latest_state: &records.latest_state,
             },
         ),
-        None => repo.replace_for_data_source(
-            &data_source.id.0,
-            std::slice::from_ref(&inventory),
-            &replica_records,
-        ),
+        None => {
+            repo.replace_for_data_source(data_source_id, std::slice::from_ref(inventory), replicas)
+        }
     }
-    .map_err(CommandError::from_service_error)?;
-    if let Some(records) = &metadata {
-        audit_bluefs_inventory(ctx, data_source, records);
-    }
-    Ok(())
+    .map_err(CommandError::from_service_error)
 }
 
 fn bluestore_volume(probe: &ImageFilesystemProbe) -> Result<&UnsupportedImageVolume, CommandError> {
@@ -190,6 +206,7 @@ fn read_label_replicas(
 fn read_bluefs_inventory(
     reader: &mut dyn evidence_core::EvidenceReader,
     data_source: &domain::DataSource,
+    case_root: &std::path::Path,
     inventory_id: &str,
     expected_osd_uuid: uuid::Uuid,
     device_size: u64,
@@ -229,6 +246,7 @@ fn read_bluefs_inventory(
     let rocksdb = super::ceph_rocksdb_inventory::inventory_rocksdb_manifest(
         &mut extent_reader,
         &replay,
+        case_root,
         &data_source.id.0,
         inventory_id,
         cancel_token,
@@ -244,6 +262,7 @@ fn read_bluefs_inventory(
         rocksdb: rocksdb.manifest,
         ssts: rocksdb.ssts,
         wals: rocksdb.wals,
+        latest_state: rocksdb.latest_state,
     })
 }
 

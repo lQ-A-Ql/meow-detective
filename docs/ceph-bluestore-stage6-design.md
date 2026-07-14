@@ -1,8 +1,8 @@
 # Ceph BlueStore Stage 6 设计
 
-**开发基线**: `2c54429c`
+**开发基线**: `20188bb0`
 **设计日期**: 2026-07-14
-**当前实现切片**: RocksDB live-SST entry stream foundation
+**当前实现切片**: RocksDB full live-set + active-WAL latest-state summary recovery
 **最终目标**: BlueStore OSD -> RocksDB latest state -> RADOS object -> RBD image -> VM 文件系统
 
 ## Summary
@@ -20,10 +20,13 @@ RBD 重建所需的可信基础。
   独立设计，不把 RBD 对象误报为 CephFS 文件树。
 
 Stage 6.1 已交付 active WAL 选择、物理日志恢复、WriteBatch wire decoder
-和 source-local metadata 持久化。当前 Stage 6.2 在 Stage 5 的结构校验基础上
-交付 live-SST entry stream：逐 block 解压并借用访问 key/value，不建立整表
-entry vector，不持久化 raw key/value，不解释 BlueStore 结构，也不改变三个
-`disk02` 数据源的 `ready_metadata` 状态。
+和 source-local metadata 持久化；Stage 6.2 已交付 live-SST entry stream。
+Stage 6.3 现已将全部 `35/40/33` live SST 与 active WAL 写入 source-local
+临时 spool，按 RocksDB internal-key 顺序执行 value/delete/single-delete、
+range-delete 和批准的 Ceph `T`/`b` merge reduction，并只在 source DB
+持久化每个 column family 的计数、sequence boundary 和 canonical digest。
+raw key/value 不进入 source DB、日志或报告，三个 `disk02` 数据源继续保持
+`ready_metadata`。
 
 ## 开发基线与事实源
 
@@ -98,12 +101,14 @@ Ceph Squid v19.2.3 (`c92aebb279828e9c3c1f5d24613efca272649e62`)
 - parser crate 不依赖 Ceph、SQLite、Tauri 或 app-services。
 - 测试正文只存在于物理 `tests/` 目录。
 
-### 本阶段不做
+### 当前仍不做
 
-- 不在首个切片中持久化 RocksDB logical key/value。
-- 不在首个切片中实现 merge operator。
-- 不在首个切片中解析 BlueStore onode/blob。
-- 不在首个切片中生成普通 `file_entries`。
+- 不持久化 RocksDB logical raw key/value；只持久化 digest-only latest-state
+  summary。
+- 不执行未经批准的 merge operator；当前仅支持 Ceph `T` 的 int64-array
+  wrapping-add 与 `b` 的 bitwise-XOR。
+- 不解析 BlueStore onode/blob/value。
+- 不生成普通 `file_entries`。
 - 不宣称 RADOS、RBD、VM 文件树或 CephFS 已完成。
 
 ## 目标架构
@@ -279,6 +284,8 @@ Implemented validation:
 
 ### Stage 6.3 - RocksDB Latest-State Reducer
 
+Status: completed for the private PVE baseline.
+
 Tasks:
 
 - 按 column family、user key、sequence 和 value type 合并 live SST。
@@ -295,6 +302,28 @@ Expected result:
 
 - 得到可重复、可审计的 RocksDB logical latest-state stream。
 - 相同证据重复导入产生相同 key digest、entry count 和 sequence boundary。
+
+Implemented result:
+
+- `inspect_sst_with_visitor` 在同一次 data-block 解压中同时完成 Stage 5 结构
+  inventory、脱敏 census 与 mutation streaming，避免每个 SST 重读 payload
+  block。
+- 全部 SST/WAL point mutation 与 range tombstone 进入
+  `staging/<dataSourceId>/ceph-rocksdb-recovery-*` 下的临时 SQLite spool；
+  spool 失败或作用域结束后自动删除。
+- spool 使用受限 schema、确定性 internal-key 顺序、单 writer 和每个 column
+  family 独立 read-only recovery connection；无 range/merge 的 column family
+  使用 borrowed point-only fast path。
+- reducer 支持 value、delete、single-delete、range-delete，以及 Ceph `T`
+  int64-array 和 `b` bitwise-XOR merge；未知 operator、重复 internal key、
+  非递减 history、inactive column family 和资源上限均 typed fail closed。
+- `source_011_ceph_latest_state.sql` 只保存每个 active column family 的 mutation
+  分类计数、latest/deleted 决策计数、sequence boundary、sharding/point/range/
+  latest-state SHA-256 和 `scan_complete=1`；不含 raw key/value。
+- 三个 OSD 各产生 12 个 column-family summary。真实样本聚合 oracle：
+  `b4f31e...22eed`、`0cf9b7...20880`、`32d7af...e978`。
+- OSD、BlueFS、MANIFEST、SST、WAL 与 latest-state summary 在同一 source DB
+  replacement transaction 中提交；任一步失败保留上一完整快照。
 
 ### Stage 6.4 - BlueStore Semantic Decode
 
@@ -396,8 +425,8 @@ Expected result:
 | Sequence | monotonic non-overlap | regression/overlap/56-bit overflow | valid gaps、zero mutation batch |
 | WAL log | full/fragmented/recyclable | CRC/fragment/log-number mismatch | block trailer、preallocated zero tail |
 | WAL selection | active numbered files | malformed/duplicate/unknown CF | min-log boundary、legacy db、post-MANIFEST、number gaps |
-| SST stream | value/delete/range/provenance | checksum/restart/type/external-seq | representative SST；全 `35/40/33` digest 为 6.3 前置 |
-| Latest state | SST + WAL | sequence regression/conflict | deterministic digest |
+| SST stream | value/delete/range/provenance | checksum/restart/type/external-seq | representative SST + full `35/40/33` live set |
+| Latest state | SST + WAL + `T`/`b` merge | sequence regression/conflict/unknown CF/operator | 12 CF rows per OSD + deterministic aggregate digest |
 | BlueStore | onode/blob/shard | DENC version/extent overlap | three OSD replica comparison |
 | RADOS | replicated object | divergent replicas | missing-but-redundant OSD |
 | RBD | head image/striping | unsupported feature/clone | first/middle/last object reads |
@@ -413,21 +442,30 @@ Expected result:
 
 ### 真实样本测试
 
-首轮真实门禁：
+Stage 6.3 真实门禁：
 
 1. 只读导出三个 `db.wal/*.log`，记录文件号、逻辑大小和 checksum。
 2. native decoder 与 `ldb`/RocksDB recovery oracle 比较 batch、mutation、
    first/last sequence。
-3. 保持六成员串行导入，三个 host 为 `ready`，三个 OSD 在
-   Stage 6.1 仍为 `ready_metadata`。
+3. 保持六成员串行导入，三个 host 为 `ready`，三个 OSD 保持
+   `ready_metadata`。
 4. ordinary BlueStore `file_entries` 继续为零。
 5. Stage 5 `35/40/33` live-SST 和聚合 entry/block 数不得变化。
+6. 每个 OSD 必须持久化 12 个 active column-family summary，并验证 mutation
+   分类恒等式、sequence boundary、`scan_complete` 和 aggregate digest。
+7. raw key/value 不得出现在 source DB schema、日志、审计或普通文件树。
 
 | OSD | WAL | 文件字节 | logical records | empty batches | mutations | payload bytes | sequence |
 |---|---:|---:|---:|---:|---:|---:|---|
 | server01 | 142 | 3,921,274 | 3,710 | 1,107 | 9,338 | 3,894,471 | 1,077,118..1,086,455 |
 | server02 | 120 | 4,142,839 | 3,782 | 1,084 | 9,644 | 4,115,489 | 1,052,659..1,062,302 |
 | server03 | 127 | 4,145,432 | 3,812 | 1,112 | 9,644 | 4,117,873 | 1,061,240..1,070,883 |
+
+| OSD | latest-state aggregate SHA-256 |
+|---|---|
+| server01 | `b4f31e224ff485b29b1b3ac7c21e079344250bf37a954b304d43294b1da22eed` |
+| server02 | `0cf9b7ead1e5953fa84f1c57a16be4f1a2d5fd4713d2ed1ad20cf8cf9d320880` |
+| server03 | `32d7af9d9eda6ca168cb9a85a7b17a36c9fce012f9301b354aebb1b633bee978` |
 
 RBD 门禁建立后：
 
@@ -447,13 +485,18 @@ RBD 门禁建立后：
 | 单 WAL file | `<=64 MiB`，超过需显式提升并记录 |
 | WAL 解析内存 | WAL 文件 bytes + 重组后的 logical-record bytes + O(mutation metadata)，受 file/record limits 约束；WriteBatch 不再复制 key/value |
 | SST 访问 | 单解压 block 常驻，累计解压默认 `<=1 GiB` |
-| latest-state | 外部排序/spool，有界内存 |
+| latest-state | source-local 临时 SQLite spool；point `<=5,000,000`、range `<=500,000`、resident range bytes `<=64 MiB`、aggregate raw bytes `<=8 GiB`；range tombstone 全量装载与 coverage end-key 副本受独立常驻预算约束 |
 | OSD IO | 串行 range read，不并发争用同一 E01 reader |
 | RBD preview | 仅读取请求覆盖的 objects |
 
 性能回归要求：
 
 - Stage 6.1 不得让现有 Stage 5 六成员导入耗时退化超过 10%。
+- Stage 6.3 首次增加全 live-set mutation spool 和约 50 万 mutation 的
+  latest-state reduction，不能直接沿用 Stage 5 纯结构扫描的 `40.32s`
+  绝对门槛。2026-07-14 本机 debug feature-adjusted baseline 为 `50.31s`；
+  相比优化前约 `59.5s` 改善约 `15.4%`。后续变更不得在相同机器、相同串行
+  配置和热缓存条件下退化超过 10%。
 - latest-state 和 BlueStore 阶段必须分别记录读取 bytes、解压 bytes、key
   count、spill bytes、wall time 和 peak memory。
 - RBD 随机 1 MiB range read 不得线性扫描全部 OSD 或全部 object。
@@ -506,6 +549,21 @@ RBD 门禁建立后：
   `ready_metadata` 状态保持不变。
 - 当前验收等级为 parser foundation；全 live-set digest、range-only SST 和
   reducer publish/rollback 门禁完成前，不进入 semantic completion。
+
+### Stage 6.3
+
+- 全部 `35/40/33` live SST 与 active WAL 通过统一 spool 进入 reducer。
+- value/delete/single-delete/range-delete 与批准的 `T`/`b` merge 语义闭合；
+  unknown operator 和 malformed history typed fail closed。
+- 每个 OSD 精确产生 12 个 active column-family summary，aggregate digest 与
+  私有真实样本 oracle 一致。
+- source DB 只保存 digest-only summary，不保存 raw RocksDB key/value。
+- disposable spool 位于 case staging，完成或失败后删除；读取证据保持只读。
+- OSD/BlueFS/MANIFEST/SST/WAL/latest-state replacement 原子提交。
+- 六成员真实回归通过，三个 host `ready`、三个 OSD `ready_metadata`、普通
+  BlueStore `file_entries=0`。
+- 当前完成的是可验证 logical latest-state summary，不是 BlueStore
+  onode/blob/value semantic decode；Stage 6.4 前不得宣称对象或 VM 磁盘恢复。
 
 ### 最终重建目标
 

@@ -3,6 +3,7 @@ mod cursor;
 mod error;
 mod limits;
 mod log;
+mod recovery;
 mod replay;
 mod sst;
 mod version_edit;
@@ -17,14 +18,19 @@ pub use log::{
     decode_log, LogDecodeOptions, LogicalLogRecord, ROCKSDB_LOG_BLOCK_SIZE,
     ROCKSDB_LOG_HEADER_SIZE, ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE,
 };
+pub use recovery::{
+    reduce_latest_state, reduce_latest_state_ref, KeyVersion, KeyVersionKind, LatestState,
+    LatestStateError, LatestStateLimits, LatestStateRef, MergeOperator,
+};
 pub use replay::{replay_version_edits, ColumnFamilyState, LiveFile, ManifestSnapshot};
 pub use sst::{
-    inspect_sst, visit_sst_entries, BlockCompression, BlockHandle, ChecksumType, DataBlockStats,
-    EntryTypeCounts, Footer, IndexKeyKind, IndexKeyMetadata, KeySpaceBucket, KeySpaceCensus,
-    KeySpaceCensusContext, KeySpacePrefixRule, RangeReader, SstDataEntry, SstEntryKind,
-    SstEntryStreamSummary, SstEntryVisitor, SstInspection, SstRangeDeletionEntry, SstReadOptions,
-    SstVisitError, SstVisitOptions, TableProperties, BLOCK_BASED_TABLE_MAGIC, BLOCK_TRAILER_LENGTH,
-    FOOTER_LENGTH, KEY_SPACE_SUMMARY_VERSION,
+    inspect_sst, inspect_sst_with_visitor, visit_sst_entries, BlockCompression, BlockHandle,
+    ChecksumType, DataBlockStats, EntryTypeCounts, Footer, IndexKeyKind, IndexKeyMetadata,
+    KeySpaceBucket, KeySpaceCensus, KeySpaceCensusContext, KeySpacePrefixRule, RangeReader,
+    SstDataEntry, SstEntryKind, SstEntryStreamSummary, SstEntryVisitor, SstInspection,
+    SstInspectionStream, SstRangeDeletionEntry, SstReadOptions, SstVisitError, SstVisitOptions,
+    TableProperties, BLOCK_BASED_TABLE_MAGIC, BLOCK_TRAILER_LENGTH, FOOTER_LENGTH,
+    KEY_SPACE_SUMMARY_VERSION,
 };
 pub use version_edit::{
     parse_version_edit, ColumnFamilyAction, CompactCursor, DeletedFile, IgnoredField,

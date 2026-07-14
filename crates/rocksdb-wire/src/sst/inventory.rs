@@ -126,16 +126,16 @@ fn inspect_range_deletions<R: RangeReader>(
 }
 
 #[derive(Default)]
-struct EntryTotals {
-    counts: EntryTypeCounts,
-    raw_key_size: u64,
-    raw_value_size: u64,
-    smallest_sequence: u64,
-    largest_sequence: u64,
+pub(super) struct EntryTotals {
+    pub(super) counts: EntryTypeCounts,
+    pub(super) raw_key_size: u64,
+    pub(super) raw_value_size: u64,
+    pub(super) smallest_sequence: u64,
+    pub(super) largest_sequence: u64,
 }
 
 impl EntryTotals {
-    fn add_data_block(&mut self, stats: &DataBlockStats) -> Result<()> {
+    pub(super) fn add_data_block(&mut self, stats: &DataBlockStats) -> Result<()> {
         self.add(
             &stats.counts,
             stats.raw_key_size,
@@ -145,7 +145,7 @@ impl EntryTotals {
         )
     }
 
-    fn add(
+    pub(super) fn add(
         &mut self,
         counts: &EntryTypeCounts,
         raw_key_size: u64,
@@ -174,14 +174,14 @@ impl EntryTotals {
         Ok(())
     }
 
-    fn finish(&mut self) {
+    pub(super) fn finish(&mut self) {
         if self.counts.entries == 0 {
             self.smallest_sequence = 0;
         }
     }
 }
 
-fn validate_counts(
+pub(super) fn validate_counts(
     counts: &EntryTypeCounts,
     raw_key_size: u64,
     raw_value_size: u64,

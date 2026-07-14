@@ -12,6 +12,7 @@ pub use ready::{
 };
 
 const SOURCES_DIR_NAME: &str = "sources";
+const STAGING_DIR_NAME: &str = "staging";
 const SOURCE_DB_FILE_NAME: &str = "source.db";
 const SOURCE_INDEX_DIR_NAME: &str = "index";
 
@@ -93,6 +94,16 @@ pub fn source_db_path(case_root: &Path, data_source_id: &DataSourceId) -> PathBu
 
 pub fn source_index_dir(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
     source_dir(case_root, data_source_id).join(SOURCE_INDEX_DIR_NAME)
+}
+
+pub fn source_staging_dir(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<PathBuf> {
+    if !is_safe_data_source_id(&data_source_id.0) {
+        return Err(DbError::System(format!(
+            "Data source '{}' cannot own a staging directory",
+            data_source_id.0
+        )));
+    }
+    Ok(case_root.join(STAGING_DIR_NAME).join(&data_source_id.0))
 }
 
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
@@ -238,6 +249,10 @@ impl SourceDbLocator {
 
     pub fn source_index_dir(&self, data_source_id: &DataSourceId) -> PathBuf {
         source_index_dir(&self.case_root, data_source_id)
+    }
+
+    pub fn source_staging_dir(&self, data_source_id: &DataSourceId) -> DbResult<PathBuf> {
+        source_staging_dir(&self.case_root, data_source_id)
     }
 }
 

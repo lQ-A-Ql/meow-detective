@@ -129,7 +129,12 @@ fn parses_stage4_fields_and_all_new_file_formats() {
     assert_eq!(edit.new_files[3].path_id, 3);
     assert!(edit.new_files[3].metadata.marked_for_compaction);
     assert_eq!(edit.new_files[3].metadata.epoch_number, Some(11));
-    assert_eq!(edit.new_files[3].metadata.skipped_safe_custom_fields, 2);
+    assert_eq!(
+        edit.new_files[3].metadata.min_timestamp_length,
+        Some(b"safe timestamp".len() as u32)
+    );
+    assert_eq!(edit.new_files[3].metadata.max_timestamp_length, None);
+    assert_eq!(edit.new_files[3].metadata.skipped_safe_custom_fields, 1);
     assert_eq!(edit.ignored_fields[0].tag, 0x2710);
 }
 

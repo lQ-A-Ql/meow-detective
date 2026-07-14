@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
@@ -12,6 +12,9 @@ use rocksdb_wire::{
 use transport::CommandError;
 
 use super::ceph_bluefs_file_reader::BluefsExtentReader;
+use super::ceph_rocksdb_spool::{
+    RocksdbRecoverySpool, SpoolPointInput, SpoolProvenance, SpoolRangeInput, SpoolSourceKind,
+};
 use super::ceph_rocksdb_wal_locator::{LocatedRocksdbWal, RocksdbWalSelection};
 
 pub(super) fn inventory_active_rocksdb_wals(
@@ -19,6 +22,7 @@ pub(super) fn inventory_active_rocksdb_wals(
     selection: &RocksdbWalSelection<'_>,
     rocksdb: &CephRocksdbAggregate,
     cancel_token: &AtomicBool,
+    spool: &mut RocksdbRecoverySpool,
 ) -> Result<CephRocksdbWalAggregate, CommandError> {
     let column_families = ColumnFamilyInventory::from_rocksdb(rocksdb);
     let mut files = Vec::with_capacity(selection.files.len());
@@ -55,8 +59,11 @@ pub(super) fn inventory_active_rocksdb_wals(
             located,
             &column_families,
             cancel_token,
-            &mut sequence_state,
-            &mut records,
+            &mut WalInventoryOutput {
+                sequence_state: &mut sequence_state,
+                records: &mut records,
+                spool,
+            },
         )?;
         if records.len() - start != file.logical_record_count as usize {
             return Err(inventory_error(
@@ -74,8 +81,7 @@ fn inventory_wal_records(
     located: &LocatedRocksdbWal<'_>,
     column_families: &ColumnFamilyInventory,
     cancel_token: &AtomicBool,
-    sequence_state: &mut WalSequenceState,
-    output: &mut Vec<CephRocksdbWalRecord>,
+    output: &mut WalInventoryOutput<'_>,
 ) -> Result<CephRocksdbWalFileRecord, CommandError> {
     let mut summary = WalSummary::default();
     for (index, record) in decoded.iter().enumerate() {
@@ -86,10 +92,17 @@ fn inventory_wal_records(
             decode_write_batch(&record.data, WriteBatchLimits::default()).map_err(map_wal_error)?;
         validate_record_ordinal(record, index)?;
         validate_auxiliary_records(&batch)?;
-        validate_batch_sequence(&batch, sequence_state)?;
+        validate_batch_sequence(&batch, output.sequence_state)?;
         validate_column_families(&batch, column_families)?;
+        spool_batch_mutations(
+            &batch,
+            record,
+            located.wal_number,
+            column_families,
+            output.spool,
+        )?;
         summary.observe(record, &batch)?;
-        output.push(CephRocksdbWalRecord {
+        output.records.push(CephRocksdbWalRecord {
             inventory_id: rocksdb.manifest.inventory_id.clone(),
             wal_number: located.wal_number,
             record_ordinal: record.ordinal,
@@ -104,6 +117,95 @@ fn inventory_wal_records(
         });
     }
     summary.finish(rocksdb, located)
+}
+
+struct WalInventoryOutput<'a> {
+    sequence_state: &'a mut WalSequenceState,
+    records: &'a mut Vec<CephRocksdbWalRecord>,
+    spool: &'a mut RocksdbRecoverySpool,
+}
+
+fn spool_batch_mutations(
+    batch: &rocksdb_wire::WriteBatch<'_>,
+    record: &rocksdb_wire::LogicalLogRecord,
+    wal_number: u64,
+    column_families: &ColumnFamilyInventory,
+    spool: &mut RocksdbRecoverySpool,
+) -> Result<(), CommandError> {
+    for (mutation_ordinal, mutation) in batch.mutations.iter().enumerate() {
+        let Some(log_number) = column_families.active.get(&mutation.column_family_id) else {
+            continue;
+        };
+        if wal_number < *log_number {
+            continue;
+        }
+        let mutation_ordinal = mutation_ordinal as u64;
+        let provenance = SpoolProvenance {
+            source_kind: SpoolSourceKind::Wal,
+            file_number: wal_number,
+            level: None,
+            physical_offset: record.physical_offset,
+            primary_ordinal: record.ordinal,
+            secondary_ordinal: mutation_ordinal,
+        };
+        match mutation.kind {
+            rocksdb_wire::WriteBatchMutationKind::Put { value } => {
+                spool.insert_point(SpoolPointInput {
+                    column_family_id: mutation.column_family_id,
+                    user_key: mutation.key,
+                    sequence: mutation.sequence,
+                    value_type: 1,
+                    value,
+                    provenance,
+                })?;
+            }
+            rocksdb_wire::WriteBatchMutationKind::Delete => {
+                spool.insert_point(SpoolPointInput {
+                    column_family_id: mutation.column_family_id,
+                    user_key: mutation.key,
+                    sequence: mutation.sequence,
+                    value_type: 0,
+                    value: &[],
+                    provenance,
+                })?;
+            }
+            rocksdb_wire::WriteBatchMutationKind::SingleDelete => {
+                spool.insert_point(SpoolPointInput {
+                    column_family_id: mutation.column_family_id,
+                    user_key: mutation.key,
+                    sequence: mutation.sequence,
+                    value_type: 7,
+                    value: &[],
+                    provenance,
+                })?;
+            }
+            rocksdb_wire::WriteBatchMutationKind::Merge { operand } => {
+                spool.insert_point(SpoolPointInput {
+                    column_family_id: mutation.column_family_id,
+                    user_key: mutation.key,
+                    sequence: mutation.sequence,
+                    value_type: 2,
+                    value: operand,
+                    provenance,
+                })?;
+            }
+            rocksdb_wire::WriteBatchMutationKind::DeleteRange { end_key } => {
+                if mutation.key > end_key {
+                    return Err(inventory_error(
+                        "WAL range tombstone start key is after its end key",
+                    ));
+                }
+                spool.insert_range(SpoolRangeInput {
+                    column_family_id: mutation.column_family_id,
+                    start_key: mutation.key,
+                    end_key,
+                    sequence: mutation.sequence,
+                    provenance,
+                })?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_record_ordinal(
@@ -176,7 +278,9 @@ fn validate_column_families(
     column_families: &ColumnFamilyInventory,
 ) -> Result<(), CommandError> {
     if let Some(mutation) = batch.mutations.iter().find(|mutation| {
-        !column_families.active.contains(&mutation.column_family_id)
+        !column_families
+            .active
+            .contains_key(&mutation.column_family_id)
             && !column_families.dropped.contains(&mutation.column_family_id)
     }) {
         return Err(inventory_error(format!(
@@ -194,19 +298,22 @@ struct WalSequenceState {
 }
 
 struct ColumnFamilyInventory {
-    active: HashSet<u32>,
+    active: HashMap<u32, u64>,
     dropped: HashSet<u32>,
 }
 
 impl ColumnFamilyInventory {
     fn from_rocksdb(rocksdb: &CephRocksdbAggregate) -> Self {
-        let mut active = HashSet::new();
+        let mut active = HashMap::new();
         let mut dropped = HashSet::new();
         for column_family in &rocksdb.column_families {
             if column_family.dropped {
                 dropped.insert(column_family.column_family_id);
             } else {
-                active.insert(column_family.column_family_id);
+                active.insert(
+                    column_family.column_family_id,
+                    column_family.log_number.unwrap_or_default(),
+                );
             }
         }
         Self { active, dropped }

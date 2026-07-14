@@ -1,6 +1,7 @@
 mod block;
 mod block_handle;
 mod census;
+mod combined;
 mod data;
 mod entry;
 mod footer;
@@ -17,9 +18,10 @@ mod visitor;
 
 pub use block_handle::BlockHandle;
 pub use census::{KeySpaceCensusContext, KeySpacePrefixRule};
+pub use combined::inspect_sst_with_visitor;
 pub use entry::{
-    SstDataEntry, SstEntryKind, SstEntryStreamSummary, SstEntryVisitor, SstRangeDeletionEntry,
-    SstVisitError, SstVisitOptions,
+    SstDataEntry, SstEntryKind, SstEntryStreamSummary, SstEntryVisitor, SstInspectionStream,
+    SstRangeDeletionEntry, SstVisitError, SstVisitOptions,
 };
 pub use footer::{Footer, BLOCK_BASED_TABLE_MAGIC, FOOTER_LENGTH};
 pub use inventory::inspect_sst;

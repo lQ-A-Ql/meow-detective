@@ -20,6 +20,8 @@ use persistence_sqlite::{
 };
 use rusqlite::Connection;
 
+mod support;
+
 fn setup_source_db() -> Connection {
     let conn = open_in_memory().expect("open source database");
     runner::run_source_all(&conn).expect("run source migrations");
@@ -212,6 +214,7 @@ fn persist(
     match rocksdb {
         Some(rocksdb) => {
             let ssts = sst_records(rocksdb);
+            let latest_state = support::empty_latest_state(rocksdb);
             repo.replace_for_data_source_with_rocksdb_metadata(
                 &osd.data_source_id,
                 std::slice::from_ref(osd),
@@ -221,6 +224,7 @@ fn persist(
                     rocksdb,
                     ssts: &ssts,
                     wals: &wals(rocksdb),
+                    latest_state: &latest_state,
                 },
             )
         }
@@ -325,7 +329,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_010_ceph_wal_inventory"
+        "source_011_ceph_latest_state"
     );
     for table in [
         "ceph_rocksdb_manifests",

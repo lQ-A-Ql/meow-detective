@@ -13,6 +13,7 @@ pub(super) fn build_rocksdb_aggregate(
     control: RocksdbControlFiles,
     snapshot: ManifestSnapshot,
 ) -> Result<CephRocksdbAggregate, CommandError> {
+    validate_recovery_profile(&snapshot)?;
     let comparator_name = utf8_metadata(
         snapshot
             .comparator
@@ -56,6 +57,39 @@ pub(super) fn build_rocksdb_aggregate(
         column_families,
         live_ssts,
     })
+}
+
+fn validate_recovery_profile(snapshot: &ManifestSnapshot) -> Result<(), CommandError> {
+    if snapshot.previous_log_number != 0 {
+        return Err(CommandError::unsupported(
+            "RocksDB previous-log recovery is outside the current Ceph reconstruction profile",
+        ));
+    }
+    if snapshot.comparator.as_deref() != Some(b"leveldb.BytewiseComparator".as_slice()) {
+        return Err(CommandError::unsupported(
+            "RocksDB latest-state recovery requires leveldb.BytewiseComparator",
+        ));
+    }
+    if let Some(column_family) = snapshot.column_families.iter().find(|column_family| {
+        !column_family.dropped
+            && column_family.comparator.as_deref() != Some(b"leveldb.BytewiseComparator".as_slice())
+    }) {
+        return Err(CommandError::unsupported(format!(
+            "RocksDB column family {} uses an unsupported comparator",
+            column_family.id
+        )));
+    }
+    if let Some(file) = snapshot.live_files.iter().find(|file| {
+        file.metadata.oldest_blob_file_number.is_some()
+            || file.metadata.min_timestamp_length.is_some()
+            || file.metadata.max_timestamp_length.is_some()
+    }) {
+        return Err(CommandError::unsupported(format!(
+            "RocksDB live SST {} uses blob or timestamp metadata outside the current recovery profile",
+            file.file_number
+        )));
+    }
+    Ok(())
 }
 
 fn map_column_family(

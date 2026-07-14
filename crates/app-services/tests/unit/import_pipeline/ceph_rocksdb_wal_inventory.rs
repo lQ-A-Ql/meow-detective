@@ -1,14 +1,20 @@
 use std::sync::atomic::AtomicBool;
 
 use ceph_wire::{BluefsExtent, BluefsFnode, CephUtime};
+use domain::DataSourceId;
 use persistence_sqlite::repositories::ceph_rocksdb_repo::{
     CephRocksdbAggregate, CephRocksdbColumnFamilyRecord, CephRocksdbManifestRecord,
 };
 use rocksdb_wire::LogicalLogRecord;
+use tempfile::TempDir;
 
 use crate::import_pipeline::ceph_bluefs_replay::BluefsReplayFile;
+use crate::import_pipeline::ceph_rocksdb_spool::RocksdbRecoverySpool;
 
-use super::{inventory_wal_records, ColumnFamilyInventory, LocatedRocksdbWal, WalSequenceState};
+use super::{
+    inventory_wal_records, ColumnFamilyInventory, LocatedRocksdbWal, WalInventoryOutput,
+    WalSequenceState,
+};
 
 const VALUE: u8 = 0x01;
 const LOG_DATA: u8 = 0x03;
@@ -45,6 +51,10 @@ fn inventories_records_without_persisting_raw_payloads() {
     let column_families = ColumnFamilyInventory::from_rocksdb(&rocksdb);
     let mut sequence_state = WalSequenceState::default();
     let mut output = Vec::new();
+    let case = TempDir::new().expect("case root");
+    let mut spool =
+        RocksdbRecoverySpool::create(case.path(), &DataSourceId("source-1".to_string()))
+            .expect("create spool");
 
     let summary = inventory_wal_records(
         &records,
@@ -52,8 +62,11 @@ fn inventories_records_without_persisting_raw_payloads() {
         &located,
         &column_families,
         &AtomicBool::new(false),
-        &mut sequence_state,
-        &mut output,
+        &mut WalInventoryOutput {
+            sequence_state: &mut sequence_state,
+            records: &mut output,
+            spool: &mut spool,
+        },
     )
     .expect("inventory WAL records");
 
@@ -178,14 +191,23 @@ fn inventory(
     transport::CommandError,
 > {
     let column_families = ColumnFamilyInventory::from_rocksdb(rocksdb);
+    let case = TempDir::new().expect("case root");
+    let mut spool =
+        RocksdbRecoverySpool::create(case.path(), &DataSourceId("source-1".to_string()))
+            .expect("create spool");
+    let mut sequence_state = WalSequenceState::default();
+    let mut output = Vec::new();
     inventory_wal_records(
         records,
         rocksdb,
         located,
         &column_families,
         &AtomicBool::new(cancelled),
-        &mut WalSequenceState::default(),
-        &mut Vec::new(),
+        &mut WalInventoryOutput {
+            sequence_state: &mut sequence_state,
+            records: &mut output,
+            spool: &mut spool,
+        },
     )
 }
 

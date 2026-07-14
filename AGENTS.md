@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (22 repos, 47 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (23 repos, 48 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -174,7 +174,7 @@ cargo test --workspace
   - Parser tests: valid / invalid / edge (at least 3 per parser family).
   - Fixture / expected JSON regression tests.
   - Real E01 regression tests are marked `#[ignore]` and run by setting `FORENSICS_E01_FIXTURE` or `FORENSICS_LIUYANG_E01_FIXTURE` environment variables.
-  - The six-member PVE cluster import regression is marked `#[ignore]`; set `FORENSICS_PVE_CLUSTER_ROOT` and run `scripts/check-pve-cluster-import.ps1`. It serially attempts all members, expects three host `disk01` filesystem imports and three metadata-only BlueStore `disk02` imports, and verifies source-database isolation, zero ordinary BlueStore file rows, sanitized OSD/BlueFS replay inventory, exact RocksDB CURRENT/IDENTITY/MANIFEST control-plane oracles, complete `35/40/33` live-SST structure inventories with bounded redacted key-space census, exact active-WAL/WriteBatch metadata oracles, plus key-file preview.
+  - The six-member PVE cluster import regression is marked `#[ignore]`; set `FORENSICS_PVE_CLUSTER_ROOT` and run `scripts/check-pve-cluster-import.ps1`. It serially attempts all members, expects three host `disk01` filesystem imports and three metadata-only BlueStore `disk02` imports, and verifies source-database isolation, zero ordinary BlueStore file rows, sanitized OSD/BlueFS replay inventory, exact RocksDB CURRENT/IDENTITY/MANIFEST control-plane oracles, complete `35/40/33` live-SST single-pass inventories, exact active-WAL/WriteBatch metadata, 12 per-OSD column-family latest-state summaries with canonical aggregate hashes, plus key-file preview.
 
 ### Frontend
 
@@ -308,8 +308,8 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 |-------|----------|-------|
 | 36 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
 | 98 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
-| 22 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo |
-| 47 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0036`, `source_001`–`source_010`, plus `staging_001.sql` |
+| 23 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo |
+| 48 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0036`, `source_001`–`source_011`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
 | 86 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
@@ -342,7 +342,7 @@ Key architectural improvements:
 | `fs-ntfs` / `fs-fat` / `fs-exfat` / `fs-ext4` / `fs-xfs` / `fs-btrfs` | Filesystem-specific parsers |
 | `fs-lvm` | Linux LVM physical-volume/logical-volume mapping and offset translation |
 | `ceph-wire` | Read-only Ceph BlueFS superblock and transaction-log wire decoding |
-| `rocksdb-wire` | Read-only RocksDB physical log and WriteBatch decoding, VersionEdit/MANIFEST replay, and block-based live-SST structure inspection |
+| `rocksdb-wire` | Read-only RocksDB physical log and WriteBatch decoding, VersionEdit/MANIFEST replay, single-pass block-based live-SST streaming, and bounded latest-state reduction primitives |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
 | `search` | Full-text indexing (tantivy), query parsing, highlighting |
 | `timeline` | Timeline event generation and aggregation |

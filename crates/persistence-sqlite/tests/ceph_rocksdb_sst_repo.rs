@@ -20,6 +20,8 @@ use persistence_sqlite::{
 };
 use rusqlite::Connection;
 
+mod support;
+
 const INVENTORY_ID: &str = "inventory-1";
 const DATA_SOURCE_ID: &str = "source-1";
 const OSD_UUID: &str = "11111111-2222-3333-4444-555555555555";
@@ -277,6 +279,7 @@ fn persist_with_file_number(
     let osd = osd();
     let bluefs = bluefs_with_file_number(file_number);
     let rocksdb = rocksdb_with_file_number(file_number);
+    let latest_state = support::empty_latest_state(&rocksdb);
     CephOsdRepo::new(conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(&osd),
@@ -286,6 +289,7 @@ fn persist_with_file_number(
             rocksdb: &rocksdb,
             ssts,
             wals: &wals(&rocksdb),
+            latest_state: &latest_state,
         },
     )
 }
@@ -295,7 +299,7 @@ fn source_migration_installs_sst_inventory_without_raw_key_or_value_columns() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_010_ceph_wal_inventory"
+        "source_011_ceph_latest_state"
     );
     let mut statement = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_sst_inventory') ORDER BY cid")
@@ -447,6 +451,7 @@ fn sqlite_write_failure_rolls_back_the_complete_ceph_aggregate() {
     changed_osd.description = "must roll back".to_string();
     let bluefs = bluefs();
     let rocksdb = rocksdb();
+    let latest_state = support::empty_latest_state(&rocksdb);
     let result = CephOsdRepo::new(&conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(&changed_osd),
@@ -456,6 +461,7 @@ fn sqlite_write_failure_rolls_back_the_complete_ceph_aggregate() {
             rocksdb: &rocksdb,
             ssts: std::slice::from_ref(&expected),
             wals: &wals(&rocksdb),
+            latest_state: &latest_state,
         },
     );
 

@@ -1,5 +1,6 @@
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
+use persistence_sqlite::repositories::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
 use persistence_sqlite::repositories::ceph_rocksdb_sst_repo::CephRocksdbSstRecord;
 use persistence_sqlite::repositories::ceph_rocksdb_wal_repo::CephRocksdbWalAggregate;
@@ -11,6 +12,7 @@ pub(super) struct CephMetadataAggregate {
     pub(super) rocksdb: CephRocksdbAggregate,
     pub(super) ssts: Vec<CephRocksdbSstRecord>,
     pub(super) wals: CephRocksdbWalAggregate,
+    pub(super) latest_state: Vec<CephRocksdbLatestStateRecord>,
 }
 
 pub(super) fn audit_bluefs_inventory(
@@ -42,6 +44,30 @@ pub(super) fn audit_bluefs_inventory(
         audit_sum_overflow(data_source, "WAL mutation count");
         return;
     };
+    let Some(latest_point_mutation_count) =
+        checked_latest_state_sum(&records.latest_state, |record| record.point_mutation_count)
+    else {
+        audit_sum_overflow(data_source, "latest-state point mutation count");
+        return;
+    };
+    let Some(latest_range_mutation_count) =
+        checked_latest_state_sum(&records.latest_state, |record| record.range_mutation_count)
+    else {
+        audit_sum_overflow(data_source, "latest-state range mutation count");
+        return;
+    };
+    let Some(latest_value_count) =
+        checked_latest_state_sum(&records.latest_state, |record| record.latest_value_count)
+    else {
+        audit_sum_overflow(data_source, "latest-state value count");
+        return;
+    };
+    let Some(latest_deleted_key_count) =
+        checked_latest_state_sum(&records.latest_state, |record| record.deleted_key_count)
+    else {
+        audit_sum_overflow(data_source, "latest-state deleted key count");
+        return;
+    };
     let details = serde_json::json!({
         "inventoryId": records.bluefs.superblock.inventory_id,
         "osdUuid": records.bluefs.superblock.osd_uuid,
@@ -65,6 +91,11 @@ pub(super) fn audit_bluefs_inventory(
         "rocksdbRecoveryWalCount": records.wals.files.len(),
         "rocksdbRecoveryWalRecordCount": wal_record_count,
         "rocksdbRecoveryWalMutationCount": wal_mutation_count,
+        "rocksdbLatestStateColumnFamilyCount": records.latest_state.len(),
+        "rocksdbLatestStatePointMutationCount": latest_point_mutation_count,
+        "rocksdbLatestStateRangeMutationCount": latest_range_mutation_count,
+        "rocksdbLatestStateValueCount": latest_value_count,
+        "rocksdbLatestStateDeletedKeyCount": latest_deleted_key_count,
         "layout": "singleSharedDevice",
     })
     .to_string();
@@ -81,6 +112,15 @@ pub(super) fn audit_bluefs_inventory(
             "Failed to record BlueFS inventory audit entry"
         );
     }
+}
+
+fn checked_latest_state_sum(
+    records: &[CephRocksdbLatestStateRecord],
+    value: impl Fn(&CephRocksdbLatestStateRecord) -> u64,
+) -> Option<u64> {
+    records
+        .iter()
+        .try_fold(0u64, |total, record| total.checked_add(value(record)))
 }
 
 fn checked_wal_sum(
@@ -108,6 +148,6 @@ fn audit_sum_overflow(data_source: &domain::DataSource, field: &str) {
     tracing::warn!(
         data_source_id = %data_source.id.0,
         field,
-        "Skipped BlueFS inventory audit entry because an SST aggregate overflowed"
+        "Skipped BlueFS inventory audit entry because a metadata aggregate overflowed"
     );
 }

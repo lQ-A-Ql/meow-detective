@@ -26,6 +26,8 @@ pub struct NewFileMetadata {
     pub file_checksum_length: Option<u32>,
     pub file_checksum_function_length: Option<u32>,
     pub unique_id_length: Option<u32>,
+    pub min_timestamp_length: Option<u32>,
+    pub max_timestamp_length: Option<u32>,
     pub skipped_safe_custom_fields: u32,
 }
 

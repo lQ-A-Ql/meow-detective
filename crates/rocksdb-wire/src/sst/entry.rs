@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::RocksDbWireError;
 
-use super::{BlockHandle, EntryTypeCounts, SstReadOptions, TableProperties};
+use super::{BlockHandle, EntryTypeCounts, SstInspection, SstReadOptions, TableProperties};
 
 const MIB: u64 = 1024 * 1024;
 
@@ -131,4 +131,10 @@ pub struct SstEntryStreamSummary {
     pub raw_value_size: u64,
     pub smallest_sequence: u64,
     pub largest_sequence: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SstInspectionStream {
+    pub inspection: SstInspection,
+    pub stream: SstEntryStreamSummary,
 }

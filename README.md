@@ -64,14 +64,14 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
 | `crates/app-services/` | Application orchestration (25 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (22) and migration scripts (47) |
+| `crates/persistence-sqlite/` | SQLite repos (23) and migration scripts (48) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/exchange/` | Entity resolution and cross-case entity matching |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS, RocksDB MANIFEST replay, active-WAL/WriteBatch decoding, and live-SST structure inspection |
+| `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction primitives |
 | `crates/ingest/` | Ingestion pipeline orchestration |
 | `crates/catalog/` | Catalog management and projections |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |

@@ -378,6 +378,29 @@ pub enum RocksDbWireError {
 
     #[error("SST column family does not match the supplied census context")]
     SstCensusColumnFamilyMismatch,
+
+    #[error("latest-state key history version count {count} exceeds limit {limit}")]
+    LatestStateVersionLimit { count: usize, limit: usize },
+
+    #[error("latest-state key history size {bytes} exceeds limit {limit}")]
+    LatestStateHistoryBytesLimit { bytes: usize, limit: usize },
+
+    #[error("latest-state merge operand count {count} exceeds limit {limit}")]
+    LatestStateMergeOperandLimit { count: usize, limit: usize },
+
+    #[error("latest-state resolved value length {length} exceeds limit {limit}")]
+    LatestStateResolvedValueLimit { length: usize, limit: usize },
+
+    #[error("duplicate latest-state internal key trailer {trailer:#018x}")]
+    DuplicateLatestStateInternalKey { trailer: u64 },
+
+    #[error(
+        "latest-state key history is not in strict descending trailer order: previous {previous_trailer:#018x}, current {current_trailer:#018x}"
+    )]
+    LatestStateHistoryOutOfOrder {
+        previous_trailer: u64,
+        current_trailer: u64,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, RocksDbWireError>;

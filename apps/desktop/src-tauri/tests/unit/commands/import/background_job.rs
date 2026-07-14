@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -59,6 +60,7 @@ struct BluestoreOracle {
     rocksdb_wal_payload_bytes: u64,
     rocksdb_wal_first_sequence: u64,
     rocksdb_wal_last_sequence: u64,
+    rocksdb_latest_state_sha256: &'static str,
     representative_sst: Option<RepresentativeSstOracle>,
 }
 
@@ -98,6 +100,32 @@ struct RocksDbManifestRow {
     prev_log_number: u64,
     max_column_family_id: u32,
     min_log_number_to_keep: Option<u64>,
+}
+
+#[derive(Debug)]
+struct RocksDbLatestStateRow {
+    column_family_id: u32,
+    column_family_name: String,
+    point_mutation_count: u64,
+    sst_point_mutation_count: u64,
+    wal_point_mutation_count: u64,
+    range_mutation_count: u64,
+    sst_range_mutation_count: u64,
+    wal_range_mutation_count: u64,
+    latest_value_count: u64,
+    deleted_key_count: u64,
+    delete_decision_count: u64,
+    single_delete_decision_count: u64,
+    range_delete_decision_count: u64,
+    merge_resolved_count: u64,
+    merge_operand_count: u64,
+    range_hidden_version_count: u64,
+    smallest_sequence: Option<u64>,
+    largest_sequence: Option<u64>,
+    sharding_sha256: String,
+    point_sha256: String,
+    range_sha256: String,
+    latest_state_sha256: String,
 }
 
 #[test]
@@ -709,6 +737,102 @@ fn assert_rocksdb_inventory(
     assert_eq!(missing_manifest_records, 0);
     assert_sst_structure_inventory(source_conn, data_source_id, oracle);
     assert_wal_inventory(source_conn, data_source_id, oracle);
+    let latest_state = load_latest_state_inventory(source_conn, data_source_id);
+    assert_eq!(latest_state.len(), 12);
+    assert_eq!(
+        latest_state_oracle_sha256(&latest_state),
+        oracle.rocksdb_latest_state_sha256,
+        "per-column-family RocksDB latest-state oracle differs for OSD {}: {latest_state:#?}",
+        oracle.osd_uuid,
+    );
+}
+
+fn load_latest_state_inventory(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &str,
+) -> Vec<RocksDbLatestStateRow> {
+    let mut statement = source_conn
+        .prepare(
+            "SELECT s.column_family_id, s.column_family_name,
+                    s.point_mutation_count, s.sst_point_mutation_count,
+                    s.wal_point_mutation_count, s.range_mutation_count,
+                    s.sst_range_mutation_count, s.wal_range_mutation_count,
+                    s.latest_value_count, s.deleted_key_count,
+                    s.delete_decision_count, s.single_delete_decision_count,
+                    s.range_delete_decision_count, s.merge_resolved_count,
+                    s.merge_operand_count, s.range_hidden_version_count,
+                    s.smallest_sequence, s.largest_sequence, s.sharding_sha256,
+                    s.point_sha256, s.range_sha256, s.latest_state_sha256
+             FROM ceph_rocksdb_latest_state s
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = s.inventory_id
+             WHERE m.data_source_id = ?1
+             ORDER BY s.column_family_id",
+        )
+        .expect("prepare RocksDB latest-state query");
+    statement
+        .query_map([data_source_id], |row| {
+            Ok(RocksDbLatestStateRow {
+                column_family_id: row.get(0)?,
+                column_family_name: row.get(1)?,
+                point_mutation_count: row.get(2)?,
+                sst_point_mutation_count: row.get(3)?,
+                wal_point_mutation_count: row.get(4)?,
+                range_mutation_count: row.get(5)?,
+                sst_range_mutation_count: row.get(6)?,
+                wal_range_mutation_count: row.get(7)?,
+                latest_value_count: row.get(8)?,
+                deleted_key_count: row.get(9)?,
+                delete_decision_count: row.get(10)?,
+                single_delete_decision_count: row.get(11)?,
+                range_delete_decision_count: row.get(12)?,
+                merge_resolved_count: row.get(13)?,
+                merge_operand_count: row.get(14)?,
+                range_hidden_version_count: row.get(15)?,
+                smallest_sequence: row.get(16)?,
+                largest_sequence: row.get(17)?,
+                sharding_sha256: row.get(18)?,
+                point_sha256: row.get(19)?,
+                range_sha256: row.get(20)?,
+                latest_state_sha256: row.get(21)?,
+            })
+        })
+        .expect("query RocksDB latest-state rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("load RocksDB latest-state rows")
+}
+
+fn latest_state_oracle_sha256(rows: &[RocksDbLatestStateRow]) -> String {
+    let mut canonical = String::from("meow.pve.rocksdb.latest-state-oracle.v1\n");
+    for row in rows {
+        writeln!(
+            canonical,
+            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}|{}|{}|{}|{}",
+            row.column_family_id,
+            row.column_family_name,
+            row.point_mutation_count,
+            row.sst_point_mutation_count,
+            row.wal_point_mutation_count,
+            row.range_mutation_count,
+            row.sst_range_mutation_count,
+            row.wal_range_mutation_count,
+            row.latest_value_count,
+            row.deleted_key_count,
+            row.delete_decision_count,
+            row.single_delete_decision_count,
+            row.range_delete_decision_count,
+            row.merge_resolved_count,
+            row.merge_operand_count,
+            row.range_hidden_version_count,
+            row.smallest_sequence,
+            row.largest_sequence,
+            row.sharding_sha256,
+            row.point_sha256,
+            row.range_sha256,
+            row.latest_state_sha256,
+        )
+        .expect("write latest-state oracle row");
+    }
+    infrastructure::hashing::sha256_bytes(canonical.as_bytes())
 }
 
 fn assert_wal_inventory(
@@ -1007,6 +1131,8 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_payload_bytes: 3_894_471,
             rocksdb_wal_first_sequence: 1_077_118,
             rocksdb_wal_last_sequence: 1_086_455,
+            rocksdb_latest_state_sha256:
+                "b4f31e224ff485b29b1b3ac7c21e079344250bf37a954b304d43294b1da22eed",
             representative_sst: Some(RepresentativeSstOracle {
                 file_number: 146,
                 data_block_count: 148,
@@ -1045,6 +1171,8 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_payload_bytes: 4_115_489,
             rocksdb_wal_first_sequence: 1_052_659,
             rocksdb_wal_last_sequence: 1_062_302,
+            rocksdb_latest_state_sha256:
+                "0cf9b7ead1e5953fa84f1c57a16be4f1a2d5fd4713d2ed1ad20cf8cf9d320880",
             representative_sst: None,
         },
         "server03-disk02.e01" => BluestoreOracle {
@@ -1073,6 +1201,8 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_payload_bytes: 4_117_873,
             rocksdb_wal_first_sequence: 1_061_240,
             rocksdb_wal_last_sequence: 1_070_883,
+            rocksdb_latest_state_sha256:
+                "32d7af9d9eda6ca168cb9a85a7b17a36c9fce012f9301b354aebb1b633bee978",
             representative_sst: None,
         },
         _ => panic!(

@@ -225,9 +225,8 @@ fn decode_custom_field(
                 metadata.temperature = Some(value);
             }
         }
-        CUSTOM_MIN_TIMESTAMP | CUSTOM_MAX_TIMESTAMP => {
-            metadata.skipped_safe_custom_fields += 1;
-        }
+        CUSTOM_MIN_TIMESTAMP => metadata.min_timestamp_length = Some(field.len() as u32),
+        CUSTOM_MAX_TIMESTAMP => metadata.max_timestamp_length = Some(field.len() as u32),
         CUSTOM_UNIQUE_ID => metadata.unique_id_length = Some(field.len() as u32),
         CUSTOM_EPOCH_NUMBER => {
             metadata.epoch_number = Some(read_varint_field(field, field_offset, "epoch number")?);
