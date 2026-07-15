@@ -2,7 +2,8 @@
 
 **开发基线**: `20188bb0`
 **设计日期**: 2026-07-14
-**当前实现切片**: RocksDB latest state + BlueStore `S/C/O/X` semantic snapshot
+**当前实现切片**: RocksDB latest state + BlueStore `S/C/O/X` semantic snapshot +
+OMAP/RADOS/RBD read foundation
 **最终目标**: BlueStore OSD -> RocksDB latest state -> RADOS object -> RBD image -> VM 文件系统
 
 ## Summary
@@ -30,7 +31,12 @@ raw key/value 不进入 source DB、日志或报告，三个 `disk02` 数据源�
 最新值，持久化 super、collection、onode、shard、blob、logical/physical
 extent、规范化 checksum chunk 与 shared-blob ref-map。语义快照绑定
 latest-state digest，并通过 canonical aggregate digest 和三 OSD 精确行数
-oracle 验证；当前仍未生成 RADOS object reader。
+oracle 验证；随后已生成受限 source-bound RADOS object range reader 和
+RBD head-image reader foundation。
+Stage 6.5/6.6 已补齐 source DB 驱动的 OMAP catalog、source-bound BlueStore
+device reader、RADOS object range reader、RBD striping reader 和 MBR/GPT/LVM/
+filesystem probe foundation；这些能力仍没有通过真实 RBD image oracle，也没有
+完成 PG/replica placement、VM 文件树或 CephFS 恢复。
 
 ## 开发基线与事实源
 
@@ -113,9 +119,11 @@ Ceph Squid v19.2.3 (`c92aebb279828e9c3c1f5d24613efca272649e62`)
   wrapping-add 与 `b` 的 bitwise-XOR。
 - 不持久化 BlueStore attrs 原值、RocksDB key/value 或 checksum 原始字节；
   只保存规范化字段、计数和摘要。
-- 不解释 `M/P/m/p` OMAP family，不生成 RADOS object content reader。
+- 不把无 Header 的 `PerPg`/`PgMeta` OMAP scope 误投影为 RBD metadata；
+  `Bulk`/`PerPool` 仍严格要求 Header。
 - 不生成普通 `file_entries`。
-- 不宣称 RADOS、RBD、VM 文件树或 CephFS 已完成。
+- 不宣称 PG/CRUSH/EC placement、完整副本闭合集合、RBD image oracle、VM
+  文件树或 CephFS 已完成。
 
 ## 目标架构
 
@@ -347,8 +355,9 @@ Tasks:
 - 解码 physical extent、compression、checksum、shared blob 引用。
 - onode shard 必须闭合；缺失 shard、重叠 logical extent、越界 physical
   extent和未知 DENC version typed fail。
-- `M/P/m/p` OMAP family 是 RBD directory/header metadata 的硬前置，必须作为
-  Stage 6.4b 在 RADOS/RBD 前完成；`T/B/b/L` 再按读取需求分批实现。
+- `M/P/m/p` OMAP family 是 RBD directory/header metadata 的硬前置；当前已
+  完成受限 RBD directory/header catalog 的 `M/P/m/p` 归一化读取，非 RBD
+  `PerPg`/`PgMeta` scope 只保存计数元数据。`T/B/b/L` 仍按读取需求分批实现。
 
 Expected result:
 
@@ -390,10 +399,14 @@ Implemented result:
 | server02 | 2,927 | 116,135 | 18,970 | 116,487 | 134,154 | 1,839,666 | 23,316 / 27,900 | `441e1a48ec5ca51e5ff2caa94eac106d283d9375bbbc08d841196eb84fbe78e9` |
 | server03 | 2,930 | 116,135 | 18,974 | 116,487 | 134,150 | 1,839,646 | 23,316 / 27,911 | `d5eb02ba6e77a66476a2c84f010bca75ec77d870858d15e6b57681fb075028bc` |
 
-每个 OSD 另有 `34` 个 collection。当前 semantic snapshot 是后续 RADOS
-读取计划的可信基础，不等同于对象内容、PG 副本或 RBD 镜像已恢复。
+每个 OSD 另有 `34` 个 collection。当前 semantic snapshot 已能生成受约束的
+RADOS object read plan，但不等同于对象跨 OSD 副本、PG placement 或 RBD
+镜像已通过真实样本验收。
 
 ### Stage 6.5 - RADOS / PG Reconstruction
+
+Status: RADOS object reader foundation completed; PG/replica reconstruction
+remains unsupported.
 
 Tasks:
 
@@ -407,12 +420,32 @@ Tasks:
 - 若恢复 `osd_superblock` 与连续 offline OSDMap epoch，则结果必须绑定历史
   epoch，不能称为在线当前状态。
 
+Implemented result:
+
+- source DB 持久化的 object/blob/extent/checksum/read-plan 通过 inventory 和
+  source-bound LVM binding 路由到只读 BlueStore LV。
+- reader 支持 logical/blob/physical extent 映射、sparse hole 零填充和 CRC32C
+  校验；压缩 blob、未知 flag、非 device-1 extent 和不支持 checksum 会
+  typed fail closed。
+- 多个 source DB 只在显式闭合集合中读取；同一 object 的有效副本内容不一致
+  时拒绝静默选择。
+
+Remaining boundary:
+
+- 当前不恢复 PG/CRUSH/acting set/EC shard placement，也不从目录扫描猜测
+  replica 数量；expected replica count 必须由集群编排显式提供。
+- 当前没有真实样本的 RADOS object byte oracle，因此不把 reader foundation
+  升级为 PVE RADOS content support。
+
 Expected result:
 
 - 可按 object identity 提供稳定的只读 RADOS object reader。
 - 副本不一致时保留来源和冲突，不静默选择。
 
 ### Stage 6.6 - RBD Image Reconstruction
+
+Status: bounded head-image reader and filesystem-probe foundation completed;
+real RBD image reconstruction remains unverified.
 
 Tasks:
 
@@ -426,12 +459,32 @@ Tasks:
   必须显式暴露，不能默认为普通 head image。
 - 实现 `RbdEvidenceReader: Read + Seek + EvidenceReader`，不生成完整磁盘副本。
 
+Implemented result:
+
+- 从 source-local OMAP aggregate 发现 RBD directory/header metadata，并校验
+  跨 replica 的 image metadata 一致性。
+- 显式副本集合同时拒绝重复 inventory 和重复 data source，不能用同一
+  source 的不同 inventory 重复满足 expected replica count。
+- 支持 head image object striping、按 object range 读取、sparse object 零填充、
+  `Read + Seek + EvidenceReader` 和现有 MBR/GPT/LVM/EXT4/XFS/Btrfs 探测入口。
+- layering、journaling、parent/clone、snapshot、encryption、data-pool
+  等会改变读取语义的 feature 均显式拒绝。
+
+Remaining boundary:
+
+- 当前 PVE 样本尚未提供可独立核验的 RBD image ID、`rbd export` 或
+  `rbd-nbd --read-only` byte oracle；因此不能宣称 VM 磁盘或文件树已恢复。
+- source DB aggregation 只接受显式闭合的 replica 集合，不自动把案件内其他
+  数据源加入读取集合。
+
 Expected result:
 
 - 每个受支持 RBD image 表现为独立只读虚拟块设备。
 - 随机 range read 只读取覆盖范围内的必要 RADOS objects。
 
 ### Stage 6.7 - VM Partition / Filesystem Integration
+
+Status: not started for a real RBD image.
 
 Tasks:
 
@@ -524,6 +577,8 @@ Stage 6.4 在同一六成员门禁中追加：
 5. 三 OSD 的精确计数与 semantic SHA-256 必须匹配 Stage 6.4 oracle。
 6. shared blob 的合法部分重叠与 ref-map union coverage 必须通过；同 blob
    自重叠、不同 shared ID 重叠、ref-map 缺口必须回滚失败。
+7. OMAP 无 Header 的 `PerPg`/`PgMeta` scope 不得中断导入；`Bulk`/`PerPool`
+   缺 Header 仍必须失败关闭。
 
 RBD 门禁建立后：
 
@@ -531,6 +586,10 @@ RBD 门禁建立后：
 - 读取每个镜像 offset `0`、对象边界、分区表、文件系统 superblock 和尾部。
 - 与只读 `rbd export` 或 `rbd-nbd --read-only` 的 range digest 比较。
 - 至少一个 VM 完成完整树统计和关键文件 FileEntryId 预览。
+
+当前真实 PVE 六成员门禁只证明 OMAP/RADOS/RBD foundation 可随 BlueStore
+metadata import 完成，并不构成 RBD image byte oracle；没有发现或无法独立
+核验的 image 不得生成虚拟 VM data source。
 
 ## 性能与资源预算
 
@@ -642,15 +701,17 @@ RBD 门禁建立后：
 - 三 OSD 精确 semantic count/digest oracle 通过，普通 `file_entries=0`。
 - raw RocksDB key/value、attrs value、checksum bytes 不进入 source DB、
   日志、审计或报告。
-- 当前仍不得宣称 RADOS object content、PG/replica、OMAP、RBD、VM 文件树
-  或 CephFS 已恢复。
+- 当前不得宣称 PG/replica placement、真实 RADOS byte oracle、VM 文件树或
+  CephFS 已恢复；OMAP catalog、RADOS range reader 和 RBD head-reader 仅以
+  foundation 口径记录。
 
 ### 最终重建目标
 
 - 三个 OSD 可以恢复可验证的 RocksDB latest state。
-- BlueStore onode/blob/extents 可以生成稳定的 RADOS object reader。
-- replicated object 的副本一致性经过校验。
-- 样本中的 RBD image 可以作为只读虚拟块设备随机读取。
+- BlueStore onode/blob/extents 可以生成稳定的 RADOS object reader foundation。
+- 显式闭合集合中的 replicated object 副本不一致时拒绝静默选择。
+- 经过真实 byte oracle 验证后，样本中的 RBD image 才能作为只读虚拟块设备
+  随机读取。
 - 受支持 VM 文件系统可完整展开文件树并按 FileEntryId 预览任意文件。
 - 不生成或修改原始证据，不依赖生产 mock，不泄露宿主路径。
 - CephFS 只有在样本证据与独立测试闭合后才标记为 supported。

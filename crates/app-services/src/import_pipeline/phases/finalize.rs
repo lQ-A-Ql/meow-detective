@@ -31,7 +31,7 @@ pub(crate) fn run_finalize_phase(
         ),
         ctx.cancel_requested(),
     );
-    checkpoint_source_database(ctx, data_source);
+    checkpoint_source_database(ctx, data_source)?;
     record_import_step(ctx, stats, import_started);
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {
@@ -83,17 +83,21 @@ pub(crate) fn emit_data_source_ready(
     Ok(())
 }
 
-fn checkpoint_source_database(ctx: &ImportJobContext<'_>, data_source: &domain::DataSource) {
+fn checkpoint_source_database(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+) -> Result<(), CommandError> {
     let Some(source_conn) = ctx.source_conn else {
-        return;
+        return Ok(());
     };
-    if let Err(error) = source_db::checkpoint_source_db(source_conn) {
-        tracing::warn!(
+    source_db::checkpoint_source_db(source_conn).map_err(|error| {
+        tracing::error!(
             data_source_id = %data_source.id.0,
             error = %error,
-            "Failed to checkpoint source DB after import"
+            "Source DB WAL checkpoint failed during import finalization"
         );
-    }
+        CommandError::from_service_error(error)
+    })
 }
 
 fn record_import_step(

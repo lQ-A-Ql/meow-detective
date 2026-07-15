@@ -91,6 +91,7 @@ pub(super) fn inventory_rocksdb_manifest(
         wals,
         latest_state: recovered.summaries,
         semantic: recovered.semantic,
+        omap: recovered.omap,
     })
 }
 
@@ -101,6 +102,7 @@ pub(super) struct RocksdbInventoryAggregate {
     pub(super) latest_state: Vec<CephRocksdbLatestStateRecord>,
     pub(super) semantic:
         persistence_sqlite::repositories::ceph_bluestore_semantic_repo::CephBluestoreSemanticAggregate,
+    pub(super) omap: super::ceph_bluestore_omap::BlueStoreOmapSnapshot,
 }
 
 fn map_manifest_error(error: rocksdb_wire::RocksDbWireError) -> CommandError {

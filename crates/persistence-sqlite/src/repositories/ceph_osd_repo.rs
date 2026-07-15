@@ -8,6 +8,7 @@ use rusqlite::Connection;
 use crate::connection::DbResult;
 
 use super::ceph_bluefs_repo::CephBluefsAggregate;
+use super::ceph_osd_device_binding_repo::CephOsdDeviceBindingAggregate;
 use replacement::CephAggregateReplacement;
 
 pub use records::{CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephRocksdbMetadataSnapshot};
@@ -65,6 +66,39 @@ impl<'a> CephOsdRepo<'a> {
             inventory,
             replicas,
             metadata.into(),
+        )
+    }
+
+    pub fn replace_for_data_source_with_device_bindings(
+        &self,
+        data_source_id: &str,
+        inventory: &[CephOsdInventoryRecord],
+        replicas: &[CephOsdLabelReplicaRecord],
+        device_bindings: &[CephOsdDeviceBindingAggregate],
+    ) -> DbResult<()> {
+        replacement::replace_aggregate(
+            self.conn,
+            data_source_id,
+            inventory,
+            replicas,
+            CephAggregateReplacement::with_device_bindings(device_bindings),
+        )
+    }
+
+    pub fn replace_for_data_source_with_rocksdb_metadata_and_device_bindings(
+        &self,
+        data_source_id: &str,
+        inventory: &[CephOsdInventoryRecord],
+        replicas: &[CephOsdLabelReplicaRecord],
+        metadata: CephRocksdbMetadataSnapshot<'_>,
+        device_bindings: &[CephOsdDeviceBindingAggregate],
+    ) -> DbResult<()> {
+        replacement::replace_aggregate(
+            self.conn,
+            data_source_id,
+            inventory,
+            replicas,
+            CephAggregateReplacement::with_metadata_and_device_bindings(metadata, device_bindings),
         )
     }
 

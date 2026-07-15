@@ -1,4 +1,5 @@
 use super::super::ceph_bluefs_repo::CephBluefsAggregate;
+use super::super::ceph_bluestore_omap_repo::CephBluestoreOmapAggregate;
 use super::super::ceph_bluestore_semantic_repo::CephBluestoreSemanticAggregate;
 use super::super::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 use super::super::ceph_rocksdb_repo::CephRocksdbAggregate;
@@ -57,4 +58,5 @@ pub struct CephRocksdbMetadataSnapshot<'a> {
     pub wals: &'a CephRocksdbWalAggregate,
     pub latest_state: &'a [CephRocksdbLatestStateRecord],
     pub semantic: &'a CephBluestoreSemanticAggregate,
+    pub omap: &'a CephBluestoreOmapAggregate,
 }

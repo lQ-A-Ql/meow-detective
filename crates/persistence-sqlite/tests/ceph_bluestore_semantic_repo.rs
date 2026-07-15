@@ -14,7 +14,7 @@ use persistence_sqlite::{
     },
     runner,
 };
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 const INVENTORY_A: &str = "inventory-a";
 const INVENTORY_B: &str = "inventory-b";
@@ -496,7 +496,7 @@ fn ceph_bluestore_semantic_schema_is_normalized_and_raw_free() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_012_ceph_bluestore_semantics"
+        "source_014_ceph_osd_device_bindings"
     );
     let tables = [
         "ceph_bluestore_semantic_scans",
@@ -613,6 +613,211 @@ fn ceph_bluestore_semantic_complete_roundtrip_preserves_typed_rows() {
             .unwrap(),
         Some(compressed)
     );
+}
+
+#[test]
+fn targeted_object_read_plan_and_exact_candidate_are_stable() {
+    let conn = setup();
+    let expected = aggregate(INVENTORY_A);
+    let object = expected.objects[0].clone();
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert semantic aggregate");
+
+    let repo = CephBluestoreSemanticRepo::new(&conn);
+    let plan = repo
+        .find_object_read_plan(INVENTORY_A, &object.object_identity_sha256)
+        .expect("query object read plan")
+        .expect("object read plan exists");
+    assert_eq!(plan.inventory_id, INVENTORY_A);
+    assert_eq!(plan.object_identity_sha256, object.object_identity_sha256);
+    assert_eq!(plan.object_ordinal, 0);
+    assert_eq!(plan.object, object);
+    assert_eq!(plan.blobs, expected.blobs);
+    assert_eq!(plan.logical_extents, expected.logical_extents);
+    assert_eq!(plan.physical_extents, expected.physical_extents);
+    assert_eq!(plan.checksum_chunks, expected.checksum_chunks);
+
+    let candidate = repo
+        .find_object_candidate(
+            INVENTORY_A,
+            &object.object_name,
+            object.decoded_pool,
+            &object.object_namespace,
+        )
+        .expect("query exact object candidate")
+        .expect("candidate exists");
+    assert_eq!(candidate.inventory_id, INVENTORY_A);
+    assert_eq!(
+        candidate.object_identity_sha256,
+        object.object_identity_sha256
+    );
+    assert_eq!(candidate.object_name, object.object_name);
+    assert_eq!(candidate.decoded_pool, object.decoded_pool);
+    assert_eq!(candidate.object_namespace, object.object_namespace);
+}
+
+#[test]
+fn targeted_object_read_does_not_load_unrelated_rocksdb_children() {
+    let conn = setup();
+    let expected = aggregate(INVENTORY_A);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert semantic aggregate");
+
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON;")
+        .expect("disable checks for corruption fixture");
+    conn.execute(
+        "INSERT INTO ceph_rocksdb_live_files (
+            inventory_id, column_family_id, level, file_number, path_id,
+            format, file_size, smallest_sequence, largest_sequence,
+            smallest_internal_key_length, largest_internal_key_length
+         ) VALUES (?1, 0, 0, 149, 0, 'corrupt', 1, NULL, NULL, 8, 8)",
+        [INVENTORY_A],
+    )
+    .expect("insert corrupt unrelated RocksDB child");
+    conn.execute(
+        "UPDATE ceph_rocksdb_latest_state
+         SET point_mutation_count = -1
+         WHERE inventory_id = ?1",
+        [INVENTORY_A],
+    )
+    .expect("corrupt unrelated latest-state payload");
+    conn.execute_batch("PRAGMA ignore_check_constraints = OFF;")
+        .expect("restore checks");
+
+    let object = &expected.objects[0];
+    let plan = CephBluestoreSemanticRepo::new(&conn)
+        .find_object_read_plan(INVENTORY_A, &object.object_identity_sha256)
+        .expect("query object read plan")
+        .expect("object read plan exists");
+    assert_eq!(plan.object, *object);
+}
+
+#[test]
+fn targeted_object_read_does_not_count_unrelated_semantic_children() {
+    let conn = setup();
+    let mut expected = aggregate(INVENTORY_A);
+    append_second_object(&mut expected, "0000000000002000", false);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert multiple objects");
+
+    let target = expected
+        .objects
+        .iter()
+        .find(|object| object.object_name == b"object")
+        .expect("target object");
+    let unrelated = expected
+        .objects
+        .iter()
+        .find(|object| object.object_name == b"second-object")
+        .expect("unrelated object");
+    conn.execute(
+        "DELETE FROM ceph_bluestore_physical_extents
+         WHERE inventory_id = ?1 AND object_identity_sha256 = ?2",
+        params![INVENTORY_A, unrelated.object_identity_sha256],
+    )
+    .expect("delete unrelated physical child");
+
+    let plan = CephBluestoreSemanticRepo::new(&conn)
+        .find_object_read_plan(INVENTORY_A, &target.object_identity_sha256)
+        .expect("query object read plan")
+        .expect("object read plan exists");
+    assert_eq!(plan.object, *target);
+}
+
+#[test]
+fn targeted_object_reads_return_none_for_valid_missing_keys() {
+    let conn = setup();
+    let expected = aggregate(INVENTORY_A);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert semantic aggregate");
+    let repo = CephBluestoreSemanticRepo::new(&conn);
+
+    assert_eq!(
+        repo.find_object_read_plan(INVENTORY_A, &"f".repeat(64))
+            .expect("query missing object"),
+        None
+    );
+    assert_eq!(
+        repo.find_object_candidate(INVENTORY_A, b"missing", 7, b"ns\0")
+            .expect("query missing candidate"),
+        None
+    );
+}
+
+#[test]
+fn exact_object_candidate_rejects_ambiguous_matches() {
+    let conn = setup();
+    let mut expected = aggregate(INVENTORY_A);
+    append_second_object(&mut expected, "0000000000002000", false);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert multiple objects");
+    let second_id = expected
+        .objects
+        .iter()
+        .find(|object| object.object_name == b"second-object")
+        .expect("second object")
+        .object_identity_sha256
+        .clone();
+    conn.execute(
+        "UPDATE ceph_bluestore_objects
+         SET object_name = ?1
+         WHERE inventory_id = ?2 AND object_identity_sha256 = ?3",
+        params![b"object".as_slice(), INVENTORY_A, second_id],
+    )
+    .expect("make exact lookup ambiguous");
+
+    let object = expected
+        .objects
+        .iter()
+        .find(|object| object.object_name == b"object")
+        .expect("original object");
+    assert!(CephBluestoreSemanticRepo::new(&conn)
+        .find_object_candidate(
+            INVENTORY_A,
+            &object.object_name,
+            object.decoded_pool,
+            &object.object_namespace,
+        )
+        .is_err());
+}
+
+#[test]
+fn targeted_object_reads_fail_closed_for_corrupt_binding_and_ranges() {
+    let conn = setup();
+    let expected = aggregate(INVENTORY_A);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert semantic aggregate");
+    conn.execute(
+        "UPDATE ceph_bluestore_physical_extents
+         SET physical_offset_hex = ?1
+         WHERE inventory_id = ?2",
+        params!["0000000000100000", INVENTORY_A],
+    )
+    .expect("corrupt physical range");
+    assert!(CephBluestoreSemanticRepo::new(&conn)
+        .find_object_read_plan(INVENTORY_A, &expected.objects[0].object_identity_sha256)
+        .is_err());
+
+    let conn = setup();
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert second semantic aggregate");
+    conn.execute(
+        "UPDATE ceph_rocksdb_latest_state
+         SET sharding_sha256 = ?1
+         WHERE inventory_id = ?2",
+        params!["e".repeat(64), INVENTORY_A],
+    )
+    .expect("corrupt persisted recovery binding");
+    assert!(CephBluestoreSemanticRepo::new(&conn)
+        .find_object_read_plan(INVENTORY_A, &expected.objects[0].object_identity_sha256)
+        .is_err());
 }
 
 #[test]

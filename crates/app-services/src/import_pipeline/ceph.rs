@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 use std::io::SeekFrom;
 use std::sync::atomic::AtomicBool;
-use std::time::Instant;
 
 use ceph_wire::{
     decode_bdev_label_block, decode_bluefs_super_block, select_bdev_label, BdevLabel, BluefsSuper,
     BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_POSITIONS, BLUEFS_SUPER_BLOCK_SIZE, BLUEFS_SUPER_OFFSET,
 };
 use persistence_sqlite::repositories::ceph_osd_repo::{
-    CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo, CephRocksdbMetadataSnapshot,
+    CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo,
 };
 use transport::CommandError;
 
@@ -79,6 +78,8 @@ pub(crate) fn persist_bluestore_probe(
         selection.label.osd_uuid,
         &selection.valid_positions,
     );
+    let device_binding =
+        super::ceph_device_binding::build_device_binding(data_source, volume, &inventory)?;
     let metadata = inventory
         .bluefs_enabled
         .is_some_and(|enabled| enabled)
@@ -100,62 +101,18 @@ pub(crate) fn persist_bluestore_probe(
             "Import cancelled before BlueStore metadata persistence",
         ));
     }
-    persist_probe_records(
+    super::ceph_persistence::persist_probe_records(
         &repo,
         &data_source.id.0,
         &inventory,
         &replica_records,
+        &device_binding,
         metadata.as_ref(),
     )?;
     if let Some(records) = &metadata {
         audit_bluefs_inventory(ctx, data_source, records);
     }
     Ok(())
-}
-
-fn persist_probe_records(
-    repo: &CephOsdRepo<'_>,
-    data_source_id: &str,
-    inventory: &CephOsdInventoryRecord,
-    replicas: &[CephOsdLabelReplicaRecord],
-    metadata: Option<&CephMetadataAggregate>,
-) -> Result<(), CommandError> {
-    let started = Instant::now();
-    let rss_before_mb = crate::import_analysis::current_rss_mb();
-    let peak_rss_before_mb = crate::import_analysis::peak_rss_mb();
-    let result = match metadata {
-        Some(records) => repo.replace_for_data_source_with_rocksdb_metadata(
-            data_source_id,
-            std::slice::from_ref(inventory),
-            replicas,
-            CephRocksdbMetadataSnapshot {
-                bluefs: &records.bluefs,
-                rocksdb: &records.rocksdb,
-                ssts: &records.ssts,
-                wals: &records.wals,
-                latest_state: &records.latest_state,
-                semantic: &records.semantic,
-            },
-        ),
-        None => {
-            repo.replace_for_data_source(data_source_id, std::slice::from_ref(inventory), replicas)
-        }
-    };
-    tracing::info!(
-        data_source_id,
-        inventory_id = inventory.id,
-        semantic_object_rows = metadata.map_or(0, |records| records.semantic.objects.len()),
-        semantic_checksum_rows =
-            metadata.map_or(0, |records| records.semantic.checksum_chunks.len()),
-        success = result.is_ok(),
-        elapsed_ms = started.elapsed().as_millis(),
-        rss_before_mb,
-        rss_after_mb = crate::import_analysis::current_rss_mb(),
-        peak_rss_before_mb,
-        peak_rss_after_mb = crate::import_analysis::peak_rss_mb(),
-        "Persisted Ceph metadata with process memory telemetry"
-    );
-    result.map_err(CommandError::from_service_error)
 }
 
 fn bluestore_volume(probe: &ImageFilesystemProbe) -> Result<&UnsupportedImageVolume, CommandError> {
@@ -277,6 +234,11 @@ fn read_bluefs_inventory(
         superblock,
         replay,
     );
+    let omap = super::ceph_bluestore_omap_records::build_omap_aggregate(
+        &data_source.id.0,
+        &rocksdb.semantic,
+        &rocksdb.omap,
+    )?;
     Ok(CephMetadataAggregate {
         bluefs,
         rocksdb: rocksdb.manifest,
@@ -284,6 +246,7 @@ fn read_bluefs_inventory(
         wals: rocksdb.wals,
         latest_state: rocksdb.latest_state,
         semantic: rocksdb.semantic,
+        omap,
     })
 }
 

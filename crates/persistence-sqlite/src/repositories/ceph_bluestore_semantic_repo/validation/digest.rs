@@ -12,26 +12,36 @@ use super::super::{
 use crate::repositories::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 
 pub fn latest_state_set_sha256(records: &[CephRocksdbLatestStateRecord]) -> String {
+    latest_state_set_sha256_from_iter(records.iter().map(|record| {
+        (
+            record.column_family_id,
+            record.column_family_name.as_str(),
+            record.latest_state_sha256.as_str(),
+        )
+    }))
+}
+
+pub(crate) fn latest_state_set_sha256_from_scalars(records: &[(u32, String, String)]) -> String {
+    latest_state_set_sha256_from_iter(
+        records
+            .iter()
+            .map(|(id, name, digest)| (*id, name.as_str(), digest.as_str())),
+    )
+}
+
+fn latest_state_set_sha256_from_iter<'a, I>(records: I) -> String
+where
+    I: IntoIterator<Item = (u32, &'a str, &'a str)>,
+{
     let mut digest = Sha256::new();
     digest.update(b"meow-detective/ceph-rocksdb-latest-state-set/v1\0");
-    digest.update((records.len() as u64).to_be_bytes());
-    let mut canonical = records.iter().collect::<Vec<_>>();
-    canonical.sort_unstable_by(|left, right| {
-        (
-            left.column_family_id,
-            left.column_family_name.as_str(),
-            left.latest_state_sha256.as_str(),
-        )
-            .cmp(&(
-                right.column_family_id,
-                right.column_family_name.as_str(),
-                right.latest_state_sha256.as_str(),
-            ))
-    });
-    for record in canonical {
-        digest.update(record.column_family_id.to_be_bytes());
-        update_bytes(&mut digest, record.column_family_name.as_bytes());
-        update_bytes(&mut digest, record.latest_state_sha256.as_bytes());
+    let mut canonical = records.into_iter().collect::<Vec<_>>();
+    digest.update((canonical.len() as u64).to_be_bytes());
+    canonical.sort_unstable();
+    for (column_family_id, column_family_name, latest_state_sha256) in canonical {
+        digest.update(column_family_id.to_be_bytes());
+        update_bytes(&mut digest, column_family_name.as_bytes());
+        update_bytes(&mut digest, latest_state_sha256.as_bytes());
     }
     hex::encode(digest.finalize())
 }

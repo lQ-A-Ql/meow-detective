@@ -1,5 +1,6 @@
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
+use persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreOmapAggregate;
 use persistence_sqlite::repositories::ceph_bluestore_semantic_repo::CephBluestoreSemanticAggregate;
 use persistence_sqlite::repositories::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
@@ -15,6 +16,7 @@ pub(super) struct CephMetadataAggregate {
     pub(super) wals: CephRocksdbWalAggregate,
     pub(super) latest_state: Vec<CephRocksdbLatestStateRecord>,
     pub(super) semantic: CephBluestoreSemanticAggregate,
+    pub(super) omap: CephBluestoreOmapAggregate,
 }
 
 struct CephMetadataAuditTotals {
@@ -150,6 +152,9 @@ fn audit_details(records: &CephMetadataAggregate, totals: CephMetadataAuditTotal
         "bluestoreSemanticLogicalExtentCount": records.semantic.scan.logical_extent_count,
         "bluestoreSemanticPhysicalExtentCount": records.semantic.scan.physical_extent_count,
         "bluestoreSemanticSharedBlobCount": records.semantic.scan.shared_blob_count,
+        "bluestoreOmapScopeCount": records.omap.scopes.len(),
+        "rbdDirectoryMappingCount": records.omap.directory_mappings.len(),
+        "rbdHeaderCount": records.omap.rbd_headers.len(),
         "layout": "singleSharedDevice",
     })
     .to_string()

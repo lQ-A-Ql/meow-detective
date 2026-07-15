@@ -1,4 +1,8 @@
 use persistence_sqlite::repositories::{
+    ceph_bluestore_omap_repo::{
+        omap_aggregate_sha256, CephBluestoreOmapAggregate, CephBluestoreOmapScanRecord,
+        BLUESTORE_OMAP_DECODE_PROFILE, BLUESTORE_OMAP_SCHEMA_VERSION,
+    },
     ceph_bluestore_semantic_repo::{
         latest_state_set_sha256, semantic_aggregate_sha256, CephBluestoreSemanticAggregate,
         CephBluestoreSemanticScanRecord, CephBluestoreSuperRecord,
@@ -41,6 +45,33 @@ pub fn empty_latest_state(rocksdb: &CephRocksdbAggregate) -> Vec<CephRocksdbLate
             scan_complete: true,
         })
         .collect()
+}
+
+pub fn empty_omap(
+    rocksdb: &CephRocksdbAggregate,
+    semantic: &CephBluestoreSemanticAggregate,
+) -> CephBluestoreOmapAggregate {
+    let mut aggregate = CephBluestoreOmapAggregate {
+        scan: CephBluestoreOmapScanRecord {
+            inventory_id: rocksdb.manifest.inventory_id.clone(),
+            data_source_id: rocksdb.manifest.data_source_id.clone(),
+            schema_version: BLUESTORE_OMAP_SCHEMA_VERSION,
+            decode_profile: BLUESTORE_OMAP_DECODE_PROFILE.to_string(),
+            sharding_sha256: semantic.scan.sharding_sha256.clone(),
+            latest_state_sha256: semantic.scan.latest_state_sha256.clone(),
+            semantic_sha256: semantic.scan.semantic_sha256.clone(),
+            omap_sha256: String::new(),
+            scope_count: 0,
+            directory_mapping_count: 0,
+            rbd_header_count: 0,
+            profile_complete: true,
+        },
+        scopes: Vec::new(),
+        directory_mappings: Vec::new(),
+        rbd_headers: Vec::new(),
+    };
+    aggregate.scan.omap_sha256 = omap_aggregate_sha256(&aggregate);
+    aggregate
 }
 
 pub fn empty_semantic(

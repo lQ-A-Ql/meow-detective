@@ -2,16 +2,15 @@ use std::collections::BTreeMap;
 
 use ceph_wire::{
     decode_bluestore_latest_value, BlueStoreCollectionId, BlueStoreDecodedRecord,
-    BlueStoreKeySpace, BlueStoreOmapMode, BlueStoreSemanticLimits, BlueStoreSharedBlobRecord,
-    BlueStoreSuperRecord,
+    BlueStoreKeySpace, BlueStoreSemanticLimits, BlueStoreSharedBlobRecord,
 };
 use persistence_sqlite::repositories::{
     ceph_bluestore_semantic_repo::{
         canonical_collection_identity, latest_state_set_sha256, semantic_aggregate_sha256,
         CephBluestoreCollectionRecord, CephBluestoreSemanticAggregate,
         CephBluestoreSemanticScanRecord, CephBluestoreSharedBlobRecord,
-        CephBluestoreSharedBlobRefRecord, CephBluestoreSuperRecord,
-        BLUESTORE_SEMANTIC_DECODE_PROFILE, BLUESTORE_SEMANTIC_SCHEMA_VERSION,
+        CephBluestoreSharedBlobRefRecord, BLUESTORE_SEMANTIC_DECODE_PROFILE,
+        BLUESTORE_SEMANTIC_SCHEMA_VERSION,
     },
     ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord,
 };
@@ -21,7 +20,12 @@ use super::{
     object::{finalize_objects, observe_object, PendingObject},
     routing::route_bluestore_key,
 };
+use crate::import_pipeline::ceph_bluestore_omap::{
+    BlueStoreOmapError, BlueStoreOmapFragment, BlueStoreOmapSnapshot,
+};
 use crate::import_pipeline::ceph_rocksdb_sharding::RocksdbShardingDefinition;
+
+use super::state::{increment, key_space_index, SharedBlobRows, SuperAccumulator};
 
 const MAX_SEMANTIC_LIVE_VALUES: u64 = 5_000_000;
 const MAX_SEMANTIC_RETAINED_INPUT_BYTES: u64 = 512 * 1024 * 1024;
@@ -32,6 +36,7 @@ pub(in crate::import_pipeline) struct BlueStoreSemanticFragment {
     collections: BTreeMap<String, CephBluestoreCollectionRecord>,
     objects: BTreeMap<ceph_wire::BlueStoreObjectId, PendingObject>,
     shared_blobs: BTreeMap<u64, SharedBlobRows>,
+    omap: BlueStoreOmapFragment,
     latest_counts: [u64; 4],
     retained_input_bytes: u64,
 }
@@ -44,12 +49,21 @@ impl BlueStoreSemanticFragment {
         user_key: &[u8],
         value: &[u8],
     ) -> Result<(), CommandError> {
+        if let Some((family, logical_key)) =
+            sharding.route_omap_key(physical_column_family, user_key)?
+        {
+            self.omap
+                .observe_routed_latest_value(family, logical_key, value)
+                .map_err(map_omap_error)?;
+            return Ok(());
+        }
         let Some(routed) = route_bluestore_key(sharding, physical_column_family, user_key)? else {
             return Ok(());
         };
         self.claim_input(user_key.len(), value.len())?;
         increment(&mut self.latest_counts[key_space_index(routed.key_space)])?;
         if routed.key_space == BlueStoreKeySpace::Object {
+            observe_omap_owner(&mut self.omap, routed.logical_key, value)?;
             return observe_object(
                 &mut self.objects,
                 routed.logical_key,
@@ -72,6 +86,7 @@ impl BlueStoreSemanticFragment {
         merge_unique(&mut self.collections, fragment.collections, "collection")?;
         merge_unique(&mut self.objects, fragment.objects, "object")?;
         merge_unique(&mut self.shared_blobs, fragment.shared_blobs, "shared blob")?;
+        self.omap.merge(fragment.omap).map_err(map_omap_error)?;
         for (target, source) in self.latest_counts.iter_mut().zip(fragment.latest_counts) {
             *target = target
                 .checked_add(source)
@@ -87,6 +102,14 @@ impl BlueStoreSemanticFragment {
                 )
             })?;
         Ok(())
+    }
+
+    pub(in crate::import_pipeline) fn finish_omap(
+        &mut self,
+    ) -> Result<BlueStoreOmapSnapshot, CommandError> {
+        std::mem::take(&mut self.omap)
+            .finish()
+            .map_err(map_omap_error)
     }
 
     pub(in crate::import_pipeline) fn finish(
@@ -291,145 +314,6 @@ impl BlueStoreSemanticFragment {
     }
 }
 
-#[derive(Default)]
-struct SuperAccumulator {
-    nid_max: Option<u64>,
-    blobid_max: Option<u64>,
-    min_alloc_size: Option<u64>,
-    ondisk_format: Option<i32>,
-    min_compat_ondisk_format: Option<i32>,
-    per_pool_omap: Option<String>,
-    freelist_type: Option<String>,
-    observed_count: u64,
-    deferred_count: u64,
-}
-
-impl SuperAccumulator {
-    fn observe(&mut self, record: BlueStoreSuperRecord) -> Result<(), CommandError> {
-        increment(&mut self.observed_count)?;
-        match record {
-            BlueStoreSuperRecord::NidMax(value) => set_once(&mut self.nid_max, value, "nid_max"),
-            BlueStoreSuperRecord::BlobIdMax(value) => {
-                set_once(&mut self.blobid_max, value, "blobid_max")
-            }
-            BlueStoreSuperRecord::MinAllocSize(value) => {
-                set_once(&mut self.min_alloc_size, value, "min_alloc_size")
-            }
-            BlueStoreSuperRecord::OndiskFormat(value) => {
-                set_once(&mut self.ondisk_format, value, "ondisk_format")
-            }
-            BlueStoreSuperRecord::MinCompatOndiskFormat(value) => set_once(
-                &mut self.min_compat_ondisk_format,
-                value,
-                "min_compat_ondisk_format",
-            ),
-            BlueStoreSuperRecord::PerPoolOmap(value) => set_once(
-                &mut self.per_pool_omap,
-                omap_mode(value).to_string(),
-                "per_pool_omap",
-            ),
-            BlueStoreSuperRecord::FreelistType(value) => {
-                set_once(&mut self.freelist_type, value, "freelist_type")
-            }
-            BlueStoreSuperRecord::Unknown { .. } => increment(&mut self.deferred_count),
-        }
-    }
-
-    fn merge(&mut self, other: Self) -> Result<(), CommandError> {
-        merge_option(&mut self.nid_max, other.nid_max, "nid_max")?;
-        merge_option(&mut self.blobid_max, other.blobid_max, "blobid_max")?;
-        merge_option(
-            &mut self.min_alloc_size,
-            other.min_alloc_size,
-            "min_alloc_size",
-        )?;
-        merge_option(
-            &mut self.ondisk_format,
-            other.ondisk_format,
-            "ondisk_format",
-        )?;
-        merge_option(
-            &mut self.min_compat_ondisk_format,
-            other.min_compat_ondisk_format,
-            "min_compat_ondisk_format",
-        )?;
-        merge_option(
-            &mut self.per_pool_omap,
-            other.per_pool_omap,
-            "per_pool_omap",
-        )?;
-        merge_option(
-            &mut self.freelist_type,
-            other.freelist_type,
-            "freelist_type",
-        )?;
-        self.observed_count = self
-            .observed_count
-            .checked_add(other.observed_count)
-            .ok_or_else(|| semantic_error("super observed-count overflow"))?;
-        self.deferred_count = self
-            .deferred_count
-            .checked_add(other.deferred_count)
-            .ok_or_else(|| semantic_error("super deferred-count overflow"))?;
-        Ok(())
-    }
-
-    fn finish(self, inventory_id: &str) -> CephBluestoreSuperRecord {
-        CephBluestoreSuperRecord {
-            inventory_id: inventory_id.to_string(),
-            nid_max: self.nid_max,
-            blobid_max: self.blobid_max,
-            min_alloc_size: self.min_alloc_size,
-            ondisk_format: self.ondisk_format,
-            min_compat_ondisk_format: self.min_compat_ondisk_format,
-            per_pool_omap: self.per_pool_omap,
-            freelist_type: self.freelist_type,
-            observed_count: self.observed_count,
-            deferred_count: self.deferred_count,
-        }
-    }
-}
-
-struct SharedBlobRows {
-    record: CephBluestoreSharedBlobRecord,
-    refs: Vec<CephBluestoreSharedBlobRefRecord>,
-}
-
-fn key_space_index(key_space: BlueStoreKeySpace) -> usize {
-    match key_space {
-        BlueStoreKeySpace::Super => 0,
-        BlueStoreKeySpace::Collection => 1,
-        BlueStoreKeySpace::Object => 2,
-        BlueStoreKeySpace::SharedBlob => 3,
-    }
-}
-
-fn omap_mode(value: BlueStoreOmapMode) -> &'static str {
-    match value {
-        BlueStoreOmapMode::Bulk => "bulk",
-        BlueStoreOmapMode::PerPool => "perPool",
-        BlueStoreOmapMode::PerPg => "perPg",
-    }
-}
-
-fn set_once<T>(target: &mut Option<T>, value: T, field: &str) -> Result<(), CommandError> {
-    if target.replace(value).is_some() {
-        return Err(semantic_error(format!("duplicate super field {field}")));
-    }
-    Ok(())
-}
-
-fn merge_option<T>(
-    target: &mut Option<T>,
-    value: Option<T>,
-    field: &str,
-) -> Result<(), CommandError> {
-    if let Some(value) = value {
-        set_once(target, value, field)?;
-    }
-    Ok(())
-}
-
 fn merge_unique<K: Ord, V>(
     target: &mut BTreeMap<K, V>,
     source: BTreeMap<K, V>,
@@ -445,13 +329,6 @@ fn merge_unique<K: Ord, V>(
     Ok(())
 }
 
-fn increment(value: &mut u64) -> Result<(), CommandError> {
-    *value = value
-        .checked_add(1)
-        .ok_or_else(|| semantic_error("semantic count overflow"))?;
-    Ok(())
-}
-
 fn map_decode_error(error: ceph_wire::CephWireError) -> CommandError {
     let message = format!("BlueStore semantic decode failed: {error}");
     if matches!(
@@ -464,6 +341,47 @@ fn map_decode_error(error: ceph_wire::CephWireError) -> CommandError {
         CommandError::unsupported(message)
     } else {
         CommandError::parser(message)
+    }
+}
+
+fn observe_omap_owner(
+    omap: &mut BlueStoreOmapFragment,
+    logical_key: &[u8],
+    value: &[u8],
+) -> Result<(), CommandError> {
+    let ceph_wire::BlueStoreObjectKey::Onode(object) = ceph_wire::decode_bluestore_object_key(
+        logical_key,
+        ceph_wire::BlueStoreSemanticLimits::default(),
+    )
+    .map_err(map_decode_error)?
+    else {
+        return Ok(());
+    };
+    let decoded = ceph_wire::decode_bluestore_latest_value(
+        BlueStoreKeySpace::Object,
+        logical_key,
+        value,
+        ceph_wire::BlueStoreSemanticLimits::default(),
+    )
+    .map_err(map_decode_error)?;
+    let ceph_wire::BlueStoreDecodedRecord::Object(record) = decoded else {
+        return Err(semantic_error(
+            "onode owner decoder returned a non-object record",
+        ));
+    };
+    let ceph_wire::BlueStoreObjectRecord::Onode { onode, .. } = *record else {
+        return Err(semantic_error(
+            "object key decoded as an extent shard while binding OMAP owner",
+        ));
+    };
+    omap.observe_onode(&object, &onode).map_err(map_omap_error)
+}
+
+fn map_omap_error(error: BlueStoreOmapError) -> CommandError {
+    let message = format!("BlueStore OMAP recovery failed: {error}");
+    match error {
+        BlueStoreOmapError::LimitExceeded { .. } => CommandError::unsupported(message),
+        _ => CommandError::parser(message),
     }
 }
 

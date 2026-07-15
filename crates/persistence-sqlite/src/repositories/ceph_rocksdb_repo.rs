@@ -187,6 +187,10 @@ pub(super) fn validate_replacement(records: &CephRocksdbAggregate) -> DbResult<(
     validate_live_ssts(records, &column_family_states)
 }
 
+pub(crate) fn validate_manifest_for_read(record: &CephRocksdbManifestRecord) -> DbResult<()> {
+    validate_manifest(record)
+}
+
 fn validate_manifest(record: &CephRocksdbManifestRecord) -> DbResult<()> {
     if record.inventory_id.is_empty()
         || record.data_source_id.is_empty()

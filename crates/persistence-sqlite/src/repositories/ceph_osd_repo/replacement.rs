@@ -5,7 +5,9 @@ use rusqlite::{params, Connection};
 use crate::connection::{DbError, DbResult};
 
 use super::super::ceph_bluefs_repo::{self, CephBluefsAggregate};
+use super::super::ceph_bluestore_omap_repo::{self, CephBluestoreOmapAggregate};
 use super::super::ceph_bluestore_semantic_repo::{self, CephBluestoreSemanticAggregate};
+use super::super::ceph_osd_device_binding_repo::{self, CephOsdDeviceBindingAggregate};
 use super::super::ceph_rocksdb_latest_state_repo::{self, CephRocksdbLatestStateRecord};
 use super::super::ceph_rocksdb_repo::{self, CephRocksdbAggregate};
 use super::super::ceph_rocksdb_sst_repo::{self, CephRocksdbSstRecord};
@@ -21,6 +23,8 @@ pub(super) struct CephAggregateReplacement<'a> {
     wals: Option<&'a CephRocksdbWalAggregate>,
     latest_state: Option<&'a [CephRocksdbLatestStateRecord]>,
     semantic: Option<&'a CephBluestoreSemanticAggregate>,
+    omap: Option<&'a CephBluestoreOmapAggregate>,
+    device_bindings: Option<&'a [CephOsdDeviceBindingAggregate]>,
 }
 
 impl<'a> CephAggregateReplacement<'a> {
@@ -28,6 +32,25 @@ impl<'a> CephAggregateReplacement<'a> {
         Self {
             bluefs,
             ..Self::default()
+        }
+    }
+
+    pub(super) fn with_device_bindings(
+        device_bindings: &'a [CephOsdDeviceBindingAggregate],
+    ) -> Self {
+        Self {
+            device_bindings: Some(device_bindings),
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn with_metadata_and_device_bindings(
+        metadata: CephRocksdbMetadataSnapshot<'a>,
+        device_bindings: &'a [CephOsdDeviceBindingAggregate],
+    ) -> Self {
+        Self {
+            device_bindings: Some(device_bindings),
+            ..metadata.into()
         }
     }
 }
@@ -41,6 +64,8 @@ impl<'a> From<CephRocksdbMetadataSnapshot<'a>> for CephAggregateReplacement<'a> 
             wals: Some(value.wals),
             latest_state: Some(value.latest_state),
             semantic: Some(value.semantic),
+            omap: Some(value.omap),
+            device_bindings: None,
         }
     }
 }
@@ -53,6 +78,40 @@ pub(super) fn replace_aggregate(
     metadata: CephAggregateReplacement<'_>,
 ) -> DbResult<()> {
     let total_started = Instant::now();
+    validate_aggregate(data_source_id, inventory, replicas, metadata)?;
+    let validation_elapsed_ms = total_started.elapsed().as_millis();
+    let (write_elapsed_ms, commit_elapsed_ms) =
+        write_aggregate(conn, data_source_id, inventory, replicas, metadata)?;
+    tracing::info!(
+        data_source_id,
+        inventory_count = inventory.len(),
+        semantic_object_rows = metadata.semantic.map_or(0, |value| value.objects.len()),
+        semantic_checksum_rows = metadata
+            .semantic
+            .map_or(0, |value| value.checksum_chunks.len()),
+        omap_scope_rows = metadata.omap.map_or(0, |value| value.scopes.len()),
+        omap_directory_rows = metadata
+            .omap
+            .map_or(0, |value| value.directory_mappings.len()),
+        omap_header_rows = metadata.omap.map_or(0, |value| value.rbd_headers.len()),
+        device_binding_rows = metadata
+            .device_bindings
+            .map_or(0, <[CephOsdDeviceBindingAggregate]>::len),
+        validation_elapsed_ms,
+        write_elapsed_ms,
+        commit_elapsed_ms,
+        total_elapsed_ms = total_started.elapsed().as_millis(),
+        "Replaced transactional Ceph metadata aggregate"
+    );
+    Ok(())
+}
+
+fn validate_aggregate(
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    replicas: &[CephOsdLabelReplicaRecord],
+    metadata: CephAggregateReplacement<'_>,
+) -> DbResult<()> {
     let CephAggregateReplacement {
         bluefs,
         rocksdb,
@@ -60,18 +119,26 @@ pub(super) fn replace_aggregate(
         wals,
         latest_state,
         semantic,
+        omap,
+        device_bindings,
     } = metadata;
     if rocksdb.is_some() != ssts.is_some()
         || rocksdb.is_some() != wals.is_some()
         || rocksdb.is_some() != latest_state.is_some()
         || rocksdb.is_some() != semantic.is_some()
+        || rocksdb.is_some() != omap.is_some()
     {
         return Err(DbError::System(
-            "RocksDB manifest, SST/WAL inventory, latest-state summaries, and BlueStore semantics must be replaced together"
+            "RocksDB manifest, SST/WAL inventory, latest-state summaries, BlueStore semantics, and OMAP metadata must be replaced together"
                 .to_string(),
         ));
     }
-    validation::validate_replacement(data_source_id, inventory, replicas)?;
+    validation::validate_replacement(
+        data_source_id,
+        inventory,
+        replicas,
+        device_bindings.unwrap_or_default(),
+    )?;
     if let Some(records) = bluefs {
         validation::validate_bluefs_binding(data_source_id, inventory, &records.superblock)?;
         ceph_bluefs_repo::validate_replacement(records)?;
@@ -93,15 +160,50 @@ pub(super) fn replace_aggregate(
         validation::validate_semantic_binding(inventory, rocksdb, latest_state, semantic)?;
         ceph_bluestore_semantic_repo::validate_replacement(semantic)?;
     }
-    let validation_elapsed_ms = total_started.elapsed().as_millis();
+    if let (Some(rocksdb), Some(latest_state), Some(semantic), Some(omap)) =
+        (rocksdb, latest_state, semantic, omap)
+    {
+        validation::validate_omap_binding(
+            data_source_id,
+            inventory,
+            rocksdb,
+            latest_state,
+            semantic,
+            omap,
+        )?;
+        ceph_bluestore_omap_repo::validate_replacement(omap)?;
+    }
+    Ok(())
+}
+
+fn write_aggregate(
+    conn: &Connection,
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    replicas: &[CephOsdLabelReplicaRecord],
+    metadata: CephAggregateReplacement<'_>,
+) -> DbResult<(u128, u128)> {
+    let CephAggregateReplacement {
+        bluefs,
+        rocksdb,
+        ssts,
+        wals,
+        latest_state,
+        semantic,
+        omap,
+        device_bindings,
+    } = metadata;
     let tx = conn.unchecked_transaction()?;
     let write_started = Instant::now();
     replace_for_data_source_on(&tx, data_source_id, inventory, replicas)?;
+    if let Some(bindings) = device_bindings {
+        ceph_osd_device_binding_repo::replace_for_data_source_on(&tx, bindings)?;
+    }
     if let Some(records) = bluefs {
         ceph_bluefs_repo::replace_for_inventory_on(&tx, records)?;
     }
-    if let (Some(records), Some(ssts), Some(wals), Some(latest_state), Some(semantic)) =
-        (rocksdb, ssts, wals, latest_state, semantic)
+    if let (Some(records), Some(ssts), Some(wals), Some(latest_state), Some(semantic), Some(omap)) =
+        (rocksdb, ssts, wals, latest_state, semantic, omap)
     {
         ceph_rocksdb_repo::replace_for_inventory_on(&tx, records)?;
         ceph_rocksdb_sst_repo::replace_for_inventory_on(&tx, &records.manifest.inventory_id, ssts)?;
@@ -112,23 +214,13 @@ pub(super) fn replace_aggregate(
             latest_state,
         )?;
         ceph_bluestore_semantic_repo::replace_validated_for_inventory_on(&tx, semantic)?;
+        ceph_bluestore_omap_repo::replace_validated_for_inventory_on(&tx, omap)?;
     }
     let write_elapsed_ms = write_started.elapsed().as_millis();
     let commit_started = Instant::now();
     tx.commit()?;
     let commit_elapsed_ms = commit_started.elapsed().as_millis();
-    tracing::info!(
-        data_source_id,
-        inventory_count = inventory.len(),
-        semantic_object_rows = semantic.map_or(0, |value| value.objects.len()),
-        semantic_checksum_rows = semantic.map_or(0, |value| value.checksum_chunks.len()),
-        validation_elapsed_ms,
-        write_elapsed_ms,
-        commit_elapsed_ms,
-        total_elapsed_ms = total_started.elapsed().as_millis(),
-        "Replaced transactional Ceph metadata aggregate"
-    );
-    Ok(())
+    Ok((write_elapsed_ms, commit_elapsed_ms))
 }
 
 fn replace_for_data_source_on(

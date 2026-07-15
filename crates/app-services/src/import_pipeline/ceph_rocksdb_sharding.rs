@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use ceph_wire::BlueStoreOmapKeyFamily;
 use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
 use transport::CommandError;
 
@@ -30,6 +31,45 @@ pub(super) struct RocksdbColumnFamilyRoute {
 impl RocksdbShardingDefinition {
     pub(super) fn route(&self, physical_name: &str) -> Option<&RocksdbColumnFamilyRoute> {
         self.routes.get(physical_name)
+    }
+
+    pub(super) fn route_omap_key<'a>(
+        &self,
+        physical_name: &str,
+        user_key: &'a [u8],
+    ) -> Result<Option<(BlueStoreOmapKeyFamily, &'a [u8])>, CommandError> {
+        let route = self.route(physical_name).ok_or_else(|| {
+            sharding_error(format!(
+                "physical column family {physical_name} has no validated sharding route"
+            ))
+        })?;
+        if !route.strips_logical_prefix {
+            if route.physical_name != "default" || route.logical_prefix.is_some() {
+                return Err(sharding_error(
+                    "non-stripping OMAP route is not the canonical default column family",
+                ));
+            }
+            let Some(prefix) = user_key.first().copied() else {
+                return Ok(None);
+            };
+            let Some(family) = omap_family(prefix) else {
+                return Ok(None);
+            };
+            if user_key.len() < 2 || user_key[1] != 0 {
+                return Err(sharding_error("default OMAP key is not prefix-NUL encoded"));
+            }
+            return Ok(Some((family, &user_key[2..])));
+        }
+
+        let prefix = route
+            .logical_prefix
+            .as_deref()
+            .ok_or_else(|| sharding_error("OMAP route has no logical prefix"))?;
+        let bytes = prefix.as_bytes();
+        if bytes.len() != 1 {
+            return Ok(None);
+        }
+        Ok(omap_family(bytes[0]).map(|family| (family, user_key)))
     }
 
     pub(super) fn digest_sha256(&self) -> &str {
@@ -94,6 +134,16 @@ fn logical_bucket_name(prefix: &str) -> &'static str {
         "L" => "bluestore.deferred",
         "P" => "bluestore.omap.pgmeta",
         _ => "bluestore.unknown",
+    }
+}
+
+fn omap_family(prefix: u8) -> Option<BlueStoreOmapKeyFamily> {
+    match prefix {
+        b'M' => Some(BlueStoreOmapKeyFamily::Bulk),
+        b'P' => Some(BlueStoreOmapKeyFamily::PgMeta),
+        b'm' => Some(BlueStoreOmapKeyFamily::PerPool),
+        b'p' => Some(BlueStoreOmapKeyFamily::PerPg),
+        _ => None,
     }
 }
 

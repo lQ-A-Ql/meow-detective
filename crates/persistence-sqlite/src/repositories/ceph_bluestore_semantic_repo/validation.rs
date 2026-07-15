@@ -11,16 +11,41 @@ use crate::repositories::{
 
 use super::{
     CephBluestoreCollectionRecord, CephBluestoreObjectRecord, CephBluestoreSemanticAggregate,
-    CephBluestoreSharedBlobRecord, BLUESTORE_SEMANTIC_DECODE_PROFILE,
-    BLUESTORE_SEMANTIC_SCHEMA_VERSION,
+    CephBluestoreSemanticScanRecord, CephBluestoreSharedBlobRecord, CephBluestoreSuperRecord,
+    BLUESTORE_SEMANTIC_DECODE_PROFILE, BLUESTORE_SEMANTIC_SCHEMA_VERSION,
 };
 use primitives::{
     checked_len, fits_sqlite, semantic_error, valid_hex_u64, valid_optional_text, valid_sha256,
     valid_status, valid_text,
 };
 
+pub(crate) use digest::latest_state_set_sha256_from_scalars;
 pub use digest::{latest_state_set_sha256, semantic_aggregate_sha256};
 pub use identity::{canonical_collection_identity, object_identity_sha256};
+
+pub(crate) fn validate_scan_for_read(scan: &CephBluestoreSemanticScanRecord) -> DbResult<()> {
+    validate_scan_record(scan)
+}
+
+pub(crate) fn validate_super_for_read(
+    inventory_id: &str,
+    record: &CephBluestoreSuperRecord,
+) -> DbResult<()> {
+    validate_super_record(inventory_id, record)
+}
+
+pub(crate) fn validate_object_for_read(
+    inventory_id: &str,
+    record: &CephBluestoreObjectRecord,
+) -> DbResult<()> {
+    validate_object(inventory_id, record)
+}
+
+pub(crate) fn validate_object_children_for_read(
+    aggregate: &CephBluestoreSemanticAggregate,
+) -> DbResult<()> {
+    children::validate_children(aggregate)
+}
 
 pub(super) fn validate_replacement(aggregate: &CephBluestoreSemanticAggregate) -> DbResult<()> {
     validate_scan(aggregate)?;
@@ -41,13 +66,35 @@ pub(crate) fn validate_recovery_binding(
     latest_state: &[CephRocksdbLatestStateRecord],
     aggregate: &CephBluestoreSemanticAggregate,
 ) -> DbResult<()> {
+    validate_recovery_binding_for_read(rocksdb, latest_state, &aggregate.scan)
+}
+
+pub(crate) fn validate_recovery_binding_for_read(
+    rocksdb: &CephRocksdbAggregate,
+    latest_state: &[CephRocksdbLatestStateRecord],
+    scan: &CephBluestoreSemanticScanRecord,
+) -> DbResult<()> {
     let sharding_sha256 = latest_state
         .first()
         .map(|record| record.sharding_sha256.as_str())
         .unwrap_or_default();
-    if aggregate.scan.inventory_id != rocksdb.manifest.inventory_id
-        || aggregate.scan.sharding_sha256 != sharding_sha256
-        || aggregate.scan.latest_state_sha256 != latest_state_set_sha256(latest_state)
+    validate_recovery_binding_for_read_scalars(
+        rocksdb.manifest.inventory_id.as_str(),
+        sharding_sha256,
+        latest_state_set_sha256(latest_state).as_str(),
+        scan,
+    )
+}
+
+pub(crate) fn validate_recovery_binding_for_read_scalars(
+    manifest_inventory_id: &str,
+    sharding_sha256: &str,
+    latest_state_sha256: &str,
+    scan: &CephBluestoreSemanticScanRecord,
+) -> DbResult<()> {
+    if scan.inventory_id != manifest_inventory_id
+        || scan.sharding_sha256 != sharding_sha256
+        || scan.latest_state_sha256 != latest_state_sha256
     {
         return Err(DbError::System(
             "BlueStore semantic snapshot does not match its RocksDB recovery".to_string(),
@@ -76,7 +123,10 @@ pub(crate) fn validate_device_bounds(
 }
 
 fn validate_scan(aggregate: &CephBluestoreSemanticAggregate) -> DbResult<()> {
-    let scan = &aggregate.scan;
+    validate_scan_record(&aggregate.scan)
+}
+
+fn validate_scan_record(scan: &CephBluestoreSemanticScanRecord) -> DbResult<()> {
     let counts = [
         scan.s_latest_count,
         scan.s_decoded_count,
@@ -115,7 +165,10 @@ fn validate_scan(aggregate: &CephBluestoreSemanticAggregate) -> DbResult<()> {
 }
 
 fn validate_super(aggregate: &CephBluestoreSemanticAggregate) -> DbResult<()> {
-    let record = &aggregate.super_record;
+    validate_super_record(&aggregate.scan.inventory_id, &aggregate.super_record)
+}
+
+fn validate_super_record(inventory_id: &str, record: &CephBluestoreSuperRecord) -> DbResult<()> {
     let present = [
         record.nid_max.is_some(),
         record.blobid_max.is_some(),
@@ -132,7 +185,7 @@ fn validate_super(aggregate: &CephBluestoreSemanticAggregate) -> DbResult<()> {
         .into_iter()
         .flatten()
         .all(fits_sqlite);
-    if record.inventory_id != aggregate.scan.inventory_id
+    if record.inventory_id != inventory_id
         || !valid_limits
         || record.min_alloc_size == Some(0)
         || record.deferred_count > record.observed_count

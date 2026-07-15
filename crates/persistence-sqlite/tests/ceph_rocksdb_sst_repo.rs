@@ -6,6 +6,7 @@ use persistence_sqlite::{
             CephBluefsReplayRecord,
         },
         ceph_bluefs_repo::{CephBluefsAggregate, CephBluefsSuperblockRecord},
+        ceph_bluestore_omap_repo::CephBluestoreOmapRepo,
         ceph_bluestore_semantic_repo::CephBluestoreSemanticRepo,
         ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo, CephRocksdbMetadataSnapshot},
         ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRepo,
@@ -283,6 +284,7 @@ fn persist_with_file_number(
     let rocksdb = rocksdb_with_file_number(file_number);
     let latest_state = support::empty_latest_state(&rocksdb);
     let semantic = support::empty_semantic(&rocksdb, &latest_state);
+    let omap = support::empty_omap(&rocksdb, &semantic);
     CephOsdRepo::new(conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(&osd),
@@ -294,6 +296,7 @@ fn persist_with_file_number(
             wals: &wals(&rocksdb),
             latest_state: &latest_state,
             semantic: &semantic,
+            omap: &omap,
         },
     )
 }
@@ -303,7 +306,7 @@ fn source_migration_installs_sst_inventory_without_raw_key_or_value_columns() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_012_ceph_bluestore_semantics"
+        "source_014_ceph_osd_device_bindings"
     );
     let mut statement = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_sst_inventory') ORDER BY cid")
@@ -457,6 +460,7 @@ fn sqlite_write_failure_rolls_back_the_complete_ceph_aggregate() {
     let rocksdb = rocksdb();
     let latest_state = support::empty_latest_state(&rocksdb);
     let semantic = support::empty_semantic(&rocksdb, &latest_state);
+    let omap = support::empty_omap(&rocksdb, &semantic);
     let result = CephOsdRepo::new(&conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(&changed_osd),
@@ -468,6 +472,7 @@ fn sqlite_write_failure_rolls_back_the_complete_ceph_aggregate() {
             wals: &wals(&rocksdb),
             latest_state: &latest_state,
             semantic: &semantic,
+            omap: &omap,
         },
     );
 
@@ -514,6 +519,7 @@ fn final_semantic_write_failure_rolls_back_latest_state_and_osd_aggregate() {
     let mut latest_state = support::empty_latest_state(&rocksdb);
     latest_state[0].latest_state_sha256 = "e".repeat(64);
     let semantic = support::empty_semantic(&rocksdb, &latest_state);
+    let omap = support::empty_omap(&rocksdb, &semantic);
     let result = CephOsdRepo::new(&conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(&changed_osd),
@@ -525,6 +531,7 @@ fn final_semantic_write_failure_rolls_back_latest_state_and_osd_aggregate() {
             wals: &wals(&rocksdb),
             latest_state: &latest_state,
             semantic: &semantic,
+            omap: &omap,
         },
     );
 
@@ -547,5 +554,79 @@ fn final_semantic_write_failure_rolls_back_latest_state_and_osd_aggregate() {
             .find_aggregate(INVENTORY_ID)
             .expect("reload semantics"),
         expected_semantic
+    );
+}
+
+#[test]
+fn final_omap_write_failure_rolls_back_semantics_latest_state_and_osd_aggregate() {
+    let conn = setup();
+    let expected_sst = sst();
+    persist(&conn, std::slice::from_ref(&expected_sst)).expect("persist initial aggregate");
+    let expected_latest_state = CephRocksdbLatestStateRepo::new(&conn)
+        .find(INVENTORY_ID)
+        .expect("load initial latest state");
+    let expected_semantic = CephBluestoreSemanticRepo::new(&conn)
+        .find_aggregate(INVENTORY_ID)
+        .expect("load initial semantics");
+    let expected_omap = CephBluestoreOmapRepo::new(&conn)
+        .find_aggregate(INVENTORY_ID)
+        .expect("load initial OMAP");
+    conn.execute_batch(
+        "CREATE TRIGGER reject_final_omap_replacement
+         BEFORE INSERT ON ceph_bluestore_omap_scans
+         BEGIN
+           SELECT RAISE(ABORT, 'injected final OMAP persistence failure');
+         END;",
+    )
+    .expect("install OMAP failure trigger");
+
+    let mut changed_osd = osd();
+    changed_osd.description = "must roll back at OMAP stage".to_string();
+    let bluefs = bluefs();
+    let rocksdb = rocksdb();
+    let mut latest_state = support::empty_latest_state(&rocksdb);
+    latest_state[0].latest_state_sha256 = "e".repeat(64);
+    let semantic = support::empty_semantic(&rocksdb, &latest_state);
+    let omap = support::empty_omap(&rocksdb, &semantic);
+    let result = CephOsdRepo::new(&conn).replace_for_data_source_with_rocksdb_metadata(
+        DATA_SOURCE_ID,
+        std::slice::from_ref(&changed_osd),
+        &[],
+        CephRocksdbMetadataSnapshot {
+            bluefs: &bluefs,
+            rocksdb: &rocksdb,
+            ssts: std::slice::from_ref(&expected_sst),
+            wals: &wals(&rocksdb),
+            latest_state: &latest_state,
+            semantic: &semantic,
+            omap: &omap,
+        },
+    );
+
+    assert!(result.is_err());
+    assert_eq!(
+        CephOsdRepo::new(&conn)
+            .find_by_data_source(DATA_SOURCE_ID)
+            .expect("reload OSD aggregate")[0]
+            .description,
+        "BlueStore OSD"
+    );
+    assert_eq!(
+        CephRocksdbLatestStateRepo::new(&conn)
+            .find(INVENTORY_ID)
+            .expect("reload latest state"),
+        expected_latest_state
+    );
+    assert_eq!(
+        CephBluestoreSemanticRepo::new(&conn)
+            .find_aggregate(INVENTORY_ID)
+            .expect("reload semantics"),
+        expected_semantic
+    );
+    assert_eq!(
+        CephBluestoreOmapRepo::new(&conn)
+            .find_aggregate(INVENTORY_ID)
+            .expect("reload OMAP"),
+        expected_omap
     );
 }

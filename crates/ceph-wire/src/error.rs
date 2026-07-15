@@ -194,6 +194,31 @@ pub enum CephWireError {
         context: &'static str,
         remaining: usize,
     },
+
+    #[error("invalid RBD metadata {field}: {reason}")]
+    InvalidRbdMetadata {
+        field: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("trailing bytes after RBD metadata {field}: {remaining} bytes remain")]
+    RbdTrailingBytes {
+        field: &'static str,
+        remaining: usize,
+    },
+
+    #[error("invalid RBD head-image layout: {reason}")]
+    InvalidRbdLayout { reason: &'static str },
+
+    #[error("RBD logical range {offset:#x}~{length:#x} is outside image size {image_size:#x}")]
+    RbdRangeOutOfBounds {
+        offset: u64,
+        length: u64,
+        image_size: u64,
+    },
+
+    #[error("RBD logical range arithmetic overflow at {offset:#x}~{length:#x}")]
+    RbdRangeOverflow { offset: u64, length: u64 },
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;

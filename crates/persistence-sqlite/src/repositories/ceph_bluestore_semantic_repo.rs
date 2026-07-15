@@ -1,5 +1,7 @@
 mod binding;
+mod mapping;
 mod query;
+mod read_plan;
 mod rows;
 pub(crate) mod validation;
 mod write;
@@ -8,6 +10,7 @@ use rusqlite::Connection;
 
 use crate::connection::DbResult;
 
+pub use read_plan::{CephBluestoreObjectCandidate, CephBluestoreObjectReadPlan};
 pub use rows::{
     CephBluestoreBlobRecord, CephBluestoreChecksumChunkRecord, CephBluestoreCollectionRecord,
     CephBluestoreLogicalExtentRecord, CephBluestoreObjectRecord, CephBluestoreOnodeShardRecord,
@@ -44,6 +47,24 @@ impl<'a> CephBluestoreSemanticRepo<'a> {
         }
         transaction.commit()?;
         Ok(aggregate)
+    }
+
+    pub fn find_object_read_plan(
+        &self,
+        inventory_id: &str,
+        object_identity_sha256: &str,
+    ) -> DbResult<Option<CephBluestoreObjectReadPlan>> {
+        read_plan::find_object_read_plan(self.conn, inventory_id, object_identity_sha256)
+    }
+
+    pub fn find_object_candidate(
+        &self,
+        inventory_id: &str,
+        object_name: &[u8],
+        pool: i64,
+        namespace: &[u8],
+    ) -> DbResult<Option<CephBluestoreObjectCandidate>> {
+        read_plan::find_object_candidate(self.conn, inventory_id, object_name, pool, namespace)
     }
 
     pub fn replace_for_inventory(

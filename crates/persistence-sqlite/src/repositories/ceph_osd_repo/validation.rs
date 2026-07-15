@@ -3,10 +3,34 @@ use std::collections::HashSet;
 use crate::connection::{DbError, DbResult};
 
 use super::super::ceph_bluefs_repo::{CephBluefsAggregate, CephBluefsSuperblockRecord};
+use super::super::ceph_bluestore_omap_repo::{self, CephBluestoreOmapAggregate};
 use super::super::ceph_bluestore_semantic_repo::{self, CephBluestoreSemanticAggregate};
+use super::super::ceph_osd_device_binding_repo::{self, CephOsdDeviceBindingAggregate};
 use super::super::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 use super::super::ceph_rocksdb_repo::CephRocksdbAggregate;
 use super::{CephOsdInventoryRecord, CephOsdLabelReplicaRecord};
+
+pub(super) fn validate_omap_binding(
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    rocksdb: &CephRocksdbAggregate,
+    latest_state: &[CephRocksdbLatestStateRecord],
+    semantic: &CephBluestoreSemanticAggregate,
+    omap: &CephBluestoreOmapAggregate,
+) -> DbResult<()> {
+    let osd = inventory
+        .iter()
+        .find(|record| record.id == rocksdb.manifest.inventory_id)
+        .ok_or_else(|| {
+            DbError::System("BlueStore OMAP snapshot has no OSD inventory".to_string())
+        })?;
+    if osd.data_source_id != data_source_id || omap.scan.data_source_id != data_source_id {
+        return Err(DbError::System(
+            "BlueStore OMAP snapshot crosses data-source ownership".to_string(),
+        ));
+    }
+    ceph_bluestore_omap_repo::validate_recovery_binding(rocksdb, latest_state, semantic, omap)
+}
 
 pub(super) fn validate_semantic_binding(
     inventory: &[CephOsdInventoryRecord],
@@ -95,6 +119,7 @@ pub(super) fn validate_replacement(
     data_source_id: &str,
     inventory: &[CephOsdInventoryRecord],
     replicas: &[CephOsdLabelReplicaRecord],
+    device_bindings: &[CephOsdDeviceBindingAggregate],
 ) -> DbResult<()> {
     let inventory_ids = inventory
         .iter()
@@ -108,6 +133,12 @@ pub(super) fn validate_replacement(
             Ok(record.id.as_str())
         })
         .collect::<DbResult<HashSet<_>>>()?;
+
+    ceph_osd_device_binding_repo::validate_replacement(
+        data_source_id,
+        &inventory_ids,
+        device_bindings,
+    )?;
 
     if let Some(replica) = replicas
         .iter()

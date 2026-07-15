@@ -8,6 +8,15 @@ mod ceph;
 mod ceph_bluefs_file_reader;
 mod ceph_bluefs_records;
 mod ceph_bluefs_replay;
+mod ceph_bluestore_omap;
+mod ceph_bluestore_omap_records;
+mod ceph_device_binding;
+mod ceph_persistence;
+pub use ceph_bluestore_omap::{
+    BlueStoreOmapError, BlueStoreOmapFragment, BlueStoreOmapLimits, BlueStoreOmapOwner,
+    BlueStoreOmapOwnerKind, BlueStoreOmapPoolScope, BlueStoreOmapScope, BlueStoreOmapScopeRecord,
+    BlueStoreOmapSnapshot, BlueStoreRbdDirectoryMapping, BlueStoreRbdHeader,
+};
 mod ceph_bluestore_semantic;
 mod ceph_metadata_audit;
 mod ceph_rocksdb_control_files;

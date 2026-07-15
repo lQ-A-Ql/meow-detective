@@ -178,3 +178,48 @@ fn open_registered_source_db_migrates_schema_version_mismatch() {
         Some(persistence_sqlite::runner::latest_source_version())
     );
 }
+
+#[test]
+fn checkpoint_source_db_requires_wal_convergence() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("source.db");
+    let writer = rusqlite::Connection::open(&path).unwrap();
+    writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+    writer
+        .execute_batch("CREATE TABLE records(value INTEGER); INSERT INTO records VALUES (1);")
+        .unwrap();
+
+    checkpoint_source_db(&writer).unwrap();
+
+    let (busy, log_frames, checkpointed_frames): (u32, u64, u64) = writer
+        .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .unwrap();
+    assert_eq!(busy, 0);
+    assert_eq!(log_frames, checkpointed_frames);
+}
+
+#[test]
+fn checkpoint_source_db_fails_when_a_reader_pins_wal_frames() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("source.db");
+    let writer = rusqlite::Connection::open(&path).unwrap();
+    writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+    writer
+        .execute_batch("CREATE TABLE records(value INTEGER); INSERT INTO records VALUES (1);")
+        .unwrap();
+
+    let reader = rusqlite::Connection::open(&path).unwrap();
+    let read_tx = reader.unchecked_transaction().unwrap();
+    let _: i64 = read_tx
+        .query_row("SELECT COUNT(*) FROM records", [], |row| row.get(0))
+        .unwrap();
+    writer
+        .execute("INSERT INTO records VALUES (2)", [])
+        .unwrap();
+
+    let error = checkpoint_source_db(&writer).unwrap_err();
+    assert!(error.to_string().contains("did not converge"));
+    drop(read_tx);
+}

@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_012_ceph_bluestore_semantics"
+        "source_014_ceph_osd_device_bindings"
     );
     for table in [
         "ceph_bluefs_superblocks",

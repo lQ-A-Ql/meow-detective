@@ -41,7 +41,7 @@ fn rocksdb() -> CephRocksdbAggregate {
             max_column_family_id: 1,
             min_log_number_to_keep: Some(9),
         },
-        column_families: vec![column_family(0, "default"), column_family(1, "m")],
+        column_families: vec![column_family(0, "default"), column_family(1, "L")],
         live_ssts: Vec::new(),
     }
 }
@@ -167,7 +167,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
         .expect("insert range");
     spool.seal().expect("seal spool");
 
-    let sharding = parse_rocksdb_sharding_definition("m").expect("parse sharding");
+    let sharding = parse_rocksdb_sharding_definition("L").expect("parse sharding");
     let records = recover_latest_state(&rocksdb(), &sharding, &spool, u64::MAX)
         .expect("recover latest state")
         .summaries;
@@ -199,7 +199,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     }
 
     let sharded = &records[1];
-    assert_eq!(sharded.column_family_name, "m");
+    assert_eq!(sharded.column_family_name, "L");
     assert_eq!(sharded.point_mutation_count, 1);
     assert_eq!(sharded.latest_value_count, 1);
     assert_eq!(sharded.deleted_key_count, 0);

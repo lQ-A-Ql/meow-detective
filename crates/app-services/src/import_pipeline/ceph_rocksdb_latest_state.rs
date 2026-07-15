@@ -14,6 +14,7 @@ use transport::CommandError;
 mod point_only;
 mod summary;
 
+use super::ceph_bluestore_omap::BlueStoreOmapSnapshot;
 use super::ceph_rocksdb_range_state::RangeCoverage;
 use super::ceph_rocksdb_sharding::RocksdbShardingDefinition;
 use super::ceph_rocksdb_spool::{RocksdbRecoverySpool, SpoolPoint, SpoolRange};
@@ -22,6 +23,7 @@ use summary::{is_hidden, ColumnFamilySummary};
 pub(super) struct RecoveredLatestState {
     pub(super) summaries: Vec<CephRocksdbLatestStateRecord>,
     pub(super) semantic: CephBluestoreSemanticAggregate,
+    pub(super) omap: BlueStoreOmapSnapshot,
 }
 
 pub(super) fn recover_latest_state(
@@ -113,10 +115,12 @@ pub(super) fn finish_recovery_parts(
     for fragment in fragments {
         semantic.merge(fragment)?;
     }
+    let omap = semantic.finish_omap()?;
     let semantic = semantic.finish(inventory_id, sharding_sha256, device_size, &summaries)?;
     Ok(RecoveredLatestState {
         summaries,
         semantic,
+        omap,
     })
 }
 

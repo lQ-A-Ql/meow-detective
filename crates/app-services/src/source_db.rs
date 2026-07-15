@@ -192,7 +192,15 @@ pub(crate) fn ready_data_sources(
 }
 
 pub fn checkpoint_source_db(conn: &Connection) -> DbResult<()> {
-    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    let (busy, log_frames, checkpointed_frames): (u32, u64, u64) =
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+    if busy != 0 || log_frames != checkpointed_frames {
+        return Err(DbError::System(format!(
+            "Source DB WAL checkpoint did not converge: busy={busy}, logFrames={log_frames}, checkpointedFrames={checkpointed_frames}"
+        )));
+    }
     Ok(())
 }
 
