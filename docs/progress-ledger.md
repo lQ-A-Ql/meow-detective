@@ -40,7 +40,7 @@
 | 2026-07-14 | Linux/Ceph | BlueStore Stage 6.2 | Entry-stream parser foundation validated / full live-set and latest-state pending | 新增逐 block、借用 raw slice 且带 block/entry provenance 的 fallible visitor；external-SST sequence fail closed，point order、range 语义和独立资源预算闭合；代表 `000146.sst` 的 148 blocks、23,364 entries 和 raw byte oracle 通过 | 先补全 `35/40/33` live-set digest 与可回滚 spool，再实现 latest-state reducer |
 | 2026-07-14 | Linux/Ceph | BlueStore Stage 6.3 | Full live-set + WAL latest-state summary completed / BlueStore semantics pending | 三个真实 OSD 的 `35/40/33` live SST 与 active WAL 进入 source-local disposable spool；value/delete/single-delete/range-delete、Ceph `T`/`b` merge 完成有界 reduction，每个 OSD 持久化 12 个 digest-only CF summary，canonical aggregate oracle 闭合，六成员回归 `50.31s` | Stage 6.4 在 reducer 生命周期内解析 BlueStore `S/C/O/X` 与后续 OMAP，不持久化 raw key/value |
 | 2026-07-15 | Linux/Ceph | BlueStore Stage 6.4 | `S/C/O/X` semantic snapshot completed / RADOS content pending | 三个真实 OSD 完成 super/collection/onode/shard/blob/logical+physical extent/checksum/shared-ref 规范化；semantic snapshot 与 latest-state、OSD/device 原子绑定，三组精确 count/digest oracle 闭合；六成员串行回归 6/6 ready，BlueStore 普通文件行仍为零 | Stage 6.5 先完成 OMAP 与 object content reader，再进行 PG/replica/RBD 重建 |
-| 2026-07-15 | Linux/Ceph | BlueStore Stage 6.4 performance hardening | Phase benchmark passed / full E01 rerun pending remount | 修复 object-child `O(n^2)` 校验，checksum 改为排序单次扫描，semantic child rows 改为 bind-budget 批量写入并共享 identity；真实 server01 source DB 三次完整 phase 为 51.58s..88.60s，peak RSS 395MB，count/digest oracle 不变 | `E:` 样本盘重新挂载后先复跑单 `server01-disk02`，再决定是否复跑六成员 |
+| 2026-07-15 | Linux/Ceph | BlueStore Stage 6.4 performance hardening | Full E01 rerun passed | 修复两处 object/blob child `O(n^2)` 路径，checksum 改为 compact numeric row + canonical object ordinal，semantic child rows 使用运行时 bind limit 批量写入；单 `server01-disk02` 从 544.105s 降至 92.673s，peak RSS 从 589MB 降至 537MB，count/digest oracle 不变 | 六成员完整性能复跑按发布门禁需要执行；Stage 6.5 继续 RADOS/OMAP |
 
 ## 代码里程碑
 
@@ -78,9 +78,9 @@
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
 - BlueStore label、BlueFS replay、RocksDB control-plane/live-SST/WAL/latest-state 以及 `S/C/O/X` onode/blob/shard/extent/checksum/shared-ref semantic snapshot 已完成；RADOS object content、OMAP、PG/replica、RBD/VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
 - BlueStore semantic persistence 的保留真实 source DB phase benchmark 已由
-  真实数据验证为 `51.58..88.60s / 395MB`。旧单成员全链路基线为
-  `486.17s / 705MB`，但测试范围不同；优化后完整 E01 导入尚待 `E:` 样本盘
-  重新挂载，不能用 phase benchmark 替代全链路结果。
+  真实数据验证为 `68.34..77.69s / 311MB`。`E:` 重新挂载后的单成员全链复跑为
+  `92.673s / 537MB`，相同命令的本轮优化前结果为 `544.105s / 589MB`；
+  semantic digest、精确行数、单事务提交和零普通文件行均保持不变。
 - Stage 7 后续清理事实：模块 baseline 0 行、正式临时例外 5 行、函数 baseline 9 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 

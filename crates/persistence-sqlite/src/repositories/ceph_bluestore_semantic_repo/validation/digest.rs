@@ -1,3 +1,5 @@
+mod checksum;
+
 use sha2::{Digest, Sha256};
 
 use super::super::{
@@ -42,11 +44,16 @@ pub fn semantic_aggregate_sha256(aggregate: &CephBluestoreSemanticAggregate) -> 
     digest.records("objects", &aggregate.objects, write_object);
     digest.records("onode_shards", &aggregate.onode_shards, write_onode_shard);
     digest.records("blobs", &aggregate.blobs, write_blob);
-    digest.records(
-        "checksum_chunks",
-        &aggregate.checksum_chunks,
-        write_checksum_chunk,
-    );
+    digest.tag("checksum_chunks");
+    digest.u64(aggregate.checksum_chunks.len() as u64);
+    for record in &aggregate.checksum_chunks {
+        write_checksum_chunk(
+            &mut digest,
+            &aggregate.scan.inventory_id,
+            &aggregate.objects,
+            record,
+        );
+    }
     digest.records(
         "logical_extents",
         &aggregate.logical_extents,
@@ -237,15 +244,31 @@ fn write_logical_extent(digest: &mut CanonicalDigest, record: &CephBluestoreLogi
     digest.bool(record.flag_spanning);
 }
 
-fn write_checksum_chunk(digest: &mut CanonicalDigest, record: &CephBluestoreChecksumChunkRecord) {
-    digest.tag("checksum_chunk");
-    digest.text(&record.inventory_id);
-    digest.text(&record.object_identity_sha256);
-    digest.u32(record.blob_ordinal);
-    digest.u32(record.checksum_ordinal);
-    digest.u64(record.chunk_offset);
-    digest.u64(record.chunk_length);
-    digest.text(&record.checksum_value_hex);
+fn write_checksum_chunk(
+    digest: &mut CanonicalDigest,
+    inventory_id: &str,
+    objects: &[CephBluestoreObjectRecord],
+    record: &CephBluestoreChecksumChunkRecord,
+) {
+    match objects.get(record.object_ordinal as usize) {
+        Some(object) => checksum::write_checksum_chunk(
+            digest,
+            inventory_id,
+            &object.object_identity_sha256,
+            record,
+        ),
+        None => {
+            digest.tag("checksum_chunk");
+            digest.text(inventory_id);
+            digest.u32(record.object_ordinal);
+            digest.text("");
+            digest.u32(record.blob_ordinal);
+            digest.u32(record.checksum_ordinal);
+            digest.u64(record.chunk_offset);
+            digest.u64(record.chunk_length);
+            digest.checksum_hex(record.checksum_value, record.checksum_value_bytes);
+        }
+    }
 }
 
 fn write_physical_extent(digest: &mut CanonicalDigest, record: &CephBluestorePhysicalExtentRecord) {
@@ -321,6 +344,22 @@ impl CanonicalDigest {
     fn bytes(&mut self, value: &[u8]) {
         self.u64(value.len() as u64);
         self.hasher.update(value);
+    }
+
+    fn checksum_hex(&mut self, value: u64, width_bytes: u8) {
+        if !(1..=8).contains(&width_bytes) {
+            self.u8(width_bytes);
+            self.u64(value);
+            return;
+        }
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let length = usize::from(width_bytes) * 2;
+        let mut encoded = [0u8; 16];
+        for (index, output) in encoded[..length].iter_mut().enumerate() {
+            let shift = (length - index - 1) * 4;
+            *output = HEX[((value >> shift) & 0x0f) as usize];
+        }
+        self.bytes(&encoded[..length]);
     }
 
     fn bool(&mut self, value: bool) {

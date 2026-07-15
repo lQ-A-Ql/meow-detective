@@ -374,13 +374,15 @@ Implemented result:
   连续覆盖时才允许部分重叠。不同/空 shared ID 的重叠拒绝。
 - 六成员真实样本于 2026-07-15 串行通过，三个 `disk02` 均为
   `ready_metadata`、普通文件行保持零，并固化以下 semantic oracle：
-- 后续性能审计消除了 object-child count 的 `O(objects * children)` 重扫，
-  checksum 归属改为排序 cursor 单次扫描，SQLite child rows 使用 bind-budget
-  内的多行批量写入，并共享重复 identity 字符串。保留的真实 `server01`
-  source DB phase benchmark 为 `51.58..88.60s / 395MB`；旧单成员全链路
-  基线为 `486.17s / 705MB`，二者范围不同，不能直接计算端到端提速比例。
-  精确 count/digest、单事务 replacement 和 fail-closed 校验保持不变；
-  完整 E01 优化后复跑等待 `E:` 样本盘重新挂载。
+- 后续性能审计消除了 object-child count 的两处
+  `O(objects * children)` 重扫，checksum 归属改为 canonical object ordinal
+  + blob cursor 单次扫描，SQLite child rows 使用运行时 bind limit 内的多行
+  批量写入。checksum 常驻模型不再复制 inventory/object/hex 字符串，但持久化
+  schema 与 canonical digest byte stream 不变。
+- `E:` 重新挂载后的单 `server01-disk02` 全链复跑为 `92.673s / 537MB`，
+  相同命令的本轮优化前复跑为 `544.105s / 589MB`。保留 source DB 的完整
+  semantic phase 为 `68.34..77.69s / 311MB`。精确 count/digest、单事务
+  replacement 和 fail-closed 校验保持不变。
 
 | OSD | objects | blobs | shards | logical | physical | checksums | shared / refs | semantic SHA-256 |
 |---|---:|---:|---:|---:|---:|---:|---|---|
@@ -556,13 +558,13 @@ RBD 门禁建立后：
 - Stage 6.4 首次持久化每 OSD 约 210 万条规范化 semantic child rows，不能
   沿用 Stage 6.3 的 digest-only `50.31s` 绝对门槛。2026-07-15 本机 debug
   串行六成员 baseline 为 `1757.04s`；单 `server01-disk02` 为 `486.17s`，
-  观测峰值 RSS 约 `705MB`。完成批量写入、共享 identity、单次 child-count
-  聚合和 checksum cursor 校验后，保留真实 source DB 的完整 semantic phase
-  三次为 `51.58..88.60s / 395MB`。phase 门禁预算固定为
+  观测峰值 RSS 约 `705MB`。本轮同命令优化前复跑为
+  `544.105s / 589MB`；完成两处二次复杂度修复、compact checksum row、
+  canonical object ordinal、单次 child-count 聚合、checksum cursor 校验和
+  动态 bind-budget 批量写入后，全链复跑为 `92.673s / 537MB`。保留真实
+  source DB 的完整 semantic phase 为 `68.34..77.69s / 311MB`。phase 门禁预算固定为
   query `60s`、validation `90s`、write `90s`、commit `30s`、peak RSS
-  `512MB`；该 phase 结果不替代完整导入基线，完整 E01 优化后耗时和峰值待
-  样本盘重新挂载后补录。所有性能结果必须保证 semantic digest 与行数 oracle
-  不变。
+  `512MB`。所有性能结果必须保证 semantic digest 与行数 oracle 不变。
 - latest-state 和 BlueStore 阶段必须分别记录读取 bytes、解压 bytes、key
   count、spill bytes、wall time 和 peak memory。
 - RBD 随机 1 MiB range read 不得线性扫描全部 OSD 或全部 object。

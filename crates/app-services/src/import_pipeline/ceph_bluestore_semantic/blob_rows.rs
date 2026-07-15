@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use ceph_wire::{BlueStoreBlob, BlueStoreBlobIdentity, BlueStoreBlobUseTracker};
 use persistence_sqlite::repositories::ceph_bluestore_semantic_repo::{
@@ -22,6 +21,7 @@ pub(super) enum PersistedBlobKey {
 pub(super) fn write_blobs(
     inventory_id: &str,
     object_id: &str,
+    object_ordinal: u32,
     spanning: &[BlueStoreBlob],
     payloads: &[PayloadRef],
     device_size: u64,
@@ -52,7 +52,7 @@ pub(super) fn write_blobs(
         result
             .blobs
             .push(blob_row(inventory_id, object_id, ordinal, key, blob));
-        write_checksum_chunks(inventory_id, object_id, ordinal, blob, result)?;
+        write_checksum_chunks(object_ordinal, ordinal, blob, result)?;
         write_physical_extents(inventory_id, object_id, ordinal, blob, device_size, result)?;
     }
     Ok(map)
@@ -129,8 +129,7 @@ fn blob_row(
 }
 
 fn write_checksum_chunks(
-    inventory_id: &str,
-    object_id: &str,
+    object_ordinal: u32,
     blob_ordinal: u32,
     blob: &BlueStoreBlob,
     result: &mut FinalizedObjects,
@@ -144,12 +143,8 @@ fn write_checksum_chunks(
     let chunk_size = 1u64
         .checked_shl(u32::from(checksum.chunk_order))
         .ok_or_else(|| blob_error("checksum chunk order exceeds u64"))?;
-    let word_width = usize::try_from(checksum_word_size(checksum.checksum_type))
-        .map_err(|_| blob_error("checksum word width exceeds usize"))?
-        .checked_mul(2)
-        .ok_or_else(|| blob_error("checksum word width overflow"))?;
-    let shared_inventory_id = Arc::<str>::from(inventory_id);
-    let shared_object_id = Arc::<str>::from(object_id);
+    let word_width = u8::try_from(checksum_word_size(checksum.checksum_type))
+        .map_err(|_| blob_error("checksum word width exceeds u8"))?;
     for (ordinal, value) in blob.checksum_words.iter().copied().enumerate() {
         let checksum_ordinal =
             u32::try_from(ordinal).map_err(|_| blob_error("checksum ordinal exceeds u32"))?;
@@ -159,13 +154,13 @@ fn write_checksum_chunks(
         result
             .checksum_chunks
             .push(CephBluestoreChecksumChunkRecord {
-                inventory_id: Arc::clone(&shared_inventory_id),
-                object_identity_sha256: Arc::clone(&shared_object_id),
+                object_ordinal,
                 blob_ordinal,
                 checksum_ordinal,
                 chunk_offset,
                 chunk_length: chunk_size,
-                checksum_value_hex: format!("{value:0word_width$x}").into_boxed_str(),
+                checksum_value: value,
+                checksum_value_bytes: word_width,
             });
     }
     Ok(())

@@ -8,7 +8,7 @@ use ceph_wire::{
 use persistence_sqlite::repositories::{
     ceph_bluestore_semantic_repo::{
         canonical_collection_identity, latest_state_set_sha256, semantic_aggregate_sha256,
-        validate_replacement, CephBluestoreCollectionRecord, CephBluestoreSemanticAggregate,
+        CephBluestoreCollectionRecord, CephBluestoreSemanticAggregate,
         CephBluestoreSemanticScanRecord, CephBluestoreSharedBlobRecord,
         CephBluestoreSharedBlobRefRecord, CephBluestoreSuperRecord,
         BLUESTORE_SEMANTIC_DECODE_PROFILE, BLUESTORE_SEMANTIC_SCHEMA_VERSION,
@@ -161,7 +161,6 @@ impl BlueStoreSemanticFragment {
             shared_blob_refs,
         };
         aggregate.scan.semantic_sha256 = semantic_aggregate_sha256(&aggregate);
-        validate_replacement(&aggregate).map_err(CommandError::from_service_error)?;
         Ok(aggregate)
     }
 

@@ -107,27 +107,31 @@ SQLite 写入：
 2026-07-15 优化保持 schema、count/digest oracle、fail-closed 校验和单事务
 replacement 不变，并完成：
 
-- object/blob/extent count 改为一次聚合后精确比较。
-- checksum 归属改为按排序 blob cursor 单次扫描。
-- semantic child table 改为受 SQLite bind 上限约束的多行批量写入；每批最多
-  `128` 行、`896` 个 bind parameter。
-- `inventory_id` 与 object identity 使用共享字符串，checksum hex 使用
-  compact boxed string。
+- object/blob/extent count 改为一次聚合后精确比较，同时移除 object finalize
+  阶段的第二处 `O(objects * children)` 重扫。
+- checksum 归属改为按 canonical object ordinal + blob cursor 单次扫描。
+- checksum 常驻模型从重复字符串/hex allocation 收敛为
+  `object_ordinal + u64 value + width`；inventory ID 从 aggregate scan 派生，
+  object identity 从 canonical object row 派生。SQLite 仍保存原有
+  `inventory_id/object_identity_sha256/checksum_value_hex` schema。
+- semantic child table 按运行时 SQLite `MAX_VARIABLE_NUMBER` 选择批量大小，
+  并限制为最多 `8,192` 个 bind parameter、`1,024` 行，低上限 SQLite
+  自动回退。
+- checksum canonical digest 使用有界 stack buffer 合并固定字段更新，digest
+  byte stream 与原实现保持一致。
 - aggregate 已完成校验后进入 repository 的 validated write path，避免同一
   replacement 重复执行完整校验；repository 公共入口仍执行完整校验。
 
-保留的真实 `server01` source DB phase benchmark 连续两次结果：
+保留的真实 `server01` source DB 最新 phase benchmark：
 
 | Run | query | validation | write | commit | total | peak RSS |
 |---|---:|---:|---:|---:|---:|---:|
-| 1 | 6.265s | 27.503s | 26.288s | 6.158s | 67.02s | 395MB |
-| 2 | 25.468s | 23.838s | 31.298s | 7.290s | 88.60s | 395MB |
-| 3 | 4.484s | 20.768s | 20.549s | 5.304s | 51.58s | 395MB |
+| 1 | 7.750s | 24.114s | 28.909s | 6.862s | 68.34s | 311MB |
+| 2 | 7.360s | 25.052s | 35.719s | 8.735s | 77.69s | 311MB |
 
-优化后的独立 semantic phase 稳定在 `51.58..88.60s`，峰值 RSS 为
-`395MB`，比旧单成员全链路测试进程观测值低 `310MB`。由于 phase benchmark
-不包含 E01/BlueFS/RocksDB 前置读取，不能把这组比例直接表述为完整导入提速；
-完整端到端耗时和峰值降幅等待样本盘重新挂载后确认。三次运行均保持：
+phase benchmark 完整查询、校验并重写约 210 万 semantic child rows。
+compact checksum 表示将该 benchmark 的峰值 RSS 从本轮早期 `366MB`
+降至 `311MB`。最新运行保持：
 
 ```text
 semantic_sha256 = 794ab1ea6632d809bac456d9cd5e5e54c3a46b93977d2224f98c0d564a46c73b
@@ -149,10 +153,21 @@ cargo test -p persistence-sqlite --lib `
 `<=30s`、peak RSS `<=512MB`。该测试会完整查询和校验约 210 万 semantic
 child rows，并写入全新的 source DB，不以摘要或 mock 替代真实数据。
 
-本次优化后尚未重跑完整 E01 导入，因为当前验证进程不可见 `E:` 盘。完整
-`server01-disk02` 和六成员串行结果必须在样本重新挂载后补录；在此之前，
-上述 phase benchmark 只证明 semantic query/validation/persistence 路径，
-不替代 E01/BlueFS/RocksDB 全链路验收。
+`E:` 重新挂载后使用同一单成员生产导入链路完成最终全链复跑：
+
+| 指标 | 优化前复跑 | 优化后 |
+|---|---:|---:|
+| import total | 544.105s | 92.673s |
+| RocksDB + semantic recovery | 460.934s | 25.017s |
+| semantic validation | - | 24.673s |
+| semantic write | - | 27.137s |
+| transaction commit | - | 6.506s |
+| observed peak RSS | 589MB | 537MB |
+
+相同命令下总耗时约缩短 `83%`，约为原来的 `5.87x`；峰值 RSS 降低约
+`8.8%`。更早的 Stage 6.4 初始实现曾记录 `486.17s / 705MB`，该结果受缓存
+和当时实现差异影响，仅保留为历史基线。最终复跑的 count、semantic digest、
+source-local transaction、零普通文件行和 `ready_metadata` 状态全部不变。
 
 ## 能力边界
 

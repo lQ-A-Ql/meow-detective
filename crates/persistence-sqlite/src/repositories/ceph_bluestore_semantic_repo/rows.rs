@@ -180,13 +180,13 @@ pub struct CephBluestorePhysicalExtentRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephBluestoreChecksumChunkRecord {
-    pub inventory_id: Arc<str>,
-    pub object_identity_sha256: Arc<str>,
+    pub object_ordinal: u32,
     pub blob_ordinal: u32,
     pub checksum_ordinal: u32,
     pub chunk_offset: u64,
     pub chunk_length: u64,
-    pub checksum_value_hex: Box<str>,
+    pub checksum_value: u64,
+    pub checksum_value_bytes: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -225,4 +225,3 @@ pub struct CephBluestoreSemanticAggregate {
     pub shared_blobs: Vec<CephBluestoreSharedBlobRecord>,
     pub shared_blob_refs: Vec<CephBluestoreSharedBlobRefRecord>,
 }
-use std::sync::Arc;

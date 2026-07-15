@@ -41,6 +41,8 @@ pub(super) fn replace_for_inventory_on(
     let blobs_ms = timed_insert!(children::insert_blobs(conn, &aggregate.blobs));
     let checksum_ms = timed_insert!(children::insert_checksum_chunks(
         conn,
+        &aggregate.scan.inventory_id,
+        &aggregate.objects,
         &aggregate.checksum_chunks
     ));
     let logical_ms = timed_insert!(children::insert_logical_extents(

@@ -26,7 +26,7 @@ pub(super) fn validate_children(aggregate: &CephBluestoreSemanticAggregate) -> D
     let shard_counts = validate_shards(inventory_id, &objects, &aggregate.onode_shards)?;
     let blobs = blob::validate_blobs(inventory_id, &objects, &shared, &aggregate.blobs)?;
     let checksums = checksum::validate_checksum_chunks(
-        inventory_id,
+        &aggregate.objects,
         &aggregate.blobs,
         &aggregate.checksum_chunks,
     )?;

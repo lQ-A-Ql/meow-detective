@@ -29,6 +29,7 @@ fn persists_normalized_checksum_words_without_raw_byte_order() {
     write_blobs(
         "inventory-1",
         "object-1",
+        0,
         &[],
         &[payload],
         0x20_000,
@@ -38,16 +39,14 @@ fn persists_normalized_checksum_words_without_raw_byte_order() {
 
     assert_eq!(result.blobs[0].checksum_value_count, 1);
     assert_eq!(result.checksum_chunks.len(), 1);
-    assert_eq!(
-        result.checksum_chunks[0].checksum_value_hex.as_ref(),
-        "12345678"
-    );
+    assert_eq!(result.checksum_chunks[0].checksum_value, 0x1234_5678);
+    assert_eq!(result.checksum_chunks[0].checksum_value_bytes, 4);
     assert_eq!(result.checksum_chunks[0].chunk_offset, 0);
     assert_eq!(result.checksum_chunks[0].chunk_length, 4096);
 }
 
 #[test]
-fn checksum_rows_share_inventory_and_object_identifiers() {
+fn checksum_rows_share_object_ordinals() {
     let mut blob = checksum_blob();
     blob.logical_length = 8192;
     blob.on_disk_length = 8192;
@@ -79,6 +78,7 @@ fn checksum_rows_share_inventory_and_object_identifiers() {
     write_blobs(
         "inventory-1",
         "object-1",
+        7,
         &[],
         &[payload],
         0x20_000,
@@ -87,14 +87,8 @@ fn checksum_rows_share_inventory_and_object_identifiers() {
     .expect("persist shared checksum identifiers");
 
     assert_eq!(result.checksum_chunks.len(), 2);
-    assert!(Arc::ptr_eq(
-        &result.checksum_chunks[0].inventory_id,
-        &result.checksum_chunks[1].inventory_id
-    ));
-    assert!(Arc::ptr_eq(
-        &result.checksum_chunks[0].object_identity_sha256,
-        &result.checksum_chunks[1].object_identity_sha256
-    ));
+    assert_eq!(result.checksum_chunks[0].object_ordinal, 7);
+    assert_eq!(result.checksum_chunks[1].object_ordinal, 7);
 }
 
 #[test]
@@ -148,4 +142,3 @@ fn checksum_blob() -> BlueStoreBlob {
         use_tracker: None,
     }
 }
-use std::sync::Arc;

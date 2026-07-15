@@ -291,9 +291,18 @@ cargo test -p persistence-sqlite --lib `
 规范化行、执行完整 fail-closed 校验、写入全新 source DB，并验证
 `794ab1...c73b` digest 与 `2,924 / 116,135 / 1,839,658`
 object/blob/checksum oracle。预算为 query `60s`、validation `90s`、write
-`90s`、commit `30s`、peak RSS `512MB`。2026-07-15 三次结果为
-`51.58s..88.60s / 395MB`。该 phase benchmark 不替代完整 E01
-或六成员回归；样本盘不可见时必须明确记录 full-chain pending。
+`90s`、commit `30s`、peak RSS `512MB`。compact checksum row 与
+canonical object ordinal 优化后的 2026-07-15 两次结果为
+`68.34s` 与 `77.69s`，peak RSS 均为 `311MB`。最新一次为 query
+`7.360s`、validation `25.052s`、write `35.719s`、commit `8.735s`。
+该 phase benchmark 不替代完整 E01 或六成员回归。
+
+`E:` 重新挂载后，单 `server01-disk02.E01` 生产导入链路已复跑：
+total `92.673s`、RocksDB/semantic recovery `25.017s`、semantic
+validation `24.673s`、write `27.137s`、commit `6.506s`、peak RSS
+`537MB`。相同命令的本轮优化前结果为 `544.105s / 589MB`。最终
+`794ab1...c73b` digest 与 `2,924 / 116,135 / 1,839,658`
+object/blob/checksum oracle 保持不变。
 
 - 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
 - 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。

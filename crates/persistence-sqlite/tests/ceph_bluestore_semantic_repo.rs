@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use persistence_sqlite::{
     open_in_memory,
     repositories::ceph_bluestore_semantic_repo::{
@@ -209,13 +207,13 @@ fn aggregate(inventory_id: &str) -> CephBluestoreSemanticAggregate {
             length: 4096,
         }],
         checksum_chunks: vec![CephBluestoreChecksumChunkRecord {
-            inventory_id: Arc::from(inventory_id),
-            object_identity_sha256: Arc::from(object_id),
+            object_ordinal: 0,
             blob_ordinal: 0,
             checksum_ordinal: 0,
             chunk_offset: 0,
             chunk_length: 4096,
-            checksum_value_hex: "12345678".into(),
+            checksum_value: 0x1234_5678,
+            checksum_value_bytes: 4,
         }],
         shared_blobs: vec![CephBluestoreSharedBlobRecord {
             inventory_id: inventory_id.to_string(),
@@ -366,6 +364,7 @@ fn append_second_object(
     physical_offset_hex: &str,
     shared: bool,
 ) {
+    let first_object_id = aggregate.objects[0].object_identity_sha256.clone();
     let mut object = aggregate.objects[0].clone();
     object.object_name = b"second-object".to_vec();
     object.object_identity_sha256 = object_identity_sha256(&object);
@@ -388,7 +387,7 @@ fn append_second_object(
     physical.object_identity_sha256 = object_id.clone();
     physical.physical_offset_hex = Some(physical_offset_hex.to_string());
     let mut checksum = aggregate.checksum_chunks[0].clone();
-    checksum.object_identity_sha256 = Arc::from(object_id);
+    checksum.object_ordinal = 1;
 
     aggregate.objects.push(object);
     aggregate.onode_shards.push(shard);
@@ -400,6 +399,18 @@ fn append_second_object(
         left.object_identity_sha256
             .cmp(&right.object_identity_sha256)
     });
+    let first_ordinal = aggregate
+        .objects
+        .iter()
+        .position(|record| record.object_identity_sha256 == first_object_id)
+        .expect("first object remains present") as u32;
+    let second_ordinal = aggregate
+        .objects
+        .iter()
+        .position(|record| record.object_identity_sha256 == object_id)
+        .expect("second object remains present") as u32;
+    aggregate.checksum_chunks[0].object_ordinal = first_ordinal;
+    aggregate.checksum_chunks[1].object_ordinal = second_ordinal;
     aggregate
         .onode_shards
         .sort_by_key(|record| (record.object_identity_sha256.clone(), record.shard_ordinal));
@@ -418,7 +429,7 @@ fn append_second_object(
     });
     aggregate.checksum_chunks.sort_by_key(|record| {
         (
-            record.object_identity_sha256.clone(),
+            record.object_ordinal,
             record.blob_ordinal,
             record.checksum_ordinal,
         )
@@ -450,13 +461,13 @@ fn expand_checksum_chunks(aggregate: &mut CephBluestoreSemanticAggregate, checks
     let template = aggregate.checksum_chunks[0].clone();
     aggregate.checksum_chunks = (0..checksum_count)
         .map(|ordinal| CephBluestoreChecksumChunkRecord {
-            inventory_id: Arc::clone(&template.inventory_id),
-            object_identity_sha256: Arc::clone(&template.object_identity_sha256),
+            object_ordinal: template.object_ordinal,
             blob_ordinal: template.blob_ordinal,
             checksum_ordinal: ordinal,
             chunk_offset: u64::from(ordinal) * chunk_size,
             chunk_length: chunk_size,
-            checksum_value_hex: template.checksum_value_hex.clone(),
+            checksum_value: template.checksum_value,
+            checksum_value_bytes: template.checksum_value_bytes,
         })
         .collect();
     aggregate.blobs[0].logical_length = total_length;
@@ -583,10 +594,8 @@ fn ceph_bluestore_semantic_complete_roundtrip_preserves_typed_rows() {
         actual.physical_extents[0].physical_offset_hex.as_deref(),
         Some("0000000000001000")
     );
-    assert_eq!(
-        actual.checksum_chunks[0].checksum_value_hex.as_ref(),
-        "12345678"
-    );
+    assert_eq!(actual.checksum_chunks[0].checksum_value, 0x1234_5678);
+    assert_eq!(actual.checksum_chunks[0].checksum_value_bytes, 4);
     assert_eq!(actual.objects[0].object_namespace, b"ns\0");
 
     let mut compressed = aggregate(INVENTORY_B);
@@ -607,7 +616,7 @@ fn ceph_bluestore_semantic_complete_roundtrip_preserves_typed_rows() {
 }
 
 #[test]
-fn batched_checksum_roundtrip_preserves_rows_and_shared_identifiers() {
+fn batched_checksum_roundtrip_preserves_rows_and_object_ordinals() {
     let conn = setup();
     let mut expected = aggregate(INVENTORY_A);
     expand_checksum_chunks(&mut expected, 129);
@@ -622,14 +631,8 @@ fn batched_checksum_roundtrip_preserves_rows_and_shared_identifiers() {
         .expect("batched aggregate exists");
 
     assert_eq!(actual, expected);
-    assert!(Arc::ptr_eq(
-        &actual.checksum_chunks[0].inventory_id,
-        &actual.checksum_chunks[128].inventory_id
-    ));
-    assert!(Arc::ptr_eq(
-        &actual.checksum_chunks[0].object_identity_sha256,
-        &actual.checksum_chunks[128].object_identity_sha256
-    ));
+    assert_eq!(actual.checksum_chunks[0].object_ordinal, 0);
+    assert_eq!(actual.checksum_chunks[128].object_ordinal, 0);
 }
 
 #[test]
@@ -830,16 +833,26 @@ fn checksum_chunks_require_canonical_fixed_width_complete_coverage() {
     let mut invalid_cases = Vec::new();
 
     let mut invalid = baseline.clone();
-    invalid.checksum_chunks[0].checksum_value_hex = "7856341A".into();
+    invalid.checksum_chunks[0].checksum_value = 0x1ff;
+    invalid.checksum_chunks[0].checksum_value_bytes = 1;
     invalid_cases.push(invalid);
 
     let mut invalid = baseline.clone();
-    invalid.checksum_chunks[0].checksum_value_hex = "7856".into();
+    invalid.checksum_chunks[0].checksum_value_bytes = 2;
     invalid_cases.push(invalid);
 
     let mut invalid = baseline.clone();
     invalid.checksum_chunks[0].chunk_offset = 1;
     invalid.checksum_chunks[0].chunk_length = 4095;
+    invalid_cases.push(invalid);
+
+    let mut invalid = baseline.clone();
+    invalid.checksum_chunks[0].object_ordinal = 1;
+    invalid_cases.push(invalid);
+
+    let mut invalid = baseline.clone();
+    expand_checksum_chunks(&mut invalid, 2);
+    invalid.checksum_chunks.swap(0, 1);
     invalid_cases.push(invalid);
 
     let mut invalid = baseline;

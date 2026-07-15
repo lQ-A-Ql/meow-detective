@@ -21,6 +21,13 @@ pub(super) struct PayloadRef {
     pub(super) payload: BlueStoreExtentPayload,
 }
 
+struct ObjectWriteContext<'a> {
+    inventory_id: &'a str,
+    object_id: &'a str,
+    blob_row_start: usize,
+    object_size: u64,
+}
+
 pub(super) fn finish_object(
     inventory_id: &str,
     object_id: BlueStoreObjectId,
@@ -46,33 +53,46 @@ pub(super) fn finish_object(
     )?;
     object.object_identity_sha256 = object_identity_sha256(&object);
     let identity = object.object_identity_sha256.clone();
+    let shard_start = result.onode_shards.len();
+    let blob_start = result.blobs.len();
+    let logical_start = result.logical_extents.len();
+    let physical_start = result.physical_extents.len();
+    let object_ordinal =
+        u32::try_from(result.objects.len()).map_err(|_| row_error("object ordinal exceeds u32"))?;
     let blob_map = write_blobs(
         inventory_id,
         &identity,
+        object_ordinal,
         &spanning_blobs,
         &payloads,
         device_size,
         result,
     )?;
     write_shards_and_extents(
-        inventory_id,
-        &identity,
+        ObjectWriteContext {
+            inventory_id,
+            object_id: &identity,
+            blob_row_start: blob_start,
+            object_size: object.size,
+        },
         &onode,
         &payloads,
         &blob_map,
-        object.size,
         result,
     )?;
-    object.onode_shard_count = payloads.iter().filter(|item| item.shard.is_some()).count() as u64;
-    object.blob_count = count_rows(&result.blobs, &identity, |row| {
-        row.object_identity_sha256.as_str()
-    });
-    object.logical_extent_count = count_rows(&result.logical_extents, &identity, |row| {
-        row.object_identity_sha256.as_str()
-    });
-    object.physical_extent_count = count_rows(&result.physical_extents, &identity, |row| {
-        row.object_identity_sha256.as_str()
-    });
+    object.onode_shard_count =
+        appended_row_count(shard_start, result.onode_shards.len(), "onode shard")?;
+    object.blob_count = appended_row_count(blob_start, result.blobs.len(), "blob")?;
+    object.logical_extent_count = appended_row_count(
+        logical_start,
+        result.logical_extents.len(),
+        "logical extent",
+    )?;
+    object.physical_extent_count = appended_row_count(
+        physical_start,
+        result.physical_extents.len(),
+        "physical extent",
+    )?;
     result.objects.push(object);
     Ok(())
 }
@@ -181,17 +201,16 @@ fn base_object_row(
 }
 
 fn write_shards_and_extents(
-    inventory_id: &str,
-    object_id: &str,
+    context: ObjectWriteContext<'_>,
     onode: &BlueStoreOnodeHeader,
     payloads: &[PayloadRef],
     blobs: &BTreeMap<PersistedBlobKey, u32>,
-    object_size: u64,
     result: &mut FinalizedObjects,
 ) -> Result<(), CommandError> {
     let mut extents = Vec::new();
+    let mut blob_logical_counts = vec![0u64; blobs.len()];
     for payload in payloads {
-        write_shard(inventory_id, object_id, payload, result);
+        write_shard(context.inventory_id, context.object_id, payload, result);
         let scope = payload_scope(payload);
         for extent in &payload.payload.extents {
             let key = match extent.blob {
@@ -202,16 +221,25 @@ fn write_shards_and_extents(
                 .get(&key)
                 .copied()
                 .ok_or_else(|| row_error("logical extent references an unknown blob"))?;
+            let count = blob_logical_counts
+                .get_mut(blob_ordinal as usize)
+                .ok_or_else(|| row_error("logical extent blob ordinal exceeds object rows"))?;
+            *count = count
+                .checked_add(1)
+                .ok_or_else(|| row_error("blob logical extent count overflow"))?;
             extents.push((extent, payload.shard.map(|value| value.0), blob_ordinal));
         }
     }
     extents.sort_by_key(|(extent, _, _)| extent.logical_offset);
-    write_logical_extents(inventory_id, object_id, extents, object_size, result)?;
-    update_blob_logical_counts(object_id, result);
-    let has_shards = result
-        .onode_shards
-        .iter()
-        .any(|row| row.object_identity_sha256 == object_id);
+    write_logical_extents(
+        context.inventory_id,
+        context.object_id,
+        extents,
+        context.object_size,
+        result,
+    )?;
+    apply_blob_logical_counts(context.blob_row_start, &blob_logical_counts, result)?;
+    let has_shards = payloads.iter().any(|payload| payload.shard.is_some());
     if onode.extent_shards.is_empty() == has_shards {
         return Err(row_error("object shard rows do not match onode storage"));
     }
@@ -282,25 +310,32 @@ fn write_logical_extents(
     Ok(())
 }
 
-fn update_blob_logical_counts(object_id: &str, result: &mut FinalizedObjects) {
-    for blob in result
+fn apply_blob_logical_counts(
+    row_start: usize,
+    logical_counts: &[u64],
+    result: &mut FinalizedObjects,
+) -> Result<(), CommandError> {
+    let rows = result
         .blobs
-        .iter_mut()
-        .filter(|row| row.object_identity_sha256 == object_id)
-    {
-        blob.logical_extent_count = result
-            .logical_extents
-            .iter()
-            .filter(|extent| {
-                extent.object_identity_sha256 == object_id
-                    && extent.blob_ordinal == blob.blob_ordinal
-            })
-            .count() as u64;
+        .get_mut(row_start..)
+        .ok_or_else(|| row_error("blob row start exceeds finalized rows"))?;
+    if rows.len() != logical_counts.len() {
+        return Err(row_error("object blob rows do not close"));
     }
+    for (ordinal, (row, logical_count)) in rows.iter_mut().zip(logical_counts).enumerate() {
+        if row.blob_ordinal as usize != ordinal {
+            return Err(row_error("object blob rows are not in ordinal order"));
+        }
+        row.logical_extent_count = *logical_count;
+    }
+    Ok(())
 }
 
-fn count_rows<T>(rows: &[T], object_id: &str, identity: impl Fn(&T) -> &str) -> u64 {
-    rows.iter().filter(|row| identity(row) == object_id).count() as u64
+fn appended_row_count(start: usize, end: usize, kind: &str) -> Result<u64, CommandError> {
+    let count = end
+        .checked_sub(start)
+        .ok_or_else(|| row_error(format!("{kind} row count regressed")))?;
+    u64::try_from(count).map_err(|_| row_error(format!("{kind} row count exceeds u64")))
 }
 
 fn row_error(message: impl Into<String>) -> CommandError {

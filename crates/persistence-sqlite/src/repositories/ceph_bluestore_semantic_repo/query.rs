@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, types::Type, Connection, OptionalExtension};
 
-use crate::connection::DbResult;
+use crate::connection::{DbError, DbResult};
 
 use super::{
     CephBluestoreBlobRecord, CephBluestoreChecksumChunkRecord, CephBluestoreCollectionRecord,
@@ -19,15 +19,17 @@ pub(super) fn find_aggregate(
     let Some(scan) = find_scan(conn, inventory_id)? else {
         return Ok(None);
     };
+    let objects = find_objects(conn, inventory_id)?;
+    let checksum_chunks = find_checksum_chunks(conn, inventory_id, &objects)?;
     Ok(Some(CephBluestoreSemanticAggregate {
         super_record: find_super(conn, inventory_id)?,
         collections: find_collections(conn, inventory_id)?,
-        objects: find_objects(conn, inventory_id)?,
+        objects,
         onode_shards: find_onode_shards(conn, inventory_id)?,
         blobs: find_blobs(conn, inventory_id)?,
         logical_extents: find_logical_extents(conn, inventory_id)?,
         physical_extents: find_physical_extents(conn, inventory_id)?,
-        checksum_chunks: find_checksum_chunks(conn, inventory_id)?,
+        checksum_chunks,
         shared_blobs: find_shared_blobs(conn, inventory_id)?,
         shared_blob_refs: find_shared_blob_refs(conn, inventory_id)?,
         scan,
@@ -177,6 +179,7 @@ fn find_physical_extents(
 fn find_checksum_chunks(
     conn: &Connection,
     inventory_id: &str,
+    objects: &[CephBluestoreObjectRecord],
 ) -> DbResult<Vec<CephBluestoreChecksumChunkRecord>> {
     let mut statement = conn.prepare(
         "SELECT object_identity_sha256, blob_ordinal,
@@ -185,24 +188,70 @@ fn find_checksum_chunks(
          WHERE inventory_id = ?1
          ORDER BY object_identity_sha256, blob_ordinal, checksum_ordinal",
     )?;
-    let shared_inventory_id = Arc::<str>::from(inventory_id);
-    let mut shared_object_id = Arc::<str>::from("");
+    let object_ordinals = objects
+        .iter()
+        .enumerate()
+        .map(|(ordinal, record)| {
+            u32::try_from(ordinal)
+                .map(|ordinal| (record.object_identity_sha256.as_str(), ordinal))
+                .map_err(|_| DbError::System("BlueStore object ordinal exceeds u32".to_string()))
+        })
+        .collect::<DbResult<HashMap<_, _>>>()?;
     let rows = statement.query_map(params![inventory_id], |row| {
         let object_id = row.get_ref(0)?.as_str()?;
-        if shared_object_id.as_ref() != object_id {
-            shared_object_id = Arc::from(object_id);
-        }
+        let (checksum_value, checksum_value_bytes) =
+            parse_checksum_value(row.get_ref(5)?.as_str()?)?;
+        let object_ordinal = object_ordinals
+            .get(object_id)
+            .copied()
+            .ok_or_else(|| invalid_checksum_object_id(object_id))?;
         Ok(CephBluestoreChecksumChunkRecord {
-            inventory_id: Arc::clone(&shared_inventory_id),
-            object_identity_sha256: Arc::clone(&shared_object_id),
+            object_ordinal,
             blob_ordinal: row.get(1)?,
             checksum_ordinal: row.get(2)?,
             chunk_offset: row.get(3)?,
             chunk_length: row.get(4)?,
-            checksum_value_hex: row.get(5)?,
+            checksum_value,
+            checksum_value_bytes,
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+}
+
+fn invalid_checksum_object_id(object_id: &str) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(
+        0,
+        Type::Text,
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("BlueStore checksum references unknown object {object_id}"),
+        )),
+    )
+}
+
+fn parse_checksum_value(value: &str) -> rusqlite::Result<(u64, u8)> {
+    if value.is_empty()
+        || value.len() > 16
+        || !value.len().is_multiple_of(2)
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(invalid_checksum_value());
+    }
+    let parsed = u64::from_str_radix(value, 16).map_err(|_| invalid_checksum_value())?;
+    Ok((parsed, (value.len() / 2) as u8))
+}
+
+fn invalid_checksum_value() -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(
+        5,
+        Type::Text,
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "BlueStore checksum value is not canonical fixed-width lowercase hex",
+        )),
+    )
 }
 
 fn find_shared_blobs(

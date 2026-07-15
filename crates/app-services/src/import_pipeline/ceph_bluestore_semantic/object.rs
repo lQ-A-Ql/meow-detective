@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use ceph_wire::{
     decode_bluestore_latest_value, decode_bluestore_latest_value_with_spanning_blobs,
@@ -87,10 +87,7 @@ pub(super) fn finalize_objects(
     for pending in objects.into_values() {
         pending.finish(inventory_id, device_size, &mut result)?;
     }
-    result.objects.sort_by(|left, right| {
-        left.object_identity_sha256
-            .cmp(&right.object_identity_sha256)
-    });
+    canonicalize_checksum_object_ordinals(&mut result)?;
     result.onode_shards.sort_by(|left, right| {
         (&left.object_identity_sha256, left.shard_ordinal)
             .cmp(&(&right.object_identity_sha256, right.shard_ordinal))
@@ -101,12 +98,12 @@ pub(super) fn finalize_objects(
     });
     result.checksum_chunks.sort_by(|left, right| {
         (
-            &left.object_identity_sha256,
+            left.object_ordinal,
             left.blob_ordinal,
             left.checksum_ordinal,
         )
             .cmp(&(
-                &right.object_identity_sha256,
+                right.object_ordinal,
                 right.blob_ordinal,
                 right.checksum_ordinal,
             ))
@@ -128,6 +125,40 @@ pub(super) fn finalize_objects(
             ))
     });
     Ok(result)
+}
+
+fn canonicalize_checksum_object_ordinals(
+    result: &mut FinalizedObjects,
+) -> Result<(), CommandError> {
+    let original_object_ids = result
+        .objects
+        .iter()
+        .map(|record| record.object_identity_sha256.clone())
+        .collect::<Vec<_>>();
+    result.objects.sort_by(|left, right| {
+        left.object_identity_sha256
+            .cmp(&right.object_identity_sha256)
+    });
+    let canonical_ordinals = result
+        .objects
+        .iter()
+        .enumerate()
+        .map(|(ordinal, record)| {
+            u32::try_from(ordinal)
+                .map(|ordinal| (record.object_identity_sha256.clone(), ordinal))
+                .map_err(|_| object_error("canonical object ordinal exceeds u32"))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+    for record in &mut result.checksum_chunks {
+        let object_id = original_object_ids
+            .get(record.object_ordinal as usize)
+            .ok_or_else(|| object_error("checksum object ordinal exceeds decoded objects"))?;
+        record.object_ordinal = canonical_ordinals
+            .get(object_id)
+            .copied()
+            .ok_or_else(|| object_error("checksum object identity was not finalized"))?;
+    }
+    Ok(())
 }
 
 impl PendingObject {

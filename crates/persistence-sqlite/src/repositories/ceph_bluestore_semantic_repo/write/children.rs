@@ -1,6 +1,6 @@
 use rusqlite::{params_from_iter, types::ToSql, Connection};
 
-use crate::connection::DbResult;
+use crate::connection::{DbError, DbResult};
 
 use super::batch::insert_rows;
 use crate::repositories::ceph_bluestore_semantic_repo::{
@@ -199,8 +199,18 @@ pub(super) fn insert_blobs(conn: &Connection, records: &[CephBluestoreBlobRecord
 
 pub(super) fn insert_checksum_chunks(
     conn: &Connection,
+    inventory_id: &str,
+    objects: &[CephBluestoreObjectRecord],
     records: &[CephBluestoreChecksumChunkRecord],
 ) -> DbResult<()> {
+    if records
+        .iter()
+        .any(|record| record.object_ordinal as usize >= objects.len())
+    {
+        return Err(DbError::System(
+            "BlueStore checksum object ordinal exceeds object rows".to_string(),
+        ));
+    }
     insert_rows(
         conn,
         "INSERT INTO ceph_bluestore_checksum_chunks (
@@ -210,17 +220,29 @@ pub(super) fn insert_checksum_chunks(
         7,
         records,
         |statement, records| {
-            statement.execute(params_from_iter(records.iter().flat_map(|record| {
-                [
-                    &record.inventory_id as &dyn ToSql,
-                    &record.object_identity_sha256,
-                    &record.blob_ordinal,
-                    &record.checksum_ordinal,
-                    &record.chunk_offset,
-                    &record.chunk_length,
-                    &record.checksum_value_hex,
-                ]
-            })))
+            let checksum_values = records
+                .iter()
+                .map(|record| {
+                    format!(
+                        "{:0width$x}",
+                        record.checksum_value,
+                        width = usize::from(record.checksum_value_bytes) * 2
+                    )
+                })
+                .collect::<Vec<_>>();
+            statement.execute(params_from_iter(records.iter().enumerate().flat_map(
+                |(index, record)| {
+                    [
+                        &inventory_id as &dyn ToSql,
+                        &objects[record.object_ordinal as usize].object_identity_sha256,
+                        &record.blob_ordinal,
+                        &record.checksum_ordinal,
+                        &record.chunk_offset,
+                        &record.chunk_length,
+                        &checksum_values[index],
+                    ]
+                },
+            )))
         },
     )
 }
