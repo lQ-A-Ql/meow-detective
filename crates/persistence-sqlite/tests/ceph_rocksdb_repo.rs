@@ -215,6 +215,7 @@ fn persist(
         Some(rocksdb) => {
             let ssts = sst_records(rocksdb);
             let latest_state = support::empty_latest_state(rocksdb);
+            let semantic = support::empty_semantic(rocksdb, &latest_state);
             repo.replace_for_data_source_with_rocksdb_metadata(
                 &osd.data_source_id,
                 std::slice::from_ref(osd),
@@ -225,6 +226,7 @@ fn persist(
                     ssts: &ssts,
                     wals: &wals(rocksdb),
                     latest_state: &latest_state,
+                    semantic: &semantic,
                 },
             )
         }
@@ -329,7 +331,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_011_ceph_latest_state"
+        "source_012_ceph_bluestore_semantics"
     );
     for table in [
         "ceph_rocksdb_manifests",

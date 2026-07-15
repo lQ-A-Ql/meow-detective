@@ -87,7 +87,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     insert_point(
         &mut spool,
         0,
-        b"a",
+        b"T\0a",
         12,
         1,
         b"latest",
@@ -123,7 +123,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     insert_point(
         &mut spool,
         0,
-        b"deleted",
+        b"T\0deleted",
         20,
         0,
         b"",
@@ -132,7 +132,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     insert_point(
         &mut spool,
         0,
-        b"deleted",
+        b"T\0deleted",
         10,
         1,
         b"old",
@@ -141,7 +141,7 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     insert_point(
         &mut spool,
         0,
-        b"ranged",
+        b"T\0ranged",
         5,
         1,
         b"hidden",
@@ -159,8 +159,8 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     spool
         .insert_range(SpoolRangeInput {
             column_family_id: 0,
-            start_key: b"range",
-            end_key: b"rangez",
+            start_key: b"T\0range",
+            end_key: b"T\0rangez",
             sequence: 8,
             provenance: provenance(SpoolSourceKind::Wal, 20),
         })
@@ -168,8 +168,9 @@ fn produces_digest_only_summary_for_every_active_column_family() {
     spool.seal().expect("seal spool");
 
     let sharding = parse_rocksdb_sharding_definition("m").expect("parse sharding");
-    let records =
-        recover_latest_state(&rocksdb(), &sharding, &spool).expect("recover latest state");
+    let records = recover_latest_state(&rocksdb(), &sharding, &spool, u64::MAX)
+        .expect("recover latest state")
+        .summaries;
     assert_eq!(records.len(), 2);
     let default = &records[0];
     assert_eq!(default.column_family_name, "default");
@@ -225,7 +226,7 @@ fn rejects_mutations_for_unknown_column_families() {
     spool.seal().expect("seal spool");
     let sharding = parse_rocksdb_sharding_definition("m").expect("parse sharding");
 
-    assert!(recover_latest_state(&rocksdb(), &sharding, &spool).is_err());
+    assert!(recover_latest_state(&rocksdb(), &sharding, &spool, u64::MAX).is_err());
 }
 
 #[test]
@@ -237,7 +238,7 @@ fn point_only_recovery_reads_column_families_through_separate_connections() {
     insert_point(
         &mut spool,
         0,
-        b"key",
+        b"T\0key",
         2,
         1,
         b"latest",
@@ -246,7 +247,7 @@ fn point_only_recovery_reads_column_families_through_separate_connections() {
     insert_point(
         &mut spool,
         0,
-        b"key",
+        b"T\0key",
         1,
         0,
         b"",
@@ -264,8 +265,9 @@ fn point_only_recovery_reads_column_families_through_separate_connections() {
     spool.seal().expect("seal spool");
     let sharding = parse_rocksdb_sharding_definition("m").expect("parse sharding");
 
-    let records =
-        recover_latest_state(&rocksdb(), &sharding, &spool).expect("recover point-only state");
+    let records = recover_latest_state(&rocksdb(), &sharding, &spool, u64::MAX)
+        .expect("recover point-only state")
+        .summaries;
     assert_eq!(records.len(), 2);
     assert_eq!(records[0].point_mutation_count, 2);
     assert_eq!(records[0].latest_value_count, 1);

@@ -241,6 +241,7 @@ fn persist(
     wals: &CephRocksdbWalAggregate,
 ) -> persistence_sqlite::DbResult<()> {
     let latest_state = support::empty_latest_state(rocksdb);
+    let semantic = support::empty_semantic(rocksdb, &latest_state);
     CephOsdRepo::new(conn).replace_for_data_source_with_rocksdb_metadata(
         DATA_SOURCE_ID,
         std::slice::from_ref(osd),
@@ -251,6 +252,7 @@ fn persist(
             ssts: &[],
             wals,
             latest_state: &latest_state,
+            semantic: &semantic,
         },
     )
 }
@@ -260,7 +262,7 @@ fn source_migration_installs_normalized_wal_schema_without_raw_keys_or_values() 
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_011_ceph_latest_state"
+        "source_012_ceph_bluestore_semantics"
     );
     for table in ["ceph_rocksdb_wal_files", "ceph_rocksdb_wal_records"] {
         let columns = conn

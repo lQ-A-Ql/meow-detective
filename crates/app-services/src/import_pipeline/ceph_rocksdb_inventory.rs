@@ -18,6 +18,7 @@ pub(super) fn inventory_rocksdb_manifest(
     case_root: &Path,
     data_source_id: &str,
     inventory_id: &str,
+    device_size: u64,
     cancel_token: &AtomicBool,
 ) -> Result<RocksdbInventoryAggregate, CommandError> {
     let inventory_started = Instant::now();
@@ -64,8 +65,12 @@ pub(super) fn inventory_rocksdb_manifest(
     spool.seal()?;
     let seal_elapsed_ms = seal_started.elapsed().as_millis();
     let recovery_started = Instant::now();
-    let latest_state =
-        super::ceph_rocksdb_latest_state::recover_latest_state(&aggregate, &sharding, &spool)?;
+    let recovered = super::ceph_rocksdb_latest_state::recover_latest_state(
+        &aggregate,
+        &sharding,
+        &spool,
+        device_size,
+    )?;
     let recovery_elapsed_ms = recovery_started.elapsed().as_millis();
     tracing::info!(
         data_source_id,
@@ -84,7 +89,8 @@ pub(super) fn inventory_rocksdb_manifest(
         manifest: aggregate,
         ssts,
         wals,
-        latest_state,
+        latest_state: recovered.summaries,
+        semantic: recovered.semantic,
     })
 }
 
@@ -93,6 +99,8 @@ pub(super) struct RocksdbInventoryAggregate {
     pub(super) ssts: Vec<CephRocksdbSstRecord>,
     pub(super) wals: CephRocksdbWalAggregate,
     pub(super) latest_state: Vec<CephRocksdbLatestStateRecord>,
+    pub(super) semantic:
+        persistence_sqlite::repositories::ceph_bluestore_semantic_repo::CephBluestoreSemanticAggregate,
 }
 
 fn map_manifest_error(error: rocksdb_wire::RocksDbWireError) -> CommandError {

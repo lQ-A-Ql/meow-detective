@@ -1,7 +1,11 @@
 use std::time::Duration;
 
 pub fn current_rss_mb() -> u64 {
-    current_rss_bytes() / (1024 * 1024)
+    process_memory_bytes().0 / (1024 * 1024)
+}
+
+pub fn peak_rss_mb() -> u64 {
+    process_memory_bytes().1 / (1024 * 1024)
 }
 
 pub(super) fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
@@ -44,7 +48,7 @@ pub(super) fn memory_hard_limit_exceeded_for_rss(rss_mb: u64, limit_mb: u64) -> 
 }
 
 #[cfg(target_os = "windows")]
-fn current_rss_bytes() -> u64 {
+fn process_memory_bytes() -> (u64, u64) {
     #[repr(C)]
     #[allow(non_snake_case)]
     struct ProcessMemoryCounters {
@@ -60,6 +64,7 @@ fn current_rss_bytes() -> u64 {
         PeakPagefileUsage: usize,
     }
 
+    #[link(name = "Psapi")]
     extern "system" {
         fn GetCurrentProcess() -> *mut std::ffi::c_void;
         fn GetProcessMemoryInfo(
@@ -92,13 +97,16 @@ fn current_rss_bytes() -> u64 {
         )
     };
     if ok == 0 {
-        0
+        (0, 0)
     } else {
-        counters.WorkingSetSize as u64
+        (
+            counters.WorkingSetSize as u64,
+            counters.PeakWorkingSetSize as u64,
+        )
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-fn current_rss_bytes() -> u64 {
-    0
+fn process_memory_bytes() -> (u64, u64) {
+    (0, 0)
 }

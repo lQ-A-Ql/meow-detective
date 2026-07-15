@@ -1,5 +1,6 @@
 use crate::{
     bluestore_semantic::{
+        budget::SemanticBudget,
         denc::{
             ensure_empty, ensure_limit, read_denc_payload, read_varint_lowz_u64, read_varint_u32,
         },
@@ -14,11 +15,17 @@ pub(crate) fn decode_shared_blob(
     value: &[u8],
     limits: BlueStoreSemanticLimits,
 ) -> Result<BlueStoreSharedBlobRecord> {
+    let mut budget = SemanticBudget::new(limits);
+    budget.claim_input(logical_key.len().checked_add(value.len()).ok_or(
+        CephWireError::LengthOverflow {
+            context: "BlueStore shared blob input",
+        },
+    )?)?;
     let sbid = decode_shared_blob_key(logical_key)?;
     let mut cursor = CephCursor::new(value);
     let denc = read_denc_payload(&mut cursor, &[1], "BlueStore shared blob")?;
     let mut payload = denc.cursor;
-    let extent_refs = decode_ref_map(&mut payload, limits)?;
+    let extent_refs = decode_ref_map(&mut payload, limits, &mut budget)?;
     ensure_empty(&payload, "BlueStore shared blob DENC payload")?;
     ensure_empty(&cursor, "BlueStore shared blob value")?;
     Ok(BlueStoreSharedBlobRecord {
@@ -36,12 +43,20 @@ fn decode_shared_blob_key(logical_key: &[u8]) -> Result<u64> {
                 key_space: "shared blob",
                 reason: "expected exactly one sortable big-endian u64",
             })?;
-    Ok(u64::from_be_bytes(bytes))
+    let sbid = u64::from_be_bytes(bytes);
+    if sbid == 0 {
+        return Err(CephWireError::InvalidBlueStoreSemanticKey {
+            key_space: "shared blob",
+            reason: "shared blob id must be non-zero",
+        });
+    }
+    Ok(sbid)
 }
 
 fn decode_ref_map(
     cursor: &mut CephCursor<'_>,
     limits: BlueStoreSemanticLimits,
+    budget: &mut SemanticBudget,
 ) -> Result<Vec<BlueStoreSharedBlobExtentRef>> {
     let count = read_varint_u32(cursor, "BlueStore shared blob ref count")? as usize;
     ensure_limit(
@@ -49,7 +64,8 @@ fn decode_ref_map(
         limits.max_shared_blob_refs,
         "BlueStore shared blob refs",
     )?;
-    let mut refs = Vec::with_capacity(count);
+    budget.claim_shared_blob_refs(count)?;
+    let mut refs = Vec::new();
     let mut position = 0i64;
     for index in 0..count {
         position = decode_position(cursor, index, position)?;
@@ -98,9 +114,14 @@ fn decode_position(cursor: &mut CephCursor<'_>, index: usize, previous: i64) -> 
 fn validate_ref_order(
     refs: &[BlueStoreSharedBlobExtentRef],
     offset: u64,
-    _end: u64,
+    end: u64,
     refs_count: u32,
 ) -> Result<()> {
+    if end == offset || refs_count == 0 {
+        return Err(invalid_ref_map(
+            "extent refs must have non-zero length and reference count",
+        ));
+    }
     if let Some(previous) = refs.last() {
         let previous_end = previous
             .offset

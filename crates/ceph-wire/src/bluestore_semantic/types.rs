@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlueStoreKeySpace {
     Super,
@@ -20,6 +22,12 @@ pub struct BlueStoreSemanticLimits {
     pub max_extent_records: usize,
     pub max_extent_payload_bytes: usize,
     pub max_shared_blob_refs: usize,
+    pub max_physical_extents: usize,
+    pub max_blobs: usize,
+    pub max_checksum_bytes: usize,
+    pub max_use_tracker_entries: usize,
+    pub max_decoded_heap_bytes: usize,
+    pub max_decode_work_units: usize,
 }
 
 impl Default for BlueStoreSemanticLimits {
@@ -37,6 +45,12 @@ impl Default for BlueStoreSemanticLimits {
             max_extent_records: 1_000_000,
             max_extent_payload_bytes: 64 * 1024 * 1024,
             max_shared_blob_refs: 1_000_000,
+            max_physical_extents: 1_000_000,
+            max_blobs: 1_000_000,
+            max_checksum_bytes: 64 * 1024 * 1024,
+            max_use_tracker_entries: 1_000_000,
+            max_decoded_heap_bytes: 128 * 1024 * 1024,
+            max_decode_work_units: 256 * 1024 * 1024,
         }
     }
 }
@@ -112,9 +126,23 @@ pub enum BlueStoreObjectRecord {
         shard_offset: u32,
         payload: BlueStoreExtentPayload,
     },
+    DeferredExtentShard {
+        object: BlueStoreObjectId,
+        shard_offset: u32,
+        payload: BlueStoreDeferred,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlueStoreObjectKey {
+    Onode(BlueStoreObjectId),
+    ExtentShard {
+        object: BlueStoreObjectId,
+        shard_offset: u32,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlueStoreObjectId {
     pub shard: i8,
     pub pool: i64,
@@ -143,6 +171,7 @@ pub struct BlueStoreOnodeHeader {
 pub struct BlueStoreAttributeSummary {
     pub name: Vec<u8>,
     pub value_length: u32,
+    pub value_sha256: [u8; 32],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,12 +207,8 @@ pub struct BlueStoreZoneOffsetRef {
 pub enum BlueStoreOnodeTail {
     Decoded {
         spanning_blob_version: u8,
+        spanning_blobs: Vec<BlueStoreBlob>,
         extents: BlueStoreExtentStorage,
-    },
-    Deferred {
-        spanning_blob_version: u8,
-        declared_spanning_blob_count: u32,
-        payload: BlueStoreDeferred,
     },
 }
 
@@ -198,13 +223,104 @@ pub struct BlueStoreExtentPayload {
     pub version: u8,
     pub declared_extent_count: u32,
     pub encoded_length: usize,
-    pub status: BlueStorePayloadStatus,
+    pub blobs: Vec<BlueStoreBlob>,
+    pub extents: Vec<BlueStoreLogicalExtent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BlueStoreBlobIdentity {
+    Local(u32),
+    Spanning(u64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlueStorePayloadStatus {
-    Parsed,
-    Deferred(BlueStoreDeferred),
+pub struct BlueStoreBlob {
+    pub identity: BlueStoreBlobIdentity,
+    pub owner: Option<Arc<BlueStoreObjectId>>,
+    pub physical_extents: Vec<BlueStorePhysicalExtent>,
+    pub on_disk_length: u32,
+    pub logical_length: u32,
+    pub compressed_length: Option<u32>,
+    pub flags: BlueStoreBlobFlags,
+    pub checksum: Option<BlueStoreChecksum>,
+    pub checksum_words: Vec<u64>,
+    pub unused_bitmap: Option<u16>,
+    pub shared_blob_id: Option<u64>,
+    pub use_tracker: Option<BlueStoreBlobUseTracker>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStorePhysicalExtent {
+    pub offset: Option<u64>,
+    pub length: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStoreBlobFlags {
+    pub raw: u32,
+    pub legacy_mutable: bool,
+    pub compressed: bool,
+    pub checksum: bool,
+    pub has_unused: bool,
+    pub shared: bool,
+    pub unknown_bits: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlueStoreChecksumType {
+    XxHash32,
+    XxHash64,
+    Crc32c,
+    Crc32c16,
+    Crc32c8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStoreChecksum {
+    pub checksum_type: BlueStoreChecksumType,
+    pub chunk_order: u8,
+    pub encoded_length: usize,
+    pub data_ceph_crc32c: u32,
+    pub data_sha256: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlueStoreBlobUseTracker {
+    V1LegacyRefMap {
+        entries: Vec<BlueStoreBlobUseRef>,
+    },
+    V2 {
+        allocation_unit_size: u32,
+        declared_allocation_units: u32,
+        referenced_bytes: Vec<u32>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStoreBlobUseRef {
+    pub offset: u64,
+    pub length: u32,
+    pub refs: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStoreExtentFlags {
+    pub raw: u8,
+    pub contiguous: bool,
+    pub zero_blob_offset: bool,
+    pub same_length: bool,
+    pub spanning: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlueStoreLogicalExtent {
+    pub record_index: u32,
+    pub logical_offset: u32,
+    pub blob_offset: u32,
+    pub length: u32,
+    pub blob: BlueStoreBlobIdentity,
+    pub defines_blob: bool,
+    pub flags: BlueStoreExtentFlags,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,8 +332,7 @@ pub struct BlueStoreDeferred {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlueStoreDeferredReason {
     UnknownSuperField,
-    SpanningBlobRecords,
-    ExtentRecords,
+    SpanningBlobContextRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

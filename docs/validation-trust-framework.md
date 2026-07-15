@@ -274,7 +274,26 @@ cargo test -p rocksdb-wire --test sst_real_sample -- --ignored
 `35/40/33` live set 由六成员门禁写入 disposable spool，并通过每 OSD 12 行
 column-family summary 与 aggregate digest 验证。
 
-该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS superblock/bounded transaction log、RocksDB CURRENT/IDENTITY 与活动 MANIFEST，并对 `35/40/33` 个 live SST 在单次 payload-block scan 中完成结构 inventory、脱敏 census 和 mutation streaming，再叠加 active WAL 恢复每个 active column family 的 digest-only latest-state summary。OSD、BlueFS replay、RocksDB control-plane、SST/WAL inventory 与 latest-state summary 原子写入 source DB，保持零普通文件行且不伪装为 POSIX 文件系统。
+该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST/live-SST/active-WAL/latest-state，并在同一 reducer 生命周期内生成 `S/C/O/X` super/collection/onode/shard/blob/logical+physical extent/checksum/shared-ref semantic snapshot。OSD、BlueFS、RocksDB 与 semantic snapshot 原子写入 source DB，保持零普通文件行且不伪装为 POSIX 文件系统。
+
+Stage 6.4 semantic persistence 另有保留真实 source DB 的 phase benchmark，用于在
+不重复执行 E01/BlueFS/RocksDB 前置阶段时精确约束约 210 万 semantic child
+rows 的 query、完整 validation、首次 write、commit 和 peak RSS：
+
+```powershell
+$env:FORENSICS_BLUESTORE_SOURCE_DB_FIXTURE='<retained server01 source.db>'
+cargo test -p persistence-sqlite --lib `
+  real_bluestore_semantic_phase_performance `
+  -- --ignored --test-threads=1 --nocapture
+```
+
+该 benchmark 必须使用真实 source DB，不允许 mock 或摘要替代。它重新查询全部
+规范化行、执行完整 fail-closed 校验、写入全新 source DB，并验证
+`794ab1...c73b` digest 与 `2,924 / 116,135 / 1,839,658`
+object/blob/checksum oracle。预算为 query `60s`、validation `90s`、write
+`90s`、commit `30s`、peak RSS `512MB`。2026-07-15 三次结果为
+`51.58s..88.60s / 395MB`。该 phase benchmark 不替代完整 E01
+或六成员回归；样本盘不可见时必须明确记录 full-chain pending。
 
 - 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
 - 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。
@@ -283,8 +302,8 @@ column-family summary 与 aggregate digest 验证。
   - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
 - 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
 - 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
-- 当前不保证：PVE 集群级 BlueStore object 语义、Ceph BlueStore onode/blob/value 与 RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取、单个共享设备布局 BlueStore LV 的 label/superblock + metadata-log replay、CURRENT 指向的活动 MANIFEST control-plane replay、block-based live-SST/WAL mutation recovery 和 digest-only latest-state summary；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
-- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-14 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，BlueFS 文件数分别为 `44/49/42`；每个活动 MANIFEST 均包含 39 个 VersionEdit 和 12 个 column family，最终 live SST 数分别为 `35/40/33`，last sequence 为 `1077117/1052658/1061239`。全部 live SST 均完成 v5 block-based footer、XXH3、LZ4、properties、index、data-block/entry 计数、脱敏 census 和 mutation streaming；代表 `000146.sst` 与独立 `sst_dump` oracle 的 148 个 data block、23,364 条 entry、raw key/value size 和 data/index/filter size 精确一致。SST/WAL mutation 经 source-local disposable spool 恢复为每 OSD 12 行 latest-state summary，aggregate digest 分别为 `b4f31e...22eed`、`0cf9b7...20880`、`32d7af...e978`。OSD、BlueFS replay、RocksDB control-plane、SST/WAL inventory 与 latest-state summary 同事务写入独立 `ready_metadata` source DB；raw key/value 未持久化，普通 `file_entries` 保持为零。
+- 当前不保证：PVE 集群级 RADOS object content、OMAP、PG/replica、RBD/VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取、单个共享设备布局 BlueStore LV 的 label/BlueFS/RocksDB latest-state 与 `S/C/O/X` metadata semantic snapshot；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
+- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-15 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，BlueFS 文件数分别为 `44/49/42`；每个活动 MANIFEST 均包含 39 个 VersionEdit 和 12 个 column family，最终 live SST 数分别为 `35/40/33`，last sequence 为 `1077117/1052658/1061239`。SST/WAL mutation 经 source-local disposable spool 恢复为每 OSD 12 行 latest-state summary，aggregate digest 分别为 `b4f31e...22eed`、`0cf9b7...20880`、`32d7af...e978`。随后 `S/C/O/X` latest values 生成规范化 semantic snapshot：objects=`2924/2927/2930`、blobs=`116135/116135/116135`、physical extents=`134148/134154/134150`、checksum chunks=`1839658/1839666/1839646`、shared blobs=`23316`，semantic digest 分别为 `794ab1...c73b`、`441e1a...78e9`、`d5eb02...28bc`。snapshot 强制绑定 latest-state digest，shared physical overlap 仅在相同非零 shared ID 且 `X` ref-map 完整覆盖时接受。raw key/value、attrs value 与 checksum bytes 未持久化，普通 `file_entries` 保持为零。
 
 ### 4.10 Backend Stage 7 final run
 

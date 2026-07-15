@@ -1,23 +1,22 @@
 use crate::{
-    bluestore_semantic::types::{BlueStoreObjectId, BlueStoreSemanticLimits},
+    bluestore_semantic::types::{BlueStoreObjectId, BlueStoreObjectKey, BlueStoreSemanticLimits},
     cursor::CephCursor,
     error::{CephWireError, Result},
 };
 
-pub(crate) enum ObjectLogicalKey {
-    Onode(BlueStoreObjectId),
-    ExtentShard {
-        object: BlueStoreObjectId,
-        offset: u32,
-    },
-}
-
-pub(crate) fn decode_object_key(
+pub fn decode_bluestore_object_key(
     logical_key: &[u8],
     limits: BlueStoreSemanticLimits,
-) -> Result<ObjectLogicalKey> {
+) -> Result<BlueStoreObjectKey> {
+    if logical_key.len() > limits.max_logical_key_bytes {
+        return Err(CephWireError::LengthLimit {
+            context: "BlueStore logical key",
+            length: logical_key.len(),
+            limit: limits.max_logical_key_bytes,
+        });
+    }
     match logical_key.last().copied() {
-        Some(b'o') => decode_onode_key(logical_key, limits).map(ObjectLogicalKey::Onode),
+        Some(b'o') => decode_onode_key(logical_key, limits).map(BlueStoreObjectKey::Onode),
         Some(b'x') => decode_extent_shard_key(logical_key, limits),
         _ => Err(invalid_key("expected onode or extent-shard suffix")),
     }
@@ -26,7 +25,7 @@ pub(crate) fn decode_object_key(
 fn decode_extent_shard_key(
     logical_key: &[u8],
     limits: BlueStoreSemanticLimits,
-) -> Result<ObjectLogicalKey> {
+) -> Result<BlueStoreObjectKey> {
     if logical_key.len() < 6 {
         return Err(invalid_key("extent-shard key is truncated"));
     }
@@ -35,9 +34,9 @@ fn decode_extent_shard_key(
     let offset_bytes: [u8; 4] = logical_key[onode_end..onode_end + 4]
         .try_into()
         .map_err(|_| invalid_key("extent-shard offset is truncated"))?;
-    Ok(ObjectLogicalKey::ExtentShard {
+    Ok(BlueStoreObjectKey::ExtentShard {
         object,
-        offset: u32::from_be_bytes(offset_bytes),
+        shard_offset: u32::from_be_bytes(offset_bytes),
     })
 }
 

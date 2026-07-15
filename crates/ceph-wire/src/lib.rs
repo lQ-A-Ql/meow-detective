@@ -23,12 +23,16 @@ pub use bluestore::{
     BDEV_LABEL_POSITIONS, BDEV_LABEL_PREFIX_LENGTH,
 };
 pub use bluestore_semantic::{
-    decode_bluestore_latest_value, BlueStoreAllocationHints, BlueStoreAttributeSummary,
-    BlueStoreCnode, BlueStoreCollectionId, BlueStoreCollectionKind, BlueStoreCollectionRecord,
-    BlueStoreDecodedRecord, BlueStoreDeferred, BlueStoreDeferredReason, BlueStoreExtentPayload,
-    BlueStoreExtentShardDescriptor, BlueStoreExtentStorage, BlueStoreKeySpace, BlueStoreObjectId,
-    BlueStoreObjectRecord, BlueStoreOmapMode, BlueStoreOnodeFlags, BlueStoreOnodeHeader,
-    BlueStoreOnodeTail, BlueStorePayloadStatus, BlueStoreSemanticLimits,
+    decode_bluestore_extent_payload, decode_bluestore_latest_value,
+    decode_bluestore_latest_value_with_spanning_blobs, decode_bluestore_object_key,
+    BlueStoreAllocationHints, BlueStoreAttributeSummary, BlueStoreBlob, BlueStoreBlobFlags,
+    BlueStoreBlobIdentity, BlueStoreBlobUseRef, BlueStoreBlobUseTracker, BlueStoreChecksum,
+    BlueStoreChecksumType, BlueStoreCnode, BlueStoreCollectionId, BlueStoreCollectionKind,
+    BlueStoreCollectionRecord, BlueStoreDecodedRecord, BlueStoreDeferred, BlueStoreDeferredReason,
+    BlueStoreExtentFlags, BlueStoreExtentPayload, BlueStoreExtentShardDescriptor,
+    BlueStoreExtentStorage, BlueStoreKeySpace, BlueStoreLogicalExtent, BlueStoreObjectId,
+    BlueStoreObjectKey, BlueStoreObjectRecord, BlueStoreOmapMode, BlueStoreOnodeFlags,
+    BlueStoreOnodeHeader, BlueStoreOnodeTail, BlueStorePhysicalExtent, BlueStoreSemanticLimits,
     BlueStoreSharedBlobExtentRef, BlueStoreSharedBlobRecord, BlueStoreSuperRecord,
     BlueStoreZoneOffsetRef,
 };

@@ -2,15 +2,24 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use app_services::cluster_service::{plan_linux_cluster_import, LinuxClusterImportPlan};
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::{
-    audit_repo::AuditRepo, case_repo::CaseRepo, datasource_cluster_repo::DataSourceClusterRepo,
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
+    audit_repo::AuditRepo,
+    case_repo::CaseRepo,
+    ceph_bluestore_semantic_repo::{
+        latest_state_set_sha256, BLUESTORE_SEMANTIC_DECODE_PROFILE,
+        BLUESTORE_SEMANTIC_SCHEMA_VERSION,
+    },
+    ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRepo,
+    datasource_cluster_repo::DataSourceClusterRepo,
+    datasource_repo::DataSourceRepo,
+    file_repo::FileRepo,
+    job_repo::JobRepo,
 };
 use tempfile::TempDir;
 use transport::dto::ViewerRangeRequestDto;
@@ -61,7 +70,21 @@ struct BluestoreOracle {
     rocksdb_wal_first_sequence: u64,
     rocksdb_wal_last_sequence: u64,
     rocksdb_latest_state_sha256: &'static str,
+    semantic: BluestoreSemanticOracle,
     representative_sst: Option<RepresentativeSstOracle>,
+}
+
+struct BluestoreSemanticOracle {
+    semantic_sha256: &'static str,
+    collection_count: u64,
+    object_count: u64,
+    blob_count: u64,
+    onode_shard_count: u64,
+    logical_extent_count: u64,
+    physical_extent_count: u64,
+    checksum_chunk_count: u64,
+    shared_blob_count: u64,
+    shared_ref_extent_count: u64,
 }
 
 struct RepresentativeSstOracle {
@@ -77,6 +100,7 @@ struct RepresentativeSstOracle {
 }
 
 struct BluefsInventoryRow {
+    inventory_id: String,
     bluefs_uuid: String,
     osd_uuid: String,
     sequence: u64,
@@ -131,6 +155,7 @@ struct RocksDbLatestStateRow {
 #[test]
 #[ignore = "requires the private six-member PVE E01 cluster fixture"]
 fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases() {
+    init_test_tracing();
     let fixture_root = required_fixture_root();
     let plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
         .expect("plan PVE cluster import");
@@ -195,6 +220,71 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     assert_manifest(&case_root, &plan);
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
     assert_job_outcome(&case_conn, &job_id, &cluster);
+}
+
+#[test]
+#[ignore = "requires the private PVE E01 cluster fixture"]
+fn real_pve_bluestore_member_persists_semantic_snapshot() {
+    init_test_tracing();
+    let fixture_root = required_fixture_root();
+    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
+        .expect("plan PVE cluster import");
+    plan.members.retain(|member| {
+        member
+            .source_name
+            .eq_ignore_ascii_case("server01-disk02.E01")
+    });
+    assert_eq!(plan.members.len(), 1, "server01 BlueStore member");
+    plan.members[0].member_index = 0;
+
+    let temp = TempDir::new().expect("create temporary case root");
+    let case_root = temp.path().join("pve-bluestore-case");
+    std::fs::create_dir_all(&case_root).expect("create case directory");
+    let case_id = CaseId("pve-bluestore-import-regression".to_string());
+    let case_conn = create_case_database(&case_root, &case_id);
+    let job_id = JobRepo::new(&case_conn)
+        .create(&case_id.0, "pve-bluestore-import")
+        .expect("create import job");
+    drop(case_conn);
+
+    run_background_linux_cluster_import_job(
+        BackgroundLinuxClusterImportJob {
+            db_path: case_root.join("app.db"),
+            case_id: case_id.clone(),
+            case_root: case_root.clone(),
+            plan,
+            job_id,
+            max_import_workers: Some(1),
+            max_analysis_workers: Some(1),
+            analysis_mode: ImportAnalysisMode::MetadataOnly,
+        },
+        None,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .expect("import BlueStore member");
+
+    let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+        .expect("reopen case database");
+    let source = DataSourceRepo::new(&case_conn)
+        .find_by_case(&case_id)
+        .expect("query data sources")
+        .into_iter()
+        .next()
+        .expect("imported BlueStore source");
+    assert_bluestore_source(&case_conn, &case_root, &source);
+}
+
+fn init_test_tracing() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            )
+            .with_test_writer()
+            .try_init();
+    });
 }
 
 fn required_fixture_root() -> PathBuf {
@@ -549,20 +639,21 @@ fn assert_bluestore_source(
     assert!(inventory.4);
     let bluefs: BluefsInventoryRow = source_conn
         .query_row(
-            "SELECT bluefs_uuid, osd_uuid, sequence, block_size, crc32c,
+            "SELECT inventory_id, bluefs_uuid, osd_uuid, sequence, block_size, crc32c,
                         shared_bdev, dedicated_db, dedicated_wal
                  FROM ceph_bluefs_superblocks WHERE data_source_id = ?1",
             [&source.id.0],
             |row| {
                 Ok(BluefsInventoryRow {
-                    bluefs_uuid: row.get(0)?,
-                    osd_uuid: row.get(1)?,
-                    sequence: row.get(2)?,
-                    block_size: row.get(3)?,
-                    crc32c: row.get(4)?,
-                    shared_bdev: row.get(5)?,
-                    dedicated_db: row.get(6)?,
-                    dedicated_wal: row.get(7)?,
+                    inventory_id: row.get(0)?,
+                    bluefs_uuid: row.get(1)?,
+                    osd_uuid: row.get(2)?,
+                    sequence: row.get(3)?,
+                    block_size: row.get(4)?,
+                    crc32c: row.get(5)?,
+                    shared_bdev: row.get(6)?,
+                    dedicated_db: row.get(7)?,
+                    dedicated_wal: row.get(8)?,
                 })
             },
         )
@@ -614,6 +705,7 @@ fn assert_bluestore_source(
     );
     assert_bluefs_replay(&source_conn, &inventory.0, &oracle);
     assert_rocksdb_inventory(&source_conn, &source.id.0, &oracle);
+    assert_bluestore_semantics(&source_conn, source, &bluefs.inventory_id, &oracle);
 
     BluestoreSourceSummary {
         osd_uuid: inventory.0,
@@ -621,6 +713,166 @@ fn assert_bluestore_source(
         ceph_fsid: inventory.2,
         bluefs_uuid: bluefs.bluefs_uuid,
     }
+}
+
+fn assert_bluestore_semantics(
+    source_conn: &rusqlite::Connection,
+    source: &DataSource,
+    inventory_id: &str,
+    oracle: &BluestoreOracle,
+) {
+    let scan = persisted_semantic_scan(source_conn, inventory_id);
+    let latest_state = CephRocksdbLatestStateRepo::new(source_conn)
+        .find(inventory_id)
+        .expect("query BlueStore RocksDB latest state");
+    assert_eq!(scan.schema_version, BLUESTORE_SEMANTIC_SCHEMA_VERSION);
+    assert_eq!(scan.decode_profile, BLUESTORE_SEMANTIC_DECODE_PROFILE);
+    assert!(scan.profile_complete);
+    assert_eq!(
+        scan.latest_state_sha256,
+        latest_state_set_sha256(&latest_state),
+        "semantic snapshot must bind to the persisted latest state"
+    );
+    assert_eq!(
+        scan.collection_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_collections")
+    );
+    assert_eq!(
+        scan.object_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_objects")
+    );
+    assert_eq!(
+        scan.blob_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_blobs")
+    );
+    assert_eq!(
+        scan.onode_shard_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_onode_shards")
+    );
+    assert_eq!(
+        scan.logical_extent_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_logical_extents")
+    );
+    assert_eq!(
+        scan.physical_extent_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_physical_extents")
+    );
+    assert_eq!(
+        scan.checksum_chunk_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_checksum_chunks")
+    );
+    assert_eq!(
+        scan.shared_blob_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_shared_blobs")
+    );
+    assert_eq!(
+        scan.shared_ref_extent_count,
+        semantic_table_count(source_conn, inventory_id, "ceph_bluestore_shared_blob_refs")
+    );
+    assert!(scan.object_count > 0);
+    assert!(scan.blob_count > 0);
+    assert!(scan.logical_extent_count > 0);
+    assert!(scan.physical_extent_count > 0);
+    assert!(scan.checksum_chunk_count > 0);
+    assert!(scan.shared_blob_count > 0);
+    assert!(scan.shared_ref_extent_count > 0);
+
+    eprintln!(
+        "BLUESTORE_SEMANTIC_ORACLE source={} semantic_sha256={} collections={} objects={} \
+         blobs={} shards={} logical={} physical={} checksums={} shared={} shared_refs={}",
+        source.name,
+        scan.semantic_sha256,
+        scan.collection_count,
+        scan.object_count,
+        scan.blob_count,
+        scan.onode_shard_count,
+        scan.logical_extent_count,
+        scan.physical_extent_count,
+        scan.checksum_chunk_count,
+        scan.shared_blob_count,
+        scan.shared_ref_extent_count,
+    );
+    let expected = &oracle.semantic;
+    assert_eq!(scan.semantic_sha256, expected.semantic_sha256);
+    assert_eq!(scan.collection_count, expected.collection_count);
+    assert_eq!(scan.object_count, expected.object_count);
+    assert_eq!(scan.blob_count, expected.blob_count);
+    assert_eq!(scan.onode_shard_count, expected.onode_shard_count);
+    assert_eq!(scan.logical_extent_count, expected.logical_extent_count);
+    assert_eq!(scan.physical_extent_count, expected.physical_extent_count);
+    assert_eq!(scan.checksum_chunk_count, expected.checksum_chunk_count);
+    assert_eq!(scan.shared_blob_count, expected.shared_blob_count);
+    assert_eq!(
+        scan.shared_ref_extent_count,
+        expected.shared_ref_extent_count
+    );
+}
+
+struct PersistedSemanticScan {
+    schema_version: u32,
+    decode_profile: String,
+    latest_state_sha256: String,
+    semantic_sha256: String,
+    collection_count: u64,
+    object_count: u64,
+    blob_count: u64,
+    onode_shard_count: u64,
+    logical_extent_count: u64,
+    physical_extent_count: u64,
+    checksum_chunk_count: u64,
+    shared_blob_count: u64,
+    shared_ref_extent_count: u64,
+    profile_complete: bool,
+}
+
+fn persisted_semantic_scan(
+    source_conn: &rusqlite::Connection,
+    inventory_id: &str,
+) -> PersistedSemanticScan {
+    source_conn
+        .query_row(
+            "SELECT schema_version, decode_profile, latest_state_sha256,
+                    semantic_sha256, collection_count, object_count, blob_count,
+                    onode_shard_count, logical_extent_count, physical_extent_count,
+                    checksum_chunk_count, shared_blob_count,
+                    shared_ref_extent_count, profile_complete
+             FROM ceph_bluestore_semantic_scans
+             WHERE inventory_id = ?1",
+            [inventory_id],
+            |row| {
+                Ok(PersistedSemanticScan {
+                    schema_version: row.get(0)?,
+                    decode_profile: row.get(1)?,
+                    latest_state_sha256: row.get(2)?,
+                    semantic_sha256: row.get(3)?,
+                    collection_count: row.get(4)?,
+                    object_count: row.get(5)?,
+                    blob_count: row.get(6)?,
+                    onode_shard_count: row.get(7)?,
+                    logical_extent_count: row.get(8)?,
+                    physical_extent_count: row.get(9)?,
+                    checksum_chunk_count: row.get(10)?,
+                    shared_blob_count: row.get(11)?,
+                    shared_ref_extent_count: row.get(12)?,
+                    profile_complete: row.get(13)?,
+                })
+            },
+        )
+        .expect("query BlueStore semantic scan")
+}
+
+fn semantic_table_count(
+    source_conn: &rusqlite::Connection,
+    inventory_id: &str,
+    table: &str,
+) -> u64 {
+    source_conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE inventory_id = ?1"),
+            [inventory_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|error| panic!("query {table} row count: {error}"))
 }
 
 fn assert_rocksdb_inventory(
@@ -1133,6 +1385,18 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_last_sequence: 1_086_455,
             rocksdb_latest_state_sha256:
                 "b4f31e224ff485b29b1b3ac7c21e079344250bf37a954b304d43294b1da22eed",
+            semantic: BluestoreSemanticOracle {
+                semantic_sha256: "794ab1ea6632d809bac456d9cd5e5e54c3a46b93977d2224f98c0d564a46c73b",
+                collection_count: 34,
+                object_count: 2924,
+                blob_count: 116_135,
+                onode_shard_count: 18_971,
+                logical_extent_count: 116_487,
+                physical_extent_count: 134_148,
+                checksum_chunk_count: 1_839_658,
+                shared_blob_count: 23_316,
+                shared_ref_extent_count: 27_897,
+            },
             representative_sst: Some(RepresentativeSstOracle {
                 file_number: 146,
                 data_block_count: 148,
@@ -1173,6 +1437,18 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_last_sequence: 1_062_302,
             rocksdb_latest_state_sha256:
                 "0cf9b7ead1e5953fa84f1c57a16be4f1a2d5fd4713d2ed1ad20cf8cf9d320880",
+            semantic: BluestoreSemanticOracle {
+                semantic_sha256: "441e1a48ec5ca51e5ff2caa94eac106d283d9375bbbc08d841196eb84fbe78e9",
+                collection_count: 34,
+                object_count: 2927,
+                blob_count: 116_135,
+                onode_shard_count: 18_970,
+                logical_extent_count: 116_487,
+                physical_extent_count: 134_154,
+                checksum_chunk_count: 1_839_666,
+                shared_blob_count: 23_316,
+                shared_ref_extent_count: 27_900,
+            },
             representative_sst: None,
         },
         "server03-disk02.e01" => BluestoreOracle {
@@ -1203,6 +1479,18 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_wal_last_sequence: 1_070_883,
             rocksdb_latest_state_sha256:
                 "32d7af9d9eda6ca168cb9a85a7b17a36c9fce012f9301b354aebb1b633bee978",
+            semantic: BluestoreSemanticOracle {
+                semantic_sha256: "d5eb02ba6e77a66476a2c84f010bca75ec77d870858d15e6b57681fb075028bc",
+                collection_count: 34,
+                object_count: 2930,
+                blob_count: 116_135,
+                onode_shard_count: 18_974,
+                logical_extent_count: 116_487,
+                physical_extent_count: 134_150,
+                checksum_chunk_count: 1_839_646,
+                shared_blob_count: 23_316,
+                shared_ref_extent_count: 27_911,
+            },
             representative_sst: None,
         },
         _ => panic!(

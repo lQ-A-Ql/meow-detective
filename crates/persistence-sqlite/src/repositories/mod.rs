@@ -4,6 +4,7 @@ pub mod batch_repo;
 pub mod case_repo;
 pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
+pub mod ceph_bluestore_semantic_repo;
 pub mod ceph_osd_repo;
 pub mod ceph_rocksdb_latest_state_repo;
 pub mod ceph_rocksdb_repo;

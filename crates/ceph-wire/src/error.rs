@@ -112,6 +112,68 @@ pub enum CephWireError {
         reason: &'static str,
     },
 
+    #[error("unknown BlueStore blob flag bits {unknown_bits:#x} in encoded flags {flags:#x}")]
+    UnknownBlueStoreBlobFlags { flags: u32, unknown_bits: u32 },
+
+    #[error("unknown BlueStore checksum type {checksum_type}")]
+    UnknownBlueStoreChecksumType { checksum_type: u8 },
+
+    #[error("invalid BlueStore checksum metadata for type {checksum_type}: {reason}")]
+    InvalidBlueStoreChecksum {
+        checksum_type: u8,
+        reason: &'static str,
+    },
+
+    #[error(
+        "invalid BlueStore physical extent {index}: offset {offset:#x}, length {length:#x}: {reason}"
+    )]
+    InvalidBlueStorePhysicalExtent {
+        index: usize,
+        offset: u64,
+        length: u32,
+        reason: &'static str,
+    },
+
+    #[error("duplicate BlueStore {kind} blob id {blob_id}")]
+    DuplicateBlueStoreBlob { kind: &'static str, blob_id: u64 },
+
+    #[error("BlueStore extent {record_index} references missing {kind} blob id {blob_id}")]
+    MissingBlueStoreBlobReference {
+        record_index: u32,
+        kind: &'static str,
+        blob_id: u64,
+    },
+
+    #[error("BlueStore spanning blob context is not bound to the extent-shard object")]
+    BlueStoreSpanningBlobOwnerMismatch,
+
+    #[error("BlueStore extent count mismatch: declared {declared}, decoded {decoded}")]
+    BlueStoreExtentCountMismatch { declared: u32, decoded: u32 },
+
+    #[error(
+        "BlueStore logical extent at {logical_offset:#x} overlaps the previous end {previous_end:#x}"
+    )]
+    BlueStoreLogicalExtentOverlap {
+        previous_end: u64,
+        logical_offset: u64,
+    },
+
+    #[error(
+        "BlueStore extent {record_index} range {blob_offset:#x}~{length:#x} exceeds blob logical length {logical_length:#x}"
+    )]
+    BlueStoreBlobRangeOverflow {
+        record_index: u32,
+        blob_offset: u32,
+        length: u32,
+        logical_length: u32,
+    },
+
+    #[error("invalid BlueStore extent {record_index}: {reason}")]
+    InvalidBlueStoreExtent {
+        record_index: u32,
+        reason: &'static str,
+    },
+
     #[error(
         "unsupported BlueStore DENC version {encoded_version} for {context}; supported versions are {supported_versions}"
     )]

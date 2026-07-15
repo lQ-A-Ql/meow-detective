@@ -1,9 +1,9 @@
 use persistence_sqlite::{
     open_in_memory,
     repositories::{
+        ceph_bluestore_semantic_repo::latest_state_set_sha256,
         ceph_rocksdb_latest_state_repo::{
-            replace_on, validate_replacement, CephRocksdbLatestStateRecord,
-            CephRocksdbLatestStateRepo,
+            validate_replacement, CephRocksdbLatestStateRecord, CephRocksdbLatestStateRepo,
         },
         ceph_rocksdb_repo::{
             CephRocksdbAggregate, CephRocksdbColumnFamilyRecord, CephRocksdbManifestRecord,
@@ -205,7 +205,7 @@ fn source_011_installs_digest_only_latest_state_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_011_ceph_latest_state"
+        "source_012_ceph_bluestore_semantics"
     );
     let columns = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_latest_state') ORDER BY cid")
@@ -244,8 +244,12 @@ fn latest_state_round_trips_in_cf_order_and_replaces_source_locally() {
     let original_2 = records("inventory-2");
     validate_replacement(&rocksdb_1, &original_1).expect("validate source 1");
     validate_replacement(&rocksdb_2, &original_2).expect("validate source 2");
-    replace_on(&conn, "inventory-1", &original_1).expect("insert source 1");
-    replace_on(&conn, "inventory-2", &original_2).expect("insert source 2");
+    CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &original_1)
+        .expect("insert source 1");
+    CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-2", &original_2)
+        .expect("insert source 2");
 
     let expected_1 = vec![original_1[1].clone(), original_1[0].clone()];
     assert_eq!(
@@ -258,11 +262,17 @@ fn latest_state_round_trips_in_cf_order_and_replaces_source_locally() {
     let mut replacement_1 = original_1.clone();
     replacement_1[0].latest_state_sha256 = "d".repeat(64);
     replacement_1[1].latest_state_sha256 = "e".repeat(64);
-    let tx = conn
-        .unchecked_transaction()
-        .expect("begin outer transaction");
-    replace_on(&tx, "inventory-1", &replacement_1).expect("replace in outer transaction");
-    tx.rollback().expect("roll back outer transaction");
+    conn.execute_batch(
+        "CREATE TRIGGER reject_latest_state_replacement
+         BEFORE INSERT ON ceph_rocksdb_latest_state
+         BEGIN
+             SELECT RAISE(ABORT, 'injected latest-state write failure');
+         END;",
+    )
+    .expect("install failure trigger");
+    assert!(CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &replacement_1)
+        .is_err());
     assert_eq!(
         CephRocksdbLatestStateRepo::new(&conn)
             .find("inventory-1")
@@ -270,7 +280,11 @@ fn latest_state_round_trips_in_cf_order_and_replaces_source_locally() {
         expected_1
     );
 
-    replace_on(&conn, "inventory-1", &replacement_1).expect("commit replacement");
+    conn.execute_batch("DROP TRIGGER reject_latest_state_replacement")
+        .expect("remove failure trigger");
+    CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &replacement_1)
+        .expect("commit replacement");
     assert_eq!(
         CephRocksdbLatestStateRepo::new(&conn)
             .find("inventory-2")
@@ -353,9 +367,49 @@ fn replacement_rejects_cross_inventory_rows_and_cascades_with_control_plane() {
     let rocksdb = seed_control_plane(&conn, "inventory-1", "source-1");
     let valid = records("inventory-1");
     validate_replacement(&rocksdb, &valid).expect("validate latest state");
-    replace_on(&conn, "inventory-1", &valid).expect("insert latest state");
+    CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &valid)
+        .expect("insert latest state");
 
-    assert!(replace_on(&conn, "inventory-2", &valid).is_err());
+    assert!(CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-2", &valid)
+        .is_err());
+    assert!(CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &[])
+        .is_err());
+    conn.execute(
+        "INSERT INTO ceph_bluestore_semantic_scans (
+            inventory_id, schema_version, decode_profile, sharding_sha256,
+            latest_state_sha256, semantic_sha256,
+            s_latest_count, s_decoded_count, s_deferred_count,
+            c_latest_count, c_decoded_count, c_deferred_count,
+            o_latest_count, o_decoded_count, o_deferred_count,
+            x_latest_count, x_decoded_count, x_deferred_count,
+            collection_count, object_count, blob_count, onode_shard_count,
+            logical_extent_count, physical_extent_count, checksum_chunk_count,
+            shared_blob_count, shared_ref_extent_count, profile_complete
+         ) VALUES (
+            ?1, 1, 'scox-v1', ?2, ?3, ?4,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+         )",
+        rusqlite::params![
+            "inventory-1",
+            valid[0].sharding_sha256,
+            latest_state_set_sha256(&valid),
+            "f".repeat(64),
+        ],
+    )
+    .expect("insert dependent semantic marker");
+    assert!(CephRocksdbLatestStateRepo::new(&conn)
+        .replace_for_inventory("inventory-1", &valid)
+        .is_err());
+    assert_eq!(
+        CephRocksdbLatestStateRepo::new(&conn)
+            .find("inventory-1")
+            .expect("latest state remains intact"),
+        vec![valid[1].clone(), valid[0].clone()]
+    );
     conn.execute(
         "DELETE FROM ceph_rocksdb_manifests WHERE inventory_id = ?1",
         ["inventory-1"],
@@ -365,4 +419,14 @@ fn replacement_rejects_cross_inventory_rows_and_cascades_with_control_plane() {
         .find("inventory-1")
         .expect("find cascaded latest state")
         .is_empty());
+}
+
+#[test]
+fn latest_state_set_digest_is_independent_of_caller_order() {
+    let ordered = records("inventory-1");
+    let reversed = ordered.iter().rev().cloned().collect::<Vec<_>>();
+    assert_eq!(
+        latest_state_set_sha256(&ordered),
+        latest_state_set_sha256(&reversed)
+    );
 }

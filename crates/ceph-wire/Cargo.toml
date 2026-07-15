@@ -8,5 +8,6 @@ license.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 uuid = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]

@@ -4,7 +4,7 @@ use rusqlite::{params, Connection};
 
 use crate::connection::{DbError, DbResult};
 
-use super::ceph_rocksdb_repo::CephRocksdbAggregate;
+use super::ceph_rocksdb_repo::{CephRocksdbAggregate, CephRocksdbRepo};
 
 const ROCKSDB_MAX_SEQUENCE_NUMBER: u64 = (1u64 << 56) - 1;
 
@@ -64,24 +64,69 @@ impl<'a> CephRocksdbLatestStateRepo<'a> {
         let rows = statement.query_map(params![inventory_id], map_record)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
+
+    pub fn replace_for_inventory(
+        &self,
+        inventory_id: &str,
+        records: &[CephRocksdbLatestStateRecord],
+    ) -> DbResult<()> {
+        validate_target(inventory_id, records)?;
+        let transaction = self.conn.unchecked_transaction()?;
+        let rocksdb = CephRocksdbRepo::new(&transaction)
+            .find_aggregate(inventory_id)?
+            .ok_or_else(|| {
+                DbError::System(
+                    "latest-state replacement references an unknown RocksDB inventory".to_string(),
+                )
+            })?;
+        validate_replacement(&rocksdb, records)?;
+        ensure_no_semantic_snapshot(&transaction, inventory_id)?;
+        replace_on(&transaction, inventory_id, records)?;
+        transaction.commit()?;
+        Ok(())
+    }
 }
 
-pub fn replace_on(
+pub(crate) fn replace_on(
     conn: &Connection,
     inventory_id: &str,
     records: &[CephRocksdbLatestStateRecord],
 ) -> DbResult<()> {
+    validate_target(inventory_id, records)?;
+    conn.execute(
+        "DELETE FROM ceph_rocksdb_latest_state WHERE inventory_id = ?1",
+        params![inventory_id],
+    )?;
+    insert_records(conn, records)
+}
+
+fn validate_target(inventory_id: &str, records: &[CephRocksdbLatestStateRecord]) -> DbResult<()> {
+    if inventory_id.is_empty() || records.is_empty() {
+        return latest_state_error("latest-state replacement cannot be empty");
+    }
     if records
         .iter()
         .any(|record| record.inventory_id != inventory_id)
     {
         return latest_state_error("latest-state replacement crosses inventory boundaries");
     }
-    conn.execute(
-        "DELETE FROM ceph_rocksdb_latest_state WHERE inventory_id = ?1",
+    Ok(())
+}
+
+fn ensure_no_semantic_snapshot(conn: &Connection, inventory_id: &str) -> DbResult<()> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM ceph_bluestore_semantic_scans WHERE inventory_id = ?1
+         )",
         params![inventory_id],
+        |row| row.get(0),
     )?;
-    insert_records(conn, records)
+    if exists {
+        return latest_state_error(
+            "latest-state replacement requires the atomic Ceph aggregate path once BlueStore semantics exist",
+        );
+    }
+    Ok(())
 }
 
 pub fn validate_replacement(

@@ -8,6 +8,7 @@ mod ceph;
 mod ceph_bluefs_file_reader;
 mod ceph_bluefs_records;
 mod ceph_bluefs_replay;
+mod ceph_bluestore_semantic;
 mod ceph_metadata_audit;
 mod ceph_rocksdb_control_files;
 mod ceph_rocksdb_digest;

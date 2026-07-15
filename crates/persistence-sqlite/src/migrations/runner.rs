@@ -163,6 +163,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_011_ceph_latest_state",
         include_str!("scripts/source_011_ceph_latest_state.sql"),
     ),
+    (
+        "source_012_ceph_bluestore_semantics",
+        include_str!("scripts/source_012_ceph_bluestore_semantics.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

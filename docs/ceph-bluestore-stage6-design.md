@@ -2,7 +2,7 @@
 
 **开发基线**: `20188bb0`
 **设计日期**: 2026-07-14
-**当前实现切片**: RocksDB full live-set + active-WAL latest-state summary recovery
+**当前实现切片**: RocksDB latest state + BlueStore `S/C/O/X` semantic snapshot
 **最终目标**: BlueStore OSD -> RocksDB latest state -> RADOS object -> RBD image -> VM 文件系统
 
 ## Summary
@@ -26,7 +26,11 @@ Stage 6.3 现已将全部 `35/40/33` live SST 与 active WAL 写入 source-local
 range-delete 和批准的 Ceph `T`/`b` merge reduction，并只在 source DB
 持久化每个 column family 的计数、sequence boundary 和 canonical digest。
 raw key/value 不进入 source DB、日志或报告，三个 `disk02` 数据源继续保持
-`ready_metadata`。
+`ready_metadata`。Stage 6.4 已在同一 reducer 生命周期内解码 `S/C/O/X`
+最新值，持久化 super、collection、onode、shard、blob、logical/physical
+extent、规范化 checksum chunk 与 shared-blob ref-map。语义快照绑定
+latest-state digest，并通过 canonical aggregate digest 和三 OSD 精确行数
+oracle 验证；当前仍未生成 RADOS object reader。
 
 ## 开发基线与事实源
 
@@ -107,7 +111,9 @@ Ceph Squid v19.2.3 (`c92aebb279828e9c3c1f5d24613efca272649e62`)
   summary。
 - 不执行未经批准的 merge operator；当前仅支持 Ceph `T` 的 int64-array
   wrapping-add 与 `b` 的 bitwise-XOR。
-- 不解析 BlueStore onode/blob/value。
+- 不持久化 BlueStore attrs 原值、RocksDB key/value 或 checksum 原始字节；
+  只保存规范化字段、计数和摘要。
+- 不解释 `M/P/m/p` OMAP family，不生成 RADOS object content reader。
 - 不生成普通 `file_entries`。
 - 不宣称 RADOS、RBD、VM 文件树或 CephFS 已完成。
 
@@ -327,6 +333,8 @@ Implemented result:
 
 ### Stage 6.4 - BlueStore Semantic Decode
 
+Status: completed for `S/C/O/X` on the private PVE baseline.
+
 Tasks:
 
 - 固定并验证 Ceph key-space prefix 与 column-family sharding 映射；专用
@@ -346,6 +354,42 @@ Expected result:
 
 - 可以从一个 OSD 构建 RADOS object 的逻辑大小和物理读取计划。
 - 不直接把 BlueStore object 伪装成 POSIX 文件。
+
+Implemented result:
+
+- `ceph-wire` 按 pinned Ceph Squid `v19.2.3` 解码 `S/C/O/X`，覆盖
+  ghobject key、onode、spanning/local blob、inline/sharded extent map、
+  physical extent、checksum、use tracker 与 shared blob ref-map。
+- 解码器设置独立 input、blob、extent、checksum、shared-ref 和 aggregate
+  work budget；未知 DENC、截断、非 canonical key、长度溢出与不闭合 shard
+  typed fail closed。
+- `source_012_ceph_bluestore_semantics.sql` 保存规范化语义行。attrs 只保存
+  value-byte count 与 SHA-256，checksum 按数值语义规范化，raw key/value、
+  attrs value 和 checksum bytes 均不持久化。
+- repository replacement 与 OSD/BlueFS/RocksDB/latest-state 使用同一事务；
+  semantic snapshot 强制绑定 persisted latest-state digest、OSD inventory
+  和 device bounds。
+- 物理 extent 校验遵循 Ceph shared blob 语义：同一 blob 自重叠拒绝；
+  不同 blob 只有在非零 shared ID 相同且其全部已分配范围被 `X` ref-map
+  连续覆盖时才允许部分重叠。不同/空 shared ID 的重叠拒绝。
+- 六成员真实样本于 2026-07-15 串行通过，三个 `disk02` 均为
+  `ready_metadata`、普通文件行保持零，并固化以下 semantic oracle：
+- 后续性能审计消除了 object-child count 的 `O(objects * children)` 重扫，
+  checksum 归属改为排序 cursor 单次扫描，SQLite child rows 使用 bind-budget
+  内的多行批量写入，并共享重复 identity 字符串。保留的真实 `server01`
+  source DB phase benchmark 为 `51.58..88.60s / 395MB`；旧单成员全链路
+  基线为 `486.17s / 705MB`，二者范围不同，不能直接计算端到端提速比例。
+  精确 count/digest、单事务 replacement 和 fail-closed 校验保持不变；
+  完整 E01 优化后复跑等待 `E:` 样本盘重新挂载。
+
+| OSD | objects | blobs | shards | logical | physical | checksums | shared / refs | semantic SHA-256 |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| server01 | 2,924 | 116,135 | 18,971 | 116,487 | 134,148 | 1,839,658 | 23,316 / 27,897 | `794ab1ea6632d809bac456d9cd5e5e54c3a46b93977d2224f98c0d564a46c73b` |
+| server02 | 2,927 | 116,135 | 18,970 | 116,487 | 134,154 | 1,839,666 | 23,316 / 27,900 | `441e1a48ec5ca51e5ff2caa94eac106d283d9375bbbc08d841196eb84fbe78e9` |
+| server03 | 2,930 | 116,135 | 18,974 | 116,487 | 134,150 | 1,839,646 | 23,316 / 27,911 | `d5eb02ba6e77a66476a2c84f010bca75ec77d870858d15e6b57681fb075028bc` |
+
+每个 OSD 另有 `34` 个 collection。当前 semantic snapshot 是后续 RADOS
+读取计划的可信基础，不等同于对象内容、PG 副本或 RBD 镜像已恢复。
 
 ### Stage 6.5 - RADOS / PG Reconstruction
 
@@ -427,7 +471,7 @@ Expected result:
 | WAL selection | active numbered files | malformed/duplicate/unknown CF | min-log boundary、legacy db、post-MANIFEST、number gaps |
 | SST stream | value/delete/range/provenance | checksum/restart/type/external-seq | representative SST + full `35/40/33` live set |
 | Latest state | SST + WAL + `T`/`b` merge | sequence regression/conflict/unknown CF/operator | 12 CF rows per OSD + deterministic aggregate digest |
-| BlueStore | onode/blob/shard | DENC version/extent overlap | three OSD replica comparison |
+| BlueStore | `S/C/O/X`、onode/blob/shard/checksum/shared ref-map | DENC、长度、shard closure、blob self-overlap、无关 shared overlap、ref-map coverage | 三 OSD 精确 semantic digest/count；replica comparison 尚未开始 |
 | RADOS | replicated object | divergent replicas | missing-but-redundant OSD |
 | RBD | head image/striping | unsupported feature/clone | first/middle/last object reads |
 | VM block | MBR/GPT/LVM | short range/out of image | partition tail |
@@ -467,6 +511,18 @@ Stage 6.3 真实门禁：
 | server02 | `0cf9b7ead1e5953fa84f1c57a16be4f1a2d5fd4713d2ed1ad20cf8cf9d320880` |
 | server03 | `32d7af9d9eda6ca168cb9a85a7b17a36c9fce012f9301b354aebb1b633bee978` |
 
+Stage 6.4 在同一六成员门禁中追加：
+
+1. 每个 `disk02` 必须存在且仅存在一个完整 semantic scan。
+2. schema/profile 固定为当前 repository 常量，`profile_complete=true`。
+3. semantic snapshot 的 `latest_state_sha256` 必须等于 persisted latest-state
+   set digest，`semantic_sha256` 必须覆盖全部规范化行。
+4. scan count 必须与 collection/object/blob/shard/logical/physical/checksum/
+   shared/ref 向量长度精确闭合。
+5. 三 OSD 的精确计数与 semantic SHA-256 必须匹配 Stage 6.4 oracle。
+6. shared blob 的合法部分重叠与 ref-map union coverage 必须通过；同 blob
+   自重叠、不同 shared ID 重叠、ref-map 缺口必须回滚失败。
+
 RBD 门禁建立后：
 
 - 精确断言发现的 image ID、名称、size、object order 和 feature flags。
@@ -497,6 +553,16 @@ RBD 门禁建立后：
   绝对门槛。2026-07-14 本机 debug feature-adjusted baseline 为 `50.31s`；
   相比优化前约 `59.5s` 改善约 `15.4%`。后续变更不得在相同机器、相同串行
   配置和热缓存条件下退化超过 10%。
+- Stage 6.4 首次持久化每 OSD 约 210 万条规范化 semantic child rows，不能
+  沿用 Stage 6.3 的 digest-only `50.31s` 绝对门槛。2026-07-15 本机 debug
+  串行六成员 baseline 为 `1757.04s`；单 `server01-disk02` 为 `486.17s`，
+  观测峰值 RSS 约 `705MB`。完成批量写入、共享 identity、单次 child-count
+  聚合和 checksum cursor 校验后，保留真实 source DB 的完整 semantic phase
+  三次为 `51.58..88.60s / 395MB`。phase 门禁预算固定为
+  query `60s`、validation `90s`、write `90s`、commit `30s`、peak RSS
+  `512MB`；该 phase 结果不替代完整导入基线，完整 E01 优化后耗时和峰值待
+  样本盘重新挂载后补录。所有性能结果必须保证 semantic digest 与行数 oracle
+  不变。
 - latest-state 和 BlueStore 阶段必须分别记录读取 bytes、解压 bytes、key
   count、spill bytes、wall time 和 peak memory。
 - RBD 随机 1 MiB range read 不得线性扫描全部 OSD 或全部 object。
@@ -564,6 +630,18 @@ RBD 门禁建立后：
   BlueStore `file_entries=0`。
 - 当前完成的是可验证 logical latest-state summary，不是 BlueStore
   onode/blob/value semantic decode；Stage 6.4 前不得宣称对象或 VM 磁盘恢复。
+
+### Stage 6.4
+
+- `S/C/O/X` latest values 全部进入有界、typed、source-local semantic decode。
+- onode/blob/shard/logical/physical/checksum/shared ref-map 规范化行与 scan
+  count、latest-state digest、semantic digest 精确闭合。
+- shared blob 部分重叠仅在相同非零 shared ID 且 ref-map 完整覆盖时接受。
+- 三 OSD 精确 semantic count/digest oracle 通过，普通 `file_entries=0`。
+- raw RocksDB key/value、attrs value、checksum bytes 不进入 source DB、
+  日志、审计或报告。
+- 当前仍不得宣称 RADOS object content、PG/replica、OMAP、RBD、VM 文件树
+  或 CephFS 已恢复。
 
 ### 最终重建目标
 

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::SeekFrom;
 use std::sync::atomic::AtomicBool;
+use std::time::Instant;
 
 use ceph_wire::{
     decode_bdev_label_block, decode_bluefs_super_block, select_bdev_label, BdevLabel, BluefsSuper,
@@ -119,7 +120,10 @@ fn persist_probe_records(
     replicas: &[CephOsdLabelReplicaRecord],
     metadata: Option<&CephMetadataAggregate>,
 ) -> Result<(), CommandError> {
-    match metadata {
+    let started = Instant::now();
+    let rss_before_mb = crate::import_analysis::current_rss_mb();
+    let peak_rss_before_mb = crate::import_analysis::peak_rss_mb();
+    let result = match metadata {
         Some(records) => repo.replace_for_data_source_with_rocksdb_metadata(
             data_source_id,
             std::slice::from_ref(inventory),
@@ -130,13 +134,28 @@ fn persist_probe_records(
                 ssts: &records.ssts,
                 wals: &records.wals,
                 latest_state: &records.latest_state,
+                semantic: &records.semantic,
             },
         ),
         None => {
             repo.replace_for_data_source(data_source_id, std::slice::from_ref(inventory), replicas)
         }
-    }
-    .map_err(CommandError::from_service_error)
+    };
+    tracing::info!(
+        data_source_id,
+        inventory_id = inventory.id,
+        semantic_object_rows = metadata.map_or(0, |records| records.semantic.objects.len()),
+        semantic_checksum_rows =
+            metadata.map_or(0, |records| records.semantic.checksum_chunks.len()),
+        success = result.is_ok(),
+        elapsed_ms = started.elapsed().as_millis(),
+        rss_before_mb,
+        rss_after_mb = crate::import_analysis::current_rss_mb(),
+        peak_rss_before_mb,
+        peak_rss_after_mb = crate::import_analysis::peak_rss_mb(),
+        "Persisted Ceph metadata with process memory telemetry"
+    );
+    result.map_err(CommandError::from_service_error)
 }
 
 fn bluestore_volume(probe: &ImageFilesystemProbe) -> Result<&UnsupportedImageVolume, CommandError> {
@@ -249,6 +268,7 @@ fn read_bluefs_inventory(
         case_root,
         &data_source.id.0,
         inventory_id,
+        device_size,
         cancel_token,
     )?;
     let bluefs = super::ceph_bluefs_records::build_bluefs_aggregate(
@@ -263,6 +283,7 @@ fn read_bluefs_inventory(
         ssts: rocksdb.ssts,
         wals: rocksdb.wals,
         latest_state: rocksdb.latest_state,
+        semantic: rocksdb.semantic,
     })
 }
 

@@ -24,7 +24,7 @@ pub use options::{
     AnalysisProgressCallback, ImportAnalysisMode, ImportAnalysisOptions, ImportAnalysisStats,
     JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions,
 };
-pub use progress::current_rss_mb;
+pub use progress::{current_rss_mb, peak_rss_mb};
 pub use worker_pool::{
     default_analysis_worker_count, resolve_analysis_worker_count, run_import_analysis_staging,
     run_post_import_pipeline_with_counts,

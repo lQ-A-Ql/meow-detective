@@ -19,6 +19,28 @@ pub fn decode_bluestore_latest_value(
     value: &[u8],
     limits: BlueStoreSemanticLimits,
 ) -> Result<BlueStoreDecodedRecord> {
+    decode_latest_value(key_space, logical_key, value, None, limits)
+}
+
+/// Decodes a latest-state BlueStore value with its owning onode's spanning
+/// blob context. The context is used only for object extent-shard values.
+pub fn decode_bluestore_latest_value_with_spanning_blobs(
+    key_space: BlueStoreKeySpace,
+    logical_key: &[u8],
+    value: &[u8],
+    spanning_blobs: &[crate::bluestore_semantic::types::BlueStoreBlob],
+    limits: BlueStoreSemanticLimits,
+) -> Result<BlueStoreDecodedRecord> {
+    decode_latest_value(key_space, logical_key, value, Some(spanning_blobs), limits)
+}
+
+fn decode_latest_value(
+    key_space: BlueStoreKeySpace,
+    logical_key: &[u8],
+    value: &[u8],
+    spanning_blobs: Option<&[crate::bluestore_semantic::types::BlueStoreBlob]>,
+    limits: BlueStoreSemanticLimits,
+) -> Result<BlueStoreDecodedRecord> {
     validate_input_lengths(logical_key, value, limits)?;
     match key_space {
         BlueStoreKeySpace::Super => {
@@ -27,7 +49,7 @@ pub fn decode_bluestore_latest_value(
         BlueStoreKeySpace::Collection => {
             decode_collection(logical_key, value, limits).map(BlueStoreDecodedRecord::Collection)
         }
-        BlueStoreKeySpace::Object => decode_object(logical_key, value, limits)
+        BlueStoreKeySpace::Object => decode_object(logical_key, value, spanning_blobs, limits)
             .map(Box::new)
             .map(BlueStoreDecodedRecord::Object),
         BlueStoreKeySpace::SharedBlob => {

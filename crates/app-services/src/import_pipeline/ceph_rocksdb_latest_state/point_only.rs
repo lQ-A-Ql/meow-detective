@@ -1,20 +1,22 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use persistence_sqlite::repositories::ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRecord;
 use rayon::prelude::*;
 use rocksdb_wire::{LatestStateLimits, LatestStateRef};
 use transport::CommandError;
 
-use super::{latest_state_error, ColumnFamilySummary};
+use super::{finish_recovery_parts, latest_state_error, ColumnFamilySummary, RecoveredLatestState};
+use crate::import_pipeline::ceph_bluestore_semantic::BlueStoreSemanticFragment;
+use crate::import_pipeline::ceph_rocksdb_sharding::RocksdbShardingDefinition;
 use crate::import_pipeline::ceph_rocksdb_spool::{RocksdbRecoverySpool, SpoolPointRef};
 
 pub(super) fn recover_point_only_state(
     spool: &RocksdbRecoverySpool,
     summaries: BTreeMap<u32, ColumnFamilySummary>,
     inventory_id: &str,
-    sharding_sha256: &str,
-) -> Result<Vec<CephRocksdbLatestStateRecord>, CommandError> {
+    sharding: &RocksdbShardingDefinition,
+    device_size: u64,
+) -> Result<RecoveredLatestState, CommandError> {
     for column_family_id in spool.point_column_family_ids()? {
         if !summaries.contains_key(&column_family_id) {
             return Err(latest_state_error(
@@ -23,27 +25,40 @@ pub(super) fn recover_point_only_state(
         }
     }
     let spool_path = spool.path().to_path_buf();
-    let mut records = summaries
+    let mut parts = summaries
         .into_values()
         .collect::<Vec<_>>()
         .into_par_iter()
         .map(|mut summary| {
             let column_family_id = summary.column_family_id;
-            let mut recovery = PointOnlyRecovery::new(&mut summary);
+            let mut semantic = BlueStoreSemanticFragment::default();
+            let mut recovery = PointOnlyRecovery::new(&mut summary, &mut semantic, sharding);
             RocksdbRecoverySpool::visit_point_rows_for_column(
                 &spool_path,
                 column_family_id,
                 |point| recovery.observe(point),
             )?;
-            summary.finish(inventory_id, sharding_sha256)
+            Ok((
+                summary.finish(inventory_id, sharding.digest_sha256())?,
+                semantic,
+            ))
         })
         .collect::<Result<Vec<_>, CommandError>>()?;
-    records.sort_by_key(|record| record.column_family_id);
-    Ok(records)
+    parts.sort_by_key(|(record, _)| record.column_family_id);
+    let (records, fragments) = parts.into_iter().unzip();
+    finish_recovery_parts(
+        records,
+        fragments,
+        inventory_id,
+        sharding.digest_sha256(),
+        device_size,
+    )
 }
 
-struct PointOnlyRecovery<'a> {
+struct PointOnlyRecovery<'a, 'b> {
     summary: &'a mut ColumnFamilySummary,
+    semantic: &'a mut BlueStoreSemanticFragment,
+    sharding: &'b RocksdbShardingDefinition,
     has_current_key: bool,
     current_user_key: Vec<u8>,
     previous_sequence: Option<u64>,
@@ -52,10 +67,16 @@ struct PointOnlyRecovery<'a> {
     limits: LatestStateLimits,
 }
 
-impl<'a> PointOnlyRecovery<'a> {
-    fn new(summary: &'a mut ColumnFamilySummary) -> Self {
+impl<'a, 'b> PointOnlyRecovery<'a, 'b> {
+    fn new(
+        summary: &'a mut ColumnFamilySummary,
+        semantic: &'a mut BlueStoreSemanticFragment,
+        sharding: &'b RocksdbShardingDefinition,
+    ) -> Self {
         Self {
             summary,
+            semantic,
+            sharding,
             has_current_key: false,
             current_user_key: Vec::new(),
             previous_sequence: None,
@@ -76,11 +97,17 @@ impl<'a> PointOnlyRecovery<'a> {
         self.validate_history(point, first_for_key)?;
         self.summary.observe_point_ref(point)?;
         if first_for_key {
-            self.summary.observe_latest(
-                point.user_key,
-                Some(point_only_latest_state(point, self.limits)?),
-                false,
-            )?;
+            let state = point_only_latest_state(point, self.limits)?;
+            if let LatestStateRef::Value { value, .. } = &state {
+                self.semantic.observe_latest_value(
+                    self.sharding,
+                    &self.summary.column_family_name,
+                    point.user_key,
+                    value.as_ref(),
+                )?;
+            }
+            self.summary
+                .observe_latest(point.user_key, Some(&state), false)?;
         }
         Ok(())
     }
