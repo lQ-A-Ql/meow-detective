@@ -106,6 +106,12 @@ pub enum CephWireError {
         reason: &'static str,
     },
 
+    #[error("invalid BlueStore OMAP key in {family}: {reason}")]
+    InvalidBlueStoreOmapKey {
+        family: &'static str,
+        reason: &'static str,
+    },
+
     #[error("invalid BlueStore semantic value in {context}: {reason}")]
     InvalidBlueStoreSemanticValue {
         context: &'static str,

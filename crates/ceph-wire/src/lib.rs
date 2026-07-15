@@ -3,6 +3,7 @@
 pub mod bluefs;
 pub mod bluefs_transaction;
 pub mod bluestore;
+pub mod bluestore_omap;
 pub mod bluestore_semantic;
 pub mod codec;
 pub mod crc32c;
@@ -21,6 +22,10 @@ pub use bluestore::{
     decode_bdev_label_block, select_bdev_label, select_bdev_labels, BdevLabel, BdevLabelCandidate,
     BdevLabelSelection, BDEV_FIRST_LABEL_POSITION, BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_MAGIC,
     BDEV_LABEL_POSITIONS, BDEV_LABEL_PREFIX_LENGTH,
+};
+pub use bluestore_omap::{
+    decode_bluestore_omap_key, decode_bluestore_omap_logical_key, decode_bluestore_raw_omap_key,
+    BlueStoreOmapKey, BlueStoreOmapKeyFamily, BlueStoreOmapKeyKind, BlueStoreOmapPool,
 };
 pub use bluestore_semantic::{
     decode_bluestore_extent_payload, decode_bluestore_latest_value,
