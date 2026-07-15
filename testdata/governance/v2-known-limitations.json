@@ -1,5 +1,5 @@
 {
-  "lastVerifiedAt": "2026-07-14T00:00:00Z",
+  "lastVerifiedAt": "2026-07-16T00:00:00Z",
   "documentedLimitCount": 49,
   "items": [
     {
@@ -285,7 +285,7 @@
       "category": "Linux LVM/PVE",
       "item": "PVE cluster 语义解析执行",
       "status": "partial",
-      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore OSD label、BlueFS metadata replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane replay、全部 live-SST 单次结构/mutation scan、active-WAL/WriteBatch metadata 恢复、digest-only latest-state summary、`S/C/O/X` semantic snapshot、OMAP catalog、source-bound RADOS range reader 与 bounded RBD/head-reader foundation 已验证；PG/replica placement、真实 RBD byte oracle、VM disk reconstruction、CephFS 与跨节点关联仍不支持",
+      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore/RocksDB/semantic/OMAP、source-bound RADOS range reader 已验证。私有样本显式加载的三 OSD inventory 可重建 `vm-100-disk-0`，派生独立 source DB 含直接 XFS、`centos/home`、`centos/root` 和 114,260 条文件记录，并通过真实预览；inventory 完整性尚未独立证明，通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联仍不支持",
       "affectedChains": [
         "LVM",
         "PVE"

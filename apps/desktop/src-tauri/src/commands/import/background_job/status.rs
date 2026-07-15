@@ -4,6 +4,7 @@ use tauri::AppHandle;
 use transport::{dto::CancellationStateDto, CommandError};
 
 use super::super::cancellation::job_cancellation_dto;
+use super::types::{BackgroundLinuxClusterImportJob, ClusterImportSummary};
 use crate::events::event_bridge;
 
 pub(super) fn cancel_job(
@@ -78,4 +79,40 @@ pub(super) fn fail_linux_cluster_job(
         event_bridge::emit_job_failed(app, &job_id.0, &detail);
     }
     Err(error)
+}
+
+pub(super) fn materialize_cluster_rbd_sources(
+    connection: &rusqlite::Connection,
+    job_repo: &JobRepo<'_>,
+    job: &BackgroundLinuxClusterImportJob,
+    app: Option<&AppHandle>,
+    summary: &ClusterImportSummary,
+) -> Result<usize, CommandError> {
+    match app_services::ceph_reconstruction::materialize_rbd_sources_for_cluster(
+        connection,
+        &job.case_root,
+        &job.case_id,
+        &job.plan.cluster_id,
+    ) {
+        Ok(sources) => Ok(sources.len()),
+        Err(error) => {
+            let message = format!(
+                "Linux cluster {} RBD materialization failed: {error}",
+                job.plan.cluster_name
+            );
+            fail_linux_cluster_job(
+                job_repo,
+                &job.job_id,
+                app,
+                Some((
+                    connection,
+                    &job.plan.cluster_id,
+                    summary.ready_count,
+                    summary.failed_count,
+                )),
+                CommandError::internal(message),
+            )
+            .map(|()| 0)
+        }
+    }
 }

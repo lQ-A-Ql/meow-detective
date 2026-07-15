@@ -66,6 +66,8 @@ pub(super) fn build_omap_aggregate(
                     size_hex: record.size.map(hex_u64),
                     object_order: record.order,
                     features_hex: record.features.map(hex_u64),
+                    operation_features_hex: record.operation_features.map(hex_u64),
+                    parent_key_present: record.parent_key_present,
                     object_prefix: record.object_prefix.clone(),
                     stripe_unit_hex: record.stripe_unit.map(hex_u64),
                     stripe_count_hex: record.stripe_count.map(hex_u64),

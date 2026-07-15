@@ -142,6 +142,9 @@ fn source_kind(kind: &domain::DataSourceKind) -> Result<&'static str, CommandErr
         domain::DataSourceKind::LogicalDirectory => Err(CommandError::from_service_error(
             "BlueStore LVM devices cannot be bound to logical-directory sources",
         )),
+        domain::DataSourceKind::CephRbd => Err(CommandError::unsupported(
+            "BlueStore LVM devices cannot be bound to Ceph RBD derived sources",
+        )),
     }
 }
 

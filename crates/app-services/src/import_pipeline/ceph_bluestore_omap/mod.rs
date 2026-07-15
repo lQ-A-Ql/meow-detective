@@ -2,6 +2,7 @@ mod accumulator;
 mod decode;
 mod error;
 mod output;
+mod projection;
 mod types;
 
 pub use accumulator::BlueStoreOmapFragment;

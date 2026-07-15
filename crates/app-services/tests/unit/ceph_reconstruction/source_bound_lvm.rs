@@ -88,6 +88,19 @@ impl SourceBoundEvidenceOpener for SyntheticOpener {
 }
 
 #[test]
+fn filesystem_opener_rejects_ceph_rbd_as_host_evidence() {
+    let error = match FilesystemEvidenceOpener.open(
+        Path::new("C:/path-that-must-not-be-opened"),
+        &DataSourceKind::CephRbd,
+    ) {
+        Ok(_) => panic!("Ceph RBD must not be opened as host evidence"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.kind, std::io::ErrorKind::Unsupported);
+}
+
+#[test]
 fn reopens_source_bound_lvm_with_synthetic_reader() {
     let temp = tempfile::tempdir().expect("create temp directory");
     let evidence_path = create_evidence_placeholder(temp.path(), "source.raw");

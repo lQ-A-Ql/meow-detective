@@ -6,8 +6,9 @@ use rusqlite::Connection;
 
 use crate::file_service::{
     viewer::{
-        descriptor_file_entry, open_descriptor_image_file, open_e01_file, open_e01_reader_cached,
-        open_raw_file, root_partition_index_for_entry, PreviewDescriptor, RangeContentReader,
+        descriptor_file_entry, open_descriptor_image_file, open_descriptor_image_file_with_context,
+        open_e01_file, open_e01_reader_cached, open_raw_file, root_partition_index_for_entry,
+        PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -25,6 +26,24 @@ pub(crate) fn open_file_content_for_descriptor(
         RangeContentReader::Seekable(reader) => reader as Box<dyn Read>,
         RangeContentReader::Streaming(reader) => reader,
     })
+}
+
+pub(crate) fn open_file_content_for_descriptor_with_context<C>(
+    context: &mut C,
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn Read>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if descriptor.source_kind != "ceph_rbd" {
+        return open_file_content_for_descriptor(descriptor);
+    }
+    Ok(
+        match open_descriptor_image_file_with_context(context, descriptor)? {
+            RangeContentReader::Seekable(reader) => reader as Box<dyn Read>,
+            RangeContentReader::Streaming(reader) => reader,
+        },
+    )
 }
 
 fn open_logical_descriptor_file(
@@ -51,6 +70,19 @@ pub(crate) fn open_range_content_for_descriptor(
         "raw" => open_raw_descriptor_file(descriptor),
         other => unsupported_source(other),
     }
+}
+
+pub(crate) fn open_range_content_for_descriptor_with_context<C>(
+    context: &mut C,
+    descriptor: &PreviewDescriptor,
+) -> Result<RangeContentReader, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if descriptor.source_kind != "ceph_rbd" {
+        return open_range_content_for_descriptor(descriptor);
+    }
+    open_descriptor_image_file_with_context(context, descriptor)
 }
 
 fn open_e01_descriptor_file(

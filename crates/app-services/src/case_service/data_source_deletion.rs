@@ -118,11 +118,16 @@ fn collect_existing_managed_paths(
     storage: &DataSourceStorage,
     data_source_id: &DataSourceId,
 ) -> Result<Vec<(&'static str, PathBuf)>> {
-    let evidence_path = PathBuf::from(ds_repo.source_path(data_source_id)?);
-    let canonical_evidence = evidence_path
-        .try_exists()?
-        .then(|| fs::canonicalize(&evidence_path))
-        .transpose()?;
+    let canonical_evidence = match ds_repo.source_kind(data_source_id)? {
+        domain::DataSourceKind::CephRbd => None,
+        _ => {
+            let evidence_path = PathBuf::from(ds_repo.source_path(data_source_id)?);
+            evidence_path
+                .try_exists()?
+                .then(|| fs::canonicalize(&evidence_path))
+                .transpose()?
+        }
+    };
     let candidates = [
         (
             "source",

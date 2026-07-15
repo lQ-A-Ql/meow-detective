@@ -5,9 +5,13 @@ use ceph_wire::{
 };
 
 use super::{
-    decode::{decode_entry, DecodedOmapEntry},
+    decode::is_rbd_candidate_key,
     error::BlueStoreOmapError,
     output::{append_directory_mappings, append_header},
+    projection::{
+        allows_headerless_scope, classify_owner, decode_candidate_entries, effective_omap_family,
+        family_rank, increment_entry,
+    },
     types::{
         BlueStoreOmapLimits, BlueStoreOmapOwner, BlueStoreOmapOwnerKind, BlueStoreOmapScope,
         BlueStoreOmapScopeRecord, BlueStoreOmapSnapshot, DirectoryAccumulator, HeaderAccumulator,
@@ -25,20 +29,25 @@ pub struct BlueStoreOmapFragment {
 
 #[derive(Debug)]
 struct PendingScope {
-    scope: BlueStoreOmapScope,
-    header_present: bool,
     entry_count: u64,
     recognized_entry_count: u64,
+    candidate_entries: Vec<CandidateEntry>,
     directory: DirectoryAccumulator,
     header: HeaderAccumulator,
 }
 
 #[derive(Debug)]
+pub(super) struct CandidateEntry {
+    pub(super) user_key: Vec<u8>,
+    pub(super) value: Vec<u8>,
+}
+
+#[derive(Debug)]
 pub(super) struct ClosedScope {
     pub(super) scope: BlueStoreOmapScope,
-    pub(super) header_present: bool,
     pub(super) entry_count: u64,
     pub(super) recognized_entry_count: u64,
+    pub(super) candidate_entries: Vec<CandidateEntry>,
     pub(super) directory: DirectoryAccumulator,
     pub(super) header: HeaderAccumulator,
 }
@@ -68,14 +77,12 @@ impl BlueStoreOmapFragment {
         let Some(kind) = classify_owner(&object.object_name)? else {
             return Ok(());
         };
-        for (enabled, family) in omap_families(onode) {
-            if enabled {
-                self.insert_owner(BlueStoreOmapOwner {
-                    nid: onode.nid,
-                    family,
-                    kind: kind.clone(),
-                })?;
-            }
+        if let Some(family) = effective_omap_family(onode) {
+            self.insert_owner(BlueStoreOmapOwner {
+                nid: onode.nid,
+                family,
+                kind,
+            })?;
         }
         Ok(())
     }
@@ -116,14 +123,16 @@ impl BlueStoreOmapFragment {
         if let Some(scope) = scope {
             return Err(BlueStoreOmapError::UnclosedScope { scope });
         }
+        let max_entries_per_scope = self.limits.max_entries_per_scope;
         let mut snapshot = BlueStoreOmapSnapshot::default();
-        for closed in self.closed.into_values() {
-            let owner = closed.header_present.then(|| {
-                self.owners
-                    .get(&(closed.scope.nid, family_rank(closed.scope.family)))
-                    .cloned()
-            });
-            let owner = owner.flatten();
+        for mut closed in self.closed.into_values() {
+            let owner = self
+                .owners
+                .get(&(closed.scope.nid, family_rank(closed.scope.family)))
+                .cloned();
+            if owner.is_some() {
+                decode_candidate_entries(&mut closed, max_entries_per_scope)?;
+            }
             snapshot.scopes.push(BlueStoreOmapScopeRecord {
                 scope: closed.scope,
                 owner: owner.clone(),
@@ -152,10 +161,9 @@ impl BlueStoreOmapFragment {
         self.open.insert(
             scope,
             PendingScope {
-                scope,
-                header_present: true,
                 entry_count: 0,
                 recognized_entry_count: 0,
+                candidate_entries: Vec::new(),
                 directory: DirectoryAccumulator::default(),
                 header: HeaderAccumulator::default(),
             },
@@ -175,26 +183,26 @@ impl BlueStoreOmapFragment {
             .get_mut(&scope)
             .ok_or(BlueStoreOmapError::MissingHeader { scope })?;
         increment_entry(&mut pending.entry_count, self.limits.max_entries_per_scope)?;
-        if !pending.header_present {
+        if !is_rbd_candidate_key(user_key) {
             return Ok(());
         }
-
-        let decoded = decode_entry(user_key, value)?;
-        let text_bytes = decoded.as_ref().map_or(0, DecodedOmapEntry::text_bytes);
-        self.claim_text_capacity(text_bytes)?;
+        let retained_bytes =
+            user_key
+                .len()
+                .checked_add(value.len())
+                .ok_or(BlueStoreOmapError::LimitExceeded {
+                    resource: "OMAP retained candidate bytes",
+                    limit: self.limits.max_retained_text_bytes,
+                })?;
+        self.claim_text_capacity(retained_bytes)?;
         let pending = self
             .open
             .get_mut(&scope)
             .ok_or(BlueStoreOmapError::MissingHeader { scope })?;
-        if let Some(decoded) = decoded {
-            observe_decoded_entry(pending, decoded)?;
-            pending.recognized_entry_count = pending.recognized_entry_count.checked_add(1).ok_or(
-                BlueStoreOmapError::LimitExceeded {
-                    resource: "OMAP recognized entry count",
-                    limit: self.limits.max_entries_per_scope,
-                },
-            )?;
-        }
+        pending.candidate_entries.push(CandidateEntry {
+            user_key: user_key.to_vec(),
+            value: value.to_vec(),
+        });
         Ok(())
     }
 
@@ -212,10 +220,9 @@ impl BlueStoreOmapFragment {
         self.open.insert(
             scope,
             PendingScope {
-                scope,
-                header_present: false,
                 entry_count: 0,
                 recognized_entry_count: 0,
+                candidate_entries: Vec::new(),
                 directory: DirectoryAccumulator::default(),
                 header: HeaderAccumulator::default(),
             },
@@ -224,6 +231,22 @@ impl BlueStoreOmapFragment {
     }
 
     fn finish_scope(&mut self, scope: BlueStoreOmapScope) -> Result<(), BlueStoreOmapError> {
+        if !self.open.contains_key(&scope) && allows_headerless_scope(scope.family) {
+            if self.closed.contains_key(&scope) {
+                return Err(BlueStoreOmapError::DuplicateScope { scope });
+            }
+            self.claim_scope_capacity(1)?;
+            self.open.insert(
+                scope,
+                PendingScope {
+                    entry_count: 0,
+                    recognized_entry_count: 0,
+                    candidate_entries: Vec::new(),
+                    directory: DirectoryAccumulator::default(),
+                    header: HeaderAccumulator::default(),
+                },
+            );
+        }
         let pending = self
             .open
             .remove(&scope)
@@ -232,9 +255,9 @@ impl BlueStoreOmapFragment {
             scope,
             ClosedScope {
                 scope,
-                header_present: pending.header_present,
                 entry_count: pending.entry_count,
                 recognized_entry_count: pending.recognized_entry_count,
+                candidate_entries: pending.candidate_entries,
                 directory: pending.directory,
                 header: pending.header,
             },
@@ -311,176 +334,4 @@ impl BlueStoreOmapFragment {
         self.retained_text_bytes = total;
         Ok(())
     }
-}
-
-fn observe_decoded_entry(
-    pending: &mut PendingScope,
-    entry: DecodedOmapEntry,
-) -> Result<(), BlueStoreOmapError> {
-    match entry {
-        DecodedOmapEntry::DirectoryName {
-            image_name,
-            image_id,
-        } => insert_directory_mapping(
-            &pending.scope,
-            &mut pending.directory.name_to_id,
-            image_name,
-            image_id,
-        ),
-        DecodedOmapEntry::DirectoryId {
-            image_id,
-            image_name,
-        } => insert_directory_mapping(
-            &pending.scope,
-            &mut pending.directory.id_to_name,
-            image_id,
-            image_name,
-        ),
-        DecodedOmapEntry::Size(value) => set_header(
-            &pending.scope,
-            &mut pending.header.size,
-            value,
-            "rbd header size",
-        ),
-        DecodedOmapEntry::Order(value) => set_header(
-            &pending.scope,
-            &mut pending.header.order,
-            value,
-            "rbd header order",
-        ),
-        DecodedOmapEntry::Features(value) => set_header(
-            &pending.scope,
-            &mut pending.header.features,
-            value,
-            "rbd header features",
-        ),
-        DecodedOmapEntry::ObjectPrefix(value) => set_header(
-            &pending.scope,
-            &mut pending.header.object_prefix,
-            value,
-            "rbd header object_prefix",
-        ),
-        DecodedOmapEntry::StripeUnit(value) => set_header(
-            &pending.scope,
-            &mut pending.header.stripe_unit,
-            value,
-            "rbd header stripe_unit",
-        ),
-        DecodedOmapEntry::StripeCount(value) => set_header(
-            &pending.scope,
-            &mut pending.header.stripe_count,
-            value,
-            "rbd header stripe_count",
-        ),
-        DecodedOmapEntry::DataPoolId(value) => set_header(
-            &pending.scope,
-            &mut pending.header.data_pool_id,
-            value,
-            "rbd header data_pool_id",
-        ),
-    }
-}
-
-fn insert_directory_mapping(
-    scope: &BlueStoreOmapScope,
-    target: &mut BTreeMap<String, String>,
-    key: String,
-    value: String,
-) -> Result<(), BlueStoreOmapError> {
-    if let Some(existing) = target.get(&key) {
-        if existing == &value {
-            return Err(BlueStoreOmapError::DuplicateDirectoryMapping { scope: *scope });
-        }
-        return Err(BlueStoreOmapError::ConflictingDirectoryMapping { scope: *scope });
-    }
-    target.insert(key, value);
-    Ok(())
-}
-
-fn set_header<T>(
-    scope: &BlueStoreOmapScope,
-    target: &mut Option<T>,
-    value: T,
-    field: &'static str,
-) -> Result<(), BlueStoreOmapError> {
-    if target.replace(value).is_some() {
-        return Err(BlueStoreOmapError::DuplicateField {
-            scope: *scope,
-            field,
-        });
-    }
-    Ok(())
-}
-
-fn increment_entry(value: &mut u64, limit: usize) -> Result<(), BlueStoreOmapError> {
-    let next = value
-        .checked_add(1)
-        .ok_or(BlueStoreOmapError::LimitExceeded {
-            resource: "OMAP entries",
-            limit,
-        })?;
-    if next > limit as u64 {
-        return Err(BlueStoreOmapError::LimitExceeded {
-            resource: "OMAP entries",
-            limit,
-        });
-    }
-    *value = next;
-    Ok(())
-}
-
-fn classify_owner(
-    object_name: &[u8],
-) -> Result<Option<BlueStoreOmapOwnerKind>, BlueStoreOmapError> {
-    if object_name == b"rbd_directory" {
-        return Ok(Some(BlueStoreOmapOwnerKind::RbdDirectory));
-    }
-    let Some(image_id) = object_name.strip_prefix(b"rbd_header.") else {
-        return Ok(None);
-    };
-    if image_id.is_empty() {
-        return Err(BlueStoreOmapError::InvalidOwnerName {
-            kind: "rbd_header",
-            reason: "image id is empty",
-        });
-    }
-    let image_id =
-        std::str::from_utf8(image_id).map_err(|_| BlueStoreOmapError::InvalidOwnerName {
-            kind: "rbd_header",
-            reason: "image id is not valid UTF-8",
-        })?;
-    if image_id.contains('\0') {
-        return Err(BlueStoreOmapError::InvalidOwnerName {
-            kind: "rbd_header",
-            reason: "image id contains NUL",
-        });
-    }
-    Ok(Some(BlueStoreOmapOwnerKind::RbdHeader {
-        image_id: image_id.to_string(),
-    }))
-}
-
-fn omap_families(onode: &BlueStoreOnodeHeader) -> [(bool, BlueStoreOmapKeyFamily); 4] {
-    [
-        (onode.flags.omap, BlueStoreOmapKeyFamily::Bulk),
-        (onode.flags.pgmeta_omap, BlueStoreOmapKeyFamily::PgMeta),
-        (onode.flags.per_pool_omap, BlueStoreOmapKeyFamily::PerPool),
-        (onode.flags.per_pg_omap, BlueStoreOmapKeyFamily::PerPg),
-    ]
-}
-
-fn family_rank(family: BlueStoreOmapKeyFamily) -> u8 {
-    match family {
-        BlueStoreOmapKeyFamily::Bulk => 0,
-        BlueStoreOmapKeyFamily::PgMeta => 1,
-        BlueStoreOmapKeyFamily::PerPool => 2,
-        BlueStoreOmapKeyFamily::PerPg => 3,
-    }
-}
-
-fn allows_headerless_scope(family: BlueStoreOmapKeyFamily) -> bool {
-    matches!(
-        family,
-        BlueStoreOmapKeyFamily::PgMeta | BlueStoreOmapKeyFamily::PerPg
-    )
 }

@@ -112,7 +112,7 @@ fn source_database_errors_are_inventory_scoped_and_do_not_expose_paths() {
 
     assert!(matches!(
         error,
-        RbdReconstructionError::SourceDb { inventory_id } if inventory_id == "inventory-a"
+        RbdReconstructionError::SourceDb { inventory_id, .. } if inventory_id == "inventory-a"
     ));
     assert!(!message.contains("private"));
     assert!(!message.contains("evidence"));
@@ -130,4 +130,17 @@ fn conflicting_descriptors_fail_closed_instead_of_selecting_one() {
         error,
         RbdReconstructionError::MetadataConflict { image_id } if image_id == "image-1"
     ));
+}
+
+#[test]
+fn source_local_scope_identity_does_not_create_a_metadata_conflict() {
+    let mut images = BTreeMap::new();
+    merge_descriptor(&mut images, descriptor("image-1", 0x1000)).expect("first descriptor");
+    let mut replica_descriptor = descriptor("image-1", 0x1000);
+    replica_descriptor.scope_identity =
+        "perPg:u0000000000000008:12345678:0000000000000020".to_string();
+
+    merge_descriptor(&mut images, replica_descriptor).expect("matching replica metadata");
+
+    assert_eq!(images.len(), 1);
 }

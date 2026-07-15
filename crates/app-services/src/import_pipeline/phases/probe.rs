@@ -86,12 +86,24 @@ fn probe_image(
     ctx: &ImportJobContext<'_>,
 ) -> Result<datasource_service::ImageFilesystemProbe, CommandError> {
     let path = &ctx.import_config.source_path;
-    let mut reader: Box<dyn EvidenceReader> =
-        if ctx.import_config.kind == domain::DataSourceKind::E01 {
+    let mut reader: Box<dyn EvidenceReader> = match ctx.import_config.kind {
+        domain::DataSourceKind::E01 => {
             Box::new(E01Reader::open(path).map_err(CommandError::from_typed_service_error)?)
-        } else {
+        }
+        domain::DataSourceKind::Raw => {
             Box::new(RawImageReader::open(path).map_err(CommandError::from_typed_service_error)?)
-        };
+        }
+        domain::DataSourceKind::LogicalDirectory => {
+            return Err(CommandError::unsupported(
+                "logical directories do not expose image probe candidates",
+            ))
+        }
+        domain::DataSourceKind::CephRbd => {
+            return Err(CommandError::unsupported(
+                "Ceph RBD derived sources do not use the host image probe pipeline",
+            ))
+        }
+    };
     datasource_service::detect_image_filesystem(&mut reader)
         .map_err(CommandError::from_typed_service_error)
 }

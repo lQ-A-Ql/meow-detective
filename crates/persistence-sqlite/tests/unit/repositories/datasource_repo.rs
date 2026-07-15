@@ -12,6 +12,22 @@ fn setup_db() -> rusqlite::Connection {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+        CREATE TABLE data_source_clusters (
+            id TEXT PRIMARY KEY NOT NULL,
+            case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            root_path TEXT NOT NULL,
+            platform TEXT NOT NULL DEFAULT 'linux',
+            profile TEXT,
+            manifest_rel_path TEXT NOT NULL,
+            import_state TEXT NOT NULL DEFAULT 'pending',
+            member_count INTEGER NOT NULL DEFAULT 0,
+            ready_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         CREATE TABLE data_sources (
             id TEXT PRIMARY KEY NOT NULL,
             case_id TEXT NOT NULL REFERENCES cases(id),
@@ -35,7 +51,7 @@ fn setup_db() -> rusqlite::Connection {
             import_state TEXT NOT NULL DEFAULT 'pending',
             schema_version TEXT,
             last_error TEXT,
-            cluster_id TEXT,
+            cluster_id TEXT REFERENCES data_source_clusters(id) ON DELETE SET NULL,
             cluster_member_index INTEGER,
             cluster_member_count INTEGER
         );
@@ -128,6 +144,37 @@ fn insert_then_find_by_case_returns_it() {
 }
 
 #[test]
+fn ceph_rbd_kind_round_trips_without_raw_downgrade() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let mut ds = make_ds("ds-ceph-rbd", "Derived VM disk");
+    ds.kind = DataSourceKind::CephRbd;
+
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    let stored = repo
+        .find_by_case(&CaseId("case-1".to_string()))
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    assert_eq!(stored.kind, DataSourceKind::CephRbd);
+    assert_eq!(
+        repo.source_kind(&DataSourceId("ds-ceph-rbd".to_string()))
+            .unwrap(),
+        DataSourceKind::CephRbd
+    );
+    let raw_kind: String = conn
+        .query_row(
+            "SELECT kind FROM data_sources WHERE id = 'ds-ceph-rbd'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(raw_kind, "ceph_rbd");
+}
+
+#[test]
 fn insert_then_find_by_case_round_trips_provenance() {
     let conn = setup_db();
     let repo = DataSourceRepo::new(&conn);
@@ -190,6 +237,14 @@ fn update_cluster_membership_requires_existing_data_source() {
     let repo = DataSourceRepo::new(&conn);
     let ds = make_ds("ds-1", "Disk Image");
     repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+    conn.execute(
+        "INSERT INTO data_source_clusters
+            (id, case_id, name, root_path, manifest_rel_path)
+         VALUES
+            ('cluster-1', 'case-1', 'PVE cluster', 'cluster-root', 'cluster.json')",
+        [],
+    )
+    .unwrap();
     repo.update_cluster_membership(&DataSourceId("ds-1".to_string()), "cluster-1", 1, 3)
         .unwrap();
 

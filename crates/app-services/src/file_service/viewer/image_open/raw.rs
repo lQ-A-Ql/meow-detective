@@ -219,8 +219,6 @@ fn candidate_reader(
     candidate: &crate::datasource_service::ImageFilesystemCandidate,
     source_kind: &domain::DataSourceKind,
 ) -> Result<(Box<dyn EvidenceReader>, u64), FileServiceError> {
-    let reader: Box<dyn EvidenceReader> =
-        Box::new(evidence_core::RawImageReader::open(source_path)?);
     match &candidate.lvm_identity {
         Some(identity) => {
             let preview_identity =
@@ -230,14 +228,33 @@ fn candidate_reader(
             let mut open_reader = |path: &Path| match source_kind {
                 domain::DataSourceKind::E01 => image_e01::E01Reader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
-                _ => evidence_core::RawImageReader::open(path)
+                domain::DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+                domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::CephRbd => {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        format!("data source kind {source_kind} is not an image reader"),
+                    ))
+                }
             };
             Ok((
                 open_lvm_logical_volume_reader(source_path, &preview_identity, &mut open_reader)?,
                 0,
             ))
         }
-        None => Ok((reader, candidate.offset)),
+        None => {
+            let reader: Box<dyn EvidenceReader> = match source_kind {
+                domain::DataSourceKind::E01 => Box::new(image_e01::E01Reader::open(source_path)?),
+                domain::DataSourceKind::Raw => {
+                    Box::new(evidence_core::RawImageReader::open(source_path)?)
+                }
+                domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::CephRbd => {
+                    return Err(FileServiceError::Unsupported(format!(
+                        "data source kind {source_kind} is not an image reader"
+                    )))
+                }
+            };
+            Ok((reader, candidate.offset))
+        }
     }
 }

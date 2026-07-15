@@ -4,7 +4,7 @@ use persistence_sqlite::repositories::ceph_bluestore_omap_repo::{
 };
 use thiserror::Error;
 
-use super::rbd_reader::RbdReadContext;
+use super::rbd_reader::{RbdReadContext, RBD_FEATURE_OPERATIONS};
 
 #[derive(Debug, Error)]
 pub enum RbdCatalogError {
@@ -64,14 +64,22 @@ fn discover_image(
         })?;
     let data_pool_id = header
         .data_pool_id
-        .or_else(|| {
-            scope
-                .pool_value_i64
-                .filter(|_| scope.pool_kind == "perPool")
-        })
+        .or_else(|| scope_pool_id(scope))
         .ok_or_else(|| RbdCatalogError::MissingDataPool {
             image_id: image_id.clone(),
         })?;
+    let features = required_u64(header, header.features_hex.as_deref(), "features")?;
+    let operation_features = optional_u64(
+        &image_id,
+        header.operation_features_hex.as_deref(),
+        "operation_features",
+    )?;
+    if (features & RBD_FEATURE_OPERATIONS != 0) != (operation_features != 0) {
+        return Err(RbdCatalogError::InvalidField {
+            image_id,
+            field: "operation_features",
+        });
+    }
     let metadata = RbdImageMetadata {
         name: mapping.image_name.clone(),
         id: image_id.clone(),
@@ -80,7 +88,7 @@ fn discover_image(
         order: header
             .object_order
             .ok_or_else(|| missing_field(&image_id, "order"))?,
-        features: required_u64(header, header.features_hex.as_deref(), "features")?,
+        features,
         stripe_unit: optional_u64(&image_id, header.stripe_unit_hex.as_deref(), "stripe_unit")?,
         stripe_count: optional_u64(
             &image_id,
@@ -93,12 +101,37 @@ fn discover_image(
         metadata,
         scope_identity: header.scope_identity.clone(),
         context: RbdReadContext {
-            operation_features: 0,
-            has_parent: false,
+            operation_features,
+            has_parent: header.parent_key_present,
             snapshot_id: None,
             encrypted: false,
         },
     })
+}
+
+fn scope_pool_id(
+    scope: &persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreOmapScopeRecord,
+) -> Option<i64> {
+    match scope.pool_kind.as_str() {
+        "perPool" => scope.pool_value_i64,
+        "perPg" => scope
+            .pool_value_hex
+            .as_deref()
+            .and_then(|value| parse_pool_hex(value).ok()),
+        _ => None,
+    }
+}
+
+fn parse_pool_hex(value: &str) -> Result<i64, ()> {
+    if value.len() != 16
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(());
+    }
+    let value = u64::from_str_radix(value, 16).map_err(|_| ())?;
+    i64::try_from(value).map_err(|_| ())
 }
 
 fn required_u64(

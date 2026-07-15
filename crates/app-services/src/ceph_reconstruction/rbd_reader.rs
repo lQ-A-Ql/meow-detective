@@ -228,14 +228,14 @@ impl RbdReadError {
 }
 
 fn validate_features(features: u64) -> Result<(), RbdReadError> {
-    if features & RBD_FEATURE_LAYERING != 0 {
-        return Err(RbdReadError::ParentCloneUnsupported);
-    }
     if features & RBD_FEATURE_JOURNALING != 0 {
         return Err(RbdReadError::JournalingUnsupported);
     }
-    let unsupported =
-        features & (RBD_FEATURE_DATA_POOL | RBD_FEATURE_DIRTY_CACHE | !RBD_FEATURES_ALL);
+    let unsupported = features
+        & (RBD_FEATURE_DATA_POOL
+            | RBD_FEATURE_MIGRATING
+            | RBD_FEATURE_DIRTY_CACHE
+            | !RBD_FEATURES_ALL);
     if unsupported == 0 {
         Ok(())
     } else {

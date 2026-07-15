@@ -1,6 +1,7 @@
 use evidence_core::filesystem::invalid_fs_data;
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
 
 pub(crate) const XFS_SUPER_MAGIC: u32 = 0x5846_5342;
@@ -79,6 +80,8 @@ pub(crate) fn be_u64(buf: &[u8], off: usize) -> u64 {
 
 pub struct XfsReader {
     pub(crate) reader: RefCell<Box<dyn EvidenceReader>>,
+    pub(crate) directory_path_cache: RefCell<HashMap<String, u64>>,
+    pub(crate) directory_inode_cache: RefCell<HashMap<u64, Vec<u8>>>,
     pub(crate) block_size: u64,
     pub(crate) dblocks: u64,
     pub(crate) _ag_blocks: u64,
@@ -135,9 +138,13 @@ impl XfsReader {
         let features_incompat = be_u32(&sb_buf, sb_off::FEATURES_INCOMPAT);
         let has_ftype = (features2 & XFS_SB_VERSION2_FTYPE) != 0
             || (features_incompat & XFS_SB_FEAT_INCOMPAT_FTYPE) != 0;
+        let mut directory_path_cache = HashMap::new();
+        directory_path_cache.insert(String::new(), root_ino);
 
         Ok(Self {
             reader: RefCell::new(reader),
+            directory_path_cache: RefCell::new(directory_path_cache),
+            directory_inode_cache: RefCell::new(HashMap::new()),
             block_size,
             dblocks,
             _ag_blocks: ag_blocks,

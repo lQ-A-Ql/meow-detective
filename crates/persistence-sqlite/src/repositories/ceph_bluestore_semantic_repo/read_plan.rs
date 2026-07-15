@@ -46,6 +46,7 @@ pub struct CephBluestoreObjectCandidate {
     pub object_name: Vec<u8>,
     pub decoded_pool: i64,
     pub object_namespace: Vec<u8>,
+    pub snap_hex: String,
 }
 
 pub(super) struct ReadContext {
@@ -121,7 +122,9 @@ pub(super) fn find_object_candidate(
     object_name: &[u8],
     pool: i64,
     namespace: &[u8],
+    snap_hex: &str,
 ) -> DbResult<Option<CephBluestoreObjectCandidate>> {
+    validate_snap_hex(snap_hex)?;
     let transaction = conn.unchecked_transaction()?;
     let Some(_context) = read_context(&transaction, inventory_id)? else {
         transaction.commit()?;
@@ -134,12 +137,13 @@ pub(super) fn find_object_candidate(
            AND object_name = ?2
            AND decoded_pool = ?3
            AND object_namespace = ?4
+           AND snap_hex = ?5
          ORDER BY object_identity_sha256
          LIMIT 2"
     );
     let mut statement = transaction.prepare(&sql)?;
     let rows = statement.query_map(
-        rusqlite::params![inventory_id, object_name, pool, namespace],
+        rusqlite::params![inventory_id, object_name, pool, namespace, snap_hex],
         mapping::map_object,
     )?;
     let objects = rows.collect::<Result<Vec<_>, _>>()?;
@@ -156,6 +160,7 @@ pub(super) fn find_object_candidate(
             if object.object_name != object_name
                 || object.decoded_pool != pool
                 || object.object_namespace != namespace
+                || object.snap_hex != snap_hex
             {
                 return Err(DbError::System(
                     "BlueStore object lookup binding is inconsistent".to_string(),
@@ -167,11 +172,26 @@ pub(super) fn find_object_candidate(
                 object_name: object.object_name.clone(),
                 decoded_pool: object.decoded_pool,
                 object_namespace: object.object_namespace.clone(),
+                snap_hex: object.snap_hex.clone(),
             })
         }
     };
     transaction.commit()?;
     Ok(candidate)
+}
+
+fn validate_snap_hex(value: &str) -> DbResult<()> {
+    if value.len() == 16
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(DbError::System(
+            "BlueStore object snap id is not canonical hex".to_string(),
+        ))
+    }
 }
 
 fn validate_identity_input(value: &str) -> DbResult<()> {

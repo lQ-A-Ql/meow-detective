@@ -179,6 +179,9 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             DataSourceKind::LogicalDirectory => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
+            DataSourceKind::CephRbd => Err(BoundEvidenceOpenError {
+                kind: io::ErrorKind::Unsupported,
+            }),
         }
     }
 }
@@ -358,6 +361,7 @@ fn parse_source_kind(value: &str) -> Result<DataSourceKind, SourceBoundLvmError>
     match value {
         "e01" => Ok(DataSourceKind::E01),
         "raw" => Ok(DataSourceKind::Raw),
+        "ceph_rbd" => Ok(DataSourceKind::CephRbd),
         _ => Err(SourceBoundLvmError::UnsupportedSourceKind {
             kind: value.to_string(),
         }),

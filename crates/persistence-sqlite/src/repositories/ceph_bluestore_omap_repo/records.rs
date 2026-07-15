@@ -51,6 +51,8 @@ pub struct CephBluestoreRbdHeaderRecord {
     pub size_hex: Option<String>,
     pub object_order: Option<u8>,
     pub features_hex: Option<String>,
+    pub operation_features_hex: Option<String>,
+    pub parent_key_present: bool,
     pub object_prefix: Option<String>,
     pub stripe_unit_hex: Option<String>,
     pub stripe_count_hex: Option<String>,

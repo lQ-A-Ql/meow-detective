@@ -8,6 +8,7 @@ pub mod ceph_bluestore_omap_repo;
 pub mod ceph_bluestore_semantic_repo;
 pub mod ceph_osd_device_binding_repo;
 pub mod ceph_osd_repo;
+pub mod ceph_rbd_lineage_repo;
 pub mod ceph_rocksdb_latest_state_repo;
 pub mod ceph_rocksdb_repo;
 pub mod ceph_rocksdb_sst_repo;

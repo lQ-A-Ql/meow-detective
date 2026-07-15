@@ -18,32 +18,12 @@ pub(super) enum DecodedOmapEntry {
     Size(u64),
     Order(u8),
     Features(u64),
+    OperationFeatures(u64),
+    ParentKeyPresent,
     ObjectPrefix(String),
     StripeUnit(u64),
     StripeCount(u64),
     DataPoolId(i64),
-}
-
-impl DecodedOmapEntry {
-    pub(super) fn text_bytes(&self) -> usize {
-        match self {
-            Self::DirectoryName {
-                image_name,
-                image_id,
-            }
-            | Self::DirectoryId {
-                image_id,
-                image_name,
-            } => image_name.len() + image_id.len(),
-            Self::ObjectPrefix(value) => value.len(),
-            Self::Size(_)
-            | Self::Order(_)
-            | Self::Features(_)
-            | Self::StripeUnit(_)
-            | Self::StripeCount(_)
-            | Self::DataPoolId(_) => 0,
-        }
-    }
 }
 
 pub(super) fn decode_entry(
@@ -73,6 +53,14 @@ pub(super) fn decode_entry(
         b"size" => DecodedOmapEntry::Size(decode_primitive(value, "rbd header size")?),
         b"order" => DecodedOmapEntry::Order(decode_primitive(value, "rbd header order")?),
         b"features" => DecodedOmapEntry::Features(decode_primitive(value, "rbd header features")?),
+        b"op_features" => DecodedOmapEntry::OperationFeatures(decode_primitive(
+            value,
+            "rbd header operation features",
+        )?),
+        b"parent" => {
+            validate_bounded_value(value)?;
+            DecodedOmapEntry::ParentKeyPresent
+        }
         b"object_prefix" => {
             DecodedOmapEntry::ObjectPrefix(decode_value_text(value, "rbd header object_prefix")?)
         }
@@ -89,6 +77,34 @@ pub(super) fn decode_entry(
     };
     validate_entry(&entry)?;
     Ok(Some(entry))
+}
+
+pub(super) fn is_rbd_candidate_key(user_key: &[u8]) -> bool {
+    user_key.starts_with(b"name_")
+        || user_key.starts_with(b"id_")
+        || matches!(
+            user_key,
+            b"size"
+                | b"order"
+                | b"features"
+                | b"op_features"
+                | b"parent"
+                | b"object_prefix"
+                | b"stripe_unit"
+                | b"stripe_count"
+                | b"data_pool_id"
+        )
+}
+
+fn validate_bounded_value(value: &[u8]) -> Result<(), BlueStoreOmapError> {
+    if value.len() > MAX_VALUE_BYTES {
+        Err(BlueStoreOmapError::LimitExceeded {
+            resource: "OMAP value",
+            limit: MAX_VALUE_BYTES,
+        })
+    } else {
+        Ok(())
+    }
 }
 
 fn decode_key_text(bytes: &[u8], field: &'static str) -> Result<String, BlueStoreOmapError> {

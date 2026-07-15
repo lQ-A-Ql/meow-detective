@@ -150,6 +150,10 @@ fn validate_headers(
             || record.object_order.is_some_and(|value| value > 63)
             || !record.features_hex.as_deref().is_none_or(valid_hex_u64)
             || !record
+                .operation_features_hex
+                .as_deref()
+                .is_none_or(valid_hex_u64)
+            || !record
                 .object_prefix
                 .as_deref()
                 .is_none_or(valid_bounded_text)

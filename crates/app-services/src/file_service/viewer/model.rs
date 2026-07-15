@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +78,17 @@ pub trait PreviewReadContext {
     }
 
     fn set_cached_preview_descriptor(&mut self, _key: &str, _value: &serde_json::Value) {}
+
+    fn open_evidence_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+    ) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
+        open_host_evidence_reader(
+            &descriptor.source_kind,
+            Path::new(&descriptor.source_path),
+            &descriptor.case_id,
+        )
+    }
 }
 
 impl PreviewReadContext for &rusqlite::Connection {
@@ -104,6 +116,13 @@ where
     fn set_cached_preview_descriptor(&mut self, key: &str, value: &serde_json::Value) {
         (**self).set_cached_preview_descriptor(key, value);
     }
+
+    fn open_evidence_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+    ) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
+        (**self).open_evidence_reader(descriptor)
+    }
 }
 
 impl<'a, G, S> PreviewReadContext for (&'a rusqlite::Connection, &'a str, G, S)
@@ -125,5 +144,23 @@ where
 
     fn set_cached_preview_descriptor(&mut self, key: &str, value: &serde_json::Value) {
         (self.3)(key, value);
+    }
+}
+
+pub(crate) fn open_host_evidence_reader(
+    source_kind: &str,
+    source_path: &Path,
+    case_id: &str,
+) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
+    match source_kind {
+        "e01" => super::e01_cache::open_e01_reader_cached(source_path, case_id)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(crate::file_service::FileServiceError::Io),
+        "raw" => evidence_core::RawImageReader::open(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(crate::file_service::FileServiceError::Io),
+        other => Err(crate::file_service::FileServiceError::Unsupported(format!(
+            "Evidence reader is not available for source kind '{other}'",
+        ))),
     }
 }

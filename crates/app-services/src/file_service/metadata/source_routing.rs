@@ -21,7 +21,8 @@ use crate::{
         viewer::{file_id_from_handle, open_file_handle_real, read_file_range_for_case},
         viewer::{
             image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
-            read_preview_bytes_for_file, text_preview_for_file, MediaPreviewPlan,
+            open_host_evidence_reader, read_preview_bytes_for_file, text_preview_for_file,
+            MediaPreviewPlan, PreviewDescriptor, PreviewReadContext,
         },
         FileServiceError,
     },
@@ -54,15 +55,56 @@ fn open_source_for_file_id(
     )?)
 }
 
-type SourceScopedContext<'a> = (
-    &'a Connection,
-    &'a str,
-    fn(&str) -> Option<serde_json::Value>,
-    fn(&str, &serde_json::Value),
-);
+struct SourceScopedContext<'a> {
+    source_conn: &'a Connection,
+    case_conn: &'a Connection,
+    case_root: &'a Path,
+    case_id: &'a str,
+}
 
-fn scoped_context<'a>(source_conn: &'a Connection, case_id: &'a str) -> SourceScopedContext<'a> {
-    (source_conn, case_id, |_| None, |_, _| {})
+impl PreviewReadContext for SourceScopedContext<'_> {
+    fn conn(&self) -> &Connection {
+        self.source_conn
+    }
+
+    fn case_id(&self) -> &str {
+        self.case_id
+    }
+
+    fn open_evidence_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+    ) -> Result<Box<dyn evidence_core::EvidenceReader>, FileServiceError> {
+        if descriptor.source_kind == "ceph_rbd" {
+            return crate::ceph_reconstruction::open_derived_rbd_reader(
+                self.case_conn,
+                self.case_root,
+                &domain::CaseId(self.case_id.to_string()),
+                &DataSourceId(descriptor.data_source_id.clone()),
+            )
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(|error| FileServiceError::other(error.to_string()));
+        }
+        open_host_evidence_reader(
+            &descriptor.source_kind,
+            Path::new(&descriptor.source_path),
+            self.case_id,
+        )
+    }
+}
+
+fn scoped_context<'a>(
+    source_conn: &'a Connection,
+    case_conn: &'a Connection,
+    case_root: &'a Path,
+    case_id: &'a str,
+) -> SourceScopedContext<'a> {
+    SourceScopedContext {
+        source_conn,
+        case_conn,
+        case_root,
+        case_id,
+    }
 }
 
 fn wrap_tree_nodes(nodes: &mut [FileTreeNodeDto]) {
@@ -283,7 +325,7 @@ pub fn open_file_handle_for_case(
 ) -> Result<ViewerHandleDto, FileServiceError> {
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     let mut handle = open_file_handle_real(
-        scoped_context(&source_conn, &case_id.0),
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
         &global_id.local_id.0,
     )?;
     handle.handle_id = format!(
@@ -305,7 +347,10 @@ pub fn read_file_range_for_source_case(
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     let mut local_request = request.clone();
     local_request.handle_id = format!("file:{}", global_id.local_id.0);
-    read_file_range_for_case(scoped_context(&source_conn, &case_id.0), &local_request)
+    read_file_range_for_case(
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
+        &local_request,
+    )
 }
 
 pub fn text_preview_for_source_case(
@@ -317,7 +362,7 @@ pub fn text_preview_for_source_case(
 ) -> Result<transport::dto::TextPreviewDto, FileServiceError> {
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     text_preview_for_file(
-        scoped_context(&source_conn, &case_id.0),
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
         &global_id.local_id.0,
         max_bytes,
     )
@@ -331,7 +376,7 @@ pub fn image_preview_for_source_case(
 ) -> Result<transport::dto::ImagePreviewDto, FileServiceError> {
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     image_preview_for_file(
-        scoped_context(&source_conn, &case_id.0),
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
         &global_id.local_id.0,
     )
 }
@@ -347,8 +392,10 @@ pub fn media_preview_plan_for_source_case(
     let global_file_id = GlobalFileId::new(global_id.data_source_id, global_id.local_id)
         .encode()
         .0;
-    let mut plan =
-        media_preview_plan_for_file(scoped_context(&source_conn, &case_id.0), &local_file_id)?;
+    let mut plan = media_preview_plan_for_file(
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
+        &local_file_id,
+    )?;
     if let MediaPreviewPlan::Inline(dto) = &mut plan {
         dto.handle_id = Some(format!("file:{global_file_id}"));
     }
@@ -364,7 +411,7 @@ pub fn media_range_for_source_case(
 ) -> Result<transport::dto::MediaRangeResponseDto, FileServiceError> {
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     media_range_for_file(
-        scoped_context(&source_conn, &case_id.0),
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
         &global_id.local_id.0,
         request,
     )
@@ -380,7 +427,7 @@ pub fn read_preview_bytes_for_source_case(
 ) -> Result<Vec<u8>, FileServiceError> {
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     read_preview_bytes_for_file(
-        scoped_context(&source_conn, &case_id.0),
+        scoped_context(&source_conn, case_conn, case_root, &case_id.0),
         &global_id.local_id.0,
         offset,
         length,

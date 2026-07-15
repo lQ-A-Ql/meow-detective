@@ -55,15 +55,14 @@ BlueStore OMAP scope family=PerPg ... has no header
 原因是非 RBD 的 `PerPg`/`PgMeta` scope 可以没有 `Header` marker，旧状态机
 却把所有 entry 都视为 RBD header scope。修复后：
 
-- `PerPg`/`PgMeta` 无 Header scope 可以由 entry + tail 闭合。
+- 所有 OMAP family 的无 Header scope 可以由 entry + tail 闭合。
 - 无 Header scope 只保存 scope、entry count 和 recognized count 元数据。
 - 无 Header scope 不解码 RBD 字段，不绑定 RBD owner，不生成 directory/header。
-- `Bulk`/`PerPool` 仍要求显式 Header；缺失时保持 `MissingHeader` fail closed。
 
 相关合成测试：
 
 - `accepts_headerless_pg_metadata_scopes_without_rbd_projection`
-- `keeps_bulk_and_per_pool_header_requirements_strict`
+- `accepts_headerless_bulk_and_per_pool_scopes_without_rbd_projection`
 
 ## Stage 6.5/6.6 实现边界
 
@@ -73,7 +72,7 @@ BlueStore OMAP scope family=PerPg ... has no header
 - source-bound BlueStore LVM 重新打开与设备身份校验。
 - RADOS logical/blob/physical extent range reader、sparse hole 零填充和
   CRC32C 校验。
-- 多 source DB 显式闭合集合读取；副本内容冲突时拒绝静默选择。
+- 多 source DB 仅按显式配置的 inventory 集合读取；副本内容冲突时拒绝静默选择。
 - 同一 inventory 或同一 data source 不能重复计入 expected replica count。
 - RBD head image object striping、`Read + Seek + EvidenceReader` 和现有
   MBR/GPT/LVM/EXT4/XFS/Btrfs filesystem probe 复用。

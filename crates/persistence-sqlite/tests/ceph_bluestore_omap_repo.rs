@@ -179,6 +179,8 @@ fn omap(
             size_hex: Some(hex_u64(64 * 1024 * 1024)),
             object_order: Some(22),
             features_hex: Some(hex_u64(0x21)),
+            operation_features_hex: None,
+            parent_key_present: false,
             object_prefix: Some(format!("rbd_data.{image_id}")),
             stripe_unit_hex: Some(hex_u64(1 << 22)),
             stripe_count_hex: Some(hex_u64(1)),
@@ -224,11 +226,11 @@ fn hex_u64(value: u64) -> String {
 }
 
 #[test]
-fn source_013_installs_raw_free_omap_schema_and_targeted_indexes() {
+fn source_migrations_install_raw_free_omap_schema_and_targeted_indexes() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_014_ceph_osd_device_bindings"
+        "source_015_ceph_bluestore_rbd_header_context"
     );
     for table in [
         "ceph_bluestore_omap_scans",
@@ -254,6 +256,7 @@ fn source_013_installs_raw_free_omap_schema_and_targeted_indexes() {
         "idx_ceph_bluestore_omap_scopes_owner",
         "idx_ceph_bluestore_rbd_directory_image_id",
         "idx_ceph_bluestore_rbd_headers_owner",
+        "idx_ceph_bluestore_objects_rbd_lookup",
     ] {
         let exists: bool = conn
             .query_row(

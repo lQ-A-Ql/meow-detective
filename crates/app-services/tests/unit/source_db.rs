@@ -180,6 +180,64 @@ fn open_registered_source_db_migrates_schema_version_mismatch() {
 }
 
 #[test]
+fn reconstruction_route_accepts_ready_metadata_but_ready_route_does_not() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let case_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    case_conn
+        .execute_batch(
+            "CREATE TABLE data_sources (
+                id TEXT PRIMARY KEY NOT NULL,
+                case_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+                source_hash_sha256 TEXT,
+                hash_status TEXT DEFAULT 'unknown',
+                canonical_source_path TEXT,
+                evidence_size INTEGER,
+                reader_kind TEXT,
+                provenance_status TEXT DEFAULT 'unknown',
+                provenance_warnings TEXT DEFAULT '[]',
+                storage_model TEXT NOT NULL DEFAULT 'source_db',
+                source_db_rel_path TEXT,
+                index_rel_path TEXT,
+                staging_rel_path TEXT,
+                platform TEXT NOT NULL DEFAULT 'unknown',
+                profile TEXT,
+                import_state TEXT NOT NULL DEFAULT 'pending',
+                schema_version TEXT,
+                last_error TEXT
+            );",
+        )
+        .unwrap();
+    let case_id = domain::CaseId("case-1".to_string());
+    let ds = domain::DataSource {
+        id: DataSourceId("ds-metadata".to_string()),
+        name: "Metadata source".to_string(),
+        kind: domain::DataSourceKind::E01,
+        source_path: std::path::PathBuf::from("D:/metadata.E01"),
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
+    let mut storage = DataSourceStorage::source_db(&ds.id.0, Some("linux"), None);
+    storage.import_state = "ready_metadata".to_string();
+    DataSourceRepo::new(&case_conn)
+        .insert_with_storage(&case_id, &ds, &storage)
+        .unwrap();
+    open_source_db(tmp.path(), &ds.id).unwrap();
+
+    let reconstruction =
+        open_reconstruction_source_by_id(&case_conn, tmp.path(), &case_id, &ds.id).unwrap();
+    assert_eq!(reconstruction.data_source_id, ds.id);
+    assert_eq!(reconstruction.platform, domain::DataSourcePlatform::Linux);
+    assert!(matches!(
+        open_ready_source_by_id(&case_conn, tmp.path(), &case_id, &ds.id),
+        Err(ReadySourceError::NotReady { .. })
+    ));
+}
+
+#[test]
 fn checkpoint_source_db_requires_wal_convergence() {
     let tmp = tempfile::TempDir::new().unwrap();
     let path = tmp.path().join("source.db");

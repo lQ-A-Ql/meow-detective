@@ -112,9 +112,10 @@ fn insert_headers(conn: &Connection, records: &[CephBluestoreRbdHeaderRecord]) -
     let mut statement = conn.prepare_cached(
         "INSERT INTO ceph_bluestore_rbd_headers (
             inventory_id, scope_identity, owner_nid_hex, image_id, size_hex,
-            object_order, features_hex, object_prefix, stripe_unit_hex,
+            object_order, features_hex, operation_features_hex,
+            parent_key_present, object_prefix, stripe_unit_hex,
             stripe_count_hex, data_pool_id
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
     )?;
     for record in records {
         statement.execute(params![
@@ -125,6 +126,8 @@ fn insert_headers(conn: &Connection, records: &[CephBluestoreRbdHeaderRecord]) -
             record.size_hex,
             record.object_order,
             record.features_hex,
+            record.operation_features_hex,
+            record.parent_key_present,
             record.object_prefix,
             record.stripe_unit_hex,
             record.stripe_count_hex,

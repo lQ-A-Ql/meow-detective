@@ -4,6 +4,8 @@ use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet, VecDeque};
 
+mod file_projection;
+
 /// Direction for neighbor traversal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {

@@ -55,6 +55,8 @@ fn aggregate() -> CephBluestoreOmapAggregate {
             size_hex: Some("0000000001000000".to_string()),
             object_order: Some(22),
             features_hex: Some("0000000000000000".to_string()),
+            operation_features_hex: None,
+            parent_key_present: false,
             object_prefix: Some("rbd_data.image-1".to_string()),
             stripe_unit_hex: None,
             stripe_count_hex: None,
@@ -75,6 +77,51 @@ fn discovers_head_image_from_directory_header_and_scope() {
     assert_eq!(images[0].metadata.data_pool_id, 8);
     assert_eq!(images[0].metadata.stripe_unit, 0);
     assert_eq!(images[0].metadata.stripe_count, 0);
+    assert_eq!(images[0].context.operation_features, 0);
+    assert!(!images[0].context.has_parent);
+}
+
+#[test]
+fn preserves_parent_and_operation_context_for_fail_closed_reads() {
+    let mut value = aggregate();
+    value.rbd_headers[0].features_hex = Some("0000000000000100".to_string());
+    value.rbd_headers[0].operation_features_hex = Some("0000000000000004".to_string());
+    value.rbd_headers[0].parent_key_present = true;
+
+    let images = discover_rbd_images(&value).expect("discover guarded RBD image");
+
+    assert_eq!(images[0].context.operation_features, 4);
+    assert!(images[0].context.has_parent);
+}
+
+#[test]
+fn rejects_inconsistent_operation_feature_metadata() {
+    let mut value = aggregate();
+    value.rbd_headers[0].operation_features_hex = Some("0000000000000004".to_string());
+
+    assert!(matches!(
+        discover_rbd_images(&value),
+        Err(RbdCatalogError::InvalidField {
+            field: "operation_features",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn discovers_data_pool_from_per_pg_scope_identity() {
+    let mut value = aggregate();
+    value.scopes[0].scope_identity =
+        "perPg:u0000000000000002:3831950c:0000000000000010".to_string();
+    value.scopes[0].key_family = "perPg".to_string();
+    value.scopes[0].pool_kind = "perPg".to_string();
+    value.scopes[0].pool_value_i64 = None;
+    value.scopes[0].pool_value_hex = Some("0000000000000002".to_string());
+    value.rbd_headers[0].scope_identity = value.scopes[0].scope_identity.clone();
+
+    let images = discover_rbd_images(&value).expect("discover per-PG RBD image");
+
+    assert_eq!(images[0].metadata.data_pool_id, 2);
 }
 
 #[test]
@@ -107,6 +154,23 @@ fn rejects_header_without_pool_identity() {
     let mut value = aggregate();
     value.scopes[0].pool_value_i64 = None;
     value.rbd_headers[0].data_pool_id = None;
+
+    assert!(matches!(
+        discover_rbd_images(&value),
+        Err(RbdCatalogError::MissingDataPool { .. })
+    ));
+}
+
+#[test]
+fn rejects_noncanonical_per_pg_pool_identity() {
+    let mut value = aggregate();
+    value.scopes[0].scope_identity =
+        "perPg:u0000000000000002:3831950c:0000000000000010".to_string();
+    value.scopes[0].key_family = "perPg".to_string();
+    value.scopes[0].pool_kind = "perPg".to_string();
+    value.scopes[0].pool_value_i64 = None;
+    value.scopes[0].pool_value_hex = Some("2".to_string());
+    value.rbd_headers[0].scope_identity = value.scopes[0].scope_identity.clone();
 
     assert!(matches!(
         discover_rbd_images(&value),

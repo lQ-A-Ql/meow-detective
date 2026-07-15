@@ -342,3 +342,41 @@ fn empty_batch_returns_zero() {
     assert_eq!(repo.insert_nodes_batch(&[]).unwrap(), 0);
     assert_eq!(repo.insert_edges_batch(&[]).unwrap(), 0);
 }
+
+#[test]
+fn project_file_tree_uses_source_rows_for_nodes_and_contains_edges() {
+    let (conn, repo) = setup();
+    conn.execute(
+        "INSERT INTO data_sources (id, case_id, name, kind, source_path)
+         VALUES ('ds-1', 'case-1', 'source', 'raw', 'source.img')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+            (id, parent_id, data_source_id, path, name, entry_type)
+         VALUES
+            ('root', NULL, 'ds-1', '', 'Partition 1', 'directory'),
+            ('child', 'root', 'ds-1', 'etc/passwd', 'passwd', 'file')",
+        [],
+    )
+    .unwrap();
+
+    let counts = repo
+        .project_file_tree("ds-1", "2026-07-16T00:00:00Z")
+        .unwrap();
+    assert_eq!(counts, (2, 1));
+
+    let child = repo.get_node("child").unwrap().unwrap();
+    assert_eq!(child.case_id, "case-1");
+    assert_eq!(child.node_type, NodeType::File);
+    assert_eq!(child.label, "passwd");
+    assert_eq!(child.summary, "etc/passwd");
+
+    let neighbors = repo
+        .get_neighbors("root", &[EdgeType::Contains], Direction::Outgoing)
+        .unwrap();
+    assert_eq!(neighbors.len(), 1);
+    assert_eq!(neighbors[0].0.id, "contains:root:child");
+    assert_eq!(neighbors[0].1.id, "child");
+}

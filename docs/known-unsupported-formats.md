@@ -44,7 +44,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
-| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore OSD label、BlueFS metadata replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane replay、全部 live-SST 单次结构/mutation scan、active-WAL/WriteBatch metadata 恢复、digest-only latest-state summary、`S/C/O/X` semantic snapshot、OMAP catalog、source-bound RADOS range reader 与 bounded RBD/head-reader foundation 已验证；PG/replica placement、真实 RBD byte oracle、VM disk reconstruction、CephFS 与跨节点关联仍不支持 |
+| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore/RocksDB/semantic/OMAP、source-bound RADOS range reader 已验证。私有样本显式加载的三 OSD inventory 可重建 `vm-100-disk-0`，派生独立 source DB 含直接 XFS、`centos/home`、`centos/root` 和 114,260 条文件记录，并通过真实预览；inventory 完整性尚未独立证明，通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联仍不支持 |
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
@@ -89,7 +89,7 @@ V2 长期计划与能力评级请同时参考：
 
 - Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明 LVM direct LV -> XFS，PVE 私有样本只证明 LVM direct LV -> 64-bit EXT4
 - Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
-- PVE 集群级 PG/replica placement、真实 RADOS byte oracle、RBD/VM disk reconstruction、CephFS 与跨节点关联；当前承诺成员发现、成员隔离、宿主文件系统 baseline、BlueStore OSD label、BlueFS metadata replay、RocksDB control-plane、全部 live-SST/WAL mutation recovery、digest-only latest-state summary、`S/C/O/X` semantic snapshot、OMAP catalog、source-bound RADOS range reader 和 bounded RBD/head-reader foundation，不承诺 VM 对象文件树
+- PVE 通用 PG/CRUSH/acting-set、EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联。当前只对 `E:\pangushi\服务器` 私有样本显式加载的三 OSD inventory、RBD head、派生独立 source DB、114,260 条 VM 文件记录和真实预览建立 baseline；已加载 inventory 是否等于完整副本集合尚未独立证明，不将其扩大为任意 Ceph 集群或公开 GA 承诺
 - 普通数据源导入自动借用案件内其他镜像补齐 multi-PV VG；必须先有原子集群成员注册与一致性校验
 - LVM thin 的全部变体与 cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活；当前仅实现受限的只读 dm-thin 映射
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）

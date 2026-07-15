@@ -104,3 +104,66 @@ fn source_db_open_failure_does_not_return_the_host_path() {
     assert!(!message.contains("private"));
     assert!(!message.contains("evidence"));
 }
+
+#[test]
+fn verified_object_cache_is_bounded_and_uses_lru_order() {
+    let mut cache = VerifiedObjectCache::new(8, 2);
+    cache.insert(
+        "object-a",
+        0,
+        VerifiedObject::Present(Arc::from(vec![1, 2, 3, 4])),
+    );
+    cache.insert(
+        "object-b",
+        0,
+        VerifiedObject::Present(Arc::from(vec![5, 6, 7, 8])),
+    );
+    assert!(cache.get("object-a", 0).is_some());
+
+    cache.insert(
+        "object-c",
+        0,
+        VerifiedObject::Present(Arc::from(vec![9, 10, 11, 12])),
+    );
+
+    assert!(cache.get("object-a", 0).is_some());
+    assert!(cache.get("object-b", 0).is_none());
+    assert!(cache.get("object-c", 0).is_some());
+}
+
+#[test]
+fn verified_object_range_copy_is_exact_and_bounded() {
+    let verified = VerifiedObject::Present(Arc::from(vec![10, 20, 30, 40, 50]));
+    let request = RbdObjectReadRequest {
+        object_no: 0,
+        object_identity: "object-a".to_string(),
+        object_offset: 1,
+        length: 3,
+    };
+    let mut output = [0; 3];
+
+    let outcome = copy_verified_segment(&request, 0, &mut output, &verified).expect("copy range");
+
+    assert_eq!(output, [20, 30, 40]);
+    assert!(matches!(
+        outcome,
+        RbdObjectReadOutcome::Present { bytes_read: 3, .. }
+    ));
+}
+
+#[test]
+fn verified_missing_object_range_preserves_missing_outcome() {
+    let request = RbdObjectReadRequest {
+        object_no: 0,
+        object_identity: "object-a".to_string(),
+        object_offset: 0,
+        length: 4,
+    };
+    let mut output = [0xAA; 4];
+
+    let outcome =
+        copy_verified_segment(&request, 0, &mut output, &VerifiedObject::Missing).unwrap();
+
+    assert_eq!(outcome, RbdObjectReadOutcome::Missing);
+    assert_eq!(output, [0xAA; 4]);
+}

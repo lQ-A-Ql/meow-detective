@@ -1,5 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use app_services::cluster_service;
 use persistence_sqlite::repositories::job_repo::JobRepo;
@@ -9,7 +11,7 @@ use transport::CommandError;
 use super::{
     cluster_members::import_cluster_members,
     gate::acquire_import_slot,
-    status::{cancel_job, fail_job, fail_linux_cluster_job},
+    status::{cancel_job, fail_job, fail_linux_cluster_job, materialize_cluster_rbd_sources},
     types::{BackgroundLinuxClusterImportJob, ClusterImportSummary},
 };
 use crate::events::event_bridge;
@@ -35,7 +37,6 @@ pub(crate) fn run_background_linux_cluster_import_job(
         );
         return Ok(());
     }
-
     let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
     initialize_cluster(&connection, &job_repo, &job, app)?;
     let Some(summary) = import_cluster_members(&connection, &job_repo, &job, app, &cancel_token)?
@@ -117,6 +118,8 @@ fn complete_cluster_import(
         None,
     )
     .map_err(CommandError::from_typed_service_error)?;
+    let derived_source_count =
+        materialize_cluster_rbd_sources(connection, job_repo, job, app, &summary)?;
     let message = format!(
         "Imported Linux cluster {}: {}/{} image(s) ready",
         job.plan.cluster_name, summary.ready_count, total_members
@@ -131,6 +134,7 @@ fn complete_cluster_import(
         cluster_id = %job.plan.cluster_id,
         members = total_members,
         imported = summary.ready_count,
+        derived_sources = derived_source_count,
         summaries = ?summary.member_messages,
         "Linux cluster import completed"
     );

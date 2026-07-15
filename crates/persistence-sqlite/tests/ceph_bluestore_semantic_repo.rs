@@ -18,6 +18,7 @@ use rusqlite::{params, Connection};
 
 const INVENTORY_A: &str = "inventory-a";
 const INVENTORY_B: &str = "inventory-b";
+const RBD_HEAD_SNAP_HEX: &str = "fffffffffffffffe";
 
 fn setup() -> Connection {
     let conn = open_in_memory().expect("open source database");
@@ -496,7 +497,7 @@ fn ceph_bluestore_semantic_schema_is_normalized_and_raw_free() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_014_ceph_osd_device_bindings"
+        "source_015_ceph_bluestore_rbd_header_context"
     );
     let tables = [
         "ceph_bluestore_semantic_scans",
@@ -644,6 +645,7 @@ fn targeted_object_read_plan_and_exact_candidate_are_stable() {
             &object.object_name,
             object.decoded_pool,
             &object.object_namespace,
+            &object.snap_hex,
         )
         .expect("query exact object candidate")
         .expect("candidate exists");
@@ -655,6 +657,7 @@ fn targeted_object_read_plan_and_exact_candidate_are_stable() {
     assert_eq!(candidate.object_name, object.object_name);
     assert_eq!(candidate.decoded_pool, object.decoded_pool);
     assert_eq!(candidate.object_namespace, object.object_namespace);
+    assert_eq!(candidate.snap_hex, object.snap_hex);
 }
 
 #[test]
@@ -742,7 +745,7 @@ fn targeted_object_reads_return_none_for_valid_missing_keys() {
         None
     );
     assert_eq!(
-        repo.find_object_candidate(INVENTORY_A, b"missing", 7, b"ns\0")
+        repo.find_object_candidate(INVENTORY_A, b"missing", 7, b"ns\0", RBD_HEAD_SNAP_HEX,)
             .expect("query missing candidate"),
         None
     );
@@ -782,6 +785,7 @@ fn exact_object_candidate_rejects_ambiguous_matches() {
             &object.object_name,
             object.decoded_pool,
             &object.object_namespace,
+            &object.snap_hex,
         )
         .is_err());
 }

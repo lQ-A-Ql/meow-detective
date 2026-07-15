@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::mem::size_of;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use evidence_core::{EvidenceReader, ReaderInfo};
 use persistence_sqlite::repositories::ceph_bluestore_semantic_repo::CephBluestoreObjectReadPlan;
@@ -21,9 +23,36 @@ pub struct RadosObjectReader {
     device: Box<dyn EvidenceReader>,
     info: ReaderInfo,
     position: u64,
+    layout: Arc<RadosObjectLayout>,
+}
+
+pub(super) struct RadosObjectLayout {
+    object_identity: String,
     object_size: u64,
     logical_extents: Vec<LogicalExtent>,
     blobs: BTreeMap<u32, BlobPlan>,
+}
+
+impl RadosObjectLayout {
+    pub(super) fn estimated_bytes(&self) -> usize {
+        let logical_extent_bytes = self
+            .logical_extents
+            .capacity()
+            .saturating_mul(size_of::<LogicalExtent>());
+        let blob_bytes = self.blobs.values().fold(0usize, |total, blob| {
+            total.saturating_add(blob.estimated_bytes())
+        });
+        size_of::<Self>()
+            .saturating_add(self.object_identity.capacity())
+            .saturating_add(logical_extent_bytes)
+            .saturating_add(
+                self.blobs
+                    .len()
+                    .saturating_mul(size_of::<(u32, BlobPlan)>())
+                    .saturating_add(blob_bytes),
+            )
+            .saturating_mul(2)
+    }
 }
 
 impl RadosObjectReader {
@@ -31,26 +60,42 @@ impl RadosObjectReader {
         device: Box<dyn EvidenceReader>,
         plan: CephBluestoreObjectReadPlan,
     ) -> Result<Self, RadosReadError> {
-        validate_plan_identity(&plan)?;
-        let blobs = build_blob_plans(&plan)?;
-        let logical_extents = build_logical_extents(&plan, &blobs)?;
-        let object_size = plan.object.size;
-        Ok(Self {
+        let layout = Self::prepare_layout(&plan)?;
+        Ok(Self::from_layout(device, layout))
+    }
+
+    pub(super) fn prepare_layout(
+        plan: &CephBluestoreObjectReadPlan,
+    ) -> Result<Arc<RadosObjectLayout>, RadosReadError> {
+        validate_plan_identity(plan)?;
+        let blobs = build_blob_plans(plan)?;
+        let logical_extents = build_logical_extents(plan, &blobs)?;
+        Ok(Arc::new(RadosObjectLayout {
+            object_identity: plan.object_identity_sha256.clone(),
+            object_size: plan.object.size,
+            logical_extents,
+            blobs,
+        }))
+    }
+
+    pub(super) fn from_layout(
+        device: Box<dyn EvidenceReader>,
+        layout: Arc<RadosObjectLayout>,
+    ) -> Self {
+        Self {
             device,
             info: ReaderInfo {
-                path: PathBuf::from(format!("ceph-rados/{}", plan.object_identity_sha256)),
-                size: object_size,
+                path: PathBuf::from(format!("ceph-rados/{}", layout.object_identity)),
+                size: layout.object_size,
                 kind: "ceph-rados-object".to_string(),
             },
             position: 0,
-            object_size,
-            logical_extents,
-            blobs,
-        })
+            layout,
+        }
     }
 
     fn read_at(&mut self, offset: u64, output: &mut [u8]) -> io::Result<usize> {
-        let available = self.object_size.saturating_sub(offset);
+        let available = self.layout.object_size.saturating_sub(offset);
         let length = usize::try_from(available.min(output.len() as u64))
             .map_err(|_| invalid_data("object range length exceeds usize"))?;
         let output = &mut output[..length];
@@ -61,13 +106,14 @@ impl RadosObjectReader {
         let end = offset
             .checked_add(length as u64)
             .ok_or_else(|| invalid_data("object range end overflow"))?;
-        let extents = self
+        let layout = Arc::clone(&self.layout);
+        let first_extent = layout
             .logical_extents
+            .partition_point(|extent| extent.end <= offset);
+        for extent in layout.logical_extents[first_extent..]
             .iter()
-            .filter(|extent| extent.logical_offset < end && extent.end > offset)
-            .cloned()
-            .collect::<Vec<_>>();
-        for extent in extents {
+            .take_while(|extent| extent.logical_offset < end)
+        {
             let start = offset.max(extent.logical_offset);
             let extent_end = end.min(extent.end);
             let destination = usize::try_from(start - offset)
@@ -88,10 +134,10 @@ impl RadosObjectReader {
     }
 
     fn read_blob(&mut self, blob_ordinal: u32, offset: u64, output: &mut [u8]) -> io::Result<()> {
-        let blob = self
+        let layout = Arc::clone(&self.layout);
+        let blob = layout
             .blobs
             .get(&blob_ordinal)
-            .cloned()
             .ok_or_else(|| invalid_data("logical extent references a missing blob"))?;
         blob.read_range(self.device.as_mut(), offset, output)?;
         blob.verify_overlapping_checksums(self.device.as_mut(), offset, output)
@@ -113,10 +159,10 @@ impl Seek for RadosObjectReader {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let next = match position {
             SeekFrom::Start(value) => i128::from(value),
-            SeekFrom::End(value) => i128::from(self.object_size) + i128::from(value),
+            SeekFrom::End(value) => i128::from(self.layout.object_size) + i128::from(value),
             SeekFrom::Current(value) => i128::from(self.position) + i128::from(value),
         };
-        if !(0..=i128::from(self.object_size)).contains(&next) {
+        if !(0..=i128::from(self.layout.object_size)).contains(&next) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "RADOS object seek lies outside the object",

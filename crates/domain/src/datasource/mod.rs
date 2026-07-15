@@ -15,6 +15,7 @@ pub enum DataSourceKind {
     E01,
     Raw,
     LogicalDirectory,
+    CephRbd,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -71,6 +72,7 @@ impl fmt::Display for DataSourceKind {
             Self::E01 => write!(f, "e01"),
             Self::Raw => write!(f, "raw"),
             Self::LogicalDirectory => write!(f, "logical_directory"),
+            Self::CephRbd => write!(f, "ceph_rbd"),
         }
     }
 }

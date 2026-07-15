@@ -17,8 +17,11 @@ pub enum RbdReconstructionError {
     DuplicateReplicaInventory { inventory_id: String },
     #[error("duplicate RBD replica data source binding: {data_source_id}")]
     DuplicateReplicaSource { data_source_id: String },
-    #[error("source database could not be opened for inventory {inventory_id}")]
-    SourceDb { inventory_id: String },
+    #[error("source database could not be opened for inventory {inventory_id}: {detail}")]
+    SourceDb {
+        inventory_id: String,
+        detail: String,
+    },
     #[error("RBD OMAP metadata is missing for inventory {inventory_id}")]
     MissingOmap { inventory_id: String },
     #[error("RBD catalog failed for inventory {inventory_id}: {detail}")]
@@ -43,13 +46,15 @@ pub fn discover_rbd_images_from_source_dbs(
     let mut images = BTreeMap::new();
     for replica in replicas {
         let connection = persistence_sqlite::open_existing_source(&replica.source_db_path)
-            .map_err(|_| RbdReconstructionError::SourceDb {
+            .map_err(|error| RbdReconstructionError::SourceDb {
                 inventory_id: replica.inventory_id.clone(),
+                detail: source_db_error_detail(&error),
             })?;
         let aggregate = CephBluestoreOmapRepo::new(&connection)
             .find_aggregate(&replica.inventory_id)
-            .map_err(|_| RbdReconstructionError::SourceDb {
+            .map_err(|error| RbdReconstructionError::SourceDb {
                 inventory_id: replica.inventory_id.clone(),
+                detail: format!("OMAP query failed: {}", source_db_error_detail(&error)),
             })?
             .ok_or_else(|| RbdReconstructionError::MissingOmap {
                 inventory_id: replica.inventory_id.clone(),
@@ -64,6 +69,17 @@ pub fn discover_rbd_images_from_source_dbs(
         }
     }
     Ok(images.into_values().collect())
+}
+
+fn source_db_error_detail(error: &persistence_sqlite::DbError) -> String {
+    match error {
+        persistence_sqlite::DbError::Sqlite(error) => format!("sqlite error: {error}"),
+        persistence_sqlite::DbError::Io(error) => {
+            format!("io error of kind {:?}", error.kind())
+        }
+        persistence_sqlite::DbError::Migration(error) => format!("migration error: {error}"),
+        persistence_sqlite::DbError::System(error) => format!("system error: {error}"),
+    }
 }
 
 pub fn detect_rbd_image_from_source_dbs(
@@ -132,7 +148,7 @@ fn merge_descriptor(
 ) -> Result<(), RbdReconstructionError> {
     let image_id = descriptor.metadata.id.clone();
     if let Some(existing) = images.get(&image_id) {
-        if existing != &descriptor {
+        if existing.metadata != descriptor.metadata || existing.context != descriptor.context {
             return Err(RbdReconstructionError::MetadataConflict { image_id });
         }
     } else {

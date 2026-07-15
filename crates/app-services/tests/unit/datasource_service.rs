@@ -61,6 +61,21 @@ fn attach_data_source_records_file_provenance() {
     );
     assert!(stored.provenance.warnings.is_empty());
 }
+
+#[test]
+fn evidence_reader_rejects_ceph_rbd_as_host_image() {
+    let result = super::reader::open_evidence_reader(
+        std::path::Path::new("C:/path-that-must-not-be-opened"),
+        &DataSourceKind::CephRbd,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("Ceph RBD must not be opened as a host image"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+}
+
 #[test]
 fn attach_data_source_records_directory_provenance_without_size() {
     let tmp = TempDir::new().unwrap();

@@ -6,7 +6,7 @@ use crate::file_service::{
     viewer::{
         descriptor_image_path_candidates, is_exfat_filesystem_kind, is_fat_filesystem_kind,
         is_linux_filesystem_kind, looks_like_exfat_boot_sector, open_first_image_path_seekable,
-        PreviewDescriptor, PreviewPartitionCandidate, RangeContentReader,
+        PreviewDescriptor, PreviewPartitionCandidate, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -45,6 +45,20 @@ where
         "Cannot open image-backed file '{}' from any partition",
         descriptor.path
     )))
+}
+
+pub(crate) fn open_descriptor_image_file_with_context<C>(
+    context: &mut C,
+    descriptor: &PreviewDescriptor,
+) -> Result<RangeContentReader, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    open_descriptor_image_file(descriptor, |_: &Path| {
+        context
+            .open_evidence_reader(descriptor)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    })
 }
 
 fn open_candidate<F>(

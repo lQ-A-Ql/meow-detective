@@ -36,10 +36,14 @@ pub(crate) use filesystem::{
     is_linux_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,
     root_partition_index_for_entry,
 };
-pub(crate) use image_open::{open_descriptor_image_file, open_e01_file, open_raw_file};
+pub(crate) use image_open::{
+    open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
+    open_raw_file,
+};
 pub(crate) use io::{
     open_first_image_path, open_first_image_path_seekable, read_bounded, read_seekable_range,
 };
+pub(crate) use model::open_host_evidence_reader;
 pub(crate) use model::{
     PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,

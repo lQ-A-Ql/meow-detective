@@ -1,10 +1,17 @@
 use std::collections::HashSet;
 use std::fmt::Write;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Once};
+use std::time::Instant;
 
+use app_services::ceph_reconstruction::{
+    discover_rbd_images_from_source_dbs, materialize_rbd_sources_for_cluster, open_rbd_head_image,
+    RadosReplicaSource, SourceDbRadosObjectProvider,
+};
 use app_services::cluster_service::{plan_linux_cluster_import, LinuxClusterImportPlan};
+use app_services::datasource_service::{self, ImageFilesystemKind, PartitionStatus};
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
@@ -15,6 +22,7 @@ use persistence_sqlite::repositories::{
         latest_state_set_sha256, BLUESTORE_SEMANTIC_DECODE_PROFILE,
         BLUESTORE_SEMANTIC_SCHEMA_VERSION,
     },
+    ceph_rbd_lineage_repo::CephRbdLineageRepo,
     ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRepo,
     datasource_cluster_repo::DataSourceClusterRepo,
     datasource_repo::DataSourceRepo,
@@ -27,9 +35,19 @@ use transport::dto::ViewerRangeRequestDto;
 use super::{run_background_linux_cluster_import_job, BackgroundLinuxClusterImportJob};
 
 const PVE_CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
+const PVE_CASE_OUTPUT_ROOT_ENV: &str = "FORENSICS_PVE_CASE_OUTPUT_ROOT";
+const PVE_RBD_CASE_ROOT_ENV: &str = "FORENSICS_PVE_RBD_CASE_ROOT";
 const PVE_MEMBER_COUNT: usize = 6;
 const PVE_HOST_COUNT: usize = 3;
 const PVE_CLUSTER_FSID: &str = "3f28d8bb-e754-475b-b471-b9c97161bbf7";
+const PVE_RBD_IMAGE_ID: &str = "16ecc87af5c9";
+const PVE_RBD_IMAGE_NAME: &str = "vm-100-disk-0";
+const PVE_RBD_POOL_ID: i64 = 2;
+const PVE_RBD_REPLICA_COUNT: usize = 3;
+const PVE_RBD_RECORD_COUNT: u64 = 114_260;
+const PVE_RBD_DIRECTORY_COUNT: u64 = 15_749;
+const PVE_RBD_FILE_COUNT: u64 = 98_511;
+const PVE_RBD_TOTAL_FILE_SIZE: u64 = 5_547_104_746;
 const PVE_MEMBER_RELATIVE_PATHS: [&str; PVE_MEMBER_COUNT] = [
     "server01/server01-disk01.E01",
     "server01/server01-disk02.E01",
@@ -173,9 +191,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
         .expect("plan PVE cluster import");
     assert_plan(&fixture_root, &plan);
 
-    let temp = TempDir::new().expect("create temporary case root");
-    let case_root = temp.path().join("pve-cluster-case");
-    std::fs::create_dir_all(&case_root).expect("create case directory");
+    let (_temp, case_root) = pve_case_root("pve-cluster-case");
     let case_id = CaseId("pve-cluster-import-regression".to_string());
     let case_conn = create_case_database(&case_root, &case_id);
     let job_id = JobRepo::new(&case_conn)
@@ -231,7 +247,33 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     assert_control_database_is_tree_free(&case_conn);
     assert_manifest(&case_root, &plan);
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
+    assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &plan.cluster_id);
     assert_job_outcome(&case_conn, &job_id, &cluster);
+}
+
+fn pve_case_root(case_name: &str) -> (Option<TempDir>, PathBuf) {
+    if let Some(output_root) = std::env::var_os(PVE_CASE_OUTPUT_ROOT_ENV) {
+        let output_root = PathBuf::from(output_root);
+        assert!(
+            output_root.is_absolute(),
+            "{PVE_CASE_OUTPUT_ROOT_ENV} must be an absolute path"
+        );
+        std::fs::create_dir_all(&output_root).expect("create retained PVE output root");
+        let case_root = output_root.join(case_name);
+        assert!(
+            !case_root.exists(),
+            "retained PVE case path already exists: {}",
+            case_root.display()
+        );
+        std::fs::create_dir_all(&case_root).expect("create retained PVE case directory");
+        eprintln!("PVE retained case root: {}", case_root.display());
+        return (None, case_root);
+    }
+
+    let temp = TempDir::new().expect("create temporary case root");
+    let case_root = temp.path().join(case_name);
+    std::fs::create_dir_all(&case_root).expect("create temporary PVE case directory");
+    (Some(temp), case_root)
 }
 
 #[test]
@@ -249,9 +291,7 @@ fn real_pve_bluestore_member_persists_semantic_snapshot() {
     assert_eq!(plan.members.len(), 1, "server01 BlueStore member");
     plan.members[0].member_index = 0;
 
-    let temp = TempDir::new().expect("create temporary case root");
-    let case_root = temp.path().join("pve-bluestore-case");
-    std::fs::create_dir_all(&case_root).expect("create case directory");
+    let (_temp, case_root) = pve_case_root("pve-bluestore-case");
     let case_id = CaseId("pve-bluestore-import-regression".to_string());
     let case_conn = create_case_database(&case_root, &case_id);
     let job_id = JobRepo::new(&case_conn)
@@ -284,6 +324,337 @@ fn real_pve_bluestore_member_persists_semantic_snapshot() {
         .next()
         .expect("imported BlueStore source");
     assert_bluestore_source(&case_conn, &case_root, &source);
+}
+
+#[test]
+#[ignore = "requires the private three-OSD PVE RBD fixture"]
+fn real_pve_rbd_head_image_byte_oracle() {
+    init_test_tracing();
+    let (_temp, case_root) = prepare_rbd_oracle_case();
+    let (replicas, osd_ids) = load_rbd_replicas(&case_root);
+    assert_eq!(osd_ids, vec![0, 1, 2]);
+
+    let descriptors =
+        discover_rbd_images_from_source_dbs(&replicas).expect("discover replicated RBD images");
+    let descriptor = descriptors
+        .into_iter()
+        .find(|descriptor| descriptor.metadata.id == PVE_RBD_IMAGE_ID)
+        .expect("vm-100 RBD image");
+    assert_eq!(descriptor.metadata.name, PVE_RBD_IMAGE_NAME);
+    assert_eq!(descriptor.metadata.data_pool_id, PVE_RBD_POOL_ID);
+    assert_eq!(descriptor.metadata.image_size, 60 * 1024 * 1024 * 1024);
+    assert_eq!(descriptor.metadata.order, 22);
+    assert_eq!(descriptor.metadata.features, 0x3d);
+    assert_eq!(descriptor.context.operation_features, 0);
+    assert!(!descriptor.context.has_parent);
+
+    let provider = SourceDbRadosObjectProvider::new(
+        replicas,
+        descriptor.metadata.data_pool_id,
+        Vec::new(),
+        PVE_RBD_REPLICA_COUNT,
+    )
+    .expect("open closed RBD replica provider");
+    let mut reader =
+        open_rbd_head_image(&descriptor, Box::new(provider)).expect("open RBD head image");
+    let probe =
+        datasource_service::detect_image_filesystem(&mut reader).expect("probe RBD filesystem");
+    assert!(!probe.partitions.is_empty(), "RBD partition table");
+    assert!(
+        !probe.candidates.is_empty(),
+        "RBD image must expose a supported filesystem candidate"
+    );
+
+    let partition = probe
+        .partitions
+        .iter()
+        .find(|partition| {
+            partition.offset > 0
+                && matches!(
+                    partition.status,
+                    PartitionStatus::Supported | PartitionStatus::Expanded
+                )
+        })
+        .expect("supported RBD partition");
+    let candidate = probe
+        .candidates
+        .iter()
+        .find(|candidate| candidate.offset == partition.offset)
+        .or_else(|| probe.candidates.first())
+        .expect("RBD filesystem candidate");
+    let object_size = 1u64 << descriptor.metadata.order;
+    let filesystem_offset = filesystem_oracle_offset(candidate.kind, candidate.offset);
+    let probes = [
+        ("image-head", 0),
+        ("object-boundary", object_size - 2048),
+        ("partition-head", partition.offset),
+        ("filesystem-superblock", filesystem_offset),
+        ("image-tail", descriptor.metadata.image_size - 4096),
+    ];
+    let mut hashes = Vec::with_capacity(probes.len());
+    for (label, offset) in probes {
+        let digest = hash_reader_range(&mut reader, offset, 4096);
+        eprintln!("RBD_BYTE_ORACLE label={label} offset={offset} sha256={digest}");
+        hashes.push((label, digest));
+    }
+    assert_rbd_oracle_hashes(&hashes);
+    eprintln!(
+        "RBD_LAYOUT_ORACLE partitions={:?} candidate_kind={:?} candidate_offset={} warnings={:?}",
+        probe
+            .partitions
+            .iter()
+            .map(|partition| (
+                partition.index,
+                partition.kind_label.as_str(),
+                partition.offset,
+                partition.length,
+                partition.status
+            ))
+            .collect::<Vec<_>>(),
+        candidate.kind,
+        candidate.offset,
+        probe.warnings
+    );
+}
+
+#[test]
+#[ignore = "requires a retained PVE case with imported OSD source databases"]
+fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
+    init_test_tracing();
+    let case_root = std::env::var_os(PVE_RBD_CASE_ROOT_ENV)
+        .map(PathBuf::from)
+        .expect("FORENSICS_PVE_RBD_CASE_ROOT must point to a retained PVE case root");
+    let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+        .expect("open retained PVE case database");
+    let cluster_id = case_conn
+        .query_row(
+            "SELECT id FROM data_source_clusters ORDER BY created_at, id LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .expect("query retained PVE cluster id");
+    let cluster = DataSourceClusterRepo::new(&case_conn)
+        .find_by_id(&cluster_id)
+        .expect("query retained PVE cluster")
+        .expect("retained PVE cluster");
+    if std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some() {
+        let ready_derived = DataSourceRepo::new(&case_conn)
+            .find_by_case(&cluster.case_id)
+            .expect("query retained derived sources")
+            .into_iter()
+            .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
+            .filter(|source| {
+                DataSourceRepo::new(&case_conn)
+                    .find_storage(&source.id)
+                    .expect("query retained derived storage")
+                    .is_some_and(|storage| storage.import_state == "ready")
+            })
+            .count();
+        assert_eq!(
+            ready_derived, 1,
+            "retained performance mode requires an already materialized ready RBD source"
+        );
+    }
+    DataSourceClusterRepo::new(&case_conn)
+        .update_state(&cluster_id, "ready", cluster.member_count, 0, None)
+        .expect("mark retained PVE cluster ready for RBD materialization");
+
+    let started = Instant::now();
+    let materialized =
+        materialize_rbd_sources_for_cluster(&case_conn, &case_root, &cluster.case_id, &cluster_id)
+            .expect("materialize retained PVE RBD sources");
+    eprintln!(
+        "PVE_RBD_MATERIALIZE elapsedMs={} sources={}",
+        started.elapsed().as_millis(),
+        materialized.len()
+    );
+
+    assert_eq!(materialized.len(), 1);
+    assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+}
+
+#[test]
+#[ignore = "requires a retained PVE case with imported cluster data"]
+fn real_pve_cluster_asserts_retained_source_isolation_and_derived_rbd() {
+    init_test_tracing();
+    let fixture_root = required_fixture_root();
+    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
+        .expect("plan retained PVE cluster");
+    let case_root = std::env::var_os(PVE_RBD_CASE_ROOT_ENV)
+        .map(PathBuf::from)
+        .expect("FORENSICS_PVE_RBD_CASE_ROOT must point to a retained PVE case root");
+    let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+        .expect("open retained PVE case database");
+    let cluster_id = case_conn
+        .query_row(
+            "SELECT id FROM data_source_clusters ORDER BY created_at, id LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .expect("query retained PVE cluster id");
+    let cluster = DataSourceClusterRepo::new(&case_conn)
+        .find_by_id(&cluster_id)
+        .expect("query retained PVE cluster")
+        .expect("retained PVE cluster");
+    plan.cluster_id = cluster_id.clone();
+    plan.manifest_rel_path = format!("clusters/{cluster_id}/cluster-manifest.json");
+
+    assert_control_database_is_tree_free(&case_conn);
+    assert_manifest(&case_root, &plan);
+    assert_member_storage_and_content(&case_conn, &case_root, &cluster.case_id, &plan, &cluster);
+    assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+}
+
+fn prepare_rbd_oracle_case() -> (Option<TempDir>, PathBuf) {
+    if let Some(case_root) = std::env::var_os(PVE_RBD_CASE_ROOT_ENV).map(PathBuf::from) {
+        assert!(
+            case_root.join("app.db").is_file(),
+            "{PVE_RBD_CASE_ROOT_ENV} must point to a retained case root"
+        );
+        return (None, case_root);
+    }
+
+    let fixture_root = required_fixture_root();
+    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-rbd-oracle".to_string()))
+        .expect("plan PVE RBD import");
+    plan.members
+        .retain(|member| member.source_name.ends_with("-disk02.E01"));
+    assert_eq!(plan.members.len(), PVE_RBD_REPLICA_COUNT);
+    for (index, member) in plan.members.iter_mut().enumerate() {
+        member.member_index = index as u32;
+    }
+
+    let (temp, case_root) = pve_case_root("pve-rbd-byte-oracle-case");
+    let case_id = CaseId("pve-rbd-byte-oracle-regression".to_string());
+    let case_conn = create_case_database(&case_root, &case_id);
+    let job_id = JobRepo::new(&case_conn)
+        .create(&case_id.0, "pve-rbd-byte-oracle-import")
+        .expect("create RBD oracle import job");
+    drop(case_conn);
+
+    run_background_linux_cluster_import_job(
+        BackgroundLinuxClusterImportJob {
+            db_path: case_root.join("app.db"),
+            case_id,
+            case_root: case_root.clone(),
+            plan,
+            job_id,
+            max_import_workers: Some(1),
+            max_analysis_workers: Some(1),
+            analysis_mode: ImportAnalysisMode::MetadataOnly,
+        },
+        None,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .expect("import three BlueStore replicas");
+    (temp, case_root)
+}
+
+fn load_rbd_replicas(case_root: &Path) -> (Vec<RadosReplicaSource>, Vec<u32>) {
+    let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+        .expect("open RBD oracle case database");
+    let case_id = case_conn
+        .query_row(
+            "SELECT id FROM cases ORDER BY created_at LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map(CaseId)
+        .expect("RBD oracle case id");
+    let sources = DataSourceRepo::new(&case_conn)
+        .find_by_case(&case_id)
+        .expect("query RBD replica sources");
+    assert_eq!(sources.len(), PVE_RBD_REPLICA_COUNT);
+
+    let mut replicas = sources
+        .into_iter()
+        .map(|source| {
+            let source_db_path = source_db::source_db_path(case_root, &source.id);
+            let source_conn = persistence_sqlite::open_existing_source(&source_db_path)
+                .expect("open RBD replica source database");
+            let (inventory_id, osd_id, ceph_fsid) = source_conn
+                .query_row(
+                    "SELECT id, whoami, ceph_fsid
+                     FROM ceph_osd_inventory
+                     WHERE data_source_id = ?1",
+                    [&source.id.0],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, u32>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    },
+                )
+                .expect("query RBD replica inventory");
+            assert_eq!(ceph_fsid, PVE_CLUSTER_FSID);
+            let replica = RadosReplicaSource::new(source.id, inventory_id, source_db_path)
+                .expect("bind RBD replica source");
+            (osd_id, replica)
+        })
+        .collect::<Vec<_>>();
+    replicas.sort_unstable_by_key(|(osd_id, _)| *osd_id);
+    let osd_ids = replicas.iter().map(|(osd_id, _)| *osd_id).collect();
+    let replicas = replicas.into_iter().map(|(_, replica)| replica).collect();
+    (replicas, osd_ids)
+}
+
+fn filesystem_oracle_offset(kind: ImageFilesystemKind, base: u64) -> u64 {
+    match kind {
+        ImageFilesystemKind::Ext4 => base + 1024,
+        ImageFilesystemKind::Btrfs => base + 64 * 1024,
+        ImageFilesystemKind::LvmPool => base + 512,
+        ImageFilesystemKind::Ntfs
+        | ImageFilesystemKind::Fat
+        | ImageFilesystemKind::BitLocker
+        | ImageFilesystemKind::Xfs => base,
+    }
+}
+
+fn hash_reader_range(
+    reader: &mut app_services::ceph_reconstruction::RbdEvidenceReader,
+    offset: u64,
+    length: usize,
+) -> String {
+    reader
+        .seek(SeekFrom::Start(offset))
+        .expect("seek RBD oracle range");
+    let mut bytes = vec![0u8; length];
+    reader
+        .read_exact(&mut bytes)
+        .expect("read RBD oracle range");
+    infrastructure::hashing::sha256_bytes(&bytes)
+}
+
+fn assert_rbd_oracle_hashes(hashes: &[(&str, String)]) {
+    let expected = [
+        (
+            "image-head",
+            "249a056f59ea7ecc4124856f78970f2622778e8bdc75146f95df3d2fdcd3d330",
+        ),
+        (
+            "object-boundary",
+            "546e6c33dbeaa8369263dfdae6312012850f965235301680680f4a2b93065924",
+        ),
+        (
+            "partition-head",
+            "7b8aaced722dc78ada3d1d9a15a57ef816703cd5fd8564693ec958a124af426b",
+        ),
+        (
+            "filesystem-superblock",
+            "7b8aaced722dc78ada3d1d9a15a57ef816703cd5fd8564693ec958a124af426b",
+        ),
+        (
+            "image-tail",
+            "ad7facb2586fc6e966c004d7d1d16b024f5805ff7cb47c7a85dabd8b48892ca7",
+        ),
+    ];
+    assert_eq!(hashes.len(), expected.len());
+    for ((label, actual), (expected_label, expected_hash)) in hashes.iter().zip(expected) {
+        assert_eq!(*label, expected_label);
+        assert_eq!(actual.len(), 64);
+        assert_eq!(actual, expected_hash, "RBD byte oracle changed for {label}");
+    }
 }
 
 fn init_test_tracing() {
@@ -407,8 +778,17 @@ fn assert_member_storage_and_content(
     let sources = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)
         .expect("query cluster data sources");
+    let member_sources = sources
+        .iter()
+        .filter(|source| {
+            plan.members
+                .iter()
+                .any(|member| member.source_path == source.source_path)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     assert_eq!(
-        sources.len(),
+        member_sources.len(),
         PVE_MEMBER_COUNT,
         "every member must be attempted and registered"
     );
@@ -421,7 +801,7 @@ fn assert_member_storage_and_content(
     let mut bluefs_uuids = HashSet::new();
     let mut cluster_fsids = HashSet::new();
     for member in &plan.members {
-        let source = source_for_member(&sources, &member.source_path);
+        let source = source_for_member(&member_sources, &member.source_path);
         assert_member_metadata(case_conn, source, plan, member.member_index);
         let storage = DataSourceRepo::new(case_conn)
             .find_storage(&source.id)
@@ -471,6 +851,140 @@ fn assert_member_storage_and_content(
     assert_eq!(cluster.failed_count, 0);
     assert_eq!(cluster.import_state, "ready");
     assert!(cluster.last_error.is_none());
+}
+
+fn assert_derived_rbd_sources(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    cluster_id: &str,
+) {
+    let derived_sources = DataSourceRepo::new(case_conn)
+        .find_by_case(case_id)
+        .expect("query derived data sources")
+        .into_iter()
+        .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        derived_sources.len(),
+        1,
+        "the PVE fixture must materialize its single RBD VM disk"
+    );
+    let source = &derived_sources[0];
+    assert_eq!(
+        source.source_path,
+        PathBuf::from(format!("ceph-rbd://{cluster_id}/{PVE_RBD_IMAGE_ID}"))
+    );
+    let storage = DataSourceRepo::new(case_conn)
+        .find_storage(&source.id)
+        .expect("query derived RBD storage")
+        .expect("derived RBD storage");
+    assert_eq!(storage.import_state, "ready");
+    assert_eq!(storage.platform, "linux");
+    assert_eq!(storage.profile.as_deref(), Some("vm_disk"));
+
+    let lineage = CephRbdLineageRepo::new(case_conn)
+        .find_by_data_source(&source.id.0)
+        .expect("query derived RBD lineage")
+        .expect("derived RBD lineage");
+    assert_eq!(lineage.lineage.parent_cluster_id, cluster_id);
+    assert_eq!(lineage.lineage.image_id, PVE_RBD_IMAGE_ID);
+    assert_eq!(lineage.lineage.image_name, PVE_RBD_IMAGE_NAME);
+    assert_eq!(
+        lineage.lineage.expected_replica_count as usize,
+        PVE_RBD_REPLICA_COUNT
+    );
+
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
+        .expect("open derived RBD source database");
+    let record_count = FileRepo::new(&source_conn)
+        .count_by_data_source(&source.id)
+        .expect("count derived RBD files");
+    assert_eq!(
+        record_count, PVE_RBD_RECORD_COUNT,
+        "derived RBD record count differs from the retained sample oracle"
+    );
+    let (directory_count, file_count, total_file_size) = source_conn
+        .query_row(
+            "SELECT
+                SUM(entry_type = 'directory'),
+                SUM(entry_type = 'file'),
+                COALESCE(SUM(CASE WHEN entry_type = 'file' THEN size ELSE 0 END), 0)
+             FROM file_entries
+             WHERE data_source_id = ?1",
+            [&source.id.0],
+            |row| {
+                Ok((
+                    row.get::<_, u64>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, u64>(2)?,
+                ))
+            },
+        )
+        .expect("query derived RBD record oracle");
+    assert_eq!(directory_count, PVE_RBD_DIRECTORY_COUNT);
+    assert_eq!(file_count, PVE_RBD_FILE_COUNT);
+    assert_eq!(total_file_size, PVE_RBD_TOTAL_FILE_SIZE);
+
+    let partition_rows = source_conn
+        .prepare(
+            "SELECT partition_index, filesystem, status
+             FROM data_source_partitions
+             WHERE data_source_id = ?1
+             ORDER BY partition_index",
+        )
+        .expect("prepare derived partition query")
+        .query_map([&source.id.0], |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .expect("query derived RBD partitions")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read derived RBD partitions");
+    assert_eq!(
+        partition_rows,
+        vec![
+            (0, Some("XFS".to_string()), "supported".to_string()),
+            (1, Some("XFS".to_string()), "supported".to_string()),
+            (2, Some("XFS".to_string()), "supported".to_string()),
+        ],
+        "derived RBD partition layout differs from the retained sample oracle"
+    );
+    assert!(
+        partition_rows
+            .iter()
+            .all(|(_, _, status)| status != "unsupported"),
+        "derived RBD source must not expose unsupported partition placeholders"
+    );
+
+    let entry_id = find_file_by_linux_suffix(&source_conn, &source.id, "/etc/passwd")
+        .expect("find stable derived RBD preview file /etc/passwd");
+    let global_id = GlobalFileId::new(source.id.clone(), entry_id).encode();
+    let handle = app_services::file_service::open_file_handle_for_case(
+        case_conn,
+        case_root,
+        case_id,
+        &global_id.0,
+    )
+    .expect("open derived RBD preview handle");
+    let response = app_services::file_service::read_file_range_for_source_case(
+        case_conn,
+        case_root,
+        case_id,
+        &ViewerRangeRequestDto {
+            handle_id: handle.handle_id,
+            offset: 0,
+            length: 512,
+        },
+    )
+    .expect("read derived RBD preview range");
+    assert!(
+        response.raw_bytes.is_some_and(|bytes| !bytes.is_empty()),
+        "derived RBD preview must return bytes"
+    );
 }
 
 fn assert_unique_source_storage(case_conn: &rusqlite::Connection, sources: &[DataSource]) {

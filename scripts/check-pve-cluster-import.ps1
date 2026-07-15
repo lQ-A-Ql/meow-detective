@@ -2,9 +2,11 @@
 
 param(
     [string]$FixtureRoot = $env:FORENSICS_PVE_CLUSTER_ROOT,
+    [string]$RetainCaseRoot = $env:FORENSICS_PVE_CASE_OUTPUT_ROOT,
+    [string]$ExistingRbdCaseRoot = $env:FORENSICS_PVE_RBD_CASE_ROOT,
     [switch]$RequireFixture,
     [ValidateRange(1, 86400)]
-    [int]$TimeoutSeconds = 3600
+    [int]$TimeoutSeconds = 1200
 )
 
 Set-StrictMode -Version Latest
@@ -18,7 +20,8 @@ $expectedMembers = [string[]]@(
     "server03/server03-disk01.E01",
     "server03/server03-disk02.E01"
 )
-$testName = "commands::import::background_job::tests::real_pve_cluster_import_attempts_every_member_and_isolates_source_databases"
+$fullImportTestName = "commands::import::background_job::tests::real_pve_cluster_import_attempts_every_member_and_isolates_source_databases"
+$retainedRbdTestName = "commands::import::background_job::tests::real_pve_rbd_materializes_vm_tree_from_retained_cluster"
 
 function Test-PrimaryClusterImage {
     param([Parameter(Mandatory = $true)][System.IO.FileInfo]$File)
@@ -45,50 +48,65 @@ function Get-FixtureRelativePath {
     return $normalizedPath.Substring($prefix.Length).Replace("\", "/")
 }
 
-if ([string]::IsNullOrWhiteSpace($FixtureRoot) -or
-    -not (Test-Path -LiteralPath $FixtureRoot -PathType Container)) {
-    $message = "FORENSICS_PVE_CLUSTER_ROOT is not set to a readable PVE cluster fixture directory."
-    if ($RequireFixture) {
-        throw $message
-    }
-    Write-Host "SKIP: $message"
-    exit 0
-}
+$projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+. (Join-Path $PSScriptRoot "lib/RustGuard.Common.ps1")
 
-$resolvedFixtureRoot = (Resolve-Path -LiteralPath $FixtureRoot).Path
-$fixtureMembers = [string[]]@(
-    Get-ChildItem -LiteralPath $resolvedFixtureRoot -Recurse -File -ErrorAction Stop |
-        Where-Object { Test-PrimaryClusterImage -File $_ } |
-        ForEach-Object {
-            if ($_.Length -le 0) {
-                throw "PVE fixture member is empty: $($_.FullName)"
+$testName = $fullImportTestName
+$timeoutContext = "real six-member PVE cluster import regression"
+$useRetainedCase = -not [string]::IsNullOrWhiteSpace($ExistingRbdCaseRoot)
+if ($useRetainedCase) {
+    $resolvedRbdCaseRoot = [System.IO.Path]::GetFullPath($ExistingRbdCaseRoot)
+    if (-not (Test-Path -LiteralPath (Join-Path $resolvedRbdCaseRoot "app.db") -PathType Leaf)) {
+        throw "FORENSICS_PVE_RBD_CASE_ROOT must contain an existing app.db: $resolvedRbdCaseRoot"
+    }
+    $env:FORENSICS_PVE_RBD_CASE_ROOT = $resolvedRbdCaseRoot
+    $env:FORENSICS_PVE_RBD_REQUIRE_READY = "1"
+    $testName = $retainedRbdTestName
+    $timeoutContext = "retained PVE RBD tree and preview regression"
+    Write-Host "Using retained PVE RBD case: $resolvedRbdCaseRoot"
+} else {
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot) -or
+        -not (Test-Path -LiteralPath $FixtureRoot -PathType Container)) {
+        $message = "FORENSICS_PVE_CLUSTER_ROOT is not set to a readable PVE cluster fixture directory."
+        if ($RequireFixture) {
+            throw $message
+        }
+        Write-Host "SKIP: $message"
+        exit 0
+    }
+
+    $resolvedFixtureRoot = (Resolve-Path -LiteralPath $FixtureRoot).Path
+    $fixtureMembers = [string[]]@(
+        Get-ChildItem -LiteralPath $resolvedFixtureRoot -Recurse -File -ErrorAction Stop |
+            Where-Object { Test-PrimaryClusterImage -File $_ } |
+            ForEach-Object {
+                if ($_.Length -le 0) {
+                    throw "PVE fixture member is empty: $($_.FullName)"
+                }
+                Get-FixtureRelativePath -Root $resolvedFixtureRoot -Path $_.FullName
             }
-            Get-FixtureRelativePath -Root $resolvedFixtureRoot -Path $_.FullName
-        }
-)
-[System.Array]::Sort($fixtureMembers, [System.StringComparer]::OrdinalIgnoreCase)
+    )
+    [System.Array]::Sort($fixtureMembers, [System.StringComparer]::OrdinalIgnoreCase)
 
-$fixtureMatches = $fixtureMembers.Count -eq $expectedMembers.Count
-if ($fixtureMatches) {
-    for ($index = 0; $index -lt $expectedMembers.Count; $index++) {
-        if ($fixtureMembers[$index] -cne $expectedMembers[$index]) {
-            $fixtureMatches = $false
-            break
+    $fixtureMatches = $fixtureMembers.Count -eq $expectedMembers.Count
+    if ($fixtureMatches) {
+        for ($index = 0; $index -lt $expectedMembers.Count; $index++) {
+            if ($fixtureMembers[$index] -cne $expectedMembers[$index]) {
+                $fixtureMatches = $false
+                break
+            }
         }
     }
-}
-if (-not $fixtureMatches) {
-    throw @"
+    if (-not $fixtureMatches) {
+        throw @"
 PVE fixture preflight failed. The planner-visible primary image set must be exactly:
 $($expectedMembers -join [Environment]::NewLine)
 Actual:
 $($fixtureMembers -join [Environment]::NewLine)
 "@
+    }
+    $env:FORENSICS_PVE_CLUSTER_ROOT = $resolvedFixtureRoot
 }
-
-$projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
-$env:FORENSICS_PVE_CLUSTER_ROOT = $resolvedFixtureRoot
-. (Join-Path $PSScriptRoot "lib/RustGuard.Common.ps1")
 
 $cargo = Get-Command cargo -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -99,15 +117,22 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
+if (-not [string]::IsNullOrWhiteSpace($RetainCaseRoot)) {
+    $retainedRoot = [System.IO.Path]::GetFullPath($RetainCaseRoot)
+    $startInfo.Environment["FORENSICS_PVE_CASE_OUTPUT_ROOT"] = $retainedRoot
+    Write-Host "Retaining derived PVE case under: $retainedRoot"
+}
 
-Write-Host "PVE fixture preflight passed in exact import order:"
-$expectedMembers | ForEach-Object { Write-Host "  $_" }
-Write-Host "Running exact serial regression with timeout ${TimeoutSeconds}s: cargo $($startInfo.Arguments)"
+if (-not $useRetainedCase) {
+    Write-Host "PVE fixture preflight passed in exact import order:"
+    $expectedMembers | ForEach-Object { Write-Host "  $_" }
+}
+Write-Host "Running exact serial regression ($timeoutContext) with timeout ${TimeoutSeconds}s: cargo $($startInfo.Arguments)"
 
 $result = Invoke-RustGuardProcess `
     -StartInfo $startInfo `
     -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
-    -TimeoutContext "real six-member PVE cluster import regression"
+    -TimeoutContext $timeoutContext
 if (-not [string]::IsNullOrEmpty($result.Stdout)) {
     [Console]::Out.Write($result.Stdout)
 }

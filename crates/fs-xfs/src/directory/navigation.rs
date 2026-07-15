@@ -6,12 +6,27 @@ use crate::{be_u64, di_off, XfsReader, FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCA
 use evidence_core::filesystem::{invalid_fs_data, path_components};
 use std::io;
 
+const MAX_DIRECTORY_PATH_CACHE_ENTRIES: usize = 100_000;
+const MAX_DIRECTORY_INODE_CACHE_ENTRIES: usize = 32_768;
+
 impl XfsReader {
+    pub(crate) fn cache_directory_path(&self, path: String, ino: u64) {
+        let mut cache = self.directory_path_cache.borrow_mut();
+        if cache.len() < MAX_DIRECTORY_PATH_CACHE_ENTRIES {
+            cache.insert(path, ino);
+        }
+    }
+
     pub(crate) fn read_directory_entries(
         &self,
         ino: u64,
     ) -> io::Result<Vec<XfsResolvedDirectoryEntry>> {
-        let inode = self.read_inode(ino)?;
+        let inode = self
+            .directory_inode_cache
+            .borrow()
+            .get(&ino)
+            .cloned()
+            .map_or_else(|| self.read_inode(ino), Ok)?;
         Self::validate_inode_magic(&inode)?;
         if !Self::inode_is_dir(&inode) {
             return Err(invalid_fs_data(format!("inode {ino} is not a directory")));
@@ -217,6 +232,10 @@ impl XfsReader {
         let inode = self.read_inode(ino).ok()?;
         Self::validate_inode_magic(&inode).ok()?;
         if Self::inode_is_dir(&inode) {
+            let mut cache = self.directory_inode_cache.borrow_mut();
+            if cache.len() < MAX_DIRECTORY_INODE_CACHE_ENTRIES {
+                cache.entry(ino).or_insert_with(|| inode.clone());
+            }
             return Some((
                 matches!(
                     inode[di_off::FORMAT],
@@ -233,14 +252,32 @@ impl XfsReader {
         if components.is_empty() {
             return Ok(Some((self.root_ino, true)));
         }
+        let normalized_path = components.join("/");
+        if let Some(inode) = self
+            .directory_path_cache
+            .borrow()
+            .get(&normalized_path)
+            .copied()
+        {
+            return Ok(Some((inode, true)));
+        }
 
         let mut current_inode = self.root_ino;
+        let mut current_path = String::new();
         for (index, component) in components.iter().enumerate() {
             let entries = self.read_directory_entries(current_inode)?;
             let is_last = index == components.len() - 1;
             let Some(entry) = entries.iter().find(|entry| entry.name == *component) else {
                 return Ok(None);
             };
+            current_path = if current_path.is_empty() {
+                (*component).to_string()
+            } else {
+                format!("{current_path}/{component}")
+            };
+            if entry.is_dir {
+                self.cache_directory_path(current_path.clone(), entry.inode);
+            }
             if is_last {
                 return Ok(Some((entry.inode, entry.is_dir)));
             }

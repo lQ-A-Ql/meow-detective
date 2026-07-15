@@ -83,7 +83,8 @@ pub(super) fn find_rbd_header(
     }
     conn.query_row(
         "SELECT inventory_id, scope_identity, owner_nid_hex, image_id, size_hex,
-                object_order, features_hex, object_prefix, stripe_unit_hex,
+                object_order, features_hex, operation_features_hex,
+                parent_key_present, object_prefix, stripe_unit_hex,
                 stripe_count_hex, data_pool_id
          FROM ceph_bluestore_rbd_headers
          WHERE inventory_id = ?1 AND image_id = ?2",
@@ -158,7 +159,8 @@ fn find_headers(
 ) -> DbResult<Vec<CephBluestoreRbdHeaderRecord>> {
     let mut statement = conn.prepare(
         "SELECT inventory_id, scope_identity, owner_nid_hex, image_id, size_hex,
-                object_order, features_hex, object_prefix, stripe_unit_hex,
+                object_order, features_hex, operation_features_hex,
+                parent_key_present, object_prefix, stripe_unit_hex,
                 stripe_count_hex, data_pool_id
          FROM ceph_bluestore_rbd_headers
          WHERE inventory_id = ?1
@@ -226,9 +228,11 @@ fn map_header(row: &rusqlite::Row<'_>) -> rusqlite::Result<CephBluestoreRbdHeade
         size_hex: row.get(4)?,
         object_order: row.get(5)?,
         features_hex: row.get(6)?,
-        object_prefix: row.get(7)?,
-        stripe_unit_hex: row.get(8)?,
-        stripe_count_hex: row.get(9)?,
-        data_pool_id: row.get(10)?,
+        operation_features_hex: row.get(7)?,
+        parent_key_present: row.get(8)?,
+        object_prefix: row.get(9)?,
+        stripe_unit_hex: row.get(10)?,
+        stripe_count_hex: row.get(11)?,
+        data_pool_id: row.get(12)?,
     })
 }

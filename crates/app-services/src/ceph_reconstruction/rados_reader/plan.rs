@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::io::{self, SeekFrom};
+use std::mem::size_of;
 
 use evidence_core::EvidenceReader;
 use persistence_sqlite::repositories::ceph_bluestore_semantic_repo::{
@@ -26,6 +27,20 @@ pub(super) struct BlobPlan {
 }
 
 impl BlobPlan {
+    pub(super) fn estimated_bytes(&self) -> usize {
+        size_of::<Self>()
+            .saturating_add(
+                self.physical_extents
+                    .capacity()
+                    .saturating_mul(size_of::<PhysicalExtent>()),
+            )
+            .saturating_add(
+                self.checksums
+                    .capacity()
+                    .saturating_mul(size_of::<ChecksumChunk>()),
+            )
+    }
+
     pub(super) fn read_range(
         &self,
         device: &mut dyn EvidenceReader,
@@ -39,10 +54,13 @@ impl BlobPlan {
             return Err(invalid_data("blob range exceeds logical length"));
         }
         output.fill(0);
-        for extent in &self.physical_extents {
-            if extent.blob_offset >= end || extent.end <= offset {
-                continue;
-            }
+        let first_extent = self
+            .physical_extents
+            .partition_point(|extent| extent.end <= offset);
+        for extent in self.physical_extents[first_extent..]
+            .iter()
+            .take_while(|extent| extent.blob_offset < end)
+        {
             let start = offset.max(extent.blob_offset);
             let extent_end = end.min(extent.end);
             let destination = usize::try_from(start - offset)
@@ -73,14 +91,13 @@ impl BlobPlan {
         let end = offset
             .checked_add(output.len() as u64)
             .ok_or_else(|| invalid_data("checksum range end overflow"))?;
-        let mut verified = BTreeSet::new();
-        for checksum in &self.checksums {
-            if checksum.offset >= end
-                || checksum.end <= offset
-                || !verified.insert(checksum.ordinal)
-            {
-                continue;
-            }
+        let first_checksum = self
+            .checksums
+            .partition_point(|checksum| checksum.end <= offset);
+        for checksum in self.checksums[first_checksum..]
+            .iter()
+            .take_while(|checksum| checksum.offset < end)
+        {
             let actual = if checksum.offset >= offset && checksum.end <= end {
                 let start = usize::try_from(checksum.offset - offset)
                     .map_err(|_| invalid_data("checksum output offset exceeds usize"))?;

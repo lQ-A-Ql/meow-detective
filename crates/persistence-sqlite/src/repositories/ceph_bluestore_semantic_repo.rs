@@ -63,8 +63,25 @@ impl<'a> CephBluestoreSemanticRepo<'a> {
         object_name: &[u8],
         pool: i64,
         namespace: &[u8],
+        snap_hex: &str,
     ) -> DbResult<Option<CephBluestoreObjectCandidate>> {
-        read_plan::find_object_candidate(self.conn, inventory_id, object_name, pool, namespace)
+        read_plan::find_object_candidate(
+            self.conn,
+            inventory_id,
+            object_name,
+            pool,
+            namespace,
+            snap_hex,
+        )
+    }
+
+    pub fn ensure_object_catalog_complete(&self, inventory_id: &str) -> DbResult<()> {
+        let Some(scan) = query::find_scan(self.conn, inventory_id)? else {
+            return Err(crate::connection::DbError::System(
+                "BlueStore object catalog is unavailable".to_string(),
+            ));
+        };
+        validation::validate_scan_for_read(&scan)
     }
 
     pub fn replace_for_inventory(

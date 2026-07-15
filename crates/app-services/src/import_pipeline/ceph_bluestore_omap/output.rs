@@ -72,6 +72,8 @@ pub(super) fn append_header(
         size: closed.header.size,
         order: closed.header.order,
         features: closed.header.features,
+        operation_features: closed.header.operation_features,
+        parent_key_present: closed.header.parent_key_present,
         object_prefix: closed.header.object_prefix.clone(),
         stripe_unit: closed.header.stripe_unit,
         stripe_count: closed.header.stripe_count,

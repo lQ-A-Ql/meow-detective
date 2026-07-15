@@ -132,12 +132,7 @@ fn clips_reads_at_eof_and_rejects_out_of_bounds_seeks() {
 
 #[test]
 fn rejects_features_that_change_missing_object_or_pool_semantics() {
-    for unsupported in [
-        RBD_FEATURE_LAYERING,
-        RBD_FEATURE_DATA_POOL,
-        RBD_FEATURE_DIRTY_CACHE,
-        1u64 << 20,
-    ] {
+    for unsupported in [RBD_FEATURE_DATA_POOL, RBD_FEATURE_DIRTY_CACHE, 1u64 << 20] {
         assert!(matches!(
             reader(MemoryProvider::default(), 64, unsupported, safe_context()),
             Err(RbdReadError::UnsupportedFeatures { .. })
@@ -219,12 +214,12 @@ fn rejects_parent_clone_operation_features() {
 fn accepts_only_explicitly_read_safe_features() {
     let provider = MemoryProvider::default().with_object(0, vec![0x33; OBJECT_SIZE]);
     let read_safe_features = RBD_FEATURE_STRIPINGV2
+        | RBD_FEATURE_LAYERING
         | RBD_FEATURE_EXCLUSIVE_LOCK
         | RBD_FEATURE_OBJECT_MAP
         | RBD_FEATURE_FAST_DIFF
         | RBD_FEATURE_DEEP_FLATTEN
         | RBD_FEATURE_OPERATIONS
-        | RBD_FEATURE_MIGRATING
         | RBD_FEATURE_NON_PRIMARY;
     let mut reader = reader(provider, 64, read_safe_features, safe_context()).unwrap();
     let mut output = [0u8; 8];
@@ -232,6 +227,20 @@ fn accepts_only_explicitly_read_safe_features() {
     reader.read_exact(&mut output).unwrap();
 
     assert_eq!(output, [0x33; 8]);
+}
+
+#[test]
+fn rejects_migration_state_that_can_redirect_image_reads() {
+    assert!(matches!(
+        reader(
+            MemoryProvider::default(),
+            64,
+            RBD_FEATURE_MIGRATING,
+            safe_context()
+        ),
+        Err(RbdReadError::UnsupportedFeatures { unsupported, .. })
+            if unsupported == RBD_FEATURE_MIGRATING
+    ));
 }
 
 #[test]

@@ -209,7 +209,9 @@ fn extracts_rbd_directory_and_header_fields_with_owner_binding() {
     for (key, value) in [
         (b"size".as_slice(), encoded(0x1000_u64)),
         (b"order".as_slice(), encoded(22_u8)),
-        (b"features".as_slice(), encoded(0x21_u64)),
+        (b"features".as_slice(), encoded(0x121_u64)),
+        (b"op_features".as_slice(), encoded(0x4_u64)),
+        (b"parent".as_slice(), b"opaque-parent".to_vec()),
         (
             b"object_prefix".as_slice(),
             encoded_string("rbd_data.image-id"),
@@ -250,7 +252,9 @@ fn extracts_rbd_directory_and_header_fields_with_owner_binding() {
     assert_eq!(header.owner_nid, header_nid);
     assert_eq!(header.size, Some(0x1000));
     assert_eq!(header.order, Some(22));
-    assert_eq!(header.features, Some(0x21));
+    assert_eq!(header.features, Some(0x121));
+    assert_eq!(header.operation_features, Some(0x4));
+    assert!(header.parent_key_present);
     assert_eq!(header.object_prefix.as_deref(), Some("rbd_data.image-id"));
     assert_eq!(header.stripe_unit, Some(4096));
     assert_eq!(header.stripe_count, Some(1));
@@ -264,7 +268,7 @@ fn binds_omap_scope_only_to_the_matching_flag_family() {
     fragment
         .observe_onode(
             &object(b"rbd_header.family-test"),
-            &onode(nid, flags(false, false, true, false)),
+            &onode(nid, flags(true, false, true, false)),
         )
         .expect("owner");
     let key = logical_key_with_scope(BlueStoreOmapKeyFamily::PerPool, 3, 0, nid, b'-', &[]);
@@ -292,16 +296,9 @@ fn binds_omap_scope_only_to_the_matching_flag_family() {
 fn rejects_unclosed_and_out_of_order_scopes() {
     let mut fragment = BlueStoreOmapFragment::default();
     let entry = logical_key(BlueStoreOmapKeyFamily::Bulk, NID, b'.', b"size");
-    assert!(matches!(
-        fragment
-            .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &entry, &encoded(1_u64),),
-        Err(BlueStoreOmapError::MissingHeader { .. })
-    ));
-
-    let header = logical_key(BlueStoreOmapKeyFamily::Bulk, NID, b'-', &[]);
     fragment
-        .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &header, &[])
-        .expect("header");
+        .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &entry, &encoded(1_u64))
+        .expect("headerless entry");
     assert!(matches!(
         fragment.finish(),
         Err(BlueStoreOmapError::UnclosedScope { .. })
@@ -335,38 +332,184 @@ fn accepts_headerless_pg_metadata_scopes_without_rbd_projection() {
 }
 
 #[test]
-fn keeps_bulk_and_per_pool_header_requirements_strict() {
+fn accepts_headerless_bulk_and_per_pool_scopes_without_rbd_projection() {
     for (family, pool) in [
         (BlueStoreOmapKeyFamily::Bulk, 0),
         (BlueStoreOmapKeyFamily::PerPool, 7),
     ] {
         let mut fragment = BlueStoreOmapFragment::default();
         let entry = logical_key_with_scope(family, pool, 0, NID, b'.', b"size");
-        assert!(matches!(
-            fragment.observe_routed_latest_value(family, &entry, &encoded(1_u64)),
-            Err(BlueStoreOmapError::MissingHeader { .. })
-        ));
+        fragment
+            .observe_routed_latest_value(family, &entry, b"not-rbd-encoded")
+            .expect("headerless entry");
+        let tail = logical_key_with_scope(family, pool, 0, NID, b'~', &[]);
+        fragment
+            .observe_routed_latest_value(family, &tail, &[])
+            .expect("headerless tail");
+        let snapshot = fragment.finish().expect("headerless scope");
+        assert_eq!(snapshot.scopes[0].entry_count, 1);
+        assert_eq!(snapshot.scopes[0].recognized_entry_count, 0);
+        assert!(snapshot.scopes[0].owner.is_none());
     }
+}
+
+#[test]
+fn binds_headerless_per_pg_rbd_entries_after_cross_fragment_merge() {
+    let directory_nid = 31;
+    let header_nid = 32;
+    let mut owners = BlueStoreOmapFragment::default();
+    owners
+        .observe_onode(
+            &object(b"rbd_directory"),
+            &onode(directory_nid, flags(true, false, true, true)),
+        )
+        .expect("directory owner");
+    owners
+        .observe_onode(
+            &object(b"rbd_header.image-id"),
+            &onode(header_nid, flags(true, false, true, true)),
+        )
+        .expect("header owner");
+
+    let mut entries = BlueStoreOmapFragment::default();
+    for (nid, key, value) in [
+        (
+            directory_nid,
+            b"name_vm-disk".as_slice(),
+            encoded_string("image-id"),
+        ),
+        (
+            directory_nid,
+            b"id_image-id".as_slice(),
+            encoded_string("vm-disk"),
+        ),
+        (header_nid, b"size".as_slice(), encoded(0x20_0000_u64)),
+        (header_nid, b"order".as_slice(), encoded(22_u8)),
+        (
+            header_nid,
+            b"object_prefix".as_slice(),
+            encoded_string("rbd_data.image-id"),
+        ),
+    ] {
+        let key = logical_key_with_scope(
+            BlueStoreOmapKeyFamily::PerPg,
+            2,
+            0x1122_3344,
+            nid,
+            b'.',
+            key,
+        );
+        entries
+            .observe_routed_latest_value(BlueStoreOmapKeyFamily::PerPg, &key, &value)
+            .expect("headerless RBD entry");
+    }
+    for nid in [directory_nid, header_nid] {
+        let tail = logical_key_with_scope(
+            BlueStoreOmapKeyFamily::PerPg,
+            2,
+            0x1122_3344,
+            nid,
+            b'~',
+            &[],
+        );
+        entries
+            .observe_routed_latest_value(BlueStoreOmapKeyFamily::PerPg, &tail, &[])
+            .expect("headerless RBD tail");
+    }
+
+    owners.merge(entries).expect("merge column fragments");
+    let snapshot = owners.finish().expect("RBD snapshot");
+    assert_eq!(snapshot.directory_mappings.len(), 1);
+    assert_eq!(snapshot.directory_mappings[0].image_name, "vm-disk");
+    assert_eq!(snapshot.directory_mappings[0].image_id, "image-id");
+    assert!(snapshot.directory_mappings[0].bidirectional);
+    assert_eq!(snapshot.rbd_headers.len(), 1);
+    assert_eq!(snapshot.rbd_headers[0].image_id, "image-id");
+    assert_eq!(snapshot.rbd_headers[0].size, Some(0x20_0000));
+    assert_eq!(snapshot.rbd_headers[0].order, Some(22));
+    assert_eq!(
+        snapshot.rbd_headers[0].object_prefix.as_deref(),
+        Some("rbd_data.image-id")
+    );
+    assert!(snapshot
+        .scopes
+        .iter()
+        .all(|scope| scope.owner.is_some() && scope.recognized_entry_count > 0));
+}
+
+#[test]
+fn selects_the_effective_omap_family_using_ceph_precedence() {
+    let mut fragment = BlueStoreOmapFragment::default();
+    fragment
+        .observe_onode(
+            &object(b"rbd_header.image-id"),
+            &onode(NID, flags(true, false, true, true)),
+        )
+        .expect("owner");
+
+    for family in [
+        BlueStoreOmapKeyFamily::PerPool,
+        BlueStoreOmapKeyFamily::PerPg,
+    ] {
+        let key = logical_key_with_scope(family, 2, 0x1122_3344, NID, b'~', &[]);
+        fragment
+            .observe_routed_latest_value(family, &key, &[])
+            .expect("tail");
+    }
+
+    let snapshot = fragment.finish().expect("snapshot");
+    let per_pool = snapshot
+        .scopes
+        .iter()
+        .find(|scope| scope.scope.family == BlueStoreOmapKeyFamily::PerPool)
+        .expect("per-pool scope");
+    let per_pg = snapshot
+        .scopes
+        .iter()
+        .find(|scope| scope.scope.family == BlueStoreOmapKeyFamily::PerPg)
+        .expect("per-pg scope");
+    assert!(per_pool.owner.is_none());
+    assert_eq!(
+        per_pg.owner.as_ref().map(|owner| owner.family),
+        Some(BlueStoreOmapKeyFamily::PerPg)
+    );
 }
 
 #[test]
 fn rejects_trailing_value_bytes_and_memory_limit() {
     let mut fragment = BlueStoreOmapFragment::default();
+    fragment
+        .observe_onode(
+            &object(b"rbd_header.image-id"),
+            &onode(NID, flags(true, false, false, false)),
+        )
+        .expect("owner");
     let header = logical_key(BlueStoreOmapKeyFamily::Bulk, NID, b'-', &[]);
     fragment
         .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &header, &[])
         .expect("header");
     let mut value = encoded(1_u64);
     value.push(0);
+    observe(
+        &mut fragment,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'.',
+        b"size",
+        &value,
+    )
+    .expect("deferred size");
+    observe(
+        &mut fragment,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'~',
+        &[],
+        &[],
+    )
+    .expect("tail");
     assert!(matches!(
-        observe(
-            &mut fragment,
-            BlueStoreOmapKeyFamily::Bulk,
-            NID,
-            b'.',
-            b"size",
-            &value,
-        ),
+        fragment.finish(),
         Err(BlueStoreOmapError::TrailingValue {
             field: "rbd header size",
             ..
@@ -400,29 +543,56 @@ fn rejects_trailing_value_bytes_and_memory_limit() {
 
 #[test]
 fn rejects_invalid_rbd_text_and_duplicate_fields() {
-    let mut fragment = BlueStoreOmapFragment::default();
+    let mut invalid = BlueStoreOmapFragment::default();
+    invalid
+        .observe_onode(
+            &object(b"rbd_header.image-id"),
+            &onode(NID, flags(true, false, false, false)),
+        )
+        .expect("owner");
     let header = logical_key(BlueStoreOmapKeyFamily::Bulk, NID, b'-', &[]);
-    fragment
+    invalid
         .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &header, &[])
         .expect("header");
     let invalid_text = encoded_string("");
+    observe(
+        &mut invalid,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'.',
+        b"object_prefix",
+        &invalid_text,
+    )
+    .expect("deferred object prefix");
+    observe(
+        &mut invalid,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'~',
+        &[],
+        &[],
+    )
+    .expect("tail");
     assert!(matches!(
-        observe(
-            &mut fragment,
-            BlueStoreOmapKeyFamily::Bulk,
-            NID,
-            b'.',
-            b"object_prefix",
-            &invalid_text,
-        ),
+        invalid.finish(),
         Err(BlueStoreOmapError::InvalidField {
             field: "rbd header object_prefix",
             ..
         })
     ));
 
+    let mut duplicate = BlueStoreOmapFragment::default();
+    duplicate
+        .observe_onode(
+            &object(b"rbd_header.image-id"),
+            &onode(NID, flags(true, false, false, false)),
+        )
+        .expect("owner");
+    duplicate
+        .observe_routed_latest_value(BlueStoreOmapKeyFamily::Bulk, &header, &[])
+        .expect("header");
     observe(
-        &mut fragment,
+        &mut duplicate,
         BlueStoreOmapKeyFamily::Bulk,
         NID,
         b'.',
@@ -430,15 +600,26 @@ fn rejects_invalid_rbd_text_and_duplicate_fields() {
         &encoded(1_u64),
     )
     .expect("size");
+    observe(
+        &mut duplicate,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'.',
+        b"size",
+        &encoded(2_u64),
+    )
+    .expect("duplicate size deferred");
+    observe(
+        &mut duplicate,
+        BlueStoreOmapKeyFamily::Bulk,
+        NID,
+        b'~',
+        &[],
+        &[],
+    )
+    .expect("tail");
     assert!(matches!(
-        observe(
-            &mut fragment,
-            BlueStoreOmapKeyFamily::Bulk,
-            NID,
-            b'.',
-            b"size",
-            &encoded(2_u64),
-        ),
+        duplicate.finish(),
         Err(BlueStoreOmapError::DuplicateField {
             field: "rbd header size",
             ..

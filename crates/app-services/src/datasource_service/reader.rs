@@ -8,7 +8,11 @@ pub(crate) fn open_evidence_reader(
     match source_kind {
         DataSourceKind::E01 => image_e01::E01Reader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>),
-        _ => evidence_core::RawImageReader::open(source_path)
+        DataSourceKind::Raw => evidence_core::RawImageReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>),
+        DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd => Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("data source kind {source_kind} is not a host image reader"),
+        )),
     }
 }

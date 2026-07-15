@@ -96,6 +96,8 @@ fn write_header(digest: &mut CanonicalDigest, record: &CephBluestoreRbdHeaderRec
     digest.option_text(record.size_hex.as_deref());
     digest.option_u8(record.object_order);
     digest.option_text(record.features_hex.as_deref());
+    digest.option_text(record.operation_features_hex.as_deref());
+    digest.bool(record.parent_key_present);
     digest.option_text(record.object_prefix.as_deref());
     digest.option_text(record.stripe_unit_hex.as_deref());
     digest.option_text(record.stripe_count_hex.as_deref());
@@ -109,7 +111,7 @@ struct CanonicalDigest {
 impl CanonicalDigest {
     fn new() -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(b"meow-detective/ceph-bluestore-omap/v1\0");
+        hasher.update(b"meow-detective/ceph-bluestore-omap/v2\0");
         Self { hasher }
     }
 

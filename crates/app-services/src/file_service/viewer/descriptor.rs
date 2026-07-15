@@ -39,7 +39,7 @@ fn preview_descriptor_for_entry(
 
     let partition_candidates = match source_kind.as_str() {
         "logical_directory" => Vec::new(),
-        "e01" => crate::file_service::viewer::e01_partition_candidates(
+        "e01" | "ceph_rbd" => crate::file_service::viewer::e01_partition_candidates(
             conn,
             entry,
             expected_partition_index,

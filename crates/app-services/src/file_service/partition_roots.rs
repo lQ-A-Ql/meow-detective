@@ -68,57 +68,64 @@ pub fn replace_placeholder_root_with_real(
     root_name_override: Option<&str>,
     progress_fn: Option<&dyn Fn(u32)>,
 ) -> DbResult<super::EnumerationStats> {
-    let repo = FileRepo::new(conn);
-    let Some(mut root_entry) = repo.find_by_id(placeholder_id)? else {
-        return Err(persistence_sqlite::DbError::System(
-            "Partition placeholder root not found".to_string(),
-        ));
-    };
-
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
 
-    root_entry.path = String::new();
-    root_entry.name = root_name_override.unwrap_or(&root.name).to_string();
-    root_entry.created_at = root.created_at;
-    root_entry.modified_at = root.modified_at;
-    root_entry.accessed_at = root.accessed_at;
-    root_entry.hidden = root.hidden;
-    root_entry.system = root.system;
+    let tx = conn.unchecked_transaction()?;
+    let result = {
+        let repo = FileRepo::new(&tx);
+        let Some(mut root_entry) = repo.find_by_id(placeholder_id)? else {
+            return Err(persistence_sqlite::DbError::System(
+                "Partition placeholder root not found".to_string(),
+            ));
+        };
 
-    let root_path = root_entry.path.clone();
-    let root_name = root_entry.name.clone();
-    let root_hidden = root_entry.hidden as i32;
-    let root_system = root_entry.system as i32;
-    let root_id_value = root_entry.id.0.clone();
-    let data_source_id = root_entry.data_source_id.clone();
-    let root_id = root_entry.id.clone();
-    conn.execute(
-        "UPDATE file_entries
-         SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5,
-             hidden = ?6, system = ?7
-         WHERE id = ?8",
-        rusqlite::params![
-            root_path,
-            root_name,
-            root_entry.created_at.map(|dt| dt.to_rfc3339()),
-            root_entry.modified_at.map(|dt| dt.to_rfc3339()),
-            root_entry.accessed_at.map(|dt| dt.to_rfc3339()),
-            root_hidden,
-            root_system,
-            root_id_value,
-        ],
-    )?;
+        root_entry.path = String::new();
+        root_entry.name = root_name_override.unwrap_or(&root.name).to_string();
+        root_entry.created_at = root.created_at;
+        root_entry.modified_at = root.modified_at;
+        root_entry.accessed_at = root.accessed_at;
+        root_entry.hidden = root.hidden;
+        root_entry.system = root.system;
 
-    super::enumeration::walk_and_insert_children(
-        &repo,
-        fs,
-        &data_source_id,
-        root_id,
-        progress_fn,
-        None,
-    )
+        tx.execute(
+            "UPDATE file_entries
+             SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5,
+                 hidden = ?6, system = ?7
+             WHERE id = ?8",
+            rusqlite::params![
+                root_entry.path,
+                root_entry.name,
+                root_entry.created_at.map(|dt| dt.to_rfc3339()),
+                root_entry.modified_at.map(|dt| dt.to_rfc3339()),
+                root_entry.accessed_at.map(|dt| dt.to_rfc3339()),
+                root_entry.hidden as i32,
+                root_entry.system as i32,
+                root_entry.id.0,
+            ],
+        )?;
+
+        super::enumeration::walk_and_insert_children(
+            &repo,
+            fs,
+            &root_entry.data_source_id,
+            root_entry.id,
+            progress_fn,
+            None,
+        )
+    };
+
+    match result {
+        Ok(stats) => {
+            tx.commit()?;
+            Ok(stats)
+        }
+        Err(error) => {
+            tx.rollback().ok();
+            Err(error)
+        }
+    }
 }
 
 pub(crate) fn directory_depth(entry: &FileEntry) -> u32 {

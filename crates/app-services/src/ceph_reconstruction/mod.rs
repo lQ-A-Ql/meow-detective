@@ -1,3 +1,5 @@
+mod derived_reader;
+mod derived_source;
 mod rados_provider;
 mod rados_reader;
 mod rbd_catalog;
@@ -7,6 +9,11 @@ mod rbd_reader;
 mod rbd_service;
 mod source_bound_lvm;
 
+pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
+pub use derived_source::{
+    materialize_rbd_sources_for_cluster, DerivedSourceError, MaterializedRbdSource,
+};
+pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{
     BluestoreDeviceOpener, FilesystemBluestoreDeviceOpener, RadosProviderError, RadosReplicaSource,
     SourceDbRadosObjectProvider,

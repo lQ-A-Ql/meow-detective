@@ -2,8 +2,9 @@ use super::*;
 use super::{
     e01_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE},
     filesystem::mft_partition_index_from_entry_id,
-    range::api::read_file_bytes_for_descriptor,
+    range::api::read_file_bytes_for_descriptor_with_context,
 };
+use crate::file_service::FileServiceError;
 use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
@@ -19,6 +20,16 @@ use transport::dto::ViewerRangeRequestDto;
 
 #[path = "preview.rs"]
 mod preview_tests;
+
+fn read_file_bytes_for_descriptor(
+    descriptor: &PreviewDescriptor,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, FileServiceError> {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let mut context = &conn;
+    read_file_bytes_for_descriptor_with_context(&mut context, descriptor, offset, length)
+}
 
 fn make_temp_e01() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::TempDir::new().unwrap();

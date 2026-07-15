@@ -119,6 +119,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0036_graph_node_order_index",
         include_str!("scripts/0036_graph_node_order_index.sql"),
     ),
+    (
+        "0037_ceph_rbd_derived_sources",
+        include_str!("scripts/0037_ceph_rbd_derived_sources.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
@@ -174,6 +178,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
     (
         "source_014_ceph_osd_device_bindings",
         include_str!("scripts/source_014_ceph_osd_device_bindings.sql"),
+    ),
+    (
+        "source_015_ceph_bluestore_rbd_header_context",
+        include_str!("scripts/source_015_ceph_bluestore_rbd_header_context.sql"),
     ),
 ];
 
@@ -232,6 +240,8 @@ fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u3
             })?;
             let migration_result = if *name == "0033_lvm_partition_identity" {
                 add_missing_lvm_partition_identity_columns(conn)
+            } else if *name == "source_015_ceph_bluestore_rbd_header_context" {
+                add_ceph_bluestore_rbd_header_context(conn)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -283,6 +293,50 @@ fn add_missing_lvm_partition_identity_columns(conn: &Connection) -> DbResult<()>
             )?;
         }
     }
+    Ok(())
+}
+
+fn add_ceph_bluestore_rbd_header_context(conn: &Connection) -> DbResult<()> {
+    let columns = [
+        (
+            "operation_features_hex",
+            "ALTER TABLE ceph_bluestore_rbd_headers
+             ADD COLUMN operation_features_hex TEXT CHECK (
+                 operation_features_hex IS NULL
+                 OR (
+                     length(operation_features_hex) = 16
+                     AND operation_features_hex NOT GLOB '*[^0-9a-f]*'
+                 )
+             )",
+        ),
+        (
+            "parent_key_present",
+            "ALTER TABLE ceph_bluestore_rbd_headers
+             ADD COLUMN parent_key_present INTEGER NOT NULL DEFAULT 0
+             CHECK (parent_key_present IN (0, 1))",
+        ),
+    ];
+    for (column, sql) in columns {
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('ceph_bluestore_rbd_headers') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            conn.execute_batch(sql)?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_ceph_bluestore_objects_rbd_lookup
+         ON ceph_bluestore_objects(
+             inventory_id,
+             object_name,
+             decoded_pool,
+             object_namespace,
+             snap_hex,
+             object_identity_sha256
+         )",
+    )?;
     Ok(())
 }
 

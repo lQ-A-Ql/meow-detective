@@ -104,14 +104,8 @@ impl LinuxClusterImportPlan {
         let member_count = self.members.len() as u32;
         self.members
             .iter()
-            .map(|member| ImportSourceConfig {
-                source_path: member.source_path.clone(),
-                source_path_display: member.source_path.display().to_string(),
-                source_name: member.source_name.clone(),
-                kind: member.source_kind.clone(),
-                platform: DataSourcePlatform::Linux,
-                profile: self.profile.clone(),
-                mode: match member.source_kind {
+            .filter_map(|member| {
+                let mode = match member.source_kind {
                     DataSourceKind::E01 => ImportSourceMode::Image {
                         staging_kind: "E01",
                     },
@@ -119,12 +113,28 @@ impl LinuxClusterImportPlan {
                         staging_kind: "Raw",
                     },
                     DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
-                },
-                cluster: Some(ImportClusterMemberConfig {
-                    cluster_id: self.cluster_id.clone(),
-                    member_index: member.member_index,
-                    member_count,
-                }),
+                    DataSourceKind::CephRbd => {
+                        tracing::warn!(
+                            source = %member.source_path.display(),
+                            "Ceph RBD derived source cannot enter the host-path cluster import pipeline"
+                        );
+                        return None;
+                    }
+                };
+                Some(ImportSourceConfig {
+                    source_path: member.source_path.clone(),
+                    source_path_display: member.source_path.display().to_string(),
+                    source_name: member.source_name.clone(),
+                    kind: member.source_kind.clone(),
+                    platform: DataSourcePlatform::Linux,
+                    profile: self.profile.clone(),
+                    mode,
+                    cluster: Some(ImportClusterMemberConfig {
+                        cluster_id: self.cluster_id.clone(),
+                        member_index: member.member_index,
+                        member_count,
+                    }),
+                })
             })
             .collect()
     }

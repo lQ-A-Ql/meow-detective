@@ -71,7 +71,7 @@ pub fn prepare_import_source_config_from_path(
     validate_import_source_for_filesystem(&path)?;
     let kind = datasource_service::classify_data_source_path(&path)?;
     let source_name = derive_source_name(&path);
-    let mode = import_source_mode(&kind);
+    let mode = import_source_mode(&kind).ok_or(ImportSourceConfigError::UnsupportedSourceType)?;
 
     Ok(ImportSourceConfig {
         source_path: path,
@@ -110,15 +110,16 @@ fn derive_source_name(path: &Path) -> String {
         .unwrap_or_else(|| "data_source".to_string())
 }
 
-fn import_source_mode(kind: &DataSourceKind) -> ImportSourceMode {
+fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
     match kind {
-        DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
-        DataSourceKind::E01 => ImportSourceMode::Image {
+        DataSourceKind::LogicalDirectory => Some(ImportSourceMode::LogicalDirectory),
+        DataSourceKind::E01 => Some(ImportSourceMode::Image {
             staging_kind: "E01",
-        },
-        DataSourceKind::Raw => ImportSourceMode::Image {
+        }),
+        DataSourceKind::Raw => Some(ImportSourceMode::Image {
             staging_kind: "Raw",
-        },
+        }),
+        DataSourceKind::CephRbd => None,
     }
 }
 
@@ -138,6 +139,15 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
 
+    if matches!(kind, DataSourceKind::CephRbd) {
+        errors.push("Ceph RBD derived data sources are not ordinary import sources".to_string());
+        return PreCheckResult {
+            plan: ImportPlan::new(ImportStrategy::Sequential, 0, 0),
+            warnings,
+            errors,
+        };
+    }
+
     // Check if path exists
     if !source_path.exists() {
         errors.push(format!("Path does not exist: {}", source_path.display()));
@@ -152,6 +162,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     let (total_files, total_size) = match kind {
         DataSourceKind::LogicalDirectory => analyze_directory(source_path, &mut warnings),
         DataSourceKind::E01 | DataSourceKind::Raw => analyze_image(source_path, &mut warnings),
+        DataSourceKind::CephRbd => unreachable!("CephRbd is rejected before filesystem access"),
     };
 
     // Select strategy

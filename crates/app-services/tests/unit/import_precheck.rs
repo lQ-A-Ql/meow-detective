@@ -31,6 +31,21 @@ fn test_pre_check_nonexistent() {
 }
 
 #[test]
+fn pre_check_rejects_ceph_rbd_before_filesystem_access() {
+    let result = pre_import_check(
+        Path::new("C:/path-that-must-not-be-opened"),
+        &DataSourceKind::CephRbd,
+    );
+
+    assert_eq!(
+        result.errors,
+        vec!["Ceph RBD derived data sources are not ordinary import sources"]
+    );
+    assert_eq!(result.plan.total_files, 0);
+    assert_eq!(result.plan.total_size, 0);
+}
+
+#[test]
 fn test_import_plan_time_estimate() {
     let plan = ImportPlan::new(ImportStrategy::Sequential, 1000, 1024 * 1024);
     assert!(plan.estimated_time_secs > 0);

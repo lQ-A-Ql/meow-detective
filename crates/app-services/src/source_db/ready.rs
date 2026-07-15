@@ -42,6 +42,12 @@ pub struct ReadySourceConnection {
     pub connection: Connection,
 }
 
+pub struct ReconstructionSourceConnection {
+    pub data_source_id: DataSourceId,
+    pub platform: DataSourcePlatform,
+    pub connection: Connection,
+}
+
 pub fn open_ready_source_by_id(
     case_conn: &Connection,
     case_root: &std::path::Path,
@@ -58,11 +64,37 @@ pub fn open_ready_source_by_id(
     })
 }
 
+pub fn open_reconstruction_source_by_id(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<ReconstructionSourceConnection, ReadySourceError> {
+    let storage = source_storage_for_case(case_conn, case_id, data_source_id)?;
+    let platform = validate_reconstruction_storage(data_source_id, &storage)?;
+    let connection = super::open_registered_source_db(case_conn, case_root, data_source_id)?;
+
+    Ok(ReconstructionSourceConnection {
+        data_source_id: data_source_id.clone(),
+        platform,
+        connection,
+    })
+}
+
 pub fn resolve_ready_source_platform(
     case_conn: &Connection,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<DataSourcePlatform, ReadySourceError> {
+    let storage = source_storage_for_case(case_conn, case_id, data_source_id)?;
+    validate_ready_storage(data_source_id, &storage)
+}
+
+fn source_storage_for_case(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<DataSourceStorage, ReadySourceError> {
     let repo = DataSourceRepo::new(case_conn);
     let belongs_to_case = repo
         .find_by_case(case_id)?
@@ -75,13 +107,27 @@ pub fn resolve_ready_source_platform(
         });
     }
 
-    let storage = repo
-        .find_storage(data_source_id)?
+    repo.find_storage(data_source_id)?
         .ok_or_else(|| ReadySourceError::NotFound {
             case_id: case_id.0.clone(),
             data_source_id: data_source_id.0.clone(),
-        })?;
-    validate_ready_storage(data_source_id, &storage)
+        })
+}
+
+fn validate_reconstruction_storage(
+    data_source_id: &DataSourceId,
+    storage: &DataSourceStorage,
+) -> Result<DataSourcePlatform, ReadySourceError> {
+    if !matches!(
+        storage.import_state.trim().to_ascii_lowercase().as_str(),
+        "ready" | "ready_metadata"
+    ) {
+        return Err(ReadySourceError::NotReady {
+            data_source_id: data_source_id.0.clone(),
+            state: storage.import_state.clone(),
+        });
+    }
+    parse_platform(data_source_id, storage)
 }
 
 pub(super) fn validate_ready_storage(
@@ -95,6 +141,13 @@ pub(super) fn validate_ready_storage(
         });
     }
 
+    parse_platform(data_source_id, storage)
+}
+
+fn parse_platform(
+    data_source_id: &DataSourceId,
+    storage: &DataSourceStorage,
+) -> Result<DataSourcePlatform, ReadySourceError> {
     DataSourcePlatform::parse_explicit(&storage.platform).map_err(|error| {
         ReadySourceError::UnsupportedPlatform {
             data_source_id: data_source_id.0.clone(),

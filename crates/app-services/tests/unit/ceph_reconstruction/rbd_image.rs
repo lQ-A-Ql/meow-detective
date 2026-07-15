@@ -7,7 +7,7 @@ use ceph_wire::RbdImageMetadata;
 use super::*;
 use crate::ceph_reconstruction::{
     RbdObjectProviderError, RbdObjectReadOutcome, RbdObjectReadRequest, RbdReadContext,
-    RBD_FEATURE_LAYERING,
+    RBD_FEATURE_JOURNALING,
 };
 use crate::datasource_service::{ImageFilesystemKind, ImageFilesystemSource, PartitionStatus};
 
@@ -115,13 +115,14 @@ fn rejects_unsupported_head_features_before_reading_objects() {
     let provider = MemoryProvider::from_image(&patterned_image());
     let requests = Arc::clone(&provider.requests);
 
-    let error = detect_rbd_image_filesystem(&descriptor(RBD_FEATURE_LAYERING), Box::new(provider))
-        .unwrap_err();
+    let error =
+        detect_rbd_image_filesystem(&descriptor(RBD_FEATURE_JOURNALING), Box::new(provider))
+            .unwrap_err();
 
     assert!(matches!(
         error,
         RbdImageError::Open {
-            source: RbdReadError::ParentCloneUnsupported,
+            source: RbdReadError::JournalingUnsupported,
             ..
         }
     ));

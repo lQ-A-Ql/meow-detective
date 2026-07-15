@@ -19,8 +19,9 @@ use crate::file_service::{
 };
 
 use super::content::{
-    open_file_content_for_descriptor, open_file_content_for_entry,
-    open_range_content_for_descriptor, open_range_content_for_entry,
+    open_file_content_for_descriptor_with_context, open_file_content_for_entry,
+    open_range_content_for_descriptor, open_range_content_for_descriptor_with_context,
+    open_range_content_for_entry,
 };
 
 pub fn read_file_range_for_case<C>(
@@ -62,7 +63,7 @@ where
         return open_file_content_for_entry(context.conn(), &repo, &entry);
     }
     let descriptor = descriptor_for_file_with_cache(&mut context, file_id)?;
-    open_file_content_for_descriptor(&descriptor)
+    open_file_content_for_descriptor_with_context(&mut context, &descriptor)
 }
 
 pub fn read_file_bytes_for_case<C>(
@@ -88,7 +89,7 @@ where
     if offset > descriptor.size {
         return Err(FileServiceError::other("Read offset exceeds file size"));
     }
-    read_file_bytes_for_descriptor(&descriptor, offset, length)
+    read_file_bytes_for_descriptor_with_context(&mut context, &descriptor, offset, length)
 }
 
 fn read_file_bytes_for_entry(
@@ -118,12 +119,27 @@ fn read_file_bytes_for_entry(
     )
 }
 
-pub(crate) fn read_file_bytes_for_descriptor(
+pub(crate) fn read_file_bytes_for_descriptor_with_context<C>(
+    context: &mut C,
     descriptor: &PreviewDescriptor,
     offset: u64,
     length: u32,
-) -> Result<Vec<u8>, FileServiceError> {
+) -> Result<Vec<u8>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
     let length = clamp_range_length(length);
+    if descriptor.source_kind == "ceph_rbd" {
+        return match open_range_content_for_descriptor_with_context(context, descriptor)? {
+            RangeContentReader::Seekable(mut reader) => {
+                read_seekable_range(reader.as_mut(), offset, length)
+            }
+            RangeContentReader::Streaming(mut reader) => {
+                crate::file_service::viewer::skip_reader_bytes(reader.as_mut(), offset)?;
+                read_bounded(reader.as_mut(), length)
+            }
+        };
+    }
     let mut reasons = Vec::new();
     if let Some(bytes) =
         try_read_ntfs_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?

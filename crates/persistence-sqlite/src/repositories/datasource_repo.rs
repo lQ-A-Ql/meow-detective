@@ -163,6 +163,23 @@ impl<'a> DataSourceRepo<'a> {
         Ok(result)
     }
 
+    pub fn find_ids_by_cluster(
+        &self,
+        case_id: &CaseId,
+        cluster_id: &str,
+    ) -> DbResult<Vec<DataSourceId>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id
+             FROM data_sources
+             WHERE case_id = ?1 AND cluster_id = ?2
+             ORDER BY cluster_member_index ASC, id ASC",
+        )?;
+        let rows = statement.query_map(params![case_id.0, cluster_id], |row| {
+            Ok(DataSourceId(row.get(0)?))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn rename(&self, data_source_id: &DataSourceId, name: &str) -> DbResult<()> {
         self.conn.execute(
             "UPDATE data_sources SET name = ?1 WHERE id = ?2",
@@ -209,6 +226,14 @@ impl<'a> DataSourceRepo<'a> {
         )?)
     }
 
+    pub fn source_kind(&self, data_source_id: &DataSourceId) -> DbResult<DataSourceKind> {
+        Ok(self.conn.query_row(
+            "SELECT kind FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| row.get::<_, String>(0).map(|kind| str_to_kind(&kind)),
+        )?)
+    }
+
     pub fn update_import_state(
         &self,
         data_source_id: &DataSourceId,
@@ -248,7 +273,13 @@ impl<'a> DataSourceRepo<'a> {
              SET cluster_id = ?1,
                  cluster_member_index = ?2,
                  cluster_member_count = ?3
-             WHERE id = ?4",
+             WHERE id = ?4
+               AND EXISTS (
+                   SELECT 1
+                   FROM data_source_clusters AS cluster
+                   WHERE cluster.id = ?1
+                     AND cluster.case_id = data_sources.case_id
+               )",
             params![
                 cluster_id,
                 i64::from(member_index),
@@ -304,6 +335,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
         DataSourceKind::Raw => "raw",
         DataSourceKind::E01 => "e01",
         DataSourceKind::LogicalDirectory => "logical_directory",
+        DataSourceKind::CephRbd => "ceph_rbd",
     }
 }
 
@@ -311,6 +343,7 @@ fn str_to_kind(s: &str) -> DataSourceKind {
     match s {
         "e01" => DataSourceKind::E01,
         "logical_directory" => DataSourceKind::LogicalDirectory,
+        "ceph_rbd" => DataSourceKind::CephRbd,
         _ => DataSourceKind::Raw,
     }
 }

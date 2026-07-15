@@ -546,6 +546,28 @@ fn test_root_directory() {
     assert_eq!(sub.path, "subdir");
 }
 
+#[test]
+fn directory_enumeration_reuses_parent_resolution_and_directory_inode() {
+    let img = build_xfs_fixture();
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> =
+        Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    xfs.list_children("").unwrap();
+    let after_root = bytes_read.load(Ordering::Relaxed);
+    let children = xfs.list_children("subdir").unwrap();
+    let nested_read_bytes = bytes_read.load(Ordering::Relaxed) - after_root;
+
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name, "hello.dat");
+    assert!(
+        nested_read_bytes <= usize::from(xfs.inode_size),
+        "cached directory traversal should only read uncached child metadata, read {nested_read_bytes} bytes"
+    );
+}
+
 // -----------------------------------------------------------------------
 // test_file_read
 // -----------------------------------------------------------------------

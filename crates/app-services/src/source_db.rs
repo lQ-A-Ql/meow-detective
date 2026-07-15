@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 
 mod ready;
 pub use ready::{
-    open_ready_source_by_id, resolve_ready_source_platform, ReadySourceConnection, ReadySourceError,
+    open_ready_source_by_id, open_reconstruction_source_by_id, resolve_ready_source_platform,
+    ReadySourceConnection, ReadySourceError, ReconstructionSourceConnection,
 };
 
 const SOURCES_DIR_NAME: &str = "sources";
@@ -115,6 +116,25 @@ pub fn open_registered_source_db(
     case_root: &Path,
     data_source_id: &DataSourceId,
 ) -> DbResult<Connection> {
+    let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
+    let storage = DataSourceRepo::new(case_conn)
+        .find_storage(data_source_id)?
+        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
+    let expected_schema_version =
+        persistence_sqlite::migrations::runner::latest_source_version().to_string();
+    let connection = persistence_sqlite::open_existing_source(&db_path)?;
+    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
+        DataSourceRepo::new(case_conn)
+            .update_schema_version(data_source_id, &expected_schema_version)?;
+    }
+    Ok(connection)
+}
+
+pub fn registered_source_db_path(
+    case_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> DbResult<PathBuf> {
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(data_source_id)?
         .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
@@ -124,8 +144,6 @@ pub fn open_registered_source_db(
             data_source_id.0, storage.storage_model
         )));
     }
-    let expected_schema_version =
-        persistence_sqlite::migrations::runner::latest_source_version().to_string();
     if storage.schema_version.is_none() {
         return Err(DbError::System(format!(
             "Data source '{}' is missing source DB schema version; re-import is required",
@@ -146,13 +164,7 @@ pub fn open_registered_source_db(
             db_path.display()
         )));
     }
-    let db_path = safe_existing_case_path(case_root, &db_path)?;
-    let connection = persistence_sqlite::open_existing_source(&db_path)?;
-    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
-        DataSourceRepo::new(case_conn)
-            .update_schema_version(data_source_id, &expected_schema_version)?;
-    }
-    Ok(connection)
+    safe_existing_case_path(case_root, &db_path)
 }
 
 /// Open only fully imported source databases for case-wide aggregation.
