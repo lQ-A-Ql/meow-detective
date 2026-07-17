@@ -29,19 +29,26 @@ pub fn run_source_evidence_scan(
 ) -> Result<EvidenceClassificationSummaryDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     let categories = select_evidence_scan_categories(source.platform, requested_categories)?;
+    let mut source_reader = file_service::SourceReadContext::new(
+        &source.connection,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    );
     artifact_service::run_targeted_evidence_scan(
         &source.connection,
         &case_id.0,
         &categories,
         |file_id| {
-            file_service::read_file_header_by_id(
-                &source.connection,
-                file_id,
-                infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
-            )
-            .map(std::io::Cursor::new)
-            .map(|cursor| Box::new(cursor) as Box<dyn std::io::Read>)
-            .map_err(artifact_service::ArtifactServiceError::from)
+            source_reader
+                .read_file_header_by_id(
+                    file_id,
+                    infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
+                )
+                .map(std::io::Cursor::new)
+                .map(|cursor| Box::new(cursor) as Box<dyn std::io::Read>)
+                .map_err(artifact_service::ArtifactServiceError::from)
         },
     )
     .map_err(|error| AnalysisServiceError::Extraction(error.to_string()))?;

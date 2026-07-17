@@ -1,5 +1,9 @@
 use super::*;
-use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
+use persistence_sqlite::repositories::{
+    case_repo::CaseRepo,
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+};
+use sha2::{Digest, Sha256};
 
 fn setup_case_conn() -> rusqlite::Connection {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
@@ -85,4 +89,54 @@ fn tree_wraps_duplicate_local_ids_by_data_source() {
     let ids = roots.into_iter().map(|node| node.id).collect::<Vec<_>>();
     assert!(ids.contains(&"ds:ds-a:file-1".to_string()));
     assert!(ids.contains(&"ds:ds-b:file-1".to_string()));
+}
+
+#[test]
+#[ignore = "requires a retained PVE case with a ready derived RBD source"]
+fn retained_pve_rbd_source_context_reads_analysis_candidate() {
+    let case_root = std::env::var_os("FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT")
+        .map(std::path::PathBuf::from)
+        .expect("FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT must point to a retained PVE case");
+    let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+        .expect("open retained PVE case database");
+    let cases = CaseRepo::new(&case_conn)
+        .list_all()
+        .expect("query retained PVE case");
+    assert_eq!(cases.len(), 1, "retained PVE case count");
+    let case_id = cases[0].id.clone();
+    let source = DataSourceRepo::new(&case_conn)
+        .find_by_case(&case_id)
+        .expect("query retained data sources")
+        .into_iter()
+        .find(|source| source.kind == domain::DataSourceKind::CephRbd)
+        .expect("ready derived RBD source");
+    let source_conn =
+        crate::source_db::open_registered_source_db(&case_conn, &case_root, &source.id)
+            .expect("open derived RBD source database");
+    let file_id = source_conn
+        .query_row(
+            "SELECT id
+             FROM file_entries
+             WHERE data_source_id = ?1
+               AND entry_type = 'file'
+               AND (lower(path) = 'etc/passwd' OR lower(path) LIKE '%/etc/passwd')
+             ORDER BY path
+             LIMIT 1",
+            [&source.id.0],
+            |row| row.get::<_, String>(0),
+        )
+        .map(FileEntryId)
+        .expect("find derived VM /etc/passwd");
+
+    let mut context =
+        SourceReadContext::new(&source_conn, &case_conn, &case_root, &case_id, &source.id);
+    let bytes = context
+        .read_file_header_by_id(&file_id, 4 * 1024)
+        .expect("read derived VM analysis candidate");
+
+    assert_eq!(bytes.len(), 1_019);
+    assert_eq!(
+        hex::encode(Sha256::digest(&bytes)),
+        "be6b8d46d8cdb839b738efda17b7b5841a990786cc6ecc869386c266de25582d"
+    );
 }

@@ -16,6 +16,7 @@ use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo,
     audit_repo::AuditRepo,
     case_repo::CaseRepo,
     ceph_bluestore_semantic_repo::{
@@ -248,6 +249,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     assert_manifest(&case_root, &plan);
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
     assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &plan.cluster_id);
+    assert_derived_rbd_linux_analysis(&case_conn, &case_root, &case_id);
     assert_job_outcome(&case_conn, &job_id, &cluster);
 }
 
@@ -984,6 +986,60 @@ fn assert_derived_rbd_sources(
     assert!(
         response.raw_bytes.is_some_and(|bytes| !bytes.is_empty()),
         "derived RBD preview must return bytes"
+    );
+}
+
+fn assert_derived_rbd_linux_analysis(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+) {
+    let source = DataSourceRepo::new(case_conn)
+        .find_by_case(case_id)
+        .expect("query derived data sources for analysis")
+        .into_iter()
+        .find(|source| source.kind == domain::DataSourceKind::CephRbd)
+        .expect("derived RBD source for Linux analysis");
+    let run = app_services::analysis_service::run_source_analysis_extraction(
+        case_conn,
+        case_root,
+        case_id,
+        &source.id,
+        &["LinuxSystemConfig"],
+    )
+    .expect("run Linux system-config extraction against derived RBD source");
+    let section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxSystemConfig")
+        .expect("LinuxSystemConfig section result");
+    assert!(
+        section.scanned_count > 0,
+        "derived VM analysis must scan Linux system configuration candidates"
+    );
+    assert!(
+        section.artifact_count > 0,
+        "derived VM analysis must persist Linux system configuration artifacts"
+    );
+    assert!(
+        run.warnings.iter().all(|warning| {
+            !warning.contains("Evidence reader is not available for source kind 'ceph_rbd'")
+        }),
+        "derived VM analysis fell back to the host-only evidence reader: {:?}",
+        run.warnings
+    );
+
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
+        .expect("open analyzed derived RBD source database");
+    let linux_system_config_count = ArtifactRepo::new(&source_conn)
+        .count_by_family()
+        .expect("count derived VM artifact families")
+        .into_iter()
+        .find_map(|(family, count)| (family == "LinuxSystemConfig").then_some(count))
+        .unwrap_or_default();
+    assert!(
+        linux_system_config_count > 0,
+        "derived VM source database must contain LinuxSystemConfig artifacts"
     );
 }
 

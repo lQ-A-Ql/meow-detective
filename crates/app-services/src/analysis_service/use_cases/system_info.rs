@@ -8,7 +8,7 @@ use super::source::open_ready_analysis_source;
 use crate::analysis_service::{
     extract_system_info_for_case, validate_analysis_categories, AnalysisServiceError,
 };
-use crate::file_service::FileHeaderReadCache;
+use crate::file_service::SourceReadContext;
 
 pub fn get_source_system_info(
     case_conn: &Connection,
@@ -18,11 +18,15 @@ pub fn get_source_system_info(
 ) -> Result<AnalysisSystemInfoDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["Registry"])?;
-    let header_cache = FileHeaderReadCache::new(case_id.0.clone());
+    let mut source_reader = SourceReadContext::new(
+        &source.connection,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    );
     Ok(extract_system_info_for_case(
         &source.connection,
-        |file_id, max_bytes| {
-            header_cache.read_file_header_by_id(&source.connection, file_id, max_bytes)
-        },
+        |file_id, max_bytes| source_reader.read_file_header_by_id(file_id, max_bytes),
     ))
 }

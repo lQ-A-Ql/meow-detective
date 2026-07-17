@@ -52,7 +52,7 @@ pub fn run_targeted_evidence_scan(
     conn: &rusqlite::Connection,
     case_id: &str,
     categories: &[&str],
-    file_reader: impl Fn(&FileEntryId) -> Result<Box<dyn Read>, ArtifactServiceError>,
+    mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, ArtifactServiceError>,
 ) -> Result<EvidenceScanStats, ArtifactServiceError> {
     let registry = create_registry();
     let selected = selected_categories(categories);

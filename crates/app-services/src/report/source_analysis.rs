@@ -39,15 +39,21 @@ pub(crate) fn current_analysis_for_case(
     let mut analyses = Vec::new();
 
     for source in open_ready_source_connections(case_conn, case_root, case_id)? {
-        let header_cache = crate::file_service::FileHeaderReadCache::new(case_id.0.clone());
-        let system_info = (source.platform == DataSourcePlatform::Windows).then(|| {
-            crate::analysis_service::extract_system_info_for_case(
+        let mut source_reader = crate::file_service::SourceReadContext::new(
+            &source.connection,
+            case_conn,
+            case_root,
+            case_id,
+            &source.data_source_id,
+        );
+        let system_info = if source.platform == DataSourcePlatform::Windows {
+            Some(crate::analysis_service::extract_system_info_for_case(
                 &source.connection,
-                |file_id, max_bytes| {
-                    header_cache.read_file_header_by_id(&source.connection, file_id, max_bytes)
-                },
-            )
-        });
+                |file_id, max_bytes| source_reader.read_file_header_by_id(file_id, max_bytes),
+            ))
+        } else {
+            None
+        };
 
         let files = crate::analysis_service::collect_file_entries(&source.connection)
             .map_err(|error| ReportError::Other(error.to_string()))?;
@@ -55,11 +61,8 @@ pub(crate) fn current_analysis_for_case(
             &files,
             crate::analysis_service::DEFAULT_SAMPLE_SIZE,
             |file_id| {
-                header_cache.read_file_header_by_id(
-                    &source.connection,
-                    file_id,
-                    crate::analysis_service::MAGIC_HEADER_LIMIT,
-                )
+                source_reader
+                    .read_file_header_by_id(file_id, crate::analysis_service::MAGIC_HEADER_LIMIT)
             },
         );
         analyses.push(ReportSourceAnalysis {

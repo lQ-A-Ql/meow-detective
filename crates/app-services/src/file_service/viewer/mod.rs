@@ -22,6 +22,7 @@ pub use io::skip_reader_bytes;
 pub use media::{media_preview_plan_for_file, media_range_for_file, MediaPreviewPlan};
 pub use path::safe_relative_path;
 pub use preview_bytes::read_preview_bytes_for_file;
+pub(crate) use range::read_file_header_with_context;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,
     read_file_range_for_case, FileHeaderReadCache,
