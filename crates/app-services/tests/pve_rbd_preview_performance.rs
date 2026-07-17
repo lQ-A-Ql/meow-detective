@@ -6,21 +6,25 @@ use std::{
 use app_services::{
     file_service::{
         close_preview_session_for_case, open_preview_session_for_case,
-        read_preview_session_bytes_for_case, PreviewRuntimeRegistry, PreviewRuntimeStats,
+        read_preview_session_bytes_for_case, read_preview_session_media_range_for_case,
+        FileServiceError, PreviewRuntimeRegistry, PreviewRuntimeStats,
     },
     import_analysis::{current_rss_mb, peak_rss_mb},
     source_db::{GlobalFileId, SourceConnectionManager},
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use domain::{CaseId, DataSourceKind, FileEntryId};
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use transport::dto::MediaRangeRequestDto;
 
 const CASE_ROOT_ENV: &str = "FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT";
 const MAX_RUNTIME_CACHE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_RSS_DELTA_MB: i64 = 640;
 const RANGE_64_KIB: u32 = 64 * 1024;
 const RANGE_1_MIB: u32 = 1024 * 1024;
+const LIFECYCLE_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 const FIXED_ORACLE_JSON: &str =
     include_str!("../../../testdata/real-samples/pve-rbd-preview-oracle.json");
 
@@ -93,6 +97,53 @@ struct RuntimeStatsReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct MediaParityReport {
+    offset: u64,
+    requested_bytes: u32,
+    viewer_bytes: usize,
+    media_bytes: u32,
+    media_base64_chars: usize,
+    viewer_sha256: String,
+    media_sha256: String,
+    exact_match: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleCheckpoint {
+    phase: &'static str,
+    runtime_count: usize,
+    session_count: usize,
+    provider_constructions: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InvalidationCycleReport {
+    scope: &'static str,
+    drained: bool,
+    old_handle_rejected: bool,
+    open_while_retired_rejected: bool,
+    pre_invalidation_sha256: String,
+    post_reactivation_sha256: String,
+    fixed_oracle_match: bool,
+    provider_constructions_before: u64,
+    provider_constructions_after_rebuild: u64,
+    post_invalidation_session_count: usize,
+    post_rebuild_close_session_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewLifecycleReport {
+    media_parity: MediaParityReport,
+    source_invalidation: InvalidationCycleReport,
+    case_invalidation: InvalidationCycleReport,
+    checkpoints: Vec<LifecycleCheckpoint>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct MemoryReport {
     rss_before_mb: u64,
     rss_after_mb: u64,
@@ -110,6 +161,7 @@ struct PreviewPerformanceReport {
     metrics: Vec<TimingMetric>,
     ranges: Vec<RangeOracle>,
     runtime: RuntimeStatsReport,
+    lifecycle: PreviewLifecycleReport,
     memory: MemoryReport,
 }
 
@@ -205,6 +257,7 @@ fn retained_pve_rbd_preview_performance() {
     );
     let small_read_elapsed = small_read_started.elapsed();
     let cold_elapsed = cold_started.elapsed();
+    let fixed_small_sha256 = sha256_hex(&small_bytes);
     ranges.push(oracle(
         "cold-small",
         0,
@@ -335,6 +388,12 @@ fn retained_pve_rbd_preview_performance() {
     }
     metrics.push(metric("largeRandom64KiB", &random_large));
 
+    let media_parity = verify_media_range_parity(
+        &read_context,
+        &medium_handle,
+        u64::from(RANGE_64_KIB),
+        RANGE_64_KIB,
+    );
     let live_stats = registry.stats().expect("preview runtime statistics");
     assert_eq!(live_stats.runtime_count, 1);
     assert_eq!(live_stats.provider_constructions, 1);
@@ -346,13 +405,22 @@ fn retained_pve_rbd_preview_performance() {
     );
     assert_eq!(live_stats.session_count, handles.len());
 
-    let rss_after_mb = current_rss_mb();
     for handle in &handles {
         assert!(close_preview_session_for_case(&registry, &case_id, handle)
             .expect("close preview session"));
     }
     let post_close_stats = registry.stats().expect("post-close runtime statistics");
     assert_eq!(post_close_stats.session_count, 0);
+    let lifecycle = verify_preview_lifecycle(
+        &read_context,
+        &source.id,
+        &targets[0],
+        &fixed_small_sha256,
+        media_parity,
+        live_stats,
+        post_close_stats,
+    );
+    let rss_after_mb = current_rss_mb();
 
     let report = PreviewPerformanceReport {
         schema_version: 1,
@@ -369,6 +437,7 @@ fn retained_pve_rbd_preview_performance() {
         metrics,
         ranges,
         runtime: runtime_report(live_stats, post_close_stats.session_count),
+        lifecycle,
         memory: MemoryReport {
             rss_before_mb,
             rss_after_mb,
@@ -387,6 +456,353 @@ fn retained_pve_rbd_preview_performance() {
         "PVE_RBD_PREVIEW_METRICS {}",
         serde_json::to_string(&report).expect("serialize preview performance report")
     );
+}
+
+fn verify_media_range_parity(
+    context: &PreviewReadContext<'_>,
+    handle: &str,
+    offset: u64,
+    length: u32,
+) -> MediaParityReport {
+    let viewer_bytes = read_range(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        handle,
+        offset,
+        length,
+    );
+    let media = read_preview_session_media_range_for_case(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        &MediaRangeRequestDto {
+            handle_id: handle.to_string(),
+            offset,
+            length,
+        },
+    )
+    .expect("read media bytes from the preview session");
+    let media_bytes = STANDARD
+        .decode(media.bytes_base64.as_bytes())
+        .expect("decode preview media base64");
+
+    assert_eq!(media.offset, offset);
+    assert_eq!(media.bytes_read as usize, media_bytes.len());
+    assert_eq!(media.bytes_read as usize, viewer_bytes.len());
+    assert_eq!(
+        media_bytes, viewer_bytes,
+        "viewer and media paths returned different evidence bytes"
+    );
+
+    MediaParityReport {
+        offset,
+        requested_bytes: length,
+        viewer_bytes: viewer_bytes.len(),
+        media_bytes: media.bytes_read,
+        media_base64_chars: media.bytes_base64.len(),
+        viewer_sha256: sha256_hex(&viewer_bytes),
+        media_sha256: sha256_hex(&media_bytes),
+        exact_match: true,
+    }
+}
+
+fn verify_preview_lifecycle(
+    context: &PreviewReadContext<'_>,
+    data_source_id: &domain::DataSourceId,
+    target: &TargetFile,
+    fixed_sha256: &str,
+    media_parity: MediaParityReport,
+    steady_live: PreviewRuntimeStats,
+    steady_closed: PreviewRuntimeStats,
+) -> PreviewLifecycleReport {
+    let mut checkpoints = vec![
+        lifecycle_checkpoint("steady-state-live", steady_live),
+        lifecycle_checkpoint("steady-state-closed", steady_closed),
+    ];
+    let source_invalidation = verify_invalidation_cycle(
+        context,
+        data_source_id,
+        target,
+        fixed_sha256,
+        InvalidationScope::Source,
+        ProviderConstructionExpectation {
+            before: 1,
+            after_rebuild: 2,
+        },
+        &mut checkpoints,
+    );
+    let case_invalidation = verify_invalidation_cycle(
+        context,
+        data_source_id,
+        target,
+        fixed_sha256,
+        InvalidationScope::Case,
+        ProviderConstructionExpectation {
+            before: 2,
+            after_rebuild: 3,
+        },
+        &mut checkpoints,
+    );
+
+    PreviewLifecycleReport {
+        media_parity,
+        source_invalidation,
+        case_invalidation,
+        checkpoints,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum InvalidationScope {
+    Source,
+    Case,
+}
+
+#[derive(Clone, Copy)]
+struct ProviderConstructionExpectation {
+    before: u64,
+    after_rebuild: u64,
+}
+
+impl InvalidationScope {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::Case => "case",
+        }
+    }
+
+    fn retire(
+        self,
+        registry: &PreviewRuntimeRegistry,
+        case_id: &CaseId,
+        data_source_id: &domain::DataSourceId,
+    ) -> Result<bool, FileServiceError> {
+        match self {
+            Self::Source => registry.retire_source_and_drain(
+                &case_id.0,
+                &data_source_id.0,
+                LIFECYCLE_DRAIN_TIMEOUT,
+            ),
+            Self::Case => registry.retire_case_and_drain(&case_id.0, LIFECYCLE_DRAIN_TIMEOUT),
+        }
+    }
+
+    fn reactivate(
+        self,
+        registry: &PreviewRuntimeRegistry,
+        case_id: &CaseId,
+        data_source_id: &domain::DataSourceId,
+    ) -> Result<(), FileServiceError> {
+        match self {
+            Self::Source => registry.reactivate_source(&case_id.0, &data_source_id.0),
+            Self::Case => registry.reactivate_case(&case_id.0),
+        }
+    }
+}
+
+fn verify_invalidation_cycle(
+    context: &PreviewReadContext<'_>,
+    data_source_id: &domain::DataSourceId,
+    target: &TargetFile,
+    fixed_sha256: &str,
+    scope: InvalidationScope,
+    expected_constructions: ProviderConstructionExpectation,
+    checkpoints: &mut Vec<LifecycleCheckpoint>,
+) -> InvalidationCycleReport {
+    let handle = open_target(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        target,
+    );
+    let before_bytes = read_range(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        &handle,
+        0,
+        RANGE_64_KIB,
+    );
+    let before_sha256 = sha256_hex(&before_bytes);
+    assert_eq!(
+        before_sha256,
+        fixed_sha256,
+        "{} pre-invalidation bytes changed from the fixed oracle",
+        scope.label()
+    );
+    let before = context
+        .registry
+        .stats()
+        .expect("pre-invalidation preview statistics");
+    assert_eq!(
+        before.provider_constructions,
+        expected_constructions.before,
+        "{} invalidation unexpectedly rebuilt the provider before retirement",
+        scope.label()
+    );
+    assert_eq!(before.session_count, 1);
+    checkpoints.push(lifecycle_checkpoint(
+        match scope {
+            InvalidationScope::Source => "source-before-invalidation",
+            InvalidationScope::Case => "case-before-invalidation",
+        },
+        before,
+    ));
+
+    let drained = scope
+        .retire(context.registry, context.case_id, data_source_id)
+        .expect("retire and drain preview scope");
+    assert!(drained, "{} preview scope did not drain", scope.label());
+    let invalidated = context
+        .registry
+        .stats()
+        .expect("post-invalidation preview statistics");
+    assert_eq!(invalidated.runtime_count, 0);
+    assert_eq!(invalidated.session_count, 0);
+    assert_eq!(
+        invalidated.provider_constructions,
+        expected_constructions.before,
+        "{} invalidation must not construct a provider",
+        scope.label()
+    );
+    checkpoints.push(lifecycle_checkpoint(
+        match scope {
+            InvalidationScope::Source => "source-invalidated",
+            InvalidationScope::Case => "case-invalidated",
+        },
+        invalidated,
+    ));
+
+    assert_invalidated_handle_rejected(context, &handle);
+    assert_retired_scope_rejects_open(context, target);
+    scope
+        .reactivate(context.registry, context.case_id, data_source_id)
+        .expect("reactivate preview scope");
+
+    let rebuilt_handle = open_target(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        target,
+    );
+    let rebuilt_bytes = read_range(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        &rebuilt_handle,
+        0,
+        RANGE_64_KIB,
+    );
+    let rebuilt_sha256 = sha256_hex(&rebuilt_bytes);
+    assert_eq!(
+        rebuilt_sha256,
+        fixed_sha256,
+        "{} cold rebuild changed fixed evidence bytes",
+        scope.label()
+    );
+    let rebuilt = context
+        .registry
+        .stats()
+        .expect("post-reactivation preview statistics");
+    assert_eq!(rebuilt.runtime_count, 1);
+    assert_eq!(rebuilt.session_count, 1);
+    assert_eq!(
+        rebuilt.provider_constructions,
+        expected_constructions.after_rebuild,
+        "{} reactivation must perform exactly one cold provider rebuild",
+        scope.label()
+    );
+    checkpoints.push(lifecycle_checkpoint(
+        match scope {
+            InvalidationScope::Source => "source-reactivated-rebuilt",
+            InvalidationScope::Case => "case-reactivated-rebuilt",
+        },
+        rebuilt,
+    ));
+
+    assert!(
+        close_preview_session_for_case(context.registry, context.case_id, &rebuilt_handle)
+            .expect("close rebuilt preview session")
+    );
+    let closed = context
+        .registry
+        .stats()
+        .expect("post-rebuild close preview statistics");
+    assert_eq!(closed.session_count, 0);
+    assert_eq!(
+        closed.provider_constructions, expected_constructions.after_rebuild,
+        "closing a session must not rebuild its provider"
+    );
+    checkpoints.push(lifecycle_checkpoint(
+        match scope {
+            InvalidationScope::Source => "source-rebuild-closed",
+            InvalidationScope::Case => "case-rebuild-closed",
+        },
+        closed,
+    ));
+
+    InvalidationCycleReport {
+        scope: scope.label(),
+        drained,
+        old_handle_rejected: true,
+        open_while_retired_rejected: true,
+        pre_invalidation_sha256: before_sha256,
+        post_reactivation_sha256: rebuilt_sha256,
+        fixed_oracle_match: true,
+        provider_constructions_before: before.provider_constructions,
+        provider_constructions_after_rebuild: rebuilt.provider_constructions,
+        post_invalidation_session_count: invalidated.session_count,
+        post_rebuild_close_session_count: closed.session_count,
+    }
+}
+
+fn assert_invalidated_handle_rejected(context: &PreviewReadContext<'_>, handle: &str) {
+    let error = read_preview_session_bytes_for_case(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        handle,
+        0,
+        1,
+    )
+    .expect_err("invalidated preview handle must fail");
+    assert!(
+        matches!(error, FileServiceError::NotFound(_)),
+        "invalidated preview handle must return not found"
+    );
+}
+
+fn assert_retired_scope_rejects_open(context: &PreviewReadContext<'_>, target: &TargetFile) {
+    let error = open_preview_session_for_case(
+        context.registry,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        &target.file_id,
+    )
+    .expect_err("retired preview scope must reject new sessions");
+    assert!(
+        matches!(error, FileServiceError::NotFound(_)),
+        "retired preview scope must return not found"
+    );
+}
+
+fn lifecycle_checkpoint(phase: &'static str, stats: PreviewRuntimeStats) -> LifecycleCheckpoint {
+    LifecycleCheckpoint {
+        phase,
+        runtime_count: stats.runtime_count,
+        session_count: stats.session_count,
+        provider_constructions: stats.provider_constructions,
+    }
 }
 
 fn validate_fixed_oracle(report: &PreviewPerformanceReport) {
@@ -581,8 +997,12 @@ fn oracle(
         requested_bytes,
         actual_bytes: bytes.len(),
         elapsed_ms: duration_ms(elapsed),
-        sha256: hex::encode(Sha256::digest(bytes)),
+        sha256: sha256_hex(bytes),
     }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn metric(scenario: &'static str, samples: &[Duration]) -> TimingMetric {

@@ -507,7 +507,9 @@ Tasks：
 - 扩大 `/etc/passwd` 单文件 oracle。
 - 覆盖直接 XFS、`centos/home`、`centos/root`。
 - 覆盖小文本、1 MiB 级二进制、100 MiB 以上文件。
-- 覆盖 text、Hex、media/protocol range。
+- 覆盖 viewer 与 media/protocol range 的相同字节校验；浏览器端播放时序单独保留。
+- 增加检材3原生 XFS 与 PVE 宿主 `pve/root` EXT4 作为只读对照链路。
+- 覆盖 source/case retire、旧 handle 拒绝、reactivate 冷重建和 session 收敛。
 - 保存每个测试范围的 SHA-256 oracle，不保存证据正文。
 
 #### Phase 6.2：发布门禁
@@ -597,7 +599,10 @@ Tasks：
 | 大文件 range RSS 增长 | 与文件总大小无关 |
 
 性能门禁使用同一机器、同一 retained case、同一请求序列比较。cold 指标允许操作系统
-文件缓存波动，但必须独立记录；warm 指标作为稳定发布门禁。
+文件缓存波动，但必须独立记录；warm 指标作为稳定发布门禁。RBD/native XFS warm
+比值对两个亚毫秒样本使用 `1ms` 分母噪声下限：
+`rbdWarm / max(nativeWarm, 1ms)`。原始比值仍写入报告，但不以计时器和调度噪声放大
+后的亚毫秒比值制造假回归。
 
 ### 8.2 正确性验收
 
@@ -677,7 +682,10 @@ Stage 总分低于 90，或取证正确性低于 90，或存在未关闭的 Crit
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check-pve-rbd-preview-performance.ps1 `
-  -CaseRoot '<retained PVE RBD case>' -RequireFixture -Runs 3
+  -CaseRoot '<retained PVE RBD case>' `
+  -NativeXfsFixture '<native Linux XFS E01>' `
+  -PveClusterRoot '<PVE cluster root>' `
+  -RequireFixture -RequireComparisonFixtures -Runs 3
 ```
 
 覆盖直接 XFS、`centos/home`、`centos/root`，并验证：
@@ -690,21 +698,32 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-rbd-preview-performan
 - cold read、warm repeat、`16x64 KiB`、`4x1 MiB`、随机 offset 和文件尾
 - 每个关键 range 同时匹配
   `testdata/real-samples/pve-rbd-preview-oracle.json` 固定 SHA-256，并验证跨运行一致
+- 检材3 `cl/root` XFS 的 `opt/faka.sql` 固定 range oracle
+- PVE 宿主 `pve/root` EXT4 的 `boot/initrd.img-6.17.2-1-pve` 固定 range oracle
+- viewer bytes 与 media range 解码 bytes 完全一致
+- source/case retire 后旧 handle 与新 open 均被拒绝；reactivate 后固定 oracle 不变
 - provider construction 为 `1`
-- 显式关闭后 session count 为 `0`
+- source/case 两次冷重建后 provider construction 精确为 `1 -> 2 -> 3`
+- 显式关闭、source invalidation、case invalidation 后 session count 均为 `0`
 
 2026-07-17 三轮中位结果：
 
 | 指标 | 结果 | 门禁 |
 |---|---:|---:|
-| cold 文件读取，不含 runtime open | `312.834ms` | `<= 1,500ms` |
-| cold runtime + 文件读取，仅报告 | `2,573.852ms` | 不作为文件读取门禁 |
-| warm 同范围 64 KiB p95 | `0.831ms` | `<= 200ms` |
-| 连续 `16x64 KiB` p95 | `18.772ms` | `<= 200ms` |
-| 连续 `4x1 MiB` p95 | `239.327ms` | `<= 300ms` |
-| 大文件随机 64 KiB p95 | `71.122ms` | `<= 500ms` |
+| cold 文件读取，不含 runtime open | `250.469ms` | `<= 1,500ms` |
+| cold runtime + 文件读取，仅报告 | `2,665.687ms` | 不作为文件读取门禁 |
+| warm 同范围 64 KiB p95 | `1.189ms` | `<= 200ms` |
+| 连续 `16x64 KiB` p95 | `13.523ms` | `<= 200ms` |
+| 连续 `4x1 MiB` p95 | `211.434ms` | `<= 300ms` |
+| 大文件随机 64 KiB p95 | `58.776ms` | `<= 500ms` |
+| 原生 XFS warm 64 KiB p95 | `0.099ms` | `<= 50ms` |
+| 原生 XFS 连续 `4x1 MiB` p95 | `14.957ms` | `<= 100ms` |
+| PVE 宿主 EXT4 warm 64 KiB p95 | `0.095ms` | `<= 50ms` |
+| PVE 宿主 EXT4 连续 `4x1 MiB` p95 | `9.794ms` | `<= 100ms` |
+| RBD/native warm 原始比值 | `12.069x` | 仅报告 |
+| RBD/native warm 门禁比值，`1ms` 噪声下限 | `1.189x` | `<= 3x` |
 | runtime cache capacity | `117,440,512 B` | `<= 128 MiB` |
-| RSS delta | `446-449 MiB` | `<= 640 MiB` |
+| RSS delta | `398-448 MiB` | `<= 640 MiB` |
 
 ### 11.3 剩余边界
 
@@ -712,11 +731,11 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-rbd-preview-performan
   初始化成本；它与文件 range 读取分开报告，不通过放宽 cold file 指标掩盖。
 - RSS 主要由三份 E01 chunk table、文件系统运行时和 112 MiB provider cache
   共同构成；当前与被预览文件总大小无关，但仍需继续观测多案件并发。
-- 当前真实门禁覆盖普通 viewer service range；media protocol 已通过单元/集成
-  测试共享同一 session、标准 `416 Content-Range` 和 expired-handle `410` 映射，
-  但尚未建立私有样本浏览器播放时序门禁。
-- cache eviction 后冷重建、并发 singleflight 和最多两条 provider lane 仍属后续
-  性能治理，不影响当前正确性承诺。
+- 当前真实门禁已证明普通 viewer range 与 media range 返回完全相同的证据字节；
+  media protocol 的标准 `416 Content-Range` 和 expired-handle `410` 映射另有测试，
+  但尚未建立私有样本浏览器端播放时序门禁。
+- source/case invalidation 后的冷重建已经进入真实门禁；容量触发的 LRU eviction、
+  并发 singleflight 和最多两条 provider lane 仍属后续性能治理，不影响当前正确性承诺。
 - 当前全局只保留 1 个 derived runtime；跨 VM 切换会驱逐旧 runtime 与关联 handle。
   在引入统一全局内存预算前不提高该上限。
 - inventory 完整集合证明、通用 PG/CRUSH/EC、degraded replica、clone、

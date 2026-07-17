@@ -184,26 +184,35 @@ otherwise                                => indeterminate
 6. 新增 `scripts/check-pve-rbd-preview-performance.ps1`，默认缺 fixture 跳过，
    `-RequireFixture` 时缺失即失败；关键 range 必须匹配固定 SHA-256 oracle，
    Cargo 编译预热不计入单轮性能超时。
+7. 门禁增加检材3原生 XFS 与 PVE 宿主 `pve/root` EXT4 对照，两个对照均使用
+   固定样本 fingerprint 和固定 range SHA-256。
+8. 真实样本验证 viewer/media 字节完全一致，并覆盖 source/case retire、
+   旧 handle 拒绝、reactivate 冷重建和 session 归零。
 
-三轮 retained-case 门禁结果：
+三轮统一门禁结果：
 
 | 指标 | 中位结果 |
 |---|---:|
-| cold 文件读取，不含 runtime open | `312.834ms` |
-| cold runtime + 文件读取，仅报告 | `2,573.852ms` |
-| warm 同范围 64 KiB p95 | `0.831ms` |
-| 连续 `16x64 KiB` p95 | `18.772ms` |
-| 连续 `4x1 MiB` p95 | `239.327ms` |
-| 614 MiB 文件随机 64 KiB p95 | `71.122ms` |
-| provider construction | `1` |
+| cold 文件读取，不含 runtime open | `250.469ms` |
+| cold runtime + 文件读取，仅报告 | `2,665.687ms` |
+| warm 同范围 64 KiB p95 | `1.189ms` |
+| 连续 `16x64 KiB` p95 | `13.523ms` |
+| 连续 `4x1 MiB` p95 | `211.434ms` |
+| 614 MiB 文件随机 64 KiB p95 | `58.776ms` |
+| 原生 XFS warm 64 KiB / `4x1 MiB` p95 | `0.099ms / 14.957ms` |
+| PVE 宿主 EXT4 warm 64 KiB / `4x1 MiB` p95 | `0.095ms / 9.794ms` |
+| RBD/native warm 原始比值 | `12.069x`，仅报告 |
+| RBD/native warm 门禁比值 | `1.189x`，使用 `1ms` 分母噪声下限 |
+| provider construction | steady `1`，两次 invalidation 冷重建后 `2 / 3` |
 | runtime cache capacity | `117,440,512 B` |
-| RSS delta | `446-449 MiB` |
+| RSS delta | `398-448 MiB` |
 
 当前状态应表述为：
 
 ```text
 VM 文件树与代表性大文件 bounded-range 预览已通过私有样本性能门禁；
-首次三 OSD E01/LVM runtime 初始化、media 浏览器时序和 cache eviction 仍需继续验收。
+viewer/media 字节一致性及 source/case 失效冷重建已验证；
+首次三 OSD E01/LVM runtime 初始化、浏览器端 media 时序和容量 LRU eviction 仍需继续验收。
 ```
 
 完整设计、门禁阈值和剩余风险见

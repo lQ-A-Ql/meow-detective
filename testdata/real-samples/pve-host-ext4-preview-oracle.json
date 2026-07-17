@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "memberFingerprint": "sha256:3bbdc779d43eb9f1b68a0f42d72bbf841e3f608928f3fdb4f6939a0cd4f332fa",
+  "filesystem": "ext4",
+  "logicalVolume": "pve/root",
+  "logicalFilePath": "boot/initrd.img-6.17.2-1-pve",
+  "fileSize": 86619624,
+  "metrics": [
+    {
+      "scenario": "coldRead64KiB",
+      "status": "measured",
+      "samples": 1,
+      "bytesPerSample": 65536,
+      "digestSha256": "23a478539aa13e6e45d61f526eca0801777fc5d88ae8cb4c8ffd70e4f3206750"
+    },
+    {
+      "scenario": "warmSame64KiB",
+      "status": "measured",
+      "samples": 12,
+      "bytesPerSample": 65536,
+      "digestSha256": "23a478539aa13e6e45d61f526eca0801777fc5d88ae8cb4c8ffd70e4f3206750"
+    },
+    {
+      "scenario": "sequential16x64KiB",
+      "status": "measured",
+      "samples": 16,
+      "bytesPerSample": 65536,
+      "digestSha256": "f8bf0799d7b0da89c69ed6071f8037bee6d5eb7099c1151ecef546be080b8f8f"
+    },
+    {
+      "scenario": "sequential4x1MiB",
+      "status": "measured",
+      "samples": 4,
+      "bytesPerSample": 1048576,
+      "digestSha256": "8d518b5824435b3139b74f2442a9f374acd85dcad486b62c1a1c0ade8f0a6774"
+    }
+  ]
+}

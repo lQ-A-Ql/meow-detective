@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "fixtureFingerprint": {
+    "algorithm": "sha256-logical-e01-samples-v1",
+    "logicalSize": 21474836480,
+    "sha256": "b6ec04cb1d8745cdb8f41bd2e04ebedb4abc4d8ef174e071966f1a98346c236f"
+  },
+  "volume": "cl/root",
+  "file": {
+    "logicalPath": "opt/faka.sql",
+    "size": 26849929
+  },
+  "ranges": [
+    {
+      "scenario": "head64KiB",
+      "offset": 0,
+      "requestedBytes": 65536,
+      "actualBytes": 65536,
+      "sha256": "ed2b9ac0fa9d96e79cbfa43c44f685920181c965889f694830d27d74566e8649"
+    },
+    {
+      "scenario": "offset960KiB64KiB",
+      "offset": 983040,
+      "requestedBytes": 65536,
+      "actualBytes": 65536,
+      "sha256": "49fafe430d8ff720886e319d1e38dc68a5e07a86140940051c0ffb697357ad6e"
+    },
+    {
+      "scenario": "head1MiB",
+      "offset": 0,
+      "requestedBytes": 1048576,
+      "actualBytes": 1048576,
+      "sha256": "0822baffc506e6359aee81bd5683a2ec1dbb375bb43fc34795184794154f8f70"
+    },
+    {
+      "scenario": "offset3MiB1MiB",
+      "offset": 3145728,
+      "requestedBytes": 1048576,
+      "actualBytes": 1048576,
+      "sha256": "52d8719a6c9a592da10fb428d631ebdfcab7a63ecd2decd463c7b302be463ce5"
+    }
+  ]
+}

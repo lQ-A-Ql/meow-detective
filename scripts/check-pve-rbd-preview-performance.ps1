@@ -2,7 +2,10 @@
 
 param(
     [string]$CaseRoot = $env:FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT,
+    [string]$NativeXfsFixture = $env:FORENSICS_LINUX_E01_FIXTURE,
+    [string]$PveClusterRoot = $env:FORENSICS_PVE_CLUSTER_ROOT,
     [switch]$RequireFixture,
+    [switch]$RequireComparisonFixtures,
     [ValidateRange(1, 20)]
     [int]$Runs = 3,
     [ValidateRange(1, 3600)]
@@ -14,6 +17,12 @@ param(
     [double]$MaxSequential4x1MiBMedianP95Ms = 300,
     [double]$MaxLargeRandom64KiBMedianP95Ms = 500,
     [double]$MaxColdFileReadMedianMs = 1500,
+    [double]$MaxNativeWarmSame64KiBP95Ms = 50,
+    [double]$MaxNativeSequential4x1MiBP95Ms = 100,
+    [double]$MaxPveHostWarmSame64KiBP95Ms = 50,
+    [double]$MaxPveHostSequential4x1MiBP95Ms = 100,
+    [double]$MaxRbdToNativeWarmRatio = 3,
+    [double]$WarmRatioNoiseFloorMs = 1,
     [int64]$MaxRuntimeCacheBytes = 134217728,
     [int]$MaxRssDeltaMb = 640,
     [string]$OraclePath = "",
@@ -47,6 +56,29 @@ if ([string]::IsNullOrWhiteSpace($CaseRoot) -or
 }
 
 $resolvedCaseRoot = (Resolve-Path -LiteralPath $CaseRoot).Path
+$hasNativeXfsFixture = -not [string]::IsNullOrWhiteSpace($NativeXfsFixture) -and
+    (Test-Path -LiteralPath $NativeXfsFixture -PathType Leaf)
+$hasPveClusterRoot = -not [string]::IsNullOrWhiteSpace($PveClusterRoot) -and
+    (Test-Path -LiteralPath $PveClusterRoot -PathType Container)
+if ($RequireComparisonFixtures -and (-not $hasNativeXfsFixture -or -not $hasPveClusterRoot)) {
+    throw "Comparison fixtures require FORENSICS_LINUX_E01_FIXTURE and FORENSICS_PVE_CLUSTER_ROOT."
+}
+$resolvedNativeXfsFixture = if ($hasNativeXfsFixture) {
+    (Resolve-Path -LiteralPath $NativeXfsFixture).Path
+} else {
+    ""
+}
+$resolvedPveClusterRoot = if ($hasPveClusterRoot) {
+    (Resolve-Path -LiteralPath $PveClusterRoot).Path
+} else {
+    ""
+}
+if (-not $hasNativeXfsFixture) {
+    Write-Host "SKIP: native XFS comparison fixture is unavailable."
+}
+if (-not $hasPveClusterRoot) {
+    Write-Host "SKIP: PVE host EXT4 comparison fixture is unavailable."
+}
 if ([string]::IsNullOrWhiteSpace($OraclePath)) {
     $OraclePath = Join-Path $projectRoot "testdata/real-samples/pve-rbd-preview-oracle.json"
 }
@@ -113,13 +145,24 @@ function Protect-PerformanceLog {
     if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
         $protected = $protected.Replace($env:USERPROFILE, "<USER_PROFILE>")
     }
+    if (-not [string]::IsNullOrWhiteSpace($resolvedNativeXfsFixture)) {
+        $protected = $protected.Replace($resolvedNativeXfsFixture, "<NATIVE_XFS_FIXTURE>")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($resolvedPveClusterRoot)) {
+        $protected = $protected.Replace($resolvedPveClusterRoot, "<PVE_CLUSTER_ROOT>")
+    }
     return $protected
 }
 
 function Invoke-PreviewPerformanceBuild {
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = $cargo.Source
-    $startInfo.Arguments = "test -p app-services --test pve_rbd_preview_performance --no-run"
+    $startInfo.Arguments = (
+        "test -p app-services " +
+        "--test pve_rbd_preview_performance " +
+        "--test native_linux_preview_performance " +
+        "--test pve_host_preview_performance --no-run"
+    )
     $startInfo.WorkingDirectory = $projectRoot
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
@@ -132,6 +175,59 @@ function Invoke-PreviewPerformanceBuild {
         -TimeoutContext "retained PVE RBD preview performance build"
     if ($result.ExitCode -ne 0) {
         throw "PVE RBD preview performance test build failed with exit code $($result.ExitCode)."
+    }
+}
+
+function Invoke-ComparisonPerformanceRun {
+    param(
+        [Parameter(Mandatory = $true)][int]$Run,
+        [Parameter(Mandatory = $true)][string]$TestTarget,
+        [Parameter(Mandatory = $true)][string]$TestName,
+        [Parameter(Mandatory = $true)][string]$MetricMarker,
+        [Parameter(Mandatory = $true)][string]$EnvironmentName,
+        [Parameter(Mandatory = $true)][string]$EnvironmentValue,
+        [Parameter(Mandatory = $true)][string]$LogLabel
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $cargo.Source
+    $startInfo.Arguments = "test -p app-services --test $TestTarget $TestName -- --ignored --exact --nocapture --test-threads=1"
+    $startInfo.WorkingDirectory = $projectRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Environment[$EnvironmentName] = $EnvironmentValue
+
+    $result = Invoke-RustGuardProcess `
+        -StartInfo $startInfo `
+        -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
+        -TimeoutContext "$LogLabel preview performance run $Run"
+    $combined = $result.Stdout + [Environment]::NewLine + $result.Stderr
+    $logPath = Join-Path $OutputDir "pve-rbd-preview-$timestamp-$LogLabel-run-$Run.txt"
+    [System.IO.File]::WriteAllText(
+        $logPath,
+        (Protect-PerformanceLog -Text $combined),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    if ($result.ExitCode -ne 0) {
+        throw "$LogLabel preview performance run $Run failed with exit code $($result.ExitCode). Log: $logPath"
+    }
+    $matches = [regex]::Matches(
+        $combined,
+        "$([regex]::Escape($MetricMarker)) (?<json>\{[^\r\n]+\})"
+    )
+    if ($matches.Count -ne 1) {
+        throw "Run $Run emitted $($matches.Count) $MetricMarker records. Log: $logPath"
+    }
+    $report = $matches[0].Groups["json"].Value | ConvertFrom-Json
+    if ([int]$report.schemaVersion -ne 1) {
+        throw "Run $Run emitted unsupported $LogLabel metrics schema version $($report.schemaVersion)."
+    }
+    return [pscustomobject]@{
+        run = $Run
+        log = $logPath
+        report = $report
     }
 }
 
@@ -182,11 +278,32 @@ function Assert-Maximum {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][double]$Actual,
-        [Parameter(Mandatory = $true)][double]$Maximum
+        [Parameter(Mandatory = $true)][double]$Maximum,
+        [string]$Unit = "ms"
     )
 
     if ($Actual -gt $Maximum) {
-        throw "$Name regression: $([Math]::Round($Actual, 3))ms > $([Math]::Round($Maximum, 3))ms"
+        throw "$Name regression: $([Math]::Round($Actual, 3))$Unit > $([Math]::Round($Maximum, 3))$Unit"
+    }
+}
+
+function Assert-LifecycleReport {
+    param([Parameter(Mandatory = $true)][object]$Report)
+
+    if (-not [bool]$Report.lifecycle.mediaParity.exactMatch -or
+        $Report.lifecycle.mediaParity.viewerSha256 -ne $Report.lifecycle.mediaParity.mediaSha256) {
+        throw "Viewer and media preview bytes did not remain identical."
+    }
+    foreach ($cycleName in @("sourceInvalidation", "caseInvalidation")) {
+        $cycle = $Report.lifecycle.$cycleName
+        if (-not [bool]$cycle.drained -or
+            -not [bool]$cycle.oldHandleRejected -or
+            -not [bool]$cycle.openWhileRetiredRejected -or
+            -not [bool]$cycle.fixedOracleMatch -or
+            [int]$cycle.postInvalidationSessionCount -ne 0 -or
+            [int]$cycle.postRebuildCloseSessionCount -ne 0) {
+            throw "Preview lifecycle checkpoint '$cycleName' did not converge safely."
+        }
     }
 }
 
@@ -228,6 +345,7 @@ for ($run = 1; $run -le $Runs; $run++) {
     $result = Invoke-PreviewPerformanceRun -Run $run
     $report = $result.report
     Assert-FixedOracle -Report $report
+    Assert-LifecycleReport -Report $report
     if ([int]$report.runtime.providerConstructions -ne 1) {
         throw "Run $run constructed $($report.runtime.providerConstructions) providers; expected exactly 1."
     }
@@ -259,11 +377,77 @@ for ($run = 1; $run -le $Runs; $run++) {
     )
 }
 
+$nativeResults = New-Object System.Collections.Generic.List[object]
+if ($hasNativeXfsFixture) {
+    for ($run = 1; $run -le $Runs; $run++) {
+        Write-Host "[$run/$Runs] Running native Linux XFS preview comparison"
+        $result = Invoke-ComparisonPerformanceRun `
+            -Run $run `
+            -TestTarget "native_linux_preview_performance" `
+            -TestName "native_linux_xfs_preview_performance" `
+            -MetricMarker "NATIVE_XFS_PREVIEW_METRICS" `
+            -EnvironmentName "FORENSICS_LINUX_E01_FIXTURE" `
+            -EnvironmentValue $resolvedNativeXfsFixture `
+            -LogLabel "native-xfs"
+        if ($result.report.oracleCapture.status -ne "fixed-oracle-verified" -or
+            @($result.report.skippedScenarios).Count -ne 0) {
+            throw "Native XFS run $run did not verify its complete fixed oracle matrix."
+        }
+        $nativeResults.Add($result) | Out-Null
+    }
+}
+
+$pveHostResults = New-Object System.Collections.Generic.List[object]
+if ($hasPveClusterRoot) {
+    for ($run = 1; $run -le $Runs; $run++) {
+        Write-Host "[$run/$Runs] Running PVE host EXT4 preview comparison"
+        $result = Invoke-ComparisonPerformanceRun `
+            -Run $run `
+            -TestTarget "pve_host_preview_performance" `
+            -TestName "pve_host_ext4_native_preview_performance" `
+            -MetricMarker "PVE_HOST_PREVIEW_METRICS" `
+            -EnvironmentName "FORENSICS_PVE_CLUSTER_ROOT" `
+            -EnvironmentValue $resolvedPveClusterRoot `
+            -LogLabel "pve-host-ext4"
+        if (-not [bool]$result.report.oracleVerified -or
+            @($result.report.metrics | Where-Object { $_.status -ne "measured" }).Count -ne 0) {
+            throw "PVE host EXT4 run $run did not verify its complete fixed oracle matrix."
+        }
+        $pveHostResults.Add($result) | Out-Null
+    }
+}
+
 $firstReport = $runResults[0].report
 foreach ($run in $runResults) {
     if ($run.report.caseId -ne $firstReport.caseId -or
         $run.report.dataSourceId -ne $firstReport.dataSourceId) {
         throw "Performance runs did not use one retained case and derived source."
+    }
+}
+
+if ($nativeResults.Count -gt 0) {
+    $firstNative = $nativeResults[0].report
+    foreach ($run in $nativeResults) {
+        if ($run.report.fixtureFingerprint.sha256 -ne $firstNative.fixtureFingerprint.sha256 -or
+            $run.report.file.logicalPath -ne $firstNative.file.logicalPath -or
+            [int64]$run.report.file.size -ne [int64]$firstNative.file.size -or
+            ($run.report.oracleCapture.ranges | ConvertTo-Json -Compress) -ne
+            ($firstNative.oracleCapture.ranges | ConvertTo-Json -Compress)) {
+            throw "Native XFS comparison oracle changed across runs."
+        }
+    }
+}
+if ($pveHostResults.Count -gt 0) {
+    $firstPveHost = $pveHostResults[0].report
+    foreach ($run in $pveHostResults) {
+        $runDigests = @($run.report.metrics | ForEach-Object { "$($_.scenario):$($_.digestSha256)" })
+        $firstDigests = @($firstPveHost.metrics | ForEach-Object { "$($_.scenario):$($_.digestSha256)" })
+        if ($run.report.memberFingerprint -ne $firstPveHost.memberFingerprint -or
+            $run.report.logicalFilePath -ne $firstPveHost.logicalFilePath -or
+            [int64]$run.report.fileSize -ne [int64]$firstPveHost.fileSize -or
+            ($runDigests -join "|") -ne ($firstDigests -join "|")) {
+            throw "PVE host EXT4 comparison oracle changed across runs."
+        }
     }
 }
 
@@ -291,6 +475,69 @@ Assert-Maximum "warm same 64 KiB median p95" $warmSame64KiBMedianP95Ms $MaxWarmS
 Assert-Maximum "sequential 16x64 KiB median p95" $sequential16x64KiBMedianP95Ms $MaxSequential16x64KiBP95Ms
 Assert-Maximum "sequential 4x1 MiB median p95" $sequential4x1MiBMedianP95Ms $MaxSequential4x1MiBMedianP95Ms
 Assert-Maximum "large random 64 KiB median p95" $largeRandom64KiBMedianP95Ms $MaxLargeRandom64KiBMedianP95Ms
+
+$comparisonSummary = [ordered]@{
+    nativeXfs = [ordered]@{ status = "skipped" }
+    pveHostExt4 = [ordered]@{ status = "skipped" }
+    rbdToNativeWarmRatio = [ordered]@{ status = "skipped" }
+}
+if ($nativeResults.Count -gt 0) {
+    $nativeWarmMedianP95Ms = Get-Median @($nativeResults | ForEach-Object {
+        [double](Get-Metric -Report $_.report -Scenario "warmSame64KiB").p95Ms
+    })
+    $nativeSequential4x1MiBMedianP95Ms = Get-Median @($nativeResults | ForEach-Object {
+        [double](Get-Metric -Report $_.report -Scenario "sequential4x1MiB").p95Ms
+    })
+    Assert-Maximum "native XFS warm same 64 KiB median p95" `
+        $nativeWarmMedianP95Ms $MaxNativeWarmSame64KiBP95Ms
+    Assert-Maximum "native XFS sequential 4x1 MiB median p95" `
+        $nativeSequential4x1MiBMedianP95Ms $MaxNativeSequential4x1MiBP95Ms
+
+    $rawWarmRatio = if ($nativeWarmMedianP95Ms -gt 0) {
+        $warmSame64KiBMedianP95Ms / $nativeWarmMedianP95Ms
+    } else {
+        [double]::PositiveInfinity
+    }
+    $gatedWarmRatio = $warmSame64KiBMedianP95Ms /
+        [Math]::Max($nativeWarmMedianP95Ms, $WarmRatioNoiseFloorMs)
+    Assert-Maximum "RBD/native XFS warm 64 KiB ratio with noise floor" `
+        $gatedWarmRatio $MaxRbdToNativeWarmRatio "x"
+    $comparisonSummary.nativeXfs = [ordered]@{
+        status = "measured"
+        fixtureFingerprint = $nativeResults[0].report.fixtureFingerprint.sha256
+        logicalFilePath = $nativeResults[0].report.file.logicalPath
+        fileSize = [int64]$nativeResults[0].report.file.size
+        warmSame64KiBP95Ms = $nativeWarmMedianP95Ms
+        sequential4x1MiBP95Ms = $nativeSequential4x1MiBMedianP95Ms
+    }
+    $comparisonSummary.rbdToNativeWarmRatio = [ordered]@{
+        status = "measured"
+        rawRatio = $rawWarmRatio
+        gatedRatio = $gatedWarmRatio
+        noiseFloorMs = $WarmRatioNoiseFloorMs
+        maximum = $MaxRbdToNativeWarmRatio
+    }
+}
+if ($pveHostResults.Count -gt 0) {
+    $pveHostWarmMedianP95Ms = Get-Median @($pveHostResults | ForEach-Object {
+        [double](Get-Metric -Report $_.report -Scenario "warmSame64KiB").p95Ms
+    })
+    $pveHostSequential4x1MiBMedianP95Ms = Get-Median @($pveHostResults | ForEach-Object {
+        [double](Get-Metric -Report $_.report -Scenario "sequential4x1MiB").p95Ms
+    })
+    Assert-Maximum "PVE host EXT4 warm same 64 KiB median p95" `
+        $pveHostWarmMedianP95Ms $MaxPveHostWarmSame64KiBP95Ms
+    Assert-Maximum "PVE host EXT4 sequential 4x1 MiB median p95" `
+        $pveHostSequential4x1MiBMedianP95Ms $MaxPveHostSequential4x1MiBP95Ms
+    $comparisonSummary.pveHostExt4 = [ordered]@{
+        status = "measured"
+        memberFingerprint = $pveHostResults[0].report.memberFingerprint
+        logicalFilePath = $pveHostResults[0].report.logicalFilePath
+        fileSize = [int64]$pveHostResults[0].report.fileSize
+        warmSame64KiBP95Ms = $pveHostWarmMedianP95Ms
+        sequential4x1MiBP95Ms = $pveHostSequential4x1MiBMedianP95Ms
+    }
+}
 
 $commit = "unknown"
 try {
@@ -325,12 +572,24 @@ $summary = [ordered]@{
         maxSequential16x64KiBP95Ms = $MaxSequential16x64KiBP95Ms
         maxSequential4x1MiBMedianP95Ms = $MaxSequential4x1MiBMedianP95Ms
         maxLargeRandom64KiBMedianP95Ms = $MaxLargeRandom64KiBMedianP95Ms
+        maxNativeWarmSame64KiBP95Ms = $MaxNativeWarmSame64KiBP95Ms
+        maxNativeSequential4x1MiBP95Ms = $MaxNativeSequential4x1MiBP95Ms
+        maxPveHostWarmSame64KiBP95Ms = $MaxPveHostWarmSame64KiBP95Ms
+        maxPveHostSequential4x1MiBP95Ms = $MaxPveHostSequential4x1MiBP95Ms
+        maxRbdToNativeWarmRatio = $MaxRbdToNativeWarmRatio
+        warmRatioNoiseFloorMs = $WarmRatioNoiseFloorMs
         maxRuntimeCacheBytes = $MaxRuntimeCacheBytes
         maxRssDeltaMb = $MaxRssDeltaMb
     }
     runtime = $firstReport.runtime
+    lifecycle = $firstReport.lifecycle
+    comparisons = $comparisonSummary
     files = $firstReport.files
-    logs = @($runResults | ForEach-Object { Split-Path -Leaf $_.log })
+    logs = @(
+        $runResults | ForEach-Object { Split-Path -Leaf $_.log }
+        $nativeResults | ForEach-Object { Split-Path -Leaf $_.log }
+        $pveHostResults | ForEach-Object { Split-Path -Leaf $_.log }
+    )
 }
 $summaryPath = Join-Path $OutputDir "pve-rbd-preview-$timestamp-summary.json"
 $summaryJson = $summary | ConvertTo-Json -Depth 8
@@ -345,4 +604,20 @@ Write-Host (
     $sequential4x1MiBMedianP95Ms,
     $largeRandom64KiBMedianP95Ms
 )
+if ($nativeResults.Count -gt 0) {
+    Write-Host (
+        "COMPARE: nativeWarm64={0:N2}ms, rawRatio={1:N2}x, gatedRatio={2:N2}x (noise floor {3:N2}ms)" -f
+        $nativeWarmMedianP95Ms,
+        $rawWarmRatio,
+        $gatedWarmRatio,
+        $WarmRatioNoiseFloorMs
+    )
+}
+if ($pveHostResults.Count -gt 0) {
+    Write-Host (
+        "CONTROL: pveHostWarm64={0:N2}ms, pveHostSeq1MiB={1:N2}ms" -f
+        $pveHostWarmMedianP95Ms,
+        $pveHostSequential4x1MiBMedianP95Ms
+    )
+}
 Write-Host "JSON: $summaryPath"
