@@ -5,6 +5,24 @@ use super::{
     MediaRangeRequestDto, MAX_VIEWER_RANGE_LENGTH,
 };
 
+fn open_media_session(
+    state: &crate::state::AppState,
+    connection: &rusqlite::Connection,
+    case_id: &str,
+    case_root: &std::path::Path,
+    file_id: &str,
+) -> persistence_sqlite::DbResult<String> {
+    app_services::file_service::open_preview_session_for_case(
+        &state.preview_runtime,
+        connection,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+        file_id,
+    )
+    .map(|handle| handle.handle_id)
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+}
+
 #[test]
 fn media_preview_returns_data_url_without_host_path() {
     support::with_logical_case_file(
@@ -12,7 +30,7 @@ fn media_preview_returns_data_url_without_host_path() {
         "clip.mp4",
         b"tiny media bytes",
         |connection, case_id, file_id, evidence_dir, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
+            let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
                 .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
             let url = media.url.expect("small media should return inline URL");
@@ -34,7 +52,7 @@ fn media_preview_logical_directory_reads_direct_without_service_fallback() {
         "clip.mp4",
         b"tiny media bytes",
         |connection, case_id, file_id, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
+            let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
                 .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
 
@@ -63,7 +81,7 @@ fn media_preview_raw_image_reads_via_bytes_only_service_path() {
         "media-raw-inline",
         "mp4",
         |connection, case_id, file_id, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
+            let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
                 .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
 
@@ -96,7 +114,7 @@ fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
         "large.mp4",
         &oversized,
         |connection, case_id, file_id, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
+            let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
                 .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
             assert_eq!(media.mode, MediaPreviewModeDto::Protocol);
@@ -142,9 +160,8 @@ fn media_range_offset_at_size_returns_empty_eof() {
         "clip.mp4",
         b"0123456789",
         |connection, case_id, file_id, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
-            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let state = support::test_state_with_case(&case_id, case_root.clone());
+            let handle_id = open_media_session(&state, connection, &case_id, &case_root, &file_id)?;
             let range = media_range_for_file(
                 &state,
                 connection,
@@ -174,9 +191,8 @@ fn media_range_mid_file_reads_raw_bytes_without_hex_viewer_path() {
         "clip.mp4",
         &content,
         |connection, case_id, file_id, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
-            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let state = support::test_state_with_case(&case_id, case_root.clone());
+            let handle_id = open_media_session(&state, connection, &case_id, &case_root, &file_id)?;
             let calls_before = support::media_range_call_count(&case_id);
             let range = media_range_for_file(
                 &state,
@@ -211,9 +227,8 @@ fn media_range_mid_raw_image_reads_via_bytes_only_service_path() {
         "media-raw-range",
         "bin",
         |connection, case_id, file_id, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
-            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let state = support::test_state_with_case(&case_id, case_root.clone());
+            let handle_id = open_media_session(&state, connection, &case_id, &case_root, &file_id)?;
             let calls_before = support::media_range_call_count(&case_id);
             let range = media_range_for_file(
                 &state,
@@ -249,7 +264,7 @@ fn media_range_rejects_invalid_handle() {
         "clip.mp4",
         b"0123456789",
         |connection, case_id, _, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
+            let state = support::test_state_with_case(&case_id, case_root.clone());
             let error = media_range_for_file(
                 &state,
                 connection,
@@ -261,7 +276,7 @@ fn media_range_rejects_invalid_handle() {
             )
             .expect_err("host paths must not be valid media handles");
 
-            assert!(error.message.contains("media handle"));
+            assert!(error.message.contains("Preview handle"));
 
             Ok(())
         },
@@ -276,9 +291,8 @@ fn media_range_clamps_length_to_one_megabyte() {
         "large.mp4",
         &content,
         |connection, case_id, file_id, _, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
-            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let state = support::test_state_with_case(&case_id, case_root.clone());
+            let handle_id = open_media_session(&state, connection, &case_id, &case_root, &file_id)?;
             let mut request = MediaRangeRequestDto {
                 handle_id,
                 offset: 0,
@@ -307,9 +321,8 @@ fn media_range_response_does_not_leak_host_path() {
         "clip.mp4",
         b"0123456789",
         |connection, case_id, file_id, evidence_dir, case_root| {
-            let state = support::test_state_with_case(&case_id, case_root);
-            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let state = support::test_state_with_case(&case_id, case_root.clone());
+            let handle_id = open_media_session(&state, connection, &case_id, &case_root, &file_id)?;
             let range = media_range_for_file(
                 &state,
                 connection,

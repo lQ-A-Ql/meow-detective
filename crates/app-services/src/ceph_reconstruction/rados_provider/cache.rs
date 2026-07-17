@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::{RbdObjectProviderError, RbdObjectReadOutcome, RbdObjectReadRequest};
 
-const MAX_BYTES: usize = 64 * 1024 * 1024;
+pub(super) const MAX_BYTES: usize = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 1024;
 pub(super) const PAGE_BYTES: usize = 64 * 1024;
 
@@ -54,6 +54,13 @@ impl VerifiedObjectCache {
         let value = self.entries.get(&key)?.clone();
         self.touch(&key);
         Some(value)
+    }
+
+    pub(super) fn contains(&self, object_identity: &str, page_offset: u64) -> bool {
+        self.entries.contains_key(&VerifiedRangeKey {
+            object_identity: object_identity.to_string(),
+            page_offset,
+        })
     }
 
     pub(super) fn insert(

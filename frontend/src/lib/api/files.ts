@@ -70,6 +70,10 @@ export async function openFileHandle(fileId: string): Promise<ViewerHandle> {
   return apiClient.request(COMMANDS.files.OPEN_FILE_HANDLE_REQUEST, { request: { fileId } });
 }
 
+export async function closeFileHandle(handleId: string): Promise<boolean> {
+  return apiClient.request(COMMANDS.files.CLOSE_FILE_HANDLE, { handleId });
+}
+
 export async function readFileRange(request: ViewerRangeRequest): Promise<import('@/types/models').ViewerRangeResponse> {
   return apiClient.request(COMMANDS.files.READ_FILE_RANGE, { request });
 }

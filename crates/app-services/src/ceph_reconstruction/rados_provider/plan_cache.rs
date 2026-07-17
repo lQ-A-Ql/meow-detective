@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::super::rados_reader::RadosObjectLayout;
 
-const MAX_PLAN_BYTES: usize = 16 * 1024 * 1024;
+pub(super) const MAX_PLAN_BYTES: usize = 16 * 1024 * 1024;
 const MAX_PLANS: usize = 128;
 
 pub(super) struct ObjectPlanCache {

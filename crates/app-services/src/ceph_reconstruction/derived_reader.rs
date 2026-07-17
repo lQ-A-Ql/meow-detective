@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use ceph_wire::RbdImageMetadata;
 use domain::{CaseId, DataSourceId};
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
@@ -8,10 +7,7 @@ use persistence_sqlite::repositories::{
 };
 use thiserror::Error;
 
-use super::{
-    open_rbd_head_image, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor, RbdReadContext,
-    SourceDbRadosObjectProvider,
-};
+use super::{build_derived_rbd_runtime, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor};
 
 #[derive(Debug, Error)]
 pub enum DerivedRbdReaderError {
@@ -38,23 +34,19 @@ pub fn open_derived_rbd_reader(
     case_id: &CaseId,
     derived_data_source_id: &DataSourceId,
 ) -> Result<RbdEvidenceReader, DerivedRbdReaderError> {
-    let aggregate = CephRbdLineageRepo::new(case_conn)
-        .find_by_data_source(&derived_data_source_id.0)?
-        .ok_or_else(|| DerivedRbdReaderError::LineageNotFound(derived_data_source_id.0.clone()))?;
-    let replicas = build_replica_bindings(case_conn, case_root, case_id, &aggregate)?;
-    let descriptor = descriptor_from_lineage(&aggregate);
-    let provider = SourceDbRadosObjectProvider::new(
-        replicas,
-        descriptor.metadata.data_pool_id,
-        Vec::new(),
-        aggregate.lineage.expected_replica_count as usize,
-    )
-    .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?;
-    open_rbd_head_image(&descriptor, Box::new(provider))
-        .map_err(|error| DerivedRbdReaderError::Open(error.to_string()))
+    build_derived_rbd_runtime(case_conn, case_root, case_id, derived_data_source_id)?.open_reader()
 }
 
-fn build_replica_bindings(
+pub(super) fn load_lineage(
+    case_conn: &rusqlite::Connection,
+    derived_data_source_id: &DataSourceId,
+) -> Result<CephRbdLineageAggregate, DerivedRbdReaderError> {
+    CephRbdLineageRepo::new(case_conn)
+        .find_by_data_source(&derived_data_source_id.0)?
+        .ok_or_else(|| DerivedRbdReaderError::LineageNotFound(derived_data_source_id.0.clone()))
+}
+
+pub(super) fn build_replica_bindings(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
@@ -89,10 +81,10 @@ fn build_replica_bindings(
         .collect()
 }
 
-fn descriptor_from_lineage(aggregate: &CephRbdLineageAggregate) -> RbdImageDescriptor {
+pub(super) fn descriptor_from_lineage(aggregate: &CephRbdLineageAggregate) -> RbdImageDescriptor {
     let lineage = &aggregate.lineage;
     RbdImageDescriptor {
-        metadata: RbdImageMetadata {
+        metadata: ceph_wire::RbdImageMetadata {
             name: lineage.image_name.clone(),
             id: lineage.image_id.clone(),
             object_prefix: lineage.object_prefix.clone(),
@@ -104,7 +96,7 @@ fn descriptor_from_lineage(aggregate: &CephRbdLineageAggregate) -> RbdImageDescr
             data_pool_id: lineage.data_pool_id,
         },
         scope_identity: lineage.scope_identity.clone(),
-        context: RbdReadContext {
+        context: super::RbdReadContext {
             operation_features: lineage.operation_features,
             has_parent: lineage.has_parent,
             snapshot_id: lineage.snapshot_id,

@@ -4,8 +4,9 @@
 //! (for example, after a data source finishes importing) and clears the
 //! runtime-cache and E01 reader cache for the affected case.
 
+use std::time::Duration;
 use tauri::{AppHandle, Listener, Manager};
-use transport::events::TOPIC_DATA_SOURCE_IMPORTED;
+use transport::events::{EventEnvelope, TOPIC_DATA_SOURCE_IMPORTED};
 
 use crate::state::AppState;
 
@@ -14,24 +15,27 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 struct DataSourceImportedPayload {
     case_id: String,
+    data_source_id: String,
 }
 
 /// Register backend listeners that invalidate preview caches on lifecycle events.
 pub fn register(app: AppHandle) {
     let app_clone = app.clone();
     app.listen(TOPIC_DATA_SOURCE_IMPORTED, move |event| {
-        let payload: DataSourceImportedPayload = match serde_json::from_str(event.payload()) {
-            Ok(p) => p,
-            Err(error) => {
-                tracing::warn!(%error, "Ignoring malformed data-source-imported event");
-                return;
-            }
-        };
-        clear_preview_caches_for_case(&app_clone, &payload.case_id);
+        let envelope: EventEnvelope<DataSourceImportedPayload> =
+            match serde_json::from_str(event.payload()) {
+                Ok(envelope) => envelope,
+                Err(error) => {
+                    tracing::warn!(%error, "Ignoring malformed data-source-imported event");
+                    return;
+                }
+            };
+        let payload = envelope.payload;
+        clear_preview_caches_for_source(&app_clone, &payload.case_id, &payload.data_source_id);
     });
 }
 
-fn clear_preview_caches_for_case(app: &AppHandle, case_id: &str) {
+fn clear_preview_caches_for_source(app: &AppHandle, case_id: &str, data_source_id: &str) {
     let state = app.state::<AppState>();
 
     // Only clear caches if the imported case is currently active. Import jobs
@@ -61,11 +65,35 @@ fn clear_preview_caches_for_case(app: &AppHandle, case_id: &str) {
         return;
     }
 
+    let drained =
+        match state.retire_preview_source(case_id, data_source_id, Duration::from_secs(30)) {
+            Ok(drained) => drained,
+            Err(error) => {
+                tracing::error!(%error, "Failed to retire preview runtime after import");
+                return;
+            }
+        };
+    if !drained {
+        tracing::error!(
+            case_id = %case_id,
+            data_source_id = %data_source_id,
+            "Preview runtime remains retired because active reads did not drain after import"
+        );
+        return;
+    }
     if let Err(error) = state.clear_runtime_cache_for_case(case_id) {
         tracing::error!(%error, "Failed to clear runtime cache after import");
     }
     app_services::file_service::clear_e01_reader_cache_for_case(case_id);
-    tracing::info!(case_id = %case_id, "Cleared preview caches after import");
+    if let Err(error) = state.reactivate_preview_source(case_id, data_source_id) {
+        tracing::error!(%error, "Failed to reactivate preview runtime after import");
+        return;
+    }
+    tracing::info!(
+        case_id = %case_id,
+        data_source_id = %data_source_id,
+        "Cleared preview caches after import"
+    );
 }
 
 #[cfg(test)]

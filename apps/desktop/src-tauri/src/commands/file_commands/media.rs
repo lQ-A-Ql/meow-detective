@@ -58,7 +58,22 @@ pub(super) fn media_data_url_for_file(
             mime_type,
             size,
             can_read_ranges,
-        } => protocol_media_url(state, file_id, mime_type, size, can_read_ranges),
+        } => {
+            let handle = file_service::open_preview_session_for_case(
+                &state.preview_runtime,
+                connection,
+                &active.case_root,
+                &active.meta.id,
+                file_id,
+            )
+            .map_err(CommandError::from_typed_service_error)?;
+            Ok(protocol_media_url(
+                &handle.handle_id,
+                mime_type,
+                size,
+                can_read_ranges,
+            ))
+        }
     }
 }
 
@@ -67,38 +82,29 @@ pub(super) fn media_range_for_file(
     connection: &rusqlite::Connection,
     request: &MediaRangeRequestDto,
 ) -> Result<MediaRangeResponseDto, CommandError> {
-    // Stage 3 compatibility: scoped Tauri media handles are desktop runtime
-    // state. Stage 4 can move this adapter behind an app-service port.
-    let file_id = crate::media_protocol::resolve_scoped_media_handle(state, &request.handle_id)
-        .map_err(CommandError::security)?;
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::media_range_for_source_case(
+    file_service::read_preview_session_media_range_for_case(
+        &state.preview_runtime,
         connection,
         &active.case_root,
         &active.meta.id,
-        &file_id,
         request,
     )
     .map_err(CommandError::from_typed_service_error)
 }
 
 fn protocol_media_url(
-    state: &AppState,
-    file_id: &str,
+    handle_id: &str,
     mime_type: String,
     size: u64,
     can_read_ranges: bool,
-) -> Result<MediaUrlDto, CommandError> {
-    // Stage 3 compatibility: protocol URL construction depends on Tauri-owned
-    // short-lived handles and therefore cannot yet be a pure app-service call.
-    let scoped_handle = crate::media_protocol::create_scoped_media_handle(state, file_id)
-        .map_err(CommandError::security)?;
-    Ok(MediaUrlDto {
+) -> MediaUrlDto {
+    MediaUrlDto {
         mode: MediaPreviewModeDto::Protocol,
-        url: Some(crate::media_protocol::media_protocol_url(&scoped_handle)),
-        handle_id: Some(scoped_handle),
+        url: Some(crate::media_protocol::media_protocol_url(handle_id)),
+        handle_id: Some(handle_id.to_string()),
         mime_type,
         size,
         can_read_ranges,
-    })
+    }
 }

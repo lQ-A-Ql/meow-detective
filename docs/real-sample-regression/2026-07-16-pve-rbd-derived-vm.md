@@ -48,7 +48,8 @@ VM file records     = 114,260
 - 直接 XFS 分区。
 - `centos/home` XFS logical volume。
 - `centos/root` XFS logical volume。
-- `/etc/passwd` 可通过全局文件 ID、文件 handle 和 range API 读取。
+- `/etc/passwd`、直接 XFS 文件、home LV 根级文件、16 MiB 文件和 614 MiB
+  文件可通过全局文件 ID、opaque preview session 和 bounded range API 读取。
 - 文本、Hex、媒体和通用 range 预览继续复用既有只读证据读取链路。
 
 派生 source 使用独立的
@@ -155,8 +156,9 @@ otherwise                                => indeterminate
 - 一个真实 RBD head image 的只读字节重建。
 - RBD 分区、单 PV LVM、三个 XFS 文件系统的完整枚举。
 - 114,260 条派生 VM 文件记录。
-- `/etc/passwd` 的真实 handle/range 预览；通用预览路由已接通，但“任意文件、
-  多分区、多 range”仍需扩大真实样本 oracle。
+- 直接 XFS、`centos/home`、`centos/root` 的五个代表文件真实预览，覆盖
+  `1,019 B` 至 `614,794,240 B`、连续/随机/文件尾 range 和跨运行 SHA-256
+  oracle。
 
 当前仍不承诺：
 
@@ -167,33 +169,42 @@ otherwise                                => indeterminate
 - CephFS MDS metadata/data object reconstruction。
 - 以该私有样本替代公开 fixture 与 expected JSON。
 
-## 2026-07-17 VM 预览性能复审
+## 2026-07-17 VM 预览性能加固
 
-本轮复审确认，`ready tree + preview` 的 `6.05s` 至 `6.54s` 不能解释为前端
-渲染延迟，也不能解释为重新物化 VM 文件树。当前主要风险位于后端 range
-读取链路：
+本轮已完成：
 
-1. `file:` handle 只是全局文件 ID 的可逆编码，不是持有 reader 的运行时会话。
-2. 每个 range 都会重新查询 lineage、校验三份 parent source、构造
-   `SourceDbRadosObjectProvider`、打开 BlueStore device，并重建 RBD/LVM/XFS。
-3. provider 内现有的每副本 plan cache 和 verified page cache 随请求结束销毁。
-4. `ceph_rbd` 当前绕过 Linux filesystem bounded-range 分派。XFS 没有
-   `open_file_seekable` 时会回退到 `open_file`，该路径可能先 materialize 整个
-   文件，即使调用方只请求 64 KiB。
-5. 当前真实样本只固定了 `/etc/passwd` 预览 oracle，尚未覆盖 100 MiB 以上
-   VM 文件、随机 offset、跨 RBD object、media protocol 和 cache eviction。
+1. Ceph RBD range 接入文件系统 bounded-range，不再整文件 materialize。
+2. source-scoped `DerivedRbdRuntime` 复用三副本 provider、connection、device、
+   plan cache 与 verified page cache。
+3. `preview:<uuid>` opaque session、TTL/LRU、显式 close、scope generation 和
+   case/source retire + active-read drain。
+4. XFS target-only path lookup，避免每级目录为全部兄弟条目读取 inode。
+5. 64 KiB verified page 保持不变；大请求最多合并四个连续 miss 为一次
+   256 KiB 三副本读取。
+6. 新增 `scripts/check-pve-rbd-preview-performance.ps1`，默认缺 fixture 跳过，
+   `-RequireFixture` 时缺失即失败；关键 range 必须匹配固定 SHA-256 oracle，
+   Cargo 编译预热不计入单轮性能超时。
 
-因此当前状态应表述为：
+三轮 retained-case 门禁结果：
+
+| 指标 | 中位结果 |
+|---|---:|
+| cold 文件读取，不含 runtime open | `312.834ms` |
+| cold runtime + 文件读取，仅报告 | `2,573.852ms` |
+| warm 同范围 64 KiB p95 | `0.831ms` |
+| 连续 `16x64 KiB` p95 | `18.772ms` |
+| 连续 `4x1 MiB` p95 | `239.327ms` |
+| 614 MiB 文件随机 64 KiB p95 | `71.122ms` |
+| provider construction | `1` |
+| runtime cache capacity | `117,440,512 B` |
+| RSS delta | `446-449 MiB` |
+
+当前状态应表述为：
 
 ```text
-VM 文件树已完成，通用预览路由已接通；低延迟、任意大文件、多 range 预览尚未验收。
+VM 文件树与代表性大文件 bounded-range 预览已通过私有样本性能门禁；
+首次三 OSD E01/LVM runtime 初始化、media 浏览器时序和 cache eviction 仍需继续验收。
 ```
 
-后续优化、风险控制、测试矩阵与性能预算以
-`docs/ceph-rbd-vm-preview-performance-design.md` 为准。实施顺序固定为：
-
-1. 分阶段 timing 与独立 preview baseline。
-2. 修复 Ceph RBD 绕过 XFS bounded-range 的 P0 缺陷。
-3. 建立 source-scoped RBD runtime。
-4. 建立 opaque PreviewSession 与 XFS prepared file access。
-5. 扩大真实样本多文件、多分区和多 range oracle。
+完整设计、门禁阈值和剩余风险见
+`docs/ceph-rbd-vm-preview-performance-design.md`。

@@ -307,7 +307,7 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 | Count | Location | Notes |
 |-------|----------|-------|
 | 36 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
-| 98 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
+| 99 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 25 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo, ceph_bluestore_semantic_repo, ceph_rbd_lineage_repo |
 | 53 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0037`, `source_001`–`source_015`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |

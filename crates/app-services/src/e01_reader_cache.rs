@@ -1,14 +1,9 @@
-//! E01 reader cache: per-case LRU cache of parsed E01 readers.
+//! Per-case cache for parsed E01 metadata and chunk tables.
 
 use image_e01::E01Reader;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 
-/// Maximum number of concurrently cached parsed E01 readers per case.
-/// Cache hits reuse the `Arc<chunk_table>` via `E01Reader::re_open`,
-/// opening fresh segment file handles without re-parsing headers.
-/// Bucketing by case prevents one case's preview activity from evicting
-/// another case's readers.
 pub(crate) const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
 
 struct E01ReaderCache {
@@ -27,30 +22,22 @@ impl E01ReaderCache {
     }
 
     fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
-        // Cache hit: re-open fresh file handles, share Arc<chunk_table>
         if let Some(cached) = self.readers.get(source_path) {
-            // Update LRU: move to most-recently-used end
-            if let Some(pos) = self.paths.iter().position(|p| p == source_path) {
-                self.paths.remove(pos);
+            if let Some(position) = self.paths.iter().position(|path| path == source_path) {
+                self.paths.remove(position);
             }
             self.paths.push_back(source_path.to_path_buf());
             return cached.re_open(source_path);
         }
 
-        // Cache miss: fully parse from disk
         let reader = E01Reader::open(source_path)?;
-
-        // Evict oldest if full
         while self.paths.len() >= self.max_size {
-            if let Some(evict_path) = self.paths.pop_front() {
-                self.readers.remove(&evict_path);
+            if let Some(evicted_path) = self.paths.pop_front() {
+                self.readers.remove(&evicted_path);
             }
         }
-
         self.paths.push_back(source_path.to_path_buf());
         self.readers.insert(source_path.to_path_buf(), reader);
-
-        // Re-open for the caller with fresh handles
         self.readers
             .get(source_path)
             .expect("reader was just inserted")
@@ -58,8 +45,6 @@ impl E01ReaderCache {
     }
 }
 
-/// Per-case E01 reader cache. Callers that do not have a case context (for
-/// example low-level filesystem probes) use the empty-string default bucket.
 pub(crate) struct E01ReaderCacheRegistry {
     default_bucket: E01ReaderCache,
     buckets: HashMap<String, E01ReaderCache>,
@@ -92,10 +77,8 @@ impl E01ReaderCacheRegistry {
         if case_id.is_empty() {
             self.default_bucket.paths.clear();
             self.default_bucket.readers.clear();
-            return;
-        }
-        if let Some(bucket) = self.buckets.remove(case_id) {
-            drop(bucket);
+        } else {
+            self.buckets.remove(case_id);
         }
     }
 }
@@ -107,14 +90,12 @@ pub(crate) static E01_READER_CACHE: std::sync::LazyLock<std::sync::Mutex<E01Read
         ))
     });
 
-/// Clear the global E01 reader cache.
 pub fn clear_e01_reader_cache() {
     if let Ok(mut cache) = E01_READER_CACHE.lock() {
         cache.clear();
     }
 }
 
-/// Clear cached E01 readers for a single case.
 pub fn clear_e01_reader_cache_for_case(case_id: &str) {
     if let Ok(mut cache) = E01_READER_CACHE.lock() {
         cache.clear_case(case_id);
@@ -126,7 +107,6 @@ pub(crate) fn open_e01_reader_cached(
     case_id: &str,
 ) -> std::io::Result<E01Reader> {
     let mut registry = E01_READER_CACHE.lock().unwrap_or_else(|poisoned| {
-        // Clear the cache on poison to avoid using potentially corrupted state
         let mut registry = poisoned.into_inner();
         registry.clear();
         registry

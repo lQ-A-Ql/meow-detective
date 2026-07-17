@@ -277,10 +277,12 @@ Assert-NotMatchesCaseSensitive `
   -Message "file_service viewer modules must stay Tauri-free; media protocol adaptation belongs in commands"
 
 foreach ($pattern in @(
-    'file_service::read_file_range_for_source_case',
+    'file_service::open_preview_session_for_case',
+    'file_service::read_preview_session_range_for_case',
+    'file_service::read_preview_session_media_range_for_case',
+    'file_service::close_preview_session_for_case',
     'file_service::image_preview_for_source_case',
     'file_service::media_preview_plan_for_source_case',
-    'file_service::media_range_for_source_case',
     'file_service::text_preview_for_source_case'
   )) {
   Assert-Matches `
@@ -288,6 +290,11 @@ foreach ($pattern in @(
     -Pattern $pattern `
     -Message "file_commands.rs must delegate preview/range work to app-services: $pattern"
 }
+
+Assert-NotMatches `
+  -Content $fileCommands `
+  -Pattern 'file_service::(?:read_file_range_for_source_case|media_range_for_source_case)' `
+  -Message "file_commands.rs must not bypass opaque preview sessions for range or media reads"
 
 # Datasource probing and LVM expansion were split into focused modules. Keep the
 # public datasource_service path as a facade so import/viewer callers do not bind

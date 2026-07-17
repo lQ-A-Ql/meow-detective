@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getMediaUrl: vi.fn(),
   readMediaRange: vi.fn(),
   openFileHandle: vi.fn(),
+  closeFileHandle: vi.fn(),
   readFileRange: vi.fn(),
   getTextPreview: vi.fn(),
   getImagePreview: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/lib/api/files', () => ({
   getFileChildrenPage: vi.fn(),
   importDataSource: mocks.importDataSource,
   openFileHandle: mocks.openFileHandle,
+  closeFileHandle: mocks.closeFileHandle,
   readFileRange: mocks.readFileRange,
   extractFile: vi.fn(),
   getTextPreview: mocks.getTextPreview,
@@ -59,9 +61,27 @@ function createWrapper() {
   };
 }
 
+function createStrictWrapper() {
+  const Wrapper = createWrapper();
+  return function StrictWrapper({ children }: { children: React.ReactNode }) {
+    return createElement(StrictMode, null, createElement(Wrapper, null, children));
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('files hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.closeFileHandle.mockResolvedValue(false);
   });
 
   describe('useFileTree', () => {
@@ -140,7 +160,7 @@ describe('files hooks', () => {
         canReadRanges: true,
       });
 
-      const { result } = renderHook(() => useMediaUrl('file-1'), {
+      const { result, unmount } = renderHook(() => useMediaUrl('file-1'), {
         wrapper: createWrapper(),
       });
 
@@ -148,6 +168,8 @@ describe('files hooks', () => {
       expect(result.current.data?.previewMode).toBe('protocol');
       expect(result.current.data?.url).toBe('evidence-media://handle/abc123');
       expect(mocks.readMediaRange).not.toHaveBeenCalled();
+      unmount();
+      await waitFor(() => expect(mocks.closeFileHandle).toHaveBeenCalledWith('abc123'));
     });
 
     it('returns inline URL when getMediaUrl provides a direct url', async () => {
@@ -213,6 +235,23 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.previewMode).toBe('rangeFallback');
       expect(result.current.data?.previewBytes).toBe(0);
+    });
+
+    it('closes the media handle when fallback range loading fails', async () => {
+      mocks.getMediaUrl.mockResolvedValue({
+        url: null,
+        handleId: 'h-failed',
+        mimeType: 'video/mp4',
+        canReadRanges: true,
+      });
+      mocks.readMediaRange.mockRejectedValue(new Error('range failed'));
+
+      const { result } = renderHook(() => useMediaUrl('file-failed'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mocks.closeFileHandle).toHaveBeenCalledWith('h-failed');
     });
   });
 
@@ -366,6 +405,66 @@ describe('files hooks', () => {
       expect(screen.getByText('5A')).toBeDefined();
       expect(screen.getByText('00')).toBeDefined();
       expect(screen.getByText('FF')).toBeDefined();
+    });
+
+    it('closes the handle when the initial hex range fails', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:range-failed',
+        size: 4096,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange.mockRejectedValue(new Error('range failed'));
+
+      const { result } = renderHook(() => useFileViewer('file-range-failed'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mocks.closeFileHandle).toHaveBeenCalledWith('file:range-failed');
+    });
+  });
+
+  describe('useFileHandle', () => {
+    it('does not dispose the live handle during StrictMode effect replay', async () => {
+      mocks.openFileHandle
+        .mockResolvedValueOnce({
+          handleId: 'file:strict-replayed',
+          size: 4096,
+          mime: 'application/octet-stream',
+        })
+        .mockResolvedValueOnce({
+          handleId: 'file:strict-live',
+          size: 4096,
+          mime: 'application/octet-stream',
+        });
+
+      const { result, unmount } = renderHook(() => useFileHandle('file-strict'), {
+        wrapper: createStrictWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.handleId).toBe('file:strict-live');
+      expect(mocks.closeFileHandle).toHaveBeenCalledWith('file:strict-replayed');
+      expect(mocks.closeFileHandle).not.toHaveBeenCalledWith('file:strict-live');
+      unmount();
+      await waitFor(() => expect(mocks.closeFileHandle).toHaveBeenCalledWith('file:strict-live'));
+    });
+
+    it('closes a handle that resolves after the hook was unmounted', async () => {
+      const pending = deferred<{ handleId: string; size: number; mime: string }>();
+      mocks.openFileHandle.mockReturnValue(pending.promise);
+
+      const { unmount } = renderHook(() => useFileHandle('file-pending'), {
+        wrapper: createWrapper(),
+      });
+      unmount();
+      pending.resolve({
+        handleId: 'file:late',
+        size: 4096,
+        mime: 'application/octet-stream',
+      });
+
+      await waitFor(() => expect(mocks.closeFileHandle).toHaveBeenCalledWith('file:late'));
     });
   });
 });

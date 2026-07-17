@@ -11,7 +11,8 @@
 > onode/blob/shard/extent/checksum/shared-ref semantic snapshot 已完成。
 > OMAP catalog、source-bound RADOS range reader、bounded RBD head-reader、
 > 持久化 RBD lineage 和派生 VM source DB 已完成。真实 PVE 样本已生成
-> 114,260 条 VM 文件记录并通过 `/etc/passwd` 预览；通用 PG/CRUSH/EC、
+> 114,260 条 VM 文件记录，并通过五个代表文件、614 MiB 大文件、连续/随机
+> bounded range 性能门禁；通用 PG/CRUSH/EC、
 > degraded replica recovery、CephFS 和跨节点语义分析仍保持 unsupported。
 >
 > 同轮结构债务从 17 个模块基线降至 0；另有 5 个
@@ -45,7 +46,7 @@
 | 2026-07-15 | Linux/Ceph | BlueStore Stage 6.4 performance hardening | Full E01 rerun passed | 修复两处 object/blob child `O(n^2)` 路径，checksum 改为 compact numeric row + canonical object ordinal，semantic child rows 使用运行时 bind limit 批量写入；单 `server01-disk02` 从 544.105s 降至 92.673s，peak RSS 从 589MB 降至 537MB，count/digest oracle 不变 | 六成员完整性能复跑按发布门禁需要执行；Stage 6.5 继续 RADOS/OMAP |
 | 2026-07-15 | Linux/Ceph | BlueStore Stage 6.5/6.6 | RADOS/RBD foundation completed / real image oracle pending | 修复真实 `PerPg`/`PgMeta` 无 Header OMAP scope 阻断；OMAP catalog、source-bound RADOS range reader、显式配置 inventory 集合的副本冲突拒绝、RBD striping/head reader 与 filesystem probe foundation 已通过 37 项重建测试和真实六成员回归；六成员耗时 353.71s，`ready=6`、`failed=0` | 建立真实 RBD image byte oracle，之后进入 VM partition/filesystem integration；PG/replica placement 与 CephFS 仍不做 |
 | 2026-07-16 | Linux/Ceph | Stage 6 RBD derived VM | Private real-sample VM tree and preview completed | 从显式加载的三个 OSD inventory 重建 `vm-100-disk-0`；派生独立 source DB 枚举直接 XFS 与 `centos/home`、`centos/root`，得到 114,260 条文件记录并通过真实 `/etc/passwd` range 预览。文件树事务、SQLite 集合式 Graph 投影和 XFS 有界目录缓存将未完成的 `>1h47min / 6,828 rows` 路径降至两次首次物化实测 `46.28s / 54.73s`；幂等物化实测 `124ms / 136ms` | 通用 PG/CRUSH/EC、degraded replica、multi-PV RBD LVM 与 CephFS 仍 fail closed；当前尚未独立证明已加载 inventory 等于集群完整副本集合 |
-| 2026-07-17 | Linux/Ceph | RBD VM preview performance audit | Design completed / implementation pending | 确认 `ceph_rbd` range 当前绕过 XFS bounded-range，并可能通过 `XfsReader::open_file` 整文件 materialize；`file:` handle 不是 live session，provider 的三副本 connection/device、48 MiB plan cache 与 64 MiB verified-page cache 均按请求销毁。已落地 source-scoped runtime、opaque session、失效模型和真实样本性能门禁设计 | 先实施 phase timing 与 bounded-range P0 修复，再实施 shared runtime 和 prepared XFS session |
+| 2026-07-17 | Linux/Ceph | RBD VM preview performance hardening | Completed for private retained-case gate | 修复 XFS 整文件 materialize，建立 source-scoped runtime、opaque preview session、scope generation、retire/read-drain、前端异常 close、target-only XFS path lookup 和最多 256 KiB 请求内页合并。关键 range 绑定固定 SHA-256 oracle；直接 XFS、`centos/home`、`centos/root` 的五个文件覆盖 `1,019 B` 至 `614,794,240 B`；三轮中位：cold file read `312.834ms`、warm 64 KiB p95 `0.831ms`、`4x1 MiB` p95 `239.327ms`、大文件随机 64 KiB p95 `71.122ms`，provider construction `1` | 首次三 OSD runtime 初始化中位 `2.574s` 继续单独优化；补 media 浏览器时序、cache eviction 与 inventory 完整集合证明 |
 
 ## 代码里程碑
 
@@ -70,7 +71,7 @@
 |---|---|---|---|
 | `D:\獬豸杯\检材2.E01` + `D:\獬豸杯\检材3.E01` | Windows/Linux 双顺序串行导入、独立 source DB、分区、文件树、预览、分析 ID 隔离 | 通过，Windows -> Linux 96.92s；Linux -> Windows 94.63s | `docs/real-sample-regression/2026-07-11-backend-refactor-stage2.md` |
 | `D:\獬豸杯\检材3.E01` | LVM direct LV -> XFS -> 文件树/预览/Linux artifacts | 通过私有 Stage 0 baseline | `docs/real-sample-regression/2026-07-05-linux-stage0-jiancai3.md` |
-| `E:\pangushi\服务器` | 6 成员发现、PVE root EXT4、BlueStore/RBD/VM 重建 | 宿主文件系统通过；三个 BlueStore OSD 完成 semantic/OMAP/RADOS；显式加载的三 OSD inventory 已重建 `vm-100-disk-0`，派生独立 source DB 含 114,260 条 VM 文件记录、直接 XFS 与两个 XFS LV，并通过真实文件预览。通用 PG/CRUSH/EC、degraded replica、集群完整副本集合证明与 CephFS 未验收 | `docs/real-sample-regression/2026-07-16-pve-rbd-derived-vm.md` |
+| `E:\pangushi\服务器` | 6 成员发现、PVE root EXT4、BlueStore/RBD/VM 重建 | 宿主文件系统通过；三个 BlueStore OSD 完成 semantic/OMAP/RADOS；显式加载的三 OSD inventory 已重建 `vm-100-disk-0`，派生独立 source DB 含 114,260 条 VM 文件记录、直接 XFS 与两个 XFS LV。五个代表文件覆盖 `1,019 B` 至 `614,794,240 B`、连续/随机/文件尾 range，并通过三轮性能门禁。通用 PG/CRUSH/EC、degraded replica、集群完整副本集合证明与 CephFS 未验收 | `docs/real-sample-regression/2026-07-16-pve-rbd-derived-vm.md` |
 
 样本路径只用于本地 opt-in 回归，不得进入生产逻辑。
 
@@ -83,7 +84,7 @@
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
 - BlueStore label、BlueFS replay、RocksDB control-plane/live-SST/WAL/latest-state、`S/C/O/X` semantic snapshot、OMAP catalog、source-bound RADOS range reader、bounded RBD head-reader、持久化 lineage、派生 VM source DB、114,260 条文件记录与真实预览已完成私有样本验收。通用 PG/CRUSH/EC、degraded replica、multi-PV RBD LVM、CephFS 和跨节点语义分析仍不得标记为完成。
 - RBD 物化旧路径运行 `>1h47min` 仅产生约 6,828 条记录。持久 source connection、每副本 read-plan LRU、64 KiB verified page cache、文件树单事务、SQLite 集合式 Graph 投影和 XFS 有界目录缓存完成后，两次 retained-case 首次物化实测为 `46.28s` 与 `54.73s`；其中最新一次 phase 为 probe `3.084s`、LVM `0.251s`、小 XFS `0.797s`、`centos/root` XFS `46.586s`、Graph `3.704s`、checkpoint `0.008s`。已完成 source 的幂等物化观测为 `124ms` 与 `136ms`，ready tree + preview 测试体观测为 `6.05s` 与 `6.54s`。深度 isolation/oracle 测试 `131.53s` 主要用于读取三个约 1 GiB source DB 并执行完整性检查；历史 `507.19s` 混合 Cargo、六成员导入和深审计，不作为生产物化或发布性能基线。
-- VM 预览性能审计确认当前仍有独立于物化性能的读取债务：Ceph RBD range 可能退化为 XFS 整文件 materialize，并且每个 range 都会重建 lineage、三副本 provider、LVM/XFS reader。`docs/ceph-rbd-vm-preview-performance-design.md` 是后续优化的权威设计；在 bounded-range、source runtime、session invalidation 和多文件真实 oracle 完成前，不把单个 `/etc/passwd` 预览扩大为任意 VM 文件低延迟承诺。
+- VM 预览性能加固已完成 bounded-range、source-scoped runtime、opaque session、scope generation、retire/read-drain、固定 SHA-256 oracle、XFS target-only path lookup 和请求内 256 KiB 页合并。三轮 retained-case 门禁中位为 cold file read `312.834ms`、cold runtime + file `2,573.852ms`（仅报告）、warm 64 KiB p95 `0.831ms`、连续 `16x64 KiB` p95 `18.772ms`、连续 `4x1 MiB` p95 `239.327ms`、614 MiB 文件随机 64 KiB p95 `71.122ms`；runtime cache `117,440,512 B`，RSS delta `446-449 MiB`，provider construction `1`。当前剩余性能债务集中在首次三 OSD E01/LVM runtime 初始化、media 浏览器时序和 cache eviction。
 - BlueStore semantic persistence 的保留真实 source DB phase benchmark 已由
   真实数据验证为 `68.34..77.69s / 311MB`。`E:` 重新挂载后的单成员全链复跑为
   `92.673s / 537MB`，相同命令的本轮优化前结果为 `544.105s / 589MB`；

@@ -18,6 +18,22 @@ fn init_case_db(state: &AppState) -> Result<(), CommandError> {
         .map_err(CommandError::from_service_error)
 }
 
+fn clear_previous_preview_runtime(state: &AppState) -> Result<(), CommandError> {
+    let previous_case_id = state
+        .active_case
+        .lock()
+        .map_err(|error| CommandError::from_lock_error("Case", error))?
+        .as_ref()
+        .map(|active| active.meta.id.0.clone());
+    if let Some(case_id) = previous_case_id {
+        state
+            .clear_preview_runtime_for_case(&case_id)
+            .map_err(CommandError::from_service_error)?;
+        app_services::file_service::clear_e01_reader_cache_for_case(&case_id);
+    }
+    Ok(())
+}
+
 pub(super) fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
     CaseSummaryDto {
         id: meta.id.0.clone(),
@@ -41,24 +57,30 @@ pub fn create_case(
         .map_err(CommandError::from_typed_service_error)?;
     let active_case_root = active.case_root.clone();
     let dto = meta_to_dto(&active.meta);
-    {
-        let mut guard = state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        *guard = Some(active);
-    }
-    if let Err(error) =
-        init_case_db(&state).and_then(|_| remember_recent_case(&active_case_root, &dto))
-    {
+    let setup_result = (|| {
+        clear_previous_preview_runtime(&state)?;
         {
             let mut guard = state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            *guard = None;
+            *guard = Some(active);
+        }
+        state
+            .reactivate_preview_case(&dto.id)
+            .map_err(CommandError::from_service_error)?;
+        init_case_db(&state)?;
+        remember_recent_case(&active_case_root, &dto)
+    })();
+    if let Err(error) = setup_result {
+        match state.active_case.lock() {
+            Ok(mut guard) => *guard = None,
+            Err(lock_error) => {
+                tracing::error!("Failed to clear active case during rollback: {lock_error}");
+            }
         }
         let _ = state.clear_db_state();
+        let _ = state.clear_preview_runtime_for_case(&dto.id);
         app_services::file_service::clear_e01_reader_cache();
         if let Err(cleanup_error) = case_service::delete_case(&active_case_root) {
             tracing::error!(
@@ -83,6 +105,7 @@ pub fn open_case(
     let root = PathBuf::from(&request.case_root);
     let active = case_service::open_case(&root).map_err(CommandError::from_typed_service_error)?;
     let dto = meta_to_dto(&active.meta);
+    clear_previous_preview_runtime(&state)?;
     {
         let mut guard = state
             .active_case
@@ -90,6 +113,9 @@ pub fn open_case(
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
         *guard = Some(active);
     }
+    state
+        .reactivate_preview_case(&dto.id)
+        .map_err(CommandError::from_service_error)?;
     init_case_db(&state)?;
     recover_interrupted_jobs(&state);
     remember_recent_case(&root, &dto)?;
@@ -139,6 +165,7 @@ pub fn create_analysis_demo_case(
     app_services::analysis_service::seed_analysis_demo_data(&active)
         .map_err(CommandError::from_typed_service_error)?;
     let dto = meta_to_dto(&active.meta);
+    clear_previous_preview_runtime(&state)?;
     {
         let mut guard = state
             .active_case
@@ -146,6 +173,9 @@ pub fn create_analysis_demo_case(
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
         *guard = Some(active);
     }
+    state
+        .reactivate_preview_case(&dto.id)
+        .map_err(CommandError::from_service_error)?;
     init_case_db(&state)?;
     remember_recent_case(&case_root.join("Analysis Demo"), &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);

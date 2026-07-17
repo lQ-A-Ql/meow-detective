@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use domain::DataSourceId;
 
+use super::cache::{copy_verified_segment, VerifiedObject, VerifiedObjectCache, PAGE_BYTES};
 use super::*;
 
 #[test]
@@ -166,4 +167,57 @@ fn verified_missing_object_range_preserves_missing_outcome() {
 
     assert_eq!(outcome, RbdObjectReadOutcome::Missing);
     assert_eq!(output, [0xAA; 4]);
+}
+
+#[test]
+fn one_mib_request_coalesces_four_uncached_pages_per_device_read() {
+    let cache = VerifiedObjectCache::new(8 * PAGE_BYTES, 8);
+    let request = RbdObjectReadRequest {
+        object_no: 0,
+        object_identity: "object-a".to_string(),
+        object_offset: 0,
+        length: 1024 * 1024,
+    };
+
+    assert_eq!(
+        range::coalesced_page_count(&cache, &request, 0, request.length as u64),
+        4
+    );
+}
+
+#[test]
+fn sixty_four_kib_request_does_not_overread_adjacent_pages() {
+    let cache = VerifiedObjectCache::new(8 * PAGE_BYTES, 8);
+    let request = RbdObjectReadRequest {
+        object_no: 0,
+        object_identity: "object-a".to_string(),
+        object_offset: 0,
+        length: PAGE_BYTES,
+    };
+
+    assert_eq!(
+        range::coalesced_page_count(&cache, &request, 0, request.length as u64),
+        1
+    );
+}
+
+#[test]
+fn coalescing_stops_before_an_already_cached_page() {
+    let mut cache = VerifiedObjectCache::new(8 * PAGE_BYTES, 8);
+    cache.insert(
+        "object-a",
+        PAGE_BYTES as u64,
+        VerifiedObject::Present(Arc::from(vec![1; PAGE_BYTES])),
+    );
+    let request = RbdObjectReadRequest {
+        object_no: 0,
+        object_identity: "object-a".to_string(),
+        object_offset: 0,
+        length: 1024 * 1024,
+    };
+
+    assert_eq!(
+        range::coalesced_page_count(&cache, &request, 0, request.length as u64),
+        1
+    );
 }

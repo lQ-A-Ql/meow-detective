@@ -49,14 +49,29 @@ pub async fn delete_case(
             .map(|(_, case_id)| case_id.as_str())
             .unwrap_or("");
         drain_active_case_jobs(&state, case_id, timeout);
+        let drained = state
+            .retire_preview_case(case_id, timeout)
+            .map_err(CommandError::from_service_error)?;
+        if !drained {
+            let _ = state.reactivate_preview_case(case_id);
+            return Err(CommandError::timeout(
+                "Timed out waiting for active preview reads to finish",
+            ));
+        }
     }
 
     let root_clone = root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let delete_result = tauri::async_runtime::spawn_blocking(move || {
         case_service::delete_case_in(&root_clone).map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)??;
+    .map_err(CommandError::from_join_error)?;
+    if let Err(error) = delete_result {
+        if let Some((_, case_id)) = &active_snapshot {
+            let _ = state.reactivate_preview_case(case_id);
+        }
+        return Err(error);
+    }
 
     if deleting_active_case {
         clear_deleted_active_case(&state, &app, active_snapshot.as_ref())?;
@@ -122,8 +137,27 @@ pub async fn delete_data_source(
         }
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
-        case_service::delete_data_source_in(&conn, &case_root, &data_source_id)
-            .map_err(CommandError::from_typed_service_error)?;
+        let case_id = crate::commands::command_support::require_active_case(&app_state)?
+            .meta
+            .id;
+        let timeout = Duration::from_secs(5);
+        let drained = app_state
+            .retire_preview_source(&case_id.0, &data_source_id, timeout)
+            .map_err(CommandError::from_service_error)?;
+        if !drained {
+            let _ = app_state.reactivate_preview_source(&case_id.0, &data_source_id);
+            return Err(CommandError::timeout(
+                "Timed out waiting for data-source preview reads to finish",
+            ));
+        }
+        app_services::file_service::clear_e01_reader_cache_for_case(&case_id.0);
+        if let Err(error) =
+            case_service::delete_data_source_in(&conn, &case_root, &data_source_id)
+                .map_err(CommandError::from_typed_service_error)
+        {
+            let _ = app_state.reactivate_preview_source(&case_id.0, &data_source_id);
+            return Err(error);
+        }
         Ok("Data source deleted".to_string())
     })
     .await

@@ -12,8 +12,11 @@ fn aggregate() -> CephBluestoreOmapAggregate {
         scan: CephBluestoreOmapScanRecord {
             inventory_id: INVENTORY_ID.to_string(),
             data_source_id: "source-test".to_string(),
-            schema_version: 1,
-            decode_profile: "omap-rbd-v1".to_string(),
+            schema_version:
+                persistence_sqlite::repositories::ceph_bluestore_omap_repo::BLUESTORE_OMAP_SCHEMA_VERSION,
+            decode_profile:
+                persistence_sqlite::repositories::ceph_bluestore_omap_repo::BLUESTORE_OMAP_DECODE_PROFILE
+                    .to_string(),
             sharding_sha256: "a".repeat(64),
             latest_state_sha256: "b".repeat(64),
             semantic_sha256: "c".repeat(64),

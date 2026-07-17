@@ -1,14 +1,14 @@
 use crate::state::AppState;
 use app_services::file_service;
 use base64::Engine;
-use chrono::Duration;
 use std::borrow::Cow;
+use std::path::PathBuf;
 use tauri::http::{self, header, StatusCode};
 use tauri::{AppHandle, Manager, Wry};
 
 pub const EVIDENCE_MEDIA_SCHEME: &str = "evidence-media";
 pub const MAX_MEDIA_PROTOCOL_READ_BYTES: u64 = transport::dto::MAX_VIEWER_RANGE_LENGTH as u64;
-const MEDIA_HANDLE_TTL_MINUTES: i64 = 30;
+type ProtocolError = (StatusCode, String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRange {
@@ -40,55 +40,6 @@ pub fn media_protocol_url(handle_id: &str) -> String {
         "{EVIDENCE_MEDIA_SCHEME}://handle/{}",
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(handle_id)
     )
-}
-
-pub fn create_scoped_media_handle(state: &AppState, file_id: &str) -> Result<String, String> {
-    let case_id = state
-        .active_case
-        .lock()
-        .map_err(|_| "media handle unavailable".to_string())?
-        .as_ref()
-        .map(|active| active.meta.id.0.clone())
-        .ok_or_else(|| "media handle unavailable".to_string())?;
-
-    let cache = state
-        .runtime_cache
-        .lock()
-        .map_err(|_| "media handle unavailable".to_string())?;
-    cache
-        .handles()
-        .create(
-            &case_id,
-            file_id,
-            Duration::minutes(MEDIA_HANDLE_TTL_MINUTES),
-        )
-        .map_err(|_| "media handle unavailable".to_string())
-}
-
-pub fn resolve_scoped_media_handle(state: &AppState, handle_id: &str) -> Result<String, String> {
-    let active_case_id = state
-        .active_case
-        .lock()
-        .map_err(|_| "media handle unavailable".to_string())?
-        .as_ref()
-        .map(|active| active.meta.id.0.clone())
-        .ok_or_else(|| "media handle unavailable".to_string())?;
-
-    let cache = state
-        .runtime_cache
-        .lock()
-        .map_err(|_| "media handle unavailable".to_string())?;
-    let handle = cache
-        .handles()
-        .get(handle_id)
-        .map_err(|_| "media handle unavailable".to_string())?
-        .ok_or_else(|| "media handle expired or invalid".to_string())?;
-
-    if handle.case_id != active_case_id {
-        return Err("media handle expired or invalid".to_string());
-    }
-
-    Ok(handle.object_id)
 }
 
 pub fn resolve_media_handle_from_uri(uri: &http::Uri) -> Result<String, String> {
@@ -206,8 +157,6 @@ fn handle_media_protocol_request_inner(
     let handle_id = resolve_media_handle_from_uri(request.uri())
         .map_err(|err| (StatusCode::BAD_REQUEST, err))?;
     let app_state = app_handle.state::<AppState>();
-    let file_id = resolve_scoped_media_handle(app_state.inner(), &handle_id)
-        .map_err(|err| (StatusCode::GONE, err))?;
     let range_header = request
         .headers()
         .get(header::RANGE)
@@ -215,25 +164,7 @@ fn handle_media_protocol_request_inner(
         .map(str::to_string);
 
     let app_state = app_state.inner().clone();
-    let (case_id, case_root, db_path) = {
-        let guard = app_state.active_case.lock().map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "media backend unavailable".to_string(),
-            )
-        })?;
-        let active = guard.as_ref().ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                "media handle unavailable".to_string(),
-            )
-        })?;
-        (
-            active.meta.id.0.clone(),
-            active.case_root.clone(),
-            active.db_path(),
-        )
-    };
+    let (case_id, case_root, db_path) = active_media_case(&app_state)?;
     let conn = persistence_sqlite::open_or_create(&db_path).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -242,47 +173,50 @@ fn handle_media_protocol_request_inner(
     })?;
 
     let case_id = domain::CaseId(case_id);
-    let handle = file_service::open_file_handle_for_case(&conn, &case_root, &case_id, &file_id)
-        .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
-    let range = parse_media_range_header(
+    let (size, mime) = preview_session_metadata(&app_state, &case_id, &handle_id)?;
+    let range = match parse_media_range_header(
         range_header.as_deref(),
-        handle.size,
+        size,
         MAX_MEDIA_PROTOCOL_READ_BYTES,
-    )
-    .map_err(|err| (err.status(), "invalid media range".to_string()))?;
+    ) {
+        Ok(range) => range,
+        Err(error) => return Ok(range_not_satisfiable_response(error, size)),
+    };
 
     let bytes = read_media_protocol_bytes(
         &app_state,
         &conn,
         &case_root,
         &case_id,
-        &file_id,
+        &handle_id,
         range.start,
         range.length.min(u32::MAX as u64) as u32,
     )?;
     let bytes_read = bytes.len();
+    if bytes_read == 0 {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        ));
+    }
 
     let content_end = range
         .start
         .saturating_add(bytes_read.saturating_sub(1) as u64);
-    let content_range = if bytes_read == 0 {
-        format!("bytes */{}", handle.size)
-    } else {
-        build_content_range(
-            &ResolvedRange {
-                end: content_end,
-                length: bytes_read as u64,
-                ..range
-            },
-            handle.size,
-        )
-    };
+    let content_range = build_content_range(
+        &ResolvedRange {
+            end: content_end,
+            length: bytes_read as u64,
+            ..range.clone()
+        },
+        size,
+    );
 
     http::Response::builder()
-        .status(StatusCode::PARTIAL_CONTENT)
+        .status(range.status)
         .header(
             header::CONTENT_TYPE,
-            handle.mime.as_deref().unwrap_or("application/octet-stream"),
+            mime.as_deref().unwrap_or("application/octet-stream"),
         )
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_RANGE, content_range)
@@ -296,25 +230,90 @@ fn handle_media_protocol_request_inner(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
+fn active_media_case(state: &AppState) -> Result<(String, PathBuf, PathBuf), ProtocolError> {
+    let guard = state.active_case.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
+    let active = guard.as_ref().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            "media handle unavailable".to_string(),
+        )
+    })?;
+    Ok((
+        active.meta.id.0.clone(),
+        active.case_root.clone(),
+        active.db_path(),
+    ))
+}
+
+fn preview_session_metadata(
+    state: &AppState,
+    case_id: &domain::CaseId,
+    handle_id: &str,
+) -> Result<(u64, Option<String>), ProtocolError> {
+    let unavailable = |_| {
+        (
+            StatusCode::GONE,
+            "media handle expired or invalid".to_string(),
+        )
+    };
+    file_service::preview_session_metadata(&state.preview_runtime, case_id, handle_id)
+        .map_err(unavailable)
+}
+
 fn read_media_protocol_bytes(
     state: &AppState,
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &domain::CaseId,
-    file_id: &str,
+    handle_id: &str,
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, (StatusCode, String)> {
-    let _ = state;
-    file_service::read_preview_bytes_for_source_case(
-        conn, case_root, case_id, file_id, offset, length,
+    file_service::read_preview_session_bytes_for_case(
+        &state.preview_runtime,
+        conn,
+        case_root,
+        case_id,
+        handle_id,
+        offset,
+        length,
     )
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "media backend unavailable".to_string(),
-        )
+    .map_err(|error| {
+        if matches!(error, file_service::FileServiceError::NotFound(_)) {
+            (
+                StatusCode::GONE,
+                "media handle expired or invalid".to_string(),
+            )
+        } else {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        }
     })
+}
+
+fn range_not_satisfiable_response(
+    error: RangeError,
+    total_size: u64,
+) -> http::Response<Cow<'static, [u8]>> {
+    http::Response::builder()
+        .status(error.status())
+        .header(header::CONTENT_RANGE, format!("bytes */{total_size}"))
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, "0")
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header(
+            header::ACCESS_CONTROL_EXPOSE_HEADERS,
+            "Content-Range, Content-Length, Accept-Ranges",
+        )
+        .body(Cow::Owned(Vec::new()))
+        .expect("range response should be valid")
 }
 
 fn text_response(status: StatusCode, message: &str) -> http::Response<Cow<'static, [u8]>> {

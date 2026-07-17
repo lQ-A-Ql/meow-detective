@@ -32,6 +32,12 @@ import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 import { getPreviewSettings } from '@/lib/settings';
 import { saveDialog } from '@/lib/platform/dialog';
+import {
+  adoptPreviewHandle,
+  ensurePreviewRequestActive,
+  releasePreviewHandle,
+  usePreviewHandleOwner,
+} from './previewHandleOwner';
 
 function getHexWindowSize(fileSize: number, maxViewerRangeLength: number, hexChunkBytes: number) {
   return fileSize <= maxViewerRangeLength ? fileSize : hexChunkBytes;
@@ -146,16 +152,24 @@ export function useImportDataSource() {
 }
 
 export function useFileHandle(fileId?: string, enabled = true) {
-  return useQuery({
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}`);
+  const query = useQuery({
     queryKey: ['files', 'handle', fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
-    queryFn: () => openFileHandle(fileId!),
+    gcTime: 0,
+    queryFn: async ({ signal }) => {
+      const handle = await openFileHandle(fileId!);
+      await adoptPreviewHandle(owner, handle.handleId, signal);
+      return handle;
+    },
   });
+  return query;
 }
 
 export function useFileViewer(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}:viewer`);
   const [loadedRanges, setLoadedRanges] = useState<HexLoadedRange[]>([]);
   const [loadedChunks, setLoadedChunks] = useState<Record<number, ViewerRangeResponse>>({});
   const [activeOffset, setActiveOffset] = useState(0);
@@ -176,19 +190,27 @@ export function useFileViewer(fileId?: string, enabled = true) {
     queryKey: ['files', 'viewer', fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
-    queryFn: async () => {
+    gcTime: 0,
+    queryFn: async ({ signal }) => {
       const handle = await openFileHandle(fileId!);
-      const initialLength = getHexWindowSize(
-        handle.size,
-        preview.maxViewerRangeLength,
-        preview.hexChunkBytes,
-      );
-      const range = await readFileRange({
-        handleId: handle.handleId,
-        offset: 0,
-        length: Math.max(1, initialLength),
-      });
-      return { handle, range };
+      await adoptPreviewHandle(owner, handle.handleId, signal);
+      try {
+        const initialLength = getHexWindowSize(
+          handle.size,
+          preview.maxViewerRangeLength,
+          preview.hexChunkBytes,
+        );
+        const range = await readFileRange({
+          handleId: handle.handleId,
+          offset: 0,
+          length: Math.max(1, initialLength),
+        });
+        await ensurePreviewRequestActive(owner, handle.handleId, signal);
+        return { handle, range };
+      } catch (error) {
+        await releasePreviewHandle(owner, handle.handleId);
+        throw error;
+      }
     },
   });
 
@@ -364,51 +386,62 @@ export function useImagePreview(fileId?: string, enabled = true) {
  */
 export function useMediaUrl(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}:media`);
   const query = useQuery<MediaPreview | null, Error>({
     queryKey: ['files', 'media', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
-    queryFn: async (): Promise<MediaPreview | null> => {
+    gcTime: 0,
+    queryFn: async ({ signal }): Promise<MediaPreview | null> => {
       if (!fileId) return null;
       const media = await getMediaUrl(fileId);
-      if (media.url && media.mode === 'protocol') {
-        return {
-          ...media,
-          previewMode: 'protocol' as const,
-        };
+      if (media.handleId) {
+        await adoptPreviewHandle(owner, media.handleId, signal);
       }
-      if (media.url || !media.handleId || !media.canReadRanges) {
-        return {
-          ...media,
-          previewMode: media.mode,
-        };
-      }
+      try {
+        if (media.url && media.mode === 'protocol') {
+          return {
+            ...media,
+            previewMode: 'protocol' as const,
+          };
+        }
+        if (media.url || !media.handleId || !media.canReadRanges) {
+          return {
+            ...media,
+            previewMode: media.mode,
+          };
+        }
 
-      const range = await readMediaRange({
-        handleId: media.handleId,
-        offset: 0,
-        length: preview.maxViewerRangeLength,
-      });
-      if (!range.bytesRead) {
+        const range = await readMediaRange({
+          handleId: media.handleId,
+          offset: 0,
+          length: preview.maxViewerRangeLength,
+        });
+        await ensurePreviewRequestActive(owner, media.handleId, signal);
+        if (!range.bytesRead) {
+          return {
+            ...media,
+            previewMode: 'rangeFallback' as const,
+            previewBytes: 0,
+          };
+        }
+        const byteCharacters = atob(range.bytesBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let index = 0; index < byteCharacters.length; index += 1) {
+          byteNumbers[index] = byteCharacters.charCodeAt(index);
+        }
+        const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
         return {
           ...media,
+          mode: media.mode ?? 'rangeFallback',
           previewMode: 'rangeFallback' as const,
-          previewBytes: 0,
+          previewBytes: range.bytesRead,
+          url: URL.createObjectURL(blob),
         };
+      } catch (error) {
+        await releasePreviewHandle(owner, media.handleId);
+        throw error;
       }
-      const byteCharacters = atob(range.bytesBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let index = 0; index < byteCharacters.length; index += 1) {
-        byteNumbers[index] = byteCharacters.charCodeAt(index);
-      }
-      const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
-      return {
-        ...media,
-        mode: media.mode ?? 'rangeFallback',
-        previewMode: 'rangeFallback' as const,
-        previewBytes: range.bytesRead,
-        url: URL.createObjectURL(blob),
-      };
     },
   });
 

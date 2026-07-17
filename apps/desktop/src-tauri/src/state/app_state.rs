@@ -6,10 +6,12 @@ use runtime_cache::RuntimeCache;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;
 
 use super::task_manager::TaskManager;
+use app_services::file_service::PreviewRuntimeRegistry;
 
 const APP_CODE_NAME: &str = "Meow_Detective";
 
@@ -32,6 +34,8 @@ pub struct AppState {
     pub app_settings_path: PathBuf,
     /// Runtime cache for ephemeral preview and query handles
     pub runtime_cache: Arc<Mutex<RuntimeCache>>,
+    /// Source-scoped evidence runtimes and opaque preview sessions.
+    pub preview_runtime: Arc<PreviewRuntimeRegistry>,
 }
 
 impl Default for AppState {
@@ -51,6 +55,7 @@ impl Default for AppState {
             mcp_config_path,
             app_settings_path,
             runtime_cache: Arc::new(Mutex::new(runtime_cache)),
+            preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),
         }
     }
 }
@@ -169,6 +174,55 @@ impl AppState {
         cache
             .clear_case(case_id)
             .map_err(|e| format!("Failed to clear runtime cache: {}", e))
+    }
+
+    pub fn clear_preview_runtime_for_case(&self, case_id: &str) -> Result<(), String> {
+        self.preview_runtime
+            .invalidate_case(case_id)
+            .map_err(|error| format!("Failed to clear preview runtime: {error}"))
+    }
+
+    pub fn clear_preview_runtime_for_source(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> Result<(), String> {
+        self.preview_runtime
+            .invalidate_source(case_id, data_source_id)
+            .map_err(|error| format!("Failed to clear preview runtime: {error}"))
+    }
+
+    pub fn retire_preview_case(&self, case_id: &str, timeout: Duration) -> Result<bool, String> {
+        self.preview_runtime
+            .retire_case_and_drain(case_id, timeout)
+            .map_err(|error| format!("Failed to retire preview runtime: {error}"))
+    }
+
+    pub fn retire_preview_source(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        timeout: Duration,
+    ) -> Result<bool, String> {
+        self.preview_runtime
+            .retire_source_and_drain(case_id, data_source_id, timeout)
+            .map_err(|error| format!("Failed to retire preview runtime: {error}"))
+    }
+
+    pub fn reactivate_preview_case(&self, case_id: &str) -> Result<(), String> {
+        self.preview_runtime
+            .reactivate_case(case_id)
+            .map_err(|error| format!("Failed to reactivate preview runtime: {error}"))
+    }
+
+    pub fn reactivate_preview_source(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> Result<(), String> {
+        self.preview_runtime
+            .reactivate_source(case_id, data_source_id)
+            .map_err(|error| format!("Failed to reactivate preview runtime: {error}"))
     }
 
     /// Load MCP configuration from file.

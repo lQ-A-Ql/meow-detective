@@ -1,9 +1,9 @@
 use super::*;
 use super::{
-    e01_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE},
     filesystem::mft_partition_index_from_entry_id,
     range::api::read_file_bytes_for_descriptor_with_context,
 };
+use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
 use crate::file_service::FileServiceError;
 use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
@@ -15,6 +15,7 @@ use rusqlite::params;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use transport::dto::ViewerRangeRequestDto;
 
@@ -249,6 +250,74 @@ fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
     Ok(LOGICAL_OFFSET)
 }
 
+fn encode_xfs_extent(logical: u64, start_block: u64, block_count: u64) -> [u8; 16] {
+    let l0 = ((logical & ((1u64 << 54) - 1)) << 9) | (start_block >> 43);
+    let l1 = ((start_block & ((1u64 << 43) - 1)) << 21) | (block_count & 0x1F_FFFF);
+    let mut encoded = [0u8; 16];
+    encoded[0..8].copy_from_slice(&l0.to_be_bytes());
+    encoded[8..16].copy_from_slice(&l1.to_be_bytes());
+    encoded
+}
+
+fn build_ceph_xfs_bounded_range_fixture(marker: &[u8]) -> (Vec<u8>, u64, Range<u64>) {
+    const BLOCK_SIZE: u64 = 4096;
+    const TOTAL_BLOCKS: u64 = 10;
+    const INODE_BASE: usize = 8192;
+    const INODE_SIZE: usize = 256;
+    const INODE_CORE_SIZE: usize = 96;
+    const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
+    const FIRST_DATA_BLOCK: u64 = 4;
+    const TARGET_DATA_BLOCK: u64 = 6;
+
+    let mut image = vec![0u8; (TOTAL_BLOCKS * BLOCK_SIZE) as usize];
+    let superblock = &mut image[..512];
+    superblock[0x00..0x04].copy_from_slice(&0x5846_5342u32.to_be_bytes());
+    superblock[0x04..0x08].copy_from_slice(&(BLOCK_SIZE as u32).to_be_bytes());
+    superblock[0x08..0x10].copy_from_slice(&TOTAL_BLOCKS.to_be_bytes());
+    superblock[0x38..0x40].copy_from_slice(&2u64.to_be_bytes());
+    superblock[0x54..0x58].copy_from_slice(&(TOTAL_BLOCKS as u32).to_be_bytes());
+    superblock[0x58..0x5C].copy_from_slice(&1u32.to_be_bytes());
+    superblock[0x66..0x68].copy_from_slice(&512u16.to_be_bytes());
+    superblock[0x68..0x6A].copy_from_slice(&(INODE_SIZE as u16).to_be_bytes());
+    superblock[0x6A..0x6C].copy_from_slice(&16u16.to_be_bytes());
+
+    let root = &mut image[INODE_BASE + INODE_SIZE..INODE_BASE + 2 * INODE_SIZE];
+    root[0x00..0x02].copy_from_slice(&0x494Eu16.to_be_bytes());
+    root[0x02..0x04].copy_from_slice(&(0x4000u16 | 0o755).to_be_bytes());
+    root[0x05] = 1;
+    root[0x38..0x40].copy_from_slice(&BLOCK_SIZE.to_be_bytes());
+    let root_data = &mut root[INODE_CORE_SIZE..];
+    root_data[0] = 1;
+    root_data[1] = 1;
+    root_data[2..10].copy_from_slice(&2u64.to_be_bytes());
+    root_data[10] = 9;
+    root_data[11..13].copy_from_slice(&0x0018u16.to_be_bytes());
+    root_data[13..22].copy_from_slice(b"large.bin");
+    root_data[22..30].copy_from_slice(&3u64.to_be_bytes());
+
+    let file = &mut image[INODE_BASE + 2 * INODE_SIZE..INODE_BASE + 3 * INODE_SIZE];
+    file[0x00..0x02].copy_from_slice(&0x494Eu16.to_be_bytes());
+    file[0x02..0x04].copy_from_slice(&(0x8000u16 | 0o644).to_be_bytes());
+    file[0x05] = 2;
+    file[0x38..0x40].copy_from_slice(&(LOGICAL_OFFSET + marker.len() as u64).to_be_bytes());
+    file[0x4C..0x50].copy_from_slice(&2u32.to_be_bytes());
+    let file_data = &mut file[INODE_CORE_SIZE..];
+    file_data[0..16].copy_from_slice(&encode_xfs_extent(0, FIRST_DATA_BLOCK, 1));
+    file_data[16..32].copy_from_slice(&encode_xfs_extent(
+        LOGICAL_OFFSET / BLOCK_SIZE,
+        TARGET_DATA_BLOCK,
+        1,
+    ));
+
+    let first_data_start = FIRST_DATA_BLOCK * BLOCK_SIZE;
+    let first_data_end = first_data_start + BLOCK_SIZE;
+    image[first_data_start as usize..first_data_end as usize].fill(b'A');
+    let target_start = (TARGET_DATA_BLOCK * BLOCK_SIZE) as usize;
+    image[target_start..target_start + marker.len()].copy_from_slice(marker);
+
+    (image, LOGICAL_OFFSET, first_data_start..first_data_end)
+}
+
 fn build_synthetic_lvm_disk() -> Vec<u8> {
     let pv_uuid = "abcdef1234567890abcdef1234567890";
     let pv_size = 2_097_152u64;
@@ -428,6 +497,94 @@ impl Seek for VecEvidenceReader {
 impl evidence_core::EvidenceReader for VecEvidenceReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
         &self.info
+    }
+}
+
+struct RejectingRangeEvidenceReader {
+    data: Vec<u8>,
+    pos: u64,
+    rejected: Range<u64>,
+    info: evidence_core::ReaderInfo,
+}
+
+impl RejectingRangeEvidenceReader {
+    fn new(data: Vec<u8>, rejected: Range<u64>) -> Self {
+        let size = data.len() as u64;
+        Self {
+            data,
+            pos: 0,
+            rejected,
+            info: evidence_core::ReaderInfo {
+                path: std::path::PathBuf::from("virtual-ceph-rbd"),
+                size,
+                kind: "ceph_rbd".to_string(),
+            },
+        }
+    }
+}
+
+impl Read for RejectingRangeEvidenceReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let requested_end = self.pos.saturating_add(buf.len() as u64);
+        if self.pos < self.rejected.end && requested_end > self.rejected.start {
+            return Err(std::io::Error::other(
+                "whole-file materialization touched an unrelated XFS extent",
+            ));
+        }
+        let start = usize::try_from(self.pos)
+            .unwrap_or(usize::MAX)
+            .min(self.data.len());
+        let end = start.saturating_add(buf.len()).min(self.data.len());
+        let len = end.saturating_sub(start);
+        buf[..len].copy_from_slice(&self.data[start..end]);
+        self.pos = self.pos.saturating_add(len as u64);
+        Ok(len)
+    }
+}
+
+impl Seek for RejectingRangeEvidenceReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.pos = match pos {
+            SeekFrom::Start(offset) => offset,
+            SeekFrom::End(offset) => (self.data.len() as i64 + offset).max(0) as u64,
+            SeekFrom::Current(offset) => (self.pos as i64 + offset).max(0) as u64,
+        };
+        Ok(self.pos)
+    }
+}
+
+impl evidence_core::EvidenceReader for RejectingRangeEvidenceReader {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        &self.info
+    }
+}
+
+struct CephRbdRangeContext<'a> {
+    conn: &'a rusqlite::Connection,
+    image: Vec<u8>,
+    rejected: Range<u64>,
+    open_calls: usize,
+}
+
+impl PreviewReadContext for CephRbdRangeContext<'_> {
+    fn conn(&self) -> &rusqlite::Connection {
+        self.conn
+    }
+
+    fn case_id(&self) -> &str {
+        "case-ceph-rbd-xfs-range"
+    }
+
+    fn open_evidence_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+    ) -> Result<Box<dyn evidence_core::EvidenceReader>, FileServiceError> {
+        assert_eq!(descriptor.source_kind, "ceph_rbd");
+        self.open_calls += 1;
+        Ok(Box::new(RejectingRangeEvidenceReader::new(
+            self.image.clone(),
+            self.rejected.clone(),
+        )))
     }
 }
 
@@ -791,6 +948,50 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
             .unwrap();
 
     assert_eq!(bytes, marker);
+}
+
+#[test]
+fn ceph_rbd_xfs_mid_file_range_uses_context_reader_without_materialize() {
+    let marker = b"CEPH-RBD-XFS-RANGE";
+    let (image, offset, rejected) = build_ceph_xfs_bounded_range_fixture(marker);
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let mut context = CephRbdRangeContext {
+        conn: &conn,
+        image,
+        rejected,
+        open_calls: 0,
+    };
+    let descriptor = PreviewDescriptor {
+        case_id: "case-ceph-rbd-xfs-range".to_string(),
+        file_id: "xfs-file-range".to_string(),
+        source_kind: "ceph_rbd".to_string(),
+        source_path: "virtual-ceph-rbd".to_string(),
+        partition_index: Some(0),
+        filesystem_kind: Some("XFS".to_string()),
+        path: "[P0]/large.bin".to_string(),
+        mime: Some("application/octet-stream".to_string()),
+        size: offset + marker.len() as u64,
+        data_source_id: "ds-ceph-rbd-xfs-range".to_string(),
+        partition_candidates: vec![PreviewPartitionCandidate {
+            partition_index: 0,
+            filesystem_kind: "XFS".to_string(),
+            offset: 0,
+            lvm_identity: None,
+        }],
+        entry_size: offset + marker.len() as u64,
+        entry_modified_at: None,
+    };
+
+    let bytes = read_file_bytes_for_descriptor_with_context(
+        &mut context,
+        &descriptor,
+        offset,
+        marker.len() as u32,
+    )
+    .unwrap();
+
+    assert_eq!(bytes, marker);
+    assert_eq!(context.open_calls, 1);
 }
 
 #[test]

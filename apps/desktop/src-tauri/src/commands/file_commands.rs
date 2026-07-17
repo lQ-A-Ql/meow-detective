@@ -13,8 +13,8 @@ pub use browse::{
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
 pub use viewer::{
-    get_image_preview, get_text_preview, open_file_handle, open_file_handle_request,
-    read_file_range,
+    close_file_handle, get_image_preview, get_text_preview, open_file_handle,
+    open_file_handle_request, read_file_range,
 };
 
 #[cfg(test)]

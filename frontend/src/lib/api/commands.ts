@@ -25,6 +25,7 @@ export const COMMANDS = {
     IMPORT_DATA_SOURCE: 'import_data_source',
     GET_FILE_CHILDREN_REQUEST: 'get_file_children_request',
     OPEN_FILE_HANDLE_REQUEST: 'open_file_handle_request',
+    CLOSE_FILE_HANDLE: 'close_file_handle',
     READ_FILE_RANGE: 'read_file_range',
     CANCEL_IMPORT: 'cancel_import',
     GET_TEXT_PREVIEW: 'get_text_preview',

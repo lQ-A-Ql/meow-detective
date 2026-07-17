@@ -7,7 +7,7 @@
 - 私有样本：`E:\pangushi\服务器`
 - 当前派生镜像：`vm-100-disk-0`
 - 当前派生文件记录：114,260
-- 状态：设计完成，待按 Stage 实施
+- 状态：Stage 0-6 已实施，真实样本性能门禁通过
 
 本文档只治理已经物化完成的 Ceph RBD 派生 VM 文件树预览性能。它不修改
 Hex 前端交互、不扩大 Ceph 支持格式，也不降低三副本一致性校验。
@@ -53,7 +53,7 @@ benchmark。本轮必须先增加分阶段计时，再建立可用于发布门�
 - app-services 保持 Tauri-free；Tauri command 只负责状态适配、校验和 DTO。
 - 新增运行时对象必须有 TTL、容量上限、case/source 归属和确定性失效路径。
 
-## 3. 只读审计结论
+## 3. 实施前只读审计结论
 
 ### 3.1 当前调用链
 
@@ -292,11 +292,12 @@ PVE 当前 XFS 路径必须直接调用 `XfsReader::read_file_content_range` 对
 
 ### 5.5 并发与内存模型
 
-首版预算：
+当前实现预算：
 
-- 每案件最多 16 个 live preview handle。
-- idle TTL 10 分钟。
-- 每案件最多 2 个 derived-source runtime。
+- 全局最多 32 个 live preview handle。
+- idle TTL 30 分钟。
+- 全局最多 1 个 derived-source runtime；第二个 source 会按 LRU 驱逐旧 runtime，
+  这是当前内存优先的明确边界。
 - 单 derived-source runtime 总目标上限 128 MiB。
 - verified page 默认仍为 64 KiB。
 - registry mutex 只保护 map 和 LRU，不在持锁时执行证据 I/O。
@@ -515,7 +516,8 @@ Tasks：
 
 - 增加 `check-pve-rbd-preview-performance.ps1`。
 - retained case 缺失时默认跳过，`-RequireFixture` 时失败。
-- 性能结果输出结构化 JSON，记录机器、提交、case fingerprint、cache mode。
+- 性能结果输出结构化 JSON，记录提交、case fingerprint、cache mode；不记录机器名
+  或绝对日志路径。
 - 文档更新 parser matrix、known limitations、progress ledger 和真实样本报告。
 
 预期结果：
@@ -645,3 +647,78 @@ Stage 总分低于 90，或取证正确性低于 90，或存在未关闭的 Crit
 
 如果 Stage 1 已将大文件延迟降至预算内，后续 Stage 仍要完成会话与失效治理，因为
 当前 request-local cache 和伪 handle 仍是明确的工程与资源风险。
+
+## 11. 2026-07-17 实施与验收结果
+
+### 11.1 已完成能力
+
+- Ceph RBD 文件 range 读取已接入文件系统 `read_file_range`，不再通过 XFS
+  `open_file` 整文件物化。
+- 同一 derived source 使用共享 `DerivedRbdRuntime`，三副本 provider、
+  source DB connection、BlueStore device、plan cache 和 verified page cache
+  跨 range 复用。
+- handle 已升级为 `preview:<uuid>` opaque session，具备 case/source 归属、
+  TTL、LRU、显式 close 和案件/数据源失效路径。
+- runtime/session 打开使用 scope generation；失效后旧 token 不能重新插入。
+  case/source 删除先进入 retired 状态并等待 session open 与 active read lease 收敛。
+- import-complete 监听按真实 `EventEnvelope.payload` 解析，先 retire/drain 对应 source，
+  清理 runtime/E01 cache 后再允许新预览。
+- 普通 viewer 与 `evidence-media:` 协议共享 PreviewSession；前端切换文件和
+  卸载时执行 best-effort close；初始 range 失败和异步打开晚到也会关闭 handle。
+- XFS path resolve 只定位目标目录项；有效 `ftype` 不再触发全部兄弟 inode
+  metadata 读取，缺失 `ftype` 时只读取目标 inode。
+- verified page 继续保持 64 KiB；大于 64 KiB 的单次请求可将最多四个连续
+  uncached page 合并为一次 256 KiB 三副本读取，之后拆回独立 verified page。
+  单次 64 KiB 随机请求不会扩大为 256 KiB 预读。
+
+### 11.2 真实样本覆盖
+
+门禁命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check-pve-rbd-preview-performance.ps1 `
+  -CaseRoot '<retained PVE RBD case>' -RequireFixture -Runs 3
+```
+
+覆盖直接 XFS、`centos/home`、`centos/root`，并验证：
+
+- `1,019 B` `/etc/passwd`
+- `168,180 B` 直接 XFS 文件
+- `36,264,624 B` home LV 根级文件
+- `16,011,004 B` 中型文件
+- `614,794,240 B` 大文件
+- cold read、warm repeat、`16x64 KiB`、`4x1 MiB`、随机 offset 和文件尾
+- 每个关键 range 同时匹配
+  `testdata/real-samples/pve-rbd-preview-oracle.json` 固定 SHA-256，并验证跨运行一致
+- provider construction 为 `1`
+- 显式关闭后 session count 为 `0`
+
+2026-07-17 三轮中位结果：
+
+| 指标 | 结果 | 门禁 |
+|---|---:|---:|
+| cold 文件读取，不含 runtime open | `312.834ms` | `<= 1,500ms` |
+| cold runtime + 文件读取，仅报告 | `2,573.852ms` | 不作为文件读取门禁 |
+| warm 同范围 64 KiB p95 | `0.831ms` | `<= 200ms` |
+| 连续 `16x64 KiB` p95 | `18.772ms` | `<= 200ms` |
+| 连续 `4x1 MiB` p95 | `239.327ms` | `<= 300ms` |
+| 大文件随机 64 KiB p95 | `71.122ms` | `<= 500ms` |
+| runtime cache capacity | `117,440,512 B` | `<= 128 MiB` |
+| RSS delta | `446-449 MiB` | `<= 640 MiB` |
+
+### 11.3 剩余边界
+
+- 首次打开三份 BlueStore E01/LVM device 仍产生秒级 runtime
+  初始化成本；它与文件 range 读取分开报告，不通过放宽 cold file 指标掩盖。
+- RSS 主要由三份 E01 chunk table、文件系统运行时和 112 MiB provider cache
+  共同构成；当前与被预览文件总大小无关，但仍需继续观测多案件并发。
+- 当前真实门禁覆盖普通 viewer service range；media protocol 已通过单元/集成
+  测试共享同一 session、标准 `416 Content-Range` 和 expired-handle `410` 映射，
+  但尚未建立私有样本浏览器播放时序门禁。
+- cache eviction 后冷重建、并发 singleflight 和最多两条 provider lane 仍属后续
+  性能治理，不影响当前正确性承诺。
+- 当前全局只保留 1 个 derived runtime；跨 VM 切换会驱逐旧 runtime 与关联 handle。
+  在引入统一全局内存预算前不提高该上限。
+- inventory 完整集合证明、通用 PG/CRUSH/EC、degraded replica、clone、
+  snapshot、encryption、multi-PV RBD LVM 与 CephFS 仍保持 unsupported 或
+  indeterminate。

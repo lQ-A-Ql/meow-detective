@@ -12,6 +12,7 @@ import {
   getTextPreview,
   importDataSource,
   openFileHandle,
+  closeFileHandle,
   readFileRange,
   readMediaRange,
 } from './files';
@@ -143,6 +144,14 @@ describe('files API', () => {
     await openFileHandle('file-1');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.OPEN_FILE_HANDLE_REQUEST, {
       request: { fileId: 'file-1' },
+    });
+  });
+
+  it('closeFileHandle sends the opaque handle ID', async () => {
+    requestMock.mockResolvedValue(true as never);
+    await closeFileHandle('preview-1');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.CLOSE_FILE_HANDLE, {
+      handleId: 'preview-1',
     });
   });
 

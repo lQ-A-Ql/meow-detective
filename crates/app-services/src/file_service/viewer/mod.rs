@@ -1,7 +1,6 @@
 //! Viewer subsystem for source-scoped handles and bounded evidence reads.
 
 mod descriptor;
-mod e01_cache;
 mod filesystem;
 mod handle;
 mod image;
@@ -16,7 +15,7 @@ mod range;
 mod range_fs;
 mod text;
 
-pub use e01_cache::{clear_e01_reader_cache, clear_e01_reader_cache_for_case};
+pub use crate::e01_reader_cache::{clear_e01_reader_cache, clear_e01_reader_cache_for_case};
 pub use handle::{get_file_path_for_entry, open_file_handle_real};
 pub use image::image_preview_for_file;
 pub use io::skip_reader_bytes;
@@ -29,8 +28,8 @@ pub use range::{
 };
 pub use text::text_preview_for_file;
 
-pub(crate) use descriptor::descriptor_for_file_with_cache;
-pub(crate) use e01_cache::open_e01_reader_cached;
+pub(crate) use crate::e01_reader_cache::open_e01_reader_cached;
+pub(crate) use descriptor::{descriptor_for_file_with_cache, preview_descriptor_for_case};
 pub(crate) use filesystem::{
     format_image_range_error, is_exfat_filesystem_kind, is_fat_filesystem_kind,
     is_linux_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,

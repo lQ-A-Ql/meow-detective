@@ -80,10 +80,24 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
         .as_ref()
         .map(|active| active.meta.id.0.clone());
 
+    if let Some(case_id) = &closed_case_id {
+        let drained = state
+            .retire_preview_case(case_id, timeout)
+            .map_err(CommandError::from_service_error)?;
+        if !drained {
+            let _ = state.reactivate_preview_case(case_id);
+            return Err(CommandError::timeout(
+                "Timed out waiting for active preview reads to finish",
+            ));
+        }
+    }
     // Clear active case state only after all drain logic finishes.
-    state
-        .clear_db_state()
-        .map_err(CommandError::from_service_error)?;
+    if let Err(error) = state.clear_db_state() {
+        if let Some(case_id) = &closed_case_id {
+            let _ = state.reactivate_preview_case(case_id);
+        }
+        return Err(CommandError::from_service_error(error));
+    }
 
     if let Some(case_id) = &closed_case_id {
         let _ = state.clear_runtime_cache_for_case(case_id);

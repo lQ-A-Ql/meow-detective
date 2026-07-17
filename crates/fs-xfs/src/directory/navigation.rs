@@ -247,6 +247,64 @@ impl XfsReader {
         Some((false, be_u64(&inode, di_off::SIZE)))
     }
 
+    fn lookup_directory_entry(&self, ino: u64, name: &str) -> io::Result<Option<(u64, bool)>> {
+        let inode = self
+            .directory_inode_cache
+            .borrow()
+            .get(&ino)
+            .cloned()
+            .map_or_else(|| self.read_inode(ino), Ok)?;
+        Self::validate_inode_magic(&inode)?;
+        if !Self::inode_is_dir(&inode) {
+            return Err(invalid_fs_data(format!("inode {ino} is not a directory")));
+        }
+
+        let entries = match inode[di_off::FORMAT] {
+            FORMAT_LOCAL => {
+                let data_fork = Self::data_fork(&inode)?;
+                let raw = Self::parse_shortform_dir(data_fork, self.has_ftype)?;
+                Self::shortform_entries_to_directory_entries(raw, self.has_ftype, data_fork)
+            }
+            FORMAT_EXTENTS => match self.read_extent_directory_entries(&inode) {
+                Ok(entries) => entries,
+                Err(block_error) => {
+                    if !self
+                        .extent_directory_data_is_all_zero(&inode)
+                        .unwrap_or(false)
+                    {
+                        return Err(block_error);
+                    }
+                    let data_fork = Self::data_fork(&inode)?;
+                    let full_literal = &inode[Self::inode_core_size(&inode)..];
+                    self.recover_shortform_dir_entries_raw(
+                        &[data_fork, full_literal],
+                        self.has_ftype,
+                    )
+                    .ok_or_else(|| {
+                        invalid_fs_data(
+                            "block dir all-zero (sf->block conversion artifact), recovery failed",
+                        )
+                    })?
+                }
+            },
+            FORMAT_BTREE => self.read_btree_directory_entries(&inode)?,
+            other => {
+                return Err(invalid_fs_data(format!(
+                    "directory inode {ino} uses unsupported format {other}"
+                )))
+            }
+        };
+        let Some(entry) = entries.into_iter().find(|entry| entry.name == name) else {
+            return Ok(None);
+        };
+        let metadata = self.child_inode_metadata(entry.inode);
+        let is_dir = entry.ftype.map_or_else(
+            || metadata.map(|item| item.0).unwrap_or(false),
+            |file_type| file_type == XFS_DIR3_FT_DIR && metadata.map(|item| item.0).unwrap_or(true),
+        );
+        Ok(Some((entry.inode, is_dir)))
+    }
+
     pub(crate) fn resolve_path(&self, path: &str) -> io::Result<Option<(u64, bool)>> {
         let components = path_components(path);
         if components.is_empty() {
@@ -265,9 +323,10 @@ impl XfsReader {
         let mut current_inode = self.root_ino;
         let mut current_path = String::new();
         for (index, component) in components.iter().enumerate() {
-            let entries = self.read_directory_entries(current_inode)?;
             let is_last = index == components.len() - 1;
-            let Some(entry) = entries.iter().find(|entry| entry.name == *component) else {
+            let Some((entry_inode, entry_is_dir)) =
+                self.lookup_directory_entry(current_inode, component)?
+            else {
                 return Ok(None);
             };
             current_path = if current_path.is_empty() {
@@ -275,16 +334,16 @@ impl XfsReader {
             } else {
                 format!("{current_path}/{component}")
             };
-            if entry.is_dir {
-                self.cache_directory_path(current_path.clone(), entry.inode);
+            if entry_is_dir {
+                self.cache_directory_path(current_path.clone(), entry_inode);
             }
             if is_last {
-                return Ok(Some((entry.inode, entry.is_dir)));
+                return Ok(Some((entry_inode, entry_is_dir)));
             }
-            if !entry.is_dir {
+            if !entry_is_dir {
                 return Ok(None);
             }
-            current_inode = entry.inode;
+            current_inode = entry_inode;
         }
         Ok(None)
     }

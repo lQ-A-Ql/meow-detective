@@ -19,8 +19,11 @@ pub async fn open_file_handle(
     state: State<'_, AppState>,
     file_id: String,
 ) -> Result<ViewerHandleDto, CommandError> {
-    run_active_case_command(state.inner().clone(), move |connection, active| {
-        file_service::open_file_handle_for_case(
+    let app_state = state.inner().clone();
+    let preview_runtime = app_state.preview_runtime.clone();
+    run_active_case_command(app_state, move |connection, active| {
+        file_service::open_preview_session_for_case(
+            &preview_runtime,
             connection,
             &active.case_root,
             &active.meta.id,
@@ -39,6 +42,24 @@ pub async fn open_file_handle_request(
 ) -> Result<ViewerHandleDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     open_file_handle(state, request.file_id).await
+}
+
+/// Close an opaque preview handle and release its prepared reader.
+#[tauri::command]
+pub fn close_file_handle(
+    state: State<'_, AppState>,
+    handle_id: String,
+) -> Result<bool, CommandError> {
+    if handle_id.trim().is_empty() {
+        return Err(CommandError::invalid_input("handleId is required"));
+    }
+    let active = crate::commands::command_support::require_active_case(state.inner())?;
+    file_service::close_preview_session_for_case(
+        &state.preview_runtime,
+        &active.meta.id,
+        &handle_id,
+    )
+    .map_err(CommandError::from_typed_service_error)
 }
 
 /// Read a range of bytes from a file (for hex/text viewer).
@@ -91,7 +112,8 @@ pub(super) fn read_file_range_for_state(
 ) -> Result<ViewerRangeResponseDto, CommandError> {
     let connection = crate::commands::command_support::get_case_connection(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::read_file_range_for_source_case(
+    file_service::read_preview_session_range_for_case(
+        &state.preview_runtime,
         &connection,
         &active.case_root,
         &active.meta.id,

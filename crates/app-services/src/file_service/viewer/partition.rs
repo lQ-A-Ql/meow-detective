@@ -23,7 +23,8 @@ pub(crate) fn e01_partition_candidates(
         ));
     }
 
-    if !entry.path.contains('/') && !entry.path.contains('\\') {
+    if expected_partition_index.is_none() && !entry.path.contains('/') && !entry.path.contains('\\')
+    {
         return Err(FileServiceError::other(format!(
             "Cannot preview '{}': path reconstruction did not resolve the parent directory. Re-import.",
             entry.path

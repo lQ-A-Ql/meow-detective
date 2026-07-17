@@ -308,6 +308,30 @@ powershell -ExecutionPolicy Bypass -File scripts\check-pve-cluster-import.ps1 -R
 Without `-RequireFixture`, an unavailable private fixture is reported as an
 explicit skip.
 
+## Retained PVE RBD Preview Performance Gate
+
+This opt-in gate reuses a retained case with a ready derived RBD source. It
+does not import, enumerate, or materialize the VM tree. The gate runs the
+preview workload multiple times, parses `PVE_RBD_PREVIEW_METRICS`, verifies
+every critical range against
+`testdata/real-samples/pve-rbd-preview-oracle.json`, verifies cross-run
+SHA-256 stability, and gates cold file reads separately from the one-time
+three-OSD runtime initialization. Cargo compilation is prewarmed under a
+separate timeout. Persisted logs redact project, case, and user-profile paths.
+
+```powershell
+$env:FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT = 'D:\path\to\retained-case'
+powershell -ExecutionPolicy Bypass -File scripts\check-pve-rbd-preview-performance.ps1 `
+  -RequireFixture -Runs 3
+```
+
+The workload covers direct XFS, `centos/home`, `centos/root`, files from
+1,019 bytes through 614 MiB, repeated 64 KiB, sequential `16x64 KiB`,
+sequential `4x1 MiB`, random large-file offsets, and the file tail. Missing
+fixtures are an explicit skip unless `-RequireFixture` is supplied. Summaries
+and raw test output are written under
+`artifacts/pve-rbd-preview-performance`.
+
 For independent read-only RocksDB oracle inspection under WSL:
 
 ```bash

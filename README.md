@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 36 Rust crates, 10 frontend pages, 98 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 36 Rust crates, 10 frontend pages, 99 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -8,8 +8,8 @@ A Tauri 2 desktop application for disk-image forensic analysis on Windows. The b
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 98 commands
-Application Services (crates/app-services/) -> 25 source modules
+Tauri Command Layer (apps/desktop/src-tauri/) -> 99 commands
+Application Services (crates/app-services/) -> 26 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
 
@@ -61,8 +61,8 @@ cd frontend && pnpm test
 | Directory | Description |
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
-| `crates/app-services/` | Application orchestration (25 source modules) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (99 commands) |
+| `crates/app-services/` | Application orchestration (26 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (25) and migration scripts (53) |
 | `crates/evidence-core/` | Disk image probing and volume detection |

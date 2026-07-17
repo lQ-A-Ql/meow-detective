@@ -77,8 +77,8 @@
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
-| Tauri commands | 98 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| Tauri commands | 99 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 26 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 25 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo) |
 | SQLite migration scripts | 53 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0037 + source_001-source_015 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |

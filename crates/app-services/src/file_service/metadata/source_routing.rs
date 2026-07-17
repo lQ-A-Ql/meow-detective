@@ -42,7 +42,7 @@ fn open_source_for_data_source(
     Ok(source_manager(case_root).open_ready(case_conn, case_id, data_source_id)?)
 }
 
-fn open_source_for_file_id(
+pub(super) fn open_source_for_file_id(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &CaseId,

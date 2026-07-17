@@ -18,10 +18,11 @@ use super::{
 mod cache;
 mod device_io;
 mod plan_cache;
+mod range;
 mod shared;
 
-use cache::{copy_verified_segment, VerifiedObject, VerifiedObjectCache, PAGE_BYTES};
-use device_io::{read_plan_page, SharedEvidenceReader};
+use cache::VerifiedObjectCache;
+use device_io::SharedEvidenceReader;
 use plan_cache::ObjectPlanCache;
 pub(crate) use shared::SharedRadosObjectProvider;
 
@@ -139,6 +140,14 @@ impl SourceDbRadosObjectProvider {
         })
     }
 
+    pub(crate) fn cache_capacity_bytes(&self) -> usize {
+        cache::MAX_BYTES.saturating_add(
+            self.replicas
+                .len()
+                .saturating_mul(plan_cache::MAX_PLAN_BYTES),
+        )
+    }
+
     fn resolve_replica_object(
         &mut self,
         replica_index: usize,
@@ -234,50 +243,6 @@ impl SourceDbRadosObjectProvider {
         Ok(Some((device, plan)))
     }
 
-    fn load_verified_page(
-        &mut self,
-        request: &RbdObjectReadRequest,
-        page_offset: u64,
-    ) -> Result<VerifiedObject, RadosProviderError> {
-        let page_request = RbdObjectReadRequest {
-            object_no: request.object_no,
-            object_identity: request.object_identity.clone(),
-            object_offset: page_offset,
-            length: PAGE_BYTES,
-        };
-        let mut expected: Option<Vec<u8>> = None;
-        let mut present_count = 0usize;
-        for replica_index in 0..self.replicas.len() {
-            let inventory_id = self.replicas[replica_index].binding.inventory_id.clone();
-            let Some((device, plan)) = self.resolve_replica_object(replica_index, &page_request)?
-            else {
-                continue;
-            };
-            let bytes = read_plan_page(device, plan, page_offset, PAGE_BYTES).map_err(|error| {
-                RadosProviderError::ObjectRead {
-                    inventory_id,
-                    detail: error.to_string(),
-                }
-            })?;
-            present_count += 1;
-            if let Some(reference) = &expected {
-                if reference != &bytes {
-                    return Err(RadosProviderError::ObjectRead {
-                        inventory_id: "replica-set".to_string(),
-                        detail: "RBD replicas returned conflicting object bytes".to_string(),
-                    });
-                }
-            } else {
-                expected = Some(bytes);
-            }
-        }
-        self.validate_replica_presence(&page_request, present_count)?;
-        Ok(match expected {
-            Some(bytes) => VerifiedObject::Present(Arc::from(bytes)),
-            None => VerifiedObject::Missing,
-        })
-    }
-
     fn validate_replica_presence(
         &self,
         request: &RbdObjectReadRequest,
@@ -293,95 +258,6 @@ impl SourceDbRadosObjectProvider {
             });
         }
         Ok(())
-    }
-}
-
-impl RbdObjectProvider for SourceDbRadosObjectProvider {
-    fn read_object_range(
-        &mut self,
-        request: &RbdObjectReadRequest,
-        output: &mut [u8],
-    ) -> Result<RbdObjectReadOutcome, RbdObjectProviderError> {
-        if output.len() != request.length {
-            return Err(RbdObjectProviderError::ReadFailed {
-                object_identity: request.object_identity.clone(),
-                reason: "provider output length does not match request".to_string(),
-            });
-        }
-        if self.replicas.len() != self.expected_replica_count {
-            return Err(RbdObjectProviderError::Unavailable {
-                object_identity: request.object_identity.clone(),
-                reason: "RBD replica coverage is no longer closed".to_string(),
-            });
-        }
-        let request_end = request
-            .object_offset
-            .checked_add(request.length as u64)
-            .ok_or_else(|| RbdObjectProviderError::ReadFailed {
-                object_identity: request.object_identity.clone(),
-                reason: "RBD request range overflow".to_string(),
-            })?;
-        let mut cursor = request.object_offset;
-        let mut output_offset = 0usize;
-        let mut any_page_present = false;
-        while cursor < request_end {
-            let page_offset = (cursor / PAGE_BYTES as u64)
-                .checked_mul(PAGE_BYTES as u64)
-                .ok_or_else(|| RbdObjectProviderError::ReadFailed {
-                    object_identity: request.object_identity.clone(),
-                    reason: "RBD page offset overflow".to_string(),
-                })?;
-            let page_end = page_offset.checked_add(PAGE_BYTES as u64).ok_or_else(|| {
-                RbdObjectProviderError::ReadFailed {
-                    object_identity: request.object_identity.clone(),
-                    reason: "RBD page end overflow".to_string(),
-                }
-            })?;
-            let segment_end = request_end.min(page_end);
-            let segment_length = usize::try_from(segment_end - cursor).map_err(|_| {
-                RbdObjectProviderError::ReadFailed {
-                    object_identity: request.object_identity.clone(),
-                    reason: "RBD page segment does not fit in memory".to_string(),
-                }
-            })?;
-            let segment_request = RbdObjectReadRequest {
-                object_no: request.object_no,
-                object_identity: request.object_identity.clone(),
-                object_offset: cursor,
-                length: segment_length,
-            };
-            let verified = if let Some(cached) = self
-                .verified_objects
-                .get(&request.object_identity, page_offset)
-            {
-                cached
-            } else {
-                let loaded = self
-                    .load_verified_page(request, page_offset)
-                    .map_err(|source| RbdObjectProviderError::ReadFailed {
-                        object_identity: request.object_identity.clone(),
-                        reason: source.to_string(),
-                    })?;
-                self.verified_objects
-                    .insert(&request.object_identity, page_offset, loaded.clone());
-                loaded
-            };
-            let output_slice = &mut output[output_offset..output_offset + segment_length];
-            match copy_verified_segment(&segment_request, page_offset, output_slice, &verified)? {
-                RbdObjectReadOutcome::Present { .. } => any_page_present = true,
-                RbdObjectReadOutcome::Missing => output_slice.fill(0),
-            }
-            cursor = segment_end;
-            output_offset += segment_length;
-        }
-        if any_page_present || output.is_empty() {
-            Ok(RbdObjectReadOutcome::Present {
-                object_identity: request.object_identity.clone(),
-                bytes_read: output.len(),
-            })
-        } else {
-            Ok(RbdObjectReadOutcome::Missing)
-        }
     }
 }
 

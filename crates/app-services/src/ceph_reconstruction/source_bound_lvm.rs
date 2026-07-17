@@ -199,6 +199,50 @@ pub fn open_source_bound_bluestore_lvm(
     )
 }
 
+pub(crate) fn open_source_bound_bluestore_lvm_for_case(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    inventory_id: &str,
+    case_id: &str,
+) -> Result<Box<dyn EvidenceReader>, SourceBoundLvmError> {
+    open_source_bound_bluestore_lvm_with_opener(
+        source_conn,
+        data_source_id,
+        inventory_id,
+        &CaseScopedFilesystemEvidenceOpener { case_id },
+    )
+}
+
+struct CaseScopedFilesystemEvidenceOpener<'a> {
+    case_id: &'a str,
+}
+
+impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
+    fn open(
+        &self,
+        path: &Path,
+        kind: &DataSourceKind,
+    ) -> Result<Box<dyn EvidenceReader>, BoundEvidenceOpenError> {
+        match kind {
+            DataSourceKind::E01 => {
+                crate::e01_reader_cache::open_e01_reader_cached(path, self.case_id)
+                    .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                    .map_err(|_| BoundEvidenceOpenError {
+                        kind: io::ErrorKind::Other,
+                    })
+            }
+            DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
+                .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
+            DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd => {
+                Err(BoundEvidenceOpenError {
+                    kind: io::ErrorKind::Unsupported,
+                })
+            }
+        }
+    }
+}
+
 pub(crate) fn open_source_bound_bluestore_lvm_with_opener(
     source_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,

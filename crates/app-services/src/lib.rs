@@ -20,6 +20,7 @@ pub mod connection;
 pub mod correlation;
 pub use correlation::get_correlation_snapshot;
 pub mod datasource_service;
+mod e01_reader_cache;
 pub mod entity_extraction;
 pub mod entity_resolution;
 pub mod error_ext;

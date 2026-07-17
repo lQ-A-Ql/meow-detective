@@ -153,7 +153,7 @@ pub(crate) fn open_host_evidence_reader(
     case_id: &str,
 ) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
     match source_kind {
-        "e01" => super::e01_cache::open_e01_reader_cached(source_path, case_id)
+        "e01" => crate::e01_reader_cache::open_e01_reader_cached(source_path, case_id)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             .map_err(crate::file_service::FileServiceError::Io),
         "raw" => evidence_core::RawImageReader::open(source_path)

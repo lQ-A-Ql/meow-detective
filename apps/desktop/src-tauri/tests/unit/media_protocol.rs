@@ -170,9 +170,24 @@ fn protocol_url_encodes_opaque_handle() {
 #[test]
 fn protocol_mid_raw_image_range_reads_expected_bytes() {
     with_raw_exfat_case_file(|state, conn, case_root, case_id, file_id| {
-        let bytes =
-            read_media_protocol_bytes(state, conn, case_root, &case_id, &file_id, 512 + 7, 9)
-                .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
+        let handle = app_services::file_service::open_preview_session_for_case(
+            &state.preview_runtime,
+            conn,
+            case_root,
+            &case_id,
+            &file_id,
+        )
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        let bytes = read_media_protocol_bytes(
+            state,
+            conn,
+            case_root,
+            &case_id,
+            &handle.handle_id,
+            512 + 7,
+            9,
+        )
+        .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
 
         assert_eq!(bytes, vec![b'B'; 9]);
         Ok(())
@@ -252,6 +267,17 @@ fn content_range_is_standard() {
         status: StatusCode::PARTIAL_CONTENT,
     };
     assert_eq!(build_content_range(&range, 20), "bytes 5-9/20");
+}
+
+#[test]
+fn unsatisfiable_response_includes_required_content_range() {
+    let response = range_not_satisfiable_response(RangeError::Unsatisfiable, 100);
+    assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(
+        response.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes */100"
+    );
+    assert_eq!(response.headers().get(header::CONTENT_LENGTH).unwrap(), "0");
 }
 
 #[test]
