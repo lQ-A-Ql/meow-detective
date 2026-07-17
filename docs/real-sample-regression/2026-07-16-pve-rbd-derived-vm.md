@@ -193,19 +193,19 @@ otherwise                                => indeterminate
 
 | 指标 | 中位结果 |
 |---|---:|
-| cold 文件读取，不含 runtime open | `250.469ms` |
-| cold runtime + 文件读取，仅报告 | `2,665.687ms` |
-| warm 同范围 64 KiB p95 | `1.189ms` |
-| 连续 `16x64 KiB` p95 | `13.523ms` |
-| 连续 `4x1 MiB` p95 | `211.434ms` |
-| 614 MiB 文件随机 64 KiB p95 | `58.776ms` |
-| 原生 XFS warm 64 KiB / `4x1 MiB` p95 | `0.099ms / 14.957ms` |
-| PVE 宿主 EXT4 warm 64 KiB / `4x1 MiB` p95 | `0.095ms / 9.794ms` |
-| RBD/native warm 原始比值 | `12.069x`，仅报告 |
-| RBD/native warm 门禁比值 | `1.189x`，使用 `1ms` 分母噪声下限 |
+| cold 文件读取，不含 runtime open | `349.992ms` |
+| cold runtime + 文件读取，仅报告 | `3,185.749ms` |
+| warm 同范围 64 KiB p95 | `0.699ms` |
+| 连续 `16x64 KiB` p95 | `16.741ms` |
+| 连续 `4x1 MiB` p95 | `234.152ms` |
+| 614 MiB 文件随机 64 KiB p95 | `73.804ms` |
+| 原生 XFS warm 64 KiB / `4x1 MiB` p95 | `0.058ms / 11.165ms` |
+| PVE 宿主 EXT4 warm 64 KiB / `4x1 MiB` p95 | `0.077ms / 7.991ms` |
+| RBD/native warm 原始比值 | `12.074x`，仅报告 |
+| RBD/native warm 门禁比值 | `0.699x`，使用 `1ms` 分母噪声下限 |
 | provider construction | steady `1`，两次 invalidation 冷重建后 `2 / 3` |
 | runtime cache capacity | `117,440,512 B` |
-| RSS delta | `398-448 MiB` |
+| RSS delta | `399-448 MiB` |
 
 当前状态应表述为：
 

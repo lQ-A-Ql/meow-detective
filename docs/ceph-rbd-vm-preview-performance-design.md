@@ -710,20 +710,20 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-rbd-preview-performan
 
 | 指标 | 结果 | 门禁 |
 |---|---:|---:|
-| cold 文件读取，不含 runtime open | `250.469ms` | `<= 1,500ms` |
-| cold runtime + 文件读取，仅报告 | `2,665.687ms` | 不作为文件读取门禁 |
-| warm 同范围 64 KiB p95 | `1.189ms` | `<= 200ms` |
-| 连续 `16x64 KiB` p95 | `13.523ms` | `<= 200ms` |
-| 连续 `4x1 MiB` p95 | `211.434ms` | `<= 300ms` |
-| 大文件随机 64 KiB p95 | `58.776ms` | `<= 500ms` |
-| 原生 XFS warm 64 KiB p95 | `0.099ms` | `<= 50ms` |
-| 原生 XFS 连续 `4x1 MiB` p95 | `14.957ms` | `<= 100ms` |
-| PVE 宿主 EXT4 warm 64 KiB p95 | `0.095ms` | `<= 50ms` |
-| PVE 宿主 EXT4 连续 `4x1 MiB` p95 | `9.794ms` | `<= 100ms` |
-| RBD/native warm 原始比值 | `12.069x` | 仅报告 |
-| RBD/native warm 门禁比值，`1ms` 噪声下限 | `1.189x` | `<= 3x` |
+| cold 文件读取，不含 runtime open | `349.992ms` | `<= 1,500ms` |
+| cold runtime + 文件读取，仅报告 | `3,185.749ms` | 不作为文件读取门禁 |
+| warm 同范围 64 KiB p95 | `0.699ms` | `<= 200ms` |
+| 连续 `16x64 KiB` p95 | `16.741ms` | `<= 200ms` |
+| 连续 `4x1 MiB` p95 | `234.152ms` | `<= 300ms` |
+| 大文件随机 64 KiB p95 | `73.804ms` | `<= 500ms` |
+| 原生 XFS warm 64 KiB p95 | `0.058ms` | `<= 50ms` |
+| 原生 XFS 连续 `4x1 MiB` p95 | `11.165ms` | `<= 100ms` |
+| PVE 宿主 EXT4 warm 64 KiB p95 | `0.077ms` | `<= 50ms` |
+| PVE 宿主 EXT4 连续 `4x1 MiB` p95 | `7.991ms` | `<= 100ms` |
+| RBD/native warm 原始比值 | `12.074x` | 仅报告 |
+| RBD/native warm 门禁比值，`1ms` 噪声下限 | `0.699x` | `<= 3x` |
 | runtime cache capacity | `117,440,512 B` | `<= 128 MiB` |
-| RSS delta | `398-448 MiB` | `<= 640 MiB` |
+| RSS delta | `399-448 MiB` | `<= 640 MiB` |
 
 ### 11.3 剩余边界
 
