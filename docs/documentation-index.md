@@ -39,6 +39,7 @@
 | MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
 | 外部实现对比（性能） | `docs/trace-ui-comparative-analysis.md` | 对比 `trace-ui` 与本项目在滚动、缓存、会话、数据访问层的实现差异与可借鉴点 |
 | 大文件浏览优化设计 | `docs/large-file-browsing-optimization-design.md` | 本项目 100MB+ 文件浏览与预览性能优化的目标架构、阶段方案、测试矩阵与验收标准 |
+| Ceph RBD VM 预览性能设计 | `docs/ceph-rbd-vm-preview-performance-design.md` | PVE 派生 VM 文件预览的 bounded-range 修复、source-scoped runtime、opaque session、缓存失效、真实样本性能门禁与剩余风险 |
 | Frontend MVP boundary | `docs/frontend-mvp-boundary.md` | Page / Feature / Component / API / Platform / Store 边界、无 runtime mock、公共组件归属与守卫规则 |
 | Backend module architecture | `docs/backend-module-architecture.md` | Stage 0 backend module/test split rules, baselines, guards, and exceptions |
 | Backend Stage 3/4 delivery | `docs/backend-stage3-stage4-design.md` | Transport/command and app-services decomposition, review gates, regression matrix, and performance boundary |

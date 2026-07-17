@@ -44,7 +44,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
-| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore/RocksDB/semantic/OMAP、source-bound RADOS range reader 已验证。私有样本显式加载的三 OSD inventory 可重建 `vm-100-disk-0`，派生独立 source DB 含直接 XFS、`centos/home`、`centos/root` 和 114,260 条文件记录，并通过真实预览；inventory 完整性尚未独立证明，通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联仍不支持 |
+| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore/RocksDB/semantic/OMAP、source-bound RADOS range reader 已验证。私有样本显式加载的三 OSD inventory 可重建 `vm-100-disk-0`，派生独立 source DB 含直接 XFS、`centos/home`、`centos/root` 和 114,260 条文件记录，并通过 `/etc/passwd` 真实预览；任意大文件低延迟、多 range 和媒体预览性能尚未验收，当前 Ceph RBD range 仍有整文件 materialize 与 request-local runtime 风险。inventory 完整性尚未独立证明，通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联仍不支持 |
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
