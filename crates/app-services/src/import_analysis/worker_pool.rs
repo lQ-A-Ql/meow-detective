@@ -12,9 +12,10 @@ use super::options::{
     PostImportPipelineError, PostImportPipelineOptions,
 };
 use super::progress::{bool_word, current_rss_mb, memory_hard_limit_exceeded};
+use super::source_reader::prepare_derived_runtime;
 use super::task_feed::{analysis_task_queue_bound, count_analysis_file_tasks};
 use super::tier::advance_tier;
-use super::worker_coordinator::run_analysis_workers;
+use super::worker_coordinator::{run_analysis_workers, AnalysisWorkerRunConfig};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
@@ -30,8 +31,19 @@ pub fn run_post_import_pipeline_with_counts(
     }
 
     emit_post_import_scheduled(&options, progress_cb);
+    let derived_runtime = match prepare_derived_runtime(&options) {
+        Ok(runtime) => runtime,
+        Err(message) => {
+            counts.add_failed(1);
+            return Err(PostImportPipelineError { message, counts });
+        }
+    };
     let analysis_options = import_analysis_options(options, Arc::clone(&tier_state));
-    let stats = match run_import_analysis_staging(analysis_options, progress_cb) {
+    let stats = match run_import_analysis_staging_with_runtime(
+        analysis_options,
+        derived_runtime,
+        progress_cb,
+    ) {
         Ok(stats) => stats,
         Err(error) => return Err(post_import_failure(error, counts)),
     };
@@ -173,6 +185,14 @@ pub fn run_import_analysis_staging(
     options: ImportAnalysisOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<ImportAnalysisStats, ImportAnalysisError> {
+    run_import_analysis_staging_with_runtime(options, None, progress_cb)
+}
+
+fn run_import_analysis_staging_with_runtime(
+    options: ImportAnalysisOptions,
+    derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
     let analysis_started = validated_analysis_start(options.platform)?;
     let setup = AnalysisRunSetup::for_options(&options);
     let startup_action = prepare_analysis_staging_startup(
@@ -200,11 +220,14 @@ pub fn run_import_analysis_staging(
 
     let mut stats = run_analysis_workers(
         &options,
-        &setup.worker_ids,
-        estimated,
-        setup.memory_soft_limit_mb,
-        setup.memory_hard_limit_mb,
-        analysis_started,
+        AnalysisWorkerRunConfig {
+            worker_ids: &setup.worker_ids,
+            derived_runtime,
+            estimated,
+            memory_soft_limit_mb: setup.memory_soft_limit_mb,
+            memory_hard_limit_mb: setup.memory_hard_limit_mb,
+            analysis_started,
+        },
         progress_cb,
     )?;
     advance_analysis_tier(&options)?;

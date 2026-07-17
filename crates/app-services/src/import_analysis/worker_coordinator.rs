@@ -10,26 +10,31 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+pub(super) struct AnalysisWorkerRunConfig<'a> {
+    pub(super) worker_ids: &'a [usize],
+    pub(super) derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
+    pub(super) estimated: u64,
+    pub(super) memory_soft_limit_mb: u64,
+    pub(super) memory_hard_limit_mb: u64,
+    pub(super) analysis_started: Instant,
+}
+
 pub(super) fn run_analysis_workers(
     options: &ImportAnalysisOptions,
-    worker_ids: &[usize],
-    estimated: u64,
-    memory_soft_limit_mb: u64,
-    memory_hard_limit_mb: u64,
-    analysis_started: Instant,
+    config: AnalysisWorkerRunConfig<'_>,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<ImportAnalysisStats, ImportAnalysisError> {
-    let group = spawn_worker_group(options, worker_ids)?;
+    let group = spawn_worker_group(options, config.worker_ids, config.derived_runtime)?;
     let mut stats = ImportAnalysisStats {
-        worker_ids: worker_ids.to_vec(),
+        worker_ids: config.worker_ids.to_vec(),
         ..ImportAnalysisStats::default()
     };
     let context = WorkerRunContext {
         options,
-        estimated,
-        memory_soft_limit_mb,
-        memory_hard_limit_mb,
-        analysis_started,
+        estimated: config.estimated,
+        memory_soft_limit_mb: config.memory_soft_limit_mb,
+        memory_hard_limit_mb: config.memory_hard_limit_mb,
+        analysis_started: config.analysis_started,
         progress_cb,
     };
     collect_worker_results(&group, &mut stats, &context);
@@ -56,6 +61,7 @@ struct AnalysisWorkerGroup {
 fn spawn_worker_group(
     options: &ImportAnalysisOptions,
     worker_ids: &[usize],
+    derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
 ) -> Result<AnalysisWorkerGroup, ImportAnalysisError> {
     let worker_count = worker_ids.len();
     let (task_tx, task_rx) = bounded(analysis_task_queue_bound(worker_count));
@@ -76,7 +82,12 @@ fn spawn_worker_group(
     let mut workers = Vec::with_capacity(worker_count);
     for worker_id in worker_ids.iter().copied() {
         workers.push(spawn_worker(
-            worker_id, options, &task_rx, &result_tx, &shared,
+            worker_id,
+            options,
+            derived_runtime.clone(),
+            &task_rx,
+            &result_tx,
+            &shared,
         )?);
     }
     drop(task_rx);
@@ -92,6 +103,7 @@ fn spawn_worker_group(
 fn spawn_worker(
     worker_id: usize,
     options: &ImportAnalysisOptions,
+    derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     task_rx: &Receiver<FileTask>,
     result_tx: &crossbeam_channel::Sender<(usize, Result<WorkerStats, ImportAnalysisError>)>,
     shared: &Arc<SharedAnalysisState>,
@@ -104,7 +116,13 @@ fn spawn_worker(
         .name(format!("analysis-worker-{worker_id}"))
         .spawn(move || {
             shared.active_workers.fetch_add(1, Ordering::Relaxed);
-            let result = run_analysis_worker(worker_id, worker_options, rx, Arc::clone(&shared));
+            let result = run_analysis_worker(
+                worker_id,
+                worker_options,
+                derived_runtime,
+                rx,
+                Arc::clone(&shared),
+            );
             shared.active_workers.fetch_sub(1, Ordering::Relaxed);
             let _ = tx.send((worker_id, result));
         })

@@ -2,6 +2,7 @@ use super::budget::ContentBudget;
 use super::error::ImportAnalysisError;
 use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
+use super::source_reader::AnalysisSourceReader;
 use super::worker_model::WorkerStats;
 use super::worker_staging::{flush_worker_rows, persist_worker_stats, IndexDocRow};
 use crate::{file_service, staging};
@@ -87,10 +88,11 @@ impl SharedAnalysisState {
 pub(super) fn run_analysis_worker(
     worker_id: usize,
     options: ImportAnalysisOptions,
+    derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     task_rx: Receiver<FileTask>,
     shared: Arc<SharedAnalysisState>,
 ) -> Result<WorkerStats, ImportAnalysisError> {
-    let mut runtime = AnalysisWorkerRuntime::open(worker_id, &options)?;
+    let mut runtime = AnalysisWorkerRuntime::open(worker_id, &options, derived_runtime)?;
     while let Ok(task) = task_rx.recv() {
         if options.cancel_token.load(Ordering::Relaxed) {
             break;
@@ -105,7 +107,7 @@ struct AnalysisWorkerRuntime {
     main_conn: Connection,
     staging_conn: Connection,
     stats: WorkerStats,
-    header_cache: file_service::FileHeaderReadCache,
+    source_reader: AnalysisSourceReader,
     artifacts: Vec<domain::Artifact>,
     timeline_events: Vec<domain::TimelineEvent>,
     index_docs: Vec<IndexDocRow>,
@@ -115,6 +117,7 @@ impl AnalysisWorkerRuntime {
     fn open(
         worker_id: usize,
         options: &ImportAnalysisOptions,
+        derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Result<Self, ImportAnalysisError> {
         let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
         let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
@@ -129,7 +132,7 @@ impl AnalysisWorkerRuntime {
             main_conn,
             staging_conn,
             stats: WorkerStats::default(),
-            header_cache: file_service::FileHeaderReadCache::new(options.case_id.clone()),
+            source_reader: AnalysisSourceReader::for_options(options, derived_runtime),
             artifacts: Vec::with_capacity(WORKER_INSERT_BATCH),
             timeline_events: Vec::with_capacity(WORKER_INSERT_BATCH),
             index_docs: Vec::with_capacity(INDEX_DOC_INSERT_BATCH),
@@ -166,7 +169,7 @@ impl AnalysisWorkerRuntime {
             && self.extractor_policy.should_extract(file)
             && reserve_content_budget(&options.content_budget, file, shared)
         {
-            match read_artifact_bytes(&self.header_cache, &self.main_conn, &file.id) {
+            match read_artifact_bytes(&mut self.source_reader, &self.main_conn, &file.id) {
                 Ok(bytes) => {
                     let mut sink = VecSink::new();
                     match self.extractor_policy.run_extractors(
@@ -230,7 +233,8 @@ impl AnalysisWorkerRuntime {
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
-            if let Ok(bytes) = read_text_index_bytes(&self.header_cache, &self.main_conn, &file.id)
+            if let Ok(bytes) =
+                read_text_index_bytes(&mut self.source_reader, &self.main_conn, &file.id)
             {
                 let mime = mime_hint_for_entry(file);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
@@ -289,27 +293,27 @@ impl AnalysisWorkerRuntime {
 }
 
 fn read_text_index_bytes(
-    header_cache: &file_service::FileHeaderReadCache,
+    source_reader: &mut AnalysisSourceReader,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    read_text_index_bytes_impl(header_cache, conn, file_id)
+    read_text_index_bytes_impl(source_reader, conn, file_id)
 }
 
 fn read_artifact_bytes(
-    header_cache: &file_service::FileHeaderReadCache,
+    source_reader: &mut AnalysisSourceReader,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    read_artifact_bytes_impl(header_cache, conn, file_id)
+    read_artifact_bytes_impl(source_reader, conn, file_id)
 }
 
 fn read_artifact_bytes_impl(
-    header_cache: &file_service::FileHeaderReadCache,
+    source_reader: &mut AnalysisSourceReader,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    header_cache.read_file_header_by_id(
+    source_reader.read_file_header_by_id(
         conn,
         file_id,
         infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
@@ -317,11 +321,11 @@ fn read_artifact_bytes_impl(
 }
 
 fn read_text_index_bytes_impl(
-    header_cache: &file_service::FileHeaderReadCache,
+    source_reader: &mut AnalysisSourceReader,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    header_cache.read_file_header_by_id(
+    source_reader.read_file_header_by_id(
         conn,
         file_id,
         infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,

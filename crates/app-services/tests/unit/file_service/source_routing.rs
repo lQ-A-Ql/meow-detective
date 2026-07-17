@@ -1,9 +1,11 @@
 use super::*;
+use crate::file_service::PreparedSourceReadState;
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
 fn setup_case_conn() -> rusqlite::Connection {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
@@ -135,8 +137,22 @@ fn retained_pve_rbd_source_context_reads_analysis_candidate() {
         .expect("read derived VM analysis candidate");
 
     assert_eq!(bytes.len(), 1_019);
+    let expected_sha256 = "be6b8d46d8cdb839b738efda17b7b5841a990786cc6ecc869386c266de25582d";
+    assert_eq!(hex::encode(Sha256::digest(&bytes)), expected_sha256);
+
+    let runtime = crate::ceph_reconstruction::build_derived_rbd_runtime(
+        &case_conn, &case_root, &case_id, &source.id,
+    )
+    .map(Arc::new)
+    .expect("build shared derived runtime");
+    let mut prepared = PreparedSourceReadState::new(case_id.0.clone(), source.id.clone(), runtime);
+    let prepared_bytes = prepared
+        .read_file_header_by_id(&source_conn, &file_id, 4 * 1024)
+        .expect("read candidate through prepared runtime");
+
+    assert_eq!(prepared_bytes, bytes);
     assert_eq!(
-        hex::encode(Sha256::digest(&bytes)),
-        "be6b8d46d8cdb839b738efda17b7b5841a990786cc6ecc869386c266de25582d"
+        hex::encode(Sha256::digest(&prepared_bytes)),
+        expected_sha256
     );
 }

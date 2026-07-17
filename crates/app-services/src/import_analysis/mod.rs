@@ -7,6 +7,7 @@ mod finalize;
 mod options;
 pub mod priority_queue;
 mod progress;
+mod source_reader;
 mod task_feed;
 pub mod tier;
 mod worker_coordinator;

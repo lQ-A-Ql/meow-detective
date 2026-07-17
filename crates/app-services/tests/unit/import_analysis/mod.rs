@@ -486,6 +486,48 @@ fn analysis_worker_staging_open_creates_expected_tables() {
 }
 
 #[test]
+fn post_import_runtime_skips_non_rbd_sources() {
+    let tmp = TempDir::new().unwrap();
+    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let options = post_import_options(
+        &tmp,
+        db_path,
+        data_source_id,
+        ImportAnalysisMode::BudgetedContent,
+    );
+
+    let runtime =
+        source_reader::prepare_derived_runtime(&options).expect("prepare non-RBD analysis runtime");
+
+    assert!(runtime.is_none());
+}
+
+#[test]
+fn post_import_rbd_runtime_fails_closed_without_lineage() {
+    let tmp = TempDir::new().unwrap();
+    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    conn.execute(
+        "UPDATE data_sources SET kind = 'ceph_rbd' WHERE id = ?1",
+        [&data_source_id.0],
+    )
+    .unwrap();
+    let options = post_import_options(
+        &tmp,
+        db_path,
+        data_source_id,
+        ImportAnalysisMode::BudgetedContent,
+    );
+
+    let error = match source_reader::prepare_derived_runtime(&options) {
+        Ok(_) => panic!("derived analysis must not fall back to the host reader"),
+        Err(error) => error,
+    };
+
+    assert!(error.contains("derived RBD lineage was not found"));
+}
+
+#[test]
 fn analysis_pool_respects_worker_limit_and_writes_temp_db() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();

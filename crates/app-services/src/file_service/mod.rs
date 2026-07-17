@@ -49,7 +49,7 @@ pub use partition_roots::{
     replace_placeholder_root_with_real, store_data_source_partitions,
 };
 pub use preview_runtime::{PreviewRuntimeRegistry, PreviewRuntimeStats};
-pub(crate) use source_read::SourceReadContext;
+pub(crate) use source_read::{PreparedSourceReadState, SourceReadContext};
 pub use viewer::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, get_file_path_for_entry,
     image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
