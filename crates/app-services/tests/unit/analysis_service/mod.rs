@@ -17,6 +17,8 @@ use tempfile::TempDir;
 use testing::{builders::registry, fixtures};
 use transport::dto::AnalysisParseStatusDto;
 
+mod cancellation;
+
 fn file(id: &str, path: &str, size: u64) -> FileEntry {
     FileEntry {
         id: FileEntryId(id.to_string()),
@@ -194,28 +196,6 @@ struct BoundedBytesProbe {
     bytes: Vec<u8>,
     requested_limits: Rc<std::cell::RefCell<Vec<usize>>>,
     full_reader_calls: Rc<Cell<usize>>,
-}
-
-struct CountingRead {
-    inner: std::io::Cursor<Vec<u8>>,
-    bytes_read: Rc<Cell<usize>>,
-}
-
-impl CountingRead {
-    fn new(bytes: Vec<u8>, bytes_read: Rc<Cell<usize>>) -> Self {
-        Self {
-            inner: std::io::Cursor::new(bytes),
-            bytes_read,
-        }
-    }
-}
-
-impl Read for CountingRead {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        self.bytes_read.set(self.bytes_read.get() + n);
-        Ok(n)
-    }
 }
 
 impl BoundedBytesProbe {
@@ -624,11 +604,17 @@ fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
     let _full_reader_path = move || full_reader_probe.open_full_reader();
     let reader_probe = probe.clone();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", W, &["Email"], |file_id| {
-        assert_eq!(file_id.0, "email");
-        let bytes = reader_probe.read_header(MAX_ANALYSIS_SOURCE_BYTES);
-        Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
-    })
+    let run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        W,
+        &["Email"],
+        |file_id, read_limit| {
+            assert_eq!(file_id.0, "email");
+            let bytes = reader_probe.read_header(read_limit);
+            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+        },
+    )
     .unwrap();
 
     assert_eq!(run.status, AnalysisParseStatusDto::Parsed);
@@ -651,23 +637,64 @@ fn linux_analysis_extraction_uses_smaller_text_log_read_cap() {
         )])
         .unwrap();
 
-    let mut source_bytes = auth_log;
-    source_bytes.resize(64 * 1024 * 1024, b'x');
-    let bytes_read = Rc::new(Cell::new(0usize));
-    let bytes_read_probe = Rc::clone(&bytes_read);
-    let run = run_analysis_extraction(&conn, "case-analysis", L, &["LinuxArtifacts"], |file_id| {
-        assert_eq!(file_id.0, "auth");
-        Ok::<Box<dyn Read>, String>(Box::new(CountingRead::new(
-            source_bytes.clone(),
-            Rc::clone(&bytes_read_probe),
-        )))
-    })
+    let probe = BoundedBytesProbe::new(auth_log);
+    let reader_probe = probe.clone();
+    let run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        L,
+        &["LinuxArtifacts"],
+        |file_id, read_limit| {
+            assert_eq!(file_id.0, "auth");
+            let bytes = reader_probe.read_header(read_limit);
+            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+        },
+    )
     .unwrap();
 
     assert_eq!(run.status, AnalysisParseStatusDto::Partial);
     assert_eq!(run.scanned_count, 1);
     assert!(run.artifact_count > 0);
-    assert!(bytes_read.get() <= 16 * 1024 * 1024);
+    assert_eq!(probe.requested_limits(), vec![16 * 1024 * 1024]);
+    assert_eq!(probe.full_reader_calls(), 0);
+}
+
+#[test]
+fn linux_analysis_passes_each_route_limit_to_the_evidence_reader() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    FileRepo::new(&conn)
+        .insert_batch(&[
+            file_with_ds(
+                "journal",
+                &ds_id,
+                "var/log/journal/fixture/system.journal",
+                MAX_ANALYSIS_SOURCE_BYTES as u64,
+            ),
+            file_with_ds("auth", &ds_id, "var/log/auth.log", 64 * 1024 * 1024),
+            file_with_ds("cron", &ds_id, "etc/crontab", 8 * 1024 * 1024),
+        ])
+        .unwrap();
+
+    let observed = Rc::new(std::cell::RefCell::new(HashMap::new()));
+    let observed_reader = Rc::clone(&observed);
+    run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        L,
+        &["LinuxArtifacts"],
+        move |file_id, read_limit| {
+            observed_reader
+                .borrow_mut()
+                .insert(file_id.0.clone(), read_limit);
+            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(Vec::<u8>::new())))
+        },
+    )
+    .unwrap();
+
+    let observed = observed.borrow();
+    assert_eq!(observed.get("journal"), Some(&MAX_ANALYSIS_SOURCE_BYTES));
+    assert_eq!(observed.get("auth"), Some(&(16 * 1024 * 1024)));
+    assert_eq!(observed.get("cron"), Some(&(4 * 1024 * 1024)));
 }
 
 #[test]
@@ -734,13 +761,19 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     contents.insert("firefox-places".to_string(), firefox_places);
     contents.insert("email".to_string(), email);
 
-    let run = run_analysis_extraction(&conn, "case-analysis", W, &[], |file_id| {
-        contents
-            .get(&file_id.0)
-            .cloned()
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
-    })
+    let run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        W,
+        &[],
+        |file_id, _read_limit| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        },
+    )
     .unwrap();
 
     assert_eq!(run.status, AnalysisParseStatusDto::Parsed);
@@ -840,13 +873,19 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
         .body_preview
         .contains("first line of the message body"));
 
-    let second_run = run_analysis_extraction(&conn, "case-analysis", W, &[], |file_id| {
-        contents
-            .get(&file_id.0)
-            .cloned()
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
-    })
+    let second_run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        W,
+        &[],
+        |file_id, _read_limit| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        },
+    )
     .unwrap();
     assert_eq!(second_run.scanned_count, 0);
     assert_eq!(second_run.artifact_count, 16);
@@ -875,13 +914,19 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
         )])
         .unwrap();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", W, &["EventLogs"], |file_id| {
-        contents
-            .get(&file_id.0)
-            .cloned()
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
-    })
+    let run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        W,
+        &["EventLogs"],
+        |file_id, _read_limit| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        },
+    )
     .unwrap();
 
     assert_eq!(run.scanned_count, 1);
@@ -1070,13 +1115,19 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         ])
         .unwrap();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", L, &["LinuxArtifacts"], |file_id| {
-        contents
-            .get(&file_id.0)
-            .cloned()
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
-    })
+    let run = run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        L,
+        &["LinuxArtifacts"],
+        |file_id, _read_limit| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        },
+    )
     .unwrap();
 
     assert_eq!(run.scanned_count, 20);

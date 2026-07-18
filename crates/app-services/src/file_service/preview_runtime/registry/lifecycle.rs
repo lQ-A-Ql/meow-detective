@@ -120,6 +120,7 @@ fn invalidate_case_locked(state: &mut RegistryState, case_id: &str) {
         .keys()
         .chain(state.runtimes.keys())
         .chain(state.building.iter())
+        .chain(state.building_filesystems.iter().map(|key| &key.runtime))
         .filter(|key| key.case_id == case_id)
         .cloned()
         .collect::<HashSet<_>>();
@@ -131,11 +132,21 @@ fn invalidate_case_locked(state: &mut RegistryState, case_id: &str) {
         .retain(|_, entry| entry.session.case_id() != case_id);
     prune_session_lru(state);
     state.runtimes.retain(|key, _| key.case_id != case_id);
+    state
+        .filesystems
+        .retain(|key, _| key.runtime.case_id != case_id);
+    state
+        .filesystem_lru
+        .retain(|key| key.runtime.case_id != case_id);
     prune_runtime_lru(state);
 }
 
 fn scope_is_busy(state: &RegistryState, matches: &impl Fn(&RuntimeKey) -> bool) -> bool {
     state.building.iter().any(matches)
+        || state
+            .building_filesystems
+            .iter()
+            .any(|key| matches(&key.runtime))
         || state
             .active_opens
             .iter()

@@ -318,16 +318,20 @@ impl XfsReader {
 
     pub(crate) fn read_file_content(&self, ino: u64) -> io::Result<Vec<u8>> {
         let inode = self.read_inode(ino)?;
-        Self::validate_inode_magic(&inode)?;
+        self.read_file_content_from_inode(&inode)
+    }
+
+    pub(crate) fn read_file_content_from_inode(&self, inode: &[u8]) -> io::Result<Vec<u8>> {
+        Self::validate_inode_magic(inode)?;
         let format = inode[di_off::FORMAT];
-        let size = be_u64(&inode, di_off::SIZE);
+        let size = be_u64(inode, di_off::SIZE);
         match format {
             FORMAT_LOCAL => {
-                let data_fork = Self::data_fork(&inode)?;
+                let data_fork = Self::data_fork(inode)?;
                 Ok(truncate_data_to_declared_size(data_fork.to_vec(), size))
             }
-            FORMAT_EXTENTS => self.read_extent_data(&inode, size),
-            FORMAT_BTREE => self.read_btree_data(&inode, size),
+            FORMAT_EXTENTS => self.read_extent_data(inode, size),
+            FORMAT_BTREE => self.read_btree_data(inode, size),
             other => Err(invalid_fs_data(format!("unsupported di_format {other}"))),
         }
     }
@@ -339,15 +343,24 @@ impl XfsReader {
         length: usize,
     ) -> io::Result<Vec<u8>> {
         let inode = self.read_inode(ino)?;
-        Self::validate_inode_magic(&inode)?;
+        self.read_file_content_range_from_inode(&inode, offset, length)
+    }
+
+    pub(crate) fn read_file_content_range_from_inode(
+        &self,
+        inode: &[u8],
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        Self::validate_inode_magic(inode)?;
         let format = inode[di_off::FORMAT];
-        let size = be_u64(&inode, di_off::SIZE);
+        let size = be_u64(inode, di_off::SIZE);
         if length == 0 || offset >= size {
             return Ok(Vec::new());
         }
         match format {
             FORMAT_LOCAL => {
-                let data_fork = Self::data_fork(&inode)?;
+                let data_fork = Self::data_fork(inode)?;
                 let start = usize::try_from(offset)
                     .ok()
                     .map(|value| value.min(data_fork.len()))
@@ -359,8 +372,8 @@ impl XfsReader {
                 let end = start.saturating_add(length).min(declared_end);
                 Ok(data_fork[start..end].to_vec())
             }
-            FORMAT_EXTENTS => self.read_extent_data_range(&inode, size, offset, length),
-            FORMAT_BTREE => self.read_btree_data_range(&inode, size, offset, length),
+            FORMAT_EXTENTS => self.read_extent_data_range(inode, size, offset, length),
+            FORMAT_BTREE => self.read_btree_data_range(inode, size, offset, length),
             other => Err(invalid_fs_data(format!("unsupported di_format {other}"))),
         }
     }

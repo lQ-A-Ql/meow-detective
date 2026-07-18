@@ -62,6 +62,52 @@ fn safe_existing_case_path_rejects_canonical_escape() {
 }
 
 #[test]
+fn registered_source_index_dir_requires_a_safe_registered_path() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let case_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&case_conn).unwrap();
+    case_conn
+        .execute("INSERT INTO cases (id, name) VALUES ('case-1', 'Case')", [])
+        .unwrap();
+    let ds = domain::DataSource {
+        id: DataSourceId("ds-index".to_string()),
+        name: "Indexed Source".to_string(),
+        kind: domain::DataSourceKind::Raw,
+        source_path: std::path::PathBuf::from("D:/source.raw"),
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
+    let mut storage = DataSourceStorage::source_db(&ds.id.0, Some("linux"), None);
+    storage.index_rel_path = None;
+    DataSourceRepo::new(&case_conn)
+        .insert_with_storage(&domain::CaseId("case-1".to_string()), &ds, &storage)
+        .unwrap();
+
+    let missing = registered_source_index_dir(&case_conn, tmp.path(), &ds.id).unwrap_err();
+    assert!(missing.to_string().contains("missing search index path"));
+
+    case_conn
+        .execute(
+            "UPDATE data_sources SET index_rel_path='../outside-index' WHERE id=?1",
+            [&ds.id.0],
+        )
+        .unwrap();
+    let escaped = registered_source_index_dir(&case_conn, tmp.path(), &ds.id).unwrap_err();
+    assert!(escaped.to_string().contains("escapes the case directory"));
+
+    case_conn
+        .execute(
+            "UPDATE data_sources SET index_rel_path='search/custom-index' WHERE id=?1",
+            [&ds.id.0],
+        )
+        .unwrap();
+    assert_eq!(
+        registered_source_index_dir(&case_conn, tmp.path(), &ds.id).unwrap(),
+        tmp.path().join("search/custom-index")
+    );
+}
+
+#[test]
 fn open_registered_source_db_rejects_missing_source_db() {
     let tmp = tempfile::TempDir::new().unwrap();
     let case_conn = persistence_sqlite::connection::open_in_memory().unwrap();
@@ -280,4 +326,114 @@ fn checkpoint_source_db_fails_when_a_reader_pins_wal_frames() {
     let error = checkpoint_source_db(&writer).unwrap_err();
     assert!(error.to_string().contains("did not converge"));
     drop(read_tx);
+}
+
+#[test]
+fn source_build_database_is_hidden_until_atomic_publish() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-build".to_string());
+    let attempt_id = "11111111-1111-4111-8111-111111111111";
+    let build_path =
+        super::build::source_build_db_path(tmp.path(), &data_source_id, attempt_id).unwrap();
+    let final_path = source_db_path(tmp.path(), &data_source_id);
+    let connection = open_fresh_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+    let wal_autocheckpoint: u32 = connection
+        .query_row("PRAGMA wal_autocheckpoint", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        wal_autocheckpoint,
+        super::build::SOURCE_BUILD_WAL_AUTOCHECKPOINT_PAGES
+    );
+    connection
+        .execute(
+            "INSERT INTO source_meta (key, value) VALUES ('catalogState', 'complete')",
+            [],
+        )
+        .unwrap();
+
+    assert!(build_path.is_file());
+    assert!(!final_path.exists());
+    finalize_source_build_db(&connection).unwrap();
+    drop(connection);
+    let published = publish_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+
+    assert_eq!(published, final_path);
+    assert!(final_path.is_file());
+    assert!(!build_path.exists());
+    let published_connection =
+        persistence_sqlite::open_existing_source_read_only(&final_path).unwrap();
+    assert_eq!(
+        published_connection
+            .query_row(
+                "SELECT value FROM source_meta WHERE key = 'catalogState'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "complete"
+    );
+}
+
+#[test]
+fn fresh_source_build_refuses_to_replace_a_published_database() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-published".to_string());
+    let published = open_source_db(tmp.path(), &data_source_id).unwrap();
+    drop(published);
+
+    let error = open_fresh_source_build_db(
+        tmp.path(),
+        &data_source_id,
+        "22222222-2222-4222-8222-222222222222",
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("already has a published"));
+}
+
+#[test]
+fn controlled_discard_removes_unpublished_source_build_files() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-discard".to_string());
+    let attempt_id = "33333333-3333-4333-8333-333333333333";
+    let build_path =
+        super::build::source_build_db_path(tmp.path(), &data_source_id, attempt_id).unwrap();
+    let connection = open_fresh_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+    connection
+        .execute(
+            "INSERT INTO source_meta (key, value) VALUES ('catalogState', 'partial')",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    discard_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+
+    assert!(!build_path.exists());
+    assert!(!PathBuf::from(format!("{}-wal", build_path.display())).exists());
+    assert!(!PathBuf::from(format!("{}-shm", build_path.display())).exists());
+}
+
+#[test]
+fn source_build_attempts_use_isolated_physical_paths() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-attempt-isolation".to_string());
+    let first_attempt = "44444444-4444-4444-8444-444444444444";
+    let second_attempt = "55555555-5555-4555-8555-555555555555";
+
+    let first = open_fresh_source_build_db(tmp.path(), &data_source_id, first_attempt).unwrap();
+    let second = open_fresh_source_build_db(tmp.path(), &data_source_id, second_attempt).unwrap();
+    let first_path =
+        super::build::source_build_db_path(tmp.path(), &data_source_id, first_attempt).unwrap();
+    let second_path =
+        super::build::source_build_db_path(tmp.path(), &data_source_id, second_attempt).unwrap();
+
+    assert_ne!(first_path, second_path);
+    assert!(first_path.is_file());
+    assert!(second_path.is_file());
+    drop(first);
+    drop(second);
+    discard_source_build_db(tmp.path(), &data_source_id, first_attempt).unwrap();
+    assert!(!first_path.exists());
+    assert!(second_path.exists());
 }

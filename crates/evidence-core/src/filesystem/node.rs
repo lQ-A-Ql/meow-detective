@@ -18,6 +18,18 @@ pub struct FsNode {
     pub changed_at: Option<FsTimestamp>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileSystemDirectoryLocator {
+    pub path: String,
+    pub locator: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileSystemFileLocator {
+    pub path: String,
+    pub locator: String,
+}
+
 pub fn root_node() -> FsNode {
     fs_node_without_timestamps(ROOT_NAME, true, 0)
 }

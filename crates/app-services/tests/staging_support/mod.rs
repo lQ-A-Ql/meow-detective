@@ -21,7 +21,8 @@ pub fn create_main_file_entries_table(conn: &Connection) {
             modified_at TEXT,
             accessed_at TEXT,
             changed_at TEXT,
-            hash_sha256 TEXT
+            hash_sha256 TEXT,
+            partition_index INTEGER
         )",
     )
     .unwrap();

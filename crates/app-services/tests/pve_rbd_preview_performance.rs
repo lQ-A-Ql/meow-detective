@@ -87,11 +87,14 @@ struct TimingMetric {
 #[serde(rename_all = "camelCase")]
 struct RuntimeStatsReport {
     runtime_count: usize,
+    filesystem_count: usize,
     session_count: usize,
     provider_constructions: u64,
+    filesystem_constructions: u64,
     runtime_cache_capacity_bytes: usize,
     max_sessions: usize,
     max_runtimes: usize,
+    max_filesystems: usize,
     post_close_session_count: usize,
 }
 
@@ -113,8 +116,10 @@ struct MediaParityReport {
 struct LifecycleCheckpoint {
     phase: &'static str,
     runtime_count: usize,
+    filesystem_count: usize,
     session_count: usize,
     provider_constructions: u64,
+    filesystem_constructions: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -397,6 +402,8 @@ fn retained_pve_rbd_preview_performance() {
     let live_stats = registry.stats().expect("preview runtime statistics");
     assert_eq!(live_stats.runtime_count, 1);
     assert_eq!(live_stats.provider_constructions, 1);
+    assert_eq!(live_stats.filesystem_count, 3);
+    assert_eq!(live_stats.filesystem_constructions, 3);
     assert!(
         live_stats.runtime_cache_capacity_bytes <= MAX_RUNTIME_CACHE_BYTES,
         "runtime cache capacity {} exceeds {}",
@@ -411,6 +418,8 @@ fn retained_pve_rbd_preview_performance() {
     }
     let post_close_stats = registry.stats().expect("post-close runtime statistics");
     assert_eq!(post_close_stats.session_count, 0);
+    assert_eq!(post_close_stats.filesystem_count, 3);
+    assert_eq!(post_close_stats.filesystem_constructions, 3);
     let lifecycle = verify_preview_lifecycle(
         &read_context,
         &source.id,
@@ -531,6 +540,8 @@ fn verify_preview_lifecycle(
         ProviderConstructionExpectation {
             before: 1,
             after_rebuild: 2,
+            filesystem_before: 3,
+            filesystem_after_rebuild: 4,
         },
         &mut checkpoints,
     );
@@ -543,6 +554,8 @@ fn verify_preview_lifecycle(
         ProviderConstructionExpectation {
             before: 2,
             after_rebuild: 3,
+            filesystem_before: 4,
+            filesystem_after_rebuild: 5,
         },
         &mut checkpoints,
     );
@@ -565,6 +578,8 @@ enum InvalidationScope {
 struct ProviderConstructionExpectation {
     before: u64,
     after_rebuild: u64,
+    filesystem_before: u64,
+    filesystem_after_rebuild: u64,
 }
 
 impl InvalidationScope {
@@ -646,6 +661,12 @@ fn verify_invalidation_cycle(
         "{} invalidation unexpectedly rebuilt the provider before retirement",
         scope.label()
     );
+    assert_eq!(
+        before.filesystem_constructions,
+        expected_constructions.filesystem_before,
+        "{} invalidation unexpectedly rebuilt a filesystem before retirement",
+        scope.label()
+    );
     assert_eq!(before.session_count, 1);
     checkpoints.push(lifecycle_checkpoint(
         match scope {
@@ -664,11 +685,18 @@ fn verify_invalidation_cycle(
         .stats()
         .expect("post-invalidation preview statistics");
     assert_eq!(invalidated.runtime_count, 0);
+    assert_eq!(invalidated.filesystem_count, 0);
     assert_eq!(invalidated.session_count, 0);
     assert_eq!(
         invalidated.provider_constructions,
         expected_constructions.before,
         "{} invalidation must not construct a provider",
+        scope.label()
+    );
+    assert_eq!(
+        invalidated.filesystem_constructions,
+        expected_constructions.filesystem_before,
+        "{} invalidation must not construct a filesystem",
         scope.label()
     );
     checkpoints.push(lifecycle_checkpoint(
@@ -713,11 +741,18 @@ fn verify_invalidation_cycle(
         .stats()
         .expect("post-reactivation preview statistics");
     assert_eq!(rebuilt.runtime_count, 1);
+    assert_eq!(rebuilt.filesystem_count, 1);
     assert_eq!(rebuilt.session_count, 1);
     assert_eq!(
         rebuilt.provider_constructions,
         expected_constructions.after_rebuild,
         "{} reactivation must perform exactly one cold provider rebuild",
+        scope.label()
+    );
+    assert_eq!(
+        rebuilt.filesystem_constructions,
+        expected_constructions.filesystem_after_rebuild,
+        "{} reactivation must perform exactly one cold filesystem rebuild",
         scope.label()
     );
     checkpoints.push(lifecycle_checkpoint(
@@ -740,6 +775,10 @@ fn verify_invalidation_cycle(
     assert_eq!(
         closed.provider_constructions, expected_constructions.after_rebuild,
         "closing a session must not rebuild its provider"
+    );
+    assert_eq!(
+        closed.filesystem_constructions, expected_constructions.filesystem_after_rebuild,
+        "closing a session must not rebuild its filesystem"
     );
     checkpoints.push(lifecycle_checkpoint(
         match scope {
@@ -800,8 +839,10 @@ fn lifecycle_checkpoint(phase: &'static str, stats: PreviewRuntimeStats) -> Life
     LifecycleCheckpoint {
         phase,
         runtime_count: stats.runtime_count,
+        filesystem_count: stats.filesystem_count,
         session_count: stats.session_count,
         provider_constructions: stats.provider_constructions,
+        filesystem_constructions: stats.filesystem_constructions,
     }
 }
 
@@ -1047,11 +1088,14 @@ fn runtime_report(
 ) -> RuntimeStatsReport {
     RuntimeStatsReport {
         runtime_count: stats.runtime_count,
+        filesystem_count: stats.filesystem_count,
         session_count: stats.session_count,
         provider_constructions: stats.provider_constructions,
+        filesystem_constructions: stats.filesystem_constructions,
         runtime_cache_capacity_bytes: stats.runtime_cache_capacity_bytes,
         max_sessions: stats.max_sessions,
         max_runtimes: stats.max_runtimes,
+        max_filesystems: stats.max_filesystems,
         post_close_session_count,
     }
 }

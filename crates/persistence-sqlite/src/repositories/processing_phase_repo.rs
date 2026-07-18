@@ -150,9 +150,10 @@ impl<'a> DataSourceProcessingPhaseRepo<'a> {
         }
     }
 
-    /// Marks processing phases left running by an interrupted application as failed.
+    /// Marks only expired running phases as failed.
     ///
-    /// Case-open recovery calls this only after the previous process has exited.
+    /// An unexpired lease may still belong to a live worker, so recovery must
+    /// not invalidate it merely because another application opened the case.
     /// Failed phases remain retryable through the normal claim path.
     pub fn recover_interrupted(&self, reason: &str) -> DbResult<usize> {
         if !valid_text(reason) {
@@ -167,7 +168,8 @@ impl<'a> DataSourceProcessingPhaseRepo<'a> {
                      heartbeat_at = datetime('now'),
                      lease_expires_at = NULL,
                      updated_at = datetime('now')
-                 WHERE state = 'running'",
+                 WHERE state = 'running'
+                   AND lease_expires_at <= datetime('now')",
                 [reason],
             )
             .map_err(Into::into)

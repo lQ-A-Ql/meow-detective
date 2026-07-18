@@ -1,4 +1,10 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use domain::{CaseId, DataSourceId, DataSourcePlatform};
 use persistence_sqlite::repositories::processing_phase_repo::ProcessingPhase;
@@ -12,6 +18,7 @@ use super::{
     phase_runner::ProcessingPhaseRunner,
     platform::{resolve_platform, run_platform_phase},
     projections::{run_search_phase, run_timeline_phase},
+    DerivedSourceContext,
 };
 
 struct ReadyPlatform {
@@ -25,8 +32,19 @@ pub(in crate::ceph_reconstruction) fn finalize_derived_source(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     lineage_fingerprint: &str,
+    cancel_token: &Arc<AtomicBool>,
 ) -> DerivedFinalizationReport {
     let mut report = DerivedFinalizationReport::default();
+    if cancellation_requested(cancel_token) {
+        return report;
+    }
+    let context = DerivedSourceContext {
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        cancel_token,
+    };
     let processing_identity =
         match load_catalog_identity(case_conn, data_source_id, lineage_fingerprint) {
             Ok(identity) => identity,
@@ -38,26 +56,22 @@ pub(in crate::ceph_reconstruction) fn finalize_derived_source(
     let runner = ProcessingPhaseRunner::new(case_conn, data_source_id, &processing_identity);
     run_graph_phase(
         &runner,
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        context.data_source_id,
+        context.cancel_token,
         &mut report,
     );
+    if cancellation_requested(cancel_token) {
+        return report;
+    }
     let Some(platform) =
         prepare_platform_phase(case_conn, data_source_id, &processing_identity, &mut report)
     else {
         return report;
     };
-    run_platform_dependent_phases(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-        &processing_identity,
-        platform,
-        &mut report,
-    );
+    run_platform_dependent_phases(&context, &processing_identity, platform, &mut report);
     report
 }
 
@@ -113,50 +127,51 @@ fn prepare_platform_phase(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_platform_dependent_phases(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
+    context: &DerivedSourceContext<'_>,
     processing_identity: &str,
     platform: ReadyPlatform,
     report: &mut DerivedFinalizationReport,
 ) {
+    if cancellation_requested(context.cancel_token) {
+        return;
+    }
     let artifact_seed = phase_dependency_identity(
         "artifacts",
         &[processing_identity, &platform.output_identity],
     );
-    let artifact_runner = ProcessingPhaseRunner::new(case_conn, data_source_id, &artifact_seed);
-    let artifact_state = run_artifact_phase(
-        &artifact_runner,
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-        platform.platform,
-        report,
-    );
+    let artifact_runner =
+        ProcessingPhaseRunner::new(context.case_conn, context.data_source_id, &artifact_seed);
+    let artifact_state = run_artifact_phase(&artifact_runner, context, platform.platform, report);
+    if cancellation_requested(context.cancel_token) {
+        return;
+    }
 
     let search_seed =
         phase_dependency_identity("search", &[processing_identity, &platform.output_identity]);
-    let search_runner = ProcessingPhaseRunner::new(case_conn, data_source_id, &search_seed);
+    let search_runner =
+        ProcessingPhaseRunner::new(context.case_conn, context.data_source_id, &search_seed);
     run_search_phase(
         &search_runner,
-        case_root,
-        case_id,
-        data_source_id,
-        platform.platform,
+        super::projections::SearchPhaseContext {
+            case_conn: context.case_conn,
+            case_root: context.case_root,
+            case_id: context.case_id,
+            data_source_id: context.data_source_id,
+            platform: platform.platform,
+            cancel_token: context.cancel_token,
+        },
         report,
     );
+    if cancellation_requested(context.cancel_token) {
+        return;
+    }
 
     if artifact_state
         == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Ready
     {
         run_timeline_after_artifacts(
-            case_conn,
-            case_root,
-            data_source_id,
+            context,
             processing_identity,
             &platform.output_identity,
             &artifact_seed,
@@ -171,7 +186,8 @@ fn run_platform_dependent_phases(
                 artifact_state.as_str(),
             ],
         );
-        let timeline_runner = ProcessingPhaseRunner::new(case_conn, data_source_id, &timeline_seed);
+        let timeline_runner =
+            ProcessingPhaseRunner::new(context.case_conn, context.data_source_id, &timeline_seed);
         defer_phase(
             &timeline_runner,
             ProcessingPhase::Timeline,
@@ -216,17 +232,15 @@ fn run_platform_failure(
 }
 
 fn run_timeline_after_artifacts(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
+    context: &DerivedSourceContext<'_>,
     processing_identity: &str,
     platform_output: &str,
     artifact_seed: &str,
     report: &mut DerivedFinalizationReport,
 ) {
     let artifact_output = match ready_phase_output_identity(
-        case_conn,
-        data_source_id,
+        context.case_conn,
+        context.data_source_id,
         ProcessingPhase::Artifacts,
         artifact_seed,
     ) {
@@ -241,8 +255,21 @@ fn run_timeline_after_artifacts(
         "timeline",
         &[processing_identity, platform_output, &artifact_output],
     );
-    let timeline_runner = ProcessingPhaseRunner::new(case_conn, data_source_id, &timeline_seed);
-    run_timeline_phase(&timeline_runner, case_root, data_source_id, report);
+    let timeline_runner =
+        ProcessingPhaseRunner::new(context.case_conn, context.data_source_id, &timeline_seed);
+    run_timeline_phase(
+        &timeline_runner,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        context.data_source_id,
+        context.cancel_token,
+        report,
+    );
+}
+
+fn cancellation_requested(cancel_token: &AtomicBool) -> bool {
+    cancel_token.load(Ordering::Relaxed)
 }
 
 fn defer_phase(

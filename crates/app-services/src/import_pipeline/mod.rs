@@ -48,7 +48,7 @@ pub use options::{ImportJobOptions, JobOutcomeCounts};
 pub use partition::{
     build_partition_work, enumerate_image_data_source, enumerate_partition_with_fs,
     format_partition_progress_detail, format_partition_record_root_name,
-    format_partition_root_name,
+    format_partition_root_name, PartitionEnumerationRequest,
 };
 
 #[cfg(test)]

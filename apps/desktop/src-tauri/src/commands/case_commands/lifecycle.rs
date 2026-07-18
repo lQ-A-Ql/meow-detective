@@ -1,5 +1,6 @@
 use app_services::case_service;
 use std::path::PathBuf;
+use std::time::Duration;
 use tauri::{AppHandle, State};
 use transport::{
     commands::{CreateCaseRequest, OpenCaseRequest},
@@ -9,6 +10,7 @@ use transport::{
 
 use super::recent::remember_recent_case;
 use super::recovery::recover_interrupted_jobs;
+use super::transition::begin_active_case_transition;
 use crate::{events::event_bridge, state::AppState};
 
 fn init_case_db(state: &AppState) -> Result<(), CommandError> {
@@ -17,22 +19,6 @@ fn init_case_db(state: &AppState) -> Result<(), CommandError> {
     state
         .init_db_pragmas()
         .map_err(CommandError::from_service_error)
-}
-
-fn clear_previous_preview_runtime(state: &AppState) -> Result<(), CommandError> {
-    let previous_case_id = state
-        .active_case
-        .lock()
-        .map_err(|error| CommandError::from_lock_error("Case", error))?
-        .as_ref()
-        .map(|active| active.meta.id.0.clone());
-    if let Some(case_id) = previous_case_id {
-        state
-            .clear_preview_runtime_for_case(&case_id)
-            .map_err(CommandError::from_service_error)?;
-        app_services::file_service::clear_e01_reader_cache_for_case(&case_id);
-    }
-    Ok(())
 }
 
 pub(super) fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
@@ -47,115 +33,113 @@ pub(super) fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
 }
 
 #[tauri::command]
-pub fn create_case(
-    state: State<AppState>,
+pub async fn create_case(
+    state: State<'_, AppState>,
     app: AppHandle,
     request: CreateCaseRequest,
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    let _lifecycle = app_state.case_lifecycle.lock().await;
     let root = PathBuf::from(&request.case_root);
-    let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
-        .map_err(CommandError::from_typed_service_error)?;
+    let name = request.name;
+    let examiner = request.examiner;
+    let active = tauri::async_runtime::spawn_blocking(move || {
+        case_service::create_case(&root, &name, examiner.as_deref())
+            .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)??;
     let active_case_root = active.case_root.clone();
     let dto = meta_to_dto(&active.meta);
-    let setup_result = (|| {
-        clear_previous_preview_runtime(&state)?;
-        {
-            let mut guard = state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            *guard = Some(active);
+    let transition = match begin_active_case_transition(&app_state, active, Duration::from_secs(5))
+    {
+        Ok(transition) => transition,
+        Err(error) => {
+            rollback_created_case(active_case_root).await;
+            return Err(error);
         }
-        state
-            .reactivate_preview_case(&dto.id)
-            .map_err(CommandError::from_service_error)?;
-        init_case_db(&state)?;
-        remember_recent_case(&active_case_root, &dto)
-    })();
-    if let Err(error) = setup_result {
-        match state.active_case.lock() {
-            Ok(mut guard) => *guard = None,
-            Err(lock_error) => {
-                tracing::error!("Failed to clear active case during rollback: {lock_error}");
-            }
-        }
-        let _ = state.clear_db_state();
-        let _ = state.clear_preview_runtime_for_case(&dto.id);
-        app_services::file_service::clear_e01_reader_cache();
-        if let Err(cleanup_error) = case_service::delete_case(&active_case_root) {
-            tracing::error!(
-                "Failed to roll back case creation at {}: {}",
-                active_case_root.display(),
-                cleanup_error
-            );
-        }
+    };
+    if let Err(error) = initialize_and_remember(&app_state, &active_case_root, &dto) {
+        transition.rollback(&app_state, Duration::from_secs(5));
+        rollback_created_case(active_case_root).await;
         return Err(error);
     }
+    transition.commit(&app_state);
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
 
 #[tauri::command]
-pub fn open_case(
-    state: State<AppState>,
+pub async fn open_case(
+    state: State<'_, AppState>,
     app: AppHandle,
     request: OpenCaseRequest,
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    let _lifecycle = app_state.case_lifecycle.lock().await;
     let root = PathBuf::from(&request.case_root);
-    let active = case_service::open_case(&root).map_err(CommandError::from_typed_service_error)?;
+    let open_root = root.clone();
+    let active = tauri::async_runtime::spawn_blocking(move || {
+        case_service::open_case(&open_root).map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)??;
     let dto = meta_to_dto(&active.meta);
-    clear_previous_preview_runtime(&state)?;
-    {
-        let mut guard = state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        *guard = Some(active);
+    let transition = begin_active_case_transition(&app_state, active, Duration::from_secs(5))?;
+    if let Err(error) = initialize_and_remember(&app_state, &root, &dto) {
+        transition.rollback(&app_state, Duration::from_secs(5));
+        return Err(error);
     }
-    state
-        .reactivate_preview_case(&dto.id)
-        .map_err(CommandError::from_service_error)?;
-    init_case_db(&state)?;
-    recover_interrupted_jobs(&state);
-    remember_recent_case(&root, &dto)?;
+    transition.commit(&app_state);
+    recover_interrupted_jobs(&app_state);
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
 
 #[tauri::command]
-pub fn create_analysis_demo_case(
-    state: State<AppState>,
+pub async fn create_analysis_demo_case(
+    state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<CaseSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let _lifecycle = app_state.case_lifecycle.lock().await;
     let case_root = std::env::temp_dir().join("Meow_Detective-analysis-demo");
-    if case_root.exists() {
-        std::fs::remove_dir_all(&case_root).map_err(|e| {
-            CommandError::internal(format!("Failed to reset analysis demo case: {e}"))
+    let create_root = case_root.clone();
+    let active = tauri::async_runtime::spawn_blocking(move || {
+        if create_root.exists() {
+            std::fs::remove_dir_all(&create_root).map_err(|error| {
+                CommandError::internal(format!("Failed to reset analysis demo case: {error}"))
+            })?;
+        }
+        std::fs::create_dir_all(&create_root).map_err(|error| {
+            CommandError::internal(format!("Failed to create analysis demo root: {error}"))
         })?;
-    }
-    std::fs::create_dir_all(&case_root)
-        .map_err(|e| CommandError::internal(format!("Failed to create analysis demo root: {e}")))?;
-
-    let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
-        .map_err(CommandError::from_typed_service_error)?;
-    app_services::analysis_service::seed_analysis_demo_data(&active)
-        .map_err(CommandError::from_typed_service_error)?;
+        let active = case_service::create_case(&create_root, "Analysis Demo", Some("Codex Demo"))
+            .map_err(CommandError::from_typed_service_error)?;
+        app_services::analysis_service::seed_analysis_demo_data(&active)
+            .map_err(CommandError::from_typed_service_error)?;
+        Ok::<_, CommandError>(active)
+    })
+    .await
+    .map_err(CommandError::from_join_error)??;
+    let active_case_root = active.case_root.clone();
     let dto = meta_to_dto(&active.meta);
-    clear_previous_preview_runtime(&state)?;
+    let transition = match begin_active_case_transition(&app_state, active, Duration::from_secs(5))
     {
-        let mut guard = state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        *guard = Some(active);
+        Ok(transition) => transition,
+        Err(error) => {
+            rollback_created_case(active_case_root).await;
+            return Err(error);
+        }
+    };
+    if let Err(error) = initialize_and_remember(&app_state, &active_case_root, &dto) {
+        transition.rollback(&app_state, Duration::from_secs(5));
+        rollback_created_case(active_case_root).await;
+        return Err(error);
     }
-    state
-        .reactivate_preview_case(&dto.id)
-        .map_err(CommandError::from_service_error)?;
-    init_case_db(&state)?;
-    remember_recent_case(&case_root.join("Analysis Demo"), &dto)?;
+    transition.commit(&app_state);
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
@@ -169,5 +153,34 @@ pub fn get_current_case(state: State<AppState>) -> Result<Option<CaseSummaryDto>
     match guard.as_ref() {
         Some(active) => Ok(Some(meta_to_dto(&active.meta))),
         None => Ok(None),
+    }
+}
+
+fn initialize_and_remember(
+    state: &AppState,
+    case_root: &std::path::Path,
+    dto: &CaseSummaryDto,
+) -> Result<(), CommandError> {
+    init_case_db(state)?;
+    remember_recent_case(case_root, dto)
+}
+
+async fn rollback_created_case(case_root: PathBuf) {
+    let cleanup_root = case_root.clone();
+    let cleanup =
+        tauri::async_runtime::spawn_blocking(move || case_service::delete_case(&cleanup_root))
+            .await;
+    match cleanup {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::error!(
+            case_root = %case_root.display(),
+            %error,
+            "Failed to roll back case creation"
+        ),
+        Err(error) => tracing::error!(
+            case_root = %case_root.display(),
+            %error,
+            "Case creation rollback worker failed"
+        ),
     }
 }

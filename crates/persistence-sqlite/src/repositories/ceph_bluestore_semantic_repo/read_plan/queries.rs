@@ -1,12 +1,11 @@
-use rusqlite::{params, types::Type, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::connection::{DbError, DbResult};
+use crate::connection::DbResult;
 
 use super::super::{
     mapping::{map_blob, map_logical_extent, map_object, map_onode_shard, map_physical_extent},
-    query::parse_checksum_value,
-    CephBluestoreBlobRecord, CephBluestoreChecksumChunkRecord, CephBluestoreLogicalExtentRecord,
-    CephBluestoreObjectRecord, CephBluestoreOnodeShardRecord, CephBluestorePhysicalExtentRecord,
+    CephBluestoreBlobRecord, CephBluestoreLogicalExtentRecord, CephBluestoreObjectRecord,
+    CephBluestoreOnodeShardRecord, CephBluestorePhysicalExtentRecord,
     CephBluestoreSharedBlobRecord, CephBluestoreSharedBlobRefRecord,
 };
 use super::OBJECT_COLUMNS;
@@ -21,31 +20,11 @@ pub(super) fn find_object(
          FROM ceph_bluestore_objects
          WHERE inventory_id = ?1 AND object_identity_sha256 = ?2"
     );
-    conn.query_row(
-        &sql,
-        params![inventory_id, object_identity_sha256],
-        map_object,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-pub(super) fn find_object_ordinal(
-    conn: &Connection,
-    inventory_id: &str,
-    object_identity_sha256: &str,
-) -> DbResult<u32> {
-    let count = conn.query_row(
-        "SELECT COUNT(*)
-         FROM ceph_bluestore_objects
-         WHERE inventory_id = ?1 AND object_identity_sha256 < ?2",
-        params![inventory_id, object_identity_sha256],
-        |row| row.get::<_, i64>(0),
-    )?;
-    let count = u64::try_from(count)
-        .map_err(|_| DbError::System("BlueStore object ordinal is negative".to_string()))?;
-    u32::try_from(count)
-        .map_err(|_| DbError::System("BlueStore object ordinal exceeds u32".to_string()))
+    let mut statement = conn.prepare_cached(&sql)?;
+    statement
+        .query_row(params![inventory_id, object_identity_sha256], map_object)
+        .optional()
+        .map_err(Into::into)
 }
 
 pub(super) fn find_onode_shards(
@@ -53,7 +32,7 @@ pub(super) fn find_onode_shards(
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestoreOnodeShardRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, object_identity_sha256, shard_ordinal, shard_offset,
                 descriptor_bytes, payload_version, declared_extent_count,
                 payload_encoded_length, decode_status, deferred_reason,
@@ -74,7 +53,7 @@ pub(super) fn find_blobs(
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestoreBlobRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, object_identity_sha256, blob_ordinal, blob_kind,
                 blob_id_hex, shared_blob_id_hex, logical_length, on_disk_length,
                 compressed_length, flags_raw, flag_legacy_mutable, flag_compressed,
@@ -98,7 +77,7 @@ pub(super) fn find_logical_extents(
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestoreLogicalExtentRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, object_identity_sha256, extent_ordinal,
                 logical_offset, length, blob_ordinal, blob_offset, shard_ordinal,
                 defines_blob, flags_raw, flag_contiguous, flag_zero_blob_offset,
@@ -119,7 +98,7 @@ pub(super) fn find_physical_extents(
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestorePhysicalExtentRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, object_identity_sha256, blob_ordinal, extent_ordinal,
                 blob_offset, device_id, physical_offset_hex, length
          FROM ceph_bluestore_physical_extents
@@ -133,44 +112,12 @@ pub(super) fn find_physical_extents(
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
-pub(super) fn find_checksum_chunks(
-    conn: &Connection,
-    inventory_id: &str,
-    object_identity_sha256: &str,
-    object_ordinal: u32,
-) -> DbResult<Vec<CephBluestoreChecksumChunkRecord>> {
-    let mut statement = conn.prepare(
-        "SELECT object_identity_sha256, blob_ordinal,
-                checksum_ordinal, chunk_offset, chunk_length, checksum_value_hex
-         FROM ceph_bluestore_checksum_chunks
-         WHERE inventory_id = ?1 AND object_identity_sha256 = ?2
-         ORDER BY blob_ordinal, checksum_ordinal",
-    )?;
-    let rows = statement.query_map(params![inventory_id, object_identity_sha256], |row| {
-        if row.get_ref(0)?.as_str()? != object_identity_sha256 {
-            return Err(invalid_checksum_binding());
-        }
-        let (checksum_value, checksum_value_bytes) =
-            parse_checksum_value(row.get_ref(5)?.as_str()?)?;
-        Ok(CephBluestoreChecksumChunkRecord {
-            object_ordinal,
-            blob_ordinal: row.get(1)?,
-            checksum_ordinal: row.get(2)?,
-            chunk_offset: row.get(3)?,
-            chunk_length: row.get(4)?,
-            checksum_value,
-            checksum_value_bytes,
-        })
-    })?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-}
-
 pub(super) fn find_shared_blobs(
     conn: &Connection,
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestoreSharedBlobRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, shared_blob_id_hex, denc_version, decode_status,
                 deferred_reason, ref_extent_count, total_ref_bytes, total_refs
          FROM ceph_bluestore_shared_blobs
@@ -204,7 +151,7 @@ pub(super) fn find_shared_blob_refs(
     inventory_id: &str,
     object_identity_sha256: &str,
 ) -> DbResult<Vec<CephBluestoreSharedBlobRefRecord>> {
-    let mut statement = conn.prepare(
+    let mut statement = conn.prepare_cached(
         "SELECT inventory_id, shared_blob_id_hex, ref_ordinal, ref_offset_hex,
                 length, refs
          FROM ceph_bluestore_shared_blob_refs
@@ -229,15 +176,4 @@ pub(super) fn find_shared_blob_refs(
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-}
-
-fn invalid_checksum_binding() -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(
-        0,
-        Type::Text,
-        Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "BlueStore checksum row crosses object identity binding",
-        )),
-    )
 }

@@ -70,8 +70,10 @@ fn registry_fixture_expected_regression() {
         let candidate = EvidenceCandidate {
             file_id: FileEntryId(entry.file.clone()),
             data_source_id: "fixture-ds".to_string(),
+            partition_index: None,
             path: entry.file.clone(),
             size: bytes.len() as u64,
+            content_identity: format!("test:{}", entry.file),
             evidence_kind: "registry_hive".to_string(),
             parser: "registry.lookup".to_string(),
             category: "Registry".to_string(),

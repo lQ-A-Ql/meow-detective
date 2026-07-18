@@ -1,6 +1,9 @@
 //! Partition candidate discovery for E01 and RAW image previews.
 
-use crate::file_service::FileServiceError;
+use crate::file_service::{
+    viewer::{PreviewDescriptor, PreviewPartitionCandidate},
+    FileServiceError,
+};
 use domain::FileEntry;
 use evidence_core::RawImageReader;
 use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
@@ -60,7 +63,7 @@ pub(crate) fn e01_partition_candidates(
         }));
     }
 
-    Ok(candidates)
+    require_unambiguous_candidates(candidates, expected_partition_index, "E01")
 }
 
 pub(crate) fn is_previewable_partition_status(status: &str) -> bool {
@@ -163,7 +166,70 @@ pub(crate) fn raw_partition_candidates(
         }));
     }
 
-    Ok(candidates)
+    require_unambiguous_candidates(candidates, expected_partition_index, "RAW")
+}
+
+fn require_unambiguous_candidates(
+    candidates: Vec<PreviewPartitionCandidate>,
+    expected_partition_index: Option<usize>,
+    source_kind: &str,
+) -> Result<Vec<PreviewPartitionCandidate>, FileServiceError> {
+    if candidates.len() == 1 {
+        return Ok(candidates);
+    }
+
+    let indexes = candidates
+        .iter()
+        .map(|candidate| candidate.partition_index.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(FileServiceError::other(match expected_partition_index {
+        Some(expected) => format!(
+            "{source_kind} preview routing is ambiguous: partition index {expected} matched {} candidates ({indexes})",
+            candidates.len()
+        ),
+        None => format!(
+            "{source_kind} preview routing requires an exact partition index; {} candidates are available ({indexes})",
+            candidates.len()
+        ),
+    }))
+}
+
+pub(crate) fn exact_partition_candidate(
+    descriptor: &PreviewDescriptor,
+) -> Result<&PreviewPartitionCandidate, FileServiceError> {
+    let expected = descriptor.partition_index.ok_or_else(|| {
+        FileServiceError::other(format!(
+            "Image preview '{}' has no exact partition index",
+            descriptor.path
+        ))
+    })?;
+    let [candidate] = descriptor.partition_candidates.as_slice() else {
+        return Err(FileServiceError::other(format!(
+            "Image preview '{}' requires exactly one partition candidate, found {}",
+            descriptor.path,
+            descriptor.partition_candidates.len()
+        )));
+    };
+    if candidate.partition_index != expected {
+        return Err(FileServiceError::other(format!(
+            "Image preview '{}' partition candidate {} does not match exact partition index {}",
+            descriptor.path, candidate.partition_index, expected
+        )));
+    }
+    if descriptor
+        .filesystem_kind
+        .as_deref()
+        .is_some_and(|kind| !kind.eq_ignore_ascii_case(&candidate.filesystem_kind))
+    {
+        return Err(FileServiceError::other(format!(
+            "Image preview '{}' filesystem candidate '{}' does not match descriptor '{}'",
+            descriptor.path,
+            candidate.filesystem_kind,
+            descriptor.filesystem_kind.as_deref().unwrap_or_default()
+        )));
+    }
+    Ok(candidate)
 }
 
 pub(crate) fn direct_exfat_raw_partition_candidate(

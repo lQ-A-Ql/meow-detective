@@ -138,6 +138,9 @@ impl XfsReader {
         let mut reader = self.reader.borrow_mut();
         reader.seek(SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf)?;
+        let mut metrics = self.read_metrics.borrow_mut();
+        metrics.evidence_read_operations = metrics.evidence_read_operations.saturating_add(1);
+        metrics.evidence_bytes_read = metrics.evidence_bytes_read.saturating_add(length as u64);
         Ok(buf)
     }
 }

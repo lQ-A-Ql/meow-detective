@@ -6,6 +6,8 @@ param(
     [string]$ExistingRbdCaseRoot = $env:FORENSICS_PVE_RBD_CASE_ROOT,
     [switch]$RequireFixture,
     [switch]$DeepParentHash,
+    [switch]$ColdArtifactReplay,
+    [switch]$CatalogRebuild,
     [ValidateRange(1, 86400)]
     [int]$TimeoutSeconds = 1200
 )
@@ -61,12 +63,28 @@ if ($useRetainedCase) {
         throw "FORENSICS_PVE_RBD_CASE_ROOT must contain an existing app.db: $resolvedRbdCaseRoot"
     }
     $env:FORENSICS_PVE_RBD_CASE_ROOT = $resolvedRbdCaseRoot
-    $env:FORENSICS_PVE_RBD_REQUIRE_READY = "1"
+    if ($CatalogRebuild -and $ColdArtifactReplay) {
+        throw "-CatalogRebuild and -ColdArtifactReplay are mutually exclusive."
+    }
+    if ($CatalogRebuild) {
+        $env:FORENSICS_PVE_RBD_CATALOG_REBUILD = "1"
+        Write-Host "Catalog rebuild mode is enabled; the retained case must not contain a derived RBD source."
+    } else {
+        $env:FORENSICS_PVE_RBD_REQUIRE_READY = "1"
+    }
     if ($DeepParentHash) {
         $env:FORENSICS_PVE_RBD_DEEP_PARENT_HASH = "1"
     }
+    if ($ColdArtifactReplay) {
+        $env:FORENSICS_PVE_RBD_COLD_ARTIFACT_REPLAY = "1"
+        Write-Host "Cold artifact replay is enabled; the disposable retained derived source will be mutated."
+    }
     $testName = $retainedRbdTestName
-    $timeoutContext = "retained PVE RBD tree and preview regression"
+    $timeoutContext = if ($CatalogRebuild) {
+        "retained PVE RBD Catalog rebuild regression"
+    } else {
+        "retained PVE RBD tree and preview regression"
+    }
     Write-Host "Using retained PVE RBD case: $resolvedRbdCaseRoot"
 } else {
     if ([string]::IsNullOrWhiteSpace($FixtureRoot) -or

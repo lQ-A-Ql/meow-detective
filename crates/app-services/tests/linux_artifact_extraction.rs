@@ -11,8 +11,10 @@ fn candidate(path: &str) -> EvidenceCandidate {
     EvidenceCandidate {
         file_id: FileEntryId(format!("file-{}", path.replace(['/', '\\', '.'], "-"))),
         data_source_id: "ds-linux-test".to_string(),
+        partition_index: None,
         path: path.to_string(),
         size: 1024,
+        content_identity: format!("test:{path}"),
         evidence_kind: "test".to_string(),
         parser: "test".to_string(),
         category: "LinuxArtifacts".to_string(),
@@ -116,6 +118,7 @@ fn candidate_discovery_recognizes_linux_paths() {
             data_source_id TEXT NOT NULL,
             path TEXT NOT NULL,
             size INTEGER,
+            partition_index INTEGER,
             entry_type TEXT NOT NULL
         )",
         [],

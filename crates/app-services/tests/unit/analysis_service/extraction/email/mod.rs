@@ -354,8 +354,10 @@ fn assert_mbox_fixture(bytes: &[u8], exp: &serde_json::Value, file_name: &str) {
     let candidate = EvidenceCandidate {
         file_id: domain::FileEntryId("file-mbox".to_string()),
         data_source_id: "ds-1".to_string(),
+        partition_index: None,
         path: format!("/fixtures/{file_name}"),
         size: bytes.len() as u64,
+        content_identity: format!("test:{file_name}"),
         evidence_kind: "email_mbox".to_string(),
         parser: "email.mbox".to_string(),
         category: "Email".to_string(),
@@ -627,8 +629,10 @@ fn assert_pst_fixture(bytes: &[u8], exp: &serde_json::Value, file_name: &str, sa
     let candidate = EvidenceCandidate {
         file_id: domain::FileEntryId(format!("file-{sample_type}")),
         data_source_id: "ds-1".to_string(),
+        partition_index: None,
         path: format!("/fixtures/{file_name}"),
         size: bytes.len() as u64,
+        content_identity: format!("test:{file_name}"),
         evidence_kind: format!("email_{sample_type}"),
         parser: format!("email.{sample_type}"),
         category: "Email".to_string(),

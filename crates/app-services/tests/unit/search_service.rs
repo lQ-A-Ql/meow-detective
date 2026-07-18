@@ -155,8 +155,15 @@ fn search_query_instrumentation_reports_query_metrics() {
 fn search_files_for_case_reads_source_indexes_and_wraps_file_ids() {
     let tmp = TempDir::new().unwrap();
     let case_conn = setup_case_db_with_source(&tmp);
-    let index_dir =
-        crate::source_db::source_index_dir(tmp.path(), &DataSourceId("ds-1".to_string()));
+    case_conn
+        .execute(
+            "UPDATE data_sources
+             SET index_rel_path = 'registered-indexes/ds-1'
+             WHERE id = 'ds-1'",
+            [],
+        )
+        .unwrap();
+    let index_dir = tmp.path().join("registered-indexes/ds-1");
     let index = SearchIndex::create(&index_dir).unwrap();
     index
         .index_documents(

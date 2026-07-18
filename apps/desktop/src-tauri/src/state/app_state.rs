@@ -22,6 +22,8 @@ pub type SharedMcpClient = Arc<AsyncMutex<McpClient>>;
 pub struct AppState {
     /// Currently active case (if any).
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
+    /// Serializes create/open/close/delete transitions across the active case.
+    pub case_lifecycle: Arc<AsyncMutex<()>>,
     /// Manager for background tasks.
     pub task_manager: Arc<TaskManager>,
     /// MCP clients (server_id -> client)
@@ -49,6 +51,7 @@ impl Default for AppState {
 
         Self {
             active_case: Arc::new(Mutex::new(None)),
+            case_lifecycle: Arc::new(AsyncMutex::new(())),
             task_manager: Arc::new(TaskManager::new()),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),

@@ -187,6 +187,14 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_015_ceph_bluestore_rbd_header_context",
         include_str!("scripts/source_015_ceph_bluestore_rbd_header_context.sql"),
     ),
+    (
+        "source_016_file_partition_index",
+        include_str!("scripts/source_016_file_partition_index.sql"),
+    ),
+    (
+        "source_017_timeline_projection_identity",
+        include_str!("scripts/source_017_timeline_projection_identity.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -201,6 +209,19 @@ pub fn latest_source_version() -> &'static str {
         .last()
         .map(|(name, _)| *name)
         .expect("source migration registry must not be empty")
+}
+
+pub fn source_version_is_at_least(actual: &str, minimum: &str) -> bool {
+    let actual_index = SOURCE_MIGRATIONS
+        .iter()
+        .position(|(name, _)| *name == actual);
+    let minimum_index = SOURCE_MIGRATIONS
+        .iter()
+        .position(|(name, _)| *name == minimum);
+    matches!(
+        (actual_index, minimum_index),
+        (Some(actual_index), Some(minimum_index)) if actual_index >= minimum_index
+    )
 }
 
 pub fn migration_count() -> usize {
@@ -246,6 +267,10 @@ fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u3
                 add_missing_lvm_partition_identity_columns(conn)
             } else if *name == "source_015_ceph_bluestore_rbd_header_context" {
                 add_ceph_bluestore_rbd_header_context(conn)
+            } else if *name == "source_016_file_partition_index" {
+                add_file_partition_index_and_backfill(conn, sql)
+            } else if *name == "source_017_timeline_projection_identity" {
+                add_timeline_projection_identity(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -341,6 +366,49 @@ fn add_ceph_bluestore_rbd_header_context(conn: &Connection) -> DbResult<()> {
              object_identity_sha256
          )",
     )?;
+    Ok(())
+}
+
+fn add_file_partition_index_and_backfill(conn: &Connection, sql: &str) -> DbResult<()> {
+    let table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0
+         FROM sqlite_master
+         WHERE type = 'table' AND name = 'file_entries'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !table_exists {
+        return Ok(());
+    }
+    let column_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0
+         FROM pragma_table_info('file_entries')
+         WHERE name = 'partition_index'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !column_exists {
+        conn.execute_batch("ALTER TABLE file_entries ADD COLUMN partition_index INTEGER")?;
+    }
+    conn.execute_batch(sql)?;
+    Ok(())
+}
+
+fn add_timeline_projection_identity(conn: &Connection, sql: &str) -> DbResult<()> {
+    conn.execute_batch(sql)?;
+    let column_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0
+         FROM pragma_table_info('timeline_projection_meta')
+         WHERE name = 'input_identity'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !column_exists {
+        conn.execute_batch(
+            "ALTER TABLE timeline_projection_meta
+             ADD COLUMN input_identity TEXT NOT NULL DEFAULT ''",
+        )?;
+    }
     Ok(())
 }
 

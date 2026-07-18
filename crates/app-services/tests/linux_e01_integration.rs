@@ -15,7 +15,8 @@
 
 use app_services::{
     analysis_service::{
-        evidence_candidates_for_categories, get_linux_artifact_summary, run_analysis_extraction,
+        evidence_candidates_for_categories, get_linux_artifact_summary,
+        run_analysis_extraction_with_reader_limits,
     },
     cluster_service::plan_linux_cluster_import,
     datasource_service::{
@@ -1849,19 +1850,15 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
         pre_summary.warnings
     );
 
-    let run = run_analysis_extraction(
+    let run = run_analysis_extraction_with_reader_limits(
         &conn,
         case_id,
         domain::DataSourcePlatform::Linux,
         &["LinuxArtifacts"],
-        |file_id| {
-            file_service::read_file_header_by_id(
-                &conn,
-                file_id,
-                app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
-            )
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .map_err(|error| error.to_string())
+        |file_id, read_limit| {
+            file_service::read_file_header_by_id(&conn, file_id, read_limit)
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .map_err(|error| error.to_string())
         },
     )
     .expect("LinuxArtifacts extraction should run against real root LV candidates");
@@ -2512,19 +2509,15 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
     );
     assert_linux_artifact_candidates_cover_critical_paths(&candidates);
 
-    let run = run_analysis_extraction(
+    let run = run_analysis_extraction_with_reader_limits(
         &conn,
         "linux-e01-analysis",
         domain::DataSourcePlatform::Linux,
         &["LinuxArtifacts"],
-        |file_id| {
-            file_service::read_file_header_by_id(
-                &conn,
-                file_id,
-                app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
-            )
-            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-            .map_err(|error| error.to_string())
+        |file_id, read_limit| {
+            file_service::read_file_header_by_id(&conn, file_id, read_limit)
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .map_err(|error| error.to_string())
         },
     )
     .expect("analysis extraction should succeed");

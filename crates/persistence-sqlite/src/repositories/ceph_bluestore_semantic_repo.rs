@@ -10,7 +10,9 @@ use rusqlite::Connection;
 
 use crate::connection::DbResult;
 
-pub use read_plan::{CephBluestoreObjectCandidate, CephBluestoreObjectReadPlan};
+pub use read_plan::{
+    CephBluestoreObjectCandidate, CephBluestoreObjectReadPlan, CephBluestoreReadPlanSession,
+};
 pub use rows::{
     CephBluestoreBlobRecord, CephBluestoreChecksumChunkRecord, CephBluestoreCollectionRecord,
     CephBluestoreLogicalExtentRecord, CephBluestoreObjectRecord, CephBluestoreOnodeShardRecord,

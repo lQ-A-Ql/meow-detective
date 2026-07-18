@@ -175,8 +175,10 @@ fn canonical_registry_extraction_sets_source_object_id() {
     let system_candidate = EvidenceCandidate {
         file_id: fid("hive-system-001"),
         data_source_id: "ds-1".to_string(),
+        partition_index: None,
         path: "C:/Windows/System32/config/SYSTEM".to_string(),
         size: system_bytes.len() as u64,
+        content_identity: "test:system".to_string(),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.system_info".to_string(),
         category: "SystemInformation".to_string(),
@@ -185,8 +187,10 @@ fn canonical_registry_extraction_sets_source_object_id() {
     let software_candidate = EvidenceCandidate {
         file_id: fid("hive-software-001"),
         data_source_id: "ds-1".to_string(),
+        partition_index: None,
         path: "C:/Windows/System32/config/SOFTWARE".to_string(),
         size: software_bytes.len() as u64,
+        content_identity: "test:software".to_string(),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.system_info".to_string(),
         category: "SystemInformation".to_string(),

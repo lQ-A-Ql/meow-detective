@@ -9,7 +9,7 @@ use crate::file_service;
 
 pub(super) enum AnalysisSourceReader {
     Host(file_service::FileHeaderReadCache),
-    Derived(file_service::PreparedSourceReadState),
+    Derived(Box<file_service::PreparedSourceReadState>),
 }
 
 impl AnalysisSourceReader {
@@ -30,11 +30,11 @@ impl AnalysisSourceReader {
         derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Self {
         match derived_runtime {
-            Some(runtime) => Self::Derived(file_service::PreparedSourceReadState::new(
+            Some(runtime) => Self::Derived(Box::new(file_service::PreparedSourceReadState::new(
                 case_id,
                 data_source_id,
                 runtime,
-            )),
+            ))),
             None => Self::Host(file_service::FileHeaderReadCache::new(case_id)),
         }
     }

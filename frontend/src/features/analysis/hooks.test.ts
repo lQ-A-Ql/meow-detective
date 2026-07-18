@@ -108,6 +108,7 @@ describe('analysis hooks', () => {
     mocks.runAnalysisExtraction.mockResolvedValue({
       status: 'parsed',
       scannedCount: 3,
+      checkpointHitCount: 0,
       artifactCount: 2,
       timelineEventCount: 1,
       generatedAt: '2026-06-01T10:15:00Z',

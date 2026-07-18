@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::{
@@ -13,12 +16,15 @@ use crate::source_db;
 
 use super::{discover_rbd_images_from_source_dbs, RadosReplicaSource};
 
+mod catalog_build;
 mod catalog_manifest;
 mod filesystem;
 mod materialization;
-use materialization::{finalize_ready_source, materialize_one_rbd_source};
+use materialization::{
+    finalize_ready_source, materialize_one_rbd_source, RbdMaterializationContext,
+};
 
-pub(super) const CATALOG_MATERIALIZER_VERSION: u32 = 2;
+pub(crate) const CATALOG_MATERIALIZER_VERSION: u32 = 3;
 
 #[derive(Debug, Error)]
 pub enum DerivedSourceError {
@@ -42,6 +48,16 @@ pub enum DerivedSourceError {
     InvalidIdentity { field: &'static str },
     #[error("RBD derived source processing phase '{phase}' is already running")]
     ProcessingBusy { phase: &'static str },
+    #[error("RBD derived source processing was cancelled")]
+    ProcessingCancelled,
+    #[error(
+        "RBD derived source post-Catalog processing is incomplete: {failed_count} failed, {deferred_count} deferred, {unfinished_count} unfinished"
+    )]
+    IncompleteProcessing {
+        failed_count: usize,
+        deferred_count: usize,
+        unfinished_count: usize,
+    },
     #[error("RBD derived source state is inconsistent: {0}")]
     InconsistentState(String),
     #[error(
@@ -60,6 +76,16 @@ pub enum DerivedSourceError {
 }
 
 pub type DerivedSourceResult<T> = Result<T, DerivedSourceError>;
+
+pub(crate) fn derived_catalog_fingerprint(lineage_fingerprint: &str) -> String {
+    catalog_manifest::catalog_fingerprint_for_source(lineage_fingerprint)
+}
+
+pub(crate) fn load_derived_catalog_fingerprint(
+    connection: &rusqlite::Connection,
+) -> DerivedSourceResult<Option<String>> {
+    catalog_manifest::load_catalog_fingerprint(connection)
+}
 
 #[derive(Debug, Clone)]
 pub struct MaterializedRbdSource {
@@ -80,6 +106,23 @@ pub fn materialize_rbd_sources_for_cluster(
     case_id: &CaseId,
     cluster_id: &str,
 ) -> DerivedSourceResult<Vec<MaterializedRbdSource>> {
+    materialize_rbd_sources_for_cluster_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        cluster_id,
+        Arc::new(AtomicBool::new(false)),
+    )
+}
+
+pub fn materialize_rbd_sources_for_cluster_with_cancel(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    cluster_id: &str,
+    cancel_token: Arc<AtomicBool>,
+) -> DerivedSourceResult<Vec<MaterializedRbdSource>> {
+    ensure_not_cancelled(&cancel_token)?;
     let cluster = DataSourceClusterRepo::new(case_conn)
         .find_by_id(cluster_id)?
         .ok_or_else(|| DerivedSourceError::ClusterNotFound(cluster_id.to_string()))?;
@@ -90,32 +133,53 @@ pub fn materialize_rbd_sources_for_cluster(
         });
     }
     if let Some(materialized) = load_ready_rbd_sources(case_conn, case_root, case_id, cluster_id)? {
+        ensure_not_cancelled(&cancel_token)?;
         return Ok(materialized);
     }
 
+    ensure_not_cancelled(&cancel_token)?;
     let parent_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
     if parent_ids.len() != cluster.member_count as usize
         || parent_ids.len() != cluster.ready_count as usize
     {
         return Err(DerivedSourceError::IncompleteCluster);
     }
-    if !cluster_has_osd_inventory(case_conn, case_root, case_id, &parent_ids)? {
+    let reconstruction_parent_ids =
+        reconstruction_parent_ids(case_conn, &parent_ids, &cancel_token)?;
+    if !cluster_has_osd_inventory(
+        case_conn,
+        case_root,
+        case_id,
+        &reconstruction_parent_ids,
+        &cancel_token,
+    )? {
         return Ok(Vec::new());
     }
-    let (replicas, replica_records) =
-        load_cluster_replicas(case_conn, case_root, case_id, &parent_ids)?;
+    let (replicas, replica_records) = load_cluster_replicas(
+        case_conn,
+        case_root,
+        case_id,
+        &reconstruction_parent_ids,
+        &cancel_token,
+    )?;
+    ensure_not_cancelled(&cancel_token)?;
     let descriptors = discover_rbd_images_from_source_dbs(&replicas)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    ensure_not_cancelled(&cancel_token)?;
 
     let mut materialized = Vec::new();
     for descriptor in descriptors {
+        ensure_not_cancelled(&cancel_token)?;
         materialized.push(materialize_one_rbd_source(
-            case_conn,
-            case_root,
-            case_id,
-            cluster_id,
-            &replicas,
-            &replica_records,
+            RbdMaterializationContext {
+                case_conn,
+                case_root,
+                case_id,
+                cluster_id,
+                replicas: &replicas,
+                replica_records: &replica_records,
+                cancel_token: &cancel_token,
+            },
             descriptor,
         )?);
     }
@@ -125,6 +189,41 @@ pub fn materialize_rbd_sources_for_cluster(
         ));
     }
     Ok(materialized)
+}
+
+pub fn finalize_rbd_source_processing(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> DerivedSourceResult<()> {
+    finalize_rbd_source_processing_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        Arc::new(AtomicBool::new(false)),
+    )
+}
+
+pub fn finalize_rbd_source_processing_with_cancel(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    cancel_token: Arc<AtomicBool>,
+) -> DerivedSourceResult<()> {
+    let belongs_to_case = DataSourceRepo::new(case_conn)
+        .find_by_case(case_id)?
+        .into_iter()
+        .any(|source| source.id == *data_source_id && source.kind == DataSourceKind::CephRbd);
+    if !belongs_to_case {
+        return Err(DerivedSourceError::InconsistentState(format!(
+            "derived source {} does not belong to case {}",
+            data_source_id.0, case_id.0
+        )));
+    }
+    finalize_ready_source(case_conn, case_root, case_id, data_source_id, cancel_token)
 }
 
 fn load_ready_rbd_sources(
@@ -157,13 +256,11 @@ fn load_ready_rbd_sources(
         if storage.import_state != "ready" {
             return Ok(None);
         }
-        let source_id = source.id.clone();
         let Some(summary) =
             materialization::ready_source_summary_if_current(case_conn, case_root, source)?
         else {
             return Ok(None);
         };
-        finalize_ready_source(case_conn, case_root, case_id, &source_id)?;
         materialized.push(summary);
     }
     if materialized.is_empty() {
@@ -173,13 +270,37 @@ fn load_ready_rbd_sources(
     }
 }
 
+fn reconstruction_parent_ids(
+    case_conn: &rusqlite::Connection,
+    parent_ids: &[DataSourceId],
+    cancel_token: &AtomicBool,
+) -> DerivedSourceResult<Vec<DataSourceId>> {
+    let repo = DataSourceRepo::new(case_conn);
+    let mut reconstruction_sources = Vec::new();
+    for data_source_id in parent_ids {
+        ensure_not_cancelled(cancel_token)?;
+        let storage = repo.find_storage(data_source_id)?.ok_or_else(|| {
+            DerivedSourceError::InconsistentState(format!(
+                "cluster member {} is missing storage metadata",
+                data_source_id.0
+            ))
+        })?;
+        if storage.import_state == "ready_metadata" {
+            reconstruction_sources.push(data_source_id.clone());
+        }
+    }
+    Ok(reconstruction_sources)
+}
+
 fn cluster_has_osd_inventory(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
     parent_ids: &[DataSourceId],
+    cancel_token: &AtomicBool,
 ) -> DerivedSourceResult<bool> {
     for source_id in parent_ids {
+        ensure_not_cancelled(cancel_token)?;
         let source =
             source_db::open_reconstruction_source_by_id(case_conn, case_root, case_id, source_id)
                 .map_err(|error| {
@@ -201,10 +322,12 @@ fn load_cluster_replicas(
     case_root: &Path,
     case_id: &CaseId,
     parent_ids: &[DataSourceId],
+    cancel_token: &AtomicBool,
 ) -> DerivedSourceResult<(Vec<RadosReplicaSource>, Vec<CephRbdReplicaRecord>)> {
     let mut replicas = Vec::with_capacity(parent_ids.len());
     let mut records = Vec::with_capacity(parent_ids.len());
     for source_id in parent_ids {
+        ensure_not_cancelled(cancel_token)?;
         let source =
             source_db::open_reconstruction_source_by_id(case_conn, case_root, case_id, source_id)
                 .map_err(|error| {
@@ -286,6 +409,14 @@ fn validate_identity_component(field: &'static str, value: &str) -> DerivedSourc
         return Err(DerivedSourceError::InvalidIdentity { field });
     }
     Ok(())
+}
+
+fn ensure_not_cancelled(cancel_token: &AtomicBool) -> DerivedSourceResult<()> {
+    if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+        Err(DerivedSourceError::ProcessingCancelled)
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

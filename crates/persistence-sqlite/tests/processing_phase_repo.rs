@@ -299,6 +299,13 @@ fn recovery_marks_interrupted_phases_failed_and_retryable() {
         &input,
         OWNER_A,
     );
+    conn.execute(
+        "UPDATE data_source_processing_phases
+         SET lease_expires_at = datetime('now', '-1 second')
+         WHERE data_source_id = ?1 AND phase = 'search'",
+        [&source_id.0],
+    )
+    .expect("expire interrupted phase lease");
 
     let recovered = repo
         .recover_interrupted("Interrupted: application exited unexpectedly")
@@ -338,6 +345,34 @@ fn recovery_marks_interrupted_phases_failed_and_retryable() {
         OWNER_B,
     );
     assert_ne!(retry.attempt_id, running.attempt_id);
+}
+
+#[test]
+fn recovery_preserves_unexpired_running_phase() {
+    let conn = setup_case_db();
+    let repo = DataSourceProcessingPhaseRepo::new(&conn);
+    let source_id = DataSourceId(DERIVED_SOURCE_ID.to_string());
+    let input = fingerprint('7');
+    acquire(
+        &repo,
+        &source_id,
+        ProcessingPhase::Search,
+        1,
+        &input,
+        OWNER_A,
+    );
+
+    let recovered = repo
+        .recover_interrupted("Interrupted: application exited unexpectedly")
+        .expect("recover interrupted phase");
+
+    assert_eq!(recovered, 0);
+    let running = repo
+        .find(&source_id, ProcessingPhase::Search)
+        .expect("query running phase")
+        .expect("running phase exists");
+    assert_eq!(running.state, ProcessingPhaseState::Running);
+    assert!(running.lease_expires_at.is_some());
 }
 
 #[test]

@@ -33,8 +33,10 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
     app_services::analysis_service::EvidenceCandidate {
         file_id: domain::FileEntryId(file_id.to_string()),
         data_source_id: "jc2-ds".to_string(),
+        partition_index: None,
         path: path.to_string(),
         size: 0,
+        content_identity: format!("test:{file_id}"),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.hive".to_string(),
         category: "Registry".to_string(),

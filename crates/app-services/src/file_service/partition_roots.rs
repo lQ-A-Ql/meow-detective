@@ -8,6 +8,7 @@ use persistence_sqlite::{
     DbResult,
 };
 use rusqlite::Connection;
+use std::sync::atomic::AtomicBool;
 use uuid::Uuid;
 
 pub(crate) const PARTITION_PLACEHOLDER_PREFIX: &str = "__partition_placeholder__/";
@@ -19,7 +20,6 @@ pub fn insert_partition_placeholder_root(
     root_name: &str,
     status: &str,
 ) -> DbResult<FileEntryId> {
-    let repo = FileRepo::new(conn);
     let root_id = FileEntryId(Uuid::new_v4().to_string());
     let root_entry = FileEntry {
         id: root_id.clone(),
@@ -41,7 +41,13 @@ pub fn insert_partition_placeholder_root(
         hash_sha256: None,
     };
 
-    repo.insert_batch(&[root_entry])?;
+    let tx = conn.unchecked_transaction()?;
+    {
+        let repo = FileRepo::new(&tx);
+        repo.insert_batch_unchecked(&[root_entry])?;
+        repo.set_partition_index_by_id(&root_id, partition_index)?;
+    }
+    tx.commit()?;
     Ok(root_id)
 }
 
@@ -68,6 +74,24 @@ pub fn replace_placeholder_root_with_real(
     root_name_override: Option<&str>,
     progress_fn: Option<&dyn Fn(u32)>,
 ) -> DbResult<super::EnumerationStats> {
+    replace_placeholder_root_with_real_and_cancel(
+        conn,
+        placeholder_id,
+        fs,
+        root_name_override,
+        progress_fn,
+        None,
+    )
+}
+
+pub fn replace_placeholder_root_with_real_and_cancel(
+    conn: &Connection,
+    placeholder_id: &FileEntryId,
+    fs: &dyn evidence_core::FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+) -> DbResult<super::EnumerationStats> {
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
@@ -88,6 +112,14 @@ pub fn replace_placeholder_root_with_real(
         root_entry.accessed_at = root.accessed_at;
         root_entry.hidden = root.hidden;
         root_entry.system = root.system;
+        let partition_index = repo
+            .find_partition_index_by_id(placeholder_id)?
+            .ok_or_else(|| {
+                persistence_sqlite::DbError::System(format!(
+                    "Partition placeholder '{}' is missing partition_index",
+                    placeholder_id.0
+                ))
+            })?;
 
         tx.execute(
             "UPDATE file_entries
@@ -106,14 +138,16 @@ pub fn replace_placeholder_root_with_real(
             ],
         )?;
 
-        super::enumeration::walk_and_insert_children(
+        let stats = super::enumeration::walk_and_insert_children(
             &repo,
             fs,
             &root_entry.data_source_id,
             root_entry.id,
             progress_fn,
-            None,
-        )
+            cancel_token,
+        )?;
+        repo.assign_partition_index_to_subtree(placeholder_id, partition_index)?;
+        Ok(stats)
     };
 
     match result {

@@ -1,8 +1,11 @@
-use evidence_core::filesystem::{invalid_fs_data, FileSystemDiagnostic};
+use crate::directory::BoundedDirectoryEntryCache;
+use crate::inode_cache::BoundedInodeBlockCache;
+use evidence_core::filesystem::{invalid_fs_data, FileSystemDiagnostic, FileSystemReadMetrics};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
 pub(crate) const XFS_SUPER_MAGIC: u32 = 0x5846_5342;
 pub(crate) const XFS_INODE_MAGIC: u16 = 0x494E;
@@ -86,13 +89,19 @@ pub(crate) fn be_u64(buf: &[u8], off: usize) -> u64 {
 pub struct XfsReader {
     pub(crate) reader: RefCell<Box<dyn EvidenceReader>>,
     pub(crate) directory_path_cache: RefCell<HashMap<String, u64>>,
+    pub(crate) file_path_cache: RefCell<HashMap<String, u64>>,
+    pub(crate) unverified_file_path_cache: RefCell<HashSet<String>>,
     pub(crate) directory_inode_cache: RefCell<HashMap<u64, Vec<u8>>>,
+    pub(crate) directory_entry_cache: RefCell<BoundedDirectoryEntryCache>,
+    pub(crate) inode_block_cache: RefCell<BoundedInodeBlockCache>,
+    pub(crate) read_metrics: RefCell<FileSystemReadMetrics>,
     pub(crate) diagnostics: RefCell<Vec<FileSystemDiagnostic>>,
     pub(crate) block_size: u64,
     pub(crate) dblocks: u64,
     pub(crate) _ag_blocks: u64,
     pub(crate) _ag_count: u32,
     pub(crate) inode_size: u16,
+    pub(crate) inode_cache_page_size: u64,
     pub(crate) _inopblock: u16,
     pub(crate) root_ino: u64,
     pub(crate) volume_offset: u64,
@@ -144,19 +153,27 @@ impl XfsReader {
         let features_incompat = be_u32(&sb_buf, sb_off::FEATURES_INCOMPAT);
         let has_ftype = (features2 & XFS_SB_VERSION2_FTYPE) != 0
             || (features_incompat & XFS_SB_FEAT_INCOMPAT_FTYPE) != 0;
+        let inode_cache_page_size =
+            aligned_inode_cache_page_size(block_size, reader.preferred_read_granularity());
         let mut directory_path_cache = HashMap::new();
         directory_path_cache.insert(String::new(), root_ino);
 
         Ok(Self {
             reader: RefCell::new(reader),
             directory_path_cache: RefCell::new(directory_path_cache),
+            file_path_cache: RefCell::new(HashMap::new()),
+            unverified_file_path_cache: RefCell::new(HashSet::new()),
             directory_inode_cache: RefCell::new(HashMap::new()),
+            directory_entry_cache: RefCell::new(BoundedDirectoryEntryCache::default()),
+            inode_block_cache: RefCell::new(BoundedInodeBlockCache::default()),
+            read_metrics: RefCell::new(FileSystemReadMetrics::default()),
             diagnostics: RefCell::new(Vec::new()),
             block_size,
             dblocks,
             _ag_blocks: ag_blocks,
             _ag_count: ag_count,
             inode_size,
+            inode_cache_page_size,
             _inopblock: inopblock,
             root_ino,
             volume_offset: offset,
@@ -169,11 +186,46 @@ impl XfsReader {
     }
 
     fn read_inode_at_offset(&self, offset: u64) -> io::Result<Vec<u8>> {
-        let mut buf = vec![0u8; usize::from(self.inode_size)];
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(SeekFrom::Start(offset))?;
-        reader.read_exact(&mut buf)?;
-        Ok(buf)
+        let inode_size = usize::from(self.inode_size);
+        let Some((block_offset, inode_offset, page_length)) =
+            self.inode_cache_range(offset, inode_size)
+        else {
+            self.read_metrics.borrow_mut().metadata_cache_misses += 1;
+            return self.read_bytes_at(offset, inode_size);
+        };
+        if let Some(block) = self.inode_block_cache.borrow_mut().get(block_offset) {
+            self.read_metrics.borrow_mut().metadata_cache_hits += 1;
+            return Ok(block[inode_offset..inode_offset + inode_size].to_vec());
+        }
+
+        self.read_metrics.borrow_mut().metadata_cache_misses += 1;
+        let block: Arc<[u8]> = Arc::from(self.read_bytes_at(block_offset, page_length)?);
+        let inode = block[inode_offset..inode_offset + inode_size].to_vec();
+        self.inode_block_cache
+            .borrow_mut()
+            .insert(block_offset, block);
+        Ok(inode)
+    }
+
+    fn inode_cache_range(&self, offset: u64, inode_size: usize) -> Option<(u64, usize, usize)> {
+        let page_size = usize::try_from(self.inode_cache_page_size).ok()?;
+        if page_size == 0 || inode_size > page_size || offset < self.volume_offset {
+            return None;
+        }
+        let relative = offset.checked_sub(self.volume_offset)?;
+        let block_start = relative
+            .checked_div(self.inode_cache_page_size)?
+            .checked_mul(self.inode_cache_page_size)?;
+        let block_offset = self.volume_offset.checked_add(block_start)?;
+        let inode_offset = usize::try_from(offset.checked_sub(block_offset)?).ok()?;
+        let filesystem_length = self.dblocks.checked_mul(self.block_size)?;
+        let remaining = usize::try_from(filesystem_length.checked_sub(block_start)?).ok()?;
+        let page_length = page_size.min(remaining);
+        (inode_offset.checked_add(inode_size)? <= page_length).then_some((
+            block_offset,
+            inode_offset,
+            page_length,
+        ))
     }
 
     fn inode_offset(&self, ino: u64) -> io::Result<u64> {
@@ -308,5 +360,16 @@ impl XfsReader {
 
     pub(crate) fn inode_is_dir(inode: &[u8]) -> bool {
         (be_u16(inode, di_off::MODE) & S_IFDIR) != 0
+    }
+}
+
+fn aligned_inode_cache_page_size(block_size: u64, preferred: usize) -> u64 {
+    let Ok(preferred) = u64::try_from(preferred) else {
+        return block_size;
+    };
+    if preferred >= block_size && preferred % block_size == 0 {
+        preferred.min(1024 * 1024)
+    } else {
+        block_size
     }
 }

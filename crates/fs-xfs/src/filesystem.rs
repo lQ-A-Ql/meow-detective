@@ -33,8 +33,14 @@ impl FileSystemReader for XfsReader {
 
         let entries = self.read_directory_entries(ino)?;
         for entry in &entries {
-            if entry.is_dir && !is_special_directory_name(&entry.name) {
-                self.cache_directory_path(join_child_path(path, &entry.name), entry.inode);
+            if is_special_directory_name(&entry.name) {
+                continue;
+            }
+            let child_path = join_child_path(path, &entry.name);
+            if entry.is_dir {
+                self.cache_directory_path(child_path, entry.inode);
+            } else {
+                self.cache_file_path(child_path, entry.inode);
             }
         }
         let nodes: Vec<FsNode> = entries
@@ -68,24 +74,57 @@ impl FileSystemReader for XfsReader {
         std::mem::take(&mut *self.diagnostics.borrow_mut())
     }
 
+    fn directory_locators(&self) -> Vec<evidence_core::FileSystemDirectoryLocator> {
+        self.exported_directory_locators()
+    }
+
+    fn seed_directory_locators(
+        &self,
+        locators: &[evidence_core::FileSystemDirectoryLocator],
+    ) -> io::Result<()> {
+        self.seed_persisted_directory_locators(locators)
+    }
+
+    fn file_locators(&self) -> Vec<evidence_core::FileSystemFileLocator> {
+        self.exported_file_locators()
+    }
+
+    fn seed_file_locators(
+        &self,
+        locators: &[evidence_core::FileSystemFileLocator],
+    ) -> io::Result<()> {
+        self.seed_persisted_file_locators(locators)
+    }
+
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        let (ino, is_dir) = self
-            .resolve_path(path)?
+        let resolved = self
+            .resolve_path_with_inode(path)?
             .ok_or_else(|| file_not_found(path))?;
-        if is_dir {
+        if resolved.is_dir {
             return Err(path_is_directory(path));
         }
-        Ok(Box::new(io::Cursor::new(self.read_file_content(ino)?)))
+        let content = match resolved.inode {
+            Some(inode) => self.read_file_content_from_inode(&inode)?,
+            None => self.read_file_content(resolved.inode_number)?,
+        };
+        Ok(Box::new(io::Cursor::new(content)))
     }
 
     fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
-        let (ino, is_dir) = self
-            .resolve_path(path)?
+        let resolved = self
+            .resolve_path_with_inode(path)?
             .ok_or_else(|| file_not_found(path))?;
-        if is_dir {
+        if resolved.is_dir {
             return Err(path_is_directory(path));
         }
-        self.read_file_content_range(ino, offset, length)
+        match resolved.inode {
+            Some(inode) => self.read_file_content_range_from_inode(&inode, offset, length),
+            None => self.read_file_content_range(resolved.inode_number, offset, length),
+        }
+    }
+
+    fn read_metrics(&self) -> evidence_core::FileSystemReadMetrics {
+        *self.read_metrics.borrow()
     }
 
     fn data_source_name(&self) -> &str {

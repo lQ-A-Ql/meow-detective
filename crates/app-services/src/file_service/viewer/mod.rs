@@ -34,7 +34,7 @@ pub(crate) use descriptor::{descriptor_for_file_with_cache, preview_descriptor_f
 pub(crate) use filesystem::{
     format_image_range_error, is_exfat_filesystem_kind, is_fat_filesystem_kind,
     is_linux_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,
-    root_partition_index_for_entry,
+    resolve_partition_index_for_entry,
 };
 pub(crate) use image_open::{
     open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
@@ -48,7 +48,10 @@ pub(crate) use model::{
     PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
-pub(crate) use partition::{e01_partition_candidates, raw_partition_candidates};
+pub(crate) use partition::{
+    e01_partition_candidates, exact_partition_candidate, preview_lvm_identity_from_datasource,
+    preview_partition_candidate_from_record, raw_partition_candidates,
+};
 pub(crate) use path::{
     descriptor_file_entry, descriptor_image_path_candidates, entry_image_path_candidates,
 };

@@ -95,6 +95,9 @@ impl From<crate::timeline_service::TimelineServiceError> for ReportError {
             crate::timeline_service::TimelineServiceError::Unsupported(message) => {
                 Self::Unsupported(message)
             }
+            crate::timeline_service::TimelineServiceError::Cancelled => {
+                Self::Other("Timeline projection cancelled".to_string())
+            }
             crate::timeline_service::TimelineServiceError::Other(message) => Self::Other(message),
         }
     }

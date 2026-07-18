@@ -181,8 +181,10 @@ fn jc2_full_pipeline() {
                     let candidate = EvidenceCandidate {
                         file_id: domain::FileEntryId(format!("jc2-{name}")),
                         data_source_id: ds_id.0.clone(),
+                        partition_index: None,
                         path: hive_path.to_string(),
                         size: buf.len() as u64,
+                        content_identity: format!("test:{name}"),
                         evidence_kind: "registry_hive".to_string(),
                         parser: "registry.hive".to_string(),
                         category: "Registry".to_string(),
@@ -736,8 +738,10 @@ fn jc2_artifact_extraction() {
                     let candidate = EvidenceCandidate {
                         file_id: domain::FileEntryId(format!("jc2-art-{name}")),
                         data_source_id: ds_id.0.clone(),
+                        partition_index: None,
                         path: hive_path.to_string(),
                         size: buf.len() as u64,
+                        content_identity: format!("test:{name}"),
                         evidence_kind: "registry_hive".to_string(),
                         parser: "registry.hive".to_string(),
                         category: "Registry".to_string(),

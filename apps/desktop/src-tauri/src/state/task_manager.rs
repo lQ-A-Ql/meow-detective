@@ -1,201 +1,394 @@
 //! Background task lifecycle management.
-//!
-//! Manages background tasks (like file import) with support for:
-//! - Task registration and tracking
-//! - Cancellation via AtomicBool tokens
-//! - Cleanup of finished tasks
-//! - Graceful shutdown of all tasks
 
-use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// Result type for background tasks.
-pub type TaskResult = Result<(), String>;
+mod heavy_queue;
+mod registry;
 
-/// Information about a running task.
-struct TaskEntry {
-    handle: JoinHandle<TaskResult>,
-    cancel_token: Arc<AtomicBool>,
-    started_at: Instant,
-}
+use heavy_queue::HeavyTaskQueue;
+use registry::{cancel_and_collect, thread_name, validate_registration, TaskEntry, TaskRegistry};
 
-/// Manager for background tasks with cancellation support.
+pub use registry::{TaskRegistrationError, TaskResult, TaskScope};
+
 pub struct TaskManager {
-    tasks: Mutex<HashMap<String, TaskEntry>>,
+    registry: Arc<TaskRegistry>,
+    heavy_queue: HeavyTaskQueue,
 }
 
 impl TaskManager {
-    /// Create a new TaskManager.
     pub fn new() -> Self {
+        let registry = Arc::new(TaskRegistry::default());
+        let heavy_queue = HeavyTaskQueue::new(Arc::clone(&registry));
         Self {
-            tasks: Mutex::new(HashMap::new()),
+            registry,
+            heavy_queue,
         }
     }
 
-    /// Register a new background task.
-    ///
-    /// Returns the cancel token for the task.
-    pub fn register(&self, task_id: String, handle: JoinHandle<TaskResult>) -> Arc<AtomicBool> {
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let entry = TaskEntry {
-            handle,
-            cancel_token: cancel_token.clone(),
-            started_at: Instant::now(),
-        };
-
-        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.insert(task_id, entry);
-
-        cancel_token
-    }
-
-    /// Register a new background task with an existing cancel token.
-    ///
-    /// This allows the caller to provide their own cancel token
-    /// that the task can check for cancellation.
-    pub fn register_with_token(
+    pub fn spawn<F>(
         &self,
         task_id: String,
-        handle: JoinHandle<TaskResult>,
+        task: F,
+    ) -> Result<Arc<AtomicBool>, TaskRegistrationError>
+    where
+        F: FnOnce(Arc<AtomicBool>) -> TaskResult + Send + 'static,
+    {
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        let worker_token = Arc::clone(&cancel_token);
+        self.spawn_internal(task_id, None, Arc::clone(&cancel_token), false, move || {
+            task(worker_token)
+        })?;
+        Ok(cancel_token)
+    }
+
+    pub fn spawn_scoped<F>(
+        &self,
+        task_id: String,
+        scope: TaskScope,
         cancel_token: Arc<AtomicBool>,
-    ) {
-        let entry = TaskEntry {
-            handle,
-            cancel_token: cancel_token.clone(),
-            started_at: Instant::now(),
-        };
-
-        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.insert(task_id, entry);
+        task: F,
+    ) -> Result<(), TaskRegistrationError>
+    where
+        F: FnOnce() -> TaskResult + Send + 'static,
+    {
+        self.spawn_internal(task_id, Some(scope), cancel_token, false, task)
     }
 
-    /// Cancel a specific task by ID.
-    ///
-    /// Returns true if the task was found and cancelled.
+    pub fn spawn_scoped_heavy<F>(
+        &self,
+        task_id: String,
+        scope: TaskScope,
+        cancel_token: Arc<AtomicBool>,
+        task: F,
+    ) -> Result<(), TaskRegistrationError>
+    where
+        F: FnOnce() -> TaskResult + Send + 'static,
+    {
+        self.spawn_internal(task_id, Some(scope), cancel_token, true, task)
+    }
+
+    fn spawn_internal<F>(
+        &self,
+        task_id: String,
+        scope: Option<TaskScope>,
+        cancel_token: Arc<AtomicBool>,
+        heavy: bool,
+        task: F,
+    ) -> Result<(), TaskRegistrationError>
+    where
+        F: FnOnce() -> TaskResult + Send + 'static,
+    {
+        {
+            let mut state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            validate_registration(&state, &task_id, scope.as_ref())?;
+            state.completed.remove(&task_id);
+            state
+                .completed_order
+                .retain(|candidate| candidate != &task_id);
+            state.tasks.insert(
+                task_id.clone(),
+                TaskEntry {
+                    cancel_token: Arc::clone(&cancel_token),
+                    started_at: Instant::now(),
+                    scope,
+                },
+            );
+        }
+
+        if heavy {
+            if self
+                .heavy_queue
+                .enqueue(task_id.clone(), cancel_token, task)
+                .is_ok()
+            {
+                return Ok(());
+            }
+            let mut state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            state.tasks.remove(&task_id);
+            return Err(TaskRegistrationError::HeavyQueueClosed(task_id));
+        }
+
+        let registry = Arc::clone(&self.registry);
+        let worker_task_id = task_id.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name(thread_name(&task_id))
+            .spawn(move || {
+                let result = catch_unwind(AssertUnwindSafe(task))
+                    .unwrap_or_else(|_| Err("Task panicked".to_string()));
+                registry.complete(worker_task_id, result);
+            })
+        {
+            let mut state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|lock_error| lock_error.into_inner());
+            state.tasks.remove(&task_id);
+            return Err(TaskRegistrationError::Spawn(error));
+        }
+        Ok(())
+    }
+
     pub fn cancel(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(entry) = tasks.get(task_id) {
-            entry.cancel_token.store(true, Ordering::Relaxed);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Cancel all running tasks.
-    pub fn cancel_all(&self) {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        for (_, entry) in tasks.iter() {
-            entry.cancel_token.store(true, Ordering::Relaxed);
-        }
-    }
-
-    /// Wait for all tasks to complete.
-    ///
-    /// This will block until all tasks finish or the timeout is reached.
-    pub fn wait_all(&self, timeout: Duration) -> Vec<(String, TaskResult)> {
-        let task_ids: Vec<String> = {
-            let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            tasks.keys().cloned().collect()
+        let task_ids = {
+            let state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            state
+                .tasks
+                .iter()
+                .filter_map(|(candidate_id, entry)| {
+                    let matches_group = entry
+                        .scope
+                        .as_ref()
+                        .is_some_and(|scope| scope.group_id == task_id);
+                    if candidate_id == task_id || matches_group {
+                        entry.cancel_token.store(true, Ordering::Release);
+                        Some(candidate_id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
         };
+        self.heavy_queue.cancel_queued(&task_ids);
+        !task_ids.is_empty()
+    }
 
-        let start = Instant::now();
+    pub fn retire_case_and_drain(
+        &self,
+        case_id: &str,
+        timeout: Duration,
+    ) -> Vec<(String, TaskResult)> {
+        let task_ids = {
+            let mut state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            state.retired_cases.insert(case_id.to_string());
+            cancel_and_collect(&state.tasks, |scope| scope.case_id == case_id)
+        };
+        self.heavy_queue.cancel_queued(&task_ids);
+        self.wait_task_ids(task_ids, timeout)
+    }
+
+    pub fn retire_source_and_drain(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        timeout: Duration,
+    ) -> Vec<(String, TaskResult)> {
+        let task_ids = {
+            let mut state = self
+                .registry
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            state
+                .retired_sources
+                .insert((case_id.to_string(), data_source_id.to_string()));
+            cancel_and_collect(&state.tasks, |scope| {
+                scope.case_id == case_id && scope.data_source_id.as_deref() == Some(data_source_id)
+            })
+        };
+        self.heavy_queue.cancel_queued(&task_ids);
+        self.wait_task_ids(task_ids, timeout)
+    }
+
+    pub fn reactivate_case(&self, case_id: &str) {
+        let mut state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.retired_cases.remove(case_id);
+    }
+
+    pub fn reactivate_source(&self, case_id: &str, data_source_id: &str) {
+        let mut state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .retired_sources
+            .remove(&(case_id.to_string(), data_source_id.to_string()));
+    }
+
+    pub fn cancel_all(&self) {
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for entry in state.tasks.values() {
+            entry.cancel_token.store(true, Ordering::Release);
+        }
+    }
+
+    pub fn wait_all(&self, timeout: Duration) -> Vec<(String, TaskResult)> {
+        let task_ids = self.task_ids_matching(|_| true);
+        self.wait_task_ids(task_ids, timeout)
+    }
+
+    fn wait_task_ids(&self, task_ids: Vec<String>, timeout: Duration) -> Vec<(String, TaskResult)> {
+        let started = Instant::now();
         let mut results = Vec::new();
-
         for task_id in task_ids {
-            let remaining = timeout.saturating_sub(start.elapsed());
+            let remaining = timeout.saturating_sub(started.elapsed());
             if remaining.is_zero() {
                 break;
             }
-
             if let Some(result) = self.wait_task(&task_id, remaining) {
                 results.push((task_id, result));
             }
         }
-
         results
     }
 
-    /// Wait for a specific task to complete.
     pub fn wait_task(&self, task_id: &str, timeout: Duration) -> Option<TaskResult> {
-        let entry = {
-            let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            tasks.remove(task_id)?
-        };
-
-        // Wait with timeout
-        let start = Instant::now();
+        let started = Instant::now();
+        let mut state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         loop {
-            if entry.handle.is_finished() {
-                break;
+            if let Some(result) = state.completed.remove(task_id) {
+                state
+                    .completed_order
+                    .retain(|candidate| candidate != task_id);
+                return Some(result);
             }
-            if start.elapsed() >= timeout {
-                // Re-insert the task if it didn't finish
-                let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-                tasks.insert(task_id.to_string(), entry);
+            if !state.tasks.contains_key(task_id) {
                 return None;
             }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-
-        match entry.handle.join() {
-            Ok(result) => Some(result),
-            Err(_) => Some(Err("Task panicked".to_string())),
+            let remaining = timeout.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                return None;
+            }
+            let (next, wait) = self
+                .registry
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(|error| error.into_inner());
+            state = next;
+            if wait.timed_out() && state.tasks.contains_key(task_id) {
+                return None;
+            }
         }
     }
 
-    /// Remove finished tasks from the manager.
-    ///
-    /// Returns the number of tasks removed.
-    pub fn cleanup_finished(&self) -> usize {
-        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        let initial_count = tasks.len();
-        tasks.retain(|_, entry| !entry.handle.is_finished());
-        initial_count - tasks.len()
-    }
-
-    /// Get a list of running task IDs.
     pub fn running_tasks(&self) -> Vec<String> {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.keys().cloned().collect()
+        self.task_ids_matching(|_| true)
     }
 
-    /// Get the number of running tasks.
     pub fn task_count(&self) -> usize {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.len()
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.tasks.len()
     }
 
-    /// Check if a specific task is running.
+    pub fn task_count_for_case(&self, case_id: &str) -> usize {
+        self.count_matching(|scope| scope.case_id == case_id)
+    }
+
+    pub fn task_count_for_case_wide(&self, case_id: &str) -> usize {
+        self.count_matching(|scope| scope.case_id == case_id && scope.data_source_id.is_none())
+    }
+
+    pub fn task_count_for_data_source(&self, case_id: &str, data_source_id: &str) -> usize {
+        self.count_matching(|scope| {
+            scope.case_id == case_id && scope.data_source_id.as_deref() == Some(data_source_id)
+        })
+    }
+
     pub fn is_running(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.contains_key(task_id)
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.tasks.contains_key(task_id)
     }
 
-    /// Get the elapsed time for a task.
     pub fn task_elapsed(&self, task_id: &str) -> Option<Duration> {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.get(task_id).map(|entry| entry.started_at.elapsed())
-    }
-
-    /// Check if a task has been cancelled.
-    pub fn is_cancelled(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .tasks
             .get(task_id)
-            .map(|entry| entry.cancel_token.load(Ordering::Relaxed))
-            .unwrap_or(false)
+            .map(|entry| entry.started_at.elapsed())
     }
 
-    /// Get the cancel token for a task.
-    ///
-    /// Returns None if the task doesn't exist.
+    pub fn is_cancelled(&self, task_id: &str) -> bool {
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .tasks
+            .get(task_id)
+            .is_some_and(|entry| entry.cancel_token.load(Ordering::Acquire))
+    }
+
     pub fn get_cancel_token(&self, task_id: &str) -> Option<Arc<AtomicBool>> {
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        tasks.get(task_id).map(|entry| entry.cancel_token.clone())
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .tasks
+            .get(task_id)
+            .map(|entry| Arc::clone(&entry.cancel_token))
+    }
+
+    fn count_matching(&self, predicate: impl Fn(&TaskScope) -> bool) -> usize {
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .tasks
+            .values()
+            .filter(|entry| entry.scope.as_ref().is_some_and(&predicate))
+            .count()
+    }
+
+    fn task_ids_matching(&self, predicate: impl Fn(&TaskEntry) -> bool) -> Vec<String> {
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state
+            .tasks
+            .iter()
+            .filter_map(|(task_id, entry)| predicate(entry).then_some(task_id.clone()))
+            .collect()
     }
 }
 
@@ -207,8 +400,8 @@ impl Default for TaskManager {
 
 impl Drop for TaskManager {
     fn drop(&mut self) {
-        // Cancel all tasks on drop
         self.cancel_all();
+        self.heavy_queue.shutdown();
     }
 }
 

@@ -2383,12 +2383,12 @@ fn liuyang_e01_email_extraction_regression() {
 
             let fixture_for_reader = fixture_path.clone();
             let offset = ntfs.offset;
-            let run = analysis_service::run_analysis_extraction(
+            let run = analysis_service::run_analysis_extraction_with_reader_limits(
                 conn,
                 &case_id.0,
                 domain::DataSourcePlatform::Windows,
                 &["Email"],
-                |file_id| {
+                |file_id, read_limit| {
                     let path = entry_map
                         .get(&file_id.0)
                         .cloned()
@@ -2396,9 +2396,12 @@ fn liuyang_e01_email_extraction_regression() {
                     let boxed: Box<dyn EvidenceReader> =
                         Box::new(E01Reader::open(&fixture_for_reader).map_err(|e| e.to_string())?);
                     let fs = fs_ntfs::NtfsReader::open(boxed, offset).map_err(|e| e.to_string())?;
-                    let mut reader = fs.open_file(&path).map_err(|e| e.to_string())?;
+                    let reader = fs.open_file(&path).map_err(|e| e.to_string())?;
                     let mut bytes = Vec::new();
-                    reader.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                    reader
+                        .take(read_limit as u64)
+                        .read_to_end(&mut bytes)
+                        .map_err(|e| e.to_string())?;
                     Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
                 },
             )

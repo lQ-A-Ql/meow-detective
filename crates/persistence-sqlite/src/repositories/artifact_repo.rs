@@ -18,31 +18,150 @@ impl<'a> ArtifactRepo<'a> {
         data_source_id: &str,
     ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
-        {
-            let mut stmt = tx.prepare_cached(
-                "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            )?;
-            for artifact in artifacts {
-                stmt.execute(params![
-                    artifact.id.0,
-                    case_id,
-                    data_source_id,
-                    artifact.family,
-                    artifact.source_object_id.as_ref().map(|id| &id.0),
-                    artifact.extractor_id,
-                    artifact.extractor_version,
-                    artifact.confidence,
-                    artifact.source_attribution,
-                    artifact.title,
-                    artifact.summary,
-                    serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
-                    artifact.created_at.to_rfc3339(),
-                ])?;
-            }
-        }
+        ArtifactRepo::new(&tx).insert_batch_in_transaction(artifacts, case_id, data_source_id)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn insert_batch_in_transaction(
+        &self,
+        artifacts: &[Artifact],
+        case_id: &str,
+        data_source_id: &str,
+    ) -> DbResult<()> {
+        let mut stmt = self.conn.prepare_cached(
+            "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        )?;
+        for artifact in artifacts {
+            stmt.execute(params![
+                artifact.id.0,
+                case_id,
+                data_source_id,
+                artifact.family,
+                artifact.source_object_id.as_ref().map(|id| &id.0),
+                artifact.extractor_id,
+                artifact.extractor_version,
+                artifact.confidence,
+                artifact.source_attribution,
+                artifact.title,
+                artifact.summary,
+                serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
+                artifact.created_at.to_rfc3339(),
+            ])?;
+        }
+        Ok(())
+    }
+
+    pub fn delete_analysis_outputs_in_transaction(
+        &self,
+        source_object_id: &str,
+        producer_prefix: &str,
+    ) -> DbResult<usize> {
+        self.conn
+            .execute(
+                "DELETE FROM artifacts
+                 WHERE source_object_id = ?1
+                   AND extractor_id LIKE ?2",
+                params![source_object_id, format!("{producer_prefix}%")],
+            )
+            .map_err(Into::into)
+    }
+
+    pub fn list_analysis_outputs(
+        &self,
+        source_object_id: &str,
+        producer_prefix: &str,
+    ) -> DbResult<Vec<Artifact>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
+                    confidence, source_attribution, title, summary, attrs, created_at
+             FROM artifacts
+             WHERE source_object_id = ?1
+               AND extractor_id LIKE ?2
+             ORDER BY rowid ASC",
+        )?;
+        let rows = statement.query_map(
+            params![source_object_id, format!("{producer_prefix}%")],
+            row_to_artifact,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn count_analysis_outputs(
+        &self,
+        source_object_id: &str,
+        producer_prefix: &str,
+    ) -> DbResult<u64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*)
+             FROM artifacts
+             WHERE source_object_id = ?1
+               AND extractor_id LIKE ?2",
+            params![source_object_id, format!("{producer_prefix}%")],
+            |row| row.get(0),
+        )?;
+        Ok(count.max(0) as u64)
+    }
+
+    pub fn list_analysis_outputs_for_prefixes(
+        &self,
+        producer_prefixes: &[&str],
+    ) -> DbResult<Vec<Artifact>> {
+        if producer_prefixes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let predicates = (1..=producer_prefixes.len())
+            .map(|index| format!("extractor_id LIKE ?{index}"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let sql = format!(
+            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
+                    confidence, source_attribution, title, summary, attrs, created_at
+             FROM artifacts
+             WHERE source_object_id IS NOT NULL
+               AND extractor_id IS NOT NULL
+               AND ({predicates})
+             ORDER BY rowid ASC"
+        );
+        let patterns = producer_prefixes
+            .iter()
+            .map(|prefix| format!("{prefix}%"))
+            .collect::<Vec<_>>();
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(rusqlite::params_from_iter(patterns), row_to_artifact)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn list_analysis_outputs_for_sources(
+        &self,
+        source_object_ids: &[&str],
+        producer_prefix: &str,
+    ) -> DbResult<Vec<Artifact>> {
+        if source_object_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (1..=source_object_ids.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let prefix_parameter = source_object_ids.len() + 1;
+        let sql = format!(
+            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
+                    confidence, source_attribution, title, summary, attrs, created_at
+             FROM artifacts
+             WHERE source_object_id IN ({placeholders})
+               AND extractor_id LIKE ?{prefix_parameter}
+             ORDER BY source_object_id ASC, rowid ASC"
+        );
+        let mut parameters = source_object_ids
+            .iter()
+            .map(|source_id| (*source_id).to_string())
+            .collect::<Vec<_>>();
+        parameters.push(format!("{producer_prefix}%"));
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(rusqlite::params_from_iter(parameters), row_to_artifact)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn list_by_family(&self, family: Option<&str>) -> DbResult<Vec<Artifact>> {

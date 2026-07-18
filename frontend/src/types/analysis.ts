@@ -134,6 +134,7 @@ export interface AnalysisExtractionPageRequest {
 export interface AnalysisExtractionRun {
   status: AnalysisParseStatus;
   scannedCount: number;
+  checkpointHitCount: number;
   artifactCount: number;
   timelineEventCount: number;
   sections: AnalysisExtractionSectionRun[];

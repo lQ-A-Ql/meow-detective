@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 
 use evidence_core::{EvidenceReader, FileSystemReader};
 
@@ -14,34 +15,75 @@ use super::work::open_candidate_filesystem;
 
 type ProgressCallback<'a> = dyn FnMut(u32, &str) -> Result<(), String> + 'a;
 
+pub struct PartitionEnumerationRequest<'a> {
+    pub conn: &'a rusqlite::Connection,
+    pub data_source_id: &'a domain::DataSourceId,
+    pub fs: &'a dyn FileSystemReader,
+    pub root_name: &'a str,
+    pub placeholder_roots: &'a HashMap<usize, domain::FileEntryId>,
+    pub candidate: &'a datasource_service::ImageFilesystemCandidate,
+    pub progress_cb: Option<&'a dyn Fn(u32)>,
+    pub cancel_token: Option<&'a AtomicBool>,
+}
+
 pub fn enumerate_partition_with_fs(
-    conn: &rusqlite::Connection,
-    data_source_id: &domain::DataSourceId,
-    fs: &dyn FileSystemReader,
-    root_name: &str,
-    placeholder_roots: &HashMap<usize, domain::FileEntryId>,
-    candidate: &datasource_service::ImageFilesystemCandidate,
-    progress_cb: Option<&dyn Fn(u32)>,
+    request: PartitionEnumerationRequest<'_>,
 ) -> persistence_sqlite::DbResult<file_service::EnumerationStats> {
-    if let Some(placeholder_id) = candidate
-        .partition_index
-        .and_then(|index| placeholder_roots.get(&index))
-    {
-        return file_service::replace_placeholder_root_with_real(
+    let PartitionEnumerationRequest {
+        conn,
+        data_source_id,
+        fs,
+        root_name,
+        placeholder_roots,
+        candidate,
+        progress_cb,
+        cancel_token,
+    } = request;
+    let placeholder = match candidate.partition_index {
+        Some(index) => match placeholder_roots.get(&index) {
+            Some(root) => Some(root.clone()),
+            None => Some(file_service::insert_partition_placeholder_root(
+                conn,
+                data_source_id,
+                index,
+                root_name,
+                "queued",
+            )?),
+        },
+        None => None,
+    };
+    let stats = if let Some(placeholder_id) = placeholder.as_ref() {
+        file_service::replace_placeholder_root_with_real_and_cancel(
             conn,
             placeholder_id,
             fs,
             Some(root_name),
             progress_cb,
-        );
+            cancel_token,
+        )?
+    } else {
+        file_service::enumerate_filesystem_with_root_name_and_cancel(
+            conn,
+            data_source_id,
+            fs,
+            Some(root_name),
+            progress_cb,
+            cancel_token,
+        )?
+    };
+    reject_cancelled(cancel_token)?;
+    reject_cancelled(cancel_token)?;
+    Ok(stats)
+}
+
+fn reject_cancelled(cancel_token: Option<&AtomicBool>) -> persistence_sqlite::DbResult<()> {
+    if cancel_token.is_some_and(|token| token.load(std::sync::atomic::Ordering::Relaxed)) {
+        Err(persistence_sqlite::DbError::System(
+            "Enumeration cancelled".to_string(),
+        ))
+    } else {
+        Ok(())
     }
-    file_service::enumerate_filesystem_with_root_name(
-        conn,
-        data_source_id,
-        fs,
-        Some(root_name),
-        progress_cb,
-    )
 }
 
 pub fn enumerate_image_data_source<R>(
@@ -136,15 +178,16 @@ impl CandidateEnumerationContext<'_> {
         let progress = |percent: u32| {
             self.report_partition_percent(ordinal, total, &root_name, percent);
         };
-        let stats = enumerate_partition_with_fs(
-            self.conn,
-            self.data_source_id,
-            fs.as_ref(),
-            &root_name,
-            self.placeholders,
+        let stats = enumerate_partition_with_fs(PartitionEnumerationRequest {
+            conn: self.conn,
+            data_source_id: self.data_source_id,
+            fs: fs.as_ref(),
+            root_name: &root_name,
+            placeholder_roots: self.placeholders,
             candidate,
-            self.job_id.map(|_| &progress as &dyn Fn(u32)),
-        )?;
+            progress_cb: self.job_id.map(|_| &progress as &dyn Fn(u32)),
+            cancel_token: None,
+        })?;
         self.report_candidate_complete(ordinal, total, &root_name)?;
         Ok(Some(stats))
     }

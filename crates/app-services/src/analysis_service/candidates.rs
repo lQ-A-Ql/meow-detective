@@ -13,7 +13,8 @@ pub use common::{
     EvidenceCandidate, EvidenceCategoryDef,
 };
 pub(crate) use common::{
-    find_candidate_by_path_suffix, normalize_evidence_path, row_to_file_entry_for_analysis,
+    evidence_candidates_for_categories_with_cancel, find_candidate_by_path_suffix,
+    normalize_evidence_path, row_to_file_entry_for_analysis,
 };
 pub use summary::get_evidence_classification_summary;
 pub(crate) use windows::is_browser_history_path;

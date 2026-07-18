@@ -44,8 +44,10 @@ fn make_evtx_candidate(
     app_services::analysis_service::EvidenceCandidate {
         file_id: domain::FileEntryId(file_id.to_string()),
         data_source_id: "evtx-ds".to_string(),
+        partition_index: None,
         path: path.to_string(),
         size: 0,
+        content_identity: format!("test:{file_id}"),
         evidence_kind: "evtx_log".to_string(),
         parser: "evtx.structured".to_string(),
         category: "EventLogs".to_string(),

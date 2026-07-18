@@ -43,7 +43,7 @@ pub async fn import_data_source(
                     active,
                     plan,
                     Some(&app_clone),
-                    &app_state.task_manager,
+                    app_state.task_manager.clone(),
                     settings.max_import_workers,
                     settings.max_analysis_workers,
                     analysis_mode,

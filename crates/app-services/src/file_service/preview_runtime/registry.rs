@@ -13,23 +13,31 @@ use domain::{CaseId, DataSourceId};
 
 use crate::{
     ceph_reconstruction::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime},
-    file_service::{preview_runtime::session::PreviewSession, FileServiceError},
+    file_service::{
+        preview_runtime::{prepared_ceph::SharedPreparedFilesystem, session::PreviewSession},
+        FileServiceError,
+    },
 };
 
+mod filesystem;
 mod lifecycle;
 
 const DEFAULT_SESSION_TTL: Duration = Duration::from_secs(30 * 60);
 const DEFAULT_MAX_SESSIONS: usize = 32;
 const DEFAULT_MAX_RUNTIMES: usize = 1;
+const MAX_FILESYSTEMS_PER_RUNTIME: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreviewRuntimeStats {
     pub runtime_count: usize,
+    pub filesystem_count: usize,
     pub session_count: usize,
     pub provider_constructions: u64,
+    pub filesystem_constructions: u64,
     pub runtime_cache_capacity_bytes: usize,
     pub max_sessions: usize,
     pub max_runtimes: usize,
+    pub max_filesystems: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -38,8 +46,20 @@ pub(super) struct RuntimeKey {
     data_source_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) struct FilesystemKey {
+    runtime: RuntimeKey,
+    fingerprint: String,
+    candidate_identity: String,
+}
+
 struct RuntimeEntry {
     runtime: Arc<DerivedRbdRuntime>,
+    last_used: Instant,
+}
+
+pub(super) struct FilesystemEntry {
+    filesystem: SharedPreparedFilesystem,
     last_used: Instant,
 }
 
@@ -85,6 +105,9 @@ pub(super) struct RegistryState {
     runtimes: HashMap<RuntimeKey, RuntimeEntry>,
     runtime_lru: VecDeque<RuntimeKey>,
     building: HashSet<RuntimeKey>,
+    filesystems: HashMap<FilesystemKey, FilesystemEntry>,
+    filesystem_lru: VecDeque<FilesystemKey>,
+    building_filesystems: HashSet<FilesystemKey>,
     sessions: HashMap<String, SessionEntry>,
     session_lru: VecDeque<String>,
     generations: HashMap<RuntimeKey, u64>,
@@ -100,7 +123,9 @@ pub struct PreviewRuntimeRegistry {
     session_ttl: Duration,
     max_sessions: usize,
     max_runtimes: usize,
+    max_filesystems: usize,
     provider_constructions: AtomicU64,
+    filesystem_constructions: AtomicU64,
 }
 
 impl Default for PreviewRuntimeRegistry {
@@ -121,7 +146,11 @@ impl PreviewRuntimeRegistry {
             session_ttl,
             max_sessions: max_sessions.max(1),
             max_runtimes: max_runtimes.max(1),
+            max_filesystems: max_runtimes
+                .max(1)
+                .saturating_mul(MAX_FILESYSTEMS_PER_RUNTIME),
             provider_constructions: AtomicU64::new(0),
+            filesystem_constructions: AtomicU64::new(0),
         }
     }
 
@@ -291,8 +320,10 @@ impl PreviewRuntimeRegistry {
         self.cleanup_expired_locked(&mut state);
         Ok(PreviewRuntimeStats {
             runtime_count: state.runtimes.len(),
+            filesystem_count: state.filesystems.len(),
             session_count: state.sessions.len(),
             provider_constructions: self.provider_construction_count(),
+            filesystem_constructions: self.filesystem_constructions.load(Ordering::Relaxed),
             runtime_cache_capacity_bytes: state
                 .runtimes
                 .values()
@@ -300,6 +331,7 @@ impl PreviewRuntimeRegistry {
                 .sum(),
             max_sessions: self.max_sessions,
             max_runtimes: self.max_runtimes,
+            max_filesystems: self.max_filesystems,
         })
     }
 
@@ -398,6 +430,7 @@ fn invalidate_runtime_locked(state: &mut RegistryState, key: &RuntimeKey) {
         .remove(key)
         .map(|entry| entry.runtime.lineage_fingerprint().to_string());
     state.runtime_lru.retain(|candidate| candidate != key);
+    filesystem::invalidate_filesystems_for_runtime(state, key);
     if let Some(fingerprint) = fingerprint {
         state.sessions.retain(|_, entry| {
             entry.session.runtime_fingerprint() != Some(fingerprint.as_str())

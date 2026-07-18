@@ -24,6 +24,20 @@ pub(crate) struct BackgroundLinuxClusterImportJob {
     pub(crate) analysis_mode: import_analysis::ImportAnalysisMode,
 }
 
+pub(crate) struct BackgroundDerivedSourceProcessingJob {
+    pub(crate) db_path: PathBuf,
+    pub(crate) case_id: domain::CaseId,
+    pub(crate) case_root: PathBuf,
+    pub(crate) cluster_id: String,
+    pub(crate) source_ids: Vec<domain::DataSourceId>,
+}
+
+pub(crate) struct BrowseableClusterImport {
+    pub(crate) processing: BackgroundDerivedSourceProcessingJob,
+    pub(crate) parent_job_id: domain::JobId,
+    pub(crate) completion_detail: String,
+}
+
 pub(super) struct ClusterImportSummary {
     pub(super) ready_count: u32,
     pub(super) failed_count: u32,

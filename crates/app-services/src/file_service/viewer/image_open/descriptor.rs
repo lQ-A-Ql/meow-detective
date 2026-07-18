@@ -4,9 +4,10 @@ use evidence_core::EvidenceReader;
 
 use crate::file_service::{
     viewer::{
-        descriptor_image_path_candidates, is_exfat_filesystem_kind, is_fat_filesystem_kind,
-        is_linux_filesystem_kind, looks_like_exfat_boot_sector, open_first_image_path_seekable,
-        PreviewDescriptor, PreviewPartitionCandidate, PreviewReadContext, RangeContentReader,
+        descriptor_image_path_candidates, exact_partition_candidate, is_exfat_filesystem_kind,
+        is_fat_filesystem_kind, is_linux_filesystem_kind, looks_like_exfat_boot_sector,
+        open_first_image_path_seekable, PreviewDescriptor, PreviewPartitionCandidate,
+        PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -20,29 +21,22 @@ pub(crate) fn open_descriptor_image_file<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
-    if descriptor.partition_candidates.is_empty() {
-        return Err(FileServiceError::other(format!(
-            "Cannot open image-backed file '{}' without partition candidates",
-            descriptor.path
-        )));
-    }
+    let candidate = exact_partition_candidate(descriptor)?;
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
-    for candidate in &descriptor.partition_candidates {
-        match open_candidate(source_path, candidate, &path_candidates, &mut open_reader) {
-            Ok(Some(reader)) => return Ok(reader),
-            Ok(None) => {}
-            Err(error) => tracing::warn!(
-                path = %descriptor.path,
-                partition_index = candidate.partition_index,
-                kind = %candidate.filesystem_kind,
-                error = %error,
-                "Descriptor file not found on partition"
-            ),
-        }
+    match open_candidate(source_path, candidate, &path_candidates, &mut open_reader) {
+        Ok(Some(reader)) => return Ok(reader),
+        Ok(None) => {}
+        Err(error) => tracing::warn!(
+            path = %descriptor.path,
+            partition_index = candidate.partition_index,
+            kind = %candidate.filesystem_kind,
+            error = %error,
+            "Descriptor file not found on exact partition"
+        ),
     }
     Err(FileServiceError::other(format!(
-        "Cannot open image-backed file '{}' from any partition",
+        "Cannot open image-backed file '{}' from its exact partition",
         descriptor.path
     )))
 }

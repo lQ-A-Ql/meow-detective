@@ -106,6 +106,23 @@ fn cancellation_methods_update_status_without_schema_changes() {
 }
 
 #[test]
+fn cancellation_does_not_regress_terminal_jobs() {
+    let conn = setup_db();
+    let repo = JobRepo::new(&conn);
+    let completed = repo.create("case-1", "ingest").unwrap();
+    repo.complete(&completed, "done").unwrap();
+
+    assert!(!repo
+        .mark_cancelling(&completed, "late cancellation")
+        .unwrap());
+    assert!(!repo.cancel(&completed, "late cancellation").unwrap());
+
+    let jobs = repo.list_recent(10).unwrap();
+    assert_eq!(jobs[0].status, "completed");
+    assert_eq!(jobs[0].detail, "done");
+}
+
+#[test]
 fn list_recent_returns_jobs_ordered() {
     let conn = setup_db();
     let repo = JobRepo::new(&conn);

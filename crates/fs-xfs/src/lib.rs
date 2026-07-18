@@ -9,6 +9,8 @@ mod extents;
 mod filesystem;
 mod geometry;
 mod inode;
+mod inode_cache;
+mod locator;
 mod reader;
 
 pub mod log;

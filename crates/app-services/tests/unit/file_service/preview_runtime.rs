@@ -103,11 +103,14 @@ fn registry_stats_report_live_sessions_and_limits() {
 
     let stats = registry.stats().unwrap();
     assert_eq!(stats.runtime_count, 0);
+    assert_eq!(stats.filesystem_count, 0);
     assert_eq!(stats.session_count, 2);
     assert_eq!(stats.provider_constructions, 0);
+    assert_eq!(stats.filesystem_constructions, 0);
     assert_eq!(stats.runtime_cache_capacity_bytes, 0);
     assert_eq!(stats.max_sessions, 3);
     assert_eq!(stats.max_runtimes, 2);
+    assert_eq!(stats.max_filesystems, 16);
 }
 
 #[test]

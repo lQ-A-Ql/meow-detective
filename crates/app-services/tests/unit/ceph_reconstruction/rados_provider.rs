@@ -7,7 +7,7 @@ use super::*;
 
 #[test]
 fn rejects_empty_replica_coverage() {
-    let error = SourceDbRadosObjectProvider::new(Vec::new(), 8, Vec::new(), 0)
+    let error = SourceDbRadosObjectProvider::new(Vec::new(), 8, Vec::new(), 3)
         .err()
         .expect("empty coverage should fail");
 
@@ -28,8 +28,9 @@ fn rejects_duplicate_inventory_bindings() {
         PathBuf::from("sources/b/source.db"),
     )
     .unwrap();
+    let third = replica("source-c", "inventory-c");
 
-    let error = SourceDbRadosObjectProvider::new(vec![first, second], 8, Vec::new(), 2)
+    let error = SourceDbRadosObjectProvider::new(vec![first, second, third], 8, Vec::new(), 3)
         .err()
         .expect("duplicate inventory should fail");
 
@@ -53,8 +54,9 @@ fn rejects_duplicate_data_source_bindings() {
         PathBuf::from("sources/b/source.db"),
     )
     .unwrap();
+    let third = replica("source-c", "inventory-c");
 
-    let error = SourceDbRadosObjectProvider::new(vec![first, second], 8, Vec::new(), 2)
+    let error = SourceDbRadosObjectProvider::new(vec![first, second, third], 8, Vec::new(), 3)
         .err()
         .expect("duplicate data source should fail");
 
@@ -73,7 +75,7 @@ fn rejects_non_closed_replica_count() {
     )
     .unwrap();
 
-    let error = SourceDbRadosObjectProvider::new(vec![source], 8, Vec::new(), 2)
+    let error = SourceDbRadosObjectProvider::new(vec![source], 8, Vec::new(), 3)
         .err()
         .expect("incomplete coverage should fail");
 
@@ -88,7 +90,17 @@ fn source_db_open_failure_does_not_return_the_host_path() {
         PathBuf::from(r"D:\private\evidence\source.db"),
     )
     .unwrap();
-    let mut provider = SourceDbRadosObjectProvider::new(vec![source], 8, Vec::new(), 1).unwrap();
+    let mut provider = SourceDbRadosObjectProvider::new(
+        vec![
+            source,
+            replica("source-b", "inventory-b"),
+            replica("source-c", "inventory-c"),
+        ],
+        8,
+        Vec::new(),
+        3,
+    )
+    .unwrap();
     let request = RbdObjectReadRequest {
         object_no: 0,
         object_identity: "rbd_data.image-test.0000000000000000".to_string(),
@@ -104,6 +116,29 @@ fn source_db_open_failure_does_not_return_the_host_path() {
     assert!(message.contains("source database could not be opened"));
     assert!(!message.contains("private"));
     assert!(!message.contains("evidence"));
+}
+
+#[test]
+fn rejects_a_self_certified_single_replica_policy() {
+    let error = SourceDbRadosObjectProvider::new(
+        vec![replica("source-a", "inventory-a")],
+        8,
+        Vec::new(),
+        1,
+    )
+    .err()
+    .expect("single-replica policy must not self-certify");
+
+    assert!(matches!(error, RadosProviderError::CoverageNotClosed));
+}
+
+fn replica(data_source_id: &str, inventory_id: &str) -> RadosReplicaSource {
+    RadosReplicaSource::new(
+        DataSourceId(data_source_id.to_string()),
+        inventory_id,
+        PathBuf::from(format!("sources/{data_source_id}/source.db")),
+    )
+    .unwrap()
 }
 
 #[test]

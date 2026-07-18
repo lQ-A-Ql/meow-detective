@@ -2,10 +2,12 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use super::{RbdObjectProviderError, RbdObjectReadOutcome, RbdObjectReadRequest};
+use crate::ceph_reconstruction::rbd_reader::RBD_READ_GRANULARITY_BYTES;
 
 pub(super) const MAX_BYTES: usize = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 1024;
-pub(super) const PAGE_BYTES: usize = 64 * 1024;
+pub(super) const PAGE_BYTES: usize = RBD_READ_GRANULARITY_BYTES;
+const CACHE_QUEUE_COMPACTION_FACTOR: usize = 4;
 
 #[derive(Clone)]
 pub(super) enum VerifiedObject {
@@ -19,12 +21,18 @@ struct VerifiedRangeKey {
     page_offset: u64,
 }
 
+struct CachedVerifiedObject {
+    value: VerifiedObject,
+    generation: u64,
+}
+
 pub(super) struct VerifiedObjectCache {
-    entries: HashMap<VerifiedRangeKey, VerifiedObject>,
-    lru: VecDeque<VerifiedRangeKey>,
+    entries: HashMap<VerifiedRangeKey, CachedVerifiedObject>,
+    access_order: VecDeque<(VerifiedRangeKey, u64)>,
     total_bytes: usize,
     max_bytes: usize,
     max_entries: usize,
+    generation: u64,
 }
 
 impl VerifiedObjectCache {
@@ -35,10 +43,11 @@ impl VerifiedObjectCache {
     pub(super) fn new(max_bytes: usize, max_entries: usize) -> Self {
         Self {
             entries: HashMap::new(),
-            lru: VecDeque::new(),
+            access_order: VecDeque::new(),
             total_bytes: 0,
             max_bytes,
             max_entries,
+            generation: 0,
         }
     }
 
@@ -51,8 +60,14 @@ impl VerifiedObjectCache {
             object_identity: object_identity.to_string(),
             page_offset,
         };
-        let value = self.entries.get(&key)?.clone();
-        self.touch(&key);
+        let generation = self.next_generation();
+        let value = {
+            let cached = self.entries.get_mut(&key)?;
+            cached.generation = generation;
+            cached.value.clone()
+        };
+        self.access_order.push_back((key, generation));
+        self.compact_access_order_if_needed();
         Some(value)
     }
 
@@ -80,31 +95,61 @@ impl VerifiedObjectCache {
         if let Some(previous) = self.entries.remove(&key) {
             self.total_bytes = self
                 .total_bytes
-                .saturating_sub(verified_object_size(&previous));
+                .saturating_sub(verified_object_size(&previous.value));
         }
-        self.lru.retain(|entry| entry != &key);
         self.total_bytes = self.total_bytes.saturating_add(value_size);
-        self.lru.push_back(key.clone());
-        self.entries.insert(key, value);
+        let generation = self.next_generation();
+        self.access_order.push_back((key.clone(), generation));
+        self.entries
+            .insert(key, CachedVerifiedObject { value, generation });
         self.evict();
-    }
-
-    fn touch(&mut self, key: &VerifiedRangeKey) {
-        self.lru.retain(|entry| entry != key);
-        self.lru.push_back(key.clone());
+        self.compact_access_order_if_needed();
     }
 
     fn evict(&mut self) {
         while self.total_bytes > self.max_bytes || self.entries.len() > self.max_entries {
-            let Some(oldest) = self.lru.pop_front() else {
+            let Some((oldest, generation)) = self.access_order.pop_front() else {
                 break;
             };
+            let is_current = self
+                .entries
+                .get(&oldest)
+                .is_some_and(|cached| cached.generation == generation);
+            if !is_current {
+                continue;
+            }
             if let Some(removed) = self.entries.remove(&oldest) {
                 self.total_bytes = self
                     .total_bytes
-                    .saturating_sub(verified_object_size(&removed));
+                    .saturating_sub(verified_object_size(&removed.value));
             }
         }
+    }
+
+    fn next_generation(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1).max(1);
+        self.generation
+    }
+
+    fn compact_access_order_if_needed(&mut self) {
+        let limit = self
+            .entries
+            .len()
+            .saturating_mul(CACHE_QUEUE_COMPACTION_FACTOR)
+            .max(128);
+        if self.access_order.len() <= limit {
+            return;
+        }
+        let mut current = self
+            .entries
+            .iter()
+            .map(|(key, cached)| (cached.generation, key.clone()))
+            .collect::<Vec<_>>();
+        current.sort_by_key(|(generation, _)| *generation);
+        self.access_order = current
+            .into_iter()
+            .map(|(generation, key)| (key, generation))
+            .collect();
     }
 }
 

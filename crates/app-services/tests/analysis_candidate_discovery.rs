@@ -1,4 +1,6 @@
-use app_services::analysis_service::discover_evidence_candidates;
+use app_services::analysis_service::{
+    discover_evidence_candidates, evidence_candidates_for_categories, AnalysisServiceError,
+};
 use rusqlite::{params, Connection};
 
 fn candidate_db() -> Connection {
@@ -10,6 +12,7 @@ fn candidate_db() -> Connection {
                 data_source_id TEXT NOT NULL,
                 path TEXT NOT NULL,
                 size INTEGER,
+                partition_index INTEGER,
                 entry_type TEXT NOT NULL
             );",
         )
@@ -77,4 +80,84 @@ fn linux_candidate_discovery_strips_partition_and_lvm_root_prefixes() {
     assert!(paths.iter().all(|path| linux
         .iter()
         .any(|candidate| candidate.path.as_str() == *path)));
+}
+
+#[test]
+fn linux_only_discovery_returns_no_windows_candidates() {
+    let connection = candidate_db();
+    insert_file(&connection, "linux-auth", "var/log/auth.log");
+    insert_file(
+        &connection,
+        "windows-registry",
+        "Windows/System32/config/SYSTEM",
+    );
+    insert_file(
+        &connection,
+        "windows-event",
+        "Windows/System32/winevt/Logs/System.evtx",
+    );
+
+    let candidates = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect("discover Linux-only evidence");
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].file_id.0, "linux-auth");
+    assert_eq!(candidates[0].category, "LinuxArtifacts");
+}
+
+#[test]
+fn discovery_carries_file_entry_partition_index() {
+    let connection = candidate_db();
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, partition_index, entry_type)
+             VALUES ('linux-web', 'source-1', 'var/www/html/index.php', 12, 7, 'file')",
+            [],
+        )
+        .expect("insert partition-bound candidate");
+
+    let candidates = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect("discover partition-bound candidate");
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].partition_index, Some(7));
+}
+
+#[test]
+fn discovery_rejects_negative_partition_index() {
+    let connection = candidate_db();
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, partition_index, entry_type)
+             VALUES ('negative', 'source-1', 'var/www/negative.php', 12, -1, 'file')",
+            [],
+        )
+        .expect("insert negative partition index");
+
+    let error = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect_err("negative partition index must fail");
+
+    assert!(matches!(error, AnalysisServiceError::InvalidInput(_)));
+    assert!(error.to_string().contains("partition_index -1"));
+}
+
+#[test]
+fn discovery_rejects_partition_index_above_supported_range() {
+    let connection = candidate_db();
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, partition_index, entry_type)
+             VALUES ('oversized', 'source-1', 'var/www/oversized.php', 12, 4294967296, 'file')",
+            [],
+        )
+        .expect("insert oversized partition index");
+
+    let error = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect_err("oversized partition index must fail");
+
+    assert!(matches!(error, AnalysisServiceError::InvalidInput(_)));
+    assert!(error.to_string().contains("partition_index 4294967296"));
 }

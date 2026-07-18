@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use super::{
     detect_rbd_image_filesystem, discover_rbd_images, RadosReplicaSource, RbdImageDescriptor,
-    SourceDbRadosObjectProvider,
+    SourceDbRadosObjectProvider, STRICT_RBD_REPLICA_COUNT,
 };
 
 #[derive(Debug, Error)]
@@ -42,7 +42,7 @@ pub enum RbdReconstructionError {
 pub fn discover_rbd_images_from_source_dbs(
     replicas: &[RadosReplicaSource],
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
-    validate_replica_set(replicas, replicas.len())?;
+    validate_replica_set(replicas)?;
     let mut images = BTreeMap::new();
     for replica in replicas {
         let connection = persistence_sqlite::open_existing_source_read_only(
@@ -87,9 +87,8 @@ fn source_db_error_detail(error: &persistence_sqlite::DbError) -> String {
 pub fn detect_rbd_image_from_source_dbs(
     replicas: Vec<RadosReplicaSource>,
     image_id: &str,
-    expected_replica_count: usize,
 ) -> Result<crate::datasource_service::ImageFilesystemProbe, RbdReconstructionError> {
-    validate_replica_set(&replicas, expected_replica_count)?;
+    validate_replica_set(&replicas)?;
     let descriptors = discover_rbd_images_from_source_dbs(&replicas)?;
     let descriptor = descriptors
         .into_iter()
@@ -101,7 +100,7 @@ pub fn detect_rbd_image_from_source_dbs(
         replicas,
         descriptor.metadata.data_pool_id,
         Vec::new(),
-        expected_replica_count,
+        STRICT_RBD_REPLICA_COUNT,
     )
     .map_err(|error| RbdReconstructionError::Provider {
         detail: error.to_string(),
@@ -114,16 +113,10 @@ pub fn detect_rbd_image_from_source_dbs(
     })
 }
 
-fn validate_replica_set(
-    replicas: &[RadosReplicaSource],
-    expected_replica_count: usize,
-) -> Result<(), RbdReconstructionError> {
-    if replicas.is_empty()
-        || expected_replica_count == 0
-        || replicas.len() != expected_replica_count
-    {
+fn validate_replica_set(replicas: &[RadosReplicaSource]) -> Result<(), RbdReconstructionError> {
+    if replicas.len() != STRICT_RBD_REPLICA_COUNT {
         return Err(RbdReconstructionError::ReplicaCoverageNotClosed {
-            expected: expected_replica_count,
+            expected: STRICT_RBD_REPLICA_COUNT,
             provided: replicas.len(),
         });
     }

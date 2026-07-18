@@ -1,3 +1,4 @@
+use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
@@ -5,8 +6,10 @@ use domain::FileEntryId;
 use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::io::Read;
+use std::sync::atomic::AtomicBool;
 
 type TxlogBytes = (Option<Vec<u8>>, Option<Vec<u8>>);
+const READ_BUFFER_BYTES: usize = 64 * 1024;
 
 pub(super) struct RegistryPreloadContext {
     registry_bytes: HashMap<(String, String), Vec<u8>>,
@@ -40,37 +43,36 @@ impl RegistryPreloadContext {
 pub(super) fn preload_registry_context<E: std::fmt::Display>(
     conn: &Connection,
     candidates: &[EvidenceCandidate],
-    mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
+    cancel_token: &AtomicBool,
+    mut file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
     already_extracted: impl Fn(&EvidenceCandidate) -> Result<bool, AnalysisServiceError>,
 ) -> Result<RegistryPreloadContext, AnalysisServiceError> {
+    ensure_not_cancelled(cancel_token)?;
     let mut registry_bytes = HashMap::new();
     let mut txlog_bytes = HashMap::new();
     let mut boot_keys = HashMap::new();
     let mut warnings = Vec::new();
 
     for candidate in candidates {
+        ensure_not_cancelled(cancel_token)?;
         if candidate.category != "Registry" {
             continue;
         }
         if already_extracted(candidate)? {
             continue;
         }
-        let mut reader = match file_reader(&candidate.file_id) {
-            Ok(reader) => reader,
-            Err(err) => {
-                warnings.push(format!("{} read failed: {}", candidate.path, err));
-                continue;
-            }
+        let bytes = match read_file_entry_bytes(
+            &mut file_reader,
+            &candidate.file_id,
+            &candidate.path,
+            None,
+            cancel_token,
+            &mut warnings,
+        )? {
+            Some(bytes) => bytes,
+            None => continue,
         };
-        let mut bytes = Vec::new();
-        if let Err(err) = reader
-            .by_ref()
-            .take(MAX_ANALYSIS_SOURCE_BYTES as u64)
-            .read_to_end(&mut bytes)
-        {
-            warnings.push(format!("{} read failed: {}", candidate.path, err));
-            continue;
-        }
+        ensure_not_cancelled(cancel_token)?;
         let normalized = normalize_evidence_path(&candidate.path);
         if normalized.ends_with("/windows/system32/config/system") {
             boot_keys.insert(
@@ -87,36 +89,86 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
         let log2_path = format!("{}.log2", normalized);
         let log1_id = find_file_entry_id_by_path(conn, &candidate.data_source_id, &log1_path);
         let log2_id = find_file_entry_id_by_path(conn, &candidate.data_source_id, &log2_path);
-        let log1_bytes = log1_id.and_then(|id| {
-            read_file_entry_bytes(
+        let log1_bytes = match log1_id {
+            Some(id) => read_file_entry_bytes(
                 &mut file_reader,
                 &id,
                 &candidate.path,
-                "LOG1",
+                Some("LOG1"),
+                cancel_token,
                 &mut warnings,
-            )
-        });
-        let log2_bytes = log2_id.and_then(|id| {
-            read_file_entry_bytes(
+            )?,
+            None => None,
+        };
+        let log2_bytes = match log2_id {
+            Some(id) => read_file_entry_bytes(
                 &mut file_reader,
                 &id,
                 &candidate.path,
-                "LOG2",
+                Some("LOG2"),
+                cancel_token,
                 &mut warnings,
-            )
-        });
+            )?,
+            None => None,
+        };
         txlog_bytes.insert(
             (candidate.data_source_id.clone(), normalized),
             (log1_bytes, log2_bytes),
         );
     }
 
+    ensure_not_cancelled(cancel_token)?;
     Ok(RegistryPreloadContext {
         registry_bytes,
         txlog_bytes,
         boot_keys,
         warnings,
     })
+}
+
+fn read_file_entry_bytes<E: std::fmt::Display>(
+    file_reader: &mut impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
+    file_id: &FileEntryId,
+    hive_path: &str,
+    label: Option<&str>,
+    cancel_token: &AtomicBool,
+    warnings: &mut Vec<String>,
+) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
+    ensure_not_cancelled(cancel_token)?;
+    let mut reader = match file_reader(file_id, MAX_ANALYSIS_SOURCE_BYTES) {
+        Ok(reader) => reader,
+        Err(err) => {
+            warnings.push(read_warning(hive_path, label, &err));
+            return Ok(None);
+        }
+    };
+    ensure_not_cancelled(cancel_token)?;
+    let mut bytes = Vec::with_capacity(READ_BUFFER_BYTES);
+    let mut buffer = [0u8; READ_BUFFER_BYTES];
+    let mut limited = reader.by_ref().take(MAX_ANALYSIS_SOURCE_BYTES as u64);
+    loop {
+        ensure_not_cancelled(cancel_token)?;
+        let read = match limited.read(&mut buffer) {
+            Ok(read) => read,
+            Err(err) => {
+                warnings.push(read_warning(hive_path, label, &err));
+                return Ok(None);
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..read]);
+    }
+    ensure_not_cancelled(cancel_token)?;
+    Ok(Some(bytes))
+}
+
+fn read_warning(hive_path: &str, label: Option<&str>, error: &impl std::fmt::Display) -> String {
+    match label {
+        Some(label) => format!("{hive_path} {label} read failed: {error}"),
+        None => format!("{hive_path} read failed: {error}"),
+    }
 }
 
 fn registry_key(candidate: &EvidenceCandidate) -> (String, String) {
@@ -143,31 +195,4 @@ fn find_file_entry_id_by_path(
     .optional()
     .ok()
     .flatten()
-}
-
-/// Read the contents of a companion file (e.g. a transaction log) using the
-/// same size-bounded reader used for primary evidence sources.
-fn read_file_entry_bytes<E: std::fmt::Display>(
-    file_reader: &mut impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
-    file_id: &FileEntryId,
-    hive_path: &str,
-    label: &str,
-    warnings: &mut Vec<String>,
-) -> Option<Vec<u8>> {
-    let reader = match file_reader(file_id) {
-        Ok(reader) => reader,
-        Err(err) => {
-            warnings.push(format!("{} {} read failed: {}", hive_path, label, err));
-            return None;
-        }
-    };
-    let mut bytes = Vec::new();
-    if let Err(err) = reader
-        .take(MAX_ANALYSIS_SOURCE_BYTES as u64)
-        .read_to_end(&mut bytes)
-    {
-        warnings.push(format!("{} {} read failed: {}", hive_path, label, err));
-        return None;
-    }
-    Some(bytes)
 }

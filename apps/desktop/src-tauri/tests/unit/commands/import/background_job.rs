@@ -35,12 +35,17 @@ use persistence_sqlite::repositories::{
 use tempfile::TempDir;
 use transport::dto::ViewerRangeRequestDto;
 
-use super::{run_background_linux_cluster_import_job, BackgroundLinuxClusterImportJob};
+use super::{
+    complete_browseable_cluster_job, continue_cluster_rbd_processing,
+    run_background_linux_cluster_import_until_browseable, BackgroundLinuxClusterImportJob,
+};
 
 const PVE_CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
 const PVE_CASE_OUTPUT_ROOT_ENV: &str = "FORENSICS_PVE_CASE_OUTPUT_ROOT";
 const PVE_RBD_CASE_ROOT_ENV: &str = "FORENSICS_PVE_RBD_CASE_ROOT";
 const PVE_RBD_DEEP_PARENT_HASH_ENV: &str = "FORENSICS_PVE_RBD_DEEP_PARENT_HASH";
+const PVE_RBD_COLD_ARTIFACT_REPLAY_ENV: &str = "FORENSICS_PVE_RBD_COLD_ARTIFACT_REPLAY";
+const PVE_RBD_CATALOG_REBUILD_ENV: &str = "FORENSICS_PVE_RBD_CATALOG_REBUILD";
 const PVE_MEMBER_COUNT: usize = 6;
 const PVE_HOST_COUNT: usize = 3;
 const PVE_CLUSTER_FSID: &str = "3f28d8bb-e754-475b-b471-b9c97161bbf7";
@@ -66,6 +71,20 @@ const PVE_OS_FILES: &[&str] = &[
     "/etc/hostname",
     "/var/lib/pve-cluster/config.db",
 ];
+
+fn run_background_linux_cluster_import_job(
+    job: BackgroundLinuxClusterImportJob,
+    app: Option<&tauri::AppHandle>,
+    cancel_token: Arc<AtomicBool>,
+) -> Result<(), transport::CommandError> {
+    let processing =
+        run_background_linux_cluster_import_until_browseable(job, app, cancel_token.clone())?;
+    if let Some(outcome) = processing {
+        complete_browseable_cluster_job(&outcome, app)?;
+        continue_cluster_rbd_processing(&outcome.processing, &cancel_token)?;
+    }
+    Ok(())
+}
 
 struct BluestoreSourceSummary {
     osd_uuid: String,
@@ -212,7 +231,10 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
         .expect("create cluster import job");
     drop(case_conn);
 
-    let result = run_background_linux_cluster_import_job(
+    let total_started = Instant::now();
+    let cancel_token = Arc::new(AtomicBool::new(false));
+    let browseable_started = Instant::now();
+    let processing = run_background_linux_cluster_import_until_browseable(
         BackgroundLinuxClusterImportJob {
             db_path: case_root.join("app.db"),
             case_id: case_id.clone(),
@@ -224,8 +246,32 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
             analysis_mode: ImportAnalysisMode::MetadataOnly,
         },
         None,
-        Arc::new(AtomicBool::new(false)),
+        cancel_token.clone(),
     );
+    let browseable_elapsed = browseable_started.elapsed();
+    let parent_snapshots = if processing.is_ok() {
+        let browseable_conn =
+            persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
+                .expect("open browseable case database");
+        capture_rbd_parent_source_snapshots(&browseable_conn, &case_root, &case_id)
+    } else {
+        Vec::new()
+    };
+    let result = processing.and_then(|processing| {
+        let post_processing_started = Instant::now();
+        let result = match processing {
+            Some(outcome) => complete_browseable_cluster_job(&outcome, None)
+                .and_then(|()| continue_cluster_rbd_processing(&outcome.processing, &cancel_token)),
+            None => Ok(()),
+        };
+        eprintln!(
+            "PVE cluster timing: browseableMs={} postProcessingMs={} totalMs={}",
+            browseable_elapsed.as_millis(),
+            post_processing_started.elapsed().as_millis(),
+            total_started.elapsed().as_millis()
+        );
+        result
+    });
     let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
         .expect("reopen case database");
     let cluster = DataSourceClusterRepo::new(&case_conn)
@@ -262,6 +308,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
     assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &plan.cluster_id);
     assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &plan.cluster_id);
+    assert_parent_source_snapshots_unchanged(&case_conn, &case_root, &case_id, &parent_snapshots);
     assert_job_outcome(&case_conn, &job_id, &cluster);
 }
 
@@ -452,7 +499,13 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         .find_by_id(&cluster_id)
         .expect("query retained PVE cluster")
         .expect("retained PVE cluster");
-    if std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some() {
+    let require_ready = std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some();
+    let catalog_rebuild = std::env::var_os(PVE_RBD_CATALOG_REBUILD_ENV).is_some();
+    assert!(
+        !(require_ready && catalog_rebuild),
+        "retained ready replay and Catalog rebuild are mutually exclusive"
+    );
+    if require_ready {
         let ready_derived = DataSourceRepo::new(&case_conn)
             .find_by_case(&cluster.case_id)
             .expect("query retained derived sources")
@@ -473,6 +526,12 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     DataSourceClusterRepo::new(&case_conn)
         .update_state(&cluster_id, "ready", cluster.member_count, 0, None)
         .expect("mark retained PVE cluster ready for RBD materialization");
+    migrate_retained_source_databases(
+        &case_conn,
+        &case_root,
+        &cluster.case_id,
+        if catalog_rebuild { 0 } else { 1 },
+    );
     let parent_snapshots =
         capture_rbd_parent_source_snapshots(&case_conn, &case_root, &cluster.case_id);
 
@@ -485,7 +544,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         started.elapsed().as_millis(),
         materialized.len()
     );
-    if std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some() {
+    if require_ready {
         assert!(
             started.elapsed() <= Duration::from_secs(5),
             "ready derived-source reuse exceeded 5 seconds and may have regressed to full Catalog work"
@@ -500,7 +559,204 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         &parent_snapshots,
     );
     assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+    if catalog_rebuild {
+        return;
+    }
+    let cold_artifact_replay = std::env::var_os(PVE_RBD_COLD_ARTIFACT_REPLAY_ENV).is_some();
+    if cold_artifact_replay {
+        reset_derived_artifact_phase(
+            &case_conn,
+            &case_root,
+            &materialized[0].data_source.id,
+            true,
+        );
+    }
+    for source in &materialized {
+        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+            &case_conn,
+            &case_root,
+            &cluster.case_id,
+            &source.data_source.id,
+        )
+        .expect("finalize retained PVE RBD source processing");
+    }
+    if cold_artifact_replay {
+        assert_cold_artifact_phase_metrics(
+            &case_conn,
+            &materialized[0].data_source.id,
+            PVE_RBD_FILE_COUNT,
+        );
+        reset_derived_artifact_phase(
+            &case_conn,
+            &case_root,
+            &materialized[0].data_source.id,
+            false,
+        );
+        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+            &case_conn,
+            &case_root,
+            &cluster.case_id,
+            &materialized[0].data_source.id,
+        )
+        .expect("run idempotent retained PVE artifact replay");
+        assert_idempotent_artifact_phase_metrics(&case_conn, &materialized[0].data_source.id);
+    }
     assert_derived_rbd_automatic_processing(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+    assert_parent_source_snapshots_unchanged(
+        &case_conn,
+        &case_root,
+        &cluster.case_id,
+        &parent_snapshots,
+    );
+}
+
+fn migrate_retained_source_databases(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    expected_derived_sources: usize,
+) {
+    let sources = DataSourceRepo::new(case_conn)
+        .find_by_case(case_id)
+        .expect("query retained source databases before migration");
+    let derived_source_count = sources
+        .iter()
+        .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
+        .count();
+    assert_eq!(
+        derived_source_count, expected_derived_sources,
+        "retained RBD replay has an unexpected derived-source baseline"
+    );
+    let started = Instant::now();
+    for source in &sources {
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "migrate retained source database '{}': {error}",
+                    source.id.0
+                )
+            });
+        source_db::checkpoint_source_db(&source_conn).unwrap_or_else(|error| {
+            panic!(
+                "checkpoint retained source database '{}': {error}",
+                source.id.0
+            )
+        });
+    }
+    eprintln!(
+        "PVE_RBD_SOURCE_MIGRATION elapsedMs={} sources={}",
+        started.elapsed().as_millis(),
+        sources.len()
+    );
+}
+
+fn reset_derived_artifact_phase(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+    clear_checkpoints: bool,
+) {
+    if clear_checkpoints {
+        let source_conn =
+            source_db::open_registered_source_db(case_conn, case_root, data_source_id)
+                .expect("open derived source for cold artifact replay");
+        source_conn
+            .execute(
+                "DELETE FROM source_meta
+                 WHERE key LIKE 'analysis_candidate_scan:%'",
+                [],
+            )
+            .expect("clear derived artifact checkpoints");
+    }
+    let changed = case_conn
+        .execute(
+            "UPDATE data_source_processing_phases
+             SET state = 'failed',
+                 stats_json = '{}',
+                 last_error = 'explicit real-sample artifact replay',
+                 completed_at = datetime('now'),
+                 heartbeat_at = datetime('now'),
+                 lease_expires_at = NULL,
+                 updated_at = datetime('now')
+             WHERE data_source_id = ?1
+               AND phase = 'artifacts'",
+            [&data_source_id.0],
+        )
+        .expect("reset derived artifact processing phase");
+    assert_eq!(
+        changed, 1,
+        "derived artifact phase must exist before replay"
+    );
+}
+
+fn assert_cold_artifact_phase_metrics(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    max_file_count: u64,
+) {
+    let stats = artifact_phase_stats(case_conn, data_source_id);
+    let scanned = required_u64(&stats, "scannedCount");
+    let source_reads = required_u64(&stats, "sourceReadCount");
+    let source_read_elapsed_ms = required_u64(&stats, "sourceReadElapsedMs");
+    let processing_elapsed_ms = required_u64(&stats, "processingElapsedMs");
+    assert!(scanned > 0 && scanned <= max_file_count);
+    assert_eq!(
+        source_reads, scanned,
+        "cold artifact replay must read every non-checkpointed candidate"
+    );
+    assert!(source_read_elapsed_ms > 0);
+    assert!(processing_elapsed_ms >= source_read_elapsed_ms);
+    assert!(required_u64(&stats, "sourceReadAvgMicros") > 0);
+    assert_eq!(
+        required_u64(&stats, "radosReadPlanSessionInitializations"),
+        PVE_RBD_REPLICA_COUNT as u64,
+        "each immutable BlueStore parent source must initialize one read-plan session"
+    );
+    assert!(
+        required_u64(&stats, "radosPlanCacheMisses")
+            >= required_u64(&stats, "radosReadPlanSessionInitializations"),
+        "object-plan misses must not reinitialize source-level bindings"
+    );
+    assert!(stats["rssMb"].is_number());
+    assert!(stats["peakRssMb"].is_number());
+    eprintln!("PVE_RBD_ARTIFACT_COLD stats={stats}");
+}
+
+fn assert_idempotent_artifact_phase_metrics(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+) {
+    let stats = artifact_phase_stats(case_conn, data_source_id);
+    let scanned = required_u64(&stats, "scannedCount");
+    assert_eq!(
+        required_u64(&stats, "sourceReadCount"),
+        0,
+        "checkpoint replay must not read derived evidence bytes"
+    );
+    assert_eq!(
+        required_u64(&stats, "checkpointHitCount"),
+        scanned,
+        "every idempotent replay candidate must resolve from a checkpoint"
+    );
+    eprintln!("PVE_RBD_ARTIFACT_IDEMPOTENT stats={stats}");
+}
+
+fn artifact_phase_stats(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+) -> serde_json::Value {
+    let phase = DataSourceProcessingPhaseRepo::new(case_conn)
+        .find(data_source_id, ProcessingPhase::Artifacts)
+        .expect("query derived artifact phase")
+        .expect("derived artifact phase");
+    assert_eq!(phase.state, ProcessingPhaseState::Ready);
+    serde_json::from_str(&phase.stats_json).expect("parse derived artifact phase stats")
+}
+
+fn required_u64(value: &serde_json::Value, field: &str) -> u64 {
+    value[field]
+        .as_u64()
+        .unwrap_or_else(|| panic!("artifact phase stats field '{field}' is missing: {value}"))
 }
 
 #[test]
@@ -1085,8 +1341,8 @@ fn assert_derived_rbd_automatic_processing(
         .as_u64()
         .expect("Timeline macbTotalCount");
     assert!(
-        macb_inserted > 0,
-        "Timeline phase must insert MACB events once XFS timestamps are available: {timeline_stats}"
+        macb_total > 0,
+        "Timeline phase must retain MACB events once XFS timestamps are available: {timeline_stats}"
     );
     assert!(
         macb_total >= macb_inserted,
@@ -1120,6 +1376,20 @@ fn assert_derived_rbd_automatic_processing(
 
     let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
         .expect("open analyzed derived RBD source database");
+    let completed_timeline_projections: u64 = source_conn
+        .query_row(
+            "SELECT COUNT(*)
+             FROM timeline_projection_meta
+             WHERE projection_key IN ('macb', 'macb_graph')
+               AND status = 'done'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("query completed Timeline projections");
+    assert_eq!(
+        completed_timeline_projections, 2,
+        "MACB and timeline graph projections must both persist completion markers"
+    );
     let linux_system_config_count = ArtifactRepo::new(&source_conn)
         .count_by_family()
         .expect("count derived VM artifact families")
@@ -1157,8 +1427,17 @@ fn assert_derived_rbd_automatic_processing(
         "automatic search index cannot resolve retained /etc/passwd content"
     );
 
-    materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
+    let repeated = materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
         .expect("repeat ready derived-source materialization");
+    for source in repeated {
+        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+            case_conn,
+            case_root,
+            case_id,
+            &source.data_source.id,
+        )
+        .expect("repeat ready derived-source processing");
+    }
     let reopened = source_db::open_registered_source_db(case_conn, case_root, &source.id)
         .expect("reopen automatically processed derived source");
     assert_eq!(

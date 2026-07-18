@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use domain::DataSourceId;
@@ -9,7 +10,7 @@ use persistence_sqlite::{
     runner,
 };
 
-use super::phase_execution::run_phase;
+use super::phase_execution::{run_cancellable_phase, run_phase};
 use super::phase_runner::ProcessingPhaseRunner;
 use super::*;
 
@@ -71,6 +72,131 @@ fn failed_phase_is_persisted_without_aborting_the_report() {
 }
 
 #[test]
+fn cancelled_phase_is_deferred_and_remains_retryable() {
+    let conn = setup_case_db();
+    let source_id = DataSourceId(SOURCE_ID.to_string());
+    let runner = ProcessingPhaseRunner::new(&conn, &source_id, FINGERPRINT);
+    let cancel_token = AtomicBool::new(true);
+    let mut report = DerivedFinalizationReport::default();
+
+    run_cancellable_phase(
+        &runner,
+        ProcessingPhase::Search,
+        &mut report,
+        &cancel_token,
+        || Err("Search indexing cancelled by user".to_string()),
+    );
+
+    let stored = DataSourceProcessingPhaseRepo::new(&conn)
+        .find(&source_id, ProcessingPhase::Search)
+        .expect("query search phase")
+        .expect("search phase exists");
+    assert_eq!(stored.state, ProcessingPhaseState::Deferred);
+    assert_eq!(
+        stored.stats_json,
+        r#"{"reason":"userCancelled","retryable":true}"#
+    );
+    assert_eq!(
+        stored.last_error.as_deref(),
+        Some("Search indexing cancelled by user")
+    );
+    assert_eq!(report.deferred_count(), 1);
+    assert_eq!(report.failed_count(), 0);
+}
+
+#[test]
+fn retryable_artifact_read_failure_cannot_publish_a_ready_phase_payload() {
+    let execution = crate::analysis_service::AnalysisExtractionExecution {
+        dto: transport::dto::AnalysisExtractionRunDto {
+            status: transport::dto::AnalysisParseStatusDto::Failed,
+            scanned_count: 0,
+            checkpoint_hit_count: 0,
+            artifact_count: 0,
+            timeline_event_count: 0,
+            sections: Vec::new(),
+            generated_at: "2026-07-18T00:00:00Z".to_string(),
+            warnings: vec!["var/www/index.php read failed".to_string()],
+        },
+        retryable_failure_count: 1,
+        discovery_elapsed_ms: 1,
+        processing_elapsed_ms: 2,
+        persistence_elapsed_ms: 0,
+        source_read_count: 1,
+        source_read_elapsed_ms: 2,
+        filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
+        rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
+    };
+
+    let error = super::artifacts::artifact_phase_output(execution)
+        .expect_err("retryable read failure must keep the phase failed");
+    assert!(error.contains("1 retryable evidence-read failures"));
+    assert!(error.contains("var/www/index.php read failed"));
+}
+
+#[test]
+fn artifact_phase_payload_records_runtime_throughput_and_memory() {
+    let execution = crate::analysis_service::AnalysisExtractionExecution {
+        dto: transport::dto::AnalysisExtractionRunDto {
+            status: transport::dto::AnalysisParseStatusDto::Parsed,
+            scanned_count: 250,
+            checkpoint_hit_count: 10,
+            artifact_count: 300,
+            timeline_event_count: 20,
+            sections: Vec::new(),
+            generated_at: "2026-07-18T00:00:00Z".to_string(),
+            warnings: Vec::new(),
+        },
+        retryable_failure_count: 0,
+        discovery_elapsed_ms: 100,
+        processing_elapsed_ms: 2_000,
+        persistence_elapsed_ms: 50,
+        source_read_count: 200,
+        source_read_elapsed_ms: 1_500,
+        filesystem_read_metrics: evidence_core::FileSystemReadMetrics {
+            filesystem_open_operations: 1,
+            metadata_cache_hits: 100,
+            metadata_cache_misses: 20,
+            evidence_read_operations: 60,
+            evidence_bytes_read: 245_760,
+        },
+        rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics {
+            verified_cache_hits: 50,
+            verified_cache_misses: 10,
+            plan_cache_hits: 25,
+            plan_cache_misses: 5,
+            plan_lookup_elapsed_micros: 1_250,
+            read_plan_session_initializations: 3,
+            read_plan_session_elapsed_micros: 750,
+            replica_device_reads: 30,
+            replica_device_bytes: 1_966_080,
+            replica_device_elapsed_micros: 25_000,
+        },
+    };
+
+    let payload = super::artifacts::artifact_phase_output(execution)
+        .expect("artifact phase payload should be serializable");
+    let stats: serde_json::Value =
+        serde_json::from_str(&payload).expect("artifact phase payload JSON");
+
+    assert_eq!(stats["processingRowsPerSec"], 125);
+    assert_eq!(stats["sourceReadAvgMicros"], 7_500);
+    assert_eq!(stats["filesystemOpenOperations"], 1);
+    assert_eq!(stats["filesystemMetadataCacheHits"], 100);
+    assert_eq!(stats["filesystemMetadataCacheMisses"], 20);
+    assert_eq!(stats["filesystemEvidenceReadOperations"], 60);
+    assert_eq!(stats["filesystemEvidenceBytesRead"], 245_760);
+    assert_eq!(stats["radosVerifiedCacheHits"], 50);
+    assert_eq!(stats["radosVerifiedCacheMisses"], 10);
+    assert_eq!(stats["radosPlanCacheHits"], 25);
+    assert_eq!(stats["radosPlanCacheMisses"], 5);
+    assert_eq!(stats["radosReadPlanSessionInitializations"], 3);
+    assert_eq!(stats["radosReadPlanSessionElapsedMicros"], 750);
+    assert_eq!(stats["radosReplicaDeviceReads"], 30);
+    assert!(stats["rssMb"].is_number());
+    assert!(stats["peakRssMb"].is_number());
+}
+
+#[test]
 fn failed_phase_can_retry_without_resetting_its_identity() {
     let conn = setup_case_db();
     let source_id = DataSourceId(SOURCE_ID.to_string());
@@ -114,6 +240,37 @@ fn ready_phase_is_idempotent_and_does_not_rerun_work() {
     assert_eq!(calls.get(), 0);
     assert_eq!(second.phases.len(), 1);
     assert_eq!(second.phases[0].state, ProcessingPhaseState::Ready);
+}
+
+#[test]
+fn catalog_completion_queues_the_complete_post_processing_graph() {
+    let conn = setup_case_db();
+    let source_id = DataSourceId(SOURCE_ID.to_string());
+    let runner = ProcessingPhaseRunner::new(&conn, &source_id, FINGERPRINT);
+    let attempt = match runner
+        .claim(ProcessingPhase::Catalog)
+        .expect("claim catalog phase")
+    {
+        super::phase_runner::PhaseClaim::Acquired(attempt) => attempt,
+        other => panic!("expected acquired catalog phase, got {other:?}"),
+    };
+    runner
+        .ready(&attempt, r#"{"recordCount":42}"#)
+        .expect("complete catalog phase");
+
+    queue_post_catalog_phases(&conn, &source_id, FINGERPRINT).expect("queue post-Catalog phases");
+
+    let phases = DataSourceProcessingPhaseRepo::new(&conn)
+        .list_for_data_source(&source_id)
+        .expect("list processing phases");
+    assert_eq!(
+        phases.iter().map(|phase| phase.phase).collect::<Vec<_>>(),
+        ProcessingPhase::ALL
+    );
+    assert_eq!(phases[0].state, ProcessingPhaseState::Ready);
+    assert!(phases[1..]
+        .iter()
+        .all(|phase| phase.state == ProcessingPhaseState::Pending));
 }
 
 #[test]
@@ -239,6 +396,53 @@ fn processing_phase_fingerprints_are_phase_scoped() {
     assert_ne!(catalog, artifacts);
     assert_ne!(artifacts, search);
     assert!(catalog.bytes().all(|byte| byte.is_ascii_hexdigit()));
+}
+
+#[test]
+fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
+    let current =
+        super::fingerprint::phase_input_fingerprint(FINGERPRINT, ProcessingPhase::Catalog);
+    let source_015 = super::fingerprint::phase_input_fingerprint_with_contract(
+        FINGERPRINT,
+        ProcessingPhase::Catalog,
+        "source_015_ceph_bluestore_rbd_header_context",
+        super::fingerprint::CATALOG_POLICY_VERSION,
+    );
+    let source_016 = super::fingerprint::phase_input_fingerprint_with_contract(
+        FINGERPRINT,
+        ProcessingPhase::Catalog,
+        persistence_sqlite::runner::latest_source_version(),
+        super::fingerprint::CATALOG_POLICY_VERSION,
+    );
+
+    assert_eq!(
+        persistence_sqlite::runner::latest_source_version(),
+        "source_017_timeline_projection_identity"
+    );
+    assert_eq!(
+        super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),
+        "source_015_ceph_bluestore_rbd_header_context"
+    );
+    assert_eq!(
+        super::fingerprint::phase_schema_dependency(ProcessingPhase::Artifacts),
+        "source_016_file_partition_index"
+    );
+    assert_eq!(current, source_015);
+    assert_ne!(current, source_016);
+}
+
+#[test]
+fn catalog_policy_change_invalidates_catalog_fingerprint() {
+    let current =
+        super::fingerprint::phase_input_fingerprint(FINGERPRINT, ProcessingPhase::Catalog);
+    let changed = super::fingerprint::phase_input_fingerprint_with_contract(
+        FINGERPRINT,
+        ProcessingPhase::Catalog,
+        super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),
+        "rbd-filesystem-catalog-v3",
+    );
+
+    assert_ne!(current, changed);
 }
 
 #[test]

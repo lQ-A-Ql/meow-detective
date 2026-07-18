@@ -50,6 +50,7 @@ pub struct AnalysisExtractionSectionRunDto {
 pub struct AnalysisExtractionRunDto {
     pub status: AnalysisParseStatusDto,
     pub scanned_count: u64,
+    pub checkpoint_hit_count: u64,
     pub artifact_count: u64,
     pub timeline_event_count: u64,
     pub sections: Vec<AnalysisExtractionSectionRunDto>,

@@ -27,3 +27,17 @@ fn normalization_preserves_windows_paths_after_partition_marker_removal() {
         "/windows/system32/config/system"
     );
 }
+
+#[test]
+fn linux_category_selection_excludes_windows_definitions_before_scan() {
+    let definitions = selected_evidence_category_defs(&["LinuxArtifacts"]);
+    let categories = definitions
+        .iter()
+        .map(|definition| definition.category)
+        .collect::<Vec<_>>();
+
+    assert_eq!(categories, vec!["LinuxArtifacts"]);
+    assert!(!categories.contains(&"Registry"));
+    assert!(!categories.contains(&"EventLogs"));
+    assert!(!categories.contains(&"BrowserHistory"));
+}

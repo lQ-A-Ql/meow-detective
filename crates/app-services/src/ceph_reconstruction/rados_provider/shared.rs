@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use super::SourceDbRadosObjectProvider;
+use super::{RadosProviderReadMetrics, SourceDbRadosObjectProvider};
 use crate::ceph_reconstruction::{
     RbdObjectProvider, RbdObjectProviderError, RbdObjectReadOutcome, RbdObjectReadRequest,
 };
@@ -15,6 +15,13 @@ impl SharedRadosObjectProvider {
         Self {
             inner: Arc::new(Mutex::new(provider)),
         }
+    }
+
+    pub(crate) fn read_metrics(&self) -> RadosProviderReadMetrics {
+        self.inner
+            .lock()
+            .map(|provider| provider.read_metrics)
+            .unwrap_or_default()
     }
 }
 

@@ -44,21 +44,21 @@ fn rejects_empty_replica_set_before_opening_source_databases() {
     assert!(matches!(
         error,
         RbdReconstructionError::ReplicaCoverageNotClosed {
-            expected: 0,
+            expected: 3,
             provided: 0
         }
     ));
 }
 
 #[test]
-fn rejects_explicit_replica_count_mismatch_before_source_access() {
-    let error = detect_rbd_image_from_source_dbs(vec![replica("inventory-a")], "image-1", 2)
+fn rejects_incomplete_replica_count_before_source_access() {
+    let error = detect_rbd_image_from_source_dbs(vec![replica("inventory-a")], "image-1")
         .expect_err("incomplete set must fail");
 
     assert!(matches!(
         error,
         RbdReconstructionError::ReplicaCoverageNotClosed {
-            expected: 2,
+            expected: 3,
             provided: 1
         }
     ));
@@ -66,7 +66,11 @@ fn rejects_explicit_replica_count_mismatch_before_source_access() {
 
 #[test]
 fn rejects_duplicate_replica_inventory_before_source_access() {
-    let replicas = vec![replica("inventory-a"), replica("inventory-a")];
+    let replicas = vec![
+        replica("inventory-a"),
+        replica("inventory-a"),
+        replica("inventory-c"),
+    ];
     let error =
         discover_rbd_images_from_source_dbs(&replicas).expect_err("duplicate set must fail");
 
@@ -87,6 +91,7 @@ fn rejects_duplicate_replica_source_before_source_access() {
             PathBuf::from("sources/inventory-b/source.db"),
         )
         .expect("valid replica"),
+        replica("inventory-c"),
     ];
     let error =
         discover_rbd_images_from_source_dbs(&replicas).expect_err("duplicate source must fail");
@@ -106,8 +111,9 @@ fn source_database_errors_are_inventory_scoped_and_do_not_expose_paths() {
         PathBuf::from(r"D:\private\evidence\source.db"),
     )
     .expect("valid replica");
+    let replicas = vec![source, replica("inventory-b"), replica("inventory-c")];
     let error =
-        discover_rbd_images_from_source_dbs(&[source]).expect_err("missing source DB must fail");
+        discover_rbd_images_from_source_dbs(&replicas).expect_err("missing source DB must fail");
     let message = error.to_string();
 
     assert!(matches!(

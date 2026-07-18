@@ -1,5 +1,6 @@
 //! Recovery operations for persisted data-source processing phases.
 
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use persistence_sqlite::{
     repositories::processing_phase_repo::{
         DataSourceProcessingPhaseRecord, DataSourceProcessingPhaseRepo, ProcessingPhaseState,
@@ -19,6 +20,51 @@ pub fn recover_interrupted_processing_phases(
     DataSourceProcessingPhaseRepo::new(connection).recover_interrupted(INTERRUPTED_REASON)
 }
 
+pub fn retryable_derived_sources(
+    connection: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+) -> Result<Vec<domain::DataSourceId>, DbError> {
+    let phase_repo = DataSourceProcessingPhaseRepo::new(connection);
+    let source_repo = DataSourceRepo::new(connection);
+    let mut retryable = Vec::new();
+    for source in source_repo
+        .find_by_case(case_id)?
+        .into_iter()
+        .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
+    {
+        let Some(storage) = source_repo.find_storage(&source.id)? else {
+            continue;
+        };
+        if storage.import_state != "ready" {
+            continue;
+        }
+        let phases = phase_repo.list_for_data_source(&source.id)?;
+        let catalog_ready = phases.iter().any(|phase| {
+            phase.phase
+                == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhase::Catalog
+                && phase.state == ProcessingPhaseState::Ready
+        });
+        let post_catalog = phases
+            .iter()
+            .filter(|phase| {
+                phase.phase
+                    != persistence_sqlite::repositories::processing_phase_repo::ProcessingPhase::Catalog
+            })
+            .collect::<Vec<_>>();
+        let post_catalog_incomplete = post_catalog.len()
+            != persistence_sqlite::repositories::processing_phase_repo::ProcessingPhase::ALL.len()
+                - 1
+            || post_catalog
+                .iter()
+                .any(|phase| phase.state != ProcessingPhaseState::Ready);
+        if catalog_ready && post_catalog_incomplete {
+            retryable.push(source.id);
+        }
+    }
+    retryable.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(retryable)
+}
+
 pub fn get_data_source_processing_summary(
     connection: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
@@ -32,8 +78,9 @@ pub fn get_data_source_processing_summary(
     let counts = ProcessingStateCounts::from_records(&records);
     let last_error = records
         .iter()
-        .rev()
-        .find_map(|record| record.last_error.clone());
+        .filter(|record| record.last_error.is_some())
+        .max_by(|left, right| left.updated_at.cmp(&right.updated_at))
+        .and_then(|record| record.last_error.clone());
     let phases = records.into_iter().map(phase_to_dto).collect();
 
     Ok(Some(DataSourceProcessingSummaryDto {
@@ -91,10 +138,13 @@ impl ProcessingStateCounts {
 }
 
 fn phase_to_dto(record: DataSourceProcessingPhaseRecord) -> DataSourceProcessingPhaseDto {
+    let stats = serde_json::from_str(&record.stats_json)
+        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
     DataSourceProcessingPhaseDto {
         phase: record.phase.as_str().to_string(),
         state: record.state.as_str().to_string(),
         version: record.version,
+        stats,
         last_error: record.last_error,
         started_at: record.started_at,
         completed_at: record.completed_at,

@@ -6,7 +6,20 @@ use rusqlite::params;
 use tempfile::TempDir;
 
 use super::setup_case_db;
-use crate::import_analysis::{run_search_index_phase, SearchIndexPhaseOptions};
+use crate::import_analysis::{
+    run_search_index_phase, search_phase::search_candidate_page_sql, SearchIndexPhaseOptions,
+};
+
+#[test]
+fn search_candidate_query_uses_priority_keyset_without_offset() {
+    let sql = search_candidate_page_sql().to_ascii_uppercase();
+
+    assert!(sql.contains("ORDER BY PRIORITY_RANK ASC, PATH ASC, ID ASC"));
+    assert!(sql.contains("PRIORITY_RANK > ?4"));
+    assert!(sql.contains("PATH > ?5"));
+    assert!(sql.contains("ID > ?6"));
+    assert!(!sql.contains(" OFFSET "));
+}
 
 #[test]
 fn dedicated_search_phase_never_creates_a_missing_source_database() {
@@ -90,6 +103,86 @@ fn dedicated_search_phase_indexes_linux_passwd_content_with_truthful_stats() {
 }
 
 #[test]
+fn sql_eligibility_matches_extension_and_linux_basename_policy() {
+    let tmp = TempDir::new().expect("create search eligibility fixture");
+    let evidence = tmp.path().join("evidence");
+    let etc = evidence.join("etc");
+    std::fs::create_dir_all(&etc).expect("create evidence fixture");
+    std::fs::write(etc.join("UPPER.TXT"), "upper extension marker")
+        .expect("write extension fallback fixture");
+    std::fs::write(etc.join("spaced-passwd"), "spaced basename marker")
+        .expect("write linux basename fixture");
+
+    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES
+             ('upper', ?1, 'etc/UPPER.TXT', 'UPPER.TXT', 'file', 22, NULL, 0, 0, 0),
+             ('spaced-passwd', ?1, 'etc/spaced-passwd', ' passwd ', 'file', 22, '', 0, 0, 0),
+             ('ext-override', ?1, 'etc/missing-override', 'looks.txt', 'file', 10, 'bin', 0, 0, 0),
+             ('too-large', ?1, 'etc/missing-large.txt', 'missing-large.txt', 'file', ?2, 'txt', 0, 0, 0),
+             ('unknown-size', ?1, 'etc/missing-size.txt', 'missing-size.txt', 'file', NULL, 'txt', 0, 0, 0)",
+            params![
+                data_source_id.0,
+                infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 1
+            ],
+        )
+        .expect("insert eligibility candidates");
+    drop(connection);
+
+    let stats = run_search_index_phase(SearchIndexPhaseOptions {
+        case_root: tmp.path().to_path_buf(),
+        db_path,
+        case_id: "case-1".to_string(),
+        data_source_id,
+        platform: DataSourcePlatform::Linux,
+        index_dir: tmp.path().join("search-index"),
+        cancel_token: Arc::new(AtomicBool::new(false)),
+    })
+    .expect("run eligibility-aware search phase");
+
+    assert_eq!(stats.eligible_count, 2);
+    assert_eq!(stats.indexed_count, 2);
+    assert_eq!(stats.skipped_count, 0);
+    assert_eq!(stats.failed_count, 0);
+}
+
+#[test]
+fn windows_sql_eligibility_excludes_extensionless_linux_basename() {
+    let tmp = TempDir::new().expect("create Windows eligibility fixture");
+    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', 12, NULL, 0, 0, 0)",
+            [&data_source_id.0],
+        )
+        .expect("insert Linux-only candidate");
+    drop(connection);
+
+    let stats = run_search_index_phase(SearchIndexPhaseOptions {
+        case_root: tmp.path().to_path_buf(),
+        db_path,
+        case_id: "case-1".to_string(),
+        data_source_id,
+        platform: DataSourcePlatform::Windows,
+        index_dir: tmp.path().join("search-index"),
+        cancel_token: Arc::new(AtomicBool::new(false)),
+    })
+    .expect("run Windows search phase");
+
+    assert_eq!(stats.eligible_count, 0);
+    assert_eq!(stats.indexed_count, 0);
+    assert_eq!(stats.skipped_count, 0);
+    assert_eq!(stats.failed_count, 0);
+}
+
+#[test]
 fn failed_search_generation_preserves_the_previous_complete_index() {
     let tmp = TempDir::new().expect("create search phase fixture");
     let evidence = tmp.path().join("evidence");
@@ -149,6 +242,61 @@ fn failed_search_generation_preserves_the_previous_complete_index() {
 }
 
 #[test]
+fn interrupted_search_publish_restores_previous_generation_before_retry() {
+    let tmp = TempDir::new().expect("create interrupted search fixture");
+    let evidence = tmp.path().join("evidence");
+    let etc = evidence.join("etc");
+    std::fs::create_dir_all(&etc).expect("create etc fixture");
+    let passwd = b"root:x:0:0:root:/root:/bin/bash\n";
+    std::fs::write(etc.join("passwd"), passwd).expect("write passwd fixture");
+
+    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0)",
+            params![data_source_id.0, passwd.len() as u64],
+        )
+        .expect("insert search candidate");
+    drop(connection);
+
+    let index_dir = tmp.path().join("search-index");
+    let base_options = SearchIndexPhaseOptions {
+        case_root: tmp.path().to_path_buf(),
+        db_path,
+        case_id: "case-1".to_string(),
+        data_source_id,
+        platform: DataSourcePlatform::Linux,
+        index_dir: index_dir.clone(),
+        cancel_token: Arc::new(AtomicBool::new(false)),
+    };
+    run_search_index_phase(base_options.clone()).expect("build initial search index");
+
+    let previous = index_dir.with_extension("previous");
+    let next = index_dir.with_extension("next");
+    std::fs::rename(&index_dir, &previous).expect("simulate current-to-previous rename");
+    std::fs::create_dir_all(&next).expect("create interrupted next generation");
+    std::fs::write(next.join("partial"), b"incomplete").expect("write interrupted generation");
+
+    let mut cancelled_options = base_options;
+    cancelled_options.cancel_token = Arc::new(AtomicBool::new(true));
+    let error = run_search_index_phase(cancelled_options)
+        .expect_err("cancelled retry must not publish a generation");
+
+    assert!(error.to_string().contains("cancelled by user"));
+    assert!(index_dir.is_dir());
+    assert!(!previous.exists());
+    assert!(!next.exists());
+    let result = search::SearchIndex::open(&index_dir)
+        .expect("open restored index")
+        .search("root", 10)
+        .expect("query restored index");
+    assert_eq!(result.total_count, 1);
+}
+
+#[test]
 fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
     let tmp = TempDir::new().expect("create search phase fixture");
     let evidence = tmp.path().join("evidence");
@@ -189,6 +337,16 @@ fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
             )
             .expect("insert generic candidate");
     }
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES
+             ('missing-after-limit', ?1, 'zzz/missing-after-limit.txt',
+              'missing-after-limit.txt', 'file', 24, 'txt', 0, 0, 0)",
+            [&data_source_id.0],
+        )
+        .expect("insert unreadable candidate beyond index limit");
     drop(connection);
 
     let index_dir = tmp.path().join("search-index");
@@ -207,7 +365,12 @@ fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
         stats.indexed_count,
         infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT as u64
     );
-    assert_eq!(stats.skipped_count, 1);
+    assert_eq!(
+        stats.eligible_count,
+        infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT as u64 + 2
+    );
+    assert_eq!(stats.skipped_count, 2);
+    assert_eq!(stats.failed_count, 0);
     let result = search::SearchIndex::open(&index_dir)
         .expect("open priority-aware index")
         .search("priority-marker", 10)

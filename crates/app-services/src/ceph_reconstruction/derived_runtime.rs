@@ -8,7 +8,7 @@ use super::{
     derived_reader::{build_replica_bindings, descriptor_from_lineage, load_lineage},
     open_rbd_head_image, BluestoreDeviceOpener, DerivedRbdReaderError, RbdEvidenceReader,
     RbdImageDescriptor, SharedRadosObjectProvider, SourceBoundLvmError,
-    SourceDbRadosObjectProvider,
+    SourceDbRadosObjectProvider, STRICT_RBD_REPLICA_COUNT,
 };
 
 #[derive(Clone)]
@@ -57,6 +57,10 @@ impl DerivedRbdRuntime {
         self.cache_capacity_bytes
     }
 
+    pub fn read_metrics(&self) -> super::RadosProviderReadMetrics {
+        self.provider.read_metrics()
+    }
+
     pub fn open_reader(&self) -> Result<RbdEvidenceReader, DerivedRbdReaderError> {
         open_rbd_head_image(&self.descriptor, Box::new(self.provider.clone()))
             .map_err(|error| DerivedRbdReaderError::Open(error.to_string()))
@@ -70,6 +74,13 @@ pub fn build_derived_rbd_runtime(
     derived_data_source_id: &DataSourceId,
 ) -> Result<DerivedRbdRuntime, DerivedRbdReaderError> {
     let aggregate = load_lineage(case_conn, derived_data_source_id)?;
+    if aggregate.lineage.expected_replica_count as usize != STRICT_RBD_REPLICA_COUNT
+        || aggregate.replicas.len() != STRICT_RBD_REPLICA_COUNT
+    {
+        return Err(DerivedRbdReaderError::Provider(format!(
+            "RBD lineage requires exactly {STRICT_RBD_REPLICA_COUNT} replicas"
+        )));
+    }
     let replicas = build_replica_bindings(case_conn, case_root, case_id, &aggregate)?;
     let descriptor = descriptor_from_lineage(&aggregate);
     let provider = SourceDbRadosObjectProvider::with_device_opener(

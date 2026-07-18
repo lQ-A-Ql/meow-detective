@@ -8,18 +8,32 @@ use persistence_sqlite::{
 use sha2::{Digest, Sha256};
 
 pub(super) const PROCESSING_PHASE_VERSION: u32 = 1;
+const SOURCE_SCHEMA_015: &str = "source_015_ceph_bluestore_rbd_header_context";
+const SOURCE_SCHEMA_016: &str = "source_016_file_partition_index";
+pub(super) const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v2-xfs-macb";
 
 pub(super) fn phase_input_fingerprint(seed: &str, phase: ProcessingPhase) -> String {
+    phase_input_fingerprint_with_contract(
+        seed,
+        phase,
+        phase_schema_dependency(phase),
+        phase_policy_version(phase),
+    )
+}
+
+pub(super) fn phase_input_fingerprint_with_contract(
+    seed: &str,
+    phase: ProcessingPhase,
+    schema_dependency: &str,
+    policy_version: &str,
+) -> String {
     let mut hasher = Sha256::new();
     update_field(&mut hasher, b"derived-rbd-processing-phase");
     update_field(&mut hasher, seed.as_bytes());
-    update_field(
-        &mut hasher,
-        persistence_sqlite::migrations::runner::latest_source_version().as_bytes(),
-    );
+    update_field(&mut hasher, schema_dependency.as_bytes());
     update_field(&mut hasher, phase.as_str().as_bytes());
     update_field(&mut hasher, &PROCESSING_PHASE_VERSION.to_le_bytes());
-    update_field(&mut hasher, phase_policy_version(phase).as_bytes());
+    update_field(&mut hasher, policy_version.as_bytes());
     hex::encode(hasher.finalize())
 }
 
@@ -93,12 +107,23 @@ pub(super) fn load_catalog_identity(
 
 fn phase_policy_version(phase: ProcessingPhase) -> &'static str {
     match phase {
-        ProcessingPhase::Catalog => "rbd-filesystem-catalog-v2-xfs-macb",
+        ProcessingPhase::Catalog => CATALOG_POLICY_VERSION,
         ProcessingPhase::Graph => "source-file-graph-v1",
         ProcessingPhase::Platform => "registered-platform-v1",
         ProcessingPhase::Artifacts => crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
         ProcessingPhase::Timeline => "macb-only-timeline-v2",
         ProcessingPhase::Search => "budgeted-text-index-v2",
+    }
+}
+
+pub(super) fn phase_schema_dependency(phase: ProcessingPhase) -> &'static str {
+    match phase {
+        ProcessingPhase::Catalog => SOURCE_SCHEMA_015,
+        ProcessingPhase::Graph
+        | ProcessingPhase::Platform
+        | ProcessingPhase::Artifacts
+        | ProcessingPhase::Timeline
+        | ProcessingPhase::Search => SOURCE_SCHEMA_016,
     }
 }
 

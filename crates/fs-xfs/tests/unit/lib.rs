@@ -100,13 +100,23 @@ impl EvidenceReader for FakeReader {
 struct CountingReader {
     inner: FakeReader,
     bytes_read: Arc<AtomicUsize>,
+    preferred_read_granularity: usize,
 }
 
 impl CountingReader {
     fn new(data: Vec<u8>, bytes_read: Arc<AtomicUsize>) -> Self {
+        Self::with_granularity(data, bytes_read, 0)
+    }
+
+    fn with_granularity(
+        data: Vec<u8>,
+        bytes_read: Arc<AtomicUsize>,
+        preferred_read_granularity: usize,
+    ) -> Self {
         Self {
             inner: FakeReader::new(data),
             bytes_read,
+            preferred_read_granularity,
         }
     }
 }
@@ -128,6 +138,10 @@ impl Seek for CountingReader {
 impl EvidenceReader for CountingReader {
     fn info(&self) -> &ReaderInfo {
         self.inner.info()
+    }
+
+    fn preferred_read_granularity(&self) -> usize {
+        self.preferred_read_granularity
     }
 }
 
@@ -565,6 +579,237 @@ fn test_root_directory() {
 }
 
 #[test]
+fn directory_locators_round_trip_into_a_fresh_reader() {
+    let first_reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let first = XfsReader::open(first_reader, 0).unwrap();
+    first.list_children("").unwrap();
+    let locators = first.directory_locators();
+    assert!(locators
+        .iter()
+        .any(|locator| locator.path == "subdir" && locator.locator == "4"));
+
+    let second_reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let second = XfsReader::open(second_reader, 0).unwrap();
+    second.seed_directory_locators(&locators).unwrap();
+
+    assert_eq!(second.directory_locators(), locators);
+    assert!(second.list_children("subdir").is_ok());
+}
+
+#[test]
+fn directory_locator_seed_rejects_invalid_inode_identity() {
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    let invalid = [evidence_core::FileSystemDirectoryLocator {
+        path: "subdir".to_string(),
+        locator: "not-an-inode".to_string(),
+    }];
+
+    assert!(xfs.seed_directory_locators(&invalid).is_err());
+}
+
+#[test]
+fn file_locators_round_trip_and_bypass_parent_directory_lookup() {
+    let first_reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let first = XfsReader::open(first_reader, 0).unwrap();
+    first.list_children("").unwrap();
+    first.list_children("subdir").unwrap();
+    let locators = first.file_locators();
+    assert!(locators
+        .iter()
+        .any(|locator| locator.path == "subdir/hello.dat" && locator.locator == "5"));
+
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let second_reader: Box<dyn EvidenceReader> = Box::new(CountingReader::new(
+        build_xfs_fixture(),
+        Arc::clone(&bytes_read),
+    ));
+    let second = XfsReader::open(second_reader, 0).unwrap();
+    second.seed_file_locators(&locators).unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    assert_eq!(
+        second.resolve_path("subdir/hello.dat").unwrap(),
+        Some((5, false))
+    );
+    assert!(
+        bytes_read.load(Ordering::Relaxed) <= second.block_size as usize,
+        "file locator should validate only the target inode block"
+    );
+}
+
+#[test]
+fn file_locator_open_reads_target_inode_once() {
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> = Box::new(CountingReader::new(
+        build_xfs_fixture(),
+        Arc::clone(&bytes_read),
+    ));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.seed_file_locators(&[evidence_core::FileSystemFileLocator {
+        path: "subdir/hello.dat".to_string(),
+        locator: "5".to_string(),
+    }])
+    .unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    let mut file = xfs.open_file("subdir/hello.dat").unwrap();
+    let mut content = Vec::new();
+    file.read_to_end(&mut content).unwrap();
+
+    assert_eq!(content, b"Hello subdir!");
+    assert_eq!(
+        bytes_read.load(Ordering::Relaxed),
+        xfs.block_size as usize + content.len(),
+        "locator-backed open should read one inode block and the requested file bytes"
+    );
+}
+
+#[test]
+fn file_locator_range_reads_target_inode_once() {
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> = Box::new(CountingReader::new(
+        build_xfs_fixture(),
+        Arc::clone(&bytes_read),
+    ));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.seed_file_locators(&[evidence_core::FileSystemFileLocator {
+        path: "test.txt".to_string(),
+        locator: "3".to_string(),
+    }])
+    .unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    let content = xfs.read_file_range("test.txt", 6, 5).unwrap();
+
+    assert_eq!(content, b"World");
+    assert_eq!(
+        bytes_read.load(Ordering::Relaxed),
+        xfs.block_size as usize + content.len(),
+        "locator-backed range should read one inode block and the requested extent bytes"
+    );
+}
+
+#[test]
+fn inode_block_cache_reuses_one_physical_read_for_nearby_inodes() {
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> = Box::new(CountingReader::new(
+        build_xfs_fixture(),
+        Arc::clone(&bytes_read),
+    ));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    let first = xfs.read_inode(3).unwrap();
+    let second = xfs.read_inode(5).unwrap();
+
+    assert_eq!(be_u16(&first, di_off::MAGIC), XFS_INODE_MAGIC);
+    assert_eq!(be_u16(&second, di_off::MAGIC), XFS_INODE_MAGIC);
+    assert_eq!(bytes_read.load(Ordering::Relaxed), xfs.block_size as usize);
+    assert_eq!(
+        xfs.read_metrics(),
+        evidence_core::FileSystemReadMetrics {
+            filesystem_open_operations: 0,
+            metadata_cache_hits: 1,
+            metadata_cache_misses: 1,
+            evidence_read_operations: 1,
+            evidence_bytes_read: xfs.block_size,
+        }
+    );
+}
+
+#[test]
+fn inode_cache_uses_an_advertised_aligned_page_and_clips_at_filesystem_end() {
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> = Box::new(CountingReader::with_granularity(
+        build_xfs_fixture(),
+        Arc::clone(&bytes_read),
+        64 * 1024,
+    ));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    bytes_read.store(0, Ordering::Relaxed);
+    let first = xfs.read_inode(3).unwrap();
+    let second = xfs.read_inode(5).unwrap();
+
+    assert_eq!(be_u16(&first, di_off::MAGIC), XFS_INODE_MAGIC);
+    assert_eq!(be_u16(&second, di_off::MAGIC), XFS_INODE_MAGIC);
+    assert_eq!(xfs.inode_cache_page_size, 64 * 1024);
+    assert_eq!(
+        bytes_read.load(Ordering::Relaxed),
+        build_xfs_fixture().len(),
+        "the final aligned cache page must be clipped to the XFS filesystem length"
+    );
+    assert_eq!(xfs.read_metrics().metadata_cache_hits, 1);
+    assert_eq!(xfs.read_metrics().metadata_cache_misses, 1);
+}
+
+#[test]
+fn inode_cache_ignores_unaligned_reader_granularity() {
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> = Box::new(CountingReader::with_granularity(
+        build_xfs_fixture(),
+        bytes_read,
+        6 * 1024,
+    ));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    assert_eq!(xfs.inode_cache_page_size, xfs.block_size);
+}
+
+#[test]
+fn invalid_file_locator_hint_falls_back_to_path_resolution() {
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.seed_file_locators(&[evidence_core::FileSystemFileLocator {
+        path: "subdir/hello.dat".to_string(),
+        locator: "999999".to_string(),
+    }])
+    .unwrap();
+
+    assert_eq!(
+        xfs.resolve_path("subdir/hello.dat").unwrap(),
+        Some((5, false))
+    );
+    assert!(xfs
+        .file_locators()
+        .iter()
+        .any(|locator| locator.path == "subdir/hello.dat" && locator.locator == "5"));
+}
+
+#[test]
+fn valid_but_wrong_file_locator_inode_falls_back_to_directory_binding() {
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.seed_file_locators(&[evidence_core::FileSystemFileLocator {
+        path: "subdir/hello.dat".to_string(),
+        locator: "3".to_string(),
+    }])
+    .unwrap();
+
+    assert_eq!(
+        xfs.resolve_path("subdir/hello.dat").unwrap(),
+        Some((5, false))
+    );
+    assert!(xfs
+        .file_locators()
+        .iter()
+        .any(|locator| locator.path == "subdir/hello.dat" && locator.locator == "5"));
+}
+
+#[test]
+fn file_locator_seed_rejects_invalid_inode_identity() {
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(build_xfs_fixture()));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    let invalid = [evidence_core::FileSystemFileLocator {
+        path: "test.txt".to_string(),
+        locator: "not-an-inode".to_string(),
+    }];
+
+    assert!(xfs.seed_file_locators(&invalid).is_err());
+}
+
+#[test]
 fn root_and_children_propagate_v2_legacy_macb_timestamps() {
     let mut img = build_xfs_fixture();
     let root = &mut img[8192 + 256..8192 + 2 * 256];
@@ -709,8 +954,37 @@ fn directory_enumeration_reuses_parent_resolution_and_directory_inode() {
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "hello.dat");
     assert!(
-        nested_read_bytes <= usize::from(xfs.inode_size),
-        "cached directory traversal should only read uncached child metadata, read {nested_read_bytes} bytes"
+        nested_read_bytes == 0,
+        "cached inode block should eliminate nested metadata reads, read {nested_read_bytes} bytes"
+    );
+}
+
+#[test]
+fn repeated_nested_resolution_reuses_longest_prefix_and_decoded_directory() {
+    let img = build_xfs_fixture();
+    let bytes_read = Arc::new(AtomicUsize::new(0));
+    let reader: Box<dyn EvidenceReader> =
+        Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    assert_eq!(
+        xfs.resolve_path("subdir/hello.dat").unwrap(),
+        Some((5, false))
+    );
+    bytes_read.store(0, Ordering::Relaxed);
+    assert_eq!(
+        xfs.resolve_path("subdir/hello.dat").unwrap(),
+        Some((5, false))
+    );
+
+    let repeated_read_bytes = bytes_read.load(Ordering::Relaxed);
+    assert!(
+        repeated_read_bytes == 0,
+        "cached inode block should eliminate the repeated target inode read, read {repeated_read_bytes} bytes"
+    );
+    assert!(
+        xfs.directory_entry_cache.borrow_mut().get(4).is_some(),
+        "decoded entries for the cached subdirectory should be retained"
     );
 }
 

@@ -1,7 +1,9 @@
+pub mod analysis_scan_repo;
 pub mod artifact_repo;
 pub mod audit_repo;
 pub mod batch_repo;
 pub mod case_repo;
+pub mod catalog_file_repo;
 pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
 pub mod ceph_bluestore_omap_repo;
@@ -18,6 +20,7 @@ pub mod datasource_cluster_repo;
 pub mod datasource_repo;
 pub mod entity_repo;
 pub mod file_repo;
+pub mod filesystem_locator_repo;
 pub mod graph_repo;
 pub mod job_repo;
 pub mod notebook_repo;

@@ -1,6 +1,9 @@
 use std::{
     path::PathBuf,
-    sync::{mpsc, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, OnceLock,
+    },
     thread,
     time::Duration,
 };
@@ -28,6 +31,7 @@ pub(in crate::ceph_reconstruction) struct ProcessingPhaseAttempt {
 pub(in crate::ceph_reconstruction) struct ProcessingPhaseHeartbeat {
     stop: Option<mpsc::Sender<()>>,
     worker: Option<thread::JoinHandle<()>>,
+    lease_lost: Arc<AtomicBool>,
 }
 
 impl ProcessingPhaseHeartbeat {
@@ -35,7 +39,12 @@ impl ProcessingPhaseHeartbeat {
         Self {
             stop: None,
             worker: None,
+            lease_lost: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub(in crate::ceph_reconstruction) fn lease_lost(&self) -> bool {
+        self.lease_lost.load(Ordering::Acquire)
     }
 }
 
@@ -55,6 +64,10 @@ impl Drop for ProcessingPhaseHeartbeat {
 impl ProcessingPhaseAttempt {
     pub(super) fn phase(&self) -> ProcessingPhase {
         self.phase
+    }
+
+    pub(in crate::ceph_reconstruction) fn attempt_id(&self) -> &str {
+        &self.attempt_id
     }
 }
 
@@ -109,6 +122,14 @@ impl<'a> ProcessingPhaseRunner<'a> {
         })
     }
 
+    pub(super) fn data_source_id(&self) -> &str {
+        &self.data_source_id.0
+    }
+
+    pub(super) fn input_fingerprint(&self, phase: ProcessingPhase) -> String {
+        phase_input_fingerprint(self.identity_seed, phase)
+    }
+
     pub(super) fn start_heartbeat(
         &self,
         attempt: &ProcessingPhaseAttempt,
@@ -131,6 +152,8 @@ impl<'a> ProcessingPhaseRunner<'a> {
         let input_fingerprint = phase_input_fingerprint(self.identity_seed, phase);
         let owner_id = self.owner_id.to_string();
         let attempt_id = attempt.attempt_id.clone();
+        let lease_lost = Arc::new(AtomicBool::new(false));
+        let worker_lease_lost = Arc::clone(&lease_lost);
         let (stop_tx, stop_rx) = mpsc::channel();
         let worker = thread::Builder::new()
             .name(format!("derived-phase-heartbeat-{}", phase.as_str()))
@@ -148,12 +171,14 @@ impl<'a> ProcessingPhaseRunner<'a> {
                                 &owner_id,
                                 &attempt_id,
                             ) {
+                                worker_lease_lost.store(true, Ordering::Release);
                                 tracing::warn!(
                                     data_source_id = %data_source_id.0,
                                     phase = %phase,
                                     error = %error,
                                     "Derived-source processing heartbeat failed"
                                 );
+                                break;
                             }
                         }
                     }
@@ -163,6 +188,7 @@ impl<'a> ProcessingPhaseRunner<'a> {
         Ok(ProcessingPhaseHeartbeat {
             stop: Some(stop_tx),
             worker: Some(worker),
+            lease_lost,
         })
     }
 
@@ -184,6 +210,20 @@ impl<'a> ProcessingPhaseRunner<'a> {
             ),
         )?;
         Ok(outcome_from_record(record))
+    }
+
+    pub(super) fn refresh(&self, attempt: &ProcessingPhaseAttempt) -> Result<(), DbError> {
+        let input_fingerprint = phase_input_fingerprint(self.identity_seed, attempt.phase);
+        self.repo
+            .heartbeat(
+                self.data_source_id,
+                attempt.phase,
+                PROCESSING_PHASE_VERSION,
+                &input_fingerprint,
+                self.owner_id,
+                &attempt.attempt_id,
+            )
+            .map(|_| ())
     }
 
     pub(super) fn failed(

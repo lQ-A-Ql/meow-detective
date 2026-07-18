@@ -33,10 +33,6 @@ pub(super) fn should_index_file(file: &FileEntry, platform: DataSourcePlatform) 
     is_text_extension(file) || is_linux_forensic_text_basename(file, platform)
 }
 
-pub(super) fn is_priority_search_candidate(file: &FileEntry, platform: DataSourcePlatform) -> bool {
-    is_linux_forensic_text_basename(file, platform)
-}
-
 pub(super) fn search_budget_allows_file(
     budget: &ContentBudget,
     file: &FileEntry,

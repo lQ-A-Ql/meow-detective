@@ -42,7 +42,8 @@ fn seed_main_db(conn: &Connection) {
             modified_at TEXT,
             accessed_at TEXT,
             changed_at TEXT,
-            hash_sha256 TEXT
+            hash_sha256 TEXT,
+            partition_index INTEGER
         );
         CREATE TABLE IF NOT EXISTS data_source_partitions (
             id TEXT PRIMARY KEY,

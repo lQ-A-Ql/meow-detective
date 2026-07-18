@@ -230,7 +230,7 @@ fn source_migrations_install_raw_free_omap_schema_and_targeted_indexes() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_015_ceph_bluestore_rbd_header_context"
+        "source_017_timeline_projection_identity"
     );
     for table in [
         "ceph_bluestore_omap_scans",

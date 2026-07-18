@@ -18,7 +18,13 @@ import {
 import { useDataSources } from '@/features/case/hooks';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { useUiStore } from '@/stores/ui-store';
-import type { ApiErrorDto, ImportPhaseProgress, JobSnapshot, WarningItem } from '@/types/models';
+import type {
+  ApiErrorDto,
+  DataSourceSummary,
+  ImportPhaseProgress,
+  JobSnapshot,
+  WarningItem,
+} from '@/types/models';
 
 type DrawerIssueSeverity = 'error' | 'warning';
 
@@ -71,15 +77,18 @@ export function BottomDrawer() {
   ].filter((issue): issue is DrawerIssue => Boolean(issue));
   const failedJobIssues = failedJobs.map((job) => buildFailedJobIssue(job, t));
   const jobWarningIssues = buildJobWarningIssues(jobs ?? [], t);
+  const processingIssues = buildDataSourceProcessingIssues(dataSources ?? [], t);
   const importPhaseIssue = buildImportPhaseIssue(importSignals.latestPhase, t);
   const errorIssues = [
     ...queryIssues,
     ...failedJobIssues,
+    ...processingIssues.filter((issue) => issue.severity === 'error'),
     ...(importPhaseIssue ? [importPhaseIssue] : []),
   ];
   const warningIssues = [
     ...buildWarningIssues(warnings ?? []),
     ...jobWarningIssues,
+    ...processingIssues.filter((issue) => issue.severity === 'warning'),
   ];
   const issueCount = errorIssues.length;
   const warningSignalCount = warningIssues.length;
@@ -552,6 +561,63 @@ function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction): DrawerIssue[]
         { label: t('bottomDrawer.labels.failed'), value: job.failedCount.toString() },
       ],
     }));
+}
+
+function buildDataSourceProcessingIssues(
+  dataSources: DataSourceSummary[],
+  t: TFunction,
+): DrawerIssue[] {
+  return dataSources.flatMap((source) =>
+    source.processing?.phases.flatMap((phase) => {
+      const warningDetails = stringArray(phase.stats.warningDetails);
+      const warningCount = numericValue(phase.stats.warningCount, warningDetails.length);
+      const issues: DrawerIssue[] = [];
+
+      if (phase.state === 'failed' || phase.state === 'deferred') {
+        issues.push({
+          id: `source-phase-${source.id}-${phase.phase}-${phase.state}`,
+          severity: phase.state === 'failed' ? 'error' : 'warning',
+          title: `${source.name} / ${phase.phase}`,
+          detail: phase.lastError || `${phase.phase} ${phase.state}`,
+          meta: [
+            { label: t('bottomDrawer.issues.meta.source'), value: source.id },
+            { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
+            { label: t('bottomDrawer.issues.meta.status'), value: phase.state },
+          ],
+        });
+      }
+
+      if (warningCount > 0) {
+        const truncated = phase.stats.warningDetailsTruncated === true;
+        issues.push({
+          id: `source-phase-${source.id}-${phase.phase}-warnings`,
+          severity: 'warning',
+          title: `${source.name} / ${phase.phase}`,
+          detail: warningDetails[0] || `${warningCount} processing warning(s)`,
+          meta: [
+            { label: t('bottomDrawer.issues.meta.source'), value: source.id },
+            { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
+            { label: t('bottomDrawer.labels.warnings'), value: warningCount.toString() },
+          ],
+          details: warningDetails.length > 0
+            ? `${warningDetails.join('\n')}${truncated ? '\n...' : ''}`
+            : undefined,
+        });
+      }
+
+      return issues;
+    }) ?? [],
+  );
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function numericValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function formatErrorDetails(details: unknown) {

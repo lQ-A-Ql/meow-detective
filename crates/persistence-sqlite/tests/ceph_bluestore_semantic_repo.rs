@@ -5,9 +5,9 @@ use persistence_sqlite::{
         semantic_aggregate_sha256, validate_replacement, CephBluestoreBlobRecord,
         CephBluestoreChecksumChunkRecord, CephBluestoreCollectionRecord,
         CephBluestoreLogicalExtentRecord, CephBluestoreObjectRecord, CephBluestoreOnodeShardRecord,
-        CephBluestorePhysicalExtentRecord, CephBluestoreSemanticAggregate,
-        CephBluestoreSemanticRepo, CephBluestoreSemanticScanRecord, CephBluestoreSharedBlobRecord,
-        CephBluestoreSharedBlobRefRecord, CephBluestoreSuperRecord,
+        CephBluestorePhysicalExtentRecord, CephBluestoreReadPlanSession,
+        CephBluestoreSemanticAggregate, CephBluestoreSemanticRepo, CephBluestoreSemanticScanRecord,
+        CephBluestoreSharedBlobRecord, CephBluestoreSharedBlobRefRecord, CephBluestoreSuperRecord,
     },
     repositories::ceph_rocksdb_latest_state_repo::{
         CephRocksdbLatestStateRecord, CephRocksdbLatestStateRepo,
@@ -497,7 +497,7 @@ fn ceph_bluestore_semantic_schema_is_normalized_and_raw_free() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_015_ceph_bluestore_rbd_header_context"
+        "source_017_timeline_projection_identity"
     );
     let tables = [
         "ceph_bluestore_semantic_scans",
@@ -658,6 +658,29 @@ fn targeted_object_read_plan_and_exact_candidate_are_stable() {
     assert_eq!(candidate.decoded_pool, object.decoded_pool);
     assert_eq!(candidate.object_namespace, object.object_namespace);
     assert_eq!(candidate.snap_hex, object.snap_hex);
+
+    let session =
+        CephBluestoreReadPlanSession::new(conn, INVENTORY_A).expect("prepare read-plan session");
+    assert!(
+        !session.connection().is_autocommit(),
+        "read-plan session should keep one stable read snapshot"
+    );
+    let session_candidate = session
+        .find_object_candidate(
+            &object.object_name,
+            object.decoded_pool,
+            &object.object_namespace,
+            &object.snap_hex,
+        )
+        .expect("query candidate through session")
+        .expect("session candidate exists");
+    let session_plan = session
+        .find_object_read_plan(&object.object_identity_sha256)
+        .expect("query plan through session")
+        .expect("session plan exists");
+
+    assert_eq!(session_candidate, candidate);
+    assert_eq!(session_plan, plan);
 }
 
 #[test]
@@ -728,6 +751,33 @@ fn targeted_object_read_does_not_count_unrelated_semantic_children() {
         .expect("query object read plan")
         .expect("object read plan exists");
     assert_eq!(plan.object, *target);
+}
+
+#[test]
+fn targeted_object_read_plan_uses_local_checksum_ordinals() {
+    let conn = setup();
+    let mut expected = aggregate(INVENTORY_A);
+    append_second_object(&mut expected, "0000000000002000", false);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&expected)
+        .expect("insert multiple objects");
+
+    let target = expected
+        .objects
+        .iter()
+        .find(|object| object.object_name == b"second-object")
+        .expect("second object");
+    let plan = CephBluestoreSemanticRepo::new(&conn)
+        .find_object_read_plan(INVENTORY_A, &target.object_identity_sha256)
+        .expect("query targeted object")
+        .expect("targeted object exists");
+
+    assert_eq!(plan.object, *target);
+    assert_eq!(plan.object_ordinal, 0);
+    assert!(plan
+        .checksum_chunks
+        .iter()
+        .all(|record| record.object_ordinal == 0));
 }
 
 #[test]

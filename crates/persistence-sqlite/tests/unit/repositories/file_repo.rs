@@ -1,5 +1,5 @@
 use super::*;
-use crate::{open_or_create, runner};
+use crate::{open_in_memory, open_or_create, runner};
 use domain::{DataSourceKind, EntryType};
 use tempfile::TempDir;
 
@@ -103,4 +103,74 @@ fn legacy_capitalized_entry_type_is_treated_as_directory() {
 
     let counts = repo.count_child_directories_batch(&[&root_id]).unwrap();
     assert_eq!(counts.get("root-dir"), Some(&1));
+}
+
+#[test]
+fn reads_and_assigns_partition_index_by_file_id() {
+    let conn = open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-partition-index".to_string());
+    let repo = FileRepo::new(&conn);
+    repo.insert_batch(&[
+        FileEntry {
+            id: FileEntryId("root".to_string()),
+            parent_id: None,
+            data_source_id: ds_id.clone(),
+            path: String::new(),
+            name: "Partition 9 (XFS)".to_string(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        },
+        FileEntry {
+            id: FileEntryId("child".to_string()),
+            parent_id: Some(FileEntryId("root".to_string())),
+            data_source_id: ds_id,
+            path: "etc".to_string(),
+            name: "etc".to_string(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        },
+    ])
+    .unwrap();
+
+    assert_eq!(
+        repo.find_partition_index_by_id(&FileEntryId("child".to_string()))
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        repo.assign_partition_index_to_subtree(&FileEntryId("root".to_string()), 9)
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        repo.find_partition_index_by_id(&FileEntryId("child".to_string()))
+            .unwrap(),
+        Some(9)
+    );
+    assert_eq!(
+        repo.find_partition_index_by_id(&FileEntryId("missing".to_string()))
+            .unwrap(),
+        None
+    );
 }

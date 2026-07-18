@@ -15,6 +15,8 @@ pub enum ArtifactServiceError {
     InvalidInput(String),
     #[error("unsupported operation: {0}")]
     Unsupported(String),
+    #[error("artifact extraction cancelled")]
+    Cancelled,
     #[error("other error: {0}")]
     Other(String),
 }
@@ -26,8 +28,13 @@ impl transport::ServiceErrorCategory for ArtifactServiceError {
             Self::Extractor(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Cancelled => transport::ErrorCategory::Timeout,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        matches!(self, Self::Cancelled).then_some(true)
     }
 }
 
@@ -75,6 +82,7 @@ impl From<AnalysisServiceError> for ArtifactServiceError {
             | AnalysisServiceError::Other(message) => Self::Other(message),
             AnalysisServiceError::InvalidInput(message) => Self::InvalidInput(message),
             AnalysisServiceError::Unsupported(message) => Self::Unsupported(message),
+            AnalysisServiceError::Cancelled => Self::Cancelled,
         }
     }
 }

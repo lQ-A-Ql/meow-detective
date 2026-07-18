@@ -6,7 +6,13 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
+mod build;
 mod ready;
+pub(crate) use build::{
+    discard_source_build_db, finalize_source_build_db, open_fresh_source_build_db,
+    publish_source_build_db,
+};
+pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
     open_ready_source_by_id, open_reconstruction_source_by_id, resolve_ready_source_platform,
     ReadySourceConnection, ReadySourceError, ReconstructionSourceConnection,
@@ -16,6 +22,7 @@ const SOURCES_DIR_NAME: &str = "sources";
 const STAGING_DIR_NAME: &str = "staging";
 const SOURCE_DB_FILE_NAME: &str = "source.db";
 const SOURCE_INDEX_DIR_NAME: &str = "index";
+const CEPH_RECONSTRUCTION_MINIMUM_SOURCE_VERSION: &str = "source_016_file_partition_index";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalFileId {
@@ -135,27 +142,76 @@ pub fn open_registered_source_db_read_only(
     case_root: &Path,
     data_source_id: &DataSourceId,
 ) -> DbResult<Connection> {
+    open_registered_source_db_read_only_at_least(
+        case_conn,
+        case_root,
+        data_source_id,
+        persistence_sqlite::migrations::runner::latest_source_version(),
+    )
+}
+
+pub(crate) fn open_registered_reconstruction_source_db_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> DbResult<Connection> {
+    open_registered_source_db_read_only_at_least(
+        case_conn,
+        case_root,
+        data_source_id,
+        CEPH_RECONSTRUCTION_MINIMUM_SOURCE_VERSION,
+    )
+}
+
+fn open_registered_source_db_read_only_at_least(
+    case_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+    minimum_schema_version: &str,
+) -> DbResult<Connection> {
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(data_source_id)?
         .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    let expected_schema_version =
-        persistence_sqlite::migrations::runner::latest_source_version().to_string();
-    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
-        return Err(DbError::System(format!(
-            "Data source '{}' requires source DB migration before read-only reconstruction",
+    let registered_schema_version = storage.schema_version.as_deref().ok_or_else(|| {
+        DbError::System(format!(
+            "Data source '{}' is missing source DB schema version",
             data_source_id.0
+        ))
+    })?;
+    if !persistence_sqlite::migrations::runner::source_version_is_at_least(
+        registered_schema_version,
+        minimum_schema_version,
+    ) {
+        return Err(DbError::System(format!(
+            "Data source '{}' requires source DB migration to at least '{}' before read-only access",
+            data_source_id.0, minimum_schema_version
         )));
     }
     let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
     let connection = persistence_sqlite::open_existing_source_read_only(&db_path)?;
     let actual_schema_version =
         persistence_sqlite::migrations::runner::current_version(&connection)?;
-    if actual_schema_version.as_deref() != Some(expected_schema_version.as_str()) {
+    let actual_schema_version = actual_schema_version.as_deref().ok_or_else(|| {
+        DbError::System(format!(
+            "Data source '{}' physical source DB has no schema version",
+            data_source_id.0
+        ))
+    })?;
+    if actual_schema_version != registered_schema_version {
         return Err(DbError::System(format!(
-            "Data source '{}' physical source DB schema is stale; expected '{}', found '{}'",
+            "Data source '{}' source DB schema metadata is inconsistent; registered '{}', physical '{}'",
+            data_source_id.0, registered_schema_version, actual_schema_version
+        )));
+    }
+    if !persistence_sqlite::migrations::runner::source_version_is_at_least(
+        actual_schema_version,
+        minimum_schema_version,
+    ) {
+        return Err(DbError::System(format!(
+            "Data source '{}' physical source DB schema is stale; requires at least '{}', found '{}'",
             data_source_id.0,
-            expected_schema_version,
-            actual_schema_version.as_deref().unwrap_or("<none>")
+            minimum_schema_version,
+            actual_schema_version
         )));
     }
     Ok(connection)
@@ -196,6 +252,30 @@ pub fn registered_source_db_path(
         )));
     }
     safe_existing_case_path(case_root, &db_path)
+}
+
+pub fn registered_source_index_dir(
+    case_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> DbResult<PathBuf> {
+    let storage = DataSourceRepo::new(case_conn)
+        .find_storage(data_source_id)?
+        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
+    if storage.storage_model != "source_db" {
+        return Err(DbError::System(format!(
+            "Data source '{}' uses unsupported storage model '{}'",
+            data_source_id.0, storage.storage_model
+        )));
+    }
+    let rel_path = storage.index_rel_path.ok_or_else(|| {
+        DbError::System(format!(
+            "Data source '{}' is missing search index path; re-import is required",
+            data_source_id.0
+        ))
+    })?;
+    let index_dir = safe_case_relative_path(case_root, &rel_path)?;
+    safe_case_managed_destination(case_root, &index_dir)
 }
 
 /// Open only fully imported source databases for case-wide aggregation.
@@ -247,6 +327,16 @@ pub fn checkpoint_source_db(conn: &Connection) -> DbResult<()> {
     Ok(())
 }
 
+pub fn verify_source_db_integrity(conn: &Connection) -> DbResult<()> {
+    let result = conn.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))?;
+    if result.eq_ignore_ascii_case("ok") {
+        return Ok(());
+    }
+    Err(DbError::System(format!(
+        "Source DB integrity check failed: {result}"
+    )))
+}
+
 pub fn safe_case_relative_path(case_root: &Path, rel_path: &str) -> DbResult<PathBuf> {
     let rel = Path::new(rel_path);
     if rel.components().any(|component| {
@@ -276,6 +366,28 @@ pub fn safe_existing_case_path(case_root: &Path, path: &Path) -> DbResult<PathBu
         )));
     }
     Ok(canonical_path)
+}
+
+fn safe_case_managed_destination(case_root: &Path, path: &Path) -> DbResult<PathBuf> {
+    let canonical_root = std::fs::canonicalize(case_root)?;
+    let mut ancestor = path;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            DbError::System(format!(
+                "Case-managed path '{}' has no existing ancestor",
+                path.display()
+            ))
+        })?;
+    }
+    let canonical_ancestor = std::fs::canonicalize(ancestor)?;
+    if !canonical_ancestor.starts_with(&canonical_root) {
+        return Err(DbError::System(format!(
+            "Case-managed path '{}' escapes the case directory '{}'",
+            path.display(),
+            case_root.display()
+        )));
+    }
+    Ok(path.to_path_buf())
 }
 
 #[derive(Debug, Clone)]

@@ -333,7 +333,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_015_ceph_bluestore_rbd_header_context"
+        "source_017_timeline_projection_identity"
     );
     for table in [
         "ceph_rocksdb_manifests",

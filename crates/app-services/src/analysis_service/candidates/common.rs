@@ -1,9 +1,18 @@
 use super::{evidence_category_defs, UNSUPPORTED_MACOS_CATEGORY};
+use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::{params, Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+
+mod path_matching;
+
+use path_matching::evidence_path_matches;
+pub(crate) use path_matching::normalize_evidence_path;
+pub(super) use path_matching::EvidencePathPattern;
 
 #[derive(Debug, Clone, Copy)]
 pub struct EvidenceCategoryDef {
@@ -14,13 +23,6 @@ pub struct EvidenceCategoryDef {
     pub artifact_families: &'static [&'static str],
     pub(super) patterns: &'static [EvidencePathPattern],
     pub(super) matcher: Option<fn(&str) -> bool>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) enum EvidencePathPattern {
-    Suffix(&'static str),
-    Contains(&'static str),
-    ContainsAndSuffix(&'static str, &'static str),
 }
 
 pub(super) const EMAIL_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -68,8 +70,10 @@ pub(crate) fn ensure_supported_analysis_categories(
 pub struct EvidenceCandidate {
     pub file_id: FileEntryId,
     pub data_source_id: String,
+    pub partition_index: Option<usize>,
     pub path: String,
     pub size: u64,
+    pub content_identity: String,
     pub evidence_kind: String,
     pub parser: String,
     pub category: String,
@@ -147,46 +151,123 @@ fn parse_timestamp(value: Option<String>) -> Option<chrono::DateTime<chrono::Utc
 pub fn discover_evidence_candidates(
     conn: &Connection,
 ) -> Result<HashMap<String, Vec<EvidenceCandidate>>, AnalysisServiceError> {
-    let definitions = evidence_category_defs();
+    let cancel_token = AtomicBool::new(false);
+    discover_evidence_candidates_with_definitions(conn, evidence_category_defs(), &cancel_token)
+}
+
+fn discover_evidence_candidates_with_definitions(
+    conn: &Connection,
+    definitions: &[EvidenceCategoryDef],
+    cancel_token: &AtomicBool,
+) -> Result<HashMap<String, Vec<EvidenceCandidate>>, AnalysisServiceError> {
+    ensure_not_cancelled(cancel_token)?;
     let mut candidates = definitions
         .iter()
         .map(|definition| (definition.category.to_string(), Vec::new()))
         .collect::<HashMap<_, _>>();
-    let mut statement = conn.prepare(
-        "SELECT id, data_source_id, path, COALESCE(size, 0)
+    let partition_column = if file_entries_has_partition_index(conn)? {
+        "partition_index"
+    } else {
+        "NULL"
+    };
+    let sql = format!(
+        "SELECT id, data_source_id, path, COALESCE(size, 0), {partition_column},
+                created_at, modified_at, accessed_at, changed_at, hash_sha256
          FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE",
-    )?;
+         WHERE entry_type = 'file' COLLATE NOCASE"
+    );
+    let mut statement = conn.prepare(&sql)?;
     let mut rows = statement.query([])?;
 
     while let Some(row) = rows.next()? {
+        ensure_not_cancelled(cancel_token)?;
         let file_id: String = row.get(0)?;
         let data_source_id: String = row.get(1)?;
         let path: String = row.get(2)?;
         let size: u64 = row.get(3)?;
+        let partition_index = parse_partition_index(row, &file_id)?;
+        let content_identity = candidate_content_identity(
+            &file_id,
+            &data_source_id,
+            partition_index,
+            &path,
+            size,
+            [
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
+            ],
+        );
         add_matching_candidates(
             &mut candidates,
             definitions,
-            &file_id,
-            &data_source_id,
-            &path,
-            size,
-        );
+            CandidateRow {
+                file_id: &file_id,
+                data_source_id: &data_source_id,
+                partition_index,
+                path: &path,
+                size,
+                content_identity: &content_identity,
+            },
+            cancel_token,
+        )?;
     }
 
+    ensure_not_cancelled(cancel_token)?;
     Ok(candidates)
+}
+
+fn file_entries_has_partition_index(conn: &Connection) -> Result<bool, AnalysisServiceError> {
+    let mut statement = conn.prepare("PRAGMA table_info(file_entries)")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    for column in columns {
+        if column?.eq_ignore_ascii_case("partition_index") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn parse_partition_index(
+    row: &rusqlite::Row<'_>,
+    file_id: &str,
+) -> Result<Option<usize>, AnalysisServiceError> {
+    match row.get_ref(4)? {
+        rusqlite::types::ValueRef::Null => Ok(None),
+        rusqlite::types::ValueRef::Integer(value) => {
+            let partition_index = u32::try_from(value).map_err(|_| {
+                AnalysisServiceError::InvalidInput(format!(
+                    "file entry '{file_id}' has invalid partition_index {value}"
+                ))
+            })?;
+            Ok(Some(partition_index as usize))
+        }
+        _ => Err(AnalysisServiceError::InvalidInput(format!(
+            "file entry '{file_id}' has non-integer partition_index"
+        ))),
+    }
+}
+
+struct CandidateRow<'a> {
+    file_id: &'a str,
+    data_source_id: &'a str,
+    partition_index: Option<usize>,
+    path: &'a str,
+    size: u64,
+    content_identity: &'a str,
 }
 
 fn add_matching_candidates(
     candidates: &mut HashMap<String, Vec<EvidenceCandidate>>,
     definitions: &[EvidenceCategoryDef],
-    file_id: &str,
-    data_source_id: &str,
-    path: &str,
-    size: u64,
-) {
-    let normalized = normalize_evidence_path(path);
+    row: CandidateRow<'_>,
+    cancel_token: &AtomicBool,
+) -> Result<(), AnalysisServiceError> {
+    let normalized = normalize_evidence_path(row.path);
     for definition in definitions {
+        ensure_not_cancelled(cancel_token)?;
         if definition.patterns.is_empty()
             || !evidence_path_matches(&normalized, definition.patterns)
             || definition
@@ -200,15 +281,56 @@ fn add_matching_candidates(
             .entry(definition.category.to_string())
             .or_default()
             .push(EvidenceCandidate {
-                file_id: FileEntryId(file_id.to_string()),
-                data_source_id: data_source_id.to_string(),
-                path: path.to_string(),
-                size,
+                file_id: FileEntryId(row.file_id.to_string()),
+                data_source_id: row.data_source_id.to_string(),
+                partition_index: row.partition_index,
+                path: row.path.to_string(),
+                size: row.size,
+                content_identity: row.content_identity.to_string(),
                 evidence_kind,
                 parser,
                 category: definition.category.to_string(),
             });
     }
+    Ok(())
+}
+
+fn candidate_content_identity(
+    file_id: &str,
+    data_source_id: &str,
+    partition_index: Option<usize>,
+    path: &str,
+    size: u64,
+    metadata: [Option<String>; 5],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"analysis-candidate-content-v1");
+    for value in [file_id, data_source_id, path] {
+        update_identity_field(&mut hasher, value.as_bytes());
+    }
+    hasher.update(size.to_le_bytes());
+    match partition_index {
+        Some(partition_index) => {
+            hasher.update([1]);
+            hasher.update((partition_index as u64).to_le_bytes());
+        }
+        None => hasher.update([0]),
+    }
+    for value in metadata {
+        match value {
+            Some(value) => {
+                hasher.update([1]);
+                update_identity_field(&mut hasher, value.as_bytes());
+            }
+            None => hasher.update([0]),
+        }
+    }
+    hex::encode(hasher.finalize())
+}
+
+fn update_identity_field(hasher: &mut Sha256, value: &[u8]) {
+    hasher.update((value.len() as u64).to_le_bytes());
+    hasher.update(value);
 }
 
 fn candidate_kind_and_parser(
@@ -245,8 +367,24 @@ pub fn evidence_candidates_for_categories(
     conn: &Connection,
     categories: &[&str],
 ) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
+    let cancel_token = AtomicBool::new(false);
+    evidence_candidates_for_categories_with_cancel(conn, categories, &cancel_token)
+}
+
+pub(crate) fn evidence_candidates_for_categories_with_cancel(
+    conn: &Connection,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
     ensure_supported_analysis_categories(categories)?;
-    let discovered = discover_evidence_candidates(conn)?;
+    ensure_not_cancelled(cancel_token)?;
+    let definitions = selected_evidence_category_defs(categories);
+    if definitions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let discovered =
+        discover_evidence_candidates_with_definitions(conn, &definitions, cancel_token)?;
+    ensure_not_cancelled(cancel_token)?;
     Ok(categories
         .iter()
         .filter_map(|category| discovered.get(*category))
@@ -255,118 +393,12 @@ pub fn evidence_candidates_for_categories(
         .collect())
 }
 
-pub(crate) fn normalize_evidence_path(path: &str) -> String {
-    let normalized = strip_synthetic_root_prefix(&path.replace('\\', "/")).to_ascii_lowercase();
-    if normalized.starts_with('/') {
-        normalized
-    } else {
-        format!("/{normalized}")
-    }
-}
-
-fn strip_synthetic_root_prefix(path: &str) -> String {
-    let mut path = path.trim().trim_start_matches('/').to_string();
-    let had_partition_marker = if let Some(stripped) = strip_partition_marker_prefix(&path) {
-        path = stripped.to_string();
-        true
-    } else {
-        false
-    };
-    let components = path
-        .split('/')
-        .filter(|component| !component.is_empty())
-        .collect::<Vec<_>>();
-
-    if components
-        .first()
-        .is_some_and(|component| is_linux_root_component(component))
-        || !looks_like_synthetic_linux_prefix(&components, had_partition_marker)
-    {
-        return path;
-    }
-
-    let Some(index) = linux_root_start_index(&components) else {
-        return path;
-    };
-    if index == 0 {
-        path
-    } else {
-        components[index..].join("/")
-    }
-}
-
-fn strip_partition_marker_prefix(path: &str) -> Option<&str> {
-    let rest = path.strip_prefix("[P")?;
-    let (partition, after_partition) = rest.split_once(']')?;
-    if partition.is_empty() || !partition.chars().all(|ch| ch.is_ascii_digit()) {
-        return None;
-    }
-    let stripped = after_partition.trim_start_matches('/');
-    (!stripped.is_empty()).then_some(stripped)
-}
-
-fn looks_like_synthetic_linux_prefix(components: &[&str], had_partition_marker: bool) -> bool {
-    had_partition_marker
-        || components
-            .first()
-            .is_some_and(|component| looks_like_partition_or_volume_root(component))
-        || (components.len() >= 3
-            && components[1].eq_ignore_ascii_case("root")
-            && !is_linux_root_component(components[0]))
-}
-
-fn looks_like_partition_or_volume_root(component: &str) -> bool {
-    let lower = component.to_ascii_lowercase();
-    lower.starts_with("partition ") || lower.starts_with("volume")
-}
-
-fn linux_root_start_index(components: &[&str]) -> Option<usize> {
-    for (index, component) in components.iter().enumerate() {
-        if !is_linux_root_component(component) {
-            continue;
-        }
-        if component.eq_ignore_ascii_case("root")
-            && index > 0
-            && components
-                .get(index + 1)
-                .is_some_and(|next| is_linux_root_component(next))
-        {
-            continue;
-        }
-        return Some(index);
-    }
-    None
-}
-
-fn is_linux_root_component(component: &str) -> bool {
-    matches!(
-        component.to_ascii_lowercase().as_str(),
-        "bin"
-            | "boot"
-            | "dev"
-            | "etc"
-            | "home"
-            | "lib"
-            | "lib64"
-            | "opt"
-            | "root"
-            | "run"
-            | "sbin"
-            | "srv"
-            | "tmp"
-            | "usr"
-            | "var"
-    )
-}
-
-fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]) -> bool {
-    patterns.iter().any(|pattern| match pattern {
-        EvidencePathPattern::Suffix(suffix) => path.ends_with(suffix),
-        EvidencePathPattern::Contains(needle) => path.contains(needle),
-        EvidencePathPattern::ContainsAndSuffix(needle, suffix) => {
-            path.contains(needle) && path.ends_with(suffix)
-        }
-    })
+fn selected_evidence_category_defs(categories: &[&str]) -> Vec<EvidenceCategoryDef> {
+    evidence_category_defs()
+        .iter()
+        .filter(|definition| categories.contains(&definition.category))
+        .copied()
+        .collect()
 }
 
 #[cfg(test)]

@@ -1,18 +1,19 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use ceph_wire::RBD_HEAD_SNAP_HEX;
 use domain::DataSourceId;
 use evidence_core::EvidenceReader;
 use persistence_sqlite::repositories::ceph_bluestore_semantic_repo::{
-    CephBluestoreObjectCandidate, CephBluestoreSemanticRepo,
+    CephBluestoreObjectReadPlan, CephBluestoreReadPlanSession,
 };
 use thiserror::Error;
 
 use super::rados_reader::{RadosObjectLayout, RadosObjectReader};
 use super::{
     open_source_bound_bluestore_lvm, RbdObjectProvider, RbdObjectProviderError,
-    RbdObjectReadOutcome, RbdObjectReadRequest, SourceBoundLvmError,
+    RbdObjectReadOutcome, RbdObjectReadRequest, SourceBoundLvmError, STRICT_RBD_REPLICA_COUNT,
 };
 
 mod cache;
@@ -25,6 +26,20 @@ use cache::VerifiedObjectCache;
 use device_io::SharedEvidenceReader;
 use plan_cache::ObjectPlanCache;
 pub(crate) use shared::SharedRadosObjectProvider;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RadosProviderReadMetrics {
+    pub verified_cache_hits: u64,
+    pub verified_cache_misses: u64,
+    pub plan_cache_hits: u64,
+    pub plan_cache_misses: u64,
+    pub plan_lookup_elapsed_micros: u64,
+    pub read_plan_session_initializations: u64,
+    pub read_plan_session_elapsed_micros: u64,
+    pub replica_device_reads: u64,
+    pub replica_device_bytes: u64,
+    pub replica_device_elapsed_micros: u64,
+}
 
 /// A source-local BlueStore inventory that may contain one RBD object replica.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,14 +83,14 @@ pub struct SourceDbRadosObjectProvider {
     expected_replica_count: usize,
     device_opener: Box<dyn BluestoreDeviceOpener>,
     verified_objects: VerifiedObjectCache,
+    read_metrics: RadosProviderReadMetrics,
 }
 
 struct ReplicaRuntime {
     binding: RadosReplicaSource,
-    connection: Option<rusqlite::Connection>,
+    read_plan_session: Option<CephBluestoreReadPlanSession>,
     device: Option<SharedEvidenceReader>,
     plans: ObjectPlanCache,
-    catalog_complete: bool,
 }
 
 impl SourceDbRadosObjectProvider {
@@ -101,10 +116,9 @@ impl SourceDbRadosObjectProvider {
         expected_replica_count: usize,
         device_opener: Box<dyn BluestoreDeviceOpener>,
     ) -> Result<Self, RadosProviderError> {
-        if replicas.is_empty() || expected_replica_count == 0 {
-            return Err(RadosProviderError::CoverageNotClosed);
-        }
-        if replicas.len() != expected_replica_count {
+        if expected_replica_count != STRICT_RBD_REPLICA_COUNT
+            || replicas.len() != STRICT_RBD_REPLICA_COUNT
+        {
             return Err(RadosProviderError::CoverageNotClosed);
         }
         let mut identities = std::collections::HashSet::new();
@@ -126,10 +140,9 @@ impl SourceDbRadosObjectProvider {
                 .into_iter()
                 .map(|binding| ReplicaRuntime {
                     binding,
-                    connection: None,
+                    read_plan_session: None,
                     device: None,
                     plans: ObjectPlanCache::for_rbd(),
-                    catalog_complete: false,
                 })
                 .collect(),
             pool,
@@ -137,6 +150,7 @@ impl SourceDbRadosObjectProvider {
             expected_replica_count,
             device_opener,
             verified_objects: VerifiedObjectCache::for_rbd(),
+            read_metrics: RadosProviderReadMetrics::default(),
         })
     }
 
@@ -156,33 +170,33 @@ impl SourceDbRadosObjectProvider {
         let device_opener = &self.device_opener;
         let runtime = &mut self.replicas[replica_index];
         let replica = runtime.binding.clone();
-        if runtime.connection.is_none() {
-            runtime.connection = Some(
-                persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
-                    .map_err(|error| RadosProviderError::SourceDb {
-                        inventory_id: replica.inventory_id.clone(),
-                        detail: format!(
-                            "source database could not be opened: {}",
-                            source_db_error_detail(&error)
-                        ),
-                    })?,
-            );
+        if let Some(elapsed_micros) = ensure_replica_read_plan_session(runtime, &replica)? {
+            self.read_metrics.read_plan_session_initializations = self
+                .read_metrics
+                .read_plan_session_initializations
+                .saturating_add(1);
+            self.read_metrics.read_plan_session_elapsed_micros = self
+                .read_metrics
+                .read_plan_session_elapsed_micros
+                .saturating_add(elapsed_micros);
         }
-        let connection =
+        let session =
             runtime
-                .connection
+                .read_plan_session
                 .as_ref()
                 .ok_or_else(|| RadosProviderError::SourceDb {
                     inventory_id: replica.inventory_id.clone(),
-                    detail: "source database cache was not initialized".to_string(),
+                    detail: "source database read-plan session was not initialized".to_string(),
                 })?;
-        let repo = CephBluestoreSemanticRepo::new(connection);
         let plan = if let Some(plan) = runtime.plans.get(&request.object_identity) {
+            self.read_metrics.plan_cache_hits = self.read_metrics.plan_cache_hits.saturating_add(1);
             plan
         } else {
-            let Some(candidate) = repo
-                .find_object_candidate(
-                    &replica.inventory_id,
+            self.read_metrics.plan_cache_misses =
+                self.read_metrics.plan_cache_misses.saturating_add(1);
+            let lookup_started = Instant::now();
+            let Some(plan) = session
+                .find_object_read_plan_by_name(
                     request.object_identity.as_bytes(),
                     self.pool,
                     &self.namespace,
@@ -193,26 +207,9 @@ impl SourceDbRadosObjectProvider {
                     detail: error.to_string(),
                 })?
             else {
-                if !runtime.catalog_complete {
-                    repo.ensure_object_catalog_complete(&replica.inventory_id)
-                        .map_err(|error| RadosProviderError::ObjectLookup {
-                            inventory_id: replica.inventory_id.clone(),
-                            detail: format!("RBD object absence is not authoritative: {error}"),
-                        })?;
-                    runtime.catalog_complete = true;
-                }
                 return Ok(None);
             };
-            validate_candidate(&candidate, request)?;
-            let plan = repo
-                .find_object_read_plan(&replica.inventory_id, &candidate.object_identity_sha256)
-                .map_err(|error| RadosProviderError::ObjectLookup {
-                    inventory_id: replica.inventory_id.clone(),
-                    detail: error.to_string(),
-                })?
-                .ok_or_else(|| RadosProviderError::ReadPlanMissing {
-                    inventory_id: replica.inventory_id.clone(),
-                })?;
+            validate_plan_binding(&plan, request)?;
             let layout = RadosObjectReader::prepare_layout(&plan).map_err(|error| {
                 RadosProviderError::ObjectRead {
                     inventory_id: replica.inventory_id.clone(),
@@ -222,11 +219,19 @@ impl SourceDbRadosObjectProvider {
             runtime
                 .plans
                 .insert(request.object_identity.clone(), layout.clone());
+            self.read_metrics.plan_lookup_elapsed_micros = self
+                .read_metrics
+                .plan_lookup_elapsed_micros
+                .saturating_add(elapsed_micros(lookup_started));
             layout
         };
         if runtime.device.is_none() {
             let device = device_opener
-                .open(connection, &replica.data_source_id, &replica.inventory_id)
+                .open(
+                    session.connection(),
+                    &replica.data_source_id,
+                    &replica.inventory_id,
+                )
                 .map_err(|error| RadosProviderError::DeviceUnavailable {
                     inventory_id: replica.inventory_id.clone(),
                     detail: error.to_string(),
@@ -258,6 +263,40 @@ impl SourceDbRadosObjectProvider {
         }
         Ok(())
     }
+}
+
+fn elapsed_micros(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX)
+}
+
+fn ensure_replica_read_plan_session(
+    runtime: &mut ReplicaRuntime,
+    replica: &RadosReplicaSource,
+) -> Result<Option<u64>, RadosProviderError> {
+    if runtime.read_plan_session.is_some() {
+        return Ok(None);
+    }
+    let started = Instant::now();
+    let connection = persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
+        .map_err(|error| RadosProviderError::SourceDb {
+            inventory_id: replica.inventory_id.clone(),
+            detail: format!(
+                "source database could not be opened: {}",
+                source_db_error_detail(&error)
+            ),
+        })?;
+    runtime.read_plan_session = Some(
+        CephBluestoreReadPlanSession::new(connection, &replica.inventory_id).map_err(|error| {
+            RadosProviderError::SourceDb {
+                inventory_id: replica.inventory_id.clone(),
+                detail: format!(
+                    "source database read context is invalid: {}",
+                    source_db_error_detail(&error)
+                ),
+            }
+        })?,
+    );
+    Ok(Some(elapsed_micros(started)))
 }
 
 pub trait BluestoreDeviceOpener: Send {
@@ -317,19 +356,19 @@ pub enum RadosProviderError {
     },
 }
 
-fn validate_candidate(
-    candidate: &CephBluestoreObjectCandidate,
+fn validate_plan_binding(
+    plan: &CephBluestoreObjectReadPlan,
     request: &RbdObjectReadRequest,
 ) -> Result<(), RadosProviderError> {
-    if candidate.object_name != request.object_identity.as_bytes() {
+    if plan.object.object_name != request.object_identity.as_bytes() {
         return Err(RadosProviderError::ObjectLookup {
-            inventory_id: candidate.inventory_id.clone(),
+            inventory_id: plan.inventory_id.clone(),
             detail: "object lookup returned a different canonical object name".to_string(),
         });
     }
-    if candidate.snap_hex != RBD_HEAD_SNAP_HEX {
+    if plan.object.snap_hex != RBD_HEAD_SNAP_HEX {
         return Err(RadosProviderError::ObjectLookup {
-            inventory_id: candidate.inventory_id.clone(),
+            inventory_id: plan.inventory_id.clone(),
             detail: "object lookup returned a non-head snapshot".to_string(),
         });
     }

@@ -22,6 +22,19 @@ pub(crate) struct AnalysisCapability {
     pub(crate) read_policy: CandidateReadPolicy,
 }
 
+impl AnalysisCapability {
+    pub(crate) fn producer_prefix(self) -> &'static str {
+        match self.key {
+            "Registry" => "registry.",
+            "BrowserHistory" => "browser.",
+            "Email" => "email.",
+            "EventLogs" => "evtx.",
+            _ if self.platform == DataSourcePlatform::Linux => "linux.",
+            _ => "analysis.",
+        }
+    }
+}
+
 pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
     capability(
         "Registry",

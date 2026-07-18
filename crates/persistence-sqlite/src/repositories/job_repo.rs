@@ -85,35 +85,48 @@ impl<'a> JobRepo<'a> {
     }
 
     pub fn complete(&self, id: &JobId, detail: &str) -> DbResult<()> {
-        self.conn.execute(
-            "UPDATE jobs SET status = 'completed', progress = 100, detail = ?1, finished_at = datetime('now') WHERE id = ?2",
+        self.complete_if_active(id, detail)?;
+        Ok(())
+    }
+
+    pub fn complete_if_active(&self, id: &JobId, detail: &str) -> DbResult<bool> {
+        let updated = self.conn.execute(
+            "UPDATE jobs
+             SET status = 'completed', progress = 100, detail = ?1, finished_at = datetime('now')
+             WHERE id = ?2 AND status IN ('running', 'pending')",
             params![detail, id.0],
         )?;
-        Ok(())
+        Ok(updated > 0)
     }
 
     pub fn fail(&self, id: &JobId, detail: &str) -> DbResult<()> {
         self.conn.execute(
-            "UPDATE jobs SET status = 'failed', detail = ?1, finished_at = datetime('now') WHERE id = ?2",
+            "UPDATE jobs
+             SET status = 'failed', detail = ?1, finished_at = datetime('now')
+             WHERE id = ?2 AND status IN ('running', 'pending', 'cancelling')",
             params![detail, id.0],
         )?;
         Ok(())
     }
 
-    pub fn mark_cancelling(&self, id: &JobId, detail: &str) -> DbResult<()> {
-        self.conn.execute(
-            "UPDATE jobs SET status = 'cancelling', detail = ?1 WHERE id = ?2",
+    pub fn mark_cancelling(&self, id: &JobId, detail: &str) -> DbResult<bool> {
+        let updated = self.conn.execute(
+            "UPDATE jobs
+             SET status = 'cancelling', detail = ?1
+             WHERE id = ?2 AND status IN ('running', 'pending')",
             params![detail, id.0],
         )?;
-        Ok(())
+        Ok(updated > 0)
     }
 
-    pub fn cancel(&self, id: &JobId, detail: &str) -> DbResult<()> {
-        self.conn.execute(
-            "UPDATE jobs SET status = 'cancelled', detail = ?1, finished_at = datetime('now') WHERE id = ?2",
+    pub fn cancel(&self, id: &JobId, detail: &str) -> DbResult<bool> {
+        let updated = self.conn.execute(
+            "UPDATE jobs
+             SET status = 'cancelled', detail = ?1, finished_at = datetime('now')
+             WHERE id = ?2 AND status IN ('running', 'pending', 'cancelling')",
             params![detail, id.0],
         )?;
-        Ok(())
+        Ok(updated > 0)
     }
 
     /// Find jobs left in a running or cancelling state (interrupted by crash/shutdown).

@@ -4,11 +4,26 @@ use super::*;
 struct FakeDevice {
     data: Vec<u8>,
     pos: u64,
+    info: ReaderInfo,
+    preferred_read_granularity: usize,
 }
 
 impl FakeDevice {
     fn new(data: Vec<u8>) -> Self {
-        Self { data, pos: 0 }
+        Self::with_granularity(data, 0)
+    }
+
+    fn with_granularity(data: Vec<u8>, preferred_read_granularity: usize) -> Self {
+        Self {
+            info: ReaderInfo {
+                path: std::path::PathBuf::from("fake-lvm-device"),
+                size: data.len() as u64,
+                kind: "fake-lvm-device".to_string(),
+            },
+            data,
+            pos: 0,
+            preferred_read_granularity,
+        }
     }
 }
 
@@ -36,8 +51,11 @@ impl Seek for FakeDevice {
 
 impl EvidenceReader for FakeDevice {
     fn info(&self) -> &ReaderInfo {
-        // Return a static reference — only used in tests
-        unimplemented!("not needed for these tests")
+        &self.info
+    }
+
+    fn preferred_read_granularity(&self) -> usize {
+        self.preferred_read_granularity
     }
 }
 
@@ -182,4 +200,20 @@ fn read_past_end_returns_zero() {
     let mut buf = [0u8; 10];
     let n = lv_ref.read(&mut buf).unwrap();
     assert_eq!(n, 0);
+}
+
+#[test]
+fn preferred_read_granularity_propagates_from_underlying_devices() {
+    let first: Box<dyn EvidenceReader> =
+        Box::new(FakeDevice::with_granularity(vec![0; 16], 4 * 1024));
+    let second: Box<dyn EvidenceReader> =
+        Box::new(FakeDevice::with_granularity(vec![0; 16], 64 * 1024));
+    let readers = vec![
+        std::sync::Arc::new(std::sync::Mutex::new(first)),
+        std::sync::Arc::new(std::sync::Mutex::new(second)),
+    ];
+
+    let lv = LvReader::new_shared(readers, "granularity".to_string(), 0, Vec::new());
+
+    assert_eq!(lv.preferred_read_granularity(), 64 * 1024);
 }

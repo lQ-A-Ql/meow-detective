@@ -10,7 +10,7 @@ use transport::dto::{
 use crate::file_service::{
     metadata::source_routing::{open_source_for_file_id, read_file_range_for_source_case},
     preview_runtime::PreviewSession,
-    viewer::preview_descriptor_for_case,
+    viewer::{exact_partition_candidate, preview_descriptor_for_case},
     FileServiceError, PreviewRuntimeRegistry,
 };
 
@@ -37,12 +37,21 @@ pub fn open_preview_session_for_case(
             &global_id.data_source_id,
             &scope,
         )?;
+        let candidate = exact_partition_candidate(&descriptor)?;
+        let filesystem = registry.resolve_derived_filesystem(
+            &source_conn,
+            &global_id.data_source_id,
+            &runtime,
+            candidate,
+            &scope,
+        )?;
         PreviewSession::prepared_ceph(
             case_id.0.clone(),
             global_file_id,
             descriptor.size,
             descriptor.mime.clone(),
-            runtime,
+            runtime.lineage_fingerprint().to_string(),
+            filesystem,
             &descriptor,
         )?
     } else {

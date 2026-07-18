@@ -35,7 +35,7 @@ fn preview_descriptor_for_entry(
         .find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
     let expected_partition_index =
-        crate::file_service::viewer::root_partition_index_for_entry(repo, entry);
+        crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
 
     let partition_candidates = match source_kind.as_str() {
         "logical_directory" => Vec::new(),
@@ -116,7 +116,8 @@ pub(crate) fn descriptor_is_fresh(
     file_id: &FileEntryId,
     descriptor: &PreviewDescriptor,
 ) -> bool {
-    let repo = match FileRepo::new(conn).find_by_id(file_id) {
+    let file_repo = FileRepo::new(conn);
+    let entry = match file_repo.find_by_id(file_id) {
         Ok(Some(entry)) => entry,
         Ok(None) => {
             tracing::debug!(file_id = %file_id.0, "File entry not found; treating descriptor as stale");
@@ -128,16 +129,32 @@ pub(crate) fn descriptor_is_fresh(
         }
     };
 
-    let current_size = repo.size.unwrap_or(0);
-    let current_modified = repo.modified_at.as_ref().map(|dt| dt.to_rfc3339());
+    let current_partition_index = match file_repo.find_partition_index_by_id(file_id) {
+        Ok(index) => index,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                file_id = %file_id.0,
+                "Failed to validate descriptor partition routing"
+            );
+            return false;
+        }
+    };
+    let current_size = entry.size.unwrap_or(0);
+    let current_modified = entry.modified_at.as_ref().map(|dt| dt.to_rfc3339());
 
-    if descriptor.entry_size != current_size || descriptor.entry_modified_at != current_modified {
+    if descriptor.entry_size != current_size
+        || descriptor.entry_modified_at != current_modified
+        || descriptor.partition_index != current_partition_index
+    {
         tracing::debug!(
             file_id = %file_id.0,
             cached_size = descriptor.entry_size,
             current_size = current_size,
             cached_modified = ?descriptor.entry_modified_at,
             current_modified = ?current_modified,
+            cached_partition_index = ?descriptor.partition_index,
+            current_partition_index = ?current_partition_index,
             "Preview descriptor metadata changed; rebuilding"
         );
         return false;
@@ -147,5 +164,5 @@ pub(crate) fn descriptor_is_fresh(
 }
 
 pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
-    format!("preview-descriptor:v2:{case_id}:{}", file_id.0)
+    format!("preview-descriptor:v3:{case_id}:{}", file_id.0)
 }

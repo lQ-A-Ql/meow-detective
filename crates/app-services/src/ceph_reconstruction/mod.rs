@@ -11,16 +11,21 @@ mod rbd_reader;
 mod rbd_service;
 mod source_bound_lvm;
 
+pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
+
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
+pub(crate) use derived_source::CATALOG_MATERIALIZER_VERSION;
+pub(crate) use derived_source::{derived_catalog_fingerprint, load_derived_catalog_fingerprint};
 pub use derived_source::{
-    materialize_rbd_sources_for_cluster, verify_derived_source_catalog, DerivedSourceError,
-    MaterializedRbdSource,
+    finalize_rbd_source_processing, finalize_rbd_source_processing_with_cancel,
+    materialize_rbd_sources_for_cluster, materialize_rbd_sources_for_cluster_with_cancel,
+    verify_derived_source_catalog, DerivedSourceError, MaterializedRbdSource,
 };
 pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{
-    BluestoreDeviceOpener, FilesystemBluestoreDeviceOpener, RadosProviderError, RadosReplicaSource,
-    SourceDbRadosObjectProvider,
+    BluestoreDeviceOpener, FilesystemBluestoreDeviceOpener, RadosProviderError,
+    RadosProviderReadMetrics, RadosReplicaSource, SourceDbRadosObjectProvider,
 };
 pub use rados_reader::{RadosObjectReader, RadosReadError};
 pub use rbd_catalog::{discover_rbd_images, RbdCatalogError, RbdImageDescriptor};

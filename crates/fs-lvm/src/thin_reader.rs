@@ -21,6 +21,7 @@ pub struct ThinLvReader {
     total_size: u64,
     device_id: u64,
     data_block_size: u64,
+    preferred_read_granularity: usize,
 }
 
 impl ThinLvReader {
@@ -31,6 +32,7 @@ impl ThinLvReader {
         total_size: u64,
         device_id: u64,
     ) -> Result<Self> {
+        let preferred_read_granularity = data_reader.preferred_read_granularity();
         let data_block_size = metadata.data_block_size_bytes()?;
         if data_block_size == 0 {
             return Err(metadata_error(
@@ -56,6 +58,7 @@ impl ThinLvReader {
             total_size,
             device_id,
             data_block_size,
+            preferred_read_granularity,
         })
     }
 
@@ -142,6 +145,10 @@ impl Seek for ThinLvReader {
 impl EvidenceReader for ThinLvReader {
     fn info(&self) -> &ReaderInfo {
         &self.info
+    }
+
+    fn preferred_read_granularity(&self) -> usize {
+        self.preferred_read_granularity
     }
 }
 

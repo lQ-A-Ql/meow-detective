@@ -41,6 +41,7 @@
 | 大文件浏览优化设计 | `docs/large-file-browsing-optimization-design.md` | 本项目 100MB+ 文件浏览与预览性能优化的目标架构、阶段方案、测试矩阵与验收标准 |
 | Ceph RBD VM 预览性能设计 | `docs/ceph-rbd-vm-preview-performance-design.md` | PVE 派生 VM 文件预览的 bounded-range 修复、source-scoped runtime、opaque session、缓存失效、真实样本性能门禁与剩余风险 |
 | PVE 集群取证加固与能力路线图 | `docs/pve-cluster-forensics-hardening-and-capability-roadmap.md` | Catalog/processing/read-only 加固、OSDMap/CRUSH/PG、RBD 高级特性与 CephFS 的 Stage 0-7 设计、测试和验收边界 |
+| PVE 派生源后台处理与性能优化 | `docs/pve-derived-source-performance-optimization.md` | Catalog 可浏览状态与昂贵后处理解耦、Timeline/Search/Artifacts 优化、后台任务边界、真实样本性能测试矩阵与剩余风险 |
 | Frontend MVP boundary | `docs/frontend-mvp-boundary.md` | Page / Feature / Component / API / Platform / Store 边界、无 runtime mock、公共组件归属与守卫规则 |
 | Backend module architecture | `docs/backend-module-architecture.md` | Stage 0 backend module/test split rules, baselines, guards, and exceptions |
 | Backend Stage 3/4 delivery | `docs/backend-stage3-stage4-design.md` | Transport/command and app-services decomposition, review gates, regression matrix, and performance boundary |
@@ -58,6 +59,7 @@
 | Ceph BlueStore Stage 6.4 real sample | `docs/real-sample-regression/2026-07-15-pve-bluestore-stage6-semantic.md` | 三 OSD `S/C/O/X` semantic snapshot、shared ref-map 语义、精确 count/digest oracle 与剩余 RADOS/RBD 边界 |
 | Ceph BlueStore Stage 6.5/6.6 real sample | `docs/real-sample-regression/2026-07-15-pve-bluestore-stage6-rados-rbd.md` | 六成员 OMAP 无 Header 修复、RADOS/RBD foundation 回归、真实样本结果与 VM/CephFS 未完成边界 |
 | Ceph RBD derived VM real sample | `docs/real-sample-regression/2026-07-16-pve-rbd-derived-vm.md` | 真实三副本 RBD 字节重建、派生 source DB、114,260 条 VM 文件记录、预览、性能与 CephFS indeterminate 边界 |
+| Ceph RBD Catalog/Artifacts performance | `docs/real-sample-regression/2026-07-18-pve-rbd-catalog-artifact-performance.md` | 零派生源 Catalog 重建、Artifacts 冷重放、时间/内存对照、采用参数与持久化 frontier 剩余风险 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |
@@ -80,8 +82,8 @@
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 99 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 27 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 26 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo) |
-| SQLite migration scripts | 54 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0038 + source_001-source_015 + staging_001) |
+| SQLite repositories | 29 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo、analysis_scan_repo、catalog_file_repo、filesystem_locator_repo) |
+| SQLite migration scripts | 56 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0038 + source_001-source_017 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 87 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
@@ -98,7 +100,7 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 54 | SQLite migration 脚本 (0001-0038 + source_001-source_015 + staging_001) |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 56 | SQLite migration 脚本 (0001-0038 + source_001-source_017 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |

@@ -70,6 +70,9 @@ impl From<crate::artifact_service::ArtifactServiceError> for V3GovernanceError {
             crate::artifact_service::ArtifactServiceError::Unsupported(message) => {
                 Self::Unsupported(message)
             }
+            crate::artifact_service::ArtifactServiceError::Cancelled => {
+                Self::Other("Artifact extraction cancelled".to_string())
+            }
             crate::artifact_service::ArtifactServiceError::Other(message) => Self::Other(message),
         }
     }

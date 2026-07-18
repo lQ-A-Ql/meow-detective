@@ -10,8 +10,10 @@ fn candidate(path: &str) -> EvidenceCandidate {
     EvidenceCandidate {
         file_id: FileEntryId(path.to_string()),
         data_source_id: "ds-1".to_string(),
+        partition_index: None,
         path: path.to_string(),
         size: 1024,
+        content_identity: format!("test:{path}"),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry".to_string(),
         category: "Registry".to_string(),

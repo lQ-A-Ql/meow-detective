@@ -1,9 +1,8 @@
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::error::AnalysisServiceError;
-use domain::Artifact;
 use rusqlite::Connection;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use transport::dto::AnalysisParseStatusDto;
 
 pub(super) struct AnalysisArtifactRow {
@@ -86,8 +85,8 @@ pub(super) fn already_has_v1_artifacts(
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
-        "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1 AND artifact_type IN ({})",
-        placeholders
+        "SELECT COUNT(*) FROM artifacts
+         WHERE source_object_id = ?1 AND artifact_type IN ({placeholders})"
     );
     let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> =
         vec![Box::new(candidate.file_id.0.clone())];
@@ -100,20 +99,6 @@ pub(super) fn already_has_v1_artifacts(
         .collect::<Vec<&dyn rusqlite::types::ToSql>>();
     let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))?;
     Ok(count > 0)
-}
-
-pub(super) fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Artifact>> {
-    let mut grouped: HashMap<String, Vec<Artifact>> = HashMap::new();
-    for artifact in artifacts {
-        let data_source_id = artifact
-            .attrs
-            .get("dataSourceId")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        grouped.entry(data_source_id).or_default().push(artifact);
-    }
-    grouped
 }
 
 pub(super) fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {

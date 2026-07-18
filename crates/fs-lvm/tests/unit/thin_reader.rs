@@ -6,10 +6,15 @@ struct FakeReader {
     data: Vec<u8>,
     pos: u64,
     info: ReaderInfo,
+    preferred_read_granularity: usize,
 }
 
 impl FakeReader {
     fn new(data: Vec<u8>, kind: &str) -> Self {
+        Self::with_granularity(data, kind, 0)
+    }
+
+    fn with_granularity(data: Vec<u8>, kind: &str, preferred_read_granularity: usize) -> Self {
         Self {
             info: ReaderInfo {
                 path: std::path::PathBuf::from(kind),
@@ -18,6 +23,7 @@ impl FakeReader {
             },
             data,
             pos: 0,
+            preferred_read_granularity,
         }
     }
 }
@@ -48,6 +54,10 @@ impl EvidenceReader for FakeReader {
     fn info(&self) -> &ReaderInfo {
         &self.info
     }
+
+    fn preferred_read_granularity(&self) -> usize {
+        self.preferred_read_granularity
+    }
 }
 
 #[test]
@@ -70,6 +80,25 @@ fn thin_reader_maps_allocated_blocks_and_zero_fills_unmapped_blocks() {
     let mut unmapped = [0xAAu8; 16];
     reader.read_exact(&mut unmapped).unwrap();
     assert_eq!(unmapped, [0u8; 16]);
+}
+
+#[test]
+fn thin_reader_propagates_data_reader_granularity() {
+    let metadata = ThinMetadata::open(Box::new(FakeReader::new(
+        build_thin_metadata(),
+        "thin-metadata",
+    )))
+    .unwrap();
+    let data_reader: Box<dyn EvidenceReader> = Box::new(FakeReader::with_granularity(
+        vec![0u8; 4 * 512],
+        "thin-data",
+        64 * 1024,
+    ));
+
+    let reader =
+        ThinLvReader::new(metadata, data_reader, "thin-root".to_string(), 1024, 7).unwrap();
+
+    assert_eq!(reader.preferred_read_granularity(), 64 * 1024);
 }
 
 fn build_thin_metadata() -> Vec<u8> {

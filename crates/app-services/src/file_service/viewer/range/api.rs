@@ -9,15 +9,15 @@ use transport::dto::{ViewerRangeRequestDto, ViewerRangeResponseDto};
 
 use crate::file_service::{
     viewer::{
-        descriptor_for_file_with_cache, descriptor_image_path_candidates, format_image_range_error,
-        is_exfat_filesystem_kind, is_fat_filesystem_kind, is_linux_filesystem_kind,
-        looks_like_exfat_boot_sector, read_bounded, read_seekable_range,
-        try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
-        try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
-        try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
-        try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
-        PreviewDescriptor, PreviewPartitionCandidate, PreviewReadContext, RangeContentReader,
-        FILE_HANDLE_PREFIX,
+        descriptor_for_file_with_cache, descriptor_image_path_candidates,
+        exact_partition_candidate, format_image_range_error, is_exfat_filesystem_kind,
+        is_fat_filesystem_kind, is_linux_filesystem_kind, looks_like_exfat_boot_sector,
+        read_bounded, read_seekable_range, try_read_exfat_image_range_for_descriptor,
+        try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
+        try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
+        try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
+        try_read_ntfs_image_range_for_entry, PreviewDescriptor, PreviewPartitionCandidate,
+        PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
     },
     FileServiceError,
 };
@@ -205,51 +205,49 @@ where
     let source_path = Path::new(&descriptor.source_path);
     let paths = descriptor_image_path_candidates(descriptor);
     let mut lvm_cache = crate::file_service::viewer::image_open::LvmPoolRequestCache::new();
-
-    for candidate in &descriptor.partition_candidates {
-        let mut open_reader = |_: &Path| {
-            context
-                .open_evidence_reader(descriptor)
-                .map_err(|error| io::Error::other(error.to_string()))
-        };
-        let (reader, fs_offset) =
-            match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
-                source_path,
-                candidate,
-                &mut open_reader,
-                &mut lvm_cache,
-            ) {
-                Ok(opened) => opened,
-                Err(error) => {
-                    record_ceph_range_failure(
-                        reasons,
-                        candidate,
-                        format!("reader open failed: {error}"),
-                    );
-                    continue;
-                }
-            };
-        let filesystem = match open_ceph_rbd_filesystem(candidate, reader, fs_offset) {
-            Ok(Some(filesystem)) => filesystem,
-            Ok(None) => continue,
+    let candidate = exact_partition_candidate(descriptor)?;
+    let mut open_reader = |_: &Path| {
+        context
+            .open_evidence_reader(descriptor)
+            .map_err(|error| io::Error::other(error.to_string()))
+    };
+    let (reader, fs_offset) =
+        match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
+            source_path,
+            candidate,
+            &mut open_reader,
+            &mut lvm_cache,
+        ) {
+            Ok(opened) => opened,
             Err(error) => {
                 record_ceph_range_failure(
                     reasons,
                     candidate,
-                    format!("filesystem open failed at offset {fs_offset}: {error}"),
+                    format!("reader open failed: {error}"),
                 );
-                continue;
+                return Ok(None);
             }
         };
-        for path in &paths {
-            match filesystem.read_file_range(path, offset, length) {
-                Ok(bytes) => return Ok(Some(bytes)),
-                Err(error) => record_ceph_range_failure(
-                    reasons,
-                    candidate,
-                    format!("path '{path}' range read failed: {error}"),
-                ),
-            }
+    let filesystem = match open_ceph_rbd_filesystem(candidate, reader, fs_offset) {
+        Ok(Some(filesystem)) => filesystem,
+        Ok(None) => return Ok(None),
+        Err(error) => {
+            record_ceph_range_failure(
+                reasons,
+                candidate,
+                format!("filesystem open failed at offset {fs_offset}: {error}"),
+            );
+            return Ok(None);
+        }
+    };
+    for path in &paths {
+        match filesystem.read_file_range(path, offset, length) {
+            Ok(bytes) => return Ok(Some(bytes)),
+            Err(error) => record_ceph_range_failure(
+                reasons,
+                candidate,
+                format!("path '{path}' range read failed: {error}"),
+            ),
         }
     }
     Ok(None)

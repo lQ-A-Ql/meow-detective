@@ -475,6 +475,73 @@ impl<'a> FileRepo<'a> {
         }
     }
 
+    pub fn find_partition_index_by_id(&self, id: &FileEntryId) -> DbResult<Option<usize>> {
+        let result = self.conn.query_row(
+            "SELECT partition_index FROM file_entries WHERE id = ?1",
+            params![id.0],
+            |row| row.get::<_, Option<i64>>(0),
+        );
+        match result {
+            Ok(Some(index)) => usize::try_from(index).map(Some).map_err(|_| {
+                crate::connection::DbError::System(format!(
+                    "File entry '{}' has invalid partition index {}",
+                    id.0, index
+                ))
+            }),
+            Ok(None) | Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn set_partition_index_by_id(
+        &self,
+        id: &FileEntryId,
+        partition_index: usize,
+    ) -> DbResult<()> {
+        let partition_index = i64::try_from(partition_index).map_err(|_| {
+            crate::connection::DbError::System(format!(
+                "Partition index is too large for SQLite: {partition_index}"
+            ))
+        })?;
+        self.conn.execute(
+            "UPDATE file_entries SET partition_index = ?1 WHERE id = ?2",
+            params![partition_index, id.0],
+        )?;
+        Ok(())
+    }
+
+    pub fn assign_partition_index_to_subtree(
+        &self,
+        root_id: &FileEntryId,
+        partition_index: usize,
+    ) -> DbResult<usize> {
+        let partition_index = i64::try_from(partition_index).map_err(|_| {
+            crate::connection::DbError::System(format!(
+                "Partition index is too large for SQLite: {partition_index}"
+            ))
+        })?;
+        let updated = self.conn.execute(
+            "WITH RECURSIVE subtree(id, data_source_id) AS (
+                 SELECT id, data_source_id
+                 FROM file_entries
+                 WHERE id = ?1
+
+                 UNION
+
+                 SELECT child.id, child.data_source_id
+                 FROM file_entries AS child
+                 JOIN subtree AS parent
+                   ON child.parent_id = parent.id
+                  AND child.data_source_id = parent.data_source_id
+             )
+             UPDATE file_entries
+             SET partition_index = ?2
+             WHERE id IN (SELECT id FROM subtree)",
+            params![root_id.0, partition_index],
+        )?;
+        Ok(updated)
+    }
+
     pub fn find_data_source_location(
         &self,
         data_source_id: &DataSourceId,

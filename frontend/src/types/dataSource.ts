@@ -41,6 +41,7 @@ export interface DataSourceProcessingPhase {
   phase: 'catalog' | 'graph' | 'platform' | 'artifacts' | 'timeline' | 'search';
   state: 'pending' | 'running' | 'ready' | 'failed' | 'deferred';
   version: number;
+  stats: Record<string, unknown>;
   lastError?: string;
   startedAt?: string;
   completedAt?: string;

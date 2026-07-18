@@ -23,14 +23,16 @@ fn aggregate() -> CephRbdLineageAggregate {
             has_parent: false,
             snapshot_id: None,
             encrypted: false,
-            expected_replica_count: 1,
+            expected_replica_count: 3,
         },
-        replicas: vec![CephRbdReplicaRecord {
-            ordinal: 0,
-            source_data_source_id: "source".to_string(),
-            inventory_id: "inventory".to_string(),
-            osd_id: 7,
-        }],
+        replicas: (0..3)
+            .map(|ordinal| CephRbdReplicaRecord {
+                ordinal,
+                source_data_source_id: format!("source-{ordinal}"),
+                inventory_id: format!("inventory-{ordinal}"),
+                osd_id: ordinal + 7,
+            })
+            .collect(),
     }
 }
 

@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use std::time::Instant;
 
+use super::super::rados_reader::RadosObjectLayout;
 use super::cache::{copy_verified_segment, VerifiedObject, VerifiedObjectCache, PAGE_BYTES};
-use super::device_io::read_plan_page;
+use super::device_io::{read_plan_page, SharedEvidenceReader};
 use super::{
     RadosProviderError, RbdObjectProvider, RbdObjectProviderError, RbdObjectReadOutcome,
     RbdObjectReadRequest, SourceDbRadosObjectProvider,
@@ -25,8 +27,7 @@ impl SourceDbRadosObjectProvider {
             object_offset: first_page_offset,
             length,
         };
-        let mut expected: Option<Vec<u8>> = None;
-        let mut present_count = 0usize;
+        let mut replica_reads = Vec::with_capacity(self.replicas.len());
         for replica_index in 0..self.replicas.len() {
             let inventory_id = self.replicas[replica_index].binding.inventory_id.clone();
             let Some((device, plan)) =
@@ -34,26 +35,24 @@ impl SourceDbRadosObjectProvider {
             else {
                 continue;
             };
-            let bytes =
-                read_plan_page(device, plan, first_page_offset, length).map_err(|error| {
-                    RadosProviderError::ObjectRead {
-                        inventory_id,
-                        detail: error.to_string(),
-                    }
-                })?;
-            present_count += 1;
-            if let Some(reference) = &expected {
-                if reference != &bytes {
-                    return Err(object_read_error(
-                        "RBD replicas returned conflicting object bytes",
-                    ));
-                }
-            } else {
-                expected = Some(bytes);
-            }
+            replica_reads.push((inventory_id, device, plan));
         }
+        let results = read_replica_pages_in_parallel(replica_reads, first_page_offset, length)?;
+        for (_, bytes, elapsed) in &results {
+            self.read_metrics.replica_device_reads =
+                self.read_metrics.replica_device_reads.saturating_add(1);
+            self.read_metrics.replica_device_bytes = self
+                .read_metrics
+                .replica_device_bytes
+                .saturating_add(bytes.len() as u64);
+            self.read_metrics.replica_device_elapsed_micros = self
+                .read_metrics
+                .replica_device_elapsed_micros
+                .saturating_add(*elapsed);
+        }
+        let present_count = results.len();
         self.validate_replica_presence(&batch_request, present_count)?;
-        match expected {
+        match compare_replica_bytes(results)? {
             Some(bytes) => split_verified_pages(first_page_offset, bytes),
             None => missing_pages(first_page_offset, page_count),
         }
@@ -81,6 +80,57 @@ impl SourceDbRadosObjectProvider {
     }
 }
 
+fn read_replica_pages_in_parallel(
+    replicas: Vec<(String, SharedEvidenceReader, Arc<RadosObjectLayout>)>,
+    offset: u64,
+    length: usize,
+) -> Result<Vec<(String, Vec<u8>, u64)>, RadosProviderError> {
+    std::thread::scope(|scope| {
+        let handles = replicas
+            .into_iter()
+            .map(|(inventory_id, device, plan)| {
+                scope.spawn(move || {
+                    let started = Instant::now();
+                    let bytes = read_plan_page(device, plan, offset, length).map_err(|error| {
+                        RadosProviderError::ObjectRead {
+                            inventory_id: inventory_id.clone(),
+                            detail: error.to_string(),
+                        }
+                    })?;
+                    let elapsed = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+                    Ok((inventory_id, bytes, elapsed))
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| object_read_error("RBD replica read worker panicked"))?
+            })
+            .collect()
+    })
+}
+
+fn compare_replica_bytes(
+    results: Vec<(String, Vec<u8>, u64)>,
+) -> Result<Option<Vec<u8>>, RadosProviderError> {
+    let mut expected: Option<Vec<u8>> = None;
+    for (_, bytes, _) in results {
+        if let Some(reference) = &expected {
+            if reference != &bytes {
+                return Err(object_read_error(
+                    "RBD replicas returned conflicting object bytes",
+                ));
+            }
+        } else {
+            expected = Some(bytes);
+        }
+    }
+    Ok(expected)
+}
+
 impl RbdObjectProvider for SourceDbRadosObjectProvider {
     fn read_object_range(
         &mut self,
@@ -102,19 +152,24 @@ impl RbdObjectProvider for SourceDbRadosObjectProvider {
                 object_offset: cursor,
                 length: segment_length,
             };
-            if !self
-                .verified_objects
-                .contains(&request.object_identity, page_offset)
-            {
-                self.load_and_cache_pages(request, page_offset, request_end)?;
-            }
-            let verified = self
+            let verified = if let Some(verified) = self
                 .verified_objects
                 .get(&request.object_identity, page_offset)
-                .ok_or_else(|| RbdObjectProviderError::ReadFailed {
-                    object_identity: request.object_identity.clone(),
-                    reason: "verified RBD page was not cached after loading".to_string(),
-                })?;
+            {
+                self.read_metrics.verified_cache_hits =
+                    self.read_metrics.verified_cache_hits.saturating_add(1);
+                verified
+            } else {
+                self.read_metrics.verified_cache_misses =
+                    self.read_metrics.verified_cache_misses.saturating_add(1);
+                self.load_and_cache_pages(request, page_offset, request_end)?;
+                self.verified_objects
+                    .get(&request.object_identity, page_offset)
+                    .ok_or_else(|| RbdObjectProviderError::ReadFailed {
+                        object_identity: request.object_identity.clone(),
+                        reason: "verified RBD page was not cached after loading".to_string(),
+                    })?
+            };
             let output_slice = &mut output[output_offset..output_offset + segment_length];
             match copy_verified_segment(&segment_request, page_offset, output_slice, &verified)? {
                 RbdObjectReadOutcome::Present { .. } => any_page_present = true,

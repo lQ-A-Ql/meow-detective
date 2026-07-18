@@ -6,7 +6,7 @@ use transport::dto::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, Sear
 
 use super::SearchError;
 use crate::source_db::{
-    encode_source_scoped_id, safe_case_relative_path, safe_existing_case_path, source_index_dir,
+    encode_source_scoped_id, registered_source_index_dir, safe_existing_case_path,
 };
 
 const MAX_CASE_SEARCH_WINDOW: u64 = 100_000;
@@ -24,13 +24,8 @@ pub(super) fn search_files_for_case(
     let mut total = 0u64;
     let mut hits = Vec::new();
 
-    for (source, storage) in crate::source_db::ready_data_sources(case_conn, case_id)? {
-        let index_dir = storage
-            .index_rel_path
-            .as_deref()
-            .map(|rel| safe_case_relative_path(case_root, rel))
-            .transpose()?
-            .unwrap_or_else(|| source_index_dir(case_root, &source.id));
+    for (source, _) in crate::source_db::ready_data_sources(case_conn, case_id)? {
+        let index_dir = registered_source_index_dir(case_conn, case_root, &source.id)?;
         if !index_dir.exists() {
             continue;
         }

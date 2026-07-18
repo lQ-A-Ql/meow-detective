@@ -10,4 +10,10 @@ pub struct ReaderInfo {
 
 pub trait EvidenceReader: Read + Seek + Send {
     fn info(&self) -> &ReaderInfo;
+
+    /// Preferred physical read size for callers that maintain an aligned
+    /// metadata cache. Zero means that the reader has no explicit preference.
+    fn preferred_read_granularity(&self) -> usize {
+        0
+    }
 }

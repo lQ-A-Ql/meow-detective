@@ -30,6 +30,8 @@ pub struct LvReader {
     current_pos: u64,
     /// Total size of this logical volume in bytes.
     total_size: u64,
+    /// Read granularity inherited from the underlying evidence readers.
+    preferred_read_granularity: usize,
 }
 
 impl LvReader {
@@ -61,6 +63,16 @@ impl LvReader {
         total_size: u64,
         extent_map: Vec<LvExtent>,
     ) -> Self {
+        let preferred_read_granularity = device_readers
+            .iter()
+            .filter_map(|reader| {
+                reader
+                    .lock()
+                    .ok()
+                    .map(|reader| reader.preferred_read_granularity())
+            })
+            .max()
+            .unwrap_or(0);
         let info = ReaderInfo {
             path: std::path::PathBuf::from(format!("lvm://{}", lv_name)),
             size: total_size,
@@ -73,6 +85,7 @@ impl LvReader {
             extent_map,
             current_pos: 0,
             total_size,
+            preferred_read_granularity,
         }
     }
 
@@ -197,6 +210,10 @@ impl Seek for LvReader {
 impl EvidenceReader for LvReader {
     fn info(&self) -> &ReaderInfo {
         &self.info
+    }
+
+    fn preferred_read_granularity(&self) -> usize {
+        self.preferred_read_granularity
     }
 }
 

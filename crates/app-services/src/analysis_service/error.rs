@@ -16,6 +16,8 @@ pub enum AnalysisServiceError {
     InvalidInput(String),
     #[error("unsupported analysis capability: {0}")]
     Unsupported(String),
+    #[error("analysis extraction cancelled")]
+    Cancelled,
     #[error("{0}")]
     Other(String),
 }
@@ -66,7 +68,12 @@ impl transport::ServiceErrorCategory for AnalysisServiceError {
             Self::Extraction(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_, _) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Cancelled => transport::ErrorCategory::Timeout,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        matches!(self, Self::Cancelled).then_some(true)
     }
 }

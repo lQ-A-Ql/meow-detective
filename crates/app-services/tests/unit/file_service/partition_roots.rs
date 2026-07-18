@@ -169,4 +169,41 @@ fn replace_placeholder_rolls_back_root_update_and_children_on_insert_failure() {
         )
         .unwrap();
     assert_eq!(child_count, 0);
+    let partition_index: i64 = conn
+        .query_row(
+            "SELECT partition_index FROM file_entries WHERE id = ?1",
+            rusqlite::params![placeholder.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(partition_index, 1);
+}
+
+#[test]
+fn replace_placeholder_materializes_partition_index_for_entire_subtree() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let data_source_id = DataSourceId("ds-materialized".to_string());
+    let placeholder =
+        insert_partition_placeholder_root(&conn, &data_source_id, 7, "Partition 7", "supported")
+            .unwrap();
+
+    replace_placeholder_root_with_real(
+        &conn,
+        &placeholder,
+        &TwoFileFs,
+        Some("Partition 7 (XFS)"),
+        None,
+    )
+    .unwrap();
+
+    let mismatched: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE partition_index IS NULL OR partition_index <> 7",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(mismatched, 0);
 }

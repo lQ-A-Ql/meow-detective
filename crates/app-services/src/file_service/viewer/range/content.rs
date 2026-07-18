@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use crate::file_service::{
     viewer::{
         descriptor_file_entry, open_descriptor_image_file, open_descriptor_image_file_with_context,
-        open_e01_file, open_e01_reader_cached, open_raw_file, root_partition_index_for_entry,
+        open_e01_file, open_e01_reader_cached, open_raw_file, resolve_partition_index_for_entry,
         PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
@@ -111,7 +111,7 @@ pub(crate) fn open_file_content_for_entry(
 ) -> Result<Box<dyn Read>, FileServiceError> {
     validate_file_entry(entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
-    let partition_index = root_partition_index_for_entry(repo, entry);
+    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => open_logical_file(&source_path, entry),
         "e01" => open_e01_file(conn, &source_path, entry, partition_index),
@@ -127,7 +127,7 @@ pub(crate) fn open_range_content_for_entry(
 ) -> Result<RangeContentReader, FileServiceError> {
     validate_file_entry(entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
-    let partition_index = root_partition_index_for_entry(repo, entry);
+    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => {
             open_logical_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)

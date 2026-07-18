@@ -1,6 +1,6 @@
 use super::*;
 use super::{
-    filesystem::mft_partition_index_from_entry_id,
+    descriptor::descriptor_is_fresh, filesystem::mft_partition_index_from_entry_id,
     range::api::read_file_bytes_for_descriptor_with_context,
 };
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
@@ -10,7 +10,6 @@ use domain::{
     FileEntryId,
 };
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
-use persistence_sqlite::runner;
 use rusqlite::params;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -727,18 +726,11 @@ fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
     let bytes: Vec<u8> = (0u8..64).collect();
     std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-range', 'Range Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
 
     let ds_id = DataSourceId("ds-logical-range".to_string());
     DataSourceRepo::new(&conn)
-        .insert(
+        .upsert_source_local_metadata(
             &CaseId("case-range".to_string()),
             &DataSource {
                 id: ds_id.clone(),
@@ -786,18 +778,11 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
     let bytes: Vec<u8> = (0u8..64).collect();
     std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-cache', 'Cache Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
 
     let ds_id = DataSourceId("ds-logical-cache".to_string());
     DataSourceRepo::new(&conn)
-        .insert(
+        .upsert_source_local_metadata(
             &CaseId("case-cache".to_string()),
             &DataSource {
                 id: ds_id.clone(),
@@ -859,6 +844,105 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
     assert_eq!(set_calls.get(), 2);
 }
 
+fn setup_e01_preview_routing_case(
+    file_id: &str,
+    partition_index: Option<i64>,
+    root_name: &str,
+) -> (tempfile::TempDir, rusqlite::Connection, domain::FileEntryId) {
+    let dir = tempfile::TempDir::new().unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
+
+    let data_source_id = DataSourceId("ds-preview-routing".to_string());
+    DataSourceRepo::new(&conn)
+        .upsert_source_local_metadata(
+            &CaseId("case-preview-routing".to_string()),
+            &DataSource {
+                id: data_source_id.clone(),
+                name: "routing evidence".to_string(),
+                kind: DataSourceKind::E01,
+                source_path: dir.path().join("routing.E01"),
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, deleted, hidden, system, partition_index)
+         VALUES ('wrong-root', NULL, ?1, '[P9]', ?2, 'directory', 0, 0, 0, NULL)",
+        params![data_source_id.0, root_name],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, partition_index)
+         VALUES (?1, 'wrong-root', ?2, '[P4]/target.bin', 'target.bin', 'file', 16, 'bin', 0, 0, 0, ?3)",
+        params![file_id, data_source_id.0, partition_index],
+    )
+    .unwrap();
+
+    let partitions = [2u32, 4u32].map(|partition_index| {
+        persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
+            id: format!("routing-partition-{partition_index}"),
+            data_source_id: data_source_id.0.clone(),
+            partition_index,
+            name: format!("Partition {partition_index}"),
+            kind_label: "NTFS".to_string(),
+            status: "ready".to_string(),
+            type_guid: None,
+            offset: u64::from(partition_index) * 1_048_576,
+            length: 1_048_576,
+            filesystem: Some("NTFS".to_string()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+        }
+    });
+    persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&conn)
+        .insert_batch(&partitions)
+        .unwrap();
+
+    (dir, conn, FileEntryId(file_id.to_string()))
+}
+
+#[test]
+fn preview_descriptor_prefers_persisted_partition_index_over_legacy_hints() {
+    let (_dir, conn, file_id) =
+        setup_e01_preview_routing_case("mft:2:42", Some(4), "Partition 9 (NTFS)");
+
+    let descriptor = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id).unwrap();
+
+    assert_eq!(descriptor.partition_index, Some(4));
+    assert_eq!(descriptor.partition_candidates.len(), 1);
+    assert_eq!(descriptor.partition_candidates[0].partition_index, 4);
+    assert!(descriptor_is_fresh(&conn, &file_id, &descriptor));
+
+    conn.execute(
+        "UPDATE file_entries SET partition_index = 2 WHERE id = ?1",
+        params![file_id.0],
+    )
+    .unwrap();
+    assert!(!descriptor_is_fresh(&conn, &file_id, &descriptor));
+}
+
+#[test]
+fn preview_descriptor_fails_closed_without_exact_partition_index() {
+    let (_dir, conn, file_id) =
+        setup_e01_preview_routing_case("legacy-file-id", None, "Evidence Root");
+
+    let error = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id)
+        .expect_err("ambiguous partition routing must fail closed");
+
+    assert!(error
+        .to_string()
+        .contains("requires an exact partition index"));
+}
+
 #[test]
 fn header_read_cache_reuses_preview_descriptor_across_chunks() {
     let dir = tempfile::TempDir::new().unwrap();
@@ -867,18 +951,11 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
     let bytes = vec![b'A'; infrastructure::constants::MAX_RANGE_LENGTH + 17];
     std::fs::write(evidence_dir.join("large.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-header-cache', 'Header Cache Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
 
     let ds_id = DataSourceId("ds-header-cache".to_string());
     DataSourceRepo::new(&conn)
-        .insert(
+        .upsert_source_local_metadata(
             &CaseId("case-header-cache".to_string()),
             &DataSource {
                 id: ds_id.clone(),
@@ -994,6 +1071,60 @@ fn ceph_rbd_xfs_mid_file_range_uses_context_reader_without_materialize() {
 
     assert_eq!(bytes, marker);
     assert_eq!(context.open_calls, 1);
+}
+
+#[test]
+fn ceph_rbd_preview_rejects_multiple_partition_candidates_before_reader_open() {
+    let marker = b"CEPH-RBD-XFS-RANGE";
+    let (image, offset, rejected) = build_ceph_xfs_bounded_range_fixture(marker);
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let mut context = CephRbdRangeContext {
+        conn: &conn,
+        image,
+        rejected,
+        open_calls: 0,
+    };
+    let descriptor = PreviewDescriptor {
+        case_id: "case-ceph-rbd-ambiguous".to_string(),
+        file_id: "xfs-file-ambiguous".to_string(),
+        source_kind: "ceph_rbd".to_string(),
+        source_path: "virtual-ceph-rbd".to_string(),
+        partition_index: Some(0),
+        filesystem_kind: Some("XFS".to_string()),
+        path: "[P0]/large.bin".to_string(),
+        mime: Some("application/octet-stream".to_string()),
+        size: offset + marker.len() as u64,
+        data_source_id: "ds-ceph-rbd-ambiguous".to_string(),
+        partition_candidates: vec![
+            PreviewPartitionCandidate {
+                partition_index: 0,
+                filesystem_kind: "XFS".to_string(),
+                offset: 0,
+                lvm_identity: None,
+            },
+            PreviewPartitionCandidate {
+                partition_index: 1,
+                filesystem_kind: "XFS".to_string(),
+                offset: 1_048_576,
+                lvm_identity: None,
+            },
+        ],
+        entry_size: offset + marker.len() as u64,
+        entry_modified_at: None,
+    };
+
+    let error = read_file_bytes_for_descriptor_with_context(
+        &mut context,
+        &descriptor,
+        offset,
+        marker.len() as u32,
+    )
+    .expect_err("Ceph preview must not select the first ambiguous candidate");
+
+    assert!(error
+        .to_string()
+        .contains("exactly one partition candidate"));
+    assert_eq!(context.open_calls, 0);
 }
 
 #[test]
@@ -1366,18 +1497,11 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
     let raw_path = dir.path().join("exfat.raw");
     write_exfat_raw_fixture(&raw_path).unwrap();
 
-    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-raw-exfat-range', 'Raw exFAT Range Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
 
     let ds_id = DataSourceId("ds-raw-exfat-range".to_string());
     DataSourceRepo::new(&conn)
-        .insert(
+        .upsert_source_local_metadata(
             &CaseId("case-raw-exfat-range".to_string()),
             &DataSource {
                 id: ds_id.clone(),
@@ -1428,18 +1552,11 @@ fn raw_exfat_text_header_reads_via_bytes_only_fast_path() {
     let raw_path = dir.path().join("exfat.raw");
     write_exfat_raw_fixture(&raw_path).unwrap();
 
-    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-raw-exfat-header', 'Raw exFAT Header Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
 
     let ds_id = DataSourceId("ds-raw-exfat-header".to_string());
     DataSourceRepo::new(&conn)
-        .insert(
+        .upsert_source_local_metadata(
             &CaseId("case-raw-exfat-header".to_string()),
             &DataSource {
                 id: ds_id.clone(),

@@ -1,11 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
-use crate::{
-    ceph_reconstruction::DerivedRbdRuntime,
-    file_service::{
-        preview_runtime::prepared_ceph::PreparedCephFile, viewer::PreviewDescriptor,
-        FileServiceError,
-    },
+use crate::file_service::{
+    preview_runtime::prepared_ceph::{PreparedCephFile, SharedPreparedFilesystem},
+    viewer::PreviewDescriptor,
+    FileServiceError,
 };
 
 pub(crate) struct PreviewSession {
@@ -42,12 +40,12 @@ impl PreviewSession {
         global_file_id: String,
         size: u64,
         mime: Option<String>,
-        runtime: Arc<DerivedRbdRuntime>,
+        runtime_fingerprint: String,
+        filesystem: SharedPreparedFilesystem,
         descriptor: &PreviewDescriptor,
     ) -> Result<Self, FileServiceError> {
-        let data_source_id = runtime.data_source_id().0.clone();
-        let runtime_fingerprint = runtime.lineage_fingerprint().to_string();
-        let prepared_ceph = PreparedCephFile::open(runtime, descriptor)?;
+        let data_source_id = descriptor.data_source_id.clone();
+        let prepared_ceph = PreparedCephFile::open(filesystem, descriptor)?;
         Ok(Self {
             case_id,
             data_source_id,

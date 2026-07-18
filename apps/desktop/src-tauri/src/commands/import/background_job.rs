@@ -2,14 +2,21 @@
 
 mod cluster;
 mod cluster_members;
+mod cluster_output;
 mod gate;
 mod single;
 mod status;
 mod types;
 
-pub(crate) use cluster::run_background_linux_cluster_import_job;
+pub(crate) use cluster::run_background_linux_cluster_import_until_browseable;
 pub(crate) use single::run_background_import_job;
-pub(crate) use types::{BackgroundImportJob, BackgroundLinuxClusterImportJob};
+pub(crate) use status::{
+    cancel_browseable_cluster_job, complete_browseable_cluster_job,
+    continue_cluster_rbd_processing, fail_browseable_cluster_job,
+};
+pub(crate) use types::{
+    BackgroundDerivedSourceProcessingJob, BackgroundImportJob, BackgroundLinuxClusterImportJob,
+};
 
 #[cfg(test)]
 #[path = "../../../tests/unit/commands/import/background_job.rs"]

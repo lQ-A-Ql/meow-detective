@@ -33,4 +33,28 @@ impl DerivedFinalizationReport {
             .filter(|outcome| outcome.state == ProcessingPhaseState::Deferred)
             .count()
     }
+
+    pub fn unfinished_count(&self) -> usize {
+        let observed = self
+            .phases
+            .iter()
+            .filter(|outcome| {
+                !matches!(
+                    outcome.state,
+                    ProcessingPhaseState::Ready
+                        | ProcessingPhaseState::Failed
+                        | ProcessingPhaseState::Deferred
+                )
+            })
+            .count();
+        observed + (ProcessingPhase::ALL.len() - 1).saturating_sub(self.phases.len())
+    }
+
+    pub fn all_ready(&self) -> bool {
+        self.phases.len() == ProcessingPhase::ALL.len() - 1
+            && self
+                .phases
+                .iter()
+                .all(|outcome| outcome.state == ProcessingPhaseState::Ready)
+    }
 }

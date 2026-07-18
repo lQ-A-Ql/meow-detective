@@ -48,21 +48,35 @@ pub(in crate::ceph_reconstruction) fn start_catalog_heartbeat(
         .start_heartbeat(attempt)
 }
 
+pub(in crate::ceph_reconstruction) fn refresh_catalog_claim(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    input_fingerprint: &str,
+    attempt: &ProcessingPhaseAttempt,
+) -> Result<(), persistence_sqlite::DbError> {
+    ProcessingPhaseRunner::new(case_conn, data_source_id, input_fingerprint).refresh(attempt)
+}
+
 pub(in crate::ceph_reconstruction) fn fail_catalog_phase(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
     attempt: &ProcessingPhaseAttempt,
     error: &str,
-) {
-    if let Err(state_error) =
-        ProcessingPhaseRunner::new(case_conn, data_source_id, input_fingerprint)
-            .failed(attempt, error)
-    {
-        tracing::warn!(
-            data_source_id = %data_source_id.0,
-            error = %state_error,
-            "Failed to persist the failed RBD catalog phase"
-        );
-    }
+) -> Result<(), persistence_sqlite::DbError> {
+    ProcessingPhaseRunner::new(case_conn, data_source_id, input_fingerprint)
+        .failed(attempt, error)
+        .map(|_| ())
+}
+
+pub(in crate::ceph_reconstruction) fn defer_catalog_phase(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    input_fingerprint: &str,
+    attempt: &ProcessingPhaseAttempt,
+    reason: &str,
+) -> Result<(), persistence_sqlite::DbError> {
+    ProcessingPhaseRunner::new(case_conn, data_source_id, input_fingerprint)
+        .deferred(attempt, "{}", reason)
+        .map(|_| ())
 }

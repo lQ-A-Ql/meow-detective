@@ -6,8 +6,8 @@ use rusqlite::Connection;
 use crate::file_service::{
     viewer::{
         descriptor_image_path_candidates, e01_partition_candidates, entry_image_path_candidates,
-        open_e01_reader_cached, raw_partition_candidates, PreviewDescriptor,
-        PreviewPartitionCandidate,
+        exact_partition_candidate, open_e01_reader_cached, raw_partition_candidates,
+        resolve_partition_index_for_entry, PreviewDescriptor, PreviewPartitionCandidate,
     },
     FileServiceError,
 };
@@ -37,6 +37,8 @@ pub(super) fn read_descriptor_range(
     {
         return Ok(None);
     }
+    let candidate = exact_partition_candidate(descriptor)?;
+    let candidates = std::slice::from_ref(candidate);
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
     match descriptor.source_kind.as_str() {
@@ -48,7 +50,7 @@ pub(super) fn read_descriptor_range(
             };
             read_candidates(
                 source_path,
-                &descriptor.partition_candidates,
+                candidates,
                 &path_candidates,
                 offset,
                 length,
@@ -63,7 +65,7 @@ pub(super) fn read_descriptor_range(
             };
             read_candidates(
                 source_path,
-                &descriptor.partition_candidates,
+                candidates,
                 &path_candidates,
                 offset,
                 length,
@@ -86,7 +88,7 @@ pub(super) fn read_entry_range(
     let (source_kind, source_path) = repo
         .find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
-    let partition_index = crate::file_service::viewer::root_partition_index_for_entry(repo, entry);
+    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     let path_candidates = entry_image_path_candidates(entry);
     match source_kind.as_str() {
         "e01" => {

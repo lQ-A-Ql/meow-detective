@@ -731,26 +731,21 @@ fn get_file_rows_sorts_full_set_then_paginates() {
 
 #[test]
 fn placeholder_path_encodes_partition_index() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
     let ds_id = DataSourceId("ds-ph-index".to_string());
-    conn.execute(
-            "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
-            [],
-        )
-        .unwrap();
-    conn.execute(
-            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','e01','C:/e','2026-01-01T00:00:00Z')",
-            params![ds_id.0],
-        )
-        .unwrap();
 
     let id = insert_partition_placeholder_root(&conn, &ds_id, 3, "Partition 3 (NTFS)", "queued")
         .unwrap();
     let entry = FileRepo::new(&conn).find_by_id(&id).unwrap().unwrap();
     assert_eq!(entry.path, "__partition_placeholder__/3/queued");
     assert_eq!(partition_placeholder_status(&entry), Some("queued"));
+    assert_eq!(
+        FileRepo::new(&conn)
+            .find_partition_index_by_id(&id)
+            .unwrap(),
+        Some(3)
+    );
 }
 
 // ------------------------------------------------------------------

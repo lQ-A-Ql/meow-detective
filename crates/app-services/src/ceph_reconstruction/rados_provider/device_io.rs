@@ -52,12 +52,21 @@ pub(super) fn read_plan_page(
     length: usize,
 ) -> std::io::Result<Vec<u8>> {
     let mut reader = RadosObjectReader::from_layout(Box::new(device), plan);
+    let object_size = reader.info().size;
+    let mut bytes = vec![0; length];
+    let readable = object_size.saturating_sub(offset).min(length as u64) as usize;
+    if readable == 0 {
+        return Ok(bytes);
+    }
     reader.seek(SeekFrom::Start(offset))?;
-    let mut bytes = Vec::with_capacity(length);
-    reader.take(length as u64).read_to_end(&mut bytes)?;
+    reader.read_exact(&mut bytes[..readable])?;
     Ok(bytes)
 }
 
 fn invalid_data_error(message: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, message)
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/ceph_reconstruction/rados_provider/device_io.rs"]
+mod tests;

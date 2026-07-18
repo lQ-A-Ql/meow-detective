@@ -8,19 +8,18 @@ use evidence_core::filesystem::{
     invalid_fs_data, path_components, FileSystemDiagnostic, FileSystemDiagnosticKind,
 };
 use std::io;
+use std::sync::Arc;
 
-const MAX_DIRECTORY_PATH_CACHE_ENTRIES: usize = 100_000;
 const MAX_DIRECTORY_INODE_CACHE_ENTRIES: usize = 32_768;
 const MAX_FILESYSTEM_DIAGNOSTICS: usize = 1_000;
 
-impl XfsReader {
-    pub(crate) fn cache_directory_path(&self, path: String, ino: u64) {
-        let mut cache = self.directory_path_cache.borrow_mut();
-        if cache.len() < MAX_DIRECTORY_PATH_CACHE_ENTRIES {
-            cache.insert(path, ino);
-        }
-    }
+pub(crate) struct XfsResolvedPath {
+    pub(crate) inode_number: u64,
+    pub(crate) is_dir: bool,
+    pub(crate) inode: Option<Vec<u8>>,
+}
 
+impl XfsReader {
     pub(crate) fn read_directory_entries(
         &self,
         ino: u64,
@@ -36,54 +35,70 @@ impl XfsReader {
             return Err(invalid_fs_data(format!("inode {ino} is not a directory")));
         }
 
-        match inode[di_off::FORMAT] {
+        let entries = self.raw_directory_entries(ino, &inode)?;
+        Ok(self.annotate_directory_entries(entries.iter().cloned()))
+    }
+
+    fn raw_directory_entries(
+        &self,
+        ino: u64,
+        inode: &[u8],
+    ) -> io::Result<Arc<Vec<XfsDirectoryEntry>>> {
+        if let Some(entries) = self.directory_entry_cache.borrow_mut().get(ino) {
+            return Ok(entries);
+        }
+
+        let diagnostic_count = self.diagnostics.borrow().len();
+        let (entries, cacheable) = match inode[di_off::FORMAT] {
             FORMAT_LOCAL => {
-                let data_fork = Self::data_fork(&inode)?;
+                let data_fork = Self::data_fork(inode)?;
                 let raw = Self::parse_shortform_dir(data_fork, self.has_ftype)?;
-                let entries =
-                    Self::shortform_entries_to_directory_entries(raw, self.has_ftype, data_fork);
-                Ok(self.annotate_directory_entries(entries))
+                (
+                    Self::shortform_entries_to_directory_entries(raw, self.has_ftype, data_fork),
+                    true,
+                )
             }
-            FORMAT_EXTENTS => match self.read_extent_directory_entries(&inode) {
-                Ok(entries) => Ok(self.annotate_directory_entries(entries)),
+            FORMAT_EXTENTS => match self.read_extent_directory_entries(inode) {
+                Ok(entries) => (entries, true),
                 Err(block_error) => {
                     if !self
-                        .extent_directory_data_is_all_zero(&inode)
+                        .extent_directory_data_is_all_zero(inode)
                         .unwrap_or(false)
                     {
                         return Err(block_error);
                     }
-                    let data_fork = Self::data_fork(&inode)?;
-                    let full_literal = &inode[Self::inode_core_size(&inode)..];
-                    self.recover_shortform_dir_entries(&[data_fork, full_literal], self.has_ftype)
-                        .and_then(|entries| {
-                            entries.ok_or_else(|| {
-                                invalid_fs_data(
-                                    "block dir all-zero (sf->block conversion artifact), recovery failed",
-                                )
-                            })
-                        })
+                    let data_fork = Self::data_fork(inode)?;
+                    let full_literal = &inode[Self::inode_core_size(inode)..];
+                    let recovered = self
+                        .recover_shortform_dir_entries_raw(
+                            &[data_fork, full_literal],
+                            self.has_ftype,
+                        )
+                        .ok_or_else(|| {
+                            invalid_fs_data(
+                                "block dir all-zero (sf->block conversion artifact), recovery failed",
+                            )
+                        })?;
+                    (recovered, false)
                 }
             },
             FORMAT_BTREE => {
-                let entries = self.read_btree_directory_entries(&inode)?;
-                Ok(self.annotate_directory_entries(entries))
+                let entries = self.read_btree_directory_entries(inode)?;
+                (entries, true)
             }
-            other => Err(invalid_fs_data(format!(
-                "directory inode {ino} uses unsupported format {other}"
-            ))),
+            other => {
+                return Err(invalid_fs_data(format!(
+                    "directory inode {ino} uses unsupported format {other}"
+                )))
+            }
+        };
+        let entries = Arc::new(entries);
+        if cacheable && self.diagnostics.borrow().len() == diagnostic_count {
+            self.directory_entry_cache
+                .borrow_mut()
+                .insert(ino, Arc::clone(&entries));
         }
-    }
-
-    fn recover_shortform_dir_entries(
-        &self,
-        slices: &[&[u8]],
-        prefer_ftype: bool,
-    ) -> io::Result<Option<Vec<XfsResolvedDirectoryEntry>>> {
-        self.recover_shortform_dir_entries_raw(slices, prefer_ftype)
-            .map(|entries| self.annotate_directory_entries(entries))
-            .map(Ok)
-            .transpose()
+        Ok(entries)
     }
 
     pub(super) fn recover_shortform_dir_entries_raw(
@@ -199,13 +214,13 @@ impl XfsReader {
 
     fn annotate_directory_entries(
         &self,
-        raw: Vec<XfsDirectoryEntry>,
+        raw: impl IntoIterator<Item = XfsDirectoryEntry>,
     ) -> Vec<XfsResolvedDirectoryEntry> {
         raw.into_iter()
             .filter_map(|entry| {
                 let fallback_is_dir = dirent_is_dir(entry.ftype);
                 match self.child_inode_metadata(entry.inode) {
-                    Ok(metadata) => {
+                    Ok((metadata, _)) => {
                         if let Err(error) =
                             validate_dirent_type(entry.inode, entry.ftype, metadata.is_dir)
                         {
@@ -267,7 +282,7 @@ impl XfsReader {
         }
     }
 
-    fn child_inode_metadata(&self, ino: u64) -> io::Result<XfsInodeMetadata> {
+    fn child_inode_metadata(&self, ino: u64) -> io::Result<(XfsInodeMetadata, Vec<u8>)> {
         let inode = self.read_inode(ino).map_err(|error| {
             invalid_fs_data(format!("cannot read directory child inode {ino}: {error}"))
         })?;
@@ -285,10 +300,10 @@ impl XfsReader {
                 cache.entry(ino).or_insert_with(|| inode.clone());
             }
         }
-        Ok(metadata)
+        Ok((metadata, inode))
     }
 
-    fn lookup_directory_entry(&self, ino: u64, name: &str) -> io::Result<Option<(u64, bool)>> {
+    fn lookup_directory_entry(&self, ino: u64, name: &str) -> io::Result<Option<XfsResolvedPath>> {
         let inode = self
             .directory_inode_cache
             .borrow()
@@ -300,71 +315,71 @@ impl XfsReader {
             return Err(invalid_fs_data(format!("inode {ino} is not a directory")));
         }
 
-        let entries = match inode[di_off::FORMAT] {
-            FORMAT_LOCAL => {
-                let data_fork = Self::data_fork(&inode)?;
-                let raw = Self::parse_shortform_dir(data_fork, self.has_ftype)?;
-                Self::shortform_entries_to_directory_entries(raw, self.has_ftype, data_fork)
-            }
-            FORMAT_EXTENTS => match self.read_extent_directory_entries(&inode) {
-                Ok(entries) => entries,
-                Err(block_error) => {
-                    if !self
-                        .extent_directory_data_is_all_zero(&inode)
-                        .unwrap_or(false)
-                    {
-                        return Err(block_error);
-                    }
-                    let data_fork = Self::data_fork(&inode)?;
-                    let full_literal = &inode[Self::inode_core_size(&inode)..];
-                    self.recover_shortform_dir_entries_raw(
-                        &[data_fork, full_literal],
-                        self.has_ftype,
-                    )
-                    .ok_or_else(|| {
-                        invalid_fs_data(
-                            "block dir all-zero (sf->block conversion artifact), recovery failed",
-                        )
-                    })?
-                }
-            },
-            FORMAT_BTREE => self.read_btree_directory_entries(&inode)?,
-            other => {
-                return Err(invalid_fs_data(format!(
-                    "directory inode {ino} uses unsupported format {other}"
-                )))
-            }
-        };
-        let Some(entry) = entries.into_iter().find(|entry| entry.name == name) else {
+        let entries = self.raw_directory_entries(ino, &inode)?;
+        let Some(entry) = entries.iter().find(|entry| entry.name == name) else {
             return Ok(None);
         };
-        let metadata = self.child_inode_metadata(entry.inode)?;
+        let (metadata, inode) = self.child_inode_metadata(entry.inode)?;
         validate_dirent_type(entry.inode, entry.ftype, metadata.is_dir)?;
-        Ok(Some((entry.inode, metadata.is_dir)))
+        Ok(Some(XfsResolvedPath {
+            inode_number: entry.inode,
+            is_dir: metadata.is_dir,
+            inode: Some(inode),
+        }))
     }
 
     pub(crate) fn resolve_path(&self, path: &str) -> io::Result<Option<(u64, bool)>> {
+        Ok(self
+            .resolve_path_with_inode(path)?
+            .map(|resolved| (resolved.inode_number, resolved.is_dir)))
+    }
+
+    pub(crate) fn resolve_path_with_inode(
+        &self,
+        path: &str,
+    ) -> io::Result<Option<XfsResolvedPath>> {
         let components = path_components(path);
         if components.is_empty() {
-            return Ok(Some((self.root_ino, true)));
+            return Ok(Some(XfsResolvedPath {
+                inode_number: self.root_ino,
+                is_dir: true,
+                inode: None,
+            }));
         }
         let normalized_path = components.join("/");
-        if let Some(inode) = self
+        if let Some((inode_number, inode, requires_binding_validation)) =
+            self.resolve_cached_file_locator(&normalized_path)
+        {
+            if !requires_binding_validation
+                || self.persisted_file_locator_matches_path(&components, inode_number)?
+            {
+                self.mark_cached_file_locator_verified(&normalized_path);
+                return Ok(Some(XfsResolvedPath {
+                    inode_number,
+                    is_dir: false,
+                    inode: Some(inode),
+                }));
+            }
+            self.discard_cached_file_locator(&normalized_path);
+        }
+        if let Some(inode_number) = self
             .directory_path_cache
             .borrow()
             .get(&normalized_path)
             .copied()
         {
-            return Ok(Some((inode, true)));
+            return Ok(Some(XfsResolvedPath {
+                inode_number,
+                is_dir: true,
+                inode: None,
+            }));
         }
 
-        let mut current_inode = self.root_ino;
-        let mut current_path = String::new();
-        for (index, component) in components.iter().enumerate() {
+        let (mut current_inode, mut current_path, start_index) =
+            self.longest_cached_directory_prefix(&components);
+        for (index, component) in components.iter().enumerate().skip(start_index) {
             let is_last = index == components.len() - 1;
-            let Some((entry_inode, entry_is_dir)) =
-                self.lookup_directory_entry(current_inode, component)?
-            else {
+            let Some(resolved) = self.lookup_directory_entry(current_inode, component)? else {
                 return Ok(None);
             };
             current_path = if current_path.is_empty() {
@@ -372,18 +387,70 @@ impl XfsReader {
             } else {
                 format!("{current_path}/{component}")
             };
-            if entry_is_dir {
-                self.cache_directory_path(current_path.clone(), entry_inode);
+            if resolved.is_dir {
+                self.cache_directory_path(current_path.clone(), resolved.inode_number);
             }
             if is_last {
-                return Ok(Some((entry_inode, entry_is_dir)));
+                if !resolved.is_dir {
+                    self.cache_file_path(current_path, resolved.inode_number);
+                }
+                return Ok(Some(resolved));
             }
-            if !entry_is_dir {
+            if !resolved.is_dir {
                 return Ok(None);
             }
-            current_inode = entry_inode;
+            current_inode = resolved.inode_number;
         }
         Ok(None)
+    }
+
+    fn persisted_file_locator_matches_path(
+        &self,
+        components: &[&str],
+        expected_inode: u64,
+    ) -> io::Result<bool> {
+        let Some(final_name) = components.last().copied() else {
+            return Ok(false);
+        };
+        let (mut current_inode, _, start_index) = self.longest_cached_directory_prefix(components);
+        for component in components
+            .iter()
+            .copied()
+            .take(components.len().saturating_sub(1))
+            .skip(start_index)
+        {
+            let Some(resolved) = self.lookup_directory_entry(current_inode, component)? else {
+                return Ok(false);
+            };
+            if !resolved.is_dir {
+                return Ok(false);
+            }
+            current_inode = resolved.inode_number;
+        }
+        let Some(resolved) = self.lookup_directory_entry(current_inode, final_name)? else {
+            return Ok(false);
+        };
+        Ok(!resolved.is_dir && resolved.inode_number == expected_inode)
+    }
+
+    fn longest_cached_directory_prefix(&self, components: &[&str]) -> (u64, String, usize) {
+        let cache = self.directory_path_cache.borrow();
+        let mut prefix = String::new();
+        let mut longest = (self.root_ino, String::new(), 0usize);
+        for (index, component) in components
+            .iter()
+            .enumerate()
+            .take(components.len().saturating_sub(1))
+        {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(component);
+            if let Some(inode) = cache.get(&prefix).copied() {
+                longest = (inode, prefix.clone(), index + 1);
+            }
+        }
+        longest
     }
 }
 

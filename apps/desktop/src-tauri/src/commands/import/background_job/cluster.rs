@@ -1,26 +1,25 @@
+use super::{
+    cluster_members::import_cluster_members,
+    cluster_output::build_derived_processing_job,
+    gate::acquire_import_slot,
+    status::{cancel_job, fail_job, fail_linux_cluster_job, materialize_cluster_rbd_sources},
+    types::{BackgroundLinuxClusterImportJob, BrowseableClusterImport, ClusterImportSummary},
+};
+use crate::events::event_bridge;
+use app_services::cluster_service;
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-
-use app_services::cluster_service;
-use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::AppHandle;
 use transport::CommandError;
 
-use super::{
-    cluster_members::import_cluster_members,
-    gate::acquire_import_slot,
-    status::{cancel_job, fail_job, fail_linux_cluster_job, materialize_cluster_rbd_sources},
-    types::{BackgroundLinuxClusterImportJob, ClusterImportSummary},
-};
-use crate::events::event_bridge;
-
-pub(crate) fn run_background_linux_cluster_import_job(
+pub(crate) fn run_background_linux_cluster_import_until_browseable(
     job: BackgroundLinuxClusterImportJob,
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
-) -> Result<(), CommandError> {
+) -> Result<Option<BrowseableClusterImport>, CommandError> {
     let connection = app_services::connection::open_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
@@ -35,15 +34,15 @@ pub(crate) fn run_background_linux_cluster_import_job(
             app,
             "Linux cluster import cancelled by user",
         );
-        return Ok(());
+        return Ok(None);
     }
     let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
     initialize_cluster(&connection, &job_repo, &job, app)?;
     let Some(summary) = import_cluster_members(&connection, &job_repo, &job, app, &cancel_token)?
     else {
-        return Ok(());
+        return Ok(None);
     };
-    complete_cluster_import(&connection, &job_repo, &job, app, summary)
+    complete_cluster_import(&connection, &job_repo, &job, app, summary, cancel_token)
 }
 
 fn initialize_cluster(
@@ -97,7 +96,8 @@ fn complete_cluster_import(
     job: &BackgroundLinuxClusterImportJob,
     app: Option<&AppHandle>,
     summary: ClusterImportSummary,
-) -> Result<(), CommandError> {
+    cancel_token: Arc<AtomicBool>,
+) -> Result<Option<BrowseableClusterImport>, CommandError> {
     let total_members = job.plan.members.len() as u32;
     if summary.failed_count > 0 {
         return complete_cluster_import_with_failures(
@@ -107,7 +107,8 @@ fn complete_cluster_import(
             app,
             summary,
             total_members,
-        );
+        )
+        .map(|()| None);
     }
     cluster_service::update_linux_cluster_import_state(
         connection,
@@ -118,27 +119,44 @@ fn complete_cluster_import(
         None,
     )
     .map_err(CommandError::from_typed_service_error)?;
-    let derived_source_count =
-        materialize_cluster_rbd_sources(connection, job_repo, job, app, &summary)?;
-    let message = format!(
+    let Some(derived_sources) = materialize_cluster_rbd_sources(
+        connection,
+        job_repo,
+        job,
+        app,
+        &summary,
+        Arc::clone(&cancel_token),
+    )?
+    else {
+        return Ok(None);
+    };
+    if cancel_token.load(Ordering::Relaxed) {
+        cancel_job(
+            job_repo,
+            &job.job_id,
+            app,
+            "Linux cluster import cancelled after RBD materialization",
+        );
+        return Ok(None);
+    }
+    let derived_source_count = derived_sources.len();
+    let completion_detail = format!(
         "Imported Linux cluster {}: {}/{} image(s) ready",
         job.plan.cluster_name, summary.ready_count, total_members
     );
-    job_repo
-        .complete(&job.job_id, &message)
-        .map_err(CommandError::from_typed_service_error)?;
-    if let Some(app) = app {
-        event_bridge::emit_job_completed(app, &job.job_id.0, &message);
-    }
     tracing::info!(
         cluster_id = %job.plan.cluster_id,
         members = total_members,
         imported = summary.ready_count,
         derived_sources = derived_source_count,
         summaries = ?summary.member_messages,
-        "Linux cluster import completed"
+        "Linux cluster import is browseable and awaiting derived-task admission"
     );
-    Ok(())
+    Ok(Some(BrowseableClusterImport {
+        processing: build_derived_processing_job(job, derived_sources),
+        parent_job_id: job.job_id.clone(),
+        completion_detail,
+    }))
 }
 
 fn complete_cluster_import_with_failures(

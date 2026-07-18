@@ -31,6 +31,7 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
                 phase: "catalog".to_string(),
                 state: "ready".to_string(),
                 version: 2,
+                stats: serde_json::json!({"recordCount": 42}),
                 last_error: None,
                 started_at: Some("2026-07-17 00:00:00".to_string()),
                 completed_at: Some("2026-07-17 00:00:01".to_string()),
@@ -76,6 +77,7 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
     assert_eq!(value["processing"]["readyCount"], 6);
     assert_eq!(value["processing"]["phases"][0]["phase"], "catalog");
     assert_eq!(value["processing"]["phases"][0]["version"], 2);
+    assert_eq!(value["processing"]["phases"][0]["stats"]["recordCount"], 42);
     assert_eq!(value["sourceHash"], "a".repeat(64));
     assert_eq!(value["hashStatus"], "hashed");
     assert_eq!(value["canonicalPath"], "D:/canonical/disk.raw");

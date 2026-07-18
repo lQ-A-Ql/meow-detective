@@ -281,6 +281,7 @@ describe('DataAnalysis page', () => {
       mutateAsync: vi.fn().mockResolvedValue({
         status: 'parsed',
         scannedCount: 8,
+        checkpointHitCount: 0,
         artifactCount: 7,
         timelineEventCount: 3,
         generatedAt: '2026-06-01T10:15:00Z',
@@ -660,6 +661,7 @@ describe('DataAnalysis page', () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
+      checkpointHitCount: 0,
       artifactCount: 7,
       timelineEventCount: 3,
       warnings: [],
@@ -687,6 +689,7 @@ describe('DataAnalysis page', () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
+      checkpointHitCount: 0,
       artifactCount: 7,
       timelineEventCount: 3,
       warnings: [],
@@ -724,6 +727,7 @@ describe('DataAnalysis page', () => {
       return {
         status: 'parsed',
         scannedCount: 8,
+        checkpointHitCount: 0,
         artifactCount: 158,
         timelineEventCount: 3,
         sections: [extractionSection(key, sectionArtifactCounts[key])],
@@ -777,6 +781,7 @@ describe('DataAnalysis page', () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 72,
+      checkpointHitCount: 0,
       artifactCount: 158,
       timelineEventCount: 27,
       sections: linuxSections,
@@ -914,6 +919,7 @@ describe('DataAnalysis page', () => {
       data: {
         status: 'failed',
         scannedCount: 0,
+        checkpointHitCount: 0,
         artifactCount: 0,
         timelineEventCount: 0,
         generatedAt: '2026-06-01T10:15:00Z',
@@ -982,6 +988,7 @@ describe('DataAnalysis page', () => {
     const run = deferred<{
       status: 'parsed';
       scannedCount: number;
+      checkpointHitCount: number;
       artifactCount: number;
       timelineEventCount: number;
       generatedAt: string;
@@ -1011,6 +1018,7 @@ describe('DataAnalysis page', () => {
       run.resolve({
         status: 'parsed',
         scannedCount: 99,
+        checkpointHitCount: 0,
         artifactCount: 99,
         timelineEventCount: 99,
         generatedAt: '2026-06-03T10:00:00Z',

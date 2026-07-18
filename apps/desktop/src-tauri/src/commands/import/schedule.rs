@@ -1,6 +1,7 @@
 //! Import command scheduling facade.
 
 use app_services::{active_case, cluster_service, import_analysis, import_precheck};
+use std::sync::Arc;
 use tauri::{AppHandle, State};
 use transport::{commands::ImportDataSourceRequest, CommandError};
 
@@ -42,7 +43,7 @@ pub fn schedule_linux_cluster_import_for_active_case(
     active: &active_case::ActiveCase,
     plan: cluster_service::LinuxClusterImportPlan,
     app: Option<&AppHandle>,
-    task_manager: &TaskManager,
+    task_manager: Arc<TaskManager>,
     max_import_workers: Option<usize>,
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,

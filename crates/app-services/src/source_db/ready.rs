@@ -1,4 +1,4 @@
-use domain::{CaseId, DataSourceId, DataSourcePlatform};
+use domain::{CaseId, DataSourceId, DataSourceKind, DataSourcePlatform};
 use persistence_sqlite::{
     repositories::datasource_repo::{DataSourceRepo, DataSourceStorage},
     DbError,
@@ -72,14 +72,46 @@ pub fn open_reconstruction_source_by_id(
 ) -> Result<ReconstructionSourceConnection, ReadySourceError> {
     let storage = source_storage_for_case(case_conn, case_id, data_source_id)?;
     let platform = validate_reconstruction_storage(data_source_id, &storage)?;
-    let connection =
-        super::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
+    let connection = super::open_registered_reconstruction_source_db_read_only(
+        case_conn,
+        case_root,
+        data_source_id,
+    )?;
 
     Ok(ReconstructionSourceConnection {
         data_source_id: data_source_id.clone(),
         platform,
         connection,
     })
+}
+
+pub(crate) fn open_catalog_recovery_source_by_id(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<Connection, ReadySourceError> {
+    let repo = DataSourceRepo::new(case_conn);
+    let source = repo
+        .find_by_case(case_id)?
+        .into_iter()
+        .find(|source| source.id == *data_source_id)
+        .ok_or_else(|| ReadySourceError::NotFound {
+            case_id: case_id.0.clone(),
+            data_source_id: data_source_id.0.clone(),
+        })?;
+    let storage = repo
+        .find_storage(data_source_id)?
+        .ok_or_else(|| ReadySourceError::NotFound {
+            case_id: case_id.0.clone(),
+            data_source_id: data_source_id.0.clone(),
+        })?;
+    validate_catalog_recovery_source(&source.kind, data_source_id, &storage)?;
+    Ok(super::open_registered_source_db(
+        case_conn,
+        case_root,
+        data_source_id,
+    )?)
 }
 
 pub fn resolve_ready_source_platform(
@@ -129,6 +161,30 @@ fn validate_reconstruction_storage(
         });
     }
     parse_platform(data_source_id, storage)
+}
+
+fn validate_catalog_recovery_source(
+    kind: &DataSourceKind,
+    data_source_id: &DataSourceId,
+    storage: &DataSourceStorage,
+) -> Result<(), ReadySourceError> {
+    let state = storage.import_state.trim().to_ascii_lowercase();
+    let platform = parse_platform(data_source_id, storage)?;
+    let valid = *kind == DataSourceKind::CephRbd
+        && platform == DataSourcePlatform::Linux
+        && storage.profile.as_deref() == Some("vm_disk")
+        && matches!(state.as_str(), "pending" | "failed" | "ready");
+    if valid {
+        return Ok(());
+    }
+    Err(ReadySourceError::UnsupportedPlatform {
+        data_source_id: data_source_id.0.clone(),
+        reason: format!(
+            "Catalog recovery expected Ceph RBD Linux vm_disk in pending, failed, or ready state; found kind={kind}, platform={platform}, profile={}, state={}",
+            storage.profile.as_deref().unwrap_or("<none>"),
+            storage.import_state
+        ),
+    })
 }
 
 pub(super) fn validate_ready_storage(

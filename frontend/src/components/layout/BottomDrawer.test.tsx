@@ -239,6 +239,60 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText(/P3 root LV/)).toBeDefined();
   });
 
+  it('surfaces persisted background phase failures and warning details', () => {
+    mocks.dataSources.mockReturnValue({
+      data: [
+        {
+          id: 'rbd-source',
+          name: 'vm-100-disk-0',
+          kind: 'ceph_rbd',
+          sourcePath: 'ceph-rbd://cluster/image',
+          importedAt: '2026-07-18T05:17:40Z',
+          platform: 'linux',
+          processing: {
+            state: 'failed',
+            totalCount: 6,
+            readyCount: 4,
+            pendingCount: 0,
+            runningCount: 0,
+            failedCount: 1,
+            deferredCount: 1,
+            lastError: 'Search index writer failed',
+            phases: [
+              {
+                phase: 'artifacts',
+                state: 'ready',
+                version: 1,
+                stats: {
+                  warningCount: 2,
+                  warningDetails: ['etc/ssh/key read failed', 'web script parse warning'],
+                  warningDetailsTruncated: false,
+                },
+                updatedAt: '2026-07-18 05:17:40',
+              },
+              {
+                phase: 'search',
+                state: 'failed',
+                version: 1,
+                stats: {},
+                lastError: 'Search index writer failed',
+                updatedAt: '2026-07-18 05:17:41',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getAllByText('vm-100-disk-0 / artifacts').length).toBeGreaterThan(0);
+    expect(screen.getByText('etc/ssh/key read failed')).toBeDefined();
+    expect(screen.getByText(/web script parse warning/)).toBeDefined();
+    expect(screen.getAllByText('vm-100-disk-0 / search').length).toBeGreaterThan(0);
+    expect(screen.getByText('Search index writer failed')).toBeDefined();
+  });
+
   it('surfaces evidence hash caveats in the compact import signal panel', () => {
     mocks.importSignals.mockReturnValue({
       latestPhase: undefined,

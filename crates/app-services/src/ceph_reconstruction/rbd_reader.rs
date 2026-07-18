@@ -27,6 +27,7 @@ pub const RBD_OPERATION_FEATURE_CLONE_PARENT: u64 = 1 << 0;
 pub const RBD_OPERATION_FEATURE_CLONE_CHILD: u64 = 1 << 1;
 pub const RBD_OPERATION_FEATURE_GROUP: u64 = 1 << 2;
 pub const RBD_OPERATION_FEATURE_SNAP_TRASH: u64 = 1 << 3;
+pub const RBD_READ_GRANULARITY_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RbdReadContext {
@@ -205,6 +206,10 @@ impl Seek for RbdEvidenceReader {
 impl EvidenceReader for RbdEvidenceReader {
     fn info(&self) -> &ReaderInfo {
         &self.info
+    }
+
+    fn preferred_read_granularity(&self) -> usize {
+        RBD_READ_GRANULARITY_BYTES
     }
 }
 

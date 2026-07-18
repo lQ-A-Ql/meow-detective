@@ -1,16 +1,22 @@
-use super::artifact_query::{
-    already_has_v1_artifacts, artifacts_by_data_source, count_analysis_artifacts,
-};
+use super::artifact_query::already_has_v1_artifacts;
 use super::browser::extract_browser_candidate;
+use super::candidate_order::order_candidates_for_extraction;
+use super::checkpoint_validation::existing_complete_scan_keys;
 use super::email::extract_email_candidate;
 use super::evtx::extract_evtx_candidate;
 use super::linux::{extract_linux_candidate, linux_candidate_read_limit};
 use super::linux_sections::{linux_artifact_section, LinuxArtifactSection};
+use super::output_persistence::flush_pending_outputs;
 use super::registry::extract_registry_candidate;
 use super::registry_preload::{preload_registry_context, RegistryPreloadContext};
+use super::state::{
+    existing_clean_scan_keys, existing_diagnostic_scan_keys, AnalysisCheckpointKey, CleanScanKeys,
+    DiagnosticScanKeys, ExtractionState,
+};
 use super::ExtractionOutcome;
+use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
-    evidence_candidates_for_categories, normalize_evidence_path, EvidenceCandidate,
+    evidence_candidates_for_categories_with_cancel, normalize_evidence_path, EvidenceCandidate,
 };
 use crate::analysis_service::capability::{
     AnalysisCapability, CandidateReadPolicy, LINUX_UMBRELLA_KEY,
@@ -19,106 +25,69 @@ use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::platforms::analyzer_for;
 use chrono::Utc;
 use domain::{DataSourcePlatform, FileEntryId};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
 use rusqlite::Connection;
-use std::collections::BTreeMap;
-use std::io::Read;
-use transport::dto::{
-    AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisParseStatusDto,
-};
+use std::collections::HashMap;
+use std::io::{Cursor, Read};
+use std::sync::atomic::AtomicBool;
+use std::time::Instant;
+use transport::dto::AnalysisExtractionRunDto;
 
-#[derive(Debug, Clone)]
-struct SectionProgress {
-    key: String,
-    label: String,
-    scanned_count: u64,
-    artifact_count: u64,
-    timeline_event_count: u64,
-    warnings: Vec<String>,
+const READ_BUFFER_BYTES: usize = 64 * 1024;
+
+#[derive(Debug)]
+enum CandidateExtractionError {
+    Warning(String),
+    Cancelled,
 }
 
-impl SectionProgress {
-    fn new(capability: AnalysisCapability) -> Self {
-        Self {
-            key: capability.key.to_string(),
-            label: capability.section_label.to_string(),
-            scanned_count: 0,
-            artifact_count: 0,
-            timeline_event_count: 0,
-            warnings: Vec::new(),
-        }
-    }
+enum CandidateSource {
+    Reader(Box<dyn Read>),
+    Bytes(Vec<u8>),
+}
 
-    fn record_scan(&mut self, outcome: &ExtractionOutcome) {
-        self.scanned_count += 1;
-        self.artifact_count += outcome.artifacts.len() as u64;
-        self.timeline_event_count += outcome.timeline_events.len() as u64;
-        self.warnings.extend(outcome.warnings.iter().cloned());
-    }
+struct ExistingCheckpoints<'a> {
+    clean: &'a CleanScanKeys,
+    diagnostic: &'a DiagnosticScanKeys,
+    complete: &'a HashMap<
+        AnalysisCheckpointKey,
+        persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan,
+    >,
+    storage_available: bool,
+}
 
-    fn into_dto(self) -> AnalysisExtractionSectionRunDto {
-        let status = extraction_status(self.scanned_count, &self.warnings);
-        AnalysisExtractionSectionRunDto {
-            key: self.key,
-            label: self.label,
-            status,
-            scanned_count: self.scanned_count,
-            artifact_count: self.artifact_count,
-            timeline_event_count: self.timeline_event_count,
-            warnings: self.warnings,
-        }
+struct CandidateProcessingContext<'a> {
+    conn: &'a Connection,
+    selected: &'a [AnalysisCapability],
+    checkpoints: &'a ExistingCheckpoints<'a>,
+    preload: &'a RegistryPreloadContext,
+    cancel_token: &'a AtomicBool,
+}
+
+impl ExistingCheckpoints<'_> {
+    fn has_candidate(&self, candidate: &EvidenceCandidate, capability: AnalysisCapability) -> bool {
+        let key = (
+            candidate.file_id.0.clone(),
+            capability.key.to_string(),
+            candidate.size,
+            candidate.content_identity.clone(),
+        );
+        self.clean.contains(&key)
+            || self.diagnostic.contains_key(&key)
+            || self.complete.contains_key(&key)
     }
 }
 
-struct ExtractionState {
-    artifacts: Vec<domain::Artifact>,
-    events: Vec<domain::TimelineEvent>,
-    warnings: Vec<String>,
-    scanned_count: u64,
-    timeline_event_count: u64,
-    sections: BTreeMap<String, SectionProgress>,
-}
-
-impl ExtractionState {
-    fn new(selected: &[AnalysisCapability]) -> Self {
-        Self {
-            artifacts: Vec::new(),
-            events: Vec::new(),
-            warnings: Vec::new(),
-            scanned_count: 0,
-            timeline_event_count: 0,
-            sections: selected
-                .iter()
-                .map(|capability| {
-                    (
-                        capability.key.to_string(),
-                        SectionProgress::new(*capability),
-                    )
-                })
-                .collect(),
-        }
-    }
-
-    fn record_outcome(&mut self, capability: AnalysisCapability, outcome: ExtractionOutcome) {
-        self.scanned_count += 1;
-        self.timeline_event_count += outcome.timeline_events.len() as u64;
-        self.sections
-            .entry(capability.key.to_string())
-            .or_insert_with(|| SectionProgress::new(capability))
-            .record_scan(&outcome);
-        self.warnings.extend(outcome.warnings.iter().cloned());
-        self.artifacts.extend(outcome.artifacts);
-        self.events.extend(outcome.timeline_events);
-    }
-
-    fn record_warning(&mut self, capability: AnalysisCapability, warning: String) {
-        self.sections
-            .entry(capability.key.to_string())
-            .or_insert_with(|| SectionProgress::new(capability))
-            .warnings
-            .push(warning.clone());
-        self.warnings.push(warning);
-    }
+pub(crate) struct AnalysisExtractionExecution {
+    pub(crate) dto: AnalysisExtractionRunDto,
+    pub(crate) retryable_failure_count: u64,
+    pub(crate) discovery_elapsed_ms: u64,
+    pub(crate) processing_elapsed_ms: u64,
+    pub(crate) persistence_elapsed_ms: u64,
+    pub(crate) source_read_count: u64,
+    pub(crate) source_read_elapsed_ms: u64,
+    pub(crate) filesystem_read_metrics: evidence_core::FileSystemReadMetrics,
+    pub(crate) rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics,
 }
 
 pub fn run_analysis_extraction<E: std::fmt::Display>(
@@ -128,12 +97,115 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
     categories: &[&str],
     mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    let cancel_token = AtomicBool::new(false);
+    run_analysis_extraction_with_cancel(
+        conn,
+        case_id,
+        platform,
+        categories,
+        &cancel_token,
+        |file_id, _read_limit| file_reader(file_id),
+    )
+}
+
+pub fn run_analysis_extraction_with_reader_limits<E: std::fmt::Display>(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
+) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    let cancel_token = AtomicBool::new(false);
+    run_analysis_extraction_with_cancel(
+        conn,
+        case_id,
+        platform,
+        categories,
+        &cancel_token,
+        file_reader,
+    )
+}
+
+pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    mut file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
+) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    run_analysis_extraction_with_source(
+        conn,
+        case_id,
+        platform,
+        categories,
+        cancel_token,
+        |candidate, read_limit| {
+            file_reader(&candidate.file_id, read_limit)
+                .map(CandidateSource::Reader)
+                .map_err(|error| error.to_string())
+        },
+    )
+    .map(|execution| execution.dto)
+}
+
+pub(crate) fn run_analysis_extraction_with_bytes_and_cancel<E: std::fmt::Display>(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<Vec<u8>, E>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    run_analysis_extraction_with_source(
+        conn,
+        case_id,
+        platform,
+        categories,
+        cancel_token,
+        |candidate, read_limit| {
+            file_reader(candidate, read_limit)
+                .map(CandidateSource::Bytes)
+                .map_err(|error| error.to_string())
+        },
+    )
+}
+
+fn run_analysis_extraction_with_source(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    let discovery_started = Instant::now();
+    ensure_not_cancelled(cancel_token)?;
     let selected = analyzer_for(platform)?.select_capabilities(categories)?;
     let discovery_categories = discovery_categories(&selected);
-    let candidates = evidence_candidates_for_categories(conn, &discovery_categories)?;
-    let preload = preload_registry_context(conn, &candidates, &mut file_reader, |candidate| {
-        already_has_v1_artifacts(conn, candidate)
-    })?;
+    let mut candidates =
+        evidence_candidates_for_categories_with_cancel(conn, &discovery_categories, cancel_token)?;
+    order_candidates_for_extraction(conn, platform, &mut candidates);
+    let existing_clean_scans = existing_clean_scan_keys(conn)?;
+    let existing_diagnostic_scans = existing_diagnostic_scan_keys(conn)?;
+    let existing_complete_scans = existing_complete_scan_keys(conn)?;
+    let checkpoint_storage_available = AnalysisScanRepo::new(conn).storage_available()?;
+    let checkpoints = ExistingCheckpoints {
+        clean: &existing_clean_scans,
+        diagnostic: &existing_diagnostic_scans,
+        complete: &existing_complete_scans,
+        storage_available: checkpoint_storage_available,
+    };
+    let preload = prepare_registry_preload(
+        conn,
+        &candidates,
+        &selected,
+        &checkpoints,
+        cancel_token,
+        &mut file_reader,
+    )?;
+    ensure_not_cancelled(cancel_token)?;
+    let discovery_elapsed_ms = elapsed_millis(discovery_started);
     let mut state = ExtractionState::new(&selected);
     if let Some(registry) = selected
         .iter()
@@ -143,56 +215,152 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
             state.record_warning(*registry, warning);
         }
     }
-    process_candidates(
+    let processing_started = Instant::now();
+    let processing_context = CandidateProcessingContext {
         conn,
+        selected: &selected,
+        checkpoints: &checkpoints,
+        preload: &preload,
+        cancel_token,
+    };
+    process_candidates(
+        &processing_context,
         candidates,
-        &selected,
-        &preload,
         &mut file_reader,
         &mut state,
     )?;
-    persist_outputs(conn, case_id, &mut state)?;
-    build_run_dto(conn, state)
+    let processing_elapsed_ms = elapsed_millis(processing_started);
+    ensure_not_cancelled(cancel_token)?;
+    let persistence_elapsed_ms = flush_pending_outputs(conn, case_id, &mut state)?;
+    let retryable_failure_count = state.retryable_failure_count;
+    let dto = build_run_dto(conn, state)?;
+    Ok(AnalysisExtractionExecution {
+        dto,
+        retryable_failure_count,
+        discovery_elapsed_ms,
+        processing_elapsed_ms,
+        persistence_elapsed_ms,
+        source_read_count: 0,
+        source_read_elapsed_ms: 0,
+        filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
+        rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
+    })
 }
 
-fn process_candidates<E: std::fmt::Display>(
+fn prepare_registry_preload(
     conn: &Connection,
-    candidates: Vec<EvidenceCandidate>,
+    candidates: &[EvidenceCandidate],
     selected: &[AnalysisCapability],
-    preload: &RegistryPreloadContext,
-    file_reader: &mut impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
+    checkpoints: &ExistingCheckpoints<'_>,
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<RegistryPreloadContext, AnalysisServiceError> {
+    let candidates_by_id = candidates
+        .iter()
+        .map(|candidate| (candidate.file_id.0.as_str(), candidate))
+        .collect::<HashMap<_, _>>();
+    let mut registry_reader = |file_id: &FileEntryId, read_limit: usize| {
+        let candidate = candidates_by_id
+            .get(file_id.0.as_str())
+            .ok_or_else(|| format!("analysis candidate '{}' was not discovered", file_id.0))?;
+        file_reader(candidate, read_limit).map(|source| match source {
+            CandidateSource::Reader(reader) => reader,
+            CandidateSource::Bytes(bytes) => Box::new(Cursor::new(bytes)) as Box<dyn Read>,
+        })
+    };
+    preload_registry_context(
+        conn,
+        candidates,
+        cancel_token,
+        &mut registry_reader,
+        |candidate| {
+            let checkpoint_exists = capability_for_candidate(selected, candidate)
+                .is_some_and(|capability| checkpoints.has_candidate(candidate, capability));
+            if checkpoint_exists {
+                Ok(true)
+            } else if checkpoints.storage_available {
+                Ok(false)
+            } else {
+                already_has_v1_artifacts(conn, candidate)
+            }
+        },
+    )
+}
+
+fn process_candidates(
+    context: &CandidateProcessingContext<'_>,
+    candidates: Vec<EvidenceCandidate>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     state: &mut ExtractionState,
 ) -> Result<(), AnalysisServiceError> {
     for candidate in candidates {
-        let Some(capability) = capability_for_candidate(selected, &candidate) else {
+        ensure_not_cancelled(context.cancel_token)?;
+        let Some(capability) = capability_for_candidate(context.selected, &candidate) else {
             continue;
         };
-        if already_has_v1_artifacts(conn, &candidate)? {
+        let checkpoint_key = (
+            candidate.file_id.0.clone(),
+            capability.key.to_string(),
+            candidate.size,
+            candidate.content_identity.clone(),
+        );
+        if let Some(warnings) = context.checkpoints.diagnostic.get(&checkpoint_key) {
+            state.replay_diagnostic(capability, warnings);
             continue;
         }
-        match extract_candidate(&candidate, capability, preload, file_reader) {
-            Ok(outcome) => state.record_outcome(capability, outcome),
-            Err(warning) => state.record_warning(capability, warning),
+        if context.checkpoints.clean.contains(&checkpoint_key) {
+            state.replay_clean(capability);
+            continue;
         }
+        if let Some(scan) = context.checkpoints.complete.get(&checkpoint_key) {
+            state.replay_complete(capability, scan);
+            continue;
+        }
+        if !context.checkpoints.storage_available
+            && already_has_v1_artifacts(context.conn, &candidate)?
+        {
+            continue;
+        }
+        match extract_candidate(
+            &candidate,
+            capability,
+            context.preload,
+            context.cancel_token,
+            file_reader,
+        ) {
+            Ok(outcome) => state.record_outcome(capability, &candidate, outcome),
+            Err(CandidateExtractionError::Warning(warning)) => {
+                state.record_warning(capability, warning);
+            }
+            Err(CandidateExtractionError::Cancelled) => {
+                return ensure_not_cancelled(context.cancel_token);
+            }
+        }
+        ensure_not_cancelled(context.cancel_token)?;
     }
     Ok(())
 }
 
-fn extract_candidate<E: std::fmt::Display>(
+fn extract_candidate(
     candidate: &EvidenceCandidate,
     capability: AnalysisCapability,
     preload: &RegistryPreloadContext,
-    file_reader: &mut impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
-) -> Result<ExtractionOutcome, String> {
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<ExtractionOutcome, CandidateExtractionError> {
+    check_candidate_cancelled(cancel_token)?;
     if capability.read_policy == CandidateReadPolicy::RegistryPreload {
-        let bytes = preload
-            .registry_bytes(candidate)
-            .ok_or_else(|| format!("{} registry bytes not preloaded", candidate.path))?;
+        let bytes = preload.registry_bytes(candidate).ok_or_else(|| {
+            CandidateExtractionError::Warning(format!(
+                "{} registry bytes not preloaded",
+                candidate.path
+            ))
+        })?;
         let boot_key = preload.boot_key(candidate);
         let (txlog1, txlog2) = preload.txlogs(candidate);
-        return Ok(extract_registry_candidate(
-            candidate, bytes, boot_key, txlog1, txlog2,
-        ));
+        let outcome = extract_registry_candidate(candidate, bytes, boot_key, txlog1, txlog2);
+        check_candidate_cancelled(cancel_token)?;
+        return Ok(outcome);
     }
 
     let normalized = normalize_evidence_path(&candidate.path);
@@ -200,36 +368,61 @@ fn extract_candidate<E: std::fmt::Display>(
         CandidateReadPolicy::Bounded(limit) => limit,
         CandidateReadPolicy::LinuxPathAware => linux_candidate_read_limit(&normalized),
         CandidateReadPolicy::RegistryPreload => {
-            return Err(format!(
+            return Err(CandidateExtractionError::Warning(format!(
                 "{} has an invalid registry read policy",
                 candidate.path
-            ));
+            )));
         }
     };
-    let bytes = read_candidate_bytes(candidate, read_limit, file_reader)?;
-    Ok(match candidate.category.as_str() {
+    let bytes = read_candidate_bytes(candidate, read_limit, cancel_token, file_reader)?;
+    let outcome = match candidate.category.as_str() {
         "BrowserHistory" => extract_browser_candidate(candidate, &bytes),
         "Email" => extract_email_candidate(candidate, &bytes),
         "EventLogs" => extract_evtx_candidate(candidate, &bytes),
         LINUX_UMBRELLA_KEY => extract_linux_candidate(candidate, &bytes),
         _ => ExtractionOutcome::default(),
-    })
+    };
+    check_candidate_cancelled(cancel_token)?;
+    Ok(outcome)
 }
 
-fn read_candidate_bytes<E: std::fmt::Display>(
+fn read_candidate_bytes(
     candidate: &EvidenceCandidate,
     read_limit: usize,
-    file_reader: &mut impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
-) -> Result<Vec<u8>, String> {
-    let mut reader = file_reader(&candidate.file_id)
-        .map_err(|error| format!("{} read failed: {error}", candidate.path))?;
-    let mut bytes = Vec::new();
-    reader
-        .by_ref()
-        .take(read_limit as u64)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("{} read failed: {error}", candidate.path))?;
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<Vec<u8>, CandidateExtractionError> {
+    check_candidate_cancelled(cancel_token)?;
+    let source = file_reader(candidate, read_limit).map_err(|error| {
+        CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
+    })?;
+    check_candidate_cancelled(cancel_token)?;
+    let mut reader = match source {
+        CandidateSource::Reader(reader) => reader,
+        CandidateSource::Bytes(mut bytes) => {
+            bytes.truncate(read_limit);
+            return Ok(bytes);
+        }
+    };
+    let mut bytes = Vec::with_capacity(read_limit.min(READ_BUFFER_BYTES));
+    let mut buffer = [0u8; READ_BUFFER_BYTES];
+    let mut limited = reader.by_ref().take(read_limit as u64);
+    loop {
+        check_candidate_cancelled(cancel_token)?;
+        let read = limited.read(&mut buffer).map_err(|error| {
+            CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
+        })?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..read]);
+    }
+    check_candidate_cancelled(cancel_token)?;
     Ok(bytes)
+}
+
+fn check_candidate_cancelled(cancel_token: &AtomicBool) -> Result<(), CandidateExtractionError> {
+    ensure_not_cancelled(cancel_token).map_err(|_| CandidateExtractionError::Cancelled)
 }
 
 fn capability_for_candidate(
@@ -263,49 +456,17 @@ fn discovery_categories(selected: &[AnalysisCapability]) -> Vec<&str> {
     categories
 }
 
-fn persist_outputs(
-    conn: &Connection,
-    case_id: &str,
-    state: &mut ExtractionState,
-) -> Result<(), AnalysisServiceError> {
-    if !state.artifacts.is_empty() {
-        let by_source = artifacts_by_data_source(std::mem::take(&mut state.artifacts));
-        let repo = ArtifactRepo::new(conn);
-        for (data_source_id, group) in by_source {
-            repo.insert_batch(&group, case_id, &data_source_id)?;
-        }
-    }
-    if !state.events.is_empty() {
-        TimelineRepo::new(conn).insert_batch_with_case(&state.events, case_id)?;
-    }
-    Ok(())
-}
-
 fn build_run_dto(
     conn: &Connection,
     state: ExtractionState,
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
-    let status = extraction_status(state.scanned_count, &state.warnings);
-    Ok(AnalysisExtractionRunDto {
-        status,
-        scanned_count: state.scanned_count,
-        artifact_count: count_analysis_artifacts(conn)?,
-        timeline_event_count: state.timeline_event_count,
-        sections: state
-            .sections
-            .into_values()
-            .map(SectionProgress::into_dto)
-            .collect(),
-        generated_at: Utc::now().to_rfc3339(),
-        warnings: state.warnings,
-    })
+    state.into_dto(conn, Utc::now().to_rfc3339())
 }
 
-fn extraction_status(scanned_count: u64, warnings: &[String]) -> AnalysisParseStatusDto {
-    match (scanned_count, warnings.is_empty()) {
-        (0, true) => AnalysisParseStatusDto::NotFound,
-        (0, false) => AnalysisParseStatusDto::Failed,
-        (_, true) => AnalysisParseStatusDto::Parsed,
-        (_, false) => AnalysisParseStatusDto::Partial,
-    }
+fn elapsed_millis(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/analysis_service/extraction/runner.rs"]
+mod tests;
