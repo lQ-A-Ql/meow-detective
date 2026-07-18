@@ -84,7 +84,10 @@ fn aggregate() -> CephRbdLineageAggregate {
 #[test]
 fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0037_ceph_rbd_derived_sources");
+    assert_eq!(
+        runner::latest_version(),
+        "0038_data_source_processing_phases"
+    );
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();
     repo.insert_aggregate(&original).expect("insert lineage");

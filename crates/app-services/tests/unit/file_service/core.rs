@@ -1,6 +1,8 @@
 use super::*;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use evidence_core::{filesystem::root_node, EvidenceReader, FsNode};
+use evidence_core::{
+    filesystem::root_node, EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FsNode,
+};
 use fs_ntfs::mft_scanner::MftRecord;
 use persistence_sqlite::{open_or_create, repositories::file_repo::FileRepo, runner};
 use rusqlite::{params, Connection};
@@ -53,6 +55,7 @@ impl FileSystemReader for CancelAfterRootFs {
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
+                    changed_at: None,
                 },
                 FsNode {
                     name: "second.txt".to_string(),
@@ -65,6 +68,7 @@ impl FileSystemReader for CancelAfterRootFs {
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
+                    changed_at: None,
                 },
             ])
         } else {
@@ -78,6 +82,83 @@ impl FileSystemReader for CancelAfterRootFs {
 
     fn data_source_name(&self) -> &str {
         "cancel-after-root"
+    }
+}
+
+struct TimestampedFs {
+    root_changed_at: chrono::DateTime<chrono::Utc>,
+    child_changed_at: chrono::DateTime<chrono::Utc>,
+}
+
+struct PartialDirectoryDiagnosticFs {
+    diagnostics: std::cell::RefCell<Vec<FileSystemDiagnostic>>,
+}
+
+impl PartialDirectoryDiagnosticFs {
+    fn new() -> Self {
+        Self {
+            diagnostics: std::cell::RefCell::new(vec![FileSystemDiagnostic::new(
+                FileSystemDiagnosticKind::DirectoryPartial,
+                "typed partial directory",
+            )]),
+        }
+    }
+}
+
+impl FileSystemReader for PartialDirectoryDiagnosticFs {
+    fn root(&self) -> io::Result<FsNode> {
+        Ok(root_node())
+    }
+
+    fn list_children(&self, _path: &str) -> io::Result<Vec<FsNode>> {
+        Ok(Vec::new())
+    }
+
+    fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
+        Ok(Box::new(Cursor::new(Vec::<u8>::new())))
+    }
+
+    fn take_diagnostics(&self) -> Vec<FileSystemDiagnostic> {
+        std::mem::take(&mut *self.diagnostics.borrow_mut())
+    }
+
+    fn data_source_name(&self) -> &str {
+        "partial-directory-diagnostic"
+    }
+}
+
+impl FileSystemReader for TimestampedFs {
+    fn root(&self) -> io::Result<FsNode> {
+        let mut root = root_node();
+        root.changed_at = Some(self.root_changed_at);
+        Ok(root)
+    }
+
+    fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+        if !path.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(vec![FsNode {
+            name: "timestamped.txt".to_string(),
+            path: "timestamped.txt".to_string(),
+            is_dir: false,
+            size: 1,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: Some(self.child_changed_at),
+        }])
+    }
+
+    fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
+        Ok(Box::new(Cursor::new(Vec::<u8>::new())))
+    }
+
+    fn data_source_name(&self) -> &str {
+        "timestamped"
     }
 }
 
@@ -112,6 +193,59 @@ fn enumerate_filesystem_cancel_rolls_back_transaction() {
         .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
         .unwrap();
     assert_eq!(row_count, 0);
+}
+
+#[test]
+fn enumerate_filesystem_persists_root_and_child_changed_at() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+    ))
+    .unwrap();
+    let root_changed_at = chrono::DateTime::from_timestamp(1_700_000_000, 123).unwrap();
+    let child_changed_at = chrono::DateTime::from_timestamp(1_800_000_000, 456).unwrap();
+    let fs = TimestampedFs {
+        root_changed_at,
+        child_changed_at,
+    };
+    let data_source_id = DataSourceId("ds-timestamps".to_string());
+
+    enumerate_filesystem(&conn, &data_source_id, &fs).unwrap();
+
+    let repo = FileRepo::new(&conn);
+    let roots = repo.find_root_entries().unwrap();
+    assert_eq!(roots.len(), 1);
+    assert_eq!(roots[0].changed_at, Some(root_changed_at));
+    let children = repo.find_children(&roots[0].id).unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].changed_at, Some(child_changed_at));
+}
+
+#[test]
+fn enumerate_filesystem_preserves_typed_completeness_diagnostics() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+    ))
+    .unwrap();
+    let stats = enumerate_filesystem(
+        &conn,
+        &DataSourceId("ds-diagnostic".to_string()),
+        &PartialDirectoryDiagnosticFs::new(),
+    )
+    .unwrap();
+
+    assert_eq!(stats.incomplete_catalog_diagnostic_count(), 1);
+    assert_eq!(stats.diagnostics[0].path.as_deref(), Some(""));
+    assert_eq!(stats.warnings, ["typed partial directory"]);
 }
 
 #[test]

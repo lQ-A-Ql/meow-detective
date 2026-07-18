@@ -14,6 +14,7 @@ export interface DataSourceSummary {
   importState?: 'pending' | 'importing' | 'ready' | 'ready_metadata' | 'failed' | string;
   schemaVersion?: string;
   lastError?: string;
+  processing?: DataSourceProcessingSummary;
   sourceHash?: string;
   hashStatus?: string;
   canonicalPath?: string;
@@ -22,6 +23,30 @@ export interface DataSourceSummary {
   provenanceStatus?: string;
   warnings?: string[];
   partitions?: DataSourcePartition[];
+}
+
+export interface DataSourceProcessingSummary {
+  state: 'pending' | 'running' | 'ready' | 'failed' | 'deferred';
+  totalCount: number;
+  readyCount: number;
+  pendingCount: number;
+  runningCount: number;
+  failedCount: number;
+  deferredCount: number;
+  lastError?: string;
+  phases: DataSourceProcessingPhase[];
+}
+
+export interface DataSourceProcessingPhase {
+  phase: 'catalog' | 'graph' | 'platform' | 'artifacts' | 'timeline' | 'search';
+  state: 'pending' | 'running' | 'ready' | 'failed' | 'deferred';
+  version: number;
+  lastError?: string;
+  startedAt?: string;
+  completedAt?: string;
+  heartbeatAt?: string;
+  leaseExpiresAt?: string;
+  updatedAt: string;
 }
 
 export interface DataSourcePartition {

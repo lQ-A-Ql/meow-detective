@@ -116,3 +116,29 @@ pub struct PostImportPipelineError {
     pub message: String,
     pub counts: JobOutcomeCounts,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PostImportPipelineReport {
+    pub message: String,
+    pub counts: JobOutcomeCounts,
+    pub stats: ImportAnalysisStats,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SearchIndexPhaseOptions {
+    pub(crate) case_root: PathBuf,
+    pub(crate) db_path: PathBuf,
+    pub(crate) case_id: String,
+    pub(crate) data_source_id: DataSourceId,
+    pub(crate) platform: DataSourcePlatform,
+    pub(crate) index_dir: PathBuf,
+    pub(crate) cancel_token: Arc<AtomicBool>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SearchIndexPhaseStats {
+    pub(crate) eligible_count: u64,
+    pub(crate) indexed_count: u64,
+    pub(crate) skipped_count: u64,
+    pub(crate) failed_count: u64,
+}

@@ -19,6 +19,7 @@ fn fs_node_builds_pathless_child_metadata() {
     assert!(node.created_at.is_none());
     assert!(node.modified_at.is_none());
     assert!(node.accessed_at.is_none());
+    assert!(node.changed_at.is_none());
 }
 
 #[test]
@@ -54,6 +55,7 @@ fn node_with_parent_path_preserves_metadata() {
         created_at: None,
         modified_at: None,
         accessed_at: None,
+        changed_at: None,
     };
 
     let joined = node_with_parent_path(node.clone(), "dir");
@@ -79,6 +81,7 @@ fn child_nodes_with_parent_path_assigns_paths_in_bulk() {
             created_at: None,
             modified_at: None,
             accessed_at: None,
+            changed_at: None,
         },
         FsNode {
             name: "b".to_string(),
@@ -91,6 +94,7 @@ fn child_nodes_with_parent_path_assigns_paths_in_bulk() {
             created_at: None,
             modified_at: None,
             accessed_at: None,
+            changed_at: None,
         },
     ];
 

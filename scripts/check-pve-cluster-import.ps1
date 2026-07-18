@@ -5,6 +5,7 @@ param(
     [string]$RetainCaseRoot = $env:FORENSICS_PVE_CASE_OUTPUT_ROOT,
     [string]$ExistingRbdCaseRoot = $env:FORENSICS_PVE_RBD_CASE_ROOT,
     [switch]$RequireFixture,
+    [switch]$DeepParentHash,
     [ValidateRange(1, 86400)]
     [int]$TimeoutSeconds = 1200
 )
@@ -61,6 +62,9 @@ if ($useRetainedCase) {
     }
     $env:FORENSICS_PVE_RBD_CASE_ROOT = $resolvedRbdCaseRoot
     $env:FORENSICS_PVE_RBD_REQUIRE_READY = "1"
+    if ($DeepParentHash) {
+        $env:FORENSICS_PVE_RBD_DEEP_PARENT_HASH = "1"
+    }
     $testName = $retainedRbdTestName
     $timeoutContext = "retained PVE RBD tree and preview regression"
     Write-Host "Using retained PVE RBD case: $resolvedRbdCaseRoot"

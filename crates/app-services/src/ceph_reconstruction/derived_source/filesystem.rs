@@ -16,6 +16,7 @@ use crate::{
     source_db::{self, checkpoint_source_db},
 };
 
+use super::catalog_manifest::summarize_source_connection;
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
 use crate::ceph_reconstruction::{
     open_rbd_head_image, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor,
@@ -71,7 +72,7 @@ pub(super) fn build_and_enumerate_source(
         })?;
 
     let placeholders = seed_placeholders(&source_conn, &data_source.id, &probe.partitions)?;
-    let summary = enumerate_rbd_candidates(
+    enumerate_rbd_candidates(
         &source_conn,
         data_source,
         &provider,
@@ -79,22 +80,15 @@ pub(super) fn build_and_enumerate_source(
         &probe.candidates,
         &placeholders,
     )?;
-    let graph_started = Instant::now();
-    file_service::populate_file_graph_for_data_source(&source_conn, &data_source.id)?;
-    tracing::info!(
-        data_source_id = %data_source.id.0,
-        elapsed_ms = graph_started.elapsed().as_millis(),
-        "Ceph RBD file graph projection completed"
-    );
     let checkpoint_started = Instant::now();
     checkpoint_source_db(&source_conn)?;
     tracing::info!(
         data_source_id = %data_source.id.0,
         elapsed_ms = checkpoint_started.elapsed().as_millis(),
         total_elapsed_ms = materialization_started.elapsed().as_millis(),
-        "Ceph RBD derived source materialization completed"
+        "Ceph RBD derived source catalog materialization completed"
     );
-    Ok(summary)
+    summarize_source_connection(&source_conn, data_source.clone())
 }
 
 fn enumerate_rbd_candidates(
@@ -104,13 +98,7 @@ fn enumerate_rbd_candidates(
     descriptor: &RbdImageDescriptor,
     candidates: &[ImageFilesystemCandidate],
     placeholders: &HashMap<usize, domain::FileEntryId>,
-) -> DerivedSourceResult<MaterializedRbdSource> {
-    let mut summary = MaterializedRbdSource {
-        data_source: data_source.clone(),
-        file_count: 0,
-        directory_count: 0,
-        total_size: 0,
-    };
+) -> DerivedSourceResult<()> {
     for candidate in candidates
         .iter()
         .filter(|candidate| candidate.kind != ImageFilesystemKind::LvmPool)
@@ -139,11 +127,51 @@ fn enumerate_rbd_candidates(
             directories = stats.dir_count,
             "Ceph RBD filesystem candidate materialized"
         );
-        summary.file_count += stats.file_count;
-        summary.directory_count += stats.dir_count;
-        summary.total_size += stats.total_size;
+        ensure_catalog_complete(&stats)?;
+        if !stats.warnings.is_empty() {
+            tracing::warn!(
+                data_source_id = %data_source.id.0,
+                partition_index = candidate.partition_index,
+                warning_count = stats.warnings.len(),
+                "Ceph RBD filesystem candidate completed with localized metadata diagnostics"
+            );
+        }
     }
-    Ok(summary)
+    Ok(())
+}
+
+pub(super) fn ensure_catalog_complete(
+    stats: &file_service::EnumerationStats,
+) -> DerivedSourceResult<()> {
+    let diagnostic_count = stats.incomplete_catalog_diagnostic_count();
+    if diagnostic_count == 0 {
+        Ok(())
+    } else {
+        Err(DerivedSourceError::IncompleteCatalog {
+            diagnostic_count,
+            diagnostic_breakdown: catalog_diagnostic_breakdown(stats),
+        })
+    }
+}
+
+fn catalog_diagnostic_breakdown(stats: &file_service::EnumerationStats) -> String {
+    let mut directory_partial = 0usize;
+    let mut directory_unreadable = 0usize;
+    let mut entry_unavailable = 0usize;
+    for diagnostic in &stats.diagnostics {
+        match diagnostic.kind {
+            evidence_core::FileSystemDiagnosticKind::DirectoryPartial => directory_partial += 1,
+            evidence_core::FileSystemDiagnosticKind::DirectoryUnreadable => {
+                directory_unreadable += 1
+            }
+            evidence_core::FileSystemDiagnosticKind::EntryUnavailable => entry_unavailable += 1,
+            evidence_core::FileSystemDiagnosticKind::MetadataDegraded
+            | evidence_core::FileSystemDiagnosticKind::TypeConflict => {}
+        }
+    }
+    format!(
+        "directoryPartial={directory_partial}, directoryUnreadable={directory_unreadable}, entryUnavailable={entry_unavailable}"
+    )
 }
 
 fn detect_rbd_probe(

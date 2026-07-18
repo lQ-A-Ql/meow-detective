@@ -2,6 +2,9 @@ use super::budget::ContentBudget;
 use super::error::ImportAnalysisError;
 use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
+use super::search_policy::{
+    mime_hint_for_entry, normalized_extension, search_budget_allows_file, should_index_file,
+};
 use super::source_reader::AnalysisSourceReader;
 use super::worker_model::WorkerStats;
 use super::worker_staging::{flush_worker_rows, persist_worker_stats, IndexDocRow};
@@ -120,7 +123,7 @@ impl AnalysisWorkerRuntime {
         derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Result<Self, ImportAnalysisError> {
         let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
-        let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
+        let main_conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
         let staging_conn = staging::open_analysis_staging(
             &options.case_root,
             &options.data_source_id.0,
@@ -227,16 +230,17 @@ impl AnalysisWorkerRuntime {
         shared: &SharedAnalysisState,
     ) {
         if options.enable_text_indexing
-            && should_index_file(file)
+            && should_index_file(file, options.platform)
             && options.analysis_mode.allows_content()
-            && reserve_content_budget(&options.content_budget, file, shared)
+            && search_budget_allows_file(&options.content_budget, file, options.platform)
+            && reserve_content_quota(&options.content_budget, file, shared)
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
             if let Ok(bytes) =
                 read_text_index_bytes(&mut self.source_reader, &self.main_conn, &file.id)
             {
-                let mime = mime_hint_for_entry(file);
+                let mime = mime_hint_for_entry(file, options.platform);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
                 if text.extractable && !text.content.is_empty() {
                     let previous = shared.indexed_total.fetch_add(1, Ordering::Relaxed);
@@ -342,53 +346,13 @@ pub(super) fn add_worker_stats(stats: &mut ImportAnalysisStats, worker: WorkerSt
     stats.failed_count = stats.failed_count.saturating_add(worker.failed_count);
 }
 
-fn mime_hint_for_entry(file: &FileEntry) -> Option<&'static str> {
-    let ext = normalized_ext(file);
-    if matches!(ext, "txt" | "log" | "csv" | "json" | "xml" | "html" | "md") {
-        Some("text/plain")
-    } else {
-        None
-    }
-}
-
-fn normalized_ext(file: &FileEntry) -> &str {
-    file.ext
-        .as_deref()
-        .or_else(|| file.name.rsplit_once('.').map(|(_, ext)| ext))
-        .unwrap_or("")
-        .trim_start_matches('.')
-}
-
-pub(super) fn should_index_file(file: &FileEntry) -> bool {
-    let Some(size) = file.size else {
-        return false;
-    };
-    if size > infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES {
-        return false;
-    }
-
-    matches!(
-        normalized_ext(file).to_ascii_lowercase().as_str(),
-        "txt" | "log" | "csv" | "json" | "xml" | "html" | "htm" | "md"
-    )
-}
-
 pub(super) fn reserve_content_budget(
     budget: &ContentBudget,
     file: &FileEntry,
     shared: &SharedAnalysisState,
 ) -> bool {
-    let Some(size) = file.size else {
-        return false;
-    };
-    if budget.max_files == 0 || budget.max_bytes_total == 0 || budget.max_bytes_per_file == 0 {
-        return false;
-    }
-    if size > budget.max_bytes_per_file {
-        return false;
-    }
     if !budget.allowed_extensions.is_empty() {
-        let ext = normalized_ext(file).to_ascii_lowercase();
+        let ext = normalized_extension(file).to_ascii_lowercase();
         if !budget
             .allowed_extensions
             .iter()
@@ -396,6 +360,24 @@ pub(super) fn reserve_content_budget(
         {
             return false;
         }
+    }
+    reserve_content_quota(budget, file, shared)
+}
+
+pub(super) fn reserve_content_quota(
+    budget: &ContentBudget,
+    file: &FileEntry,
+    shared: &SharedAnalysisState,
+) -> bool {
+    let Some(size) = file.size else {
+        return false;
+    };
+    if budget.max_files == 0
+        || budget.max_bytes_total == 0
+        || budget.max_bytes_per_file == 0
+        || size > budget.max_bytes_per_file
+    {
+        return false;
     }
     let previous_files = shared.content_files_used.fetch_add(1, Ordering::Relaxed);
     if previous_files >= budget.max_files {
@@ -409,4 +391,12 @@ pub(super) fn reserve_content_budget(
         return false;
     }
     true
+}
+
+pub(super) fn release_content_quota(file: &FileEntry, shared: &SharedAnalysisState) {
+    let Some(size) = file.size else {
+        return;
+    };
+    shared.content_files_used.fetch_sub(1, Ordering::Relaxed);
+    shared.content_bytes_used.fetch_sub(size, Ordering::Relaxed);
 }

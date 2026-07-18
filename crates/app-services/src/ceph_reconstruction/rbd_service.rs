@@ -45,11 +45,13 @@ pub fn discover_rbd_images_from_source_dbs(
     validate_replica_set(replicas, replicas.len())?;
     let mut images = BTreeMap::new();
     for replica in replicas {
-        let connection = persistence_sqlite::open_existing_source(&replica.source_db_path)
-            .map_err(|error| RbdReconstructionError::SourceDb {
-                inventory_id: replica.inventory_id.clone(),
-                detail: source_db_error_detail(&error),
-            })?;
+        let connection = persistence_sqlite::open_existing_source_read_only(
+            &replica.source_db_path,
+        )
+        .map_err(|error| RbdReconstructionError::SourceDb {
+            inventory_id: replica.inventory_id.clone(),
+            detail: source_db_error_detail(&error),
+        })?;
         let aggregate = CephBluestoreOmapRepo::new(&connection)
             .find_aggregate(&replica.inventory_id)
             .map_err(|error| RbdReconstructionError::SourceDb {

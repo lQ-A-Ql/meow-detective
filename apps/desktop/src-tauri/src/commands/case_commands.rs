@@ -5,6 +5,7 @@ mod deletion;
 mod lifecycle;
 mod metrics;
 mod recent;
+mod recovery;
 
 pub use close::close_case;
 pub use deletion::{delete_case, delete_data_source};

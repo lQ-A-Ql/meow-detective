@@ -1,6 +1,6 @@
 use crate::file_service::visibility::visibility_flags_for_node;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use evidence_core::{FileSystemReader, FsNode};
+use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use rusqlite::Connection;
@@ -15,6 +15,16 @@ pub struct EnumerationStats {
     pub dir_count: u64,
     pub total_size: u64,
     pub warnings: Vec<String>,
+    pub diagnostics: Vec<FileSystemDiagnostic>,
+}
+
+impl EnumerationStats {
+    pub fn incomplete_catalog_diagnostic_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.kind.affects_catalog_completeness())
+            .count()
+    }
 }
 
 pub fn enumerate_filesystem(
@@ -77,7 +87,7 @@ pub fn enumerate_filesystem_with_root_name_and_cancel(
         created_at: root.created_at,
         modified_at: root.modified_at,
         accessed_at: root.accessed_at,
-        changed_at: None,
+        changed_at: root.changed_at,
         hash_sha256: None,
     };
 
@@ -140,13 +150,18 @@ pub(crate) fn walk_and_insert_children(
             return Err(enumeration_cancelled_error());
         }
 
-        let children = match fs.list_children(&dir_path) {
+        let children_result = fs.list_children(&dir_path);
+        state.extend_diagnostics(fs.take_diagnostics(), &dir_path);
+        let children = match children_result {
             Ok(c) => c,
             Err(e) => {
-                state
-                    .stats
-                    .warnings
-                    .push(format!("Cannot read '{}': {}", dir_path, e));
+                state.push_diagnostic(
+                    FileSystemDiagnostic::new(
+                        FileSystemDiagnosticKind::DirectoryUnreadable,
+                        format!("Cannot read '{}': {}", dir_path, e),
+                    )
+                    .with_default_path(&dir_path),
+                );
                 continue;
             }
         };
@@ -190,10 +205,22 @@ impl EnumerationState {
                 dir_count: 1,
                 total_size: 0,
                 warnings: Vec::new(),
+                diagnostics: Vec::new(),
             },
             batch: Vec::with_capacity(FILE_INSERT_BATCH_SIZE),
             total_processed: 0,
         }
+    }
+
+    fn extend_diagnostics(&mut self, diagnostics: Vec<FileSystemDiagnostic>, directory_path: &str) {
+        for diagnostic in diagnostics {
+            self.push_diagnostic(diagnostic.with_default_path(directory_path));
+        }
+    }
+
+    fn push_diagnostic(&mut self, diagnostic: FileSystemDiagnostic) {
+        self.stats.warnings.push(diagnostic.message.clone());
+        self.stats.diagnostics.push(diagnostic);
     }
 
     fn process_child(
@@ -273,7 +300,7 @@ fn file_entry_for_child(
         created_at: child.created_at,
         modified_at: child.modified_at,
         accessed_at: child.accessed_at,
-        changed_at: None,
+        changed_at: child.changed_at,
         hash_sha256: None,
     }
 }

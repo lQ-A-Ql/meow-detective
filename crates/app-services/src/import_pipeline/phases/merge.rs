@@ -56,6 +56,7 @@ pub(super) fn merge_enumeration_results(
             .map(|partition| partition.total_size)
             .sum(),
         warnings: collect_partition_warnings(ctx.case_root, &data_source.id.0, manifest),
+        diagnostics: Vec::new(),
     })
 }
 

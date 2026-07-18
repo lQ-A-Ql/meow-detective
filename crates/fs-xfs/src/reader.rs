@@ -1,4 +1,4 @@
-use evidence_core::filesystem::invalid_fs_data;
+use evidence_core::filesystem::{invalid_fs_data, FileSystemDiagnostic};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ pub(crate) const FORMAT_LOCAL: u8 = 1;
 pub(crate) const FORMAT_EXTENTS: u8 = 2;
 pub(crate) const FORMAT_BTREE: u8 = 3;
 
-pub(crate) const INODE_CORE_SIZE: usize = 96;
+pub(crate) const INODE_CORE_SIZE: usize = 100;
 pub(crate) const INODE_CORE_SIZE_V3: usize = 176;
 pub(crate) const BMBT_REC_SIZE: usize = 16;
 pub(crate) const BMBT_SHORT_ROOT_HDR_SIZE: usize = 4;
@@ -52,9 +52,14 @@ pub(crate) mod di_off {
     pub const MODE: usize = 0x02;
     pub const VERSION: usize = 0x04;
     pub const FORMAT: usize = 0x05;
+    pub const ATIME: usize = 0x20;
+    pub const MTIME: usize = 0x28;
+    pub const CTIME: usize = 0x30;
     pub const SIZE: usize = 0x38;
     pub const NEXTENTS: usize = 0x4C;
     pub const FORKOFF: usize = 0x52;
+    pub const FLAGS2: usize = 0x78;
+    pub const CRTIME: usize = 0x90;
 }
 
 pub(crate) fn be_u16(buf: &[u8], off: usize) -> u16 {
@@ -82,6 +87,7 @@ pub struct XfsReader {
     pub(crate) reader: RefCell<Box<dyn EvidenceReader>>,
     pub(crate) directory_path_cache: RefCell<HashMap<String, u64>>,
     pub(crate) directory_inode_cache: RefCell<HashMap<u64, Vec<u8>>>,
+    pub(crate) diagnostics: RefCell<Vec<FileSystemDiagnostic>>,
     pub(crate) block_size: u64,
     pub(crate) dblocks: u64,
     pub(crate) _ag_blocks: u64,
@@ -145,6 +151,7 @@ impl XfsReader {
             reader: RefCell::new(reader),
             directory_path_cache: RefCell::new(directory_path_cache),
             directory_inode_cache: RefCell::new(HashMap::new()),
+            diagnostics: RefCell::new(Vec::new()),
             block_size,
             dblocks,
             _ag_blocks: ag_blocks,

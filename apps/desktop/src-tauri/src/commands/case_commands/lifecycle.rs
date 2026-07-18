@@ -1,4 +1,4 @@
-use app_services::{case_service, job_service};
+use app_services::case_service;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
 use transport::{
@@ -8,6 +8,7 @@ use transport::{
 };
 
 use super::recent::remember_recent_case;
+use super::recovery::recover_interrupted_jobs;
 use crate::{events::event_bridge, state::AppState};
 
 fn init_case_db(state: &AppState) -> Result<(), CommandError> {
@@ -121,29 +122,6 @@ pub fn open_case(
     remember_recent_case(&root, &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
-}
-
-fn recover_interrupted_jobs(state: &AppState) {
-    // Recovery is best-effort so a stale job cannot prevent the case from opening.
-    match state.get_connection() {
-        Ok(conn) => match job_service::recover_interrupted_jobs(&conn) {
-            Ok(recovery) => {
-                if !recovery.recovered_job_ids.is_empty() {
-                    tracing::info!(
-                        "Recovered {} interrupted job(s): {:?}",
-                        recovery.recovered_job_ids.len(),
-                        recovery.recovered_job_ids
-                    );
-                }
-            }
-            Err(error) => {
-                tracing::warn!("Failed to recover interrupted jobs on case open: {error}");
-            }
-        },
-        Err(error) => {
-            tracing::warn!("Failed to get connection for job recovery on case open: {error}");
-        }
-    }
 }
 
 #[tauri::command]

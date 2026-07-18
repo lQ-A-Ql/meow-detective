@@ -1,5 +1,7 @@
 use std::io;
 
+use crate::inode::XfsInodeMetadata;
+
 pub(crate) const DIR2_SF_HDR_8: usize = 10;
 pub(super) const DIR2_SF_HDR_4: usize = 6;
 pub(crate) const XFS_DIR3_BLOCK_MAGIC: u32 = 0x5844_4233;
@@ -33,7 +35,7 @@ pub(crate) struct XfsResolvedDirectoryEntry {
     pub(crate) name: String,
     pub(crate) inode: u64,
     pub(crate) is_dir: bool,
-    pub(crate) size: u64,
+    pub(crate) metadata: Option<XfsInodeMetadata>,
 }
 
 #[derive(Default)]

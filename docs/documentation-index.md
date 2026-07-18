@@ -40,6 +40,7 @@
 | 外部实现对比（性能） | `docs/trace-ui-comparative-analysis.md` | 对比 `trace-ui` 与本项目在滚动、缓存、会话、数据访问层的实现差异与可借鉴点 |
 | 大文件浏览优化设计 | `docs/large-file-browsing-optimization-design.md` | 本项目 100MB+ 文件浏览与预览性能优化的目标架构、阶段方案、测试矩阵与验收标准 |
 | Ceph RBD VM 预览性能设计 | `docs/ceph-rbd-vm-preview-performance-design.md` | PVE 派生 VM 文件预览的 bounded-range 修复、source-scoped runtime、opaque session、缓存失效、真实样本性能门禁与剩余风险 |
+| PVE 集群取证加固与能力路线图 | `docs/pve-cluster-forensics-hardening-and-capability-roadmap.md` | Catalog/processing/read-only 加固、OSDMap/CRUSH/PG、RBD 高级特性与 CephFS 的 Stage 0-7 设计、测试和验收边界 |
 | Frontend MVP boundary | `docs/frontend-mvp-boundary.md` | Page / Feature / Component / API / Platform / Store 边界、无 runtime mock、公共组件归属与守卫规则 |
 | Backend module architecture | `docs/backend-module-architecture.md` | Stage 0 backend module/test split rules, baselines, guards, and exceptions |
 | Backend Stage 3/4 delivery | `docs/backend-stage3-stage4-design.md` | Transport/command and app-services decomposition, review gates, regression matrix, and performance boundary |
@@ -78,11 +79,11 @@
 |---|---:|---|
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 99 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 26 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 25 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo) |
-| SQLite migration scripts | 53 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0037 + source_001-source_015 + staging_001) |
+| app-services source modules | 27 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| SQLite repositories | 26 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo) |
+| SQLite migration scripts | 54 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0038 + source_001-source_015 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 86 | `frontend/src/**/*.test.ts(x)` |
+| frontend test files | 87 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 8 | 历史 V3 文档清单；当前支持事实以 parser matrix 为准 |
 | V3 保留新增 crate | 2 | `crates/containers-pst/`, `crates/artifacts-linux/` |
@@ -97,7 +98,7 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 53 | SQLite migration 脚本 (0001-0037 + source_001-source_015 + staging_001) |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 54 | SQLite migration 脚本 (0001-0038 + source_001-source_015 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |

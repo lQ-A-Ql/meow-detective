@@ -123,6 +123,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0037_ceph_rbd_derived_sources",
         include_str!("scripts/0037_ceph_rbd_derived_sources.sql"),
     ),
+    (
+        "0038_data_source_processing_phases",
+        include_str!("scripts/0038_data_source_processing_phases.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[

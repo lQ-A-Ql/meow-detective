@@ -46,6 +46,7 @@ impl LogicalFsReader {
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
+            changed_at: None,
         })
     }
 }
@@ -68,6 +69,7 @@ impl FileSystemReader for LogicalFsReader {
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
+            changed_at: None,
         })
     }
 

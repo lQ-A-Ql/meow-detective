@@ -4,14 +4,15 @@ use super::{
     extractor_policy::registry_supports_file,
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
     progress::memory_hard_limit_exceeded_for_rss,
+    search_policy::should_index_file,
     task_feed::{analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page},
-    worker_runtime::{reserve_content_budget, should_index_file, SharedAnalysisState},
+    worker_runtime::{reserve_content_budget, SharedAnalysisState},
 };
 use crate::{artifact_service, staging};
 use chrono::{TimeZone, Utc};
 use domain::{
-    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
-    FileEntryId,
+    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance,
+    EntryType, FileEntry, FileEntryId,
 };
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use persistence_sqlite::runner;
@@ -21,6 +22,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 static TEST_HOOK_LOCK: Mutex<()> = Mutex::new(());
+
+mod search_phase;
+
 fn setup_case_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
     let db_path = tmp.path().join("app.db");
     let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
@@ -654,9 +658,18 @@ fn analysis_indexing_skips_large_or_unknown_extension_files() {
         ..small_text.clone()
     };
 
-    assert!(should_index_file(&small_text));
-    assert!(!should_index_file(&large_text));
-    assert!(!should_index_file(&unknown));
+    let passwd = FileEntry {
+        path: "etc/passwd".to_string(),
+        name: "passwd".to_string(),
+        ext: None,
+        ..small_text.clone()
+    };
+
+    assert!(should_index_file(&small_text, DataSourcePlatform::Linux));
+    assert!(!should_index_file(&large_text, DataSourcePlatform::Linux));
+    assert!(!should_index_file(&unknown, DataSourcePlatform::Linux));
+    assert!(should_index_file(&passwd, DataSourcePlatform::Linux));
+    assert!(!should_index_file(&passwd, DataSourcePlatform::Windows));
 }
 
 #[test]

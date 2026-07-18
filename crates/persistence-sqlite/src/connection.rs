@@ -51,6 +51,22 @@ pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
     Ok(conn)
 }
 
+pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
+    if !path.exists() {
+        return Err(DbError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Database file not found: {}", path.display()),
+        )));
+    }
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    conn.execute_batch(
+        "PRAGMA query_only=ON;
+         PRAGMA foreign_keys=ON;
+         PRAGMA busy_timeout=5000;",
+    )?;
+    Ok(conn)
+}
+
 /// Open an existing database file. Returns an error if the file does not exist.
 pub fn open_existing(path: &Path) -> DbResult<Connection> {
     if !path.exists() {

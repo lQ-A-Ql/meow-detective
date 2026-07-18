@@ -138,6 +138,7 @@ pub fn enumerate_filesystem_mft_with_partition(
         dir_count: output.dir_count,
         total_size: output.total_size,
         warnings: output.warnings,
+        diagnostics: Vec::new(),
     })
 }
 

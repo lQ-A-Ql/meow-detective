@@ -8,6 +8,14 @@ import type { DataSourceSummary, DataSourcePartition, JobSnapshot, RecentObject 
 
 // ── Shared helper ──
 
+const processingStatePresentation = {
+  pending: { label: '等待处理', tone: 'border-[#e3e3e3] bg-[#fafafa] text-[#666]' },
+  running: { label: '处理中', tone: 'border-[#cfdde9] bg-[#f5f9fc] text-[#315a75]' },
+  ready: { label: '处理完成', tone: 'border-[#d7e7d7] bg-[#f7fbf7] text-[#234b23]' },
+  failed: { label: '处理失败', tone: 'border-red-200 bg-red-50 text-red-700' },
+  deferred: { label: '部分延后', tone: 'border-[#ead8ab] bg-[#fff9ec] text-[#8a5a00]' },
+} as const;
+
 export function MetricBlock({
   icon,
   title,
@@ -209,6 +217,29 @@ export function DataSourcesPanel({
                     )}
                     <div className="mt-1 text-[10px] uppercase tracking-wider text-[#888]">{source.kind}</div>
                     <div className="mt-1 text-[11px] text-[#666] font-mono break-all">{source.sourcePath}</div>
+                    {source.processing ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                        <span
+                          className={`border px-2 py-0.5 font-medium ${processingStatePresentation[source.processing.state].tone}`}
+                          title={source.processing.lastError}
+                        >
+                          {processingStatePresentation[source.processing.state].label}
+                        </span>
+                        <span className="font-mono text-[#666]">
+                          phase {source.processing.readyCount}/{source.processing.totalCount}
+                        </span>
+                        {source.processing.failedCount > 0 ? (
+                          <span className="font-mono text-red-700">
+                            failed {source.processing.failedCount}
+                          </span>
+                        ) : null}
+                        {source.processing.deferredCount > 0 ? (
+                          <span className="font-mono text-[#8a5a00]">
+                            deferred {source.processing.deferredCount}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {partitionCount > 0 ? (
                       <div className="mt-3 space-y-2">
                         <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-[#777]">

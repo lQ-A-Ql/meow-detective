@@ -38,6 +38,7 @@ pub mod job_service;
 pub mod notebook_service;
 pub mod parallel_enum;
 pub mod performance;
+pub mod processing_phase_service;
 pub mod report;
 pub use report::{
     generate_csv_artifacts, generate_csv_correlation, generate_html_report, generate_json_export,

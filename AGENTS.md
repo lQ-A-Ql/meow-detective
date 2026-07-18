@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (25 repos, 53 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (26 repos, 54 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -308,10 +308,10 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 |-------|----------|-------|
 | 36 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
 | 99 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
-| 25 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo, ceph_bluestore_semantic_repo, ceph_rbd_lineage_repo |
-| 53 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0037`, `source_001`–`source_015`, plus `staging_001.sql` |
+| 26 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo, ceph_bluestore_semantic_repo, ceph_rbd_lineage_repo, processing_phase_repo |
+| 54 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0038`, `source_001`–`source_015`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
-| 86 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 87 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |

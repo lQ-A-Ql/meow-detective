@@ -264,7 +264,7 @@ fn build_ceph_xfs_bounded_range_fixture(marker: &[u8]) -> (Vec<u8>, u64, Range<u
     const TOTAL_BLOCKS: u64 = 10;
     const INODE_BASE: usize = 8192;
     const INODE_SIZE: usize = 256;
-    const INODE_CORE_SIZE: usize = 96;
+    const INODE_CORE_SIZE: usize = 100;
     const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
     const FIRST_DATA_BLOCK: u64 = 4;
     const TARGET_DATA_BLOCK: u64 = 6;
@@ -284,6 +284,7 @@ fn build_ceph_xfs_bounded_range_fixture(marker: &[u8]) -> (Vec<u8>, u64, Range<u
     let root = &mut image[INODE_BASE + INODE_SIZE..INODE_BASE + 2 * INODE_SIZE];
     root[0x00..0x02].copy_from_slice(&0x494Eu16.to_be_bytes());
     root[0x02..0x04].copy_from_slice(&(0x4000u16 | 0o755).to_be_bytes());
+    root[0x04] = 2;
     root[0x05] = 1;
     root[0x38..0x40].copy_from_slice(&BLOCK_SIZE.to_be_bytes());
     let root_data = &mut root[INODE_CORE_SIZE..];
@@ -298,6 +299,7 @@ fn build_ceph_xfs_bounded_range_fixture(marker: &[u8]) -> (Vec<u8>, u64, Range<u
     let file = &mut image[INODE_BASE + 2 * INODE_SIZE..INODE_BASE + 3 * INODE_SIZE];
     file[0x00..0x02].copy_from_slice(&0x494Eu16.to_be_bytes());
     file[0x02..0x04].copy_from_slice(&(0x8000u16 | 0o644).to_be_bytes());
+    file[0x04] = 2;
     file[0x05] = 2;
     file[0x38..0x40].copy_from_slice(&(LOGICAL_OFFSET + marker.len() as u64).to_be_bytes());
     file[0x4C..0x50].copy_from_slice(&2u32.to_be_bytes());

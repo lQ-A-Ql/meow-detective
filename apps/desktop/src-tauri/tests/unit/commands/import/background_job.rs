@@ -4,11 +4,11 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Once};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
 use app_services::ceph_reconstruction::{
     discover_rbd_images_from_source_dbs, materialize_rbd_sources_for_cluster, open_rbd_head_image,
-    RadosReplicaSource, SourceDbRadosObjectProvider,
+    verify_derived_source_catalog, RadosReplicaSource, SourceDbRadosObjectProvider,
 };
 use app_services::cluster_service::{plan_linux_cluster_import, LinuxClusterImportPlan};
 use app_services::datasource_service::{self, ImageFilesystemKind, PartitionStatus};
@@ -29,6 +29,8 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
     file_repo::FileRepo,
     job_repo::JobRepo,
+    processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseState},
+    timeline_repo::TimelineRepo,
 };
 use tempfile::TempDir;
 use transport::dto::ViewerRangeRequestDto;
@@ -38,6 +40,7 @@ use super::{run_background_linux_cluster_import_job, BackgroundLinuxClusterImpor
 const PVE_CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
 const PVE_CASE_OUTPUT_ROOT_ENV: &str = "FORENSICS_PVE_CASE_OUTPUT_ROOT";
 const PVE_RBD_CASE_ROOT_ENV: &str = "FORENSICS_PVE_RBD_CASE_ROOT";
+const PVE_RBD_DEEP_PARENT_HASH_ENV: &str = "FORENSICS_PVE_RBD_DEEP_PARENT_HASH";
 const PVE_MEMBER_COUNT: usize = 6;
 const PVE_HOST_COUNT: usize = 3;
 const PVE_CLUSTER_FSID: &str = "3f28d8bb-e754-475b-b471-b9c97161bbf7";
@@ -183,6 +186,15 @@ struct RocksDbLatestStateRow {
     latest_state_sha256: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct SourceDbReadOnlySnapshot {
+    source_id: String,
+    length: u64,
+    modified_at: SystemTime,
+    boundary_sha256: String,
+    full_sha256: Option<String>,
+}
+
 #[test]
 #[ignore = "requires the private six-member PVE E01 cluster fixture"]
 fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases() {
@@ -249,7 +261,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     assert_manifest(&case_root, &plan);
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
     assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &plan.cluster_id);
-    assert_derived_rbd_linux_analysis(&case_conn, &case_root, &case_id);
+    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &plan.cluster_id);
     assert_job_outcome(&case_conn, &job_id, &cluster);
 }
 
@@ -428,6 +440,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         .expect("FORENSICS_PVE_RBD_CASE_ROOT must point to a retained PVE case root");
     let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
         .expect("open retained PVE case database");
+    persistence_sqlite::runner::run_all(&case_conn).expect("migrate retained PVE case database");
     let cluster_id = case_conn
         .query_row(
             "SELECT id FROM data_source_clusters ORDER BY created_at, id LIMIT 1",
@@ -460,6 +473,8 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     DataSourceClusterRepo::new(&case_conn)
         .update_state(&cluster_id, "ready", cluster.member_count, 0, None)
         .expect("mark retained PVE cluster ready for RBD materialization");
+    let parent_snapshots =
+        capture_rbd_parent_source_snapshots(&case_conn, &case_root, &cluster.case_id);
 
     let started = Instant::now();
     let materialized =
@@ -470,9 +485,22 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         started.elapsed().as_millis(),
         materialized.len()
     );
+    if std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some() {
+        assert!(
+            started.elapsed() <= Duration::from_secs(5),
+            "ready derived-source reuse exceeded 5 seconds and may have regressed to full Catalog work"
+        );
+    }
 
     assert_eq!(materialized.len(), 1);
+    assert_parent_source_snapshots_unchanged(
+        &case_conn,
+        &case_root,
+        &cluster.case_id,
+        &parent_snapshots,
+    );
     assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &cluster.case_id, &cluster_id);
 }
 
 #[test]
@@ -709,6 +737,8 @@ fn assert_plan(fixture_root: &Path, plan: &LinuxClusterImportPlan) {
 }
 
 fn create_case_database(case_root: &Path, case_id: &CaseId) -> rusqlite::Connection {
+    std::fs::create_dir_all(case_root.join("cache"))
+        .expect("create case cache directory required by data-source lifecycle");
     let conn = persistence_sqlite::connection::open_or_create(&case_root.join("app.db"))
         .expect("create app database");
     persistence_sqlite::runner::run_all(&conn).expect("run app migrations");
@@ -987,12 +1017,18 @@ fn assert_derived_rbd_sources(
         response.raw_bytes.is_some_and(|bytes| !bytes.is_empty()),
         "derived RBD preview must return bytes"
     );
+    assert!(
+        verify_derived_source_catalog(case_conn, case_root, case_id, &source.id)
+            .expect("deep-verify derived RBD Catalog"),
+        "derived RBD Catalog manifest does not match its complete persisted file tree"
+    );
 }
 
-fn assert_derived_rbd_linux_analysis(
+fn assert_derived_rbd_automatic_processing(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
+    cluster_id: &str,
 ) {
     let source = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)
@@ -1000,33 +1036,86 @@ fn assert_derived_rbd_linux_analysis(
         .into_iter()
         .find(|source| source.kind == domain::DataSourceKind::CephRbd)
         .expect("derived RBD source for Linux analysis");
-    let run = app_services::analysis_service::run_source_analysis_extraction(
-        case_conn,
-        case_root,
-        case_id,
-        &source.id,
-        &["LinuxSystemConfig"],
+
+    let phases = DataSourceProcessingPhaseRepo::new(case_conn)
+        .list_for_data_source(&source.id)
+        .expect("list automatic derived-source phases");
+    assert_eq!(
+        phases.iter().map(|phase| phase.phase).collect::<Vec<_>>(),
+        ProcessingPhase::ALL,
+        "automatic derived-source processing must persist the complete phase graph"
+    );
+    assert!(
+        phases
+            .iter()
+            .all(|phase| phase.state == ProcessingPhaseState::Ready),
+        "automatic derived-source processing is incomplete: {phases:?}"
+    );
+    let processing = app_services::processing_phase_service::get_data_source_processing_summary(
+        case_conn, &source.id,
     )
-    .expect("run Linux system-config extraction against derived RBD source");
-    let section = run
-        .sections
+    .expect("query derived-source processing summary")
+    .expect("derived-source processing summary");
+    assert_eq!(processing.state, "ready");
+    assert_eq!(processing.total_count, ProcessingPhase::ALL.len() as u32);
+    assert_eq!(processing.ready_count, ProcessingPhase::ALL.len() as u32);
+    assert_eq!(processing.failed_count, 0);
+    assert_eq!(processing.deferred_count, 0);
+    assert_eq!(
+        processing
+            .phases
+            .iter()
+            .map(|phase| phase.phase.as_str())
+            .collect::<Vec<_>>(),
+        ProcessingPhase::ALL
+            .iter()
+            .map(|phase| phase.as_str())
+            .collect::<Vec<_>>()
+    );
+    let timeline_phase = phases
         .iter()
-        .find(|section| section.key == "LinuxSystemConfig")
-        .expect("LinuxSystemConfig section result");
+        .find(|phase| phase.phase == ProcessingPhase::Timeline)
+        .expect("automatic Timeline phase");
+    let timeline_stats: serde_json::Value =
+        serde_json::from_str(&timeline_phase.stats_json).expect("parse Timeline phase stats");
+    let macb_inserted = timeline_stats["macbInsertedCount"]
+        .as_u64()
+        .expect("Timeline macbInsertedCount");
+    let macb_total = timeline_stats["macbTotalCount"]
+        .as_u64()
+        .expect("Timeline macbTotalCount");
     assert!(
-        section.scanned_count > 0,
-        "derived VM analysis must scan Linux system configuration candidates"
+        macb_inserted > 0,
+        "Timeline phase must insert MACB events once XFS timestamps are available: {timeline_stats}"
     );
     assert!(
-        section.artifact_count > 0,
-        "derived VM analysis must persist Linux system configuration artifacts"
+        macb_total >= macb_inserted,
+        "Timeline MACB totals are inconsistent: {timeline_stats}"
     );
-    assert!(
-        run.warnings.iter().all(|warning| {
-            !warning.contains("Evidence reader is not available for source kind 'ceph_rbd'")
-        }),
-        "derived VM analysis fell back to the host-only evidence reader: {:?}",
-        run.warnings
+    let search_phase = phases
+        .iter()
+        .find(|phase| phase.phase == ProcessingPhase::Search)
+        .expect("automatic Search phase");
+    let search_stats: serde_json::Value =
+        serde_json::from_str(&search_phase.stats_json).expect("parse Search phase stats");
+    let eligible = search_stats["eligibleCount"]
+        .as_u64()
+        .expect("Search eligibleCount");
+    let indexed = search_stats["indexedCount"]
+        .as_u64()
+        .expect("Search indexedCount");
+    let skipped = search_stats["skippedCount"]
+        .as_u64()
+        .expect("Search skippedCount");
+    let failed = search_stats["failedCount"]
+        .as_u64()
+        .expect("Search failedCount");
+    assert!(eligible > 0, "Search phase found no eligible files");
+    assert!(indexed > 0, "Search phase indexed no files");
+    assert_eq!(
+        eligible,
+        indexed + skipped + failed,
+        "Search phase accounting is inconsistent: {search_stats}"
     );
 
     let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
@@ -1039,7 +1128,71 @@ fn assert_derived_rbd_linux_analysis(
         .unwrap_or_default();
     assert!(
         linux_system_config_count > 0,
-        "derived VM source database must contain LinuxSystemConfig artifacts"
+        "automatic finalization must persist LinuxSystemConfig artifacts"
+    );
+    let artifact_count = ArtifactRepo::new(&source_conn)
+        .count()
+        .expect("count automatic derived artifacts");
+    let timeline_count = TimelineRepo::new(&source_conn)
+        .count()
+        .expect("count automatic derived timeline");
+    assert!(artifact_count > 0, "automatic artifact projection is empty");
+    assert!(timeline_count > 0, "automatic timeline projection is empty");
+
+    let search = app_services::search_service::search_files_real(
+        &source_db::source_index_dir(case_root, &source.id),
+        "nologin",
+        0,
+        100,
+    )
+    .expect("query automatic derived search index");
+    assert!(
+        search.items.iter().any(|item| {
+            item.path.replace('\\', "/").ends_with("etc/passwd")
+                && item
+                    .snippets
+                    .iter()
+                    .any(|snippet| snippet.text.contains("nologin"))
+        }),
+        "automatic search index cannot resolve retained /etc/passwd content"
+    );
+
+    materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
+        .expect("repeat ready derived-source materialization");
+    let reopened = source_db::open_registered_source_db(case_conn, case_root, &source.id)
+        .expect("reopen automatically processed derived source");
+    assert_eq!(
+        ArtifactRepo::new(&reopened)
+            .count()
+            .expect("recount derived artifacts"),
+        artifact_count,
+        "ready-source retry changed the artifact count"
+    );
+    assert_eq!(
+        TimelineRepo::new(&reopened)
+            .count()
+            .expect("recount derived timeline"),
+        timeline_count,
+        "ready-source retry changed the timeline count"
+    );
+    let retried_phases = DataSourceProcessingPhaseRepo::new(case_conn)
+        .list_for_data_source(&source.id)
+        .expect("list retried derived-source phases");
+    let retried_timeline = retried_phases
+        .iter()
+        .find(|phase| phase.phase == ProcessingPhase::Timeline)
+        .expect("retried Timeline phase");
+    let retried_search = retried_phases
+        .iter()
+        .find(|phase| phase.phase == ProcessingPhase::Search)
+        .expect("retried Search phase");
+    assert_eq!(
+        retried_timeline.stats_json, timeline_phase.stats_json,
+        "ready-source retry changed Timeline phase stats"
+    );
+    assert_eq!(
+        retried_search.stats_json, search_phase.stats_json,
+        "ready-source retry changed Search phase stats"
     );
 }
 
@@ -1139,7 +1292,7 @@ fn host_file_count_oracle(source: &DataSource) -> u64 {
 fn assert_source_database_health(case_root: &Path, source: &DataSource) {
     let source_db_path = source_db::source_db_path(case_root, &source.id);
     assert!(source_db_path.is_file(), "missing retained source database");
-    assert_sqlite_sidecars_absent(&source_db_path);
+    assert_sqlite_wal_quiescent(&source_db_path);
     {
         let source_conn = persistence_sqlite::open_existing_source(&source_db_path)
             .expect("open retained source database for health checks");
@@ -1193,18 +1346,99 @@ fn assert_source_database_health(case_root: &Path, source: &DataSource) {
             source.name
         );
     }
-    assert_sqlite_sidecars_absent(&source_db_path);
+    assert_sqlite_wal_quiescent(&source_db_path);
 }
 
-fn assert_sqlite_sidecars_absent(database_path: &Path) {
-    for suffix in ["-wal", "-shm"] {
-        let mut sidecar = database_path.as_os_str().to_os_string();
-        sidecar.push(suffix);
-        let sidecar = PathBuf::from(sidecar);
-        assert!(
-            !sidecar.exists(),
-            "retained source database sidecar must be absent: {}",
-            sidecar.display()
+fn capture_rbd_parent_source_snapshots(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+) -> Vec<SourceDbReadOnlySnapshot> {
+    let mut snapshots = DataSourceRepo::new(case_conn)
+        .find_by_case(case_id)
+        .expect("query parent source databases")
+        .into_iter()
+        .filter(|source| source.kind != domain::DataSourceKind::CephRbd)
+        .filter(|source| {
+            DataSourceRepo::new(case_conn)
+                .find_storage(&source.id)
+                .expect("query parent source storage")
+                .is_some_and(|storage| storage.import_state == "ready_metadata")
+        })
+        .map(|source| {
+            let path = source_db::source_db_path(case_root, &source.id);
+            source_db_read_only_snapshot(&source.id, &path)
+        })
+        .collect::<Vec<_>>();
+    snapshots.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+    assert_eq!(
+        snapshots.len(),
+        PVE_RBD_REPLICA_COUNT,
+        "retained RBD reconstruction requires exactly three metadata parent sources"
+    );
+    snapshots
+}
+
+fn assert_parent_source_snapshots_unchanged(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    expected: &[SourceDbReadOnlySnapshot],
+) {
+    let actual = capture_rbd_parent_source_snapshots(case_conn, case_root, case_id);
+    assert_eq!(
+        actual, expected,
+        "RBD reconstruction changed a parent source database"
+    );
+}
+
+fn source_db_read_only_snapshot(
+    source_id: &DataSourceId,
+    database_path: &Path,
+) -> SourceDbReadOnlySnapshot {
+    assert_sqlite_wal_quiescent(database_path);
+    let metadata = std::fs::metadata(database_path).expect("read parent source DB metadata");
+    assert!(metadata.len() > 0, "parent source DB must not be empty");
+    SourceDbReadOnlySnapshot {
+        source_id: source_id.0.clone(),
+        length: metadata.len(),
+        modified_at: metadata.modified().expect("read parent source DB mtime"),
+        boundary_sha256: source_db_boundary_sha256(database_path, metadata.len()),
+        full_sha256: std::env::var_os(PVE_RBD_DEEP_PARENT_HASH_ENV)
+            .map(|_| infrastructure::hashing::sha256_file(database_path).expect("hash parent DB")),
+    }
+}
+
+fn source_db_boundary_sha256(database_path: &Path, length: u64) -> String {
+    const WINDOW: usize = 64 * 1024;
+    let mut file = std::fs::File::open(database_path).expect("open parent source DB");
+    let head_length = usize::try_from(length.min(WINDOW as u64)).expect("head length");
+    let mut bytes = vec![0u8; head_length];
+    file.read_exact(&mut bytes)
+        .expect("read parent source DB head");
+    if length > WINDOW as u64 {
+        file.seek(SeekFrom::End(-(WINDOW as i64)))
+            .expect("seek parent source DB tail");
+        let mut tail = vec![0u8; WINDOW];
+        file.read_exact(&mut tail)
+            .expect("read parent source DB tail");
+        bytes.extend_from_slice(&tail);
+    }
+    infrastructure::hashing::sha256_bytes(&bytes)
+}
+
+fn assert_sqlite_wal_quiescent(database_path: &Path) {
+    let mut wal_path = database_path.as_os_str().to_os_string();
+    wal_path.push("-wal");
+    let wal_path = PathBuf::from(wal_path);
+    if wal_path.exists() {
+        assert_eq!(
+            std::fs::metadata(&wal_path)
+                .expect("read retained source database WAL metadata")
+                .len(),
+            0,
+            "retained source database must not have pending WAL frames: {}",
+            wal_path.display()
         );
     }
 }

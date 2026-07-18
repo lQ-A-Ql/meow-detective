@@ -36,7 +36,7 @@ pub(super) fn merge_finished_analysis_staging(
     }
     let merge_started = Instant::now();
     let merge_stats = staging::merge_analysis_staging_to_main(
-        &persistence_sqlite::open_or_create(&options.db_path)?,
+        &persistence_sqlite::open_existing_source(&options.db_path)?,
         &options.case_root,
         &options.data_source_id.0,
         worker_ids,

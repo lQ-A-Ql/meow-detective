@@ -130,6 +130,37 @@ pub fn open_registered_source_db(
     Ok(connection)
 }
 
+pub fn open_registered_source_db_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> DbResult<Connection> {
+    let storage = DataSourceRepo::new(case_conn)
+        .find_storage(data_source_id)?
+        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
+    let expected_schema_version =
+        persistence_sqlite::migrations::runner::latest_source_version().to_string();
+    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
+        return Err(DbError::System(format!(
+            "Data source '{}' requires source DB migration before read-only reconstruction",
+            data_source_id.0
+        )));
+    }
+    let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
+    let connection = persistence_sqlite::open_existing_source_read_only(&db_path)?;
+    let actual_schema_version =
+        persistence_sqlite::migrations::runner::current_version(&connection)?;
+    if actual_schema_version.as_deref() != Some(expected_schema_version.as_str()) {
+        return Err(DbError::System(format!(
+            "Data source '{}' physical source DB schema is stale; expected '{}', found '{}'",
+            data_source_id.0,
+            expected_schema_version,
+            actual_schema_version.as_deref().unwrap_or("<none>")
+        )));
+    }
+    Ok(connection)
+}
+
 pub fn registered_source_db_path(
     case_conn: &Connection,
     case_root: &Path,

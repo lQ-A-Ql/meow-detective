@@ -59,6 +59,8 @@ pub struct DataSourceSummaryDto {
     pub schema_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing: Option<DataSourceProcessingSummaryDto>,
     #[serde(rename = "sourceHash", skip_serializing_if = "Option::is_none")]
     pub source_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -75,6 +77,40 @@ pub struct DataSourceSummaryDto {
     pub warnings: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub partitions: Vec<DataSourcePartitionDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataSourceProcessingSummaryDto {
+    pub state: String,
+    pub total_count: u32,
+    pub ready_count: u32,
+    pub pending_count: u32,
+    pub running_count: u32,
+    pub failed_count: u32,
+    pub deferred_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub phases: Vec<DataSourceProcessingPhaseDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataSourceProcessingPhaseDto {
+    pub phase: String,
+    pub state: String,
+    pub version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heartbeat_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at: Option<String>,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,5 +1,19 @@
 use super::*;
 
+fn sqlite_sidecar_path(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    value.into()
+}
+
+fn assert_sqlite_read_only(error: &rusqlite::Error) {
+    assert_eq!(
+        error.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::ReadOnly),
+        "expected SQLite read-only failure, got {error}"
+    );
+}
+
 #[test]
 fn open_in_memory_can_query() {
     let conn = open_in_memory().unwrap();
@@ -149,4 +163,102 @@ fn open_existing_works_on_existing_file() {
         .query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
         .unwrap();
     assert_eq!(count, 0);
+}
+
+#[test]
+fn open_existing_source_read_only_enforces_query_only_and_rejects_writes() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("source.db");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode=DELETE;
+                 CREATE TABLE evidence_marker(id INTEGER PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO evidence_marker(value) VALUES ('preserved');",
+            )
+            .unwrap();
+    }
+
+    let connection = open_existing_source_read_only(&path).unwrap();
+    let query_only: i64 = connection
+        .query_row("PRAGMA query_only", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(query_only, 1);
+
+    let dml_error = connection
+        .execute(
+            "UPDATE evidence_marker SET value = 'changed' WHERE id = 1",
+            [],
+        )
+        .unwrap_err();
+    assert_sqlite_read_only(&dml_error);
+    let ddl_error = connection
+        .execute_batch("CREATE TABLE forbidden_write(id INTEGER)")
+        .unwrap_err();
+    assert_sqlite_read_only(&ddl_error);
+
+    let preserved: String = connection
+        .query_row(
+            "SELECT value FROM evidence_marker WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(preserved, "preserved");
+}
+
+#[test]
+fn open_existing_source_read_only_does_not_migrate_or_create_sidecars() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("legacy-source.db");
+    let wal_path = sqlite_sidecar_path(&path, "-wal");
+    let shm_path = sqlite_sidecar_path(&path, "-shm");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode=DELETE;
+                 CREATE TABLE schema_migrations (
+                     id INTEGER PRIMARY KEY,
+                     name TEXT NOT NULL UNIQUE,
+                     applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+                 );
+                 INSERT INTO schema_migrations(name) VALUES ('source_001');
+                 CREATE TABLE evidence_marker(value TEXT NOT NULL);
+                 INSERT INTO evidence_marker(value) VALUES ('preserved');",
+            )
+            .unwrap();
+    }
+    assert!(!wal_path.exists());
+    assert!(!shm_path.exists());
+    let before = std::fs::read(&path).unwrap();
+
+    {
+        let connection = open_existing_source_read_only(&path).unwrap();
+        assert_eq!(
+            crate::migrations::runner::current_version(&connection).unwrap(),
+            Some("source_001".to_string())
+        );
+        let migrated_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'ceph_bluestore_omap_scans'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migrated_table_count, 0);
+    }
+
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert!(!wal_path.exists());
+    assert!(!shm_path.exists());
+    let verifier =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    assert_eq!(
+        crate::migrations::runner::current_version(&verifier).unwrap(),
+        Some("source_001".to_string())
+    );
 }

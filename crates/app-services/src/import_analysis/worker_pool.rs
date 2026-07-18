@@ -9,7 +9,7 @@ use super::finalize::{
 };
 use super::options::{
     AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats, JobOutcomeCounts,
-    PostImportPipelineError, PostImportPipelineOptions,
+    PostImportPipelineError, PostImportPipelineOptions, PostImportPipelineReport,
 };
 use super::progress::{bool_word, current_rss_mb, memory_hard_limit_exceeded};
 use super::source_reader::prepare_derived_runtime;
@@ -24,6 +24,14 @@ pub fn run_post_import_pipeline_with_counts(
     options: PostImportPipelineOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<(String, JobOutcomeCounts), PostImportPipelineError> {
+    let report = run_post_import_pipeline_report(options, progress_cb)?;
+    Ok((report.message, report.counts))
+}
+
+pub fn run_post_import_pipeline_report(
+    options: PostImportPipelineOptions,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<PostImportPipelineReport, PostImportPipelineError> {
     let mut counts = initial_counts_for_platform(options.platform)?;
     let tier_state = Arc::clone(&options.tier_state);
     if post_import_disabled(&options) {
@@ -51,7 +59,11 @@ pub fn run_post_import_pipeline_with_counts(
     counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
     counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
     counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
-    Ok((post_import_message(&stats, &counts), counts))
+    Ok(PostImportPipelineReport {
+        message: post_import_message(&stats, &counts),
+        counts,
+        stats,
+    })
 }
 
 fn post_import_disabled(options: &PostImportPipelineOptions) -> bool {
@@ -65,7 +77,7 @@ fn finish_disabled_post_import(
     tier_state: &Arc<std::sync::Mutex<super::tier::TierStateMachine>>,
     counts: JobOutcomeCounts,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
-) -> Result<(String, JobOutcomeCounts), PostImportPipelineError> {
+) -> Result<PostImportPipelineReport, PostImportPipelineError> {
     if let Some(cb) = progress_cb {
         cb(
             84,
@@ -76,10 +88,12 @@ fn finish_disabled_post_import(
         );
     }
     finish_post_import_tiers(tier_state, &counts)?;
-    Ok((
-        "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed".to_string(),
+    Ok(PostImportPipelineReport {
+        message: "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
+            .to_string(),
         counts,
-    ))
+        stats: ImportAnalysisStats::default(),
+    })
 }
 
 fn emit_post_import_scheduled(

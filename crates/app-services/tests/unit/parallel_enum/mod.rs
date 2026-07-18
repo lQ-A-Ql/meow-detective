@@ -75,6 +75,7 @@ impl FakeFsReader {
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,
+                changed_at: None,
             })
             .collect()
     }

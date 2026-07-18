@@ -66,8 +66,8 @@ pub use android::{
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use case::{
-    CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
-    RecentObjectDto,
+    CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
+    DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,
 };
 pub use cloud_audit::{CloudAuditEntryDto, CloudAuditSourceDto};
 pub use correlation::{

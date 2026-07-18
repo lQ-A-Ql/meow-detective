@@ -204,6 +204,20 @@ fn encode_bmbt_extent(logical: u64, start_block: u64, block_count: u64) -> [u8; 
     encoded
 }
 
+fn write_legacy_timestamp(inode: &mut [u8], offset: usize, seconds: i32, nanoseconds: u32) {
+    inode[offset..offset + 4].copy_from_slice(&seconds.to_be_bytes());
+    inode[offset + 4..offset + 8].copy_from_slice(&nanoseconds.to_be_bytes());
+}
+
+fn write_bigtime_timestamp(inode: &mut [u8], offset: usize, unix_seconds: i64, nanoseconds: u32) {
+    const BIGTIME_EPOCH_OFFSET: i64 = 2_147_483_648;
+    const NSEC_PER_SEC: u64 = 1_000_000_000;
+
+    let ondisk_seconds = u64::try_from(unix_seconds + BIGTIME_EPOCH_OFFSET).unwrap();
+    let total_nanoseconds = ondisk_seconds * NSEC_PER_SEC + u64::from(nanoseconds);
+    inode[offset..offset + 8].copy_from_slice(&total_nanoseconds.to_be_bytes());
+}
+
 // -----------------------------------------------------------------------
 // Fixture builder
 // -----------------------------------------------------------------------
@@ -257,6 +271,7 @@ fn build_xfs_fixture() -> Vec<u8> {
     let ri = &mut img[ino_base + ino_size..ino_base + 2 * ino_size];
     ri[di_off::MAGIC..di_off::MAGIC + 2].copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
     ri[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+    ri[di_off::VERSION] = 2;
     ri[di_off::FORMAT] = FORMAT_LOCAL;
     ri[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&4096u64.to_be_bytes());
     ri[di_off::FORKOFF] = 0;
@@ -292,6 +307,7 @@ fn build_xfs_fixture() -> Vec<u8> {
     let fi = &mut img[ino_base + 2 * ino_size..ino_base + 3 * ino_size];
     fi[di_off::MAGIC..di_off::MAGIC + 2].copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
     fi[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFREG | 0o644).to_be_bytes());
+    fi[di_off::VERSION] = 2;
     fi[di_off::FORMAT] = FORMAT_EXTENTS;
     fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&11u64.to_be_bytes()); // "Hello World"
     fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
@@ -305,6 +321,7 @@ fn build_xfs_fixture() -> Vec<u8> {
     let sd = &mut img[ino_base + 3 * ino_size..ino_base + 4 * ino_size];
     sd[di_off::MAGIC..di_off::MAGIC + 2].copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
     sd[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+    sd[di_off::VERSION] = 2;
     sd[di_off::FORMAT] = FORMAT_LOCAL;
     sd[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&4096u64.to_be_bytes());
     sd[di_off::FORKOFF] = 0;
@@ -328,6 +345,7 @@ fn build_xfs_fixture() -> Vec<u8> {
     let hi = &mut img[ino_base + 4 * ino_size..ino_base + 5 * ino_size];
     hi[di_off::MAGIC..di_off::MAGIC + 2].copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
     hi[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFREG | 0o644).to_be_bytes());
+    hi[di_off::VERSION] = 2;
     hi[di_off::FORMAT] = FORMAT_BTREE;
     hi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&13u64.to_be_bytes()); // "Hello subdir!"
     hi[di_off::FORKOFF] = 0;
@@ -544,6 +562,134 @@ fn test_root_directory() {
     let sub = children.iter().find(|n| n.name == "subdir").unwrap();
     assert!(sub.is_dir);
     assert_eq!(sub.path, "subdir");
+}
+
+#[test]
+fn root_and_children_propagate_v2_legacy_macb_timestamps() {
+    let mut img = build_xfs_fixture();
+    let root = &mut img[8192 + 256..8192 + 2 * 256];
+    write_legacy_timestamp(root, di_off::ATIME, 10, 1);
+    write_legacy_timestamp(root, di_off::MTIME, 20, 2);
+    write_legacy_timestamp(root, di_off::CTIME, 30, 3);
+    let file = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    write_legacy_timestamp(file, di_off::ATIME, 40, 4);
+    write_legacy_timestamp(file, di_off::MTIME, 50, 5);
+    write_legacy_timestamp(file, di_off::CTIME, 60, 6);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let root = xfs.root().unwrap();
+    let children = xfs.list_children("").unwrap();
+    let file = children
+        .iter()
+        .find(|node| node.name == "test.txt")
+        .unwrap();
+
+    assert!(root.created_at.is_none());
+    assert_eq!(root.accessed_at.unwrap().timestamp(), 10);
+    assert_eq!(root.modified_at.unwrap().timestamp(), 20);
+    assert_eq!(root.changed_at.unwrap().timestamp(), 30);
+    assert!(file.created_at.is_none());
+    assert_eq!(file.accessed_at.unwrap().timestamp(), 40);
+    assert_eq!(file.modified_at.unwrap().timestamp(), 50);
+    assert_eq!(file.changed_at.unwrap().timestamp(), 60);
+}
+
+#[test]
+fn child_propagates_v3_bigtime_macb_and_crtime() {
+    let mut img = build_xfs_fixture();
+    let file = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    file[di_off::VERSION] = 3;
+    file[di_off::FLAGS2..di_off::FLAGS2 + 8].copy_from_slice(&(1u64 << 3).to_be_bytes());
+    write_bigtime_timestamp(file, di_off::ATIME, -2_147_483_648, 7);
+    write_bigtime_timestamp(file, di_off::MTIME, 0, 8);
+    write_bigtime_timestamp(file, di_off::CTIME, 2_147_483_648, 9);
+    write_bigtime_timestamp(file, di_off::CRTIME, 4_102_444_800, 10);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let children = xfs.list_children("").unwrap();
+    let file = children
+        .iter()
+        .find(|node| node.name == "test.txt")
+        .unwrap();
+
+    assert_eq!(file.accessed_at.unwrap().timestamp(), -2_147_483_648);
+    assert_eq!(file.accessed_at.unwrap().timestamp_subsec_nanos(), 7);
+    assert_eq!(file.modified_at.unwrap().timestamp(), 0);
+    assert_eq!(file.changed_at.unwrap().timestamp(), 2_147_483_648);
+    assert_eq!(file.created_at.unwrap().timestamp(), 4_102_444_800);
+}
+
+#[test]
+fn invalid_child_timestamp_is_localized_and_reported() {
+    let mut img = build_xfs_fixture();
+    let file = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    write_legacy_timestamp(file, di_off::ATIME, 1, 1_000_000_000);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let children = xfs.list_children("").unwrap();
+    let diagnostics = xfs.take_diagnostics();
+
+    assert_eq!(children.len(), 2);
+    assert!(children.iter().any(|node| node.name == "subdir"));
+    let degraded = children
+        .iter()
+        .find(|node| node.name == "test.txt")
+        .expect("degraded file remains visible");
+    assert!(!degraded.is_dir);
+    assert_eq!(degraded.size, 11);
+    assert!(degraded.modified_at.is_none());
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::MetadataDegraded
+            && diagnostic.inode == Some(3)
+            && diagnostic.message.contains("invalid nanoseconds")
+    }));
+}
+
+#[test]
+fn known_dirent_type_retains_entry_with_degraded_metadata() {
+    let mut img = build_xfs_fixture_with_zeroed_block_dir_and_v5_ftype_residual_shortform();
+    let child = &mut img[8192 + 3 * 256..8192 + 4 * 256];
+    child[di_off::MAGIC..di_off::MAGIC + 2].fill(0);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let children = xfs.list_children("").unwrap();
+    let diagnostics = xfs.take_diagnostics();
+
+    let degraded = children
+        .iter()
+        .find(|node| node.name == "subdir")
+        .expect("known directory-entry type keeps the child visible");
+    assert!(degraded.is_dir);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::MetadataDegraded
+            && diagnostic.inode == Some(4)
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::EntryUnavailable
+            && diagnostic.inode == Some(4)
+    }));
+}
+
+#[test]
+fn unknown_dirent_type_omits_entry_with_unavailable_metadata() {
+    let mut img = build_xfs_fixture();
+    let child = &mut img[8192 + 3 * 256..8192 + 4 * 256];
+    child[di_off::MAGIC..di_off::MAGIC + 2].fill(0);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let children = xfs.list_children("").unwrap();
+    let diagnostics = xfs.take_diagnostics();
+
+    assert!(!children.iter().any(|node| node.name == "subdir"));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::EntryUnavailable
+            && diagnostic.inode == Some(4)
+    }));
 }
 
 #[test]
@@ -1549,10 +1695,14 @@ fn test_extent_directory_keeps_valid_xdd3_entries_when_later_block_is_truncated(
     let xfs = XfsReader::open(reader, 0).unwrap();
 
     let children = xfs.list_children("test.txt").unwrap();
+    let diagnostics = xfs.take_diagnostics();
 
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "subdir");
     assert!(children[0].is_dir);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::DirectoryPartial
+    }));
 }
 
 #[test]
@@ -1562,10 +1712,14 @@ fn test_btree_directory_keeps_valid_xdd3_entries_when_later_block_is_truncated()
     let xfs = XfsReader::open(reader, 0).unwrap();
 
     let children = xfs.list_children("test.txt").unwrap();
+    let diagnostics = xfs.take_diagnostics();
 
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "subdir");
     assert!(children[0].is_dir);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == evidence_core::filesystem::FileSystemDiagnosticKind::DirectoryPartial
+    }));
 }
 
 // -----------------------------------------------------------------------

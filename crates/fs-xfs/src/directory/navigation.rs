@@ -1,13 +1,17 @@
 use super::{
     XfsDirectoryEntry, XfsResolvedDirectoryEntry, DIR2_SF_HDR_4, DIR2_SF_HDR_8, XFS_DIR3_FT_DIR,
-    XFS_DIR3_FT_MAX,
+    XFS_DIR3_FT_MAX, XFS_DIR3_FT_UNKNOWN,
 };
-use crate::{be_u64, di_off, XfsReader, FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL};
-use evidence_core::filesystem::{invalid_fs_data, path_components};
+use crate::inode::XfsInodeMetadata;
+use crate::{di_off, XfsReader, FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL};
+use evidence_core::filesystem::{
+    invalid_fs_data, path_components, FileSystemDiagnostic, FileSystemDiagnosticKind,
+};
 use std::io;
 
 const MAX_DIRECTORY_PATH_CACHE_ENTRIES: usize = 100_000;
 const MAX_DIRECTORY_INODE_CACHE_ENTRIES: usize = 32_768;
+const MAX_FILESYSTEM_DIAGNOSTICS: usize = 1_000;
 
 impl XfsReader {
     pub(crate) fn cache_directory_path(&self, path: String, ino: u64) {
@@ -34,8 +38,11 @@ impl XfsReader {
 
         match inode[di_off::FORMAT] {
             FORMAT_LOCAL => {
-                let raw = Self::parse_shortform_dir(Self::data_fork(&inode)?, self.has_ftype)?;
-                Ok(self.annotate_shortform_entries(raw))
+                let data_fork = Self::data_fork(&inode)?;
+                let raw = Self::parse_shortform_dir(data_fork, self.has_ftype)?;
+                let entries =
+                    Self::shortform_entries_to_directory_entries(raw, self.has_ftype, data_fork);
+                Ok(self.annotate_directory_entries(entries))
             }
             FORMAT_EXTENTS => match self.read_extent_directory_entries(&inode) {
                 Ok(entries) => Ok(self.annotate_directory_entries(entries)),
@@ -49,16 +56,19 @@ impl XfsReader {
                     let data_fork = Self::data_fork(&inode)?;
                     let full_literal = &inode[Self::inode_core_size(&inode)..];
                     self.recover_shortform_dir_entries(&[data_fork, full_literal], self.has_ftype)
-                        .ok_or_else(|| {
-                            invalid_fs_data(
-                            "block dir all-zero (sf->block conversion artifact), recovery failed",
-                        )
+                        .and_then(|entries| {
+                            entries.ok_or_else(|| {
+                                invalid_fs_data(
+                                    "block dir all-zero (sf->block conversion artifact), recovery failed",
+                                )
+                            })
                         })
                 }
             },
-            FORMAT_BTREE => self
-                .read_btree_directory_entries(&inode)
-                .map(|entries| self.annotate_directory_entries(entries)),
+            FORMAT_BTREE => {
+                let entries = self.read_btree_directory_entries(&inode)?;
+                Ok(self.annotate_directory_entries(entries))
+            }
             other => Err(invalid_fs_data(format!(
                 "directory inode {ino} uses unsupported format {other}"
             ))),
@@ -69,9 +79,11 @@ impl XfsReader {
         &self,
         slices: &[&[u8]],
         prefer_ftype: bool,
-    ) -> Option<Vec<XfsResolvedDirectoryEntry>> {
+    ) -> io::Result<Option<Vec<XfsResolvedDirectoryEntry>>> {
         self.recover_shortform_dir_entries_raw(slices, prefer_ftype)
             .map(|entries| self.annotate_directory_entries(entries))
+            .map(Ok)
+            .transpose()
     }
 
     pub(super) fn recover_shortform_dir_entries_raw(
@@ -185,66 +197,95 @@ impl XfsReader {
         Ok(file_types)
     }
 
-    fn annotate_shortform_entries(
-        &self,
-        raw: Vec<(String, u64)>,
-    ) -> Vec<XfsResolvedDirectoryEntry> {
-        raw.into_iter()
-            .map(|(name, inode)| {
-                let metadata = self.child_inode_metadata(inode);
-                XfsResolvedDirectoryEntry {
-                    name,
-                    inode,
-                    is_dir: metadata.map(|item| item.0).unwrap_or(false),
-                    size: metadata.map(|item| item.1).unwrap_or(0),
-                }
-            })
-            .collect()
-    }
-
     fn annotate_directory_entries(
         &self,
         raw: Vec<XfsDirectoryEntry>,
     ) -> Vec<XfsResolvedDirectoryEntry> {
         raw.into_iter()
-            .map(|entry| {
-                let metadata = self.child_inode_metadata(entry.inode);
-                let is_dir = entry.ftype.map_or_else(
-                    || metadata.map(|item| item.0).unwrap_or(false),
-                    |file_type| {
-                        file_type == XFS_DIR3_FT_DIR && metadata.map(|item| item.0).unwrap_or(true)
-                    },
-                );
-                XfsResolvedDirectoryEntry {
-                    name: entry.name,
-                    inode: entry.inode,
-                    is_dir,
-                    size: metadata
-                        .filter(|item| !item.0)
-                        .map(|item| item.1)
-                        .unwrap_or(0),
+            .filter_map(|entry| {
+                let fallback_is_dir = dirent_is_dir(entry.ftype);
+                match self.child_inode_metadata(entry.inode) {
+                    Ok(metadata) => {
+                        if let Err(error) =
+                            validate_dirent_type(entry.inode, entry.ftype, metadata.is_dir)
+                        {
+                            self.record_diagnostic(
+                                FileSystemDiagnostic::new(
+                                    FileSystemDiagnosticKind::TypeConflict,
+                                    error.to_string(),
+                                )
+                                .with_inode(entry.inode),
+                            );
+                        }
+                        Some(XfsResolvedDirectoryEntry {
+                            name: entry.name,
+                            inode: entry.inode,
+                            is_dir: metadata.is_dir,
+                            metadata: Some(metadata),
+                        })
+                    }
+                    Err(error) => {
+                        let Some(is_dir) = fallback_is_dir else {
+                            self.record_diagnostic(
+                                FileSystemDiagnostic::new(
+                                    FileSystemDiagnosticKind::EntryUnavailable,
+                                    format!(
+                                        "XFS directory entry '{}' inode {} was omitted because its metadata is unreadable and its file type is unknown: {}",
+                                        entry.name, entry.inode, error
+                                    ),
+                                )
+                                .with_inode(entry.inode),
+                            );
+                            return None;
+                        };
+                        self.record_diagnostic(
+                            FileSystemDiagnostic::new(
+                                FileSystemDiagnosticKind::MetadataDegraded,
+                                format!(
+                                    "XFS directory entry '{}' inode {} retained with directory-entry type but without inode metadata: {}",
+                                    entry.name, entry.inode, error
+                                ),
+                            )
+                            .with_inode(entry.inode),
+                        );
+                        Some(XfsResolvedDirectoryEntry {
+                            name: entry.name,
+                            inode: entry.inode,
+                            is_dir,
+                            metadata: None,
+                        })
+                    }
                 }
             })
             .collect()
     }
 
-    fn child_inode_metadata(&self, ino: u64) -> Option<(bool, u64)> {
-        let inode = self.read_inode(ino).ok()?;
-        Self::validate_inode_magic(&inode).ok()?;
-        if Self::inode_is_dir(&inode) {
+    pub(crate) fn record_diagnostic(&self, diagnostic: FileSystemDiagnostic) {
+        let mut diagnostics = self.diagnostics.borrow_mut();
+        if diagnostics.len() < MAX_FILESYSTEM_DIAGNOSTICS {
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    fn child_inode_metadata(&self, ino: u64) -> io::Result<XfsInodeMetadata> {
+        let inode = self.read_inode(ino).map_err(|error| {
+            invalid_fs_data(format!("cannot read directory child inode {ino}: {error}"))
+        })?;
+        let metadata = self
+            .decode_inode_metadata_with_diagnostics(ino, &inode)
+            .map_err(|error| {
+                invalid_fs_data(format!(
+                    "cannot decode directory child inode {ino} metadata: {error}"
+                ))
+            })?;
+        Self::validate_directory_inode_metadata(ino, &inode, &metadata)?;
+        if metadata.is_dir {
             let mut cache = self.directory_inode_cache.borrow_mut();
             if cache.len() < MAX_DIRECTORY_INODE_CACHE_ENTRIES {
                 cache.entry(ino).or_insert_with(|| inode.clone());
             }
-            return Some((
-                matches!(
-                    inode[di_off::FORMAT],
-                    FORMAT_LOCAL | FORMAT_EXTENTS | FORMAT_BTREE
-                ),
-                0,
-            ));
         }
-        Some((false, be_u64(&inode, di_off::SIZE)))
+        Ok(metadata)
     }
 
     fn lookup_directory_entry(&self, ino: u64, name: &str) -> io::Result<Option<(u64, bool)>> {
@@ -297,12 +338,9 @@ impl XfsReader {
         let Some(entry) = entries.into_iter().find(|entry| entry.name == name) else {
             return Ok(None);
         };
-        let metadata = self.child_inode_metadata(entry.inode);
-        let is_dir = entry.ftype.map_or_else(
-            || metadata.map(|item| item.0).unwrap_or(false),
-            |file_type| file_type == XFS_DIR3_FT_DIR && metadata.map(|item| item.0).unwrap_or(true),
-        );
-        Ok(Some((entry.inode, is_dir)))
+        let metadata = self.child_inode_metadata(entry.inode)?;
+        validate_dirent_type(entry.inode, entry.ftype, metadata.is_dir)?;
+        Ok(Some((entry.inode, metadata.is_dir)))
     }
 
     pub(crate) fn resolve_path(&self, path: &str) -> io::Result<Option<(u64, bool)>> {
@@ -347,6 +385,25 @@ impl XfsReader {
         }
         Ok(None)
     }
+}
+
+fn validate_dirent_type(ino: u64, ftype: Option<u8>, inode_is_dir: bool) -> io::Result<()> {
+    let Some(ftype) = ftype.filter(|value| *value != XFS_DIR3_FT_UNKNOWN) else {
+        return Ok(());
+    };
+    let dirent_is_dir = ftype == XFS_DIR3_FT_DIR;
+    if dirent_is_dir != inode_is_dir {
+        return Err(invalid_fs_data(format!(
+            "directory entry type for inode {ino} conflicts with inode mode"
+        )));
+    }
+    Ok(())
+}
+
+fn dirent_is_dir(ftype: Option<u8>) -> Option<bool> {
+    ftype
+        .filter(|value| *value != XFS_DIR3_FT_UNKNOWN)
+        .map(|value| value == XFS_DIR3_FT_DIR)
 }
 
 fn is_plausible_shortform_name(name: &str) -> bool {

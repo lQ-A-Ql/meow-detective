@@ -1,5 +1,7 @@
 const ROOT_NAME: &str = "\\";
 
+pub type FsTimestamp = chrono::DateTime<chrono::Utc>;
+
 #[derive(Debug, Clone)]
 pub struct FsNode {
     pub name: String,
@@ -10,9 +12,10 @@ pub struct FsNode {
     pub system: bool,
     /// True when the file is encrypted via NTFS Encrypting File System (EFS).
     pub encrypted: bool,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: Option<FsTimestamp>,
+    pub modified_at: Option<FsTimestamp>,
+    pub accessed_at: Option<FsTimestamp>,
+    pub changed_at: Option<FsTimestamp>,
 }
 
 pub fn root_node() -> FsNode {
@@ -23,9 +26,9 @@ pub fn fs_node(
     name: impl Into<String>,
     is_dir: bool,
     size: u64,
-    created_at: Option<chrono::DateTime<chrono::Utc>>,
-    modified_at: Option<chrono::DateTime<chrono::Utc>>,
-    accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: Option<FsTimestamp>,
+    modified_at: Option<FsTimestamp>,
+    accessed_at: Option<FsTimestamp>,
 ) -> FsNode {
     fs_node_with_attributes(
         name,
@@ -48,9 +51,9 @@ pub fn fs_node_with_attributes(
     hidden: bool,
     system: bool,
     encrypted: bool,
-    created_at: Option<chrono::DateTime<chrono::Utc>>,
-    modified_at: Option<chrono::DateTime<chrono::Utc>>,
-    accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: Option<FsTimestamp>,
+    modified_at: Option<FsTimestamp>,
+    accessed_at: Option<FsTimestamp>,
 ) -> FsNode {
     FsNode {
         name: name.into(),
@@ -63,6 +66,7 @@ pub fn fs_node_with_attributes(
         created_at,
         modified_at,
         accessed_at,
+        changed_at: None,
     }
 }
 

@@ -32,6 +32,9 @@ pub fn get_data_sources_real(
                 ))
             })?;
             let platform = required_data_source_platform(&storage)?;
+            let processing = crate::processing_phase_service::get_data_source_processing_summary(
+                conn, &source.id,
+            )?;
             let partitions = partition_repo
                 .find_by_data_source(&source.id.0)
                 .map(|items| {
@@ -68,6 +71,7 @@ pub fn get_data_sources_real(
                 import_state: Some(storage.import_state),
                 schema_version: storage.schema_version,
                 last_error: storage.last_error,
+                processing,
                 source_hash: source.provenance.source_hash_sha256,
                 hash_status: Some(data_source_hash_status_label(
                     &source.provenance.hash_status,

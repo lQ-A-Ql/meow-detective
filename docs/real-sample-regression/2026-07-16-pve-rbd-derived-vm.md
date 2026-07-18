@@ -26,6 +26,11 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 `
   -RequireFixture -TimeoutSeconds 300
 ```
 
+发布前如需对三个父 BlueStore `source.db` 做完整文件 SHA-256 前后比较，可在
+retained 模式增加 `-DeepParentHash`。默认门禁比较文件长度、mtime、首尾
+64 KiB 摘要和 WAL/SHM sidecar，以避免每轮额外读取约 6 GiB；完整 hash 作为
+较慢的深度只读审计运行。
+
 快速模式只复用已经导入的六个物理成员，验证 RBD lineage、派生 source DB、
 VM 文件树和真实预览。完整模式仍重新串行导入全部六个 E01，并执行物理成员、
 BlueStore semantic oracle、独立 source DB 和派生 RBD 的深度验收。
@@ -217,3 +222,30 @@ viewer/media 字节一致性及 source/case 失效冷重建已验证；
 
 完整设计、门禁阈值和剩余风险见
 `docs/ceph-rbd-vm-preview-performance-design.md`。
+
+## 2026-07-17 Catalog 与后处理完整性加固
+
+本轮将派生 source 的“可浏览”和“全部投影完成”拆为独立状态：
+
+- `data_sources.import_state=ready` 只证明文件 Catalog 可浏览。
+- `data_source_processing_phases` 保存 Catalog、Graph、Platform、Artifacts、
+  Timeline、Search 六个 phase 的版本、input fingerprint、owner/attempt、lease、
+  heartbeat 和 terminal state。
+- `get_data_sources` 返回后端聚合的 processing state、计数、lastError 和 phase
+  明细，前端不自行重建依赖语义。
+
+ready source 的重复物化不再扫描 114,260 条 `file_entries`。版本化 Catalog
+manifest 保存于 `source_meta`，绑定 lineage fingerprint 和 materializer version；
+显式 `verify_derived_source_catalog` 才执行全表深度 digest。digest 覆盖
+path/name/type/size/status/MACB/partition 和稳定父路径身份，可检出父子关系漂移，
+同时不包含随机 UUID。
+
+XFS 目录和 inode 路径新增 typed completeness diagnostic；派生 Catalog 只有在
+不存在 `DirectoryPartial`、`DirectoryUnreadable`、`EntryUnavailable` 时才能
+ready。XFS v1/v2 inode core 按 100 bytes、v3 按 176 bytes 解码，BIGTIME/crtime
+与 MACB 继续传播。
+
+三个父 BlueStore source DB 在 RADOS/RBD reconstruction 中统一 read-only 打开，
+不运行 migration，不创建缺失数据库，也不产生 WAL/SHM。后续真实样本门禁将继续
+把父库 hash/mtime/sidecar 零变化、manifest 快速复用、deep audit 和六 phase
+状态作为硬断言。

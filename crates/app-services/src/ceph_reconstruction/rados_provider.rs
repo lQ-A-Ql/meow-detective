@@ -158,15 +158,14 @@ impl SourceDbRadosObjectProvider {
         let replica = runtime.binding.clone();
         if runtime.connection.is_none() {
             runtime.connection = Some(
-                persistence_sqlite::open_existing_source(&replica.source_db_path).map_err(
-                    |error| RadosProviderError::SourceDb {
+                persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
+                    .map_err(|error| RadosProviderError::SourceDb {
                         inventory_id: replica.inventory_id.clone(),
                         detail: format!(
                             "source database could not be opened: {}",
                             source_db_error_detail(&error)
                         ),
-                    },
-                )?,
+                    })?,
             );
         }
         let connection =

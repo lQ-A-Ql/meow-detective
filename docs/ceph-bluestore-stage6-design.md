@@ -41,6 +41,13 @@ filesystem probe foundation。2026-07-16 的私有真实样本回归进一步从
 PG/CRUSH/EC placement、degraded replica、multi-PV RBD LVM 与 CephFS
 仍未完成；当前尚未独立证明已加载 inventory 等于集群完整副本集合。
 
+2026-07-17 的派生源加固进一步把 `import_state=ready` 限定为 Catalog 可浏览，
+并新增独立 processing phase ledger 表达 Graph/Platform/Artifacts/Timeline/Search
+完整性。ready reopen 通过 source-local 版本化 manifest O(1) 复用 Catalog，
+全表 digest 只在显式 deep audit 中执行；父 BlueStore source DB 通过 read-only
+reconstruction route 打开。后续 Stage 6 能力补齐与 OSDMap/CRUSH/PG/CephFS
+边界统一以 `docs/pve-cluster-forensics-hardening-and-capability-roadmap.md` 为准。
+
 ## 开发基线与事实源
 
 ### 样本与已验证 Oracle

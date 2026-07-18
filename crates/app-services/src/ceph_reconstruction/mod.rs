@@ -1,3 +1,4 @@
+mod derived_finalizer;
 mod derived_reader;
 mod derived_runtime;
 mod derived_source;
@@ -13,7 +14,8 @@ mod source_bound_lvm;
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
 pub use derived_source::{
-    materialize_rbd_sources_for_cluster, DerivedSourceError, MaterializedRbdSource,
+    materialize_rbd_sources_for_cluster, verify_derived_source_catalog, DerivedSourceError,
+    MaterializedRbdSource,
 };
 pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{

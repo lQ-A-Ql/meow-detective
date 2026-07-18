@@ -9,7 +9,7 @@ A Tauri 2 desktop application for disk-image forensic analysis on Windows. The b
 ```text
 React UI (frontend/) -> Tauri commands / events
 Tauri Command Layer (apps/desktop/src-tauri/) -> 99 commands
-Application Services (crates/app-services/) -> 26 source modules
+Application Services (crates/app-services/) -> 27 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
 
@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (86 test files)
+cd frontend && pnpm test            # Frontend (87 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -62,9 +62,9 @@ cd frontend && pnpm test
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
 | `apps/desktop/src-tauri/` | Tauri 2 shell (99 commands) |
-| `crates/app-services/` | Application orchestration (26 source modules) |
+| `crates/app-services/` | Application orchestration (27 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (25) and migration scripts (53) |
+| `crates/persistence-sqlite/` | SQLite repos (26) and migration scripts (54) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |

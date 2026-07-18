@@ -72,7 +72,8 @@ pub fn open_reconstruction_source_by_id(
 ) -> Result<ReconstructionSourceConnection, ReadySourceError> {
     let storage = source_storage_for_case(case_conn, case_id, data_source_id)?;
     let platform = validate_reconstruction_storage(data_source_id, &storage)?;
-    let connection = super::open_registered_source_db(case_conn, case_root, data_source_id)?;
+    let connection =
+        super::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
 
     Ok(ReconstructionSourceConnection {
         data_source_id: data_source_id.clone(),

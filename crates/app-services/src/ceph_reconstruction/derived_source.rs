@@ -1,25 +1,24 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use domain::{
-    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance,
-    DataSourceProvenanceStatus,
-};
+use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
-    ceph_rbd_lineage_repo::{
-        CephRbdLineageAggregate, CephRbdLineageRecord, CephRbdLineageRepo, CephRbdReplicaRecord,
-    },
+    ceph_rbd_lineage_repo::{CephRbdLineageRepo, CephRbdReplicaRecord},
     datasource_cluster_repo::DataSourceClusterRepo,
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    datasource_repo::DataSourceRepo,
 };
 use thiserror::Error;
 
 use crate::source_db;
 
-use super::{discover_rbd_images_from_source_dbs, RadosReplicaSource, RbdImageDescriptor};
+use super::{discover_rbd_images_from_source_dbs, RadosReplicaSource};
 
+mod catalog_manifest;
 mod filesystem;
-use filesystem::build_and_enumerate_source;
+mod materialization;
+use materialization::{finalize_ready_source, materialize_one_rbd_source};
+
+pub(super) const CATALOG_MATERIALIZER_VERSION: u32 = 2;
 
 #[derive(Debug, Error)]
 pub enum DerivedSourceError {
@@ -41,6 +40,17 @@ pub enum DerivedSourceError {
     NoFilesystem(String),
     #[error("RBD derived source has an invalid {field}")]
     InvalidIdentity { field: &'static str },
+    #[error("RBD derived source processing phase '{phase}' is already running")]
+    ProcessingBusy { phase: &'static str },
+    #[error("RBD derived source state is inconsistent: {0}")]
+    InconsistentState(String),
+    #[error(
+        "RBD derived source Catalog is incomplete because {diagnostic_count} filesystem entries or directories could not be enumerated reliably ({diagnostic_breakdown})"
+    )]
+    IncompleteCatalog {
+        diagnostic_count: usize,
+        diagnostic_breakdown: String,
+    },
     #[error("RBD logical volume layout is unsupported: {0}")]
     UnsupportedLvm(String),
     #[error("RBD derived source database failed: {0}")]
@@ -57,6 +67,11 @@ pub struct MaterializedRbdSource {
     pub file_count: u64,
     pub directory_count: u64,
     pub total_size: u64,
+    pub created_count: u64,
+    pub modified_count: u64,
+    pub accessed_count: u64,
+    pub changed_count: u64,
+    pub catalog_digest: String,
 }
 
 pub fn materialize_rbd_sources_for_cluster(
@@ -143,9 +158,13 @@ fn load_ready_rbd_sources(
             return Ok(None);
         }
         let source_id = source.id.clone();
-        materialized.push(source_summary(
-            case_conn, case_root, case_id, &source_id, source,
-        )?);
+        let Some(summary) =
+            materialization::ready_source_summary_if_current(case_conn, case_root, source)?
+        else {
+            return Ok(None);
+        };
+        finalize_ready_source(case_conn, case_root, case_id, &source_id)?;
+        materialized.push(summary);
     }
     if materialized.is_empty() {
         Ok(None)
@@ -225,165 +244,33 @@ fn load_cluster_replicas(
     Ok((replicas, records))
 }
 
-fn materialize_one_rbd_source(
+pub fn verify_derived_source_catalog(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
-    replicas: &[RadosReplicaSource],
-    replica_records: &[CephRbdReplicaRecord],
-    descriptor: RbdImageDescriptor,
-) -> DerivedSourceResult<MaterializedRbdSource> {
-    let data_source_id = derived_data_source_id(cluster_id, &descriptor.metadata.id)?;
-    let data_source = DataSource {
-        id: data_source_id.clone(),
-        name: descriptor.metadata.name.clone(),
-        kind: DataSourceKind::CephRbd,
-        source_path: PathBuf::from(format!(
-            "ceph-rbd://{cluster_id}/{}",
-            descriptor.metadata.id
-        )),
-        imported_at: chrono::Utc::now(),
-        provenance: DataSourceProvenance {
-            source_hash_sha256: None,
-            hash_status: domain::DataSourceHashStatus::Unavailable,
-            canonical_source_path: None,
-            evidence_size: Some(descriptor.metadata.image_size),
-            reader_kind: Some("ceph-rbd".to_string()),
-            provenance_status: DataSourceProvenanceStatus::Recorded,
-            warnings: Vec::new(),
-        },
-    };
-
-    if let Some(existing) = DataSourceRepo::new(case_conn)
+    data_source_id: &DataSourceId,
+) -> DerivedSourceResult<bool> {
+    let source = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)?
         .into_iter()
-        .find(|source| source.id == data_source_id)
-    {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&data_source_id)?;
-        if storage.is_some_and(|value| value.import_state == "ready") {
-            return source_summary(case_conn, case_root, case_id, &data_source_id, existing);
-        }
-        crate::case_service::delete_data_source_in(case_conn, case_root, &data_source_id.0)
-            .map_err(|error| {
-                DerivedSourceError::Database(persistence_sqlite::DbError::System(format!(
-                    "RBD derived source {} could not be reset for retry: {error}",
-                    data_source_id.0
-                )))
-            })?;
-    }
-
-    let storage = DataSourceStorage::source_db(
-        &data_source_id.0,
-        Some(DataSourcePlatform::Linux.as_storage_str()),
-        Some("vm_disk".to_string()),
-    );
-    let lineage = lineage_aggregate(&data_source_id, cluster_id, &descriptor, replica_records);
-    persistence_sqlite::repositories::ceph_rbd_lineage_repo::validate_aggregate(&lineage)?;
-    let transaction = case_conn
-        .unchecked_transaction()
-        .map_err(persistence_sqlite::DbError::from)?;
-    DataSourceRepo::new(&transaction).insert_with_storage(case_id, &data_source, &storage)?;
-    persistence_sqlite::repositories::ceph_rbd_lineage_repo::insert_aggregate_in_transaction(
-        &transaction,
-        &lineage,
-    )?;
-    transaction
-        .commit()
-        .map_err(persistence_sqlite::DbError::from)?;
-
-    let result =
-        build_and_enumerate_source(case_root, case_id, &data_source, replicas, &descriptor);
-    match result {
-        Ok(summary) => {
-            DataSourceRepo::new(case_conn).update_import_state(&data_source_id, "ready", None)?;
-            Ok(MaterializedRbdSource {
-                data_source,
-                ..summary
-            })
-        }
-        Err(error) => {
-            if let Err(state_error) = DataSourceRepo::new(case_conn).update_import_state(
-                &data_source_id,
-                "failed",
-                Some(&error.to_string()),
-            ) {
-                tracing::warn!(
-                    data_source_id = %data_source_id.0,
-                    error = %state_error,
-                    "Failed to persist the failed RBD derived-source state"
-                );
-            }
-            Err(error)
-        }
-    }
+        .find(|source| source.id == *data_source_id && source.kind == DataSourceKind::CephRbd)
+        .ok_or_else(|| {
+            DerivedSourceError::InconsistentState(format!(
+                "derived source {} does not belong to case {}",
+                data_source_id.0, case_id.0
+            ))
+        })?;
+    let lineage_fingerprint = super::load_lineage_fingerprint(case_conn, data_source_id)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let connection =
+        source_db::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
+    catalog_manifest::verify_current_source_manifest_deep(&connection, &lineage_fingerprint, source)
 }
 
-fn source_summary(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-    data_source: DataSource,
-) -> DerivedSourceResult<MaterializedRbdSource> {
-    let source_conn =
-        source_db::open_ready_source_by_id(case_conn, case_root, case_id, data_source_id)
-            .map_err(|error| {
-                DerivedSourceError::Database(persistence_sqlite::DbError::System(error.to_string()))
-            })?
-            .connection;
-    let file_count = persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
-        .count_by_data_source(data_source_id)?;
-    let directory_count = source_conn.query_row(
-        "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1 AND entry_type = 'directory'",
-        [&data_source_id.0],
-        |row| row.get::<_, u64>(0),
-    ).map_err(persistence_sqlite::DbError::from)?;
-    let total_size = source_conn.query_row(
-        "SELECT COALESCE(SUM(size), 0) FROM file_entries WHERE data_source_id = ?1 AND entry_type = 'file'",
-        [&data_source_id.0],
-        |row| row.get::<_, u64>(0),
-    ).map_err(persistence_sqlite::DbError::from)?;
-    Ok(MaterializedRbdSource {
-        data_source,
-        file_count,
-        directory_count,
-        total_size,
-    })
-}
-
-fn lineage_aggregate(
-    data_source_id: &DataSourceId,
+pub(super) fn derived_data_source_id(
     cluster_id: &str,
-    descriptor: &RbdImageDescriptor,
-    replicas: &[CephRbdReplicaRecord],
-) -> CephRbdLineageAggregate {
-    let metadata = &descriptor.metadata;
-    CephRbdLineageAggregate {
-        lineage: CephRbdLineageRecord {
-            derived_data_source_id: data_source_id.0.clone(),
-            parent_cluster_id: cluster_id.to_string(),
-            image_name: metadata.name.clone(),
-            image_id: metadata.id.clone(),
-            object_prefix: metadata.object_prefix.clone(),
-            image_size: metadata.image_size,
-            object_order: metadata.order,
-            features: metadata.features,
-            stripe_unit: metadata.stripe_unit,
-            stripe_count: metadata.stripe_count,
-            data_pool_id: metadata.data_pool_id,
-            scope_identity: descriptor.scope_identity.clone(),
-            operation_features: descriptor.context.operation_features,
-            has_parent: descriptor.context.has_parent,
-            snapshot_id: descriptor.context.snapshot_id,
-            encrypted: descriptor.context.encrypted,
-            expected_replica_count: replicas.len() as u32,
-        },
-        replicas: replicas.to_vec(),
-    }
-}
-
-fn derived_data_source_id(cluster_id: &str, image_id: &str) -> DerivedSourceResult<DataSourceId> {
+    image_id: &str,
+) -> DerivedSourceResult<DataSourceId> {
     validate_identity_component("cluster ID", cluster_id)?;
     validate_identity_component("image ID", image_id)?;
     Ok(DataSourceId(format!("rbd-{cluster_id}-{image_id}")))

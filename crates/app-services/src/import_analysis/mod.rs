@@ -7,6 +7,8 @@ mod finalize;
 mod options;
 pub mod priority_queue;
 mod progress;
+mod search_phase;
+mod search_policy;
 mod source_reader;
 mod task_feed;
 pub mod tier;
@@ -21,14 +23,16 @@ pub use budget::{
     ContentBudget,
 };
 pub use error::ImportAnalysisError;
+pub(crate) use options::SearchIndexPhaseOptions;
 pub use options::{
     AnalysisProgressCallback, ImportAnalysisMode, ImportAnalysisOptions, ImportAnalysisStats,
-    JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions,
+    JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions, PostImportPipelineReport,
 };
 pub use progress::{current_rss_mb, peak_rss_mb};
+pub(crate) use search_phase::run_search_index_phase;
 pub use worker_pool::{
     default_analysis_worker_count, resolve_analysis_worker_count, run_import_analysis_staging,
-    run_post_import_pipeline_with_counts,
+    run_post_import_pipeline_report, run_post_import_pipeline_with_counts,
 };
 
 #[cfg(test)]

@@ -126,6 +126,9 @@ pub fn get_data_sources_for_case(
                 ))
             })?;
         let platform = crate::file_service::data_sources::required_data_source_platform(&storage)?;
+        let processing = crate::processing_phase_service::get_data_source_processing_summary(
+            case_conn, &source.id,
+        )?;
         let source_conn =
             open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
         let (file_count, partitions) = if let Some(source_conn) = source_conn.as_ref() {
@@ -172,6 +175,7 @@ pub fn get_data_sources_for_case(
             import_state: Some(storage.import_state),
             schema_version: storage.schema_version,
             last_error: storage.last_error,
+            processing,
             source_hash: source.provenance.source_hash_sha256,
             hash_status: Some(data_source_hash_status_label(
                 &source.provenance.hash_status,

@@ -340,6 +340,7 @@ fn empty_stats(warnings: Vec<String>) -> file_service::EnumerationStats {
         dir_count: 0,
         total_size: 0,
         warnings,
+        diagnostics: Vec::new(),
     }
 }
 
@@ -351,6 +352,7 @@ fn add_stats(
     total.dir_count = total.dir_count.saturating_add(partition.dir_count);
     total.total_size = total.total_size.saturating_add(partition.total_size);
     total.warnings.extend(partition.warnings);
+    total.diagnostics.extend(partition.diagnostics);
 }
 
 fn system_error(error: impl ToString) -> persistence_sqlite::DbError {

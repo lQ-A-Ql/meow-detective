@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 const TASKS_PER_WORKER_BOUND: usize = 256;
-const FILE_PAGE_SIZE: u64 = 750;
+pub(super) const FILE_PAGE_SIZE: u64 = 750;
 
 pub(super) fn analysis_task_queue_bound(worker_count: usize) -> usize {
     worker_count.max(1) * TASKS_PER_WORKER_BOUND
@@ -21,7 +21,7 @@ pub(super) fn count_analysis_file_tasks(
     db_path: &Path,
     data_source_id: &DataSourceId,
 ) -> Result<u64, ImportAnalysisError> {
-    let conn = persistence_sqlite::open_or_create(db_path)?;
+    let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'",
@@ -43,7 +43,7 @@ pub(super) fn fetch_analysis_file_page(
                     size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
              FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
-             ORDER BY path ASC
+             ORDER BY path ASC, id ASC
              LIMIT ?2 OFFSET ?3",
         )?;
     let rows = stmt.query_map(params![data_source_id.0, limit, offset], row_to_file_task)?;
@@ -73,7 +73,7 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
     shared: Arc<SharedAnalysisState>,
 ) -> Result<(), ImportAnalysisError> {
     let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
-    let conn = persistence_sqlite::open_or_create(&options.db_path)?;
+    let conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
     let mut offset = 0u64;
 
     loop {

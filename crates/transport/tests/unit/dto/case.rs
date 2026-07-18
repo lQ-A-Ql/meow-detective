@@ -18,6 +18,27 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
         import_state: Some("ready".to_string()),
         schema_version: Some("source_002_data_source_metadata".to_string()),
         last_error: None,
+        processing: Some(DataSourceProcessingSummaryDto {
+            state: "ready".to_string(),
+            total_count: 6,
+            ready_count: 6,
+            pending_count: 0,
+            running_count: 0,
+            failed_count: 0,
+            deferred_count: 0,
+            last_error: None,
+            phases: vec![DataSourceProcessingPhaseDto {
+                phase: "catalog".to_string(),
+                state: "ready".to_string(),
+                version: 2,
+                last_error: None,
+                started_at: Some("2026-07-17 00:00:00".to_string()),
+                completed_at: Some("2026-07-17 00:00:01".to_string()),
+                heartbeat_at: Some("2026-07-17 00:00:01".to_string()),
+                lease_expires_at: None,
+                updated_at: "2026-07-17 00:00:01".to_string(),
+            }],
+        }),
         source_hash: Some("a".repeat(64)),
         hash_status: Some("hashed".to_string()),
         canonical_path: Some("D:/canonical/disk.raw".to_string()),
@@ -51,6 +72,10 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
     assert_eq!(value["profile"], "triage");
     assert_eq!(value["importState"], "ready");
     assert_eq!(value["schemaVersion"], "source_002_data_source_metadata");
+    assert_eq!(value["processing"]["state"], "ready");
+    assert_eq!(value["processing"]["readyCount"], 6);
+    assert_eq!(value["processing"]["phases"][0]["phase"], "catalog");
+    assert_eq!(value["processing"]["phases"][0]["version"], 2);
     assert_eq!(value["sourceHash"], "a".repeat(64));
     assert_eq!(value["hashStatus"], "hashed");
     assert_eq!(value["canonicalPath"], "D:/canonical/disk.raw");
@@ -83,6 +108,7 @@ fn data_source_summary_skips_missing_optional_provenance_fields() {
         import_state: None,
         schema_version: None,
         last_error: None,
+        processing: None,
         source_hash: None,
         hash_status: None,
         canonical_path: None,
@@ -105,6 +131,7 @@ fn data_source_summary_skips_missing_optional_provenance_fields() {
     assert!(value.get("importState").is_none());
     assert!(value.get("schemaVersion").is_none());
     assert!(value.get("lastError").is_none());
+    assert!(value.get("processing").is_none());
     assert!(value.get("sourceHash").is_none());
     assert!(value.get("hashStatus").is_none());
     assert!(value.get("canonicalPath").is_none());

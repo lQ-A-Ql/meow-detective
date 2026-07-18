@@ -1,3 +1,4 @@
+mod diagnostic;
 mod errors;
 pub mod logical_fs;
 mod node;
@@ -5,13 +6,14 @@ mod path;
 
 use std::io::{self, Read, Seek};
 
+pub use diagnostic::{FileSystemDiagnostic, FileSystemDiagnosticKind};
 pub use errors::{
     file_not_found, fs_out_of_memory, invalid_fs_data, path_is_directory, path_is_not_directory,
     path_not_found, unexpected_fs_eof, unsupported_fs,
 };
 pub use node::{
     fs_node, fs_node_with_attributes, fs_node_without_timestamps, root_node,
-    truncate_data_to_declared_size, FsNode,
+    truncate_data_to_declared_size, FsNode, FsTimestamp,
 };
 pub use path::{
     child_nodes_with_parent_path, child_nodes_with_parent_path_with_separator,
@@ -27,6 +29,15 @@ pub trait FileSystemReader {
     fn root(&self) -> io::Result<FsNode>;
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>>;
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>>;
+
+    /// Drain non-fatal diagnostics produced while reading the filesystem.
+    ///
+    /// Readers may use this for entry-local corruption that should not hide
+    /// otherwise valid siblings. The import layer persists these messages as
+    /// enumeration warnings instead of silently fabricating metadata.
+    fn take_diagnostics(&self) -> Vec<FileSystemDiagnostic> {
+        Vec::new()
+    }
 
     /// Read a bounded byte range without requiring callers to materialize the
     /// entire file. Filesystems that cannot provide an efficient range path

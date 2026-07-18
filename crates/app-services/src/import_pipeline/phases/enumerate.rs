@@ -88,6 +88,7 @@ fn enumerate_image_data_source_with_staging(
                 "Ceph BlueStore metadata was inventoried; filesystem enumeration is not applicable"
                     .to_string(),
             ],
+            diagnostics: Vec::new(),
         });
     }
     if manifest.partitions.is_empty() {
@@ -489,5 +490,6 @@ fn manifest_stats(manifest: &staging::StagingManifest) -> file_service::Enumerat
             .map(|partition| partition.total_size)
             .sum(),
         warnings: Vec::new(),
+        diagnostics: Vec::new(),
     }
 }
