@@ -64,6 +64,23 @@ pub fn open_ready_source_by_id(
     })
 }
 
+pub fn open_ready_source_read_only_by_id(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<ReadySourceConnection, ReadySourceError> {
+    let platform = resolve_ready_source_platform(case_conn, case_id, data_source_id)?;
+    let connection =
+        super::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
+
+    Ok(ReadySourceConnection {
+        data_source_id: data_source_id.clone(),
+        platform,
+        connection,
+    })
+}
+
 pub fn open_reconstruction_source_by_id(
     case_conn: &Connection,
     case_root: &std::path::Path,

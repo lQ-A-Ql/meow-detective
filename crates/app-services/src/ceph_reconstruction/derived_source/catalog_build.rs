@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use domain::{CaseId, DataSource, DataSourceId};
+use persistence_sqlite::repositories::catalog_publication_repo::CatalogPublicationRepo;
 
 use crate::source_db;
 
@@ -72,6 +73,7 @@ pub(super) fn build_and_enumerate_source(
         &request.data_source.id,
         request.lineage_fingerprint,
         request.catalog_attempt,
+        &summary.catalog_digest,
     ) {
         discard_failed_source_build(
             request.case_root,
@@ -95,6 +97,7 @@ pub(super) fn publish_claimed_source_build(
     data_source_id: &DataSourceId,
     lineage_fingerprint: &str,
     catalog_attempt: &ProcessingPhaseAttempt,
+    catalog_digest: &str,
 ) -> DerivedSourceResult<std::path::PathBuf> {
     refresh_catalog_claim(
         case_conn,
@@ -102,8 +105,27 @@ pub(super) fn publish_claimed_source_build(
         lineage_fingerprint,
         catalog_attempt,
     )?;
-    source_db::publish_source_build_db(case_root, data_source_id, catalog_attempt.attempt_id())
-        .map_err(DerivedSourceError::Database)
+    let source_db_rel_path = source_db::canonical_source_db_rel_path(data_source_id);
+    let catalog_fingerprint =
+        super::catalog_manifest::catalog_fingerprint_for_source(lineage_fingerprint);
+    let publication = CatalogPublicationRepo::new(case_conn).prepare(
+        data_source_id,
+        catalog_attempt.attempt_id(),
+        &catalog_fingerprint,
+        &source_db_rel_path,
+        catalog_digest,
+    )?;
+    let published_path =
+        source_db::publish_source_build_db(case_root, data_source_id, catalog_attempt.attempt_id())
+            .map_err(DerivedSourceError::Database)?;
+    CatalogPublicationRepo::new(case_conn)
+        .mark_published(
+            data_source_id,
+            catalog_attempt.attempt_id(),
+            &publication.seal,
+        )
+        .map_err(DerivedSourceError::Database)?;
+    Ok(published_path)
 }
 
 fn discard_failed_source_build(

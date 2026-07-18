@@ -4,6 +4,7 @@ pub mod audit_repo;
 pub mod batch_repo;
 pub mod case_repo;
 pub mod catalog_file_repo;
+pub mod catalog_publication_repo;
 pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
 pub mod ceph_bluestore_omap_repo;

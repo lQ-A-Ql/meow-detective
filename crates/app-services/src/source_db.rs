@@ -14,8 +14,9 @@ pub(crate) use build::{
 };
 pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
-    open_ready_source_by_id, open_reconstruction_source_by_id, resolve_ready_source_platform,
-    ReadySourceConnection, ReadySourceError, ReconstructionSourceConnection,
+    open_ready_source_by_id, open_ready_source_read_only_by_id, open_reconstruction_source_by_id,
+    resolve_ready_source_platform, ReadySourceConnection, ReadySourceError,
+    ReconstructionSourceConnection,
 };
 
 const SOURCES_DIR_NAME: &str = "sources";
@@ -98,6 +99,13 @@ pub fn source_dir(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
 
 pub fn source_db_path(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
     source_dir(case_root, data_source_id).join(SOURCE_DB_FILE_NAME)
+}
+
+pub(crate) fn canonical_source_db_rel_path(data_source_id: &DataSourceId) -> String {
+    format!(
+        "{SOURCES_DIR_NAME}/{}/{SOURCE_DB_FILE_NAME}",
+        data_source_id.0
+    )
 }
 
 pub fn source_index_dir(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
@@ -243,6 +251,12 @@ pub fn registered_source_db_path(
             data_source_id.0
         ))
     })?;
+    if rel_path.replace('\\', "/") != canonical_source_db_rel_path(data_source_id) {
+        return Err(DbError::System(format!(
+            "Data source '{}' is bound to a non-canonical source DB path; re-import is required",
+            data_source_id.0
+        )));
+    }
     let db_path = safe_case_relative_path(case_root, &rel_path)?;
     if !db_path.exists() {
         return Err(DbError::System(format!(

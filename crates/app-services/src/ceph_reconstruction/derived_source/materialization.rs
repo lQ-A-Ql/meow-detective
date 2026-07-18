@@ -8,7 +8,8 @@ use std::{
 
 use domain::{CaseId, DataSource, DataSourceId};
 use persistence_sqlite::repositories::{
-    ceph_rbd_lineage_repo::CephRbdReplicaRecord, datasource_repo::DataSourceRepo,
+    catalog_publication_repo::CatalogPublicationRepo, ceph_rbd_lineage_repo::CephRbdReplicaRecord,
+    datasource_repo::DataSourceRepo,
 };
 
 use super::{
@@ -20,14 +21,18 @@ use crate::ceph_reconstruction::{
     derived_finalizer::{
         begin_catalog_phase, catalog_phase_is_current, complete_catalog_phase, defer_catalog_phase,
         fail_catalog_phase, finalize_derived_source, queue_post_catalog_phases,
-        start_catalog_heartbeat, DerivedFinalizationReport, PhaseClaim, ProcessingPhaseAttempt,
+        start_catalog_heartbeat, PhaseClaim, ProcessingPhaseAttempt,
     },
     load_lineage_fingerprint, RadosReplicaSource, RbdImageDescriptor,
 };
 
+mod guards;
+mod logging;
 mod recovery;
 mod registration;
 
+use guards::ensure_not_cancelled;
+use logging::log_finalization_report;
 use recovery::reuse_existing_catalog;
 use registration::{build_data_source, register_derived_source, validate_existing_registration};
 
@@ -277,6 +282,18 @@ fn publish_catalog_readiness(
     catalog_attempt: &ProcessingPhaseAttempt,
     summary: &MaterializedRbdSource,
 ) -> DerivedSourceResult<()> {
+    let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(&data_source.id);
+    let catalog_fingerprint = crate::ceph_reconstruction::derived_catalog_fingerprint(fingerprint);
+    if !CatalogPublicationRepo::new(case_conn).is_published(
+        &data_source.id,
+        &catalog_fingerprint,
+        &source_db_rel_path,
+        &summary.catalog_digest,
+    )? {
+        return Err(DerivedSourceError::InconsistentState(
+            "Catalog cannot become ready without a matching publication seal".to_string(),
+        ));
+    }
     let transaction = case_conn
         .unchecked_transaction()
         .map_err(persistence_sqlite::DbError::from)?;
@@ -446,36 +463,27 @@ pub(super) fn ready_source_summary_if_current(
         case_root,
         &data_source_id,
     )?;
-    load_current_source_summary(&source_connection, &lineage_fingerprint, data_source)
-}
-
-fn log_finalization_report(data_source_id: &DataSourceId, report: &DerivedFinalizationReport) {
-    let failed = report.failed_count();
-    let deferred = report.deferred_count();
-    if failed > 0 {
+    let Some(summary) =
+        load_current_source_summary(&source_connection, &lineage_fingerprint, data_source)?
+    else {
+        return Ok(None);
+    };
+    let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(&data_source_id);
+    if !CatalogPublicationRepo::new(case_conn).is_published(
+        &data_source_id,
+        &crate::ceph_reconstruction::derived_catalog_fingerprint(&lineage_fingerprint),
+        &source_db_rel_path,
+        &summary.catalog_digest,
+    )? {
         tracing::warn!(
             data_source_id = %data_source_id.0,
-            failed_phases = failed,
-            deferred_phases = deferred,
-            "RBD derived source is ready, but post-catalog processing is incomplete"
+            "Published Catalog has no matching app database publication seal"
         );
-    } else {
-        tracing::info!(
-            data_source_id = %data_source_id.0,
-            deferred_phases = deferred,
-            "RBD derived source post-catalog processing completed"
-        );
+        return Ok(None);
     }
+    Ok(Some(summary))
 }
 
 #[cfg(test)]
 #[path = "../../../tests/unit/ceph_reconstruction/derived_source/materialization.rs"]
 mod tests;
-
-fn ensure_not_cancelled(cancel_token: &AtomicBool) -> DerivedSourceResult<()> {
-    if cancel_token.load(Ordering::Relaxed) {
-        Err(DerivedSourceError::ProcessingCancelled)
-    } else {
-        Ok(())
-    }
-}

@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use super::*;
 use crate::ceph_reconstruction::derived_source::catalog_manifest::persist_current_source_manifest;
 use domain::{DataSourceKind, DataSourcePlatform, DataSourceProvenance};
+use persistence_sqlite::repositories::catalog_publication_repo::{
+    seal_for, CatalogPublicationRepo,
+};
 use persistence_sqlite::repositories::ceph_rbd_lineage_repo::{
     CephRbdLineageRepo, CephRbdReplicaRecord,
 };
@@ -200,6 +203,33 @@ fn setup_recoverable_catalog(
         .expect("persist catalog manifest");
     crate::source_db::checkpoint_source_db(&source_connection).expect("checkpoint source database");
     drop(source_connection);
+    let catalog_fingerprint =
+        super::super::catalog_manifest::catalog_fingerprint_for_source(&fingerprint);
+    let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(&source.id);
+    let attempt_id = "66666666-6666-4666-8666-666666666666";
+    let seal = seal_for(
+        &source.id.0,
+        attempt_id,
+        &catalog_fingerprint,
+        &source_db_rel_path,
+        &persisted_summary.catalog_digest,
+    );
+    connection
+        .execute(
+            "INSERT INTO data_source_catalog_publications (
+                data_source_id, attempt_id, input_fingerprint, source_db_rel_path,
+                catalog_digest, seal, state, published_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'published', datetime('now'))",
+            rusqlite::params![
+                source.id.0,
+                attempt_id,
+                catalog_fingerprint,
+                source_db_rel_path,
+                persisted_summary.catalog_digest,
+                seal,
+            ],
+        )
+        .expect("insert catalog publication seal");
     (connection, source, fingerprint, persisted_summary)
 }
 
@@ -208,6 +238,20 @@ fn catalog_phase_queue_and_ready_state_publish_atomically() {
     let connection = setup_case_db();
     let source = data_source();
     let attempt = start_catalog(&connection, &source.id, FINGERPRINT).expect("claim catalog");
+    let catalog_fingerprint =
+        super::super::catalog_manifest::catalog_fingerprint_for_source(FINGERPRINT);
+    let publication = CatalogPublicationRepo::new(&connection)
+        .prepare(
+            &source.id,
+            attempt.attempt_id(),
+            &catalog_fingerprint,
+            &crate::source_db::canonical_source_db_rel_path(&source.id),
+            &summary(source.clone()).catalog_digest,
+        )
+        .expect("prepare publication seal");
+    CatalogPublicationRepo::new(&connection)
+        .mark_published(&source.id, attempt.attempt_id(), &publication.seal)
+        .expect("publish publication seal");
     connection
         .execute_batch(
             "CREATE TRIGGER reject_ready_publish
@@ -339,6 +383,122 @@ fn failed_catalog_publication_reuses_persisted_manifest_without_reenumeration() 
 }
 
 #[test]
+fn catalog_recovery_finalizes_a_prepared_publication_after_rename() {
+    let temp = tempfile::tempdir().expect("create temporary case root");
+    let (connection, source, _, persisted_summary) = setup_recoverable_catalog(temp.path());
+    connection
+        .execute(
+            "UPDATE data_source_catalog_publications
+             SET state = 'prepared', published_at = NULL
+             WHERE data_source_id = ?1",
+            [&source.id.0],
+        )
+        .expect("simulate crash after source database rename");
+
+    let recovered = super::recovery::recover_persisted_catalog(
+        &connection,
+        temp.path(),
+        &CaseId("case-1".to_string()),
+        source.clone(),
+    )
+    .expect("recover prepared publication")
+    .expect("catalog manifest is reusable");
+
+    assert_eq!(recovered.catalog_digest, persisted_summary.catalog_digest);
+    assert_eq!(
+        CatalogPublicationRepo::new(&connection)
+            .find(&source.id)
+            .expect("read publication")
+            .expect("publication exists")
+            .state,
+        "published"
+    );
+    assert_eq!(
+        DataSourceRepo::new(&connection)
+            .find_storage(&source.id)
+            .expect("query recovered storage")
+            .expect("storage exists")
+            .import_state,
+        "ready"
+    );
+}
+
+#[test]
+fn catalog_recovery_rejects_seal_tampering_without_deleting_source() {
+    let temp = tempfile::tempdir().expect("create temporary case root");
+    let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
+    let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
+    connection
+        .execute(
+            "UPDATE data_source_catalog_publications
+             SET seal = ?1
+             WHERE data_source_id = ?2",
+            rusqlite::params!["0".repeat(64), source.id.0],
+        )
+        .expect("tamper publication seal");
+
+    let error = super::recovery::recover_persisted_catalog(
+        &connection,
+        temp.path(),
+        &CaseId("case-1".to_string()),
+        source,
+    )
+    .expect_err("tampered seal must fail closed");
+    assert!(matches!(error, DerivedSourceError::InconsistentState(_)));
+    assert!(source_path.is_file());
+}
+
+#[test]
+fn catalog_recovery_rejects_path_tampering_without_deleting_source() {
+    let temp = tempfile::tempdir().expect("create temporary case root");
+    let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
+    let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
+    connection
+        .execute(
+            "UPDATE data_source_catalog_publications
+             SET source_db_rel_path = ?1
+             WHERE data_source_id = ?2",
+            rusqlite::params!["sources/other/source.db", source.id.0],
+        )
+        .expect("tamper publication path");
+
+    let error = super::recovery::recover_persisted_catalog(
+        &connection,
+        temp.path(),
+        &CaseId("case-1".to_string()),
+        source,
+    )
+    .expect_err("tampered path must fail closed");
+    assert!(matches!(error, DerivedSourceError::InconsistentState(_)));
+    assert!(source_path.is_file());
+}
+
+#[test]
+fn catalog_recovery_rejects_digest_tampering_without_deleting_source() {
+    let temp = tempfile::tempdir().expect("create temporary case root");
+    let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
+    let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
+    connection
+        .execute(
+            "UPDATE data_source_catalog_publications
+             SET catalog_digest = ?1
+             WHERE data_source_id = ?2",
+            rusqlite::params!["c".repeat(64), source.id.0],
+        )
+        .expect("tamper publication digest");
+
+    let error = super::recovery::recover_persisted_catalog(
+        &connection,
+        temp.path(),
+        &CaseId("case-1".to_string()),
+        source,
+    )
+    .expect_err("tampered digest must fail closed");
+    assert!(matches!(error, DerivedSourceError::InconsistentState(_)));
+    assert!(source_path.is_file());
+}
+
+#[test]
 fn catalog_recovery_rejects_file_tree_drift_without_deleting_source() {
     let temp = tempfile::tempdir().expect("create temporary case root");
     let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
@@ -457,6 +617,7 @@ fn stale_catalog_attempt_cannot_publish_after_a_new_claim_takes_over() {
         &source.id,
         FINGERPRINT,
         &stale_attempt,
+        &"b".repeat(64),
     )
     .expect_err("stale attempt must fail before rename");
 

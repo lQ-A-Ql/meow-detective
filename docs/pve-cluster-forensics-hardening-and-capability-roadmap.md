@@ -317,6 +317,7 @@ Platform/Artifact output identity，不能只比较数据源 ID。
 **Phase 3.1 Ledger**
 
 - 新增 case migration `0038_data_source_processing_phases.sql`。
+- 新增 case migration `0039_data_source_catalog_publications.sql`，为派生 Catalog 发布记录 attempt、输入指纹、规范 source DB 路径、Catalog digest 和发布 seal，崩溃恢复不得绕过该封印。
 - phase 状态支持 pending/running/ready/failed/deferred。
 - 保存 version、input fingerprint、owner、attempt、lease、heartbeat 和 stats。
 

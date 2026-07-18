@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use domain::{CaseId, DataSource, DataSourceId};
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::{
+    catalog_publication_repo::CatalogPublicationRepo, datasource_repo::DataSourceRepo,
+};
 
 use super::{
     publish_catalog_readiness, ready_source_summary_if_current, record_catalog_failure,
@@ -82,6 +84,7 @@ pub(super) fn recover_persisted_catalog(
             data_source_id.0
         )));
     }
+    reconcile_catalog_publication(case_conn, &data_source_id, &lineage_fingerprint, &summary)?;
 
     if catalog_phase_is_current(case_conn, &data_source_id, &lineage_fingerprint)? {
         publish_recovered_catalog_registration(case_conn, &data_source_id, &lineage_fingerprint)?;
@@ -110,6 +113,59 @@ pub(super) fn recover_persisted_catalog(
         "Recovered a verified RBD Catalog without re-enumerating the filesystem"
     );
     Ok(Some(summary))
+}
+
+fn reconcile_catalog_publication(
+    case_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    lineage_fingerprint: &str,
+    summary: &MaterializedRbdSource,
+) -> DerivedSourceResult<()> {
+    let publication = CatalogPublicationRepo::new(case_conn)
+        .find(data_source_id)?
+        .ok_or_else(|| {
+            DerivedSourceError::InconsistentState(format!(
+                "persisted Catalog for {} has no app database publication seal",
+                data_source_id.0
+            ))
+        })?;
+    let catalog_fingerprint =
+        crate::ceph_reconstruction::derived_catalog_fingerprint(lineage_fingerprint);
+    let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(data_source_id);
+    let expected_seal = persistence_sqlite::repositories::catalog_publication_repo::seal_for(
+        &data_source_id.0,
+        &publication.attempt_id,
+        &catalog_fingerprint,
+        &source_db_rel_path,
+        &summary.catalog_digest,
+    );
+    if publication.input_fingerprint != catalog_fingerprint
+        || publication.source_db_rel_path != source_db_rel_path
+        || publication.catalog_digest != summary.catalog_digest
+        || publication.seal != expected_seal
+    {
+        return Err(DerivedSourceError::InconsistentState(format!(
+            "persisted Catalog publication seal for {} does not match its source database",
+            data_source_id.0
+        )));
+    }
+    match publication.state.as_str() {
+        "prepared" => {
+            CatalogPublicationRepo::new(case_conn).mark_published(
+                data_source_id,
+                &publication.attempt_id,
+                &publication.seal,
+            )?;
+        }
+        "published" => {}
+        state => {
+            return Err(DerivedSourceError::InconsistentState(format!(
+                "persisted Catalog publication for {} has unsupported state '{}'",
+                data_source_id.0, state
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn publish_recovered_catalog_registration(

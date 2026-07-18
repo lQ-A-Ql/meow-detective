@@ -375,6 +375,63 @@ fn source_build_database_is_hidden_until_atomic_publish() {
 }
 
 #[test]
+fn source_build_rejects_duplicate_attempt_without_overwriting_the_first_build() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-duplicate-attempt".to_string());
+    let attempt_id = "77777777-7777-4777-8777-777777777777";
+    let first = open_fresh_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+    first
+        .execute(
+            "INSERT INTO source_meta (key, value) VALUES ('sentinel', 'keep')",
+            [],
+        )
+        .unwrap();
+    drop(first);
+
+    let error = open_fresh_source_build_db(tmp.path(), &data_source_id, attempt_id)
+        .expect_err("duplicate attempt must not replace its build database");
+
+    assert!(error.to_string().contains("already has a build database"));
+    let preserved = persistence_sqlite::open_existing_source_read_only(
+        &super::build::source_build_db_path(tmp.path(), &data_source_id, attempt_id).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        preserved
+            .query_row(
+                "SELECT value FROM source_meta WHERE key = 'sentinel'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "keep"
+    );
+}
+
+#[test]
+fn source_build_publish_rejects_an_unsealed_database() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data_source_id = DataSourceId("derived-unsealed".to_string());
+    let attempt_id = "88888888-8888-4888-8888-888888888888";
+    let connection = open_fresh_source_build_db(tmp.path(), &data_source_id, attempt_id).unwrap();
+    drop(connection);
+
+    let error = publish_source_build_db(tmp.path(), &data_source_id, attempt_id)
+        .expect_err("unsealed build must not publish");
+
+    assert!(
+        error.to_string().contains("not sealed"),
+        "unexpected publish error: {error}"
+    );
+    assert!(!source_db_path(tmp.path(), &data_source_id).exists());
+    assert!(
+        super::build::source_build_db_path(tmp.path(), &data_source_id, attempt_id)
+            .unwrap()
+            .is_file()
+    );
+}
+
+#[test]
 fn fresh_source_build_refuses_to_replace_a_published_database() {
     let tmp = tempfile::TempDir::new().unwrap();
     let data_source_id = DataSourceId("derived-published".to_string());

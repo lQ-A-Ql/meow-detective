@@ -59,7 +59,7 @@ fn migration_installs_constrained_phase_ledger_with_cascade_delete() {
     let conn = setup_case_db();
     assert_eq!(
         runner::latest_version(),
-        "0038_data_source_processing_phases"
+        "0039_data_source_catalog_publications"
     );
 
     let columns = conn
@@ -434,6 +434,37 @@ fn failed_phase_retries_and_identity_change_resets_ready_work() {
     assert_eq!(reset.state, ProcessingPhaseState::Pending);
     assert!(reset.owner_id.is_none());
     assert!(reset.attempt_id.is_none());
+}
+
+#[test]
+fn active_phase_identity_cannot_be_replaced_before_lease_expiry() {
+    let conn = setup_case_db();
+    let repo = DataSourceProcessingPhaseRepo::new(&conn);
+    let source_id = DataSourceId(DERIVED_SOURCE_ID.to_string());
+    let original = fingerprint('1');
+    let changed = fingerprint('2');
+    acquire(
+        &repo,
+        &source_id,
+        ProcessingPhase::Graph,
+        1,
+        &original,
+        OWNER_A,
+    );
+
+    let error = repo
+        .upsert(&source_id, ProcessingPhase::Graph, 2, &changed)
+        .expect_err("active phase identity must remain fenced");
+
+    assert!(error
+        .to_string()
+        .contains("identity cannot change while its lease is active"));
+    let current = repo
+        .find(&source_id, ProcessingPhase::Graph)
+        .expect("query current phase")
+        .expect("current phase exists");
+    assert_eq!(current.state, ProcessingPhaseState::Running);
+    assert_eq!(current.input_fingerprint, original);
 }
 
 #[test]

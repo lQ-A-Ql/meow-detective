@@ -41,6 +41,29 @@ impl<'a> DataSourceProcessingPhaseRepo<'a> {
     ) -> DbResult<DataSourceProcessingPhaseRecord> {
         validate_identity(data_source_id, version, input_fingerprint)?;
         ensure_derived_source(self.conn, data_source_id)?;
+        if let Some(current) = self.find(data_source_id, phase)? {
+            let identity_changed =
+                current.version != version || current.input_fingerprint != input_fingerprint;
+            if identity_changed && current.state == ProcessingPhaseState::Running {
+                let active = self.conn.query_row(
+                    "SELECT EXISTS (
+                         SELECT 1
+                         FROM data_source_processing_phases
+                         WHERE data_source_id = ?1
+                           AND phase = ?2
+                           AND state = 'running'
+                           AND lease_expires_at > datetime('now')
+                     )",
+                    params![data_source_id.0, phase.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )? == 1;
+                if active {
+                    return invalid(
+                        "processing phase identity cannot change while its lease is active",
+                    );
+                }
+            }
+        }
         self.conn.execute(
             "INSERT INTO data_source_processing_phases (
                 data_source_id, phase, state, version, input_fingerprint, stats_json

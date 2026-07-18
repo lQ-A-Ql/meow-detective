@@ -86,7 +86,7 @@ fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
     assert_eq!(
         runner::latest_version(),
-        "0038_data_source_processing_phases"
+        "0039_data_source_catalog_publications"
     );
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();

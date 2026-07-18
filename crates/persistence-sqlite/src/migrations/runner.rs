@@ -127,6 +127,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0038_data_source_processing_phases",
         include_str!("scripts/0038_data_source_processing_phases.sql"),
     ),
+    (
+        "0039_data_source_catalog_publications",
+        include_str!("scripts/0039_data_source_catalog_publications.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
