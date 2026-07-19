@@ -48,6 +48,8 @@ fn map_evidence(source: &str, inventory: &str, state: CephMdsState) -> CephFsMap
         source_identity: source.to_string(),
         inventory_identity: inventory.to_string(),
         captured_at: Utc.with_ymd_and_hms(2026, 7, 19, 10, 0, 0).unwrap(),
+        raw_fsmap_sha256: "a".repeat(64),
+        raw_mdsmap_sha256: BTreeMap::from([(1, "b".repeat(64))]),
         map: map(state),
     }
 }
@@ -86,6 +88,9 @@ fn binds_consistent_cross_source_maps_and_pool_provenance() {
     assert_eq!(descriptor.identity, "ceph-fs:cluster-a:1:17:3");
     assert_eq!(descriptor.state, CephFsDescriptorState::Present);
     assert_eq!(descriptor.provenance.len(), 2);
+    assert_eq!(descriptor.provenance[0].raw_fsmap_sha256, "a".repeat(64));
+    assert_eq!(descriptor.provenance[0].raw_mdsmap_sha256, "b".repeat(64));
+    assert_eq!(descriptor.rank_bindings[0].incarnation, 4);
     assert_eq!(descriptor.metadata_pool.pool_id, 3);
     assert_eq!(descriptor.metadata_pool.role, CephFsPoolRole::Metadata);
     assert_eq!(descriptor.metadata_pool.provenance.len(), 2);
@@ -160,5 +165,16 @@ fn conflicting_duplicate_snapshot_identity_fails_closed() {
     assert!(matches!(
         bind_cephfs_descriptors(&[first, duplicate], &all_pool_evidence()),
         Err(CephFsBindingError::ConflictingSourceSnapshot { .. })
+    ));
+}
+
+#[test]
+fn raw_map_snapshot_digest_conflicts_fail_closed() {
+    let first = map_evidence("monitor-a", "map-17-a", CephMdsState::Active);
+    let mut conflicting = map_evidence("monitor-b", "map-17-b", CephMdsState::Active);
+    conflicting.raw_mdsmap_sha256.insert(1, "c".repeat(64));
+    assert!(matches!(
+        bind_cephfs_descriptors(&[first, conflicting], &all_pool_evidence()),
+        Err(CephFsBindingError::ConflictingFsMap { .. })
     ));
 }

@@ -4,6 +4,24 @@ const MDS_LOG_BACKUP_OFFSET: u64 = 3 * MAX_MDS;
 const MDS_LOG_POINTER_OFFSET: u64 = 4 * MAX_MDS;
 const MDS_PURGE_QUEUE_OFFSET: u64 = 5 * MAX_MDS;
 
+pub fn format_cephfs_journal_pointer_object_name(rank: u32) -> Option<String> {
+    (u64::from(rank) < MAX_MDS)
+        .then(|| format!("{:x}.00000000", MDS_LOG_POINTER_OFFSET + u64::from(rank)))
+}
+
+pub fn format_cephfs_journal_data_object_name(
+    rank: u32,
+    journal_inode: u64,
+    object_index: u32,
+) -> Option<String> {
+    let rank = u64::from(rank);
+    let base = journal_inode.checked_sub(rank)?;
+    if rank >= MAX_MDS || (base != MDS_LOG_OFFSET && base != MDS_LOG_BACKUP_OFFSET) {
+        return None;
+    }
+    Some(format!("{journal_inode:x}.{object_index:08x}"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CephFsRankTableKind {
     Inode,

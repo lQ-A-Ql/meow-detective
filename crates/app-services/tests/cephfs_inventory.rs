@@ -36,6 +36,7 @@ fn descriptor() -> CephFsDescriptor {
             ],
         },
         data_pools: Vec::new(),
+        rank_bindings: Vec::new(),
         daemons: Vec::new(),
         provenance: Vec::new(),
     }

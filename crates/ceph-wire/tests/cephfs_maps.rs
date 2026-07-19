@@ -4,6 +4,7 @@ use ceph_wire::{decode_ceph_fs_map, decode_ceph_mds_map, CephEncode, CephMdsStat
 struct MdsFixture {
     gid: u64,
     rank: i32,
+    incarnation: i32,
     state: i32,
 }
 
@@ -32,7 +33,7 @@ fn encode_mds_info(fixture: MdsFixture) -> Vec<u8> {
     append(&mut payload, fixture.gid);
     append(&mut payload, format!("mds-{}", fixture.gid));
     append(&mut payload, fixture.rank);
-    append(&mut payload, 4i32);
+    append(&mut payload, fixture.incarnation);
     append(&mut payload, fixture.state);
     append(&mut payload, 99u64);
     append(&mut payload, 2u8); // entity_addrvec marker
@@ -90,9 +91,9 @@ fn encode_mds_map(
     append(&mut payload, 0u32); // modified nanoseconds
     append(&mut payload, 0i32); // tableserver
     append_i32_set(&mut payload, &[daemon.rank]);
-    append(&mut payload, 1u32); // rank incarnation map
+    append(&mut payload, 1u32); // legacy rank/epoch map
     append(&mut payload, daemon.rank);
-    append(&mut payload, 4i32);
+    append(&mut payload, epoch as i32);
     append(&mut payload, 1u32); // up map
     append(&mut payload, daemon.rank);
     append(&mut payload, daemon.gid);
@@ -154,6 +155,7 @@ fn active_daemon() -> MdsFixture {
     MdsFixture {
         gid: 123,
         rank: 0,
+        incarnation: 4,
         state: 13,
     }
 }
@@ -265,6 +267,17 @@ fn rejects_unknown_state_invalid_pool_and_trailing_bytes() {
             remaining: 1
         }
     );
+}
+
+#[test]
+fn legacy_rank_epoch_map_is_not_treated_as_daemon_incarnation() {
+    let daemon = MdsFixture {
+        incarnation: 5,
+        ..active_daemon()
+    };
+    let decoded = decode_ceph_mds_map(&encode_mds_map(7, "cephfs", 3, &[5], daemon))
+        .expect("decode legacy rank/epoch map");
+    assert_eq!(decoded.daemons[0].incarnation, 5);
 }
 
 #[test]

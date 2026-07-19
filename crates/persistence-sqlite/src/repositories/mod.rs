@@ -9,6 +9,7 @@ pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
 pub mod ceph_bluestore_omap_repo;
 pub mod ceph_bluestore_semantic_repo;
+pub mod ceph_fs_journal_repo;
 pub mod ceph_fs_metadata_inventory_repo;
 pub mod ceph_osd_device_binding_repo;
 pub mod ceph_osd_repo;

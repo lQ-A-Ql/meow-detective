@@ -2,6 +2,7 @@ mod binding;
 mod inventory;
 mod inventory_digest;
 mod inventory_merge;
+mod journal_replay;
 mod locator;
 mod object_reader;
 mod types;
@@ -12,12 +13,21 @@ pub use inventory_merge::{
     merge_cephfs_metadata_inventories, CephFsMergedMetadataInventory, CephFsMergedMetadataObject,
     CephFsObjectProvenance,
 };
+pub use journal_replay::{
+    discover_cephfs_journal_ranks, persist_cephfs_journal_replay, replay_cephfs_journal,
+    CephFsJournalDiscoveryError, CephFsJournalFramingStatus, CephFsJournalNamespaceStopReason,
+    CephFsJournalPersistenceError, CephFsJournalPersistenceOutcome, CephFsJournalRankCandidate,
+    CephFsJournalReplay, CephFsJournalReplayError, CephFsJournalReplayEvent,
+    CephFsJournalReplayLimits, CephFsJournalSourceSpan, CephFsJournalStopReason,
+};
 pub use locator::CephFsObjectLocator;
+use object_reader::{validate_metadata_response, validate_range_response};
 pub use object_reader::{
-    CephFsObjectRange, CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource,
-    SourceDbCephFsObjectReader, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
+    CephFsObjectMetadata, CephFsObjectRange, CephFsObjectRangeReader, CephFsObjectReadError,
+    CephFsObjectReadProvenance, CephFsObjectSource, SourceDbCephFsObjectReader,
+    MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 pub use types::{
     CephFsDescriptor, CephFsDescriptorState, CephFsMapEvidence, CephFsMapProvenance,
-    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole,
+    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, CephFsRankBinding,
 };

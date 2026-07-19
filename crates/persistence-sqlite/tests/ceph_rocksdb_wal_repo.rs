@@ -264,7 +264,7 @@ fn source_migration_installs_normalized_wal_schema_without_raw_keys_or_values() 
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_018_cephfs_metadata_inventory"
+        "source_019_cephfs_journal_replay"
     );
     for table in ["ceph_rocksdb_wal_files", "ceph_rocksdb_wal_records"] {
         let columns = conn

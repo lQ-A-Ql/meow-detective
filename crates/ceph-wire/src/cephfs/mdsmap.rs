@@ -68,7 +68,8 @@ fn decode_mds_map(cursor: &mut CephCursor<'_>) -> Result<CephMdsMap> {
     CephUtime::decode(&mut payload)?; // modified
     i32::decode(&mut payload)?; // tableserver
     let in_ranks = decode_i32_set(&mut payload, "MDSMap in ranks")?;
-    skip_i32_i32_map(&mut payload, "MDSMap rank incarnations")?;
+    // Upstream encodes this legacy rank/epoch map for old monitors and drops it on decode.
+    skip_i32_i32_map(&mut payload, "MDSMap legacy rank epochs")?;
     let up_ranks = decode_i32_u64_map(&mut payload, "MDSMap up ranks")?;
     let failed_ranks = decode_i32_set(&mut payload, "MDSMap failed ranks")?;
     let stopped_ranks = decode_i32_set(&mut payload, "MDSMap stopped ranks")?;
@@ -423,6 +424,17 @@ fn validate_rank_sets(map: &CephMdsMap) -> Result<()> {
             MDS_MAP_NAME,
             "rank sets",
             "failed, stopped, and damaged rank sets overlap",
+        ));
+    }
+    if map.up_ranks.keys().any(|rank| {
+        map.failed_ranks.contains(rank)
+            || map.stopped_ranks.contains(rank)
+            || map.damaged_ranks.contains(rank)
+    }) {
+        return Err(invalid(
+            MDS_MAP_NAME,
+            "up ranks",
+            "an up rank is also failed, stopped, or damaged",
         ));
     }
 

@@ -18,13 +18,18 @@ mod source_bound_lvm;
 pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
 
 pub use cephfs::{
-    bind_cephfs_descriptors, inventory_cephfs_metadata_pool, merge_cephfs_metadata_inventories,
+    bind_cephfs_descriptors, discover_cephfs_journal_ranks, inventory_cephfs_metadata_pool,
+    merge_cephfs_metadata_inventories, persist_cephfs_journal_replay, replay_cephfs_journal,
     CephFsBindingError, CephFsDescriptor, CephFsDescriptorState, CephFsInventoryError,
-    CephFsMapEvidence, CephFsMapProvenance, CephFsMergedMetadataInventory,
-    CephFsMergedMetadataObject, CephFsObjectLocator, CephFsObjectProvenance, CephFsObjectRange,
-    CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource, CephFsPoolBinding,
-    CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, SourceDbCephFsObjectReader,
-    CEPHFS_HEAD_SNAP_HEX, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
+    CephFsJournalDiscoveryError, CephFsJournalFramingStatus, CephFsJournalNamespaceStopReason,
+    CephFsJournalPersistenceError, CephFsJournalPersistenceOutcome, CephFsJournalRankCandidate,
+    CephFsJournalReplay, CephFsJournalReplayError, CephFsJournalReplayEvent,
+    CephFsJournalReplayLimits, CephFsJournalSourceSpan, CephFsJournalStopReason, CephFsMapEvidence,
+    CephFsMapProvenance, CephFsMergedMetadataInventory, CephFsMergedMetadataObject,
+    CephFsObjectLocator, CephFsObjectMetadata, CephFsObjectProvenance, CephFsObjectRange,
+    CephFsObjectRangeReader, CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource,
+    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, CephFsRankBinding,
+    SourceDbCephFsObjectReader, CEPHFS_HEAD_SNAP_HEX, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 pub use cephfs_presence::{
     assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,

@@ -1,4 +1,5 @@
 mod range;
+mod response_validation;
 mod types;
 mod validation;
 
@@ -19,9 +20,10 @@ use validation::{
     validate_replica_metadata, validate_sources,
 };
 
+pub(super) use response_validation::{validate_metadata_response, validate_range_response};
 pub use types::{
-    CephFsObjectRange, CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource,
-    MAX_CEPHFS_OBJECT_RANGE_LENGTH,
+    CephFsObjectMetadata, CephFsObjectRange, CephFsObjectRangeReader, CephFsObjectReadError,
+    CephFsObjectReadProvenance, CephFsObjectSource, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 
 pub struct SourceDbCephFsObjectReader {
@@ -110,6 +112,25 @@ impl SourceDbCephFsObjectReader {
             object_size,
             offset,
             bytes,
+            provenance: replicas
+                .into_iter()
+                .map(|replica| replica.provenance)
+                .collect(),
+        })
+    }
+
+    pub fn inspect_object(
+        &mut self,
+        locator: &CephFsObjectLocator,
+    ) -> Result<CephFsObjectMetadata, CephFsObjectReadError> {
+        validate_locator(&self.descriptor, locator)?;
+        let canonical = locator.canonical();
+        let replicas = self.resolve_replicas(&canonical, locator)?;
+        let object_size = validate_replica_metadata(&canonical, &replicas)?;
+        Ok(CephFsObjectMetadata {
+            filesystem_identity: self.descriptor.identity.clone(),
+            locator: canonical,
+            object_size,
             provenance: replicas
                 .into_iter()
                 .map(|replica| replica.provenance)
@@ -217,6 +238,24 @@ impl SourceDbCephFsObjectReader {
             device,
             layout,
         }))
+    }
+}
+
+impl CephFsObjectRangeReader for SourceDbCephFsObjectReader {
+    fn inspect_object(
+        &mut self,
+        locator: &CephFsObjectLocator,
+    ) -> Result<CephFsObjectMetadata, CephFsObjectReadError> {
+        SourceDbCephFsObjectReader::inspect_object(self, locator)
+    }
+
+    fn read_range(
+        &mut self,
+        locator: &CephFsObjectLocator,
+        offset: u64,
+        length: usize,
+    ) -> Result<CephFsObjectRange, CephFsObjectReadError> {
+        SourceDbCephFsObjectReader::read_range(self, locator, offset, length)
     }
 }
 

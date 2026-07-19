@@ -245,6 +245,35 @@ pub enum CephWireError {
 
     #[error("trailing bytes after CephFS {map}: {remaining} bytes remain")]
     CephFsTrailingBytes { map: &'static str, remaining: usize },
+
+    #[error("unsupported CephFS journal {structure} version {encoded_version}/{compat_version}")]
+    UnsupportedCephFsJournalVersion {
+        structure: &'static str,
+        encoded_version: u8,
+        compat_version: u8,
+    },
+
+    #[error("unsupported CephFS journal stream format {value}")]
+    UnsupportedCephFsJournalStreamFormat { value: u8 },
+
+    #[error("invalid CephFS journal {context}: {reason}")]
+    InvalidCephFsJournal {
+        context: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("CephFS journal event at {offset:#x} is {length} bytes; maximum is {limit}")]
+    CephFsJournalEventTooLarge {
+        offset: u64,
+        length: usize,
+        limit: usize,
+    },
+
+    #[error("invalid CephFS journal frame at {offset:#x}: {reason}")]
+    InvalidCephFsJournalFrame { offset: u64, reason: &'static str },
+
+    #[error("CephFS journal range arithmetic overflow")]
+    CephFsJournalRangeOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;

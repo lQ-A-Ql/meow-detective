@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (34 repos, 58 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (35 repos, 59 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -308,8 +308,8 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 |-------|----------|-------|
 | 36 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
 | 99 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
-| 34 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` and `*_repo/` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_osd_device_binding_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo, ceph_bluestore_omap_repo, ceph_bluestore_semantic_repo, ceph_fs_metadata_inventory_repo, ceph_rbd_lineage_repo, processing_phase_repo, analysis_scan_repo, catalog_file_repo, catalog_publication_repo, filesystem_locator_repo, source_meta_repo |
-| 58 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0039`, `source_001`–`source_018`, plus `staging_001.sql` |
+| 35 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` and `*_repo/` | Includes datasource_cluster_repo, ceph_osd_repo, ceph_osd_device_binding_repo, ceph_bluefs_repo, ceph_bluefs_replay_repo, ceph_rocksdb_repo, ceph_rocksdb_sst_repo, ceph_rocksdb_wal_repo, ceph_rocksdb_latest_state_repo, ceph_bluestore_omap_repo, ceph_bluestore_semantic_repo, ceph_fs_metadata_inventory_repo, ceph_fs_journal_repo, ceph_rbd_lineage_repo, processing_phase_repo, analysis_scan_repo, catalog_file_repo, catalog_publication_repo, filesystem_locator_repo, source_meta_repo |
+| 59 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0039`, `source_001`–`source_019`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
 | 87 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
@@ -341,7 +341,7 @@ Key architectural improvements:
 | `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader; APFS/HFS+ type recognition is metadata-only and unsupported |
 | `fs-ntfs` / `fs-fat` / `fs-exfat` / `fs-ext4` / `fs-xfs` / `fs-btrfs` | Filesystem-specific parsers |
 | `fs-lvm` | Linux LVM physical-volume/logical-volume mapping and offset translation |
-| `ceph-wire` | Read-only Ceph BlueFS superblock and transaction-log wire decoding |
+| `ceph-wire` | Read-only Ceph BlueFS wire decoding plus bounded CephFS map, journal framing, and Striper primitives |
 | `rocksdb-wire` | Read-only RocksDB physical log and WriteBatch decoding, VersionEdit/MANIFEST replay, single-pass block-based live-SST streaming, and bounded latest-state reduction primitives |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
 | `search` | Full-text indexing (tantivy), query parsing, highlighting |

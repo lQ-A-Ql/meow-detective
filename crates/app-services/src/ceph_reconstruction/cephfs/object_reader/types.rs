@@ -53,6 +53,28 @@ pub struct CephFsObjectRange {
     pub provenance: Vec<CephFsObjectReadProvenance>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CephFsObjectMetadata {
+    pub filesystem_identity: String,
+    pub locator: String,
+    pub object_size: u64,
+    pub provenance: Vec<CephFsObjectReadProvenance>,
+}
+
+pub trait CephFsObjectRangeReader {
+    fn inspect_object(
+        &mut self,
+        locator: &super::super::CephFsObjectLocator,
+    ) -> Result<CephFsObjectMetadata, CephFsObjectReadError>;
+
+    fn read_range(
+        &mut self,
+        locator: &super::super::CephFsObjectLocator,
+        offset: u64,
+        length: usize,
+    ) -> Result<CephFsObjectRange, CephFsObjectReadError>;
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CephFsObjectReadError {
     #[error("invalid CephFS descriptor binding")]
@@ -97,6 +119,8 @@ pub enum CephFsObjectReadError {
     ObjectRead { inventory_id: String },
     #[error("CephFS object bytes conflict across replicas: {locator}")]
     ByteConflict { locator: String },
+    #[error("CephFS object reader returned a response outside the requested binding: {locator}")]
+    ResponseMismatch { locator: String },
 }
 
 impl transport::ServiceErrorCategory for CephFsObjectReadError {
@@ -119,7 +143,8 @@ impl transport::ServiceErrorCategory for CephFsObjectReadError {
             | Self::MetadataConflict { .. }
             | Self::ReadPlanUnavailable { .. }
             | Self::RangeOverflow { .. }
-            | Self::ByteConflict { .. } => transport::ErrorCategory::Parser,
+            | Self::ByteConflict { .. }
+            | Self::ResponseMismatch { .. } => transport::ErrorCategory::Parser,
         }
     }
 }

@@ -98,6 +98,10 @@ fn complete_source_set_can_exceed_the_configured_replica_count() {
     assert_eq!(range.bytes, b"456789");
     assert_eq!(range.provenance.len(), 3);
     assert_eq!(range.object_size, support::OBJECT_SIZE);
+
+    let metadata = reader.inspect_object(&support::locator()).unwrap();
+    assert_eq!(metadata.object_size, support::OBJECT_SIZE);
+    assert_eq!(metadata.provenance.len(), 3);
 }
 
 #[test]

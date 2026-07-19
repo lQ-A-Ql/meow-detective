@@ -45,8 +45,14 @@ pub use bluestore_semantic::{
 };
 pub use cephfs::{
     classify_cephfs_metadata_object_name, decode_ceph_fs_map, decode_ceph_mds_map,
-    CephFsFilesystem, CephFsMap, CephFsMetadataObjectCandidates, CephFsMetadataObjectClass,
-    CephFsRankTableKind, CephMdsDaemon, CephMdsMap, CephMdsState,
+    decode_cephfs_journal_frame, decode_cephfs_journal_frame_prefix, decode_cephfs_journal_header,
+    decode_cephfs_journal_pointer, format_cephfs_journal_data_object_name,
+    format_cephfs_journal_pointer_object_name, plan_cephfs_journal_range, CephFsFilesystem,
+    CephFsJournalEvent, CephFsJournalEventEncoding, CephFsJournalEventKind, CephFsJournalFrame,
+    CephFsJournalFramePrefix, CephFsJournalHeader, CephFsJournalLayout, CephFsJournalObjectExtent,
+    CephFsJournalPointer, CephFsJournalStreamFormat, CephFsMap, CephFsMetadataObjectCandidates,
+    CephFsMetadataObjectClass, CephFsRankTableKind, CephMdsDaemon, CephMdsMap, CephMdsState,
+    CEPHFS_JOURNAL_MAGIC, CEPHFS_JOURNAL_MAX_EVENT_BYTES,
 };
 pub use codec::{
     decode_lba_u64, decode_varint_lowz_u64, decode_varint_u64, CephDecode, CephEncode,

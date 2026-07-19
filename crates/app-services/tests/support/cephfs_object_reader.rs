@@ -46,6 +46,7 @@ pub fn descriptor(bindings: &[(&str, &str)]) -> CephFsDescriptor {
                 .collect(),
         },
         data_pools: Vec::new(),
+        rank_bindings: Vec::new(),
         daemons: Vec::new(),
         provenance: Vec::new(),
     }

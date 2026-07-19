@@ -43,7 +43,11 @@ impl<'a> CephFsMetadataInventoryRepo<'a> {
         filesystem_identity: &str,
         inventory_id: &str,
     ) -> CephFsMetadataInventoryRepoResult<Option<CephFsMetadataInventory>> {
-        query::find(self.conn, filesystem_identity, inventory_id)
+        let inventory = query::find(self.conn, filesystem_identity, inventory_id)?;
+        if let Some(inventory) = &inventory {
+            validation::validate_inventory(inventory)?;
+        }
+        Ok(inventory)
     }
 
     pub fn find_manifest(

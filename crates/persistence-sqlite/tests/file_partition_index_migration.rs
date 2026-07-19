@@ -99,10 +99,10 @@ fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     insert_entry(&conn, "unknown", None, "ds-a", "Volume (XFS)", None);
     insert_entry(&conn, "preset", None, "ds-a", "Partition 3", Some(99));
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 4);
     assert_eq!(
         runner::latest_source_version(),
-        "source_018_cephfs_metadata_inventory"
+        "source_019_cephfs_journal_replay"
     );
 
     for id in ["root-2", "etc", "ssh"] {
@@ -211,7 +211,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 4);
     for id in ["root-4", "child"] {
         let partition_index: Option<i64> = conn
             .query_row(

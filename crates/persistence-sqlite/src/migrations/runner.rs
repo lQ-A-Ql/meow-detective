@@ -203,6 +203,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_018_cephfs_metadata_inventory",
         include_str!("scripts/source_018_cephfs_metadata_inventory.sql"),
     ),
+    (
+        "source_019_cephfs_journal_replay",
+        include_str!("scripts/source_019_cephfs_journal_replay.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

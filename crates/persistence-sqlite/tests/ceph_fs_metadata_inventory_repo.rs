@@ -382,11 +382,11 @@ fn cross_pool_projection_rolls_back_and_source_delete_cascades() {
 }
 
 #[test]
-fn source_018_is_latest_and_reapplication_is_idempotent() {
+fn source_migrations_are_current_and_reapplication_is_idempotent() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_018_cephfs_metadata_inventory"
+        "source_019_cephfs_journal_replay"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     let index_count: u64 = conn

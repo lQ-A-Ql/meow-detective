@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use super::types::{
     CephFsDescriptor, CephFsDescriptorState, CephFsMapEvidence, CephFsMapProvenance,
-    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole,
+    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, CephFsRankBinding,
 };
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -13,6 +13,12 @@ pub enum CephFsBindingError {
     NoMapEvidence,
     #[error("CephFS {field} is empty or contains a NUL byte")]
     InvalidIdentity { field: &'static str },
+    #[error("CephFS {field} is not a canonical SHA-256 digest")]
+    InvalidSnapshotDigest { field: &'static str },
+    #[error("CephFS map evidence has no raw MDSMap snapshot for filesystem {filesystem_id}")]
+    MissingMdsMapSnapshot { filesystem_id: i64 },
+    #[error("CephFS raw MDSMap snapshot set does not match the decoded FSMap")]
+    MdsMapSnapshotSetMismatch,
     #[error(
         "CephFS source '{source_identity}' inventory '{inventory_identity}' has conflicting snapshots"
     )]
@@ -38,6 +44,16 @@ pub enum CephFsBindingError {
     },
     #[error("CephFS pool {pool_id} has no inventory evidence")]
     MissingPoolBinding { pool_id: i64 },
+    #[error("CephFS MDS rank {rank} references missing daemon GID {gid}")]
+    MissingRankDaemon { rank: i32, gid: u64 },
+    #[error("CephFS MDS rank {rank} does not match daemon GID {gid} rank {daemon_rank}")]
+    RankDaemonMismatch {
+        rank: i32,
+        gid: u64,
+        daemon_rank: i32,
+    },
+    #[error("CephFS MDS rank {rank} cannot be represented as an unsigned rank")]
+    InvalidRank { rank: i32 },
     #[error(
         "CephFS pool {pool_id} belongs to cluster '{observed}', expected '{expected}' (source '{source_identity}')"
     )]
@@ -52,13 +68,18 @@ pub enum CephFsBindingError {
 impl transport::ServiceErrorCategory for CephFsBindingError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::NoMapEvidence | Self::InvalidIdentity { .. } => {
-                transport::ErrorCategory::Validation
-            }
+            Self::NoMapEvidence
+            | Self::InvalidIdentity { .. }
+            | Self::InvalidSnapshotDigest { .. }
+            | Self::MissingMdsMapSnapshot { .. }
+            | Self::MdsMapSnapshotSetMismatch => transport::ErrorCategory::Validation,
             Self::ConflictingSourceSnapshot { .. }
             | Self::ConflictingClusterIdentity { .. }
             | Self::ConflictingFsMap { .. }
             | Self::MissingPoolBinding { .. }
+            | Self::MissingRankDaemon { .. }
+            | Self::RankDaemonMismatch { .. }
+            | Self::InvalidRank { .. }
             | Self::PoolClusterMismatch { .. } => transport::ErrorCategory::Parser,
         }
     }
@@ -83,6 +104,7 @@ fn canonical_map_evidence(
         validate_identity(&item.cluster_identity, "cluster identity")?;
         validate_identity(&item.source_identity, "source identity")?;
         validate_identity(&item.inventory_identity, "inventory identity")?;
+        validate_map_snapshot_digests(item)?;
         let key = (
             item.source_identity.clone(),
             item.inventory_identity.clone(),
@@ -113,7 +135,10 @@ fn validate_map_consistency(
                 source_identity: item.source_identity.clone(),
             });
         }
-        if item.map != expected.map {
+        if item.map != expected.map
+            || item.raw_fsmap_sha256 != expected.raw_fsmap_sha256
+            || item.raw_mdsmap_sha256 != expected.raw_mdsmap_sha256
+        {
             return Err(CephFsBindingError::ConflictingFsMap {
                 source_identity: item.source_identity.clone(),
                 expected_epoch: expected.map.epoch,
@@ -168,16 +193,28 @@ fn build_descriptors(
     maps: &[CephFsMapEvidence],
     pools: &BTreeMap<i64, Vec<CephFsPoolProvenance>>,
 ) -> Result<Vec<CephFsDescriptor>, CephFsBindingError> {
-    let provenance = maps
-        .iter()
-        .map(|item| CephFsMapProvenance {
-            source_identity: item.source_identity.clone(),
-            inventory_identity: item.inventory_identity.clone(),
-            captured_at: item.captured_at,
-        })
-        .collect::<Vec<_>>();
     let mut descriptors = Vec::with_capacity(source.map.filesystems.len());
     for filesystem in &source.map.filesystems {
+        let provenance = maps
+            .iter()
+            .map(|item| {
+                let raw_mdsmap_sha256 = item
+                    .raw_mdsmap_sha256
+                    .get(&filesystem.filesystem_id)
+                    .cloned()
+                    .ok_or(CephFsBindingError::MissingMdsMapSnapshot {
+                        filesystem_id: filesystem.filesystem_id,
+                    })?;
+                Ok(CephFsMapProvenance {
+                    source_identity: item.source_identity.clone(),
+                    inventory_identity: item.inventory_identity.clone(),
+                    captured_at: item.captured_at,
+                    raw_fsmap_sha256: item.raw_fsmap_sha256.clone(),
+                    raw_mdsmap_sha256,
+                })
+            })
+            .collect::<Result<Vec<_>, CephFsBindingError>>()?;
+        let rank_bindings = bind_rank_daemons(&filesystem.mds_map)?;
         let metadata_pool = bind_pool(
             filesystem.mds_map.metadata_pool_id,
             CephFsPoolRole::Metadata,
@@ -218,11 +255,46 @@ fn build_descriptors(
             },
             metadata_pool,
             data_pools,
+            rank_bindings,
             daemons: filesystem.mds_map.daemons.clone(),
             provenance: provenance.clone(),
         });
     }
     Ok(descriptors)
+}
+
+fn bind_rank_daemons(
+    map: &ceph_wire::CephMdsMap,
+) -> Result<Vec<CephFsRankBinding>, CephFsBindingError> {
+    let daemons = map
+        .daemons
+        .iter()
+        .map(|daemon| (daemon.gid, daemon))
+        .collect::<BTreeMap<_, _>>();
+    map.up_ranks
+        .iter()
+        .map(|(rank, gid)| {
+            let daemon = daemons
+                .get(gid)
+                .ok_or(CephFsBindingError::MissingRankDaemon {
+                    rank: *rank,
+                    gid: *gid,
+                })?;
+            if daemon.rank != *rank {
+                return Err(CephFsBindingError::RankDaemonMismatch {
+                    rank: *rank,
+                    gid: *gid,
+                    daemon_rank: daemon.rank,
+                });
+            }
+            Ok(CephFsRankBinding {
+                rank: u32::try_from(*rank)
+                    .map_err(|_| CephFsBindingError::InvalidRank { rank: *rank })?,
+                gid: *gid,
+                incarnation: daemon.incarnation,
+            })
+        })
+        .collect()
 }
 
 fn bind_pool(
@@ -244,6 +316,34 @@ fn bind_pool(
 fn validate_identity(value: &str, field: &'static str) -> Result<(), CephFsBindingError> {
     if value.trim().is_empty() || value.contains('\0') {
         return Err(CephFsBindingError::InvalidIdentity { field });
+    }
+    Ok(())
+}
+
+fn validate_map_snapshot_digests(item: &CephFsMapEvidence) -> Result<(), CephFsBindingError> {
+    validate_sha256(&item.raw_fsmap_sha256, "raw FSMap snapshot digest")?;
+    if item.raw_mdsmap_sha256.len() != item.map.filesystems.len() {
+        return Err(CephFsBindingError::MdsMapSnapshotSetMismatch);
+    }
+    for filesystem in &item.map.filesystems {
+        let digest = item
+            .raw_mdsmap_sha256
+            .get(&filesystem.filesystem_id)
+            .ok_or(CephFsBindingError::MissingMdsMapSnapshot {
+                filesystem_id: filesystem.filesystem_id,
+            })?;
+        validate_sha256(digest, "raw MDSMap snapshot digest")?;
+    }
+    Ok(())
+}
+
+fn validate_sha256(value: &str, field: &'static str) -> Result<(), CephFsBindingError> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(CephFsBindingError::InvalidSnapshotDigest { field });
     }
     Ok(())
 }

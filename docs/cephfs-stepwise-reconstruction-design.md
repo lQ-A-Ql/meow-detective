@@ -42,8 +42,10 @@ FSMap freshness proof 成立之前，不创建 CephFS 数据源。
   当作 CephFS object locator。
 - source DB 独立路径、publication seal、manifest、phase lease/heartbeat/recovery
   已具备复用条件。
-- 当前没有 FSMap/MDSMap canonical snapshot、MDS journal decoder、CephFS inode/
-  dirfrag/dentry decoder 或 CephFS layout reader。
+- 当前没有从真实 monitor store 自动采集的 FSMap/MDSMap canonical snapshot，也没有
+  CephFS inode/dirfrag/dentry decoder 或 CephFS layout reader。FSMap/MDSMap wire
+  foundation 与 bounded MDS journal framing/audit 已实现，但仍只由 synthetic fixture
+  验证，不能据此创建 CephFS 数据源。
 
 ### 2.3 官方实现依据
 
@@ -384,32 +386,100 @@ inode/dirfrag/dentry 解码、namespace tree、CephFS source 或前端入口；
 
 #### stage_design
 
-journal 是 crash consistency 和 namespace 最新状态的关键。先解码和建立
-事务边界，再决定能否发布最新目录树。
+journal 是 crash consistency 和 namespace 最新状态的关键。Stage 3 先建立可审计的
+wire/framing 边界，Stage 4 再复用同一输入解码 `EMetaBlob` 并与 inode/dirfrag
+基础快照做版本敏感的幂等合并。不能把已完成 frame 扫描等同于已恢复 namespace。
+
+实现固定对照 `ceph/ceph@42b8bc661d12759cc5fbb65e49804615263c679d`：
+
+- `JournalPointer.h/.cc`：rank pointer 的 `front/back` 与对象命名。
+- `Journaler.h/.cc`：header、legacy/resilient stream framing 和保守持久化尾。
+- `Striper.cc::file_to_extents`：通用 `stripe_count/stripe_unit/object_size` 映射。
+- `LogEvent.h/.cc`：event header、rank-local segment boundary 和 event type。
+
+`front` 是权威 journal；`back != 0` 只记录为 rewrite/cleanup 中间态，不与
+`front` 合并回放。首版不实现 Ceph recovery 的 tail probe，因此只读取
+`expire_pos..write_pos`，并把 `write_pos` 命名为 `committed_header_tail`，不宣称它是
+磁盘上的最新完整尾。
 
 #### phase / tasks
 
-- 解析 journal header、transaction sequence、event framing、commit boundary。
-- 区分 clean journal、可重放 journal、截断 journal、未知版本和冲突 sequence。
-- 在内存 overlay 中应用 inode/dentry/link/unlink/rename/xattr/snap 变更。
-- 记录每个 mutation 的 journal sequence、object provenance 和 source range。
+- 通过 MDSMap `up[rank] -> daemon GID` 与 `mds_info_t.inc` 建立当前 rank
+  incarnation，并将 rank、GID、incarnation、daemon state 一致性作为 journal replay
+  前置条件。MDSMap 的 legacy `inc` map 是上游按 epoch 伪造并在解码后丢弃的兼容字段，
+  不作为 daemon incarnation 事实源。
+- 解析 `JournalPointer`、legacy-v1/current-v2 header、magic、position、layout、pool 和
+  stream format；pointer/header 建立失败时不写 replay projection。
+- 按 Ceph Striper 算法读取条带化逻辑流；所有 object range 继续通过 Stage 2
+  source-bound replica reader，不增加宿主路径或单副本旁路。
+- 解码 legacy/resilient frame、sentinel、payload length、trailing `start_ptr`、
+  versioned `LogEvent` 和 `ESegment/ELid` rank-local sequence。
+- 分别输出 `framing_safe_pos` 与 `namespace_safe_pos`。未知 event、classic event、
+  未支持 mutation payload、sequence 回退、截断、预算耗尽和副本冲突不会越过安全边界。
+- 保存 frame payload SHA-256、逻辑 range、object range、source/inventory/object
+  provenance；不保存原始 payload，不修改 evidence。
+- source-local `source_019` 只持久化 replay audit projection，不写 inode/dentry/file row。
 - 禁止修改原始 journal；不调用宿主 `cephfs-journal-tool` 的写恢复模式。
-- journal 只完成到某一安全 boundary 时，输出 boundary timestamp/sequence。
 
 #### 预期结果
 
-得到可审计的 namespace overlay：
+得到可审计的 rank-local journal framing 结果：
 
 ```text
-base metadata snapshot + journal mutations <= safe boundary
+JournalPointer(front)
+  -> verified Header(committed_header_tail)
+  -> replica-verified striped ranges
+  -> complete LogEvent frames <= framing_safe_pos
+  -> supported namespace boundary <= namespace_safe_pos
 ```
 
-超出 safe boundary 的内容不进入 `ready` 文件树。
+Stage 3 不创建 CephFS source、不生成文件树、不接 preview。`EUpdate/EPeerUpdate/EOpen`
+中的 `EMetaBlob`、snapshot、peer rollback、fragment 和跨 rank resolve 仍为 Stage 4
+输入；遇到它们时保留 opaque digest/provenance，并冻结 namespace boundary。
 
 #### 完成门槛
 
-截断 journal、重复 transaction、乱序 sequence、未知 event、跨 epoch replay
-必须 fail closed 或输出明确的 incomplete boundary。
+pointer/header/layout golden wire、`stripe_count > 1`、legacy/resilient frame、所有截断
+前缀、坏 sentinel/start pointer、未知 event/version、重复/倒退 segment sequence、
+byte/event budget、缺对象和副本冲突均有测试。跨 FSMap/MDSMap epoch 或 stale rank
+incarnation 必须在读取/聚合前拒绝。只有 `framing_safe_pos == committed_header_tail` 才能
+标记 `complete_to_header_tail`；该状态仍不等于 namespace complete。
+
+#### 2026-07-19 implementation snapshot
+
+Stage 3 的 journal framing、bounded replay 与 source-local audit persistence 已实现，
+但不创建 CephFS 数据源、文件树或预览入口：
+
+- `ceph-wire::cephfs::journal` 解析 `JournalPointer`、legacy-v1/current-v2 header、
+  `ceph fs volume v011` magic、legacy/resilient frame、sentinel、payload length、
+  resilient `start_ptr` 与 versioned/classic event envelope。decoder 维持 16 MiB 单 event
+  上限，并对控制结构和 frame prefix 做 exhaustive truncation 回归。
+- journal 数据读取复用 Stage 2 `CephFsObjectRangeReader`，按 Ceph Striper 规则覆盖
+  `stripe_count > 1`，单次 object range 仍受 1 MiB 上限约束。pointer、header 和每个
+  event frame 都保留 canonical locator、逻辑/对象 range digest 以及完整副本 provenance。
+- rank 必须处于 Ceph `MAX_MDS=0x100` 范围内，并与当前 MDSMap 的 GID、incarnation、
+  active daemon 一致。major/segment boundary 使用其安全解码出的 encoded sequence，
+  无显式 sequence 的受支持 boundary 使用逻辑 offset；普通 event 从当前 boundary
+  sequence 递增，不做跨 rank 全局排序。非初始 `ELid` 仅保留物理审计并标记为忽略，
+  不重置当前 sequence。
+- `write_pos` 仅命名为 `committed_header_tail`。完整 frame 推进
+  `framing_safe_pos`；unknown/classic/未支持 mutation event 只冻结
+  `namespace_safe_pos`，保留 opaque payload SHA-256，不伪造 namespace mutation。
+  `unused_pos` 作为原始 header 字段保留，但不参与 `trimmed <= expire <= write`
+  的提交边界排序。
+- `source_019_cephfs_journal_replay.sql` 和 `ceph_fs_journal_repo` 在目标 source DB
+  中原子替换 manifest、event metadata 与 object spans。service adapter 先在内存中
+  完成全部投影，再要求每个 span 对目标 `(dataSourceId, inventoryId)` 恰好存在一条
+  provenance；缺失、重复、跨 inventory/object、determinism conflict 均在写入前或
+  同一事务内 fail closed。schema 不保存 raw event payload。
+- replay digest 覆盖 pointer/header、header layout/positions、framing/namespace boundary、
+  event metadata、所有 object range 以及排序后的 source provenance。两个独立 source DB
+  对同一回放生成各自绑定的 projection，重复写为 no-op。
+
+当前测试覆盖 wire 12 项、striped layout 3 项、service replay/discovery 14 项、
+source-local persistence 8 项和 repository 16 项；`cargo clippy` 及模块、函数、测试布局、
+service boundary 守卫通过。当前私有 PVE 样本仍无 fresh positive FSMap/MDSMap evidence，
+因此继续保持 `indeterminate`，Stage 3 不改变 presence 结论，也不写 CephFS file row。
 
 ### Stage 4：inode / dirfrag / dentry namespace graph
 
@@ -654,5 +724,6 @@ CephFS 能力按证据闭合程度发布，不以“能列出一些目录”作�
 7. Stage 6：接入独立 source DB、preview 和 publication/recovery。
 8. Stage 7：positive fixture、真实样本和能力分级验收。
 
-当前建议先执行 Stage 0，不修改 RBD 路径，不向 `E:\pangushi\服务器` 写入
-CephFS 假数据或空 source。
+Stage 0-3 foundation 已完成；下一实施边界是 Stage 4 namespace graph 与
+`EMetaBlob` mutation 解码。继续冻结 RBD 路径，且在 positive presence proof 成立前，
+不得向 `E:\pangushi\服务器` 写入 CephFS 假数据、空 source、文件树或预览入口。

@@ -18,6 +18,10 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_018_cephfs_metadata_inventory",
         "source_017_timeline_projection_identity"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_019_cephfs_journal_replay",
+        "source_018_cephfs_metadata_inventory"
+    ));
 }
 
 #[test]

@@ -417,7 +417,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
 
     assert_eq!(
         persistence_sqlite::runner::latest_source_version(),
-        "source_018_cephfs_metadata_inventory"
+        "source_019_cephfs_journal_replay"
     );
     assert_eq!(
         super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),
