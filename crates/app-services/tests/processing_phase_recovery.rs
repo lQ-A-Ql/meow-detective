@@ -10,7 +10,7 @@ use persistence_sqlite::{
 const FINGERPRINT: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 #[test]
-fn case_recovery_fails_running_processing_phases() {
+fn case_recovery_fails_expired_running_processing_phases() {
     let connection = persistence_sqlite::open_in_memory().expect("open case database");
     runner::run_all(&connection).expect("run migrations");
     connection
@@ -33,6 +33,14 @@ fn case_recovery_fails_running_processing_phases() {
         )
         .expect("claim artifacts phase");
     assert!(matches!(claim, ProcessingPhaseClaim::Acquired(_)));
+    connection
+        .execute(
+            "UPDATE data_source_processing_phases
+             SET lease_expires_at = datetime('now', '-1 second')
+             WHERE data_source_id = ?1 AND phase = 'artifacts'",
+            [&source_id.0],
+        )
+        .expect("expire abandoned processing lease");
 
     assert_eq!(
         recover_interrupted_processing_phases(&connection).expect("recover phases"),

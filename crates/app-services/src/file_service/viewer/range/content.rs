@@ -111,11 +111,16 @@ pub(crate) fn open_file_content_for_entry(
 ) -> Result<Box<dyn Read>, FileServiceError> {
     validate_file_entry(entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
-    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => open_logical_file(&source_path, entry),
-        "e01" => open_e01_file(conn, &source_path, entry, partition_index),
-        "raw" => open_raw_file(&source_path, entry, partition_index),
+        "e01" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
+            open_e01_file(conn, &source_path, entry, partition_index)
+        }
+        "raw" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
+            open_raw_file(&source_path, entry, partition_index)
+        }
         other => unsupported_source(other),
     }
 }
@@ -127,14 +132,17 @@ pub(crate) fn open_range_content_for_entry(
 ) -> Result<RangeContentReader, FileServiceError> {
     validate_file_entry(entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
-    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => {
             open_logical_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
         }
-        "e01" => open_e01_file(conn, &source_path, entry, partition_index)
-            .map(RangeContentReader::Streaming),
+        "e01" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
+            open_e01_file(conn, &source_path, entry, partition_index)
+                .map(RangeContentReader::Streaming)
+        }
         "raw" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
             open_raw_file(&source_path, entry, partition_index).map(RangeContentReader::Streaming)
         }
         other => unsupported_source(other),

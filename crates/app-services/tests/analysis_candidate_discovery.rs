@@ -13,6 +13,11 @@ fn candidate_db() -> Connection {
                 path TEXT NOT NULL,
                 size INTEGER,
                 partition_index INTEGER,
+                created_at TEXT,
+                modified_at TEXT,
+                accessed_at TEXT,
+                changed_at TEXT,
+                hash_sha256 TEXT,
                 entry_type TEXT NOT NULL
             );",
         )

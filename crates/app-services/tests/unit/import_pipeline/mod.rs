@@ -932,6 +932,12 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
                   '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z')",
                 [&data_source_id.0],
             )?;
+            conn.execute(
+                "INSERT INTO graph_nodes
+                 (id, case_id, node_type, label, summary, tags, created_at)
+                 VALUES ('raw-file-1', ?1, 'file', 'SYSTEM', '', '[]', datetime('now'))",
+                [&active.meta.id.0],
+            )?;
 
             let index_dir = active.case_root.join("indexes").join("tantivy");
             let (message, counts) = import_analysis::run_post_import_pipeline_with_counts(

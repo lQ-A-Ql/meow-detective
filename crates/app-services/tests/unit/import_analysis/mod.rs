@@ -208,6 +208,35 @@ fn analysis_options(
     }
 }
 
+fn setup_raw_source_db(
+    tmp: &TempDir,
+    case_id: &str,
+    data_source_id: &str,
+    raw_path: PathBuf,
+) -> (PathBuf, DataSourceId) {
+    let ds_id = DataSourceId(data_source_id.to_string());
+    let db_path = tmp
+        .path()
+        .join("sources")
+        .join(data_source_id)
+        .join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
+    DataSourceRepo::new(&conn)
+        .upsert_source_local_metadata(
+            &CaseId(case_id.to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "raw exfat evidence".to_string(),
+                kind: DataSourceKind::Raw,
+                source_path: raw_path,
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    (db_path, ds_id)
+}
+
 fn post_import_options(
     tmp: &TempDir,
     db_path: PathBuf,
@@ -679,30 +708,9 @@ fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
     let raw_path = tmp.path().join("text-exfat.raw");
     write_exfat_text_raw_fixture(&raw_path).unwrap();
 
-    let db_path = tmp.path().join("app.db");
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-            "INSERT INTO cases (id, name, created_at, updated_at)
-             VALUES ('case-raw-exfat-index', 'Raw exFAT Index Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-            [],
-        )
-        .unwrap();
-
-    let ds_id = DataSourceId("ds-raw-exfat-index".to_string());
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("case-raw-exfat-index".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "raw exfat evidence".to_string(),
-                kind: DataSourceKind::Raw,
-                source_path: raw_path,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
+    let (db_path, ds_id) =
+        setup_raw_source_db(&tmp, "case-raw-exfat-index", "ds-raw-exfat-index", raw_path);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
             "INSERT INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
@@ -791,30 +799,13 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
     )
     .unwrap();
 
-    let db_path = tmp.path().join("app.db");
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-            "INSERT INTO cases (id, name, created_at, updated_at)
-             VALUES ('case-raw-exfat-artifact', 'Raw exFAT Artifact Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-            [],
-        )
-        .unwrap();
-
-    let ds_id = DataSourceId("ds-raw-exfat-artifact".to_string());
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("case-raw-exfat-artifact".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "raw exfat evidence".to_string(),
-                kind: DataSourceKind::Raw,
-                source_path: raw_path,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
+    let (db_path, ds_id) = setup_raw_source_db(
+        &tmp,
+        "case-raw-exfat-artifact",
+        "ds-raw-exfat-artifact",
+        raw_path,
+    );
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
             "INSERT INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
@@ -830,7 +821,7 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
 
     let mut options = analysis_options(
         &tmp,
-        db_path,
+        db_path.clone(),
         ds_id.clone(),
         ImportAnalysisMode::FullContent,
     );
@@ -845,7 +836,7 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
     assert_eq!(stats.indexed_count, 0);
     assert_eq!(stats.warning_count, 0);
 
-    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
+    let main_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     let (artifact_type, source_object_id, summary): (String, String, String) = main_conn
         .query_row(
             "SELECT artifact_type, source_object_id, summary

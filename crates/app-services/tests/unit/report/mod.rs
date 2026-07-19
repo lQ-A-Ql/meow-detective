@@ -139,7 +139,7 @@ fn insert_timeline_event_with_provenance(conn: &rusqlite::Connection, case_id: &
                     .with_timezone(&chrono::Utc),
                 title: "Timeline Provenance Event".to_string(),
                 description: "timeline provenance fixture".to_string(),
-                parser_id: Some("timeline.macb".to_string()),
+                parser_id: Some("fixture.timeline".to_string()),
                 parser_version: Some("1.2.3".to_string()),
                 confidence: Some(0.82),
                 source_attribution: Some("modified_at".to_string()),
@@ -212,7 +212,7 @@ fn insert_artifact_and_timeline_for_correlation(
                 timestamp: chrono::Utc::now(),
                 title: "cmd.exe modified".to_string(),
                 description: "timeline correlation fixture".to_string(),
-                parser_id: Some("timeline.macb".to_string()),
+                parser_id: Some("fixture.timeline".to_string()),
                 parser_version: Some("1.0.0".to_string()),
                 confidence: Some(0.82),
                 source_attribution: Some("modified_at".to_string()),
@@ -469,7 +469,7 @@ fn report_exports_include_timeline_provenance() {
         serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
             .unwrap();
     let event = &json["timeline_events"][0];
-    assert_eq!(event["parserId"], "timeline.macb");
+    assert_eq!(event["parserId"], "fixture.timeline");
     assert_eq!(event["parserVersion"], "1.2.3");
     assert!((event["confidence"].as_f64().unwrap() - 0.82).abs() < 0.000001);
     assert_eq!(event["sourceAttribution"], "modified_at");
@@ -477,7 +477,7 @@ fn report_exports_include_timeline_provenance() {
     let html_name =
         generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
     let html = std::fs::read_to_string(tmp.path().join(html_name)).unwrap();
-    assert!(html.contains("timeline.macb"));
+    assert!(html.contains("fixture.timeline"));
     assert!(html.contains("parserVersion=1.2.3"));
     assert!(html.contains("confidence=0.82"));
     assert!(html.contains("sourceAttribution=modified_at"));

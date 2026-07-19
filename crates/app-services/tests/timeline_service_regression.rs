@@ -17,6 +17,36 @@ use transport::dto::PerformanceReportDto;
 const TIMELINE_SCHEMA: &str =
     include_str!("../../persistence-sqlite/src/migrations/scripts/0005_timeline_events.sql");
 
+const MACB_SOURCE_SCHEMA: &str = r#"
+CREATE TABLE data_sources (
+    id TEXT PRIMARY KEY NOT NULL,
+    case_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    size INTEGER,
+    imported_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE file_entries (
+    id TEXT PRIMARY KEY NOT NULL,
+    parent_id TEXT,
+    data_source_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    entry_type TEXT NOT NULL,
+    size INTEGER,
+    ext TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    system INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT,
+    modified_at TEXT,
+    accessed_at TEXT,
+    changed_at TEXT,
+    hash_sha256 TEXT
+);
+"#;
+
 fn in_memory_db_with_timeline() -> rusqlite::Connection {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     conn.execute_batch(TIMELINE_SCHEMA).unwrap();
@@ -27,6 +57,7 @@ fn in_memory_db_with_timeline() -> rusqlite::Connection {
          ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;",
     )
     .unwrap();
+    conn.execute_batch(MACB_SOURCE_SCHEMA).unwrap();
     conn
 }
 
@@ -254,8 +285,24 @@ fn timeline_case_pagination_is_stable_across_source_identity_ties() {
 #[test]
 fn timeline_instrumented_queries_report_rows_without_paths() {
     let conn = in_memory_db_with_timeline();
-    let files = vec![make_file("test.txt", "/test.txt", true, true)];
-    project_and_store_macb(&conn, &files).unwrap();
+    insert_events(
+        &conn,
+        &[
+            ("event-1", "FILE_CREATED", "created", "2026-01-01T00:00:00Z"),
+            (
+                "event-2",
+                "FILE_MODIFIED",
+                "modified",
+                "2026-01-02T00:00:00Z",
+            ),
+            (
+                "event-3",
+                "FILE_ACCESSED",
+                "accessed",
+                "2026-01-03T00:00:00Z",
+            ),
+        ],
+    );
 
     let result = query_timeline_instrumented(&conn, 0, 100).unwrap();
     assert_eq!(result.page.items.len(), 3);
@@ -436,41 +483,9 @@ fn timeline_large_aggregation_remains_bounded() {
 
 #[test]
 fn timeline_lazy_macb_projection_is_idempotent() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(TIMELINE_SCHEMA).unwrap();
+    let conn = in_memory_db_with_timeline();
     conn.execute_batch(
-        "ALTER TABLE timeline_events ADD COLUMN parser_id TEXT;
-         ALTER TABLE timeline_events ADD COLUMN parser_version TEXT;
-         ALTER TABLE timeline_events ADD COLUMN confidence REAL;
-         ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;
-         CREATE TABLE data_sources (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            source_path TEXT NOT NULL,
-            size INTEGER,
-            imported_at TEXT NOT NULL DEFAULT ''
-         );
-         CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY NOT NULL,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT
-         );
-         INSERT INTO data_sources (id, case_id, name, kind, source_path)
+        "INSERT INTO data_sources (id, case_id, name, kind, source_path)
          VALUES ('ds-1', 'case-1', 'sample', 'Raw', '/sample.raw');
          INSERT INTO file_entries
          (id, data_source_id, path, name, entry_type, created_at, modified_at, accessed_at)

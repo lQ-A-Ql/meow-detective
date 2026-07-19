@@ -88,10 +88,10 @@ pub(super) fn read_entry_range(
     let (source_kind, source_path) = repo
         .find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
-    let partition_index = resolve_partition_index_for_entry(repo, entry)?;
     let path_candidates = entry_image_path_candidates(entry);
     match source_kind.as_str() {
         "e01" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
             let candidates = e01_partition_candidates(conn, entry, partition_index)?;
             let mut factory = |path: &Path| {
                 open_e01_reader_cached(path, "")
@@ -108,6 +108,7 @@ pub(super) fn read_entry_range(
             )
         }
         "raw" => {
+            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
             let candidates = raw_partition_candidates(&source_path, partition_index)?;
             let mut factory = |path: &Path| {
                 evidence_core::RawImageReader::open(path)

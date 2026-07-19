@@ -34,20 +34,26 @@ fn preview_descriptor_for_entry(
     let (source_kind, source_path) = repo
         .find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
-    let expected_partition_index =
-        crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
 
     let partition_candidates = match source_kind.as_str() {
         "logical_directory" => Vec::new(),
-        "e01" | "ceph_rbd" => crate::file_service::viewer::e01_partition_candidates(
-            conn,
-            entry,
-            expected_partition_index,
-        )?,
-        "raw" => crate::file_service::viewer::raw_partition_candidates(
-            &source_path,
-            expected_partition_index,
-        )?,
+        "e01" | "ceph_rbd" => {
+            let expected_partition_index =
+                crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
+            crate::file_service::viewer::e01_partition_candidates(
+                conn,
+                entry,
+                expected_partition_index,
+            )?
+        }
+        "raw" => {
+            let expected_partition_index =
+                crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
+            crate::file_service::viewer::raw_partition_candidates(
+                &source_path,
+                expected_partition_index,
+            )?
+        }
         other => {
             return Err(FileServiceError::other(format!(
                 "Range reading is not yet wired for data source kind '{}'",
