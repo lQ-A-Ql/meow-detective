@@ -26,6 +26,7 @@
 
 | 日期 | 类型 | 范围 | 状态 | 结果 | 下一边界 |
 |---|---|---|---|---|---|
+| 2026-07-19 | Linux/CephFS | Stage 0 presence proof + Stage 1 FSMap/MDSMap/pool binding foundation | Implemented / positive real-sample gate pending | Presence 三态判定保持当前 PVE 样本 indeterminate；新增 FSMap v7-v8、MDSMap v4-v5、`mds_info_t` v4-v10 有界 decoder，typed MDS state、跨 source map 一致性、pool cluster binding、descriptor provenance 和重复 evidence 幂等。wire 7 项与 binding 6 项测试通过 | 从 monitor store 建立带 provenance 的 map 自动采集和正样本 oracle；完成前不创建 CephFS source，再进入 Stage 2 metadata pool object inventory |
 | 2026-07-18 | Linux/Ceph | RBD Catalog 与 Artifacts 冷路径性能加固 | Completed for private retained-case gate | Artifacts 最终采用 8MiB read-plan cache 且关闭 mmap，冷重放 `130.62s / 715MiB`；Catalog 使用隐藏 build DB、4,000 行 / 16MiB 双上限和 64MiB WAL checkpoint，真实零派生源重建 `83.574s`，114,260 行、三 XFS 分区、预览、deep manifest 和零 sidecar 通过 | 持久化 Catalog frontier/cursor、inventory 完整集合证明 |
 | 2026-07-17 | Linux/Ceph | PVE 派生 Catalog 与 processing 加固 | Implemented / final gate pending | 父 source DB 只读路由、O(1) Catalog manifest、显式 deep audit、typed completeness diagnostic、XFS v1/v2/v3 inode/MACB、六阶段 processing ledger/lease/heartbeat/recovery 及 `get_data_sources` processing DTO 已落地 | 补 retained-case 只读/manifest/deep-audit 门禁后进入 OSDMap epoch 与 inventory 完整集合证明 |
 | 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 99/100 | 继续按 baseline 单调清理剩余结构债务 |

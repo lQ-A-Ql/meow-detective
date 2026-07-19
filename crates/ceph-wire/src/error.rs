@@ -219,6 +219,32 @@ pub enum CephWireError {
 
     #[error("RBD logical range arithmetic overflow at {offset:#x}~{length:#x}")]
     RbdRangeOverflow { offset: u64, length: u64 },
+
+    #[error(
+        "unsupported CephFS {map} version {encoded_version} (supported {minimum_version}..={decoder_version})"
+    )]
+    UnsupportedCephFsMapVersion {
+        map: &'static str,
+        encoded_version: u8,
+        minimum_version: u8,
+        decoder_version: u8,
+    },
+
+    #[error("invalid CephFS {map} field {field}: {reason}")]
+    InvalidCephFsMap {
+        map: &'static str,
+        field: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("duplicate CephFS {kind} identifier {value}")]
+    DuplicateCephFsIdentifier { kind: &'static str, value: i64 },
+
+    #[error("unknown CephFS MDS daemon state {value}")]
+    UnknownCephFsMdsState { value: i32 },
+
+    #[error("trailing bytes after CephFS {map}: {remaining} bytes remain")]
+    CephFsTrailingBytes { map: &'static str, remaining: usize },
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;

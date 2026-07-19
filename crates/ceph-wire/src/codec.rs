@@ -104,6 +104,7 @@ macro_rules! impl_le_integer {
 impl_le_integer!(u16, 2);
 impl_le_integer!(u32, 4);
 impl_le_integer!(u64, 8);
+impl_le_integer!(i32, 4);
 impl_le_integer!(i64, 8);
 
 impl CephDecode for Uuid {

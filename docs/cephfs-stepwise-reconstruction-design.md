@@ -283,6 +283,31 @@ epoch 和 evidence provenance。
 跨 source 冲突 fail closed；同一 source 重复导入幂等；所有字段都有 source
 provenance。
 
+#### 2026-07-19 implementation snapshot
+
+Stage 1 的 decoder/binding foundation 已实现，但不改变 CephFS 的生产支持等级：
+
+- `ceph-wire::cephfs` 按 Ceph upstream 当前编码顺序有界解码 FSMap v7-v8、
+  MDSMap v4-v5、Filesystem v1-v2 和 `mds_info_t` v4-v10；未知未来版本、截断、
+  非法 bool、未知 MDS state、重复 filesystem/GID/rank/pool 和 epoch 冲突均返回
+  typed error。
+- MDS state 使用 Ceph `ceph_fs.h` 的原始整数定义，保留 rank、GID、incarnation、
+  state sequence、`in/up/failed/stopped/damaged` 集合和 last-failure OSD epoch。
+- `app-services::ceph_reconstruction::cephfs` 对跨 source FSMap 和独立 pool
+  evidence 执行确定性 binding；同一 source/inventory 重复输入幂等，不同 source
+  的 cluster/map 冲突、缺失 pool 或跨 cluster pool 一律 fail closed。
+- 输出的 `CephFsDescriptor` identity 固定为
+  `ceph-fs:<clusterId>:<filesystemId>:<fsmapEpoch>:<metadataPoolId>`，并分别保存
+  map provenance 与 metadata/data pool provenance。无 active MDS 时保持
+  `present_but_not_replayable`，不降级为 absent。
+
+实现依据固定为 Ceph upstream `src/mds/FSMap.cc`、`src/mds/FSMap.h`、
+`src/mds/MDSMap.cc`、`src/mds/MDSMap.h`、`src/include/ceph_fs.h`、
+`src/common/CompatSet.cc`、`src/msg/msg_types.h`、`src/msg/msg_types.cc` 和
+`src/include/encoding.h`。当前尚未实现 monitor store
+中的 map 自动发现/采集，也没有 CephFS 正样本，因此不会创建 `ceph_fs` source；
+`E:\pangushi\服务器` 仍保持 `indeterminate (strongly leaning absent)`。
+
 ### Stage 2：metadata pool inventory 与只读 object locator
 
 #### stage_design

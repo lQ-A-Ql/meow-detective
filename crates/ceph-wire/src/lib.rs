@@ -5,6 +5,7 @@ pub mod bluefs_transaction;
 pub mod bluestore;
 pub mod bluestore_omap;
 pub mod bluestore_semantic;
+pub mod cephfs;
 pub mod codec;
 pub mod crc32c;
 pub mod cursor;
@@ -41,6 +42,10 @@ pub use bluestore_semantic::{
     BlueStoreOnodeHeader, BlueStoreOnodeTail, BlueStorePhysicalExtent, BlueStoreSemanticLimits,
     BlueStoreSharedBlobExtentRef, BlueStoreSharedBlobRecord, BlueStoreSuperRecord,
     BlueStoreZoneOffsetRef,
+};
+pub use cephfs::{
+    decode_ceph_fs_map, decode_ceph_mds_map, CephFsFilesystem, CephFsMap, CephMdsDaemon,
+    CephMdsMap, CephMdsState,
 };
 pub use codec::{
     decode_lba_u64, decode_varint_lowz_u64, decode_varint_u64, CephDecode, CephEncode,

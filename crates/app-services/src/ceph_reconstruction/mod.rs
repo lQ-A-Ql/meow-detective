@@ -1,3 +1,4 @@
+mod cephfs;
 mod cephfs_presence;
 mod cephfs_presence_storage;
 mod cephfs_presence_validation;
@@ -16,6 +17,11 @@ mod source_bound_lvm;
 
 pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
 
+pub use cephfs::{
+    bind_cephfs_descriptors, CephFsBindingError, CephFsDescriptor, CephFsDescriptorState,
+    CephFsMapEvidence, CephFsMapProvenance, CephFsPoolBinding, CephFsPoolEvidence,
+    CephFsPoolProvenance, CephFsPoolRole,
+};
 pub use cephfs_presence::{
     assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,
     CephFsMapPresenceSnapshot, CephFsMdsFilesystemPresenceRecord, CephFsMdsMapPresenceSnapshot,
