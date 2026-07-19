@@ -37,6 +37,7 @@ pub(super) fn validate_sources(
     descriptor: &CephFsDescriptor,
     sources: &[CephFsObjectSource],
     expected_replica_count: usize,
+    target_pool_id: i64,
 ) -> Result<(), CephFsObjectReadError> {
     if expected_replica_count == 0 || sources.len() < expected_replica_count {
         return Err(CephFsObjectReadError::CoverageNotClosed {
@@ -44,6 +45,12 @@ pub(super) fn validate_sources(
             supplied: sources.len(),
         });
     }
+    let pool = descriptor
+        .data_pools
+        .iter()
+        .chain(std::iter::once(&descriptor.metadata_pool))
+        .find(|pool| pool.pool_id == target_pool_id)
+        .ok_or(CephFsObjectReadError::InvalidDescriptor)?;
     let mut source_ids = HashSet::new();
     let mut inventories = HashSet::new();
     for source in sources {
@@ -57,7 +64,7 @@ pub(super) fn validate_sources(
                 inventory_id: source.inventory_id.clone(),
             });
         }
-        let bound = descriptor.metadata_pool.provenance.iter().any(|bound| {
+        let bound = pool.provenance.iter().any(|bound| {
             bound.source_identity == source.data_source_id.0
                 && bound.inventory_identity == source.inventory_id
         });
@@ -71,13 +78,41 @@ pub(super) fn validate_sources(
 pub(super) fn validate_locator(
     descriptor: &CephFsDescriptor,
     locator: &CephFsObjectLocator,
+    target_pool_id: i64,
 ) -> Result<(), CephFsObjectReadError> {
     if locator.filesystem_id() != descriptor.filesystem_id
-        || locator.pool_id() != descriptor.metadata_pool.pool_id
+        || locator.pool_id() != target_pool_id
         || locator.fsmap_epoch() != descriptor.fsmap_epoch
     {
         return Err(CephFsObjectReadError::LocatorMismatch {
             filesystem_identity: descriptor.identity.clone(),
+        });
+    }
+    Ok(())
+}
+
+pub(super) fn validate_data_plan(
+    descriptor: &CephFsDescriptor,
+    locator: &CephFsObjectLocator,
+    plan: &CephBluestoreObjectReadPlan,
+) -> Result<(), CephFsObjectReadError> {
+    let object = &plan.object;
+    let pool_is_bound = descriptor
+        .data_pools
+        .iter()
+        .any(|pool| pool.pool_id == locator.pool_id());
+    if !pool_is_bound
+        || plan.object_identity_sha256 != object.object_identity_sha256
+        || object.decoded_pool != locator.pool_id()
+        || object.object_namespace != locator.namespace()
+        || object.object_name != locator.object_name()
+        || object.snap_hex != super::super::CEPHFS_HEAD_SNAP_HEX
+        || object.decode_status != "parsed"
+        || object.deferred_reason.is_some()
+        || !canonical_sha256(&object.object_identity_sha256)
+    {
+        return Err(CephFsObjectReadError::MetadataConflict {
+            locator: locator.canonical(),
         });
     }
     Ok(())

@@ -105,6 +105,35 @@ fn complete_source_set_can_exceed_the_configured_replica_count() {
 }
 
 #[test]
+fn data_pool_reader_resolves_objects_directly_from_the_bound_semantic_catalog() {
+    let temp = tempfile::tempdir().unwrap();
+    let bindings = bindings(1);
+    let descriptor = support::descriptor_with_data_pool(&binding_refs(&bindings));
+    let (source, inventory) = &bindings[0];
+    let source_binding = support::write_data_source(
+        &temp.path().join("data-source.db"),
+        source,
+        inventory,
+        Some(support::OBJECT_SIZE),
+    );
+    let mut reader = SourceDbCephFsObjectReader::with_device_opener_for_pool(
+        descriptor,
+        vec![source_binding],
+        1,
+        support::DATA_POOL,
+        Box::new(SyntheticDeviceOpener {
+            devices: HashMap::from([(source.clone(), device(b"0123456789abcdef"))]),
+        }),
+    )
+    .unwrap();
+
+    let range = reader.read_range(&support::data_locator(), 4, 6).unwrap();
+
+    assert_eq!(range.bytes, b"456789");
+    assert_eq!(range.provenance.len(), 1);
+}
+
+#[test]
 fn incomplete_replica_coverage_fails_closed() {
     let (mut reader, _temp) = reader_fixture(&[Some(16), Some(16), None], None);
 

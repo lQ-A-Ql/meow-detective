@@ -3,6 +3,7 @@ mod inventory;
 mod inventory_digest;
 mod inventory_merge;
 mod journal_replay;
+mod layout_reader;
 mod locator;
 mod object_reader;
 mod types;
@@ -19,6 +20,11 @@ pub use journal_replay::{
     CephFsJournalPersistenceError, CephFsJournalPersistenceOutcome, CephFsJournalRankCandidate,
     CephFsJournalReplay, CephFsJournalReplayError, CephFsJournalReplayEvent,
     CephFsJournalReplayLimits, CephFsJournalSourceSpan, CephFsJournalStopReason,
+};
+pub use layout_reader::{
+    CephFsDataObjectCacheKey, CephFsDataObjectRead, CephFsDataRangeReader,
+    CephFsFileDataDescriptor, CephFsFileDataRange, CephFsFileDataReadError,
+    CEPHFS_DATA_LOCATOR_VERSION, MAX_CEPHFS_INLINE_DATA_LENGTH,
 };
 pub use locator::CephFsObjectLocator;
 use object_reader::{validate_metadata_response, validate_range_response};

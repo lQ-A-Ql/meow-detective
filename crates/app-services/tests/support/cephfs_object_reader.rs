@@ -24,6 +24,7 @@ pub const OBJECT_SIZE: u64 = 16;
 const FILESYSTEM_ID: i64 = 1;
 const FSMAP_EPOCH: u32 = 17;
 const METADATA_POOL: i64 = 7;
+pub const DATA_POOL: i64 = 8;
 
 pub fn descriptor(bindings: &[(&str, &str)]) -> CephFsDescriptor {
     CephFsDescriptor {
@@ -52,6 +53,22 @@ pub fn descriptor(bindings: &[(&str, &str)]) -> CephFsDescriptor {
     }
 }
 
+pub fn descriptor_with_data_pool(bindings: &[(&str, &str)]) -> CephFsDescriptor {
+    let mut descriptor = descriptor(bindings);
+    descriptor.data_pools.push(CephFsPoolBinding {
+        pool_id: DATA_POOL,
+        role: CephFsPoolRole::Data { ordinal: 0 },
+        provenance: bindings
+            .iter()
+            .map(|(source, inventory)| CephFsPoolProvenance {
+                source_identity: (*source).to_string(),
+                inventory_identity: (*inventory).to_string(),
+            })
+            .collect(),
+    });
+    descriptor
+}
+
 pub fn locator() -> CephFsObjectLocator {
     CephFsObjectLocator::new(
         FILESYSTEM_ID,
@@ -61,6 +78,17 @@ pub fn locator() -> CephFsObjectLocator {
         FSMAP_EPOCH,
     )
     .expect("build CephFS locator")
+}
+
+pub fn data_locator() -> CephFsObjectLocator {
+    CephFsObjectLocator::new(
+        FILESYSTEM_ID,
+        DATA_POOL,
+        Vec::new(),
+        OBJECT_NAME.to_vec(),
+        FSMAP_EPOCH,
+    )
+    .expect("build CephFS data locator")
 }
 
 pub fn write_source(
@@ -87,6 +115,29 @@ pub fn write_source(
         path.to_path_buf(),
     )
     .expect("build CephFS object source")
+}
+
+pub fn write_data_source(
+    path: &Path,
+    source: &str,
+    inventory: &str,
+    object_size: Option<u64>,
+) -> CephFsObjectSource {
+    let conn = persistence_sqlite::open_or_create_source(path).expect("open source database");
+    seed_control_plane(&conn, source, inventory);
+    let aggregate = semantic_aggregate_for(inventory, object_size, DATA_POOL, OBJECT_NAME);
+    CephBluestoreSemanticRepo::new(&conn)
+        .replace_for_inventory(&aggregate)
+        .expect("persist data-pool semantic aggregate");
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .expect("checkpoint source database");
+    drop(conn);
+    CephFsObjectSource::new(
+        DataSourceId(source.to_string()),
+        inventory,
+        path.to_path_buf(),
+    )
+    .expect("build CephFS data object source")
 }
 
 fn seed_control_plane(conn: &Connection, source: &str, inventory: &str) {
@@ -149,13 +200,22 @@ fn seed_control_plane(conn: &Connection, source: &str, inventory: &str) {
 }
 
 fn semantic_aggregate(inventory: &str, object_size: Option<u64>) -> CephBluestoreSemanticAggregate {
+    semantic_aggregate_for(inventory, object_size, METADATA_POOL, OBJECT_NAME)
+}
+
+fn semantic_aggregate_for(
+    inventory: &str,
+    object_size: Option<u64>,
+    pool: i64,
+    object_name: &[u8],
+) -> CephBluestoreSemanticAggregate {
     let latest_state = latest_state(inventory);
     let mut objects = Vec::new();
     let mut blobs = Vec::new();
     let mut logical_extents = Vec::new();
     let mut physical_extents = Vec::new();
     if let Some(size) = object_size {
-        let object = object_record(inventory, size);
+        let object = object_record(inventory, size, pool, object_name);
         let identity = object.object_identity_sha256.clone();
         objects.push(object);
         blobs.push(blob_record(inventory, &identity, size));
@@ -220,17 +280,22 @@ fn semantic_aggregate(inventory: &str, object_size: Option<u64>) -> CephBluestor
     aggregate
 }
 
-fn object_record(inventory: &str, size: u64) -> CephBluestoreObjectRecord {
+fn object_record(
+    inventory: &str,
+    size: u64,
+    pool: i64,
+    object_name: &[u8],
+) -> CephBluestoreObjectRecord {
     let mut object = CephBluestoreObjectRecord {
         inventory_id: inventory.to_string(),
         object_identity_sha256: String::new(),
         decoded_shard: -1,
-        decoded_pool: METADATA_POOL,
+        decoded_pool: pool,
         decoded_hash: 1,
         decoded_bitwise_hash: 2_147_483_648,
         object_namespace: Vec::new(),
         object_key: None,
-        object_name: OBJECT_NAME.to_vec(),
+        object_name: object_name.to_vec(),
         snap_hex: "fffffffffffffffe".to_string(),
         generation_hex: "0000000000000000".to_string(),
         onode_denc_version: 1,

@@ -6,7 +6,7 @@ mod validation;
 use std::sync::Arc;
 
 use persistence_sqlite::repositories::{
-    ceph_bluestore_semantic_repo::CephBluestoreReadPlanSession,
+    ceph_bluestore_semantic_repo::{CephBluestoreObjectReadPlan, CephBluestoreReadPlanSession},
     ceph_fs_metadata_inventory_repo::CephFsMetadataInventoryRepo,
 };
 
@@ -16,8 +16,8 @@ use crate::ceph_reconstruction::{
     RadosObjectReader,
 };
 use validation::{
-    checked_range, validate_descriptor, validate_locator, validate_manifest, validate_plan,
-    validate_replica_metadata, validate_sources,
+    checked_range, validate_data_plan, validate_descriptor, validate_locator, validate_manifest,
+    validate_plan, validate_replica_metadata, validate_sources,
 };
 
 pub(super) use response_validation::{validate_metadata_response, validate_range_response};
@@ -28,6 +28,7 @@ pub use types::{
 
 pub struct SourceDbCephFsObjectReader {
     descriptor: CephFsDescriptor,
+    target_pool_id: i64,
     sources: Vec<SourceRuntime>,
     expected_replica_count: usize,
     device_opener: Box<dyn BluestoreDeviceOpener>,
@@ -53,28 +54,68 @@ impl SourceDbCephFsObjectReader {
         sources: Vec<CephFsObjectSource>,
         expected_replica_count: usize,
     ) -> Result<Self, CephFsObjectReadError> {
-        Self::with_device_opener(
+        let target_pool_id = descriptor.metadata_pool.pool_id;
+        Self::with_device_opener_for_pool(
             descriptor,
             sources,
             expected_replica_count,
+            target_pool_id,
+            Box::new(FilesystemBluestoreDeviceOpener),
+        )
+    }
+
+    pub fn for_data_pool(
+        descriptor: CephFsDescriptor,
+        sources: Vec<CephFsObjectSource>,
+        expected_replica_count: usize,
+        pool_id: i64,
+    ) -> Result<Self, CephFsObjectReadError> {
+        Self::with_device_opener_for_pool(
+            descriptor,
+            sources,
+            expected_replica_count,
+            pool_id,
             Box::new(FilesystemBluestoreDeviceOpener),
         )
     }
 
     pub fn with_device_opener(
         descriptor: CephFsDescriptor,
-        mut sources: Vec<CephFsObjectSource>,
+        sources: Vec<CephFsObjectSource>,
         expected_replica_count: usize,
         device_opener: Box<dyn BluestoreDeviceOpener>,
     ) -> Result<Self, CephFsObjectReadError> {
+        let target_pool_id = descriptor.metadata_pool.pool_id;
+        Self::with_device_opener_for_pool(
+            descriptor,
+            sources,
+            expected_replica_count,
+            target_pool_id,
+            device_opener,
+        )
+    }
+
+    pub fn with_device_opener_for_pool(
+        descriptor: CephFsDescriptor,
+        mut sources: Vec<CephFsObjectSource>,
+        expected_replica_count: usize,
+        target_pool_id: i64,
+        device_opener: Box<dyn BluestoreDeviceOpener>,
+    ) -> Result<Self, CephFsObjectReadError> {
         validate_descriptor(&descriptor)?;
-        validate_sources(&descriptor, &sources, expected_replica_count)?;
+        validate_sources(
+            &descriptor,
+            &sources,
+            expected_replica_count,
+            target_pool_id,
+        )?;
         sources.sort_by(|left, right| {
             (&left.data_source_id.0, &left.inventory_id)
                 .cmp(&(&right.data_source_id.0, &right.inventory_id))
         });
         Ok(Self {
             descriptor,
+            target_pool_id,
             sources: sources
                 .into_iter()
                 .map(|binding| SourceRuntime {
@@ -94,7 +135,7 @@ impl SourceDbCephFsObjectReader {
         offset: u64,
         length: usize,
     ) -> Result<CephFsObjectRange, CephFsObjectReadError> {
-        validate_locator(&self.descriptor, locator)?;
+        validate_locator(&self.descriptor, locator, self.target_pool_id)?;
         if length > MAX_CEPHFS_OBJECT_RANGE_LENGTH {
             return Err(CephFsObjectReadError::RangeTooLarge {
                 requested: length,
@@ -123,7 +164,7 @@ impl SourceDbCephFsObjectReader {
         &mut self,
         locator: &CephFsObjectLocator,
     ) -> Result<CephFsObjectMetadata, CephFsObjectReadError> {
-        validate_locator(&self.descriptor, locator)?;
+        validate_locator(&self.descriptor, locator, self.target_pool_id)?;
         let canonical = locator.canonical();
         let replicas = self.resolve_replicas(&canonical, locator)?;
         let object_size = validate_replica_metadata(&canonical, &replicas)?;
@@ -170,75 +211,128 @@ impl SourceDbCephFsObjectReader {
         canonical: &str,
         locator: &CephFsObjectLocator,
     ) -> Result<Option<ResolvedReplica>, CephFsObjectReadError> {
+        let descriptor = &self.descriptor;
+        let target_pool_id = self.target_pool_id;
+        let device_opener = self.device_opener.as_ref();
         let runtime = &mut self.sources[index];
         ensure_session(runtime)?;
-        let session =
-            runtime
-                .session
-                .as_ref()
-                .ok_or_else(|| CephFsObjectReadError::SourceDbUnavailable {
-                    inventory_id: runtime.binding.inventory_id.clone(),
-                })?;
-        let repo = CephFsMetadataInventoryRepo::new(session.connection());
-        let manifest = repo
-            .find_manifest(&self.descriptor.identity, &runtime.binding.inventory_id)
-            .map_err(|_| inventory_unavailable(runtime))?
-            .ok_or_else(|| inventory_unavailable(runtime))?;
-        validate_manifest(
-            &self.descriptor,
-            &runtime.binding,
-            session.semantic_sha256(),
-            &manifest,
-        )?;
-        let Some(projection) = repo
-            .find_object_by_locator(
-                &self.descriptor.identity,
-                &runtime.binding.inventory_id,
-                canonical,
-            )
-            .map_err(|_| inventory_unavailable(runtime))?
-        else {
-            return Ok(None);
-        };
-        let plan = session
-            .find_object_read_plan(&projection.object_identity_sha256)
-            .map_err(|_| read_plan_unavailable(runtime))?
-            .ok_or_else(|| read_plan_unavailable(runtime))?;
-        validate_plan(locator, &projection, &plan)?;
-        let layout =
-            RadosObjectReader::prepare_layout(&plan).map_err(|_| read_plan_unavailable(runtime))?;
-        if runtime.device.is_none() {
-            let device = self
-                .device_opener
-                .open(
-                    session.connection(),
-                    &runtime.binding.data_source_id,
-                    &runtime.binding.inventory_id,
-                )
-                .map_err(|_| CephFsObjectReadError::DeviceUnavailable {
-                    inventory_id: runtime.binding.inventory_id.clone(),
-                })?;
-            runtime.device = Some(SharedEvidenceReader::new(device));
+        if target_pool_id == descriptor.metadata_pool.pool_id {
+            resolve_metadata_source(descriptor, device_opener, runtime, canonical, locator)
+        } else {
+            resolve_data_source(descriptor, device_opener, runtime, locator)
         }
-        let device =
-            runtime
-                .device
-                .clone()
-                .ok_or_else(|| CephFsObjectReadError::DeviceUnavailable {
-                    inventory_id: runtime.binding.inventory_id.clone(),
-                })?;
-        Ok(Some(ResolvedReplica {
-            provenance: CephFsObjectReadProvenance {
-                data_source_id: runtime.binding.data_source_id.0.clone(),
-                inventory_id: runtime.binding.inventory_id.clone(),
-                object_identity_sha256: projection.object_identity_sha256,
-            },
-            record_sha256: projection.record_sha256,
-            object_size: plan.object.size,
-            device,
-            layout,
-        }))
     }
+}
+
+fn resolve_metadata_source(
+    descriptor: &CephFsDescriptor,
+    device_opener: &dyn BluestoreDeviceOpener,
+    runtime: &mut SourceRuntime,
+    canonical: &str,
+    locator: &CephFsObjectLocator,
+) -> Result<Option<ResolvedReplica>, CephFsObjectReadError> {
+    let session = source_session(runtime)?;
+    let repo = CephFsMetadataInventoryRepo::new(session.connection());
+    let manifest = repo
+        .find_manifest(&descriptor.identity, &runtime.binding.inventory_id)
+        .map_err(|_| inventory_unavailable(runtime))?
+        .ok_or_else(|| inventory_unavailable(runtime))?;
+    validate_manifest(
+        descriptor,
+        &runtime.binding,
+        session.semantic_sha256(),
+        &manifest,
+    )?;
+    let Some(projection) = repo
+        .find_object_by_locator(
+            &descriptor.identity,
+            &runtime.binding.inventory_id,
+            canonical,
+        )
+        .map_err(|_| inventory_unavailable(runtime))?
+    else {
+        return Ok(None);
+    };
+    let plan = session
+        .find_object_read_plan(&projection.object_identity_sha256)
+        .map_err(|_| read_plan_unavailable(runtime))?
+        .ok_or_else(|| read_plan_unavailable(runtime))?;
+    validate_plan(locator, &projection, &plan)?;
+    finish_replica(
+        device_opener,
+        runtime,
+        plan,
+        projection.record_sha256,
+        projection.object_identity_sha256,
+    )
+    .map(Some)
+}
+
+fn resolve_data_source(
+    descriptor: &CephFsDescriptor,
+    device_opener: &dyn BluestoreDeviceOpener,
+    runtime: &mut SourceRuntime,
+    locator: &CephFsObjectLocator,
+) -> Result<Option<ResolvedReplica>, CephFsObjectReadError> {
+    let session = source_session(runtime)?;
+    let plan = session
+        .find_object_read_plan_by_name(
+            locator.object_name(),
+            locator.pool_id(),
+            locator.namespace(),
+            super::CEPHFS_HEAD_SNAP_HEX,
+        )
+        .map_err(|_| read_plan_unavailable(runtime))?;
+    let Some(plan) = plan else {
+        return Ok(None);
+    };
+    validate_data_plan(descriptor, locator, &plan)?;
+    let object_identity = plan.object_identity_sha256.clone();
+    finish_replica(
+        device_opener,
+        runtime,
+        plan,
+        object_identity.clone(),
+        object_identity,
+    )
+    .map(Some)
+}
+
+fn finish_replica(
+    device_opener: &dyn BluestoreDeviceOpener,
+    runtime: &mut SourceRuntime,
+    plan: CephBluestoreObjectReadPlan,
+    record_sha256: String,
+    object_identity_sha256: String,
+) -> Result<ResolvedReplica, CephFsObjectReadError> {
+    let layout =
+        RadosObjectReader::prepare_layout(&plan).map_err(|_| read_plan_unavailable(runtime))?;
+    if runtime.device.is_none() {
+        let session = source_session(runtime)?;
+        let device = device_opener
+            .open(
+                session.connection(),
+                &runtime.binding.data_source_id,
+                &runtime.binding.inventory_id,
+            )
+            .map_err(|_| device_unavailable(runtime))?;
+        runtime.device = Some(SharedEvidenceReader::new(device));
+    }
+    let device = runtime
+        .device
+        .clone()
+        .ok_or_else(|| device_unavailable(runtime))?;
+    Ok(ResolvedReplica {
+        provenance: CephFsObjectReadProvenance {
+            data_source_id: runtime.binding.data_source_id.0.clone(),
+            inventory_id: runtime.binding.inventory_id.clone(),
+            object_identity_sha256,
+        },
+        record_sha256,
+        object_size: plan.object.size,
+        device,
+        layout,
+    })
 }
 
 impl CephFsObjectRangeReader for SourceDbCephFsObjectReader {
@@ -278,6 +372,17 @@ fn ensure_session(runtime: &mut SourceRuntime) -> Result<(), CephFsObjectReadErr
     Ok(())
 }
 
+fn source_session(
+    runtime: &SourceRuntime,
+) -> Result<&CephBluestoreReadPlanSession, CephFsObjectReadError> {
+    runtime
+        .session
+        .as_ref()
+        .ok_or_else(|| CephFsObjectReadError::SourceDbUnavailable {
+            inventory_id: runtime.binding.inventory_id.clone(),
+        })
+}
+
 fn inventory_unavailable(runtime: &SourceRuntime) -> CephFsObjectReadError {
     CephFsObjectReadError::InventoryUnavailable {
         inventory_id: runtime.binding.inventory_id.clone(),
@@ -286,6 +391,12 @@ fn inventory_unavailable(runtime: &SourceRuntime) -> CephFsObjectReadError {
 
 fn read_plan_unavailable(runtime: &SourceRuntime) -> CephFsObjectReadError {
     CephFsObjectReadError::ReadPlanUnavailable {
+        inventory_id: runtime.binding.inventory_id.clone(),
+    }
+}
+
+fn device_unavailable(runtime: &SourceRuntime) -> CephFsObjectReadError {
+    CephFsObjectReadError::DeviceUnavailable {
         inventory_id: runtime.binding.inventory_id.clone(),
     }
 }
