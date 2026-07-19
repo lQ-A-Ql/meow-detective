@@ -274,6 +274,53 @@ pub enum CephWireError {
 
     #[error("CephFS journal range arithmetic overflow")]
     CephFsJournalRangeOverflow,
+
+    #[error("unsupported CephFS inode {structure} version {encoded_version}/{compat_version}")]
+    UnsupportedCephFsInodeVersion {
+        structure: &'static str,
+        encoded_version: u8,
+        compat_version: u8,
+    },
+
+    #[error("invalid CephFS inode field {field}: {reason}")]
+    InvalidCephFsInode {
+        field: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("unsupported CephFS dentry type {value:#04x}")]
+    UnsupportedCephFsDentryType { value: u8 },
+
+    #[error("invalid CephFS dentry {context}: {reason}")]
+    InvalidCephFsDentry {
+        context: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("unsupported CephFS file layout version {encoded_version}/{compat_version}")]
+    UnsupportedCephFsLayoutVersion {
+        encoded_version: u8,
+        compat_version: u8,
+    },
+
+    #[error("invalid CephFS file layout field {field}: {reason}")]
+    InvalidCephFsLayout {
+        field: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("CephFS layout range arithmetic overflow")]
+    CephFsLayoutRangeOverflow,
+
+    #[error("CephFS logical range {offset:#x}~{length:#x} is outside file size {file_size:#x}")]
+    CephFsLayoutRangeOutOfBounds {
+        offset: u64,
+        length: u64,
+        file_size: u64,
+    },
+
+    #[error("CephFS object index cannot be represented as u32")]
+    CephFsObjectIndexOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;
