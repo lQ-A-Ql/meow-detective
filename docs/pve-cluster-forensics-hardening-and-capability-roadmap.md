@@ -481,6 +481,9 @@ RBD capability 由 metadata feature matrix 驱动；head/snapshot/clone/multi-PV
 
 ### Stage 7 - CephFS Presence 与文件系统重建
 
+详细实施设计见 `docs/cephfs-stepwise-reconstruction-design.md`；当前真实样本复跑
+记录见 `docs/real-sample-regression/2026-07-19-pve-cluster-import-rerun.md`。
+
 #### stage_design
 
 先做 presence proof，再做 MDS metadata 和 data object 重建。不存在或不可判定时不创建伪文件树。

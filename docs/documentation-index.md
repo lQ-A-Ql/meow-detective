@@ -60,6 +60,8 @@
 | Ceph BlueStore Stage 6.5/6.6 real sample | `docs/real-sample-regression/2026-07-15-pve-bluestore-stage6-rados-rbd.md` | 六成员 OMAP 无 Header 修复、RADOS/RBD foundation 回归、真实样本结果与 VM/CephFS 未完成边界 |
 | Ceph RBD derived VM real sample | `docs/real-sample-regression/2026-07-16-pve-rbd-derived-vm.md` | 真实三副本 RBD 字节重建、派生 source DB、114,260 条 VM 文件记录、预览、性能与 CephFS indeterminate 边界 |
 | Ceph RBD Catalog/Artifacts performance | `docs/real-sample-regression/2026-07-18-pve-rbd-catalog-artifact-performance.md` | 零派生源 Catalog 重建、Artifacts 冷重放、时间/内存对照、采用参数与持久化 frontier 剩余风险 |
+| PVE cluster import rerun | `docs/real-sample-regression/2026-07-19-pve-cluster-import-rerun.md` | 六成员串行真实复跑、ready/ready_metadata 结果、BlueStore semantic oracle、CephFS 当前 indeterminate 结论 |
+| CephFS 逐步重建设计 | `docs/cephfs-stepwise-reconstruction-design.md` | Presence proof、FSMap/MDSMap、metadata pool、journal、namespace、layout、bounded preview 与分阶段验收边界 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |
