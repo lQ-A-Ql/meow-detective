@@ -216,6 +216,27 @@ negative/indeterminate regression，不作为 CephFS positive fixture。
 - 构造无 FSMap、空 FSMap、FSMap 有 filesystem、map 冲突、epoch 不连续 fixture。
 - 每个 fixture 固定 expected JSON 和 provenance。
 
+#### Stage 0 snapshot contract
+
+Stage 0 只读取 source DB 的两个受控 `source_meta` key，不创建新的 CephFS
+数据源，也不把 RBD 或 BlueStore 记录推断为 CephFS：
+
+```text
+ceph.fsmap.presence.v1
+ceph.mdsmap.presence.v1
+```
+
+两个 snapshot 都必须包含 `schemaVersion=1`、cluster/source/inventory identity、
+大于零的 map epoch、RFC3339 `capturedAt`，并且通过 source set 内的一致性校验。
+FSMap 的每个 filesystem record 必须绑定非零 metadata pool 和至少一个 data
+pool；MDSMap 必须引用同一 FSMap epoch，并为每个 filesystem 提供 MDS record。
+`rankCount=0` 不代表 filesystem 不存在，只表示当前没有可证明的 active MDS。
+
+任何 key 缺失、JSON 损坏、freshness 无法证明、source set 不闭合、cluster identity
+或 epoch 冲突、FSMap/MDSMap filesystem 集合不一致，均只能返回
+`indeterminate` 并附带结构化 diagnostic。只有完整空 FSMap + 空 MDSMap 才能返回
+`absent`；只有完整非空 FSMap 且 pool/MDS binding 闭合才能返回 `present`。
+
 #### 预期结果
 
 当前 PVE 样本仍为 `indeterminate`；不存在“因为有 RBD 所以创建 CephFS”
@@ -223,8 +244,8 @@ negative/indeterminate regression，不作为 CephFS positive fixture。
 
 #### 完成门槛
 
-三态判定器单测、DTO round-trip、negative real-sample regression 和文档守卫
-通过。
+三态判定器单测、presence assessment serde round-trip、negative real-sample
+regression 和文档守卫通过。
 
 ### Stage 1：FSMap、MDSMap 和 pool binding
 

@@ -1,3 +1,6 @@
+mod cephfs_presence;
+mod cephfs_presence_storage;
+mod cephfs_presence_validation;
 mod derived_finalizer;
 mod derived_reader;
 mod derived_runtime;
@@ -13,6 +16,13 @@ mod source_bound_lvm;
 
 pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
 
+pub use cephfs_presence::{
+    assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,
+    CephFsMapPresenceSnapshot, CephFsMdsFilesystemPresenceRecord, CephFsMdsMapPresenceSnapshot,
+    CephFsPresenceAssessment, CephFsPresenceDiagnostic, CephFsPresenceError,
+    CephFsPresenceEvidence, CephFsPresenceMapKind, CephFsPresenceState, FSMAP_PRESENCE_KEY,
+    MDSMAP_PRESENCE_KEY,
+};
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
 pub(crate) use derived_source::CATALOG_MATERIALIZER_VERSION;

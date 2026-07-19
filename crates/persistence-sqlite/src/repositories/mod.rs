@@ -28,6 +28,7 @@ pub mod notebook_repo;
 pub mod partition_repo;
 pub mod processing_phase_repo;
 pub mod report_repo;
+pub mod source_meta_repo;
 pub mod staging_repo;
 pub mod timeline_repo;
 

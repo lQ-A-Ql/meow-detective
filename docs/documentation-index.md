@@ -84,7 +84,7 @@
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 99 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 27 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 30 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo、analysis_scan_repo、catalog_file_repo、catalog_publication_repo、filesystem_locator_repo) |
+| SQLite repositories | 31 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo、analysis_scan_repo、catalog_file_repo、catalog_publication_repo、filesystem_locator_repo、source_meta_repo) |
 | SQLite migration scripts | 57 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0039 + source_001-source_017 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 87 | `frontend/src/**/*.test.ts(x)` |
