@@ -72,7 +72,7 @@ fn source_migration_installs_sanitized_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_017_timeline_projection_identity"
+        "source_018_cephfs_metadata_inventory"
     );
     for table in ["ceph_osd_inventory", "ceph_osd_label_replicas"] {
         let exists: bool = conn

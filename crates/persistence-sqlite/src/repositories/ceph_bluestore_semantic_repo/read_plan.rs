@@ -80,6 +80,10 @@ impl CephBluestoreReadPlanSession {
         &self.conn
     }
 
+    pub fn semantic_sha256(&self) -> &str {
+        &self.context.scan.semantic_sha256
+    }
+
     pub fn find_object_read_plan(
         &self,
         object_identity_sha256: &str,

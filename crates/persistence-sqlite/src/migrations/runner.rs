@@ -199,6 +199,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_017_timeline_projection_identity",
         include_str!("scripts/source_017_timeline_projection_identity.sql"),
     ),
+    (
+        "source_018_cephfs_metadata_inventory",
+        include_str!("scripts/source_018_cephfs_metadata_inventory.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

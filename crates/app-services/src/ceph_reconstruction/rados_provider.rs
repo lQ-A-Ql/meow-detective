@@ -23,7 +23,7 @@ mod range;
 mod shared;
 
 use cache::VerifiedObjectCache;
-use device_io::SharedEvidenceReader;
+pub(super) use device_io::SharedEvidenceReader;
 use plan_cache::ObjectPlanCache;
 pub(crate) use shared::SharedRadosObjectProvider;
 

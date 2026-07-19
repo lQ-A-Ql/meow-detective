@@ -84,8 +84,8 @@
 | Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 99 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 27 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 31 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (含 datasource_cluster_repo、ceph_osd_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_semantic_repo、ceph_rbd_lineage_repo、processing_phase_repo、analysis_scan_repo、catalog_file_repo、catalog_publication_repo、filesystem_locator_repo、source_meta_repo) |
-| SQLite migration scripts | 57 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0039 + source_001-source_017 + staging_001) |
+| SQLite repositories | 34 | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/` (含 datasource_cluster_repo、ceph_osd_repo、ceph_osd_device_binding_repo、ceph_bluefs_repo、ceph_bluefs_replay_repo、ceph_rocksdb_repo、ceph_rocksdb_sst_repo、ceph_rocksdb_wal_repo、ceph_rocksdb_latest_state_repo、ceph_bluestore_omap_repo、ceph_bluestore_semantic_repo、ceph_fs_metadata_inventory_repo、ceph_rbd_lineage_repo、processing_phase_repo、analysis_scan_repo、catalog_file_repo、catalog_publication_repo、filesystem_locator_repo、source_meta_repo) |
+| SQLite migration scripts | 58 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0039 + source_001-source_018 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 87 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
@@ -102,7 +102,7 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 57 | SQLite migration 脚本 (0001-0039 + source_001-source_017 + staging_001) |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 58 | SQLite migration 脚本 (0001-0039 + source_001-source_018 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |

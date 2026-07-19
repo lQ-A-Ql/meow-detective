@@ -408,7 +408,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
         "source_015_ceph_bluestore_rbd_header_context",
         super::fingerprint::CATALOG_POLICY_VERSION,
     );
-    let source_016 = super::fingerprint::phase_input_fingerprint_with_contract(
+    let latest_source = super::fingerprint::phase_input_fingerprint_with_contract(
         FINGERPRINT,
         ProcessingPhase::Catalog,
         persistence_sqlite::runner::latest_source_version(),
@@ -417,7 +417,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
 
     assert_eq!(
         persistence_sqlite::runner::latest_source_version(),
-        "source_017_timeline_projection_identity"
+        "source_018_cephfs_metadata_inventory"
     );
     assert_eq!(
         super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),
@@ -428,7 +428,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
         "source_016_file_partition_index"
     );
     assert_eq!(current, source_015);
-    assert_ne!(current, source_016);
+    assert_ne!(current, latest_source);
 }
 
 #[test]

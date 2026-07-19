@@ -18,9 +18,13 @@ mod source_bound_lvm;
 pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
 
 pub use cephfs::{
-    bind_cephfs_descriptors, CephFsBindingError, CephFsDescriptor, CephFsDescriptorState,
-    CephFsMapEvidence, CephFsMapProvenance, CephFsPoolBinding, CephFsPoolEvidence,
-    CephFsPoolProvenance, CephFsPoolRole,
+    bind_cephfs_descriptors, inventory_cephfs_metadata_pool, merge_cephfs_metadata_inventories,
+    CephFsBindingError, CephFsDescriptor, CephFsDescriptorState, CephFsInventoryError,
+    CephFsMapEvidence, CephFsMapProvenance, CephFsMergedMetadataInventory,
+    CephFsMergedMetadataObject, CephFsObjectLocator, CephFsObjectProvenance, CephFsObjectRange,
+    CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource, CephFsPoolBinding,
+    CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, SourceDbCephFsObjectReader,
+    CEPHFS_HEAD_SNAP_HEX, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 pub use cephfs_presence::{
     assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,

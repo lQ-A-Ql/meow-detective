@@ -1,4 +1,5 @@
 mod binding;
+mod inventory_page;
 mod mapping;
 mod query;
 mod read_plan;
@@ -10,6 +11,10 @@ use rusqlite::Connection;
 
 use crate::connection::DbResult;
 
+pub use inventory_page::{
+    CephBluestoreObjectInventoryEntry, CephBluestoreObjectInventoryPage,
+    CephBluestoreObjectPageCursor, MAX_OBJECT_INVENTORY_PAGE_SIZE,
+};
 pub use read_plan::{
     CephBluestoreObjectCandidate, CephBluestoreObjectReadPlan, CephBluestoreReadPlanSession,
 };
@@ -84,6 +89,16 @@ impl<'a> CephBluestoreSemanticRepo<'a> {
             ));
         };
         validation::validate_scan_for_read(&scan)
+    }
+
+    pub fn list_objects_by_pool_after(
+        &self,
+        inventory_id: &str,
+        pool_id: i64,
+        after: Option<&CephBluestoreObjectPageCursor>,
+        limit: u32,
+    ) -> DbResult<CephBluestoreObjectInventoryPage> {
+        inventory_page::list_objects_by_pool_after(self.conn, inventory_id, pool_id, after, limit)
     }
 
     pub fn replace_for_inventory(

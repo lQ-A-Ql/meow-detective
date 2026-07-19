@@ -339,6 +339,47 @@ Stage 1 的 decoder/binding foundation 已实现，但不改变 CephFS 的生产
 object identity 冲突、跨 pool 引用、越界 range、未知 object type 均有 typed
 错误或 metadata-only 降级。
 
+#### 2026-07-19 implementation snapshot
+
+Stage 2 的 metadata inventory、locator 与 source-bound object range foundation 已实现，
+但仍不创建 CephFS 数据源，也不生成文件树：
+
+- `ceph-wire::cephfs::object_name` 按 Ceph metadata object 命名语义区分
+  dirfrag candidate、standalone inode candidate、journal data/pointer、purge queue、
+  rank table、open-file table、snap table 和 anchor table。`<ino>.<frag>` 只标记为
+  dirfrag candidate；inode、dentry、xattr、snapshot realm 是对象内能力，不伪装成
+  独立 object kind。未知和非 UTF-8 名称保留为 metadata-only。
+- `CephFsObjectLocator` 使用
+  `<filesystemId>:<poolId>:h<namespaceHex>:h<objectNameHex>:<fsmapEpoch>` canonical
+  形式，保持 namespace/object name binary-safe，并拒绝非 canonical 数字、hex、空名称、
+  range overflow 和 EOF 越界。
+- `source_018_cephfs_metadata_inventory.sql` 与
+  `ceph_fs_metadata_inventory_repo` 保存 source-local manifest 和 object projection。
+  BlueStore metadata pool 通过 SHA-256 keyset cursor 分页，单页最大 4,096 条；一次
+  inventory 在同一 deferred SQLite snapshot 内读取，跨页 semantic digest 改变会失败。
+  replacement 原子、重复写幂等、digest 冲突和跨 pool 引用回滚。inventory digest
+  使用顺序无关的 canonical projection 集合计算，写入与跨 source merge 都校验
+  schema/profile、source binding、计数、locator 和实际 digest，禁止内存构造绕过持久化约束。
+- `SourceDbCephFsObjectReader` 必须绑定完整 `CephFsDescriptor.identity`、metadata pool
+  provenance、每个 source 的完整 manifest 和 persisted locator projection。read plan 只按
+  projection 中的 `object_identity_sha256` 查询，不调用 RBD name/head lookup。完整 source
+  集合可大于可配置副本数；对象存在数必须精确等于期望副本数，且 replica metadata、
+  object size 和返回 bytes 全部一致。
+- 单次 object range 上限保持 1 MiB，offset/length 使用 checked arithmetic，精确 EOF
+  的零长度读取允许通过。原有 RBD 三副本策略、RBD object naming、verified cache、
+  文件预览和 Hex 链路均未改变。
+
+实现语义依据固定为 Ceph upstream
+`ceph/ceph@42b8bc661d12759cc5fbb65e49804615263c679d` 的
+`src/mds/CInode.cc`、`src/mds/CDir.cc`、`src/mds/CDir.h`、
+`src/mds/mdstypes.h`、`src/mds/OpenFileTable.cc`、`src/mds/SessionMap.cc` 和
+`src/mds/MDSTable.cc`。backtrace 按 RADOS `parent` xattr 处理，不作为独立对象。
+
+当前测试覆盖 classifier 3 项、repository 5 项、service inventory/merge 6 项和
+source-bound reader 6 项（含 stale semantic projection 拒绝）。尚未具备 monitor store 自动 map 采集、MDS journal replay、
+inode/dirfrag/dentry 解码、namespace tree、CephFS source 或前端入口；
+`E:\pangushi\服务器` 仍为 `indeterminate (strongly leaning absent)`。
+
 ### Stage 3：MDS journal bounded replay
 
 #### stage_design

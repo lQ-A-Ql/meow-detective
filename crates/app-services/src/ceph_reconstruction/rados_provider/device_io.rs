@@ -6,13 +6,13 @@ use evidence_core::{EvidenceReader, ReaderInfo};
 use super::super::rados_reader::{RadosObjectLayout, RadosObjectReader};
 
 #[derive(Clone)]
-pub(super) struct SharedEvidenceReader {
+pub(in crate::ceph_reconstruction) struct SharedEvidenceReader {
     inner: Arc<Mutex<Box<dyn EvidenceReader>>>,
     info: ReaderInfo,
 }
 
 impl SharedEvidenceReader {
-    pub(super) fn new(reader: Box<dyn EvidenceReader>) -> Self {
+    pub(in crate::ceph_reconstruction) fn new(reader: Box<dyn EvidenceReader>) -> Self {
         let info = reader.info().clone();
         Self {
             inner: Arc::new(Mutex::new(reader)),

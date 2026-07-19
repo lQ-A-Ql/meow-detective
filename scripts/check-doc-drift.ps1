@@ -142,7 +142,14 @@ $crateCount = ([regex]::Matches(
 Assert-Equals $crateCount 36 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
-$repoCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories') -Filter '*_repo.rs' | Measure-Object).Count
+$repositoryRoot = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories'
+$repositoryNames = @(
+  Get-ChildItem -LiteralPath $repositoryRoot -File -Filter '*_repo.rs' |
+    ForEach-Object { $_.BaseName }
+  Get-ChildItem -LiteralPath $repositoryRoot -Directory -Filter '*_repo' |
+    ForEach-Object { $_.Name }
+)
+$repoCount = @($repositoryNames | Sort-Object -Unique).Count
 $migrationCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/persistence-sqlite/src/migrations/scripts') -Filter '*.sql' | Measure-Object).Count
 $pageCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'frontend/src/app/pages') -Filter '*.tsx' | Where-Object { $_.Name -notlike '*.test.tsx' } | Measure-Object).Count
 $frontendTestCount = (

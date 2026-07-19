@@ -14,6 +14,10 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_017_timeline_projection_identity",
         "source_016_file_partition_index"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_018_cephfs_metadata_inventory",
+        "source_017_timeline_projection_identity"
+    ));
 }
 
 #[test]

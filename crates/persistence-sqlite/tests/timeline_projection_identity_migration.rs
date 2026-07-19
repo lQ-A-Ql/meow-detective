@@ -40,7 +40,7 @@ fn fresh_source_schema_contains_timeline_projection_identity() {
         runner::current_version(&connection)
             .expect("read source version")
             .as_deref(),
-        Some("source_017_timeline_projection_identity")
+        Some("source_018_cephfs_metadata_inventory")
     );
 }
 
@@ -60,6 +60,18 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
                  inserted_count INTEGER NOT NULL DEFAULT 0,
                  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
              );
+             CREATE TABLE data_sources (
+                 id TEXT PRIMARY KEY NOT NULL
+             );
+             CREATE TABLE ceph_bluestore_semantic_scans (
+                 inventory_id TEXT PRIMARY KEY NOT NULL
+             );
+             CREATE TABLE ceph_bluestore_objects (
+                 inventory_id TEXT NOT NULL,
+                 object_identity_sha256 TEXT NOT NULL,
+                 decoded_pool INTEGER NOT NULL,
+                 PRIMARY KEY (inventory_id, object_identity_sha256)
+             );
              INSERT INTO timeline_projection_meta
                  (projection_key, status, inserted_count)
              VALUES ('macb', 'done', 42);",
@@ -76,7 +88,7 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
 
     assert_eq!(
         runner::run_source_all(&connection).expect("upgrade source database"),
-        1
+        2
     );
     let row: (String, i64, String) = connection
         .query_row(

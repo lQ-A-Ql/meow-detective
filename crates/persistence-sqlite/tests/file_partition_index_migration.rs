@@ -46,6 +46,18 @@ fn legacy_source_connection() -> Connection {
              id TEXT PRIMARY KEY NOT NULL,
              source_object_id TEXT NOT NULL,
              parser_id TEXT
+         );
+         CREATE TABLE data_sources (
+             id TEXT PRIMARY KEY NOT NULL
+         );
+         CREATE TABLE ceph_bluestore_semantic_scans (
+             inventory_id TEXT PRIMARY KEY NOT NULL
+         );
+         CREATE TABLE ceph_bluestore_objects (
+             inventory_id TEXT NOT NULL,
+             object_identity_sha256 TEXT NOT NULL,
+             decoded_pool INTEGER NOT NULL,
+             PRIMARY KEY (inventory_id, object_identity_sha256)
          );",
     )
     .unwrap();
@@ -87,10 +99,10 @@ fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     insert_entry(&conn, "unknown", None, "ds-a", "Volume (XFS)", None);
     insert_entry(&conn, "preset", None, "ds-a", "Partition 3", Some(99));
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 2);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
     assert_eq!(
         runner::latest_source_version(),
-        "source_017_timeline_projection_identity"
+        "source_018_cephfs_metadata_inventory"
     );
 
     for id in ["root-2", "etc", "ssh"] {
@@ -172,6 +184,18 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
              source_object_id TEXT NOT NULL,
              parser_id TEXT
          );
+         CREATE TABLE data_sources (
+             id TEXT PRIMARY KEY NOT NULL
+         );
+         CREATE TABLE ceph_bluestore_semantic_scans (
+             inventory_id TEXT PRIMARY KEY NOT NULL
+         );
+         CREATE TABLE ceph_bluestore_objects (
+             inventory_id TEXT NOT NULL,
+             object_identity_sha256 TEXT NOT NULL,
+             decoded_pool INTEGER NOT NULL,
+             PRIMARY KEY (inventory_id, object_identity_sha256)
+         );
          INSERT INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type)
          VALUES
@@ -187,7 +211,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 2);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
     for id in ["root-4", "child"] {
         let partition_index: Option<i64> = conn
             .query_row(

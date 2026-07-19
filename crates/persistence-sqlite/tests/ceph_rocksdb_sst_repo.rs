@@ -306,7 +306,7 @@ fn source_migration_installs_sst_inventory_without_raw_key_or_value_columns() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_017_timeline_projection_identity"
+        "source_018_cephfs_metadata_inventory"
     );
     let mut statement = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_sst_inventory') ORDER BY cid")

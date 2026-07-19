@@ -44,8 +44,9 @@ pub use bluestore_semantic::{
     BlueStoreZoneOffsetRef,
 };
 pub use cephfs::{
-    decode_ceph_fs_map, decode_ceph_mds_map, CephFsFilesystem, CephFsMap, CephMdsDaemon,
-    CephMdsMap, CephMdsState,
+    classify_cephfs_metadata_object_name, decode_ceph_fs_map, decode_ceph_mds_map,
+    CephFsFilesystem, CephFsMap, CephFsMetadataObjectCandidates, CephFsMetadataObjectClass,
+    CephFsRankTableKind, CephMdsDaemon, CephMdsMap, CephMdsState,
 };
 pub use codec::{
     decode_lba_u64, decode_varint_lowz_u64, decode_varint_u64, CephDecode, CephEncode,
