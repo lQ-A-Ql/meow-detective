@@ -7,6 +7,7 @@ use transport::{commands::ImportDataSourceRequest, CommandError};
 
 use crate::state::{AppState, TaskManager};
 
+mod cluster_queue;
 mod preparation;
 mod queue;
 mod request;
@@ -48,7 +49,7 @@ pub fn schedule_linux_cluster_import_for_active_case(
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,
 ) -> Result<String, CommandError> {
-    queue::schedule_linux_cluster_import_for_active_case(
+    cluster_queue::schedule_linux_cluster_import_for_active_case(
         active,
         plan,
         app,

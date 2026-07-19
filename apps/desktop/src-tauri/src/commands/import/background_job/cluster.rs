@@ -1,8 +1,9 @@
 use super::{
     cluster_members::import_cluster_members,
     cluster_output::build_derived_processing_job,
+    cluster_status::materialize_cluster_rbd_sources,
     gate::acquire_import_slot,
-    status::{cancel_job, fail_job, fail_linux_cluster_job, materialize_cluster_rbd_sources},
+    status::{cancel_job, fail_job, fail_linux_cluster_job},
     types::{BackgroundLinuxClusterImportJob, BrowseableClusterImport, ClusterImportSummary},
 };
 use crate::events::event_bridge;
