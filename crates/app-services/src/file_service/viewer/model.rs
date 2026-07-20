@@ -29,6 +29,29 @@ pub struct PreviewDescriptor {
     pub entry_size: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry_modified_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ceph_fs: Option<PreviewCephFsDescriptor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewCephFsDescriptor {
+    pub filesystem_identity: String,
+    pub filesystem_id: i64,
+    pub fsmap_epoch: u32,
+    pub inode: u64,
+    pub stripe_unit: u32,
+    pub stripe_count: u32,
+    pub object_size: u32,
+    pub pool_id: i64,
+    pub pool_namespace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_data: Option<Vec<u8>>,
+    pub projection_sha256: String,
+    pub schema_version: u32,
+    pub decoder_profile: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sparse_extents: Vec<crate::ceph_reconstruction::CephFsSparseExtentProof>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +112,15 @@ pub trait PreviewReadContext {
             &descriptor.case_id,
         )
     }
+
+    fn read_cephfs_range(
+        &mut self,
+        _descriptor: &PreviewDescriptor,
+        _offset: u64,
+        _length: usize,
+    ) -> Result<Option<Vec<u8>>, crate::file_service::FileServiceError> {
+        Ok(None)
+    }
 }
 
 impl PreviewReadContext for &rusqlite::Connection {
@@ -122,6 +154,15 @@ where
         descriptor: &PreviewDescriptor,
     ) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
         (**self).open_evidence_reader(descriptor)
+    }
+
+    fn read_cephfs_range(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        offset: u64,
+        length: usize,
+    ) -> Result<Option<Vec<u8>>, crate::file_service::FileServiceError> {
+        (**self).read_cephfs_range(descriptor, offset, length)
     }
 }
 

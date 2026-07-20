@@ -1,6 +1,6 @@
 //! Preview descriptor construction and caching.
 
-use crate::file_service::viewer::{PreviewDescriptor, PreviewReadContext};
+use crate::file_service::viewer::{PreviewCephFsDescriptor, PreviewDescriptor, PreviewReadContext};
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
@@ -36,7 +36,7 @@ fn preview_descriptor_for_entry(
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
 
     let partition_candidates = match source_kind.as_str() {
-        "logical_directory" => Vec::new(),
+        "logical_directory" | "ceph_fs" => Vec::new(),
         "e01" | "ceph_rbd" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
@@ -62,6 +62,11 @@ fn preview_descriptor_for_entry(
         }
     };
     let selected = partition_candidates.first();
+    let ceph_fs = if source_kind == "ceph_fs" {
+        Some(cephfs_descriptor(conn, entry)?)
+    } else {
+        None
+    };
 
     Ok(PreviewDescriptor {
         case_id: case_id.to_string(),
@@ -77,6 +82,53 @@ fn preview_descriptor_for_entry(
         partition_candidates,
         entry_size: entry.size.unwrap_or(0),
         entry_modified_at: entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
+        ceph_fs,
+    })
+}
+
+fn cephfs_descriptor(
+    conn: &Connection,
+    entry: &FileEntry,
+) -> Result<PreviewCephFsDescriptor, FileServiceError> {
+    let locator =
+        persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+            .find_file_locator(&entry.data_source_id.0, &entry.id.0)?
+            .ok_or_else(|| {
+                FileServiceError::not_found("Published CephFS file locator not found")
+            })?;
+    if !matches!(locator.entry_kind.as_str(), "file" | "symlink")
+        || locator.size != entry.size.unwrap_or(0)
+    {
+        return Err(FileServiceError::other(
+            "CephFS file locator does not match the file catalog",
+        ));
+    }
+    Ok(PreviewCephFsDescriptor {
+        filesystem_identity: locator.filesystem_identity,
+        filesystem_id: locator.filesystem_id,
+        fsmap_epoch: locator.fsmap_epoch,
+        inode: locator.inode,
+        stripe_unit: locator.stripe_unit,
+        stripe_count: locator.stripe_count,
+        object_size: locator.object_size,
+        pool_id: locator.pool_id,
+        pool_namespace: locator.pool_namespace,
+        inline_data: locator.inline_data,
+        projection_sha256: locator.projection_sha256,
+        schema_version: locator.schema_version,
+        decoder_profile: locator.decoder_profile,
+        sparse_extents: locator
+            .sparse_extents
+            .into_iter()
+            .map(
+                |extent| crate::ceph_reconstruction::CephFsSparseExtentProof {
+                    offset: extent.offset,
+                    length: extent.length,
+                    evidence_sha256: extent.evidence_sha256,
+                    proof_sha256: extent.proof_sha256,
+                },
+            )
+            .collect(),
     })
 }
 
@@ -166,9 +218,35 @@ pub(crate) fn descriptor_is_fresh(
         return false;
     }
 
+    if descriptor.source_kind == "ceph_fs"
+        && !cephfs_descriptor_is_fresh(conn, &entry, descriptor.ceph_fs.as_ref())
+    {
+        return false;
+    }
+
     true
 }
 
+fn cephfs_descriptor_is_fresh(
+    conn: &Connection,
+    entry: &FileEntry,
+    cached: Option<&PreviewCephFsDescriptor>,
+) -> bool {
+    let Some(cached) = cached else {
+        return false;
+    };
+    persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+        .find_file_locator(&entry.data_source_id.0, &entry.id.0)
+        .ok()
+        .flatten()
+        .is_some_and(|current| {
+            current.filesystem_identity == cached.filesystem_identity
+                && current.fsmap_epoch == cached.fsmap_epoch
+                && current.inode == cached.inode
+                && current.projection_sha256 == cached.projection_sha256
+        })
+}
+
 pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
-    format!("preview-descriptor:v3:{case_id}:{}", file_id.0)
+    format!("preview-descriptor:v4:{case_id}:{}", file_id.0)
 }

@@ -119,7 +119,7 @@ fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
         DataSourceKind::Raw => Some(ImportSourceMode::Image {
             staging_kind: "Raw",
         }),
-        DataSourceKind::CephRbd => None,
+        DataSourceKind::CephRbd | DataSourceKind::CephFs => None,
     }
 }
 
@@ -162,7 +162,9 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     let (total_files, total_size) = match kind {
         DataSourceKind::LogicalDirectory => analyze_directory(source_path, &mut warnings),
         DataSourceKind::E01 | DataSourceKind::Raw => analyze_image(source_path, &mut warnings),
-        DataSourceKind::CephRbd => unreachable!("CephRbd is rejected before filesystem access"),
+        DataSourceKind::CephRbd | DataSourceKind::CephFs => {
+            unreachable!("derived Ceph sources are rejected before filesystem access")
+        }
     };
 
     // Select strategy

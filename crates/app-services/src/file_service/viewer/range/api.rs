@@ -132,6 +132,15 @@ where
     C: PreviewReadContext,
 {
     let length = clamp_range_length(length);
+    if descriptor.source_kind == "ceph_fs" {
+        return context
+            .read_cephfs_range(descriptor, offset, length)?
+            .ok_or_else(|| {
+                FileServiceError::security(
+                    "CephFS range read requires a source-bound preview context",
+                )
+            });
+    }
     if descriptor.source_kind == "ceph_rbd" {
         return read_ceph_rbd_descriptor_range(context, descriptor, offset, length);
     }

@@ -321,6 +321,12 @@ pub enum CephWireError {
 
     #[error("CephFS object index cannot be represented as u32")]
     CephFsObjectIndexOverflow,
+
+    #[error("invalid CephFS namespace assembly {field}: {reason}")]
+    InvalidCephFsNamespaceAssembly {
+        field: &'static str,
+        reason: &'static str,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, CephWireError>;

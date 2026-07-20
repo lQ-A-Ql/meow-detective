@@ -16,6 +16,8 @@ pub enum DataSourceKind {
     Raw,
     LogicalDirectory,
     CephRbd,
+    /// A reconstructed CephFS namespace backed by a cluster source set.
+    CephFs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -73,6 +75,7 @@ impl fmt::Display for DataSourceKind {
             Self::Raw => write!(f, "raw"),
             Self::LogicalDirectory => write!(f, "logical_directory"),
             Self::CephRbd => write!(f, "ceph_rbd"),
+            Self::CephFs => write!(f, "ceph_fs"),
         }
     }
 }

@@ -1020,6 +1020,7 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
         }],
         entry_size: huge_size,
         entry_modified_at: None,
+        ceph_fs: None,
     };
 
     let bytes =
@@ -1059,6 +1060,7 @@ fn ceph_rbd_xfs_mid_file_range_uses_context_reader_without_materialize() {
         }],
         entry_size: offset + marker.len() as u64,
         entry_modified_at: None,
+        ceph_fs: None,
     };
 
     let bytes = read_file_bytes_for_descriptor_with_context(
@@ -1111,6 +1113,7 @@ fn ceph_rbd_preview_rejects_multiple_partition_candidates_before_reader_open() {
         ],
         entry_size: offset + marker.len() as u64,
         entry_modified_at: None,
+        ceph_fs: None,
     };
 
     let error = read_file_bytes_for_descriptor_with_context(
@@ -1153,6 +1156,7 @@ fn raw_ext4_mid_file_range_uses_linux_range_reader_without_materialize() {
         }],
         entry_size: offset + marker.len() as u64,
         entry_modified_at: None,
+        ceph_fs: None,
     };
 
     let bytes = read_file_bytes_for_descriptor(&descriptor, offset, marker.len() as u32).unwrap();
@@ -1484,6 +1488,7 @@ fn raw_fat_mid_file_range_uses_fat_range_reader_without_materialize() {
         }],
         entry_size: 1536,
         entry_modified_at: None,
+        ceph_fs: None,
     };
 
     let bytes = read_file_bytes_for_descriptor(&descriptor, 512 + 7, 9).unwrap();

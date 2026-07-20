@@ -50,6 +50,8 @@ pub enum ClusterServiceError {
     Db(#[from] persistence_sqlite::DbError),
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("CephFS presence assessment failed: {0}")]
+    CephFsPresence(#[from] crate::ceph_reconstruction::CephFsPresenceError),
 }
 
 impl transport::ServiceErrorCategory for ClusterServiceError {
@@ -62,6 +64,7 @@ impl transport::ServiceErrorCategory for ClusterServiceError {
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Classification(e) => e.category(),
             Self::Json(_) => transport::ErrorCategory::Internal,
+            Self::CephFsPresence(error) => error.category(),
         }
     }
 }
@@ -113,7 +116,7 @@ impl LinuxClusterImportPlan {
                         staging_kind: "Raw",
                     },
                     DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
-                    DataSourceKind::CephRbd => {
+                    DataSourceKind::CephRbd | DataSourceKind::CephFs => {
                         tracing::warn!(
                             source = %member.source_path.display(),
                             "Ceph RBD derived source cannot enter the host-path cluster import pipeline"
@@ -232,6 +235,18 @@ pub fn update_linux_cluster_import_state(
         last_error,
     )?;
     Ok(())
+}
+
+pub fn assess_linux_cluster_cephfs_presence(
+    conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    cluster_id: &str,
+) -> Result<crate::ceph_reconstruction::CephFsPresenceAssessment> {
+    crate::ceph_reconstruction::assess_cephfs_presence_for_cluster(
+        conn, case_root, case_id, cluster_id,
+    )
+    .map_err(Into::into)
 }
 
 pub fn write_linux_cluster_manifest(

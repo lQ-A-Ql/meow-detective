@@ -179,7 +179,7 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             DataSourceKind::LogicalDirectory => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
-            DataSourceKind::CephRbd => Err(BoundEvidenceOpenError {
+            DataSourceKind::CephRbd | DataSourceKind::CephFs => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
         }
@@ -234,7 +234,7 @@ impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
             DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                 .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
                 .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
-            DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd => {
+            DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
                 Err(BoundEvidenceOpenError {
                     kind: io::ErrorKind::Unsupported,
                 })

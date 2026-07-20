@@ -13,13 +13,14 @@ pub(super) fn ensure_derived_source(
 ) -> DbResult<()> {
     let valid: bool = conn.query_row(
         "SELECT EXISTS(
-            SELECT 1 FROM data_sources WHERE id = ?1 AND kind = 'ceph_rbd'
+            SELECT 1 FROM data_sources
+            WHERE id = ?1 AND kind IN ('ceph_rbd', 'ceph_fs')
          )",
         [&data_source_id.0],
         |row| row.get(0),
     )?;
     if !valid {
-        return invalid("processing phases require a Ceph RBD derived data source");
+        return invalid("processing phases require a Ceph derived data source");
     }
     Ok(())
 }

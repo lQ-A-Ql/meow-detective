@@ -89,7 +89,7 @@ pub(crate) fn publish_source_build_db(
             data_source_id.0
         )));
     }
-    verify_finalized_build_db(&build_path, data_source_id)?;
+    verify_finalized_source_db(&build_path, data_source_id)?;
     if sqlite_file_set_has_sidecars(&build_path) {
         return Err(DbError::System(format!(
             "Data source '{}' build database still has SQLite sidecars",
@@ -99,6 +99,14 @@ pub(crate) fn publish_source_build_db(
     remove_sqlite_sidecars(&build_path)?;
     std::fs::rename(&build_path, &final_path)?;
     Ok(final_path)
+}
+
+pub(crate) fn preserve_unpublished_source_build_db(
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+    attempt_id: &str,
+) -> DbResult<PathBuf> {
+    publish_source_build_db(case_root, data_source_id, attempt_id)
 }
 
 pub(crate) fn discard_source_build_db(
@@ -134,7 +142,10 @@ fn sqlite_file_set_has_sidecars(path: &Path) -> bool {
         || Path::new(&format!("{path_text}-shm")).exists()
 }
 
-fn verify_finalized_build_db(path: &Path, data_source_id: &DataSourceId) -> DbResult<()> {
+pub(crate) fn verify_finalized_source_db(
+    path: &Path,
+    data_source_id: &DataSourceId,
+) -> DbResult<()> {
     let connection = persistence_sqlite::open_existing_source_read_only(path)?;
     let marker = connection
         .query_row(

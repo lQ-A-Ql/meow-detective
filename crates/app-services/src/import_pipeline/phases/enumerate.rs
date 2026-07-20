@@ -29,7 +29,7 @@ pub(crate) fn run_enumeration_phase(
         domain::DataSourceKind::E01 | domain::DataSourceKind::Raw => {
             enumerate_image_data_source_with_staging(ctx, data_source)?
         }
-        domain::DataSourceKind::CephRbd => {
+        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the ordinary import pipeline",
             ))

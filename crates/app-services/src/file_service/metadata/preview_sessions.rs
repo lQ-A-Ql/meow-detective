@@ -7,11 +7,14 @@ use transport::dto::{
     ViewerRangeResponseDto,
 };
 
-use crate::file_service::{
-    metadata::source_routing::{open_source_for_file_id, read_file_range_for_source_case},
-    preview_runtime::PreviewSession,
-    viewer::{exact_partition_candidate, preview_descriptor_for_case},
-    FileServiceError, PreviewRuntimeRegistry,
+use crate::{
+    ceph_reconstruction::open_cephfs_file_reader,
+    file_service::{
+        metadata::source_routing::{open_source_for_file_id, read_file_range_for_source_case},
+        preview_runtime::PreviewSession,
+        viewer::{exact_partition_candidate, preview_descriptor_for_case},
+        FileServiceError, PreviewRuntimeRegistry,
+    },
 };
 
 pub fn open_preview_session_for_case(
@@ -54,6 +57,22 @@ pub fn open_preview_session_for_case(
             filesystem,
             &descriptor,
         )?
+    } else if descriptor.source_kind == "ceph_fs" {
+        let reader = open_cephfs_file_reader(
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+            &descriptor,
+        )?;
+        PreviewSession::prepared_cephfs(
+            case_id.0.clone(),
+            global_file_id,
+            descriptor.size,
+            descriptor.mime.clone(),
+            &descriptor,
+            reader,
+        )
     } else {
         PreviewSession::routed(
             case_id.0.clone(),

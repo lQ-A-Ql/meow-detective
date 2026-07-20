@@ -6,6 +6,8 @@ use super::super::CephFsObjectReadError;
 pub enum CephFsFileDataReadError {
     #[error("invalid CephFS file data descriptor: {0}")]
     InvalidDescriptor(&'static str),
+    #[error("invalid CephFS sparse extent proof: {0}")]
+    InvalidSparseExtentProof(&'static str),
     #[error("CephFS file range exceeds the {maximum} byte limit: {requested}")]
     RangeTooLarge { requested: usize, maximum: usize },
     #[error("CephFS file range arithmetic overflow")]
@@ -30,6 +32,7 @@ impl transport::ServiceErrorCategory for CephFsFileDataReadError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::InvalidDescriptor(_)
+            | Self::InvalidSparseExtentProof(_)
             | Self::RangeTooLarge { .. }
             | Self::RangeOutOfBounds { .. } => transport::ErrorCategory::Validation,
             Self::Object(error) => transport::ServiceErrorCategory::category(error),

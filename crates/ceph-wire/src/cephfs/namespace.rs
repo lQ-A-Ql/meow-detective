@@ -38,6 +38,8 @@ pub struct CephFsNamespaceEntry {
     pub nlink: Option<i32>,
     pub size: Option<u64>,
     pub layout: Option<CephFsFileLayout>,
+    pub encoded_version: Option<u8>,
+    pub remaining_inode_bytes: Option<usize>,
     pub alternate_name: String,
 }
 
@@ -96,7 +98,13 @@ pub fn build_cephfs_namespace(
             diagnostic,
             CephFsNamespaceDiagnostic::SnapshotDentrySkipped { .. }
         )
-    }) && entries.len() == head_count;
+    }) && entries.len() == head_count
+        && entries.iter().all(|entry| {
+            !matches!(
+                entry.kind,
+                CephFsNamespaceEntryKind::Remote | CephFsNamespaceEntryKind::Other
+            )
+        });
     Ok(CephFsNamespaceGraph {
         filesystem_root_inode: root_inode.ino,
         root,
@@ -232,6 +240,8 @@ fn root_entry(root: &CephFsInodeProjection) -> CephFsNamespaceEntry {
         nlink: Some(root.nlink),
         size: Some(root.size),
         layout: Some(root.layout.clone()),
+        encoded_version: Some(root.encoded_version),
+        remaining_inode_bytes: Some(root.remaining_inode_bytes),
         alternate_name: String::new(),
     }
 }
@@ -270,6 +280,8 @@ fn entry_from_record(
         nlink: inode.map(|value| value.nlink),
         size: inode.map(|value| value.size),
         layout: inode.map(|value| value.layout.clone()),
+        encoded_version: inode.map(|value| value.encoded_version),
+        remaining_inode_bytes: inode.map(|value| value.remaining_inode_bytes),
         alternate_name: record.dentry.alternate_name.clone(),
     }
 }

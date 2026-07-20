@@ -336,6 +336,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
         DataSourceKind::E01 => "e01",
         DataSourceKind::LogicalDirectory => "logical_directory",
         DataSourceKind::CephRbd => "ceph_rbd",
+        DataSourceKind::CephFs => "ceph_fs",
     }
 }
 
@@ -344,6 +345,7 @@ fn str_to_kind(s: &str) -> DataSourceKind {
         "e01" => DataSourceKind::E01,
         "logical_directory" => DataSourceKind::LogicalDirectory,
         "ceph_rbd" => DataSourceKind::CephRbd,
+        "ceph_fs" => DataSourceKind::CephFs,
         _ => DataSourceKind::Raw,
     }
 }

@@ -45,7 +45,7 @@ pub(crate) use io::{
 };
 pub(crate) use model::open_host_evidence_reader;
 pub(crate) use model::{
-    PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
+    PreviewCephFsDescriptor, PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
 pub(crate) use partition::{

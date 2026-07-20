@@ -5,6 +5,9 @@ mod journal;
 mod layout;
 mod mdsmap;
 mod namespace;
+mod namespace_assembly;
+mod namespace_assembly_checks;
+mod namespace_assembly_digest;
 mod object_name;
 mod types;
 mod wire;
@@ -35,6 +38,11 @@ pub use mdsmap::decode_ceph_mds_map;
 pub use namespace::{
     build_cephfs_namespace, CephFsNamespaceDiagnostic, CephFsNamespaceEntry,
     CephFsNamespaceEntryKind, CephFsNamespaceGraph, CephFsNamespaceRecord,
+};
+pub use namespace_assembly::{
+    assemble_cephfs_namespace, cephfs_backtrace_proof_sha256, CephFsDirfragBatch,
+    CephFsDirfragParentProof, CephFsMetadataMutationState, CephFsNamespaceAssembly,
+    CephFsNamespaceAssemblyInput, CephFsNamespaceFreezeReason, CEPHFS_NAMESPACE_ASSEMBLY_VERSION,
 };
 pub use object_name::{
     classify_cephfs_metadata_object_name, format_cephfs_journal_data_object_name,

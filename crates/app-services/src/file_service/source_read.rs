@@ -5,7 +5,10 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 use serde_json::Value;
 
 use crate::{
-    ceph_reconstruction::{build_derived_rbd_runtime, DerivedRbdRuntime},
+    ceph_reconstruction::{
+        build_derived_rbd_runtime, open_cephfs_file_reader, DerivedRbdRuntime,
+        PreparedCephFsFileReader,
+    },
     file_service::{
         viewer::{
             descriptor_for_file_with_cache, open_host_evidence_reader,
@@ -21,6 +24,7 @@ use derived_cache::DerivedSourceReadCache;
 
 const MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES: usize = 4_096;
 const MAX_SOURCE_PARTITION_CACHE_ENTRIES: usize = 64;
+const MAX_CEPHFS_PREPARED_READERS: usize = 8;
 
 #[derive(Debug, Clone)]
 struct SourceReadFileHint {
@@ -65,6 +69,7 @@ pub(crate) struct SourceReadContext<'a> {
         HashMap<usize, Vec<crate::file_service::viewer::PreviewPartitionCandidate>>,
     derived_runtime: Option<Arc<DerivedRbdRuntime>>,
     derived_reads: DerivedSourceReadCache,
+    cephfs_readers: HashMap<String, PreparedCephFsFileReader>,
 }
 
 /// Per-worker state for reading a derived source through one shared runtime.
@@ -98,6 +103,7 @@ impl<'a> SourceReadContext<'a> {
             partition_candidates: HashMap::new(),
             derived_runtime: None,
             derived_reads: DerivedSourceReadCache::default(),
+            cephfs_readers: HashMap::new(),
         }
     }
 
@@ -224,6 +230,7 @@ impl<'a> SourceReadContext<'a> {
             partition_candidates,
             entry_size: hint.size,
             entry_modified_at: None,
+            ceph_fs: None,
         })
     }
 
@@ -350,6 +357,52 @@ impl PreviewReadContext for SourceReadContext<'_> {
             Path::new(&descriptor.source_path),
             &self.case_id.0,
         )
+    }
+
+    fn read_cephfs_range(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        offset: u64,
+        length: usize,
+    ) -> Result<Option<Vec<u8>>, FileServiceError> {
+        if descriptor.source_kind != "ceph_fs" {
+            return Ok(None);
+        }
+        if descriptor.data_source_id != self.data_source_id.0 {
+            return Err(FileServiceError::security(
+                "CephFS descriptor does not belong to the bound data source",
+            ));
+        }
+        let cephfs = descriptor.ceph_fs.as_ref().ok_or_else(|| {
+            FileServiceError::other("CephFS preview descriptor is missing its file locator")
+        })?;
+        let cache_key = descriptor.file_id.clone();
+        if self
+            .cephfs_readers
+            .get(&cache_key)
+            .is_some_and(|reader| reader.projection_sha256() != cephfs.projection_sha256)
+        {
+            self.cephfs_readers.remove(&cache_key);
+        }
+        if !self.cephfs_readers.contains_key(&cache_key) {
+            if self.cephfs_readers.len() >= MAX_CEPHFS_PREPARED_READERS {
+                self.cephfs_readers.clear();
+            }
+            let reader = open_cephfs_file_reader(
+                self.case_conn,
+                self.case_root,
+                self.case_id,
+                self.data_source_id,
+                descriptor,
+            )?;
+            self.cephfs_readers.insert(cache_key.clone(), reader);
+        }
+        self.cephfs_readers
+            .get_mut(&cache_key)
+            .ok_or_else(|| FileServiceError::other("CephFS reader cache insertion failed"))?
+            .read_range(offset, length)
+            .map(Some)
+            .map_err(Into::into)
     }
 }
 

@@ -119,7 +119,7 @@ fn collect_existing_managed_paths(
     data_source_id: &DataSourceId,
 ) -> Result<Vec<(&'static str, PathBuf)>> {
     let canonical_evidence = match ds_repo.source_kind(data_source_id)? {
-        domain::DataSourceKind::CephRbd => None,
+        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => None,
         _ => {
             let evidence_path = PathBuf::from(ds_repo.source_path(data_source_id)?);
             evidence_path

@@ -342,10 +342,10 @@ impl PreviewRuntimeRegistry {
     }
 
     fn cleanup_expired_locked(&self, state: &mut RegistryState) {
-        let cutoff = Instant::now()
-            .checked_sub(self.session_ttl)
-            .unwrap_or_else(Instant::now);
-        state.sessions.retain(|_, entry| entry.last_used >= cutoff);
+        let now = Instant::now();
+        state
+            .sessions
+            .retain(|_, entry| now.saturating_duration_since(entry.last_used) <= self.session_ttl);
         prune_session_lru(state);
     }
 

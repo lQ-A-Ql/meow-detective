@@ -102,6 +102,12 @@ fn complete_empty_maps_prove_cephfs_absent() {
 
     assert_eq!(assessment.state, CephFsPresenceState::Absent);
     assert_eq!(assessment.filesystem_count, 0);
+    assert_eq!(
+        assessment.cluster_identity.as_deref(),
+        Some("ceph-cluster-a")
+    );
+    assert_eq!(assessment.source_ids, ["source-a", "source-b"]);
+    assert!(assessment.filesystems.is_empty());
     assert!(assessment.diagnostics.is_empty());
 }
 
@@ -125,8 +131,38 @@ fn complete_non_empty_maps_prove_cephfs_present_even_without_active_mds() {
 
     assert_eq!(assessment.state, CephFsPresenceState::Present);
     assert_eq!(assessment.filesystem_count, 1);
+    assert_eq!(
+        assessment.cluster_identity.as_deref(),
+        Some("ceph-cluster-a")
+    );
+    assert_eq!(assessment.filesystems, vec![valid_filesystem()]);
     assert_eq!(assessment.fsmap_epoch, Some(7));
     assert_eq!(assessment.mdsmap_epoch, Some(9));
+}
+
+#[test]
+fn duplicate_or_overlapping_pool_bindings_are_indeterminate() {
+    let mut filesystem = valid_filesystem();
+    filesystem.data_pool_ids = vec![11, 11, 10];
+    let assessment = assess_cephfs_presence(
+        &[evidence(
+            "source-a",
+            fsmap("source-a", 7, vec![filesystem]),
+            mdsmap("source-a", 7, 9, vec![valid_mds_filesystem()]),
+        )],
+        1,
+    );
+
+    assert_eq!(assessment.state, CephFsPresenceState::Indeterminate);
+    assert!(assessment.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            CephFsPresenceDiagnostic::InvalidFilesystemBinding {
+                filesystem_id: 1,
+                ..
+            }
+        )
+    }));
 }
 
 #[test]
@@ -185,6 +221,27 @@ fn incomplete_source_set_is_indeterminate() {
         matches!(
             diagnostic,
             CephFsPresenceDiagnostic::SourceSetIncomplete { .. }
+        )
+    }));
+}
+
+#[test]
+fn duplicate_source_evidence_is_indeterminate() {
+    let source = evidence(
+        "source-a",
+        fsmap("source-a", 7, vec![valid_filesystem()]),
+        mdsmap("source-a", 7, 9, vec![valid_mds_filesystem()]),
+    );
+    let assessment = assess_cephfs_presence(&[source.clone(), source], 2);
+
+    assert_eq!(assessment.state, CephFsPresenceState::Indeterminate);
+    assert!(assessment.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            CephFsPresenceDiagnostic::SourceSetIncomplete {
+                expected: 2,
+                observed: 1,
+            }
         )
     }));
 }

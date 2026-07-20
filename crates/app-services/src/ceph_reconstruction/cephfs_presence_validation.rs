@@ -1,11 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use chrono::DateTime;
 
 use super::cephfs_presence::{
-    CephFsFilesystemPresenceRecord, CephFsMapPresenceSnapshot, CephFsMdsFilesystemPresenceRecord,
-    CephFsMdsMapPresenceSnapshot, CephFsPresenceAssessment, CephFsPresenceDiagnostic,
-    CephFsPresenceEvidence, CephFsPresenceMapKind, CephFsPresenceState,
+    CephFsMapPresenceSnapshot, CephFsMdsMapPresenceSnapshot, CephFsPresenceAssessment,
+    CephFsPresenceDiagnostic, CephFsPresenceEvidence, CephFsPresenceMapKind, CephFsPresenceState,
+};
+use super::cephfs_presence_bindings::{
+    canonical_filesystem_ids, canonical_filesystems, validate_filesystem_bindings,
+    validate_unique_filesystems, validate_unique_mds_filesystems,
 };
 
 const PRESENCE_SCHEMA_VERSION: u32 = 1;
@@ -28,10 +31,15 @@ pub(super) fn assess_presence(
     }
 
     let mut diagnostics = Vec::new();
-    if evidence.len() != expected_source_count {
+    let unique_source_count = evidence
+        .iter()
+        .map(|source| source.source_id.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    if evidence.len() != expected_source_count || unique_source_count != evidence.len() {
         diagnostics.push(CephFsPresenceDiagnostic::SourceSetIncomplete {
             expected: expected_source_count,
-            observed: evidence.len(),
+            observed: unique_source_count,
         });
     }
 
@@ -100,22 +108,38 @@ pub(super) fn assess_presence(
     }
 
     let first_fsmap = valid_fsmap[0];
-    let filesystem_count = first_fsmap.filesystems.len();
     if !diagnostics.is_empty() {
         return indeterminate(evidence.len(), diagnostics);
     }
+    completed_assessment(evidence, first_fsmap, fsmap_epoch, mdsmap_epoch)
+}
 
+fn completed_assessment(
+    evidence: &[CephFsPresenceEvidence],
+    fsmap: &CephFsMapPresenceSnapshot,
+    fsmap_epoch: u64,
+    mdsmap_epoch: u64,
+) -> CephFsPresenceAssessment {
+    let filesystems = canonical_filesystems(&fsmap.filesystems);
+    let mut source_ids = evidence
+        .iter()
+        .map(|source| source.source_id.clone())
+        .collect::<Vec<_>>();
+    source_ids.sort();
     CephFsPresenceAssessment {
-        state: if filesystem_count == 0 {
+        state: if filesystems.is_empty() {
             CephFsPresenceState::Absent
         } else {
             CephFsPresenceState::Present
         },
         source_count: evidence.len(),
-        filesystem_count,
+        source_ids,
+        cluster_identity: Some(fsmap.cluster_identity.clone()),
+        filesystem_count: filesystems.len(),
+        filesystems,
         fsmap_epoch: Some(fsmap_epoch),
         mdsmap_epoch: Some(mdsmap_epoch),
-        diagnostics,
+        diagnostics: Vec::new(),
     }
 }
 
@@ -126,7 +150,10 @@ fn indeterminate(
     CephFsPresenceAssessment {
         state: CephFsPresenceState::Indeterminate,
         source_count,
+        source_ids: Vec::new(),
+        cluster_identity: None,
         filesystem_count: 0,
+        filesystems: Vec::new(),
         fsmap_epoch: None,
         mdsmap_epoch: None,
         diagnostics,
@@ -296,49 +323,6 @@ fn validate_common_snapshot(
     }
 }
 
-fn validate_unique_filesystems(
-    filesystems: &[CephFsFilesystemPresenceRecord],
-    diagnostics: &mut Vec<CephFsPresenceDiagnostic>,
-) {
-    let mut seen = BTreeSet::new();
-    for filesystem in filesystems {
-        if !seen.insert(filesystem.filesystem_id) {
-            diagnostics.push(CephFsPresenceDiagnostic::InvalidFilesystemBinding {
-                filesystem_id: filesystem.filesystem_id,
-                reason: "FSMap contains a duplicate filesystem ID".to_string(),
-            });
-        }
-        if filesystem.metadata_pool_id == 0 || filesystem.data_pool_ids.is_empty() {
-            diagnostics.push(CephFsPresenceDiagnostic::InvalidFilesystemBinding {
-                filesystem_id: filesystem.filesystem_id,
-                reason: "filesystem is missing metadata or data pool binding".to_string(),
-            });
-        }
-        if filesystem.data_pool_ids.contains(&0) {
-            diagnostics.push(CephFsPresenceDiagnostic::InvalidFilesystemBinding {
-                filesystem_id: filesystem.filesystem_id,
-                reason: "filesystem contains an invalid data pool ID".to_string(),
-            });
-        }
-    }
-}
-
-fn validate_unique_mds_filesystems(
-    source_id: &str,
-    filesystems: &[CephFsMdsFilesystemPresenceRecord],
-    diagnostics: &mut Vec<CephFsPresenceDiagnostic>,
-) {
-    let mut seen = BTreeSet::new();
-    for filesystem in filesystems {
-        if !seen.insert(filesystem.filesystem_id) {
-            diagnostics.push(CephFsPresenceDiagnostic::FsmapMdsmapMismatch {
-                source_id: source_id.to_string(),
-                reason: "MDSMap contains a duplicate filesystem ID".to_string(),
-            });
-        }
-    }
-}
-
 fn compare_snapshot_consistency<T: SnapshotIdentity>(
     snapshots: &[T],
     map: CephFsPresenceMapKind,
@@ -423,37 +407,5 @@ impl SnapshotIdentity for &CephFsMdsMapPresenceSnapshot {
 
     fn epoch(&self) -> u64 {
         self.epoch
-    }
-}
-
-fn canonical_filesystem_ids(ids: impl IntoIterator<Item = u64>) -> Vec<u64> {
-    let mut ids = ids.into_iter().collect::<Vec<_>>();
-    ids.sort_unstable();
-    ids.dedup();
-    ids
-}
-
-fn validate_filesystem_bindings(
-    fsmap: &CephFsMapPresenceSnapshot,
-    mdsmap: &CephFsMdsMapPresenceSnapshot,
-    diagnostics: &mut Vec<CephFsPresenceDiagnostic>,
-) {
-    let mds_by_id = mdsmap
-        .filesystems
-        .iter()
-        .map(|filesystem| (filesystem.filesystem_id, filesystem.rank_count))
-        .collect::<BTreeMap<_, _>>();
-    for filesystem in &fsmap.filesystems {
-        if !mds_by_id.contains_key(&filesystem.filesystem_id) {
-            diagnostics.push(CephFsPresenceDiagnostic::MissingMdsBinding {
-                filesystem_id: filesystem.filesystem_id,
-            });
-        }
-    }
-    if mds_by_id.len() != fsmap.filesystems.len() {
-        diagnostics.push(CephFsPresenceDiagnostic::FsmapMdsmapMismatch {
-            source_id: fsmap.source_identity.clone(),
-            reason: "FSMap and MDSMap filesystem sets differ".to_string(),
-        });
     }
 }

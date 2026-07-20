@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use app_services::ceph_reconstruction::{
     CephFsDataRangeReader, CephFsFileDataDescriptor, CephFsFileDataReadError, CephFsObjectLocator,
     CephFsObjectMetadata, CephFsObjectRange, CephFsObjectRangeReader, CephFsObjectReadError,
-    CephFsObjectReadProvenance, CEPHFS_DATA_LOCATOR_VERSION, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
+    CephFsObjectReadProvenance, CephFsSparseExtentProof, CEPHFS_DATA_LOCATOR_VERSION,
+    MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 use ceph_wire::CephFsFileLayout;
 
@@ -168,6 +169,119 @@ fn missing_objects_bad_responses_and_invalid_ranges_fail_closed() {
     assert!(matches!(
         mismatched.read_range(0, 1),
         Err(CephFsFileDataReadError::ResponseMismatch { .. })
+    ));
+}
+
+#[test]
+fn proven_sparse_hole_skips_missing_object_and_returns_zeroes() {
+    let file_size = 192 * KIB as u64;
+    let hole_start = 64 * KIB as u64;
+    let hole_length = 64 * KIB as u64;
+    let proof =
+        CephFsSparseExtentProof::from_evidence(1, hole_start, hole_length, "e".repeat(64)).unwrap();
+    let descriptor = CephFsFileDataDescriptor::with_sparse_extents(
+        FILESYSTEM_IDENTITY,
+        1,
+        17,
+        1,
+        file_size,
+        CephFsFileLayout::new(64 * KIB, 1, 64 * KIB, 8, "").unwrap(),
+        vec![proof],
+    )
+    .unwrap();
+    let mut reader = CephFsDataRangeReader::new(
+        descriptor,
+        FixtureObjectReader {
+            objects: BTreeMap::from([
+                (locator(0).canonical(), vec![b'A'; 64 * KIB as usize]),
+                (locator(2).canonical(), vec![b'C'; 64 * KIB as usize]),
+            ]),
+            mismatched_response: false,
+        },
+    )
+    .unwrap();
+
+    let range = reader.read_range(0, file_size as usize).unwrap();
+
+    assert_eq!(
+        &range.bytes[..64 * KIB as usize],
+        vec![b'A'; 64 * KIB as usize]
+    );
+    assert_eq!(
+        &range.bytes[64 * KIB as usize..128 * KIB as usize],
+        vec![0; 64 * KIB as usize]
+    );
+    assert_eq!(
+        &range.bytes[128 * KIB as usize..],
+        vec![b'C'; 64 * KIB as usize]
+    );
+    assert_eq!(range.object_reads.len(), 2);
+}
+
+#[test]
+fn full_sparse_proof_supports_a_hole_only_file_without_object_reads() {
+    let file_size = 128 * KIB as u64;
+    let proof = CephFsSparseExtentProof::from_evidence(8, 0, file_size, "e".repeat(64)).unwrap();
+    let descriptor = CephFsFileDataDescriptor::with_sparse_extents(
+        FILESYSTEM_IDENTITY,
+        1,
+        17,
+        8,
+        file_size,
+        CephFsFileLayout::new(0, 0, 0, -1, "").unwrap(),
+        vec![proof],
+    )
+    .unwrap();
+    let mut reader = CephFsDataRangeReader::new(
+        descriptor,
+        FixtureObjectReader {
+            objects: BTreeMap::new(),
+            mismatched_response: false,
+        },
+    )
+    .unwrap();
+
+    let range = reader.read_range(0, file_size as usize).unwrap();
+
+    assert_eq!(range.bytes, vec![0; file_size as usize]);
+    assert!(range.object_reads.is_empty());
+}
+
+#[test]
+fn sparse_proof_overlap_and_tampering_fail_closed() {
+    let first =
+        CephFsSparseExtentProof::from_evidence(9, 0, 64 * KIB as u64, "e".repeat(64)).unwrap();
+    let second =
+        CephFsSparseExtentProof::from_evidence(9, 32 * KIB as u64, 64 * KIB as u64, "e".repeat(64))
+            .unwrap();
+    let descriptor = CephFsFileDataDescriptor::with_sparse_extents(
+        FILESYSTEM_IDENTITY,
+        1,
+        17,
+        9,
+        128 * KIB as u64,
+        CephFsFileLayout::new(64 * KIB, 1, 64 * KIB, 8, "").unwrap(),
+        vec![first, second],
+    );
+    assert!(matches!(
+        descriptor,
+        Err(CephFsFileDataReadError::InvalidSparseExtentProof(_))
+    ));
+
+    let mut tampered =
+        CephFsSparseExtentProof::from_evidence(9, 0, 64 * KIB as u64, "e".repeat(64)).unwrap();
+    tampered.proof_sha256.replace_range(..1, "0");
+    assert!(matches!(
+        CephFsFileDataDescriptor::with_sparse_extents(
+            FILESYSTEM_IDENTITY,
+            1,
+            17,
+            9,
+            128 * KIB as u64,
+            CephFsFileLayout::new(64 * KIB, 1, 64 * KIB, 8, "").unwrap(),
+            vec![tampered],
+        ),
+        Err(CephFsFileDataReadError::InvalidSparseExtentProof(_))
     ));
 }
 

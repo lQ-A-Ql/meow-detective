@@ -3,6 +3,7 @@
 mod cluster;
 mod cluster_members;
 mod cluster_output;
+mod cluster_presence;
 mod cluster_status;
 mod gate;
 mod single;

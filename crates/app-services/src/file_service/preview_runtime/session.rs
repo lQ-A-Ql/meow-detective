@@ -1,10 +1,18 @@
 use std::sync::Mutex;
 
-use crate::file_service::{
-    preview_runtime::prepared_ceph::{PreparedCephFile, SharedPreparedFilesystem},
-    viewer::PreviewDescriptor,
-    FileServiceError,
+use crate::{
+    ceph_reconstruction::PreparedCephFsFileReader,
+    file_service::{
+        preview_runtime::prepared_ceph::{PreparedCephFile, SharedPreparedFilesystem},
+        viewer::PreviewDescriptor,
+        FileServiceError,
+    },
 };
+
+enum PreparedPreview {
+    Rbd(Mutex<PreparedCephFile>),
+    CephFs(Box<Mutex<PreparedCephFsFileReader>>),
+}
 
 pub(crate) struct PreviewSession {
     case_id: String,
@@ -13,7 +21,7 @@ pub(crate) struct PreviewSession {
     size: u64,
     mime: Option<String>,
     runtime_fingerprint: Option<String>,
-    prepared_ceph: Option<Mutex<PreparedCephFile>>,
+    prepared: Option<PreparedPreview>,
 }
 
 impl PreviewSession {
@@ -31,7 +39,7 @@ impl PreviewSession {
             size,
             mime,
             runtime_fingerprint: None,
-            prepared_ceph: None,
+            prepared: None,
         }
     }
 
@@ -53,8 +61,28 @@ impl PreviewSession {
             size,
             mime,
             runtime_fingerprint: Some(runtime_fingerprint),
-            prepared_ceph: Some(Mutex::new(prepared_ceph)),
+            prepared: Some(PreparedPreview::Rbd(Mutex::new(prepared_ceph))),
         })
+    }
+
+    pub(crate) fn prepared_cephfs(
+        case_id: String,
+        global_file_id: String,
+        size: u64,
+        mime: Option<String>,
+        descriptor: &PreviewDescriptor,
+        reader: PreparedCephFsFileReader,
+    ) -> Self {
+        let runtime_fingerprint = reader.lineage_fingerprint().to_string();
+        Self {
+            case_id,
+            data_source_id: descriptor.data_source_id.clone(),
+            global_file_id,
+            size,
+            mime,
+            runtime_fingerprint: Some(runtime_fingerprint),
+            prepared: Some(PreparedPreview::CephFs(Box::new(Mutex::new(reader)))),
+        }
     }
 
     pub(crate) fn case_id(&self) -> &str {
@@ -86,12 +114,21 @@ impl PreviewSession {
         offset: u64,
         length: usize,
     ) -> Result<Option<Vec<u8>>, FileServiceError> {
-        let Some(prepared) = &self.prepared_ceph else {
+        let Some(prepared) = &self.prepared else {
             return Ok(None);
         };
-        let mut prepared = prepared
-            .lock()
-            .map_err(|_| FileServiceError::other("Preview session lock is poisoned"))?;
-        prepared.read_range(offset, length).map(Some)
+        match prepared {
+            PreparedPreview::Rbd(prepared) => prepared
+                .lock()
+                .map_err(|_| FileServiceError::other("Preview session lock is poisoned"))?
+                .read_range(offset, length)
+                .map(Some),
+            PreparedPreview::CephFs(prepared) => prepared
+                .lock()
+                .map_err(|_| FileServiceError::other("CephFS preview session lock is poisoned"))?
+                .read_range(offset, length)
+                .map(Some)
+                .map_err(Into::into),
+        }
     }
 }

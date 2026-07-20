@@ -74,6 +74,45 @@ impl From<crate::source_db::ReadySourceError> for FileServiceError {
     }
 }
 
+impl From<crate::ceph_reconstruction::CephFsSourceError> for FileServiceError {
+    fn from(error: crate::ceph_reconstruction::CephFsSourceError) -> Self {
+        use crate::ceph_reconstruction::CephFsSourceError;
+
+        match error {
+            CephFsSourceError::InvalidInput(message) => Self::InvalidInput(message.to_string()),
+            CephFsSourceError::IncompleteNamespace
+            | CephFsSourceError::RetainedIncompleteSource => Self::Unsupported(error.to_string()),
+            CephFsSourceError::PresenceNotProven(_) => Self::Unsupported(error.to_string()),
+            CephFsSourceError::CapabilityInsufficient { .. } => {
+                Self::Unsupported(error.to_string())
+            }
+            CephFsSourceError::StalePublication => Self::Other(error.to_string()),
+            CephFsSourceError::ProcessingBusy => Self::Other(error.to_string()),
+            CephFsSourceError::NamespaceAssembly(_)
+            | CephFsSourceError::InconsistentState(_)
+            | CephFsSourceError::Namespace(_) => Self::Other(error.to_string()),
+            CephFsSourceError::Database(error) => Self::Db(error),
+            CephFsSourceError::Io(error) => Self::Io(error),
+        }
+    }
+}
+
+impl From<persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError>
+    for FileServiceError
+{
+    fn from(
+        error: persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError,
+    ) -> Self {
+        use persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError;
+
+        match error {
+            CephFsNamespaceRepoError::Database(error) => Self::Db(error),
+            CephFsNamespaceRepoError::Invalid(_)
+            | CephFsNamespaceRepoError::DeterminismConflict => Self::Other(error.to_string()),
+        }
+    }
+}
+
 impl transport::ServiceErrorCategory for FileServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {

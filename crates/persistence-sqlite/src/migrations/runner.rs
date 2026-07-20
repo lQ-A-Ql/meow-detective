@@ -131,6 +131,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0039_data_source_catalog_publications",
         include_str!("scripts/0039_data_source_catalog_publications.sql"),
     ),
+    (
+        "0040_cephfs_derived_sources",
+        include_str!("scripts/0040_cephfs_derived_sources.sql"),
+    ),
+    (
+        "0041_cephfs_assembly_binding",
+        include_str!("scripts/0041_cephfs_assembly_binding.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
@@ -206,6 +214,14 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
     (
         "source_019_cephfs_journal_replay",
         include_str!("scripts/source_019_cephfs_journal_replay.sql"),
+    ),
+    (
+        "source_020_cephfs_namespace_layout",
+        include_str!("scripts/source_020_cephfs_namespace_layout.sql"),
+    ),
+    (
+        "source_021_cephfs_assembly_capability",
+        include_str!("scripts/source_021_cephfs_assembly_capability.sql"),
     ),
 ];
 

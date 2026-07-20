@@ -106,7 +106,13 @@ pub enum CephFsPresenceDiagnostic {
 pub struct CephFsPresenceAssessment {
     pub state: CephFsPresenceState,
     pub source_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_identity: Option<String>,
     pub filesystem_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub filesystems: Vec<CephFsFilesystemPresenceRecord>,
     pub fsmap_epoch: Option<u64>,
     pub mdsmap_epoch: Option<u64>,
     pub diagnostics: Vec<CephFsPresenceDiagnostic>,

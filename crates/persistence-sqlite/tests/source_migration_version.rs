@@ -22,6 +22,14 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_019_cephfs_journal_replay",
         "source_018_cephfs_metadata_inventory"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_020_cephfs_namespace_layout",
+        "source_019_cephfs_journal_replay"
+    ));
+    assert!(runner::source_version_is_at_least(
+        "source_021_cephfs_assembly_capability",
+        "source_020_cephfs_namespace_layout"
+    ));
 }
 
 #[test]

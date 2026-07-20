@@ -132,7 +132,7 @@ Passed:
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -j 1 -- -D warnings`
 - `cargo test --workspace -j 1`
-- frontend typecheck, lint, 86 Vitest files / 547 tests, and production build
+- frontend typecheck, lint, 87 Vitest files / 547 tests, and production build
 - module, function, test-layout self-tests and normal guards
 - Stage 0, 2, 3, 4, 5, and 6 architecture guards
 - command SQL, media protocol, release, Stage 5 regression, import

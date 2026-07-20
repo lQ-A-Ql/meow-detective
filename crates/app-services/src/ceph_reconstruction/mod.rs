@@ -1,7 +1,9 @@
 mod cephfs;
 mod cephfs_presence;
+mod cephfs_presence_bindings;
 mod cephfs_presence_storage;
 mod cephfs_presence_validation;
+mod cephfs_source;
 mod derived_finalizer;
 mod derived_reader;
 mod derived_runtime;
@@ -20,19 +22,19 @@ pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
 pub use cephfs::{
     bind_cephfs_descriptors, discover_cephfs_journal_ranks, inventory_cephfs_metadata_pool,
     merge_cephfs_metadata_inventories, persist_cephfs_journal_replay, replay_cephfs_journal,
-    CephFsBindingError, CephFsDataObjectCacheKey, CephFsDataObjectRead, CephFsDataRangeReader,
-    CephFsDescriptor, CephFsDescriptorState, CephFsFileDataDescriptor, CephFsFileDataRange,
-    CephFsFileDataReadError, CephFsInventoryError, CephFsJournalDiscoveryError,
-    CephFsJournalFramingStatus, CephFsJournalNamespaceStopReason, CephFsJournalPersistenceError,
-    CephFsJournalPersistenceOutcome, CephFsJournalRankCandidate, CephFsJournalReplay,
-    CephFsJournalReplayError, CephFsJournalReplayEvent, CephFsJournalReplayLimits,
-    CephFsJournalSourceSpan, CephFsJournalStopReason, CephFsMapEvidence, CephFsMapProvenance,
-    CephFsMergedMetadataInventory, CephFsMergedMetadataObject, CephFsObjectLocator,
-    CephFsObjectMetadata, CephFsObjectProvenance, CephFsObjectRange, CephFsObjectRangeReader,
-    CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource, CephFsPoolBinding,
-    CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, CephFsRankBinding,
-    SourceDbCephFsObjectReader, CEPHFS_DATA_LOCATOR_VERSION, CEPHFS_HEAD_SNAP_HEX,
-    MAX_CEPHFS_INLINE_DATA_LENGTH, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
+    sparse_extent_proof_sha256, CephFsBindingError, CephFsDataObjectCacheKey, CephFsDataObjectRead,
+    CephFsDataRangeReader, CephFsDescriptor, CephFsDescriptorState, CephFsFileDataContent,
+    CephFsFileDataDescriptor, CephFsFileDataRange, CephFsFileDataReadError, CephFsInventoryError,
+    CephFsJournalDiscoveryError, CephFsJournalFramingStatus, CephFsJournalNamespaceStopReason,
+    CephFsJournalPersistenceError, CephFsJournalPersistenceOutcome, CephFsJournalRankCandidate,
+    CephFsJournalReplay, CephFsJournalReplayError, CephFsJournalReplayEvent,
+    CephFsJournalReplayLimits, CephFsJournalSourceSpan, CephFsJournalStopReason, CephFsMapEvidence,
+    CephFsMapProvenance, CephFsMergedMetadataInventory, CephFsMergedMetadataObject,
+    CephFsObjectLocator, CephFsObjectMetadata, CephFsObjectProvenance, CephFsObjectRange,
+    CephFsObjectRangeReader, CephFsObjectReadError, CephFsObjectReadProvenance, CephFsObjectSource,
+    CephFsPoolBinding, CephFsPoolEvidence, CephFsPoolProvenance, CephFsPoolRole, CephFsRankBinding,
+    CephFsSparseExtentProof, SourceDbCephFsObjectReader, CEPHFS_DATA_LOCATOR_VERSION,
+    CEPHFS_HEAD_SNAP_HEX, MAX_CEPHFS_INLINE_DATA_LENGTH, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 pub use cephfs_presence::{
     assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,
@@ -41,6 +43,11 @@ pub use cephfs_presence::{
     CephFsPresenceEvidence, CephFsPresenceMapKind, CephFsPresenceState, FSMAP_PRESENCE_KEY,
     MDSMAP_PRESENCE_KEY,
 };
+pub use cephfs_source::{
+    materialize_cephfs_source, CephFsSourceCapability, CephFsSourceError,
+    CephFsSourceMaterializationRequest, CephFsSourceResult, MaterializedCephFsSource,
+};
+pub(crate) use cephfs_source::{open_cephfs_file_reader, PreparedCephFsFileReader};
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
 pub(crate) use derived_source::CATALOG_MATERIALIZER_VERSION;

@@ -63,7 +63,9 @@ pub use viewer::{
     safe_relative_path, skip_reader_bytes, text_preview_for_file, FileHeaderReadCache,
     MediaPreviewPlan,
 };
-pub(crate) use viewer::{preview_partition_candidate_from_record, PreviewPartitionCandidate};
+pub(crate) use viewer::{
+    preview_partition_candidate_from_record, PreviewDescriptor, PreviewPartitionCandidate,
+};
 
 #[cfg(test)]
 #[path = "../../tests/unit/file_service/core.rs"]

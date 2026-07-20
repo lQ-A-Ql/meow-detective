@@ -50,6 +50,15 @@ where
                 object_reads: Vec::new(),
             });
         }
+        if self.descriptor.layout.is_empty() {
+            return Ok(CephFsFileDataRange {
+                filesystem_identity: self.descriptor.filesystem_identity.clone(),
+                inode: self.descriptor.inode,
+                offset,
+                bytes: vec![0; length],
+                object_reads: Vec::new(),
+            });
+        }
         self.read_object_range(offset, length)
     }
 
@@ -70,16 +79,7 @@ where
         let mut bytes = Vec::with_capacity(length);
         let mut object_reads = Vec::with_capacity(segments.len());
         for segment in segments {
-            let (range, cache_key) = self.read_segment(&segment)?;
-            bytes.extend_from_slice(&range.bytes);
-            object_reads.push(CephFsDataObjectRead {
-                cache_key,
-                locator: range.locator,
-                logical_offset: segment.logical_offset,
-                object_offset: segment.object_offset,
-                length: range.bytes.len(),
-                provenance: range.provenance,
-            });
+            self.read_segment_with_holes(&segment, &mut bytes, &mut object_reads)?;
         }
         if bytes.len() != length {
             return Err(CephFsFileDataReadError::ResponseMismatch {
@@ -93,6 +93,66 @@ where
             bytes,
             object_reads,
         })
+    }
+
+    fn read_segment_with_holes(
+        &mut self,
+        segment: &CephFsLayoutSegment,
+        bytes: &mut Vec<u8>,
+        object_reads: &mut Vec<CephFsDataObjectRead>,
+    ) -> Result<(), CephFsFileDataReadError> {
+        let segment_end = segment
+            .logical_offset
+            .checked_add(segment.length)
+            .ok_or(CephFsFileDataReadError::RangeOverflow)?;
+        let mut cursor = segment.logical_offset;
+        while cursor < segment_end {
+            if let Some(hole_end) = self.proven_sparse_end(cursor) {
+                let end = hole_end.min(segment_end);
+                let length = usize::try_from(end - cursor)
+                    .map_err(|_| CephFsFileDataReadError::RangeOverflow)?;
+                bytes.resize(bytes.len().saturating_add(length), 0);
+                cursor = end;
+                continue;
+            }
+            let next_hole = self
+                .descriptor
+                .sparse_extents
+                .iter()
+                .find(|extent| extent.offset > cursor)
+                .map(|extent| extent.offset)
+                .unwrap_or(segment_end)
+                .min(segment_end);
+            let piece = CephFsLayoutSegment {
+                logical_offset: cursor,
+                object_number: segment.object_number,
+                object_offset: segment
+                    .object_offset
+                    .checked_add(cursor - segment.logical_offset)
+                    .ok_or(CephFsFileDataReadError::RangeOverflow)?,
+                length: next_hole - cursor,
+            };
+            let (range, cache_key) = self.read_segment(&piece)?;
+            bytes.extend_from_slice(&range.bytes);
+            object_reads.push(CephFsDataObjectRead {
+                cache_key,
+                locator: range.locator,
+                logical_offset: piece.logical_offset,
+                object_offset: piece.object_offset,
+                length: range.bytes.len(),
+                provenance: range.provenance,
+            });
+            cursor = next_hole;
+        }
+        Ok(())
+    }
+
+    fn proven_sparse_end(&self, offset: u64) -> Option<u64> {
+        self.descriptor
+            .sparse_extents
+            .iter()
+            .find(|extent| extent.offset <= offset && offset < extent.end())
+            .map(|extent| extent.end())
     }
 
     fn read_segment(

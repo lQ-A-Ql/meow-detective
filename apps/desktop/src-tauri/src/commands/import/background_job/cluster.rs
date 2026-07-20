@@ -1,6 +1,7 @@
 use super::{
     cluster_members::import_cluster_members,
     cluster_output::build_derived_processing_job,
+    cluster_presence::assess_cephfs_presence,
     cluster_status::materialize_cluster_rbd_sources,
     gate::acquire_import_slot,
     status::{cancel_job, fail_job, fail_linux_cluster_job},
@@ -120,6 +121,7 @@ fn complete_cluster_import(
         None,
     )
     .map_err(CommandError::from_typed_service_error)?;
+    assess_cephfs_presence(connection, job);
     let Some(derived_sources) = materialize_cluster_rbd_sources(
         connection,
         job_repo,

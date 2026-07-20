@@ -550,6 +550,7 @@ checksum = "4f4c707c6a209cbe82d10abd08e1ea8995e9ea937d2550646e02798948992be0"
 name = "ceph-wire"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "sha2",
  "thiserror 2.0.18",
  "uuid",

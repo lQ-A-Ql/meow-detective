@@ -230,12 +230,12 @@ fn candidate_reader(
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
                 domain::DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
-                domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::CephRbd => {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        format!("data source kind {source_kind} is not an image reader"),
-                    ))
-                }
+                domain::DataSourceKind::LogicalDirectory
+                | domain::DataSourceKind::CephRbd
+                | domain::DataSourceKind::CephFs => Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    format!("data source kind {source_kind} is not an image reader"),
+                )),
             };
             Ok((
                 open_lvm_logical_volume_reader(source_path, &preview_identity, &mut open_reader)?,
@@ -248,7 +248,9 @@ fn candidate_reader(
                 domain::DataSourceKind::Raw => {
                     Box::new(evidence_core::RawImageReader::open(source_path)?)
                 }
-                domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::CephRbd => {
+                domain::DataSourceKind::LogicalDirectory
+                | domain::DataSourceKind::CephRbd
+                | domain::DataSourceKind::CephFs => {
                     return Err(FileServiceError::Unsupported(format!(
                         "data source kind {source_kind} is not an image reader"
                     )))

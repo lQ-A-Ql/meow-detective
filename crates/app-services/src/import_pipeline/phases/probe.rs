@@ -98,7 +98,7 @@ fn probe_image(
                 "logical directories do not expose image probe candidates",
             ))
         }
-        domain::DataSourceKind::CephRbd => {
+        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the host image probe pipeline",
             ))

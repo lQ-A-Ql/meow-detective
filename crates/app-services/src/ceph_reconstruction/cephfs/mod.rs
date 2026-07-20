@@ -22,9 +22,10 @@ pub use journal_replay::{
     CephFsJournalReplayLimits, CephFsJournalSourceSpan, CephFsJournalStopReason,
 };
 pub use layout_reader::{
-    CephFsDataObjectCacheKey, CephFsDataObjectRead, CephFsDataRangeReader,
-    CephFsFileDataDescriptor, CephFsFileDataRange, CephFsFileDataReadError,
-    CEPHFS_DATA_LOCATOR_VERSION, MAX_CEPHFS_INLINE_DATA_LENGTH,
+    sparse_extent_proof_sha256, CephFsDataObjectCacheKey, CephFsDataObjectRead,
+    CephFsDataRangeReader, CephFsFileDataContent, CephFsFileDataDescriptor, CephFsFileDataRange,
+    CephFsFileDataReadError, CephFsSparseExtentProof, CEPHFS_DATA_LOCATOR_VERSION,
+    MAX_CEPHFS_INLINE_DATA_LENGTH,
 };
 pub use locator::CephFsObjectLocator;
 use object_reader::{validate_metadata_response, validate_range_response};

@@ -15,6 +15,12 @@
 `E:\pangushi\服务器` 仍为 `indeterminate (strongly leaning absent)`，直到
 FSMap freshness proof 成立之前，不创建 CephFS 数据源。
 
+截至 2026-07-20，Stage 4–6 的可审计 foundation 已在 synthetic positive fixture
+中落地：namespace graph/manifest、CephFS layout bounded reader、独立 source DB、
+namespace 与 `file_entries` 跨表闭合校验、preview 路由、publication seal、
+recovery、删除和 presence gate 均有回归覆盖。
+这不等同于真实 CephFS 已支持；当前 PVE 样本仍只执行负向 presence 验证。
+
 ## 2. 开发基线
 
 ### 2.1 已验证基线
@@ -34,18 +40,19 @@ FSMap freshness proof 成立之前，不创建 CephFS 数据源。
 
 ### 2.2 当前代码事实
 
-- `domain::DataSourceKind` 目前只有 `E01`、`Raw`、`LogicalDirectory`、
-  `CephRbd`，没有 `CephFs`。
+- `domain::DataSourceKind` 已增加独立的 `CephFs`，稳定存储值为 `ceph_fs`；它不
+  复用 RBD、分区或 LVM 数据源。
 - 现有 RBD 入口由 `rbd_catalog`、`rbd_reader`、`rados_provider`、
   `derived_source` 和 source-bound LVM 组成。
 - 现有 RBD provider 的 object lookup 包含 RBD head/snapshot 语义，不能直接
   当作 CephFS object locator。
 - source DB 独立路径、publication seal、manifest、phase lease/heartbeat/recovery
   已具备复用条件。
-- 当前没有从真实 monitor store 自动采集的 FSMap/MDSMap canonical snapshot，也没有
-  CephFS inode/dirfrag/dentry decoder 或 CephFS layout reader。FSMap/MDSMap wire
-  foundation 与 bounded MDS journal framing/audit 已实现，但仍只由 synthetic fixture
-  验证，不能据此创建 CephFS 数据源。
+- 当前仍没有从真实 monitor store 自动采集的 FSMap/MDSMap canonical snapshot，且
+  `EMetaBlob` mutation、完整 dirfrag/backtrace/snapshot realm 语义尚未闭合。
+  Stage 4–6 已实现有界 namespace graph 校验、namespace projection、inline/layout
+  bounded reader、source-local catalog 和 preview 路由，但只由 synthetic fixture
+  验证；没有 fresh positive presence proof 时不能创建真实 CephFS 数据源。
 
 ### 2.3 官方实现依据
 
@@ -512,6 +519,25 @@ link、orphan/stray、snapshot realm 和 backtrace 必须分别建模。
 目录 fragment 不完整、重复 dentry、nlink 不一致、循环父链、跨 filesystem
 引用均不能静默发布为完整树。
 
+#### 当前实现状态
+
+- `ceph-wire` 的 namespace builder 会保留 orphan、cycle、duplicate 和 snapshot
+  diagnostic；包含 unresolved kind 或非 snapshot diagnostic 时 `complete=false`。
+- `CephFsNamespaceAssembly` 是不可由调用方构造或篡改的 opaque 结果；应用服务只
+  接受 dirfrag/inode assembly input，并在 materialization 入口内部调用唯一 assembler。
+  `complete`、`frozen`、freeze reasons 和 assembly SHA-256 不再是调用方可声明事实。
+- assembler 在构图前拒绝不安全 dentry name、零 child inode、重复 dentry identity、
+  batch/record parent 不一致，以及 primary/remote dentry 与 inode payload 不一致。
+- expected dirfrag inventory 必须闭合：额外 batch 直接拒绝，目录 dentry 若没有任何
+  已声明 dirfrag 则冻结为 incomplete，backtrace 只能绑定 primary directory dentry；
+  canonical assembly digest 同时绑定 remote dentry `d_type`，避免类型漂移复用旧 identity。
+- app-service projection 在发布前再次校验唯一 root、parent entry/inode、canonical
+  path、duplicate path/dentry、hard-link metadata 一致性和 parent chain。
+- source DB 发布前及 ready/recovery/runtime 建立时，对 `ceph_fs_dentries` 与
+  `file_entries` 逐行校验 ID、parent、path、name、type、size 和 data source；
+  目录树不是可脱离 namespace manifest 的独立事实源。
+- incomplete graph 只允许写入诊断 source DB，不写 `file_entries`，不进入 ready。
+
 ### Stage 5：CephFS file layout 与 bounded data reader
 
 #### stage_design
@@ -542,6 +568,18 @@ link、orphan/stray、snapshot realm 和 backtrace 必须分别建模。
 inline、sparse、跨 object、文件尾、错误 layout、缺失 object、重复 object
 和副本字节冲突测试全部通过。
 
+#### 当前实现状态
+
+- inline data 和 bounded range reader 已接入独立 CephFS preview reader；读取上限、
+  layout identity、pool binding、source/inventory provenance 和副本一致性沿用
+  已验证的 RADOS reader。
+- source capability 由持久化 projection 自动推导，调用方不能请求升级：完整 inline
+  bytes 或覆盖整个文件的 sparse proof 才能得到 `bounded-preview`；闭合 namespace
+  但对象覆盖尚未证明时只能得到 `metadata-browseable`；不完整 assembly 固定为
+  `metadata-only`。
+- 未能证明为 sparse hole 的缺失 object 不会被静默补零；跨 object、真实 sparse
+  和非 inline positive byte oracle 仍属于 Stage 7 验收边界。
+
 ### Stage 6：CephFS derived source DB 与前端只读链路
 
 #### stage_design
@@ -570,6 +608,28 @@ present 且 metadata/data locator 闭合的 CephFS filesystem 具备独立 sourc
 
 source isolation、open/recovery/delete、前端 DTO、preview session 和 media
 协议回归通过。
+
+#### 当前实现状态
+
+- `ceph_fs` 每个 filesystem 使用独立 `sources/<dataSourceId>/source.db`，file ID
+  通过 `ds:<dataSourceId>:<localId>` 路由；namespace manifest、lineage、catalog
+  publication seal 和 finalized marker 必须一致。
+- preview descriptor、text/hex/media 的 bounded range 均复用统一 file service；
+  CephFS 不进入 Windows/Linux host artifact extraction。
+- opaque preview session 已覆盖 CephFS reader。registry TTL 改为按 `Instant` elapsed
+  duration 判定，避免 Windows 启动时间不足默认 TTL 时 `checked_sub` 下溢并立即清除
+  新建 handle；LRU、case/source invalidation 和 read-drain 语义保持不变。
+- 重开会校验 finalized DB、manifest digest 和 publication seal；发布后 app.db
+  状态提交失败可恢复，删除先处理受管 source 目录再清理 lineage/registration。
+- ready summary 使用 repository 聚合统计，不再把整个 `file_entries` 表加载进内存；
+  完整 namespace 与 catalog 校验仍是有界的 O(namespace) 读取，bounded range
+  在 reader 建立后不重复扫描目录树。
+- 物化请求必须携带 `presence=present`、单 filesystem 和匹配的 FSMap/MDSMap epoch；
+  `absent`、`indeterminate`、多 filesystem 或 epoch 冲突均 fail closed。
+- 当前生产 cluster completion 只调用 CephFS presence assessment，不调用
+  `materialize_cephfs_source`。只有真实 metadata inventory 产生经过验证的 dirfrag、
+  backtrace、journal boundary 和 file-data coverage 后，才允许增加生产调用方；不得由
+  presence metadata 合成 namespace input。
 
 ### Stage 7：真实样本验收与能力分级
 
@@ -615,7 +675,7 @@ CephFS 能力按证据闭合程度发布，不以“能列出一些目录”作�
 | Unit | namespace | root、dirfrag、hard link、symlink、orphan、循环父链 |
 | Unit | layout | inline、sparse、stripe boundary、tail、错误 pool/object |
 | Unit | RADOS | 三副本一致、缺失对象、sparse zero、字节冲突 |
-| Repository | source DB | source-local replacement、foreign source 拒绝、manifest digest |
+| Repository | source DB | source-local replacement、foreign source 拒绝、manifest digest、namespace/file catalog 跨表一致性 |
 | Service | recovery | prepared/publication、stale attempt、journal boundary recovery |
 | API | DTO | `cephFs` 类型、presence、diagnostic、provenance round-trip |
 | Frontend | preview | FileEntryId、Hex/text/media bounded range，无 host path 泄露 |
@@ -630,6 +690,8 @@ CephFS 能力按证据闭合程度发布，不以“能列出一些目录”作�
 - Presence proof 只读取 map/pool metadata，不启动文件树物化。
 - metadata inventory 使用 cursor/page 分段，禁止一次性载入全部 object metadata。
 - namespace 构建使用有界 inode/dirfrag cache；超过预算输出可审计 incomplete。
+- publication、ready reopen、recovery 和 preview runtime 建立执行一次完整的
+  namespace/catalog 语义校验；校验只保留逐行计数与摘要，不保留完整 `FileEntry` 集合。
 - data preview 使用现有 verified page cache，但 CephFS cache key 单独命名空间。
 - 首版不承诺 CephFS 全量 data pool materialization。
 - 任何性能优化不得跳过三副本一致性、layout 校验、journal boundary 或
@@ -724,6 +786,9 @@ CephFS 能力按证据闭合程度发布，不以“能列出一些目录”作�
 7. Stage 6：接入独立 source DB、preview 和 publication/recovery。
 8. Stage 7：positive fixture、真实样本和能力分级验收。
 
-Stage 0-3 foundation 已完成；下一实施边界是 Stage 4 namespace graph 与
-`EMetaBlob` mutation 解码。继续冻结 RBD 路径，且在 positive presence proof 成立前，
-不得向 `E:\pangushi\服务器` 写入 CephFS 假数据、空 source、文件树或预览入口。
+Stage 0-6 foundation 已完成（Stage 4–6 仅 synthetic positive fixture 验证）；
+下一实施边界是从真实 monitor/source inventory 采集 fresh FSMap/MDSMap、补齐
+`EMetaBlob` mutation、dirfrag/backtrace 和真实 layout byte oracle。继续冻结 RBD
+路径，且不得向 `E:\pangushi\服务器` 写入 CephFS 假数据、空 source、文件树或预览入口。
+该样本当前只能通过只读 negative/indeterminate presence gate；没有可报告的 CephFS
+文件树、文件预览或 source materialization 正向结果。
