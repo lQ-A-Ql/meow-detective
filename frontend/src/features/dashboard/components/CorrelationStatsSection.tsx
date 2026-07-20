@@ -13,7 +13,7 @@ export function CorrelationStatsSection({ data }: { data: CorrelationSnapshot | 
         <StatCard title="线索数" value={data?.leadCount ?? 0} icon={Shield} />
       </div>
       {data?.familyCoverage && data.familyCoverage.length > 0 ? (
-        <div className="mt-3 rounded border border-forensics-border bg-white p-4">
+        <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">家族覆盖</div>
           <div className="space-y-1">
             {data.familyCoverage.map((fc, i) => (
@@ -21,7 +21,7 @@ export function CorrelationStatsSection({ data }: { data: CorrelationSnapshot | 
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-forensics-text">{fc.displayName}</span>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                    className={`rounded-none px-1.5 py-0.5 text-[10px] font-light ${
                       fc.status === 'covered'
                         ? 'bg-forensics-badge-covered-bg text-forensics-badge-covered-text'
                         : fc.status === 'review'

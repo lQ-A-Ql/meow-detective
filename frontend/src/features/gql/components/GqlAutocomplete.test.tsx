@@ -68,9 +68,9 @@ describe('GqlAutocomplete', () => {
     );
 
     const highlighted = screen.getByText('File').closest('button');
-    expect(highlighted?.className).toContain('bg-[#0366d6]');
+    expect(highlighted?.className).toContain('bg-forensics-primary-blue');
     const notHighlighted = screen.getByText('MATCH').closest('button');
-    expect(notHighlighted?.className).not.toContain('bg-[#0366d6]');
+    expect(notHighlighted?.className).not.toContain('bg-forensics-primary-blue');
   });
 
   it('renders nothing when there are no suggestions', () => {

@@ -50,15 +50,15 @@ function LargeMediaFallback({
     ? '当前通过 evidence-media 受控协议提供按需 Range 读取；若播放器不支持该协议，可提取文件后在本机播放器查看。'
     : `当前只读取首个 ${formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧"提取文件"导出后在本机播放器查看。`;
   return (
-    <div className="flex h-full items-center justify-center px-6 text-center text-[#555]">
+    <div className="flex h-full items-center justify-center px-6 text-center text-forensics-text-tertiary">
       <div className="max-w-md space-y-2">
-        <div className="text-[12px] font-semibold text-[#222]">
+        <div className="text-[12px] font-light text-forensics-text">
           {title}
         </div>
         <div className="text-[11px] leading-5">
           {detail}
         </div>
-        <div className="font-mono text-[10px] text-[#888]">
+        <div className="font-mono text-[10px] text-forensics-muted-light">
           total={formatBytes(totalBytes)} / source=opaque handle
         </div>
       </div>
@@ -117,12 +117,12 @@ export function FilePreviewPanel({
 
   return (
     <div
-      className="bg-[#fcfcfc] shrink-0 min-h-0 flex flex-col"
+      className="bg-forensics-surface shrink-0 min-h-0 flex flex-col"
       style={{ height: `${previewHeight}px` }}
     >
       <div
         className={`shrink-0 h-1 cursor-row-resize transition-colors ${
-          isResizingPreview ? 'bg-blue-400' : 'hover:bg-blue-200'
+          isResizingPreview ? 'bg-forensics-info-bg' : 'hover:bg-forensics-info-bg'
         }`}
         onMouseDown={onPreviewResizeStart}
         title="拖拽调整预览区高度"
@@ -131,9 +131,9 @@ export function FilePreviewPanel({
         <ViewerError error={previewError} onRetry={onRetryPreview} />
       )}
       {!previewError && selectedFile?.encrypted && (
-        <div className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-3 py-1.5 text-[11px] text-amber-800">
-          <span className="font-semibold">EFS Encrypted</span>
-          <span className="text-amber-600">
+        <div className="flex items-center gap-2 bg-forensics-warning-bg border-b border-forensics-warning-border px-3 py-1.5 text-[11px] text-forensics-warning-text">
+          <span className="font-light">EFS Encrypted</span>
+          <span className="text-forensics-warning-text">
             This file is encrypted with NTFS Encrypting File System. Content cannot be decrypted without the private key.
           </span>
         </div>
@@ -171,9 +171,9 @@ export function FilePreviewPanel({
                   />
                 </div>
                 {viewer.error ? (
-                  <div className="mt-2 shrink-0 text-[10px] text-red-600">{viewer.error}</div>
+                  <div className="mt-2 shrink-0 text-[10px] text-forensics-error-text">{viewer.error}</div>
                 ) : null}
-                <div className="mt-2 shrink-0 border border-[#e0e0e0] bg-[#fafafa]">
+                <div className="mt-2 shrink-0 border border-forensics-border bg-forensics-panel">
                   <Button
                     type="button"
                     variant="forensicsGhost"
@@ -182,7 +182,7 @@ export function FilePreviewPanel({
                     className="h-auto w-full justify-between px-3 py-2 text-left text-[10px]"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="font-semibold text-[#222]">
+                      <span className="font-light text-forensics-text">
                         {viewer.mode === 'full' ? '完整 Hex 预览' : '分段只读浏览'}
                       </span>
                       <span>
@@ -193,7 +193,7 @@ export function FilePreviewPanel({
                     {hexInspectorExpanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
                   </Button>
                   {hexInspectorExpanded ? (
-                    <div className="border-t border-[#e0e0e0] px-3 py-2 text-[10px] text-[#666]">
+                    <div className="border-t border-forensics-border px-3 py-2 text-[10px] text-forensics-muted">
                       <div className="flex items-center gap-2">
                         <Input
                           value={viewer.jumpOffsetInput}
@@ -222,7 +222,7 @@ export function FilePreviewPanel({
                 </div>
               </div>
             ) : (
-              <div className="text-[#666]">
+              <div className="text-forensics-muted">
                 选择文件后显示十六进制预览。
               </div>
             ),
@@ -238,7 +238,7 @@ export function FilePreviewPanel({
                 isTruncated={textPreview.isTruncated}
               />
             ) : (
-              <div className="flex items-center justify-center h-full text-[#888]">
+              <div className="flex items-center justify-center h-full text-forensics-muted-light">
                 {textPreview?.isBinary ? '二进制文件，无法预览文本' : '选择文本文件后显示预览'}
               </div>
             ),
@@ -259,7 +259,7 @@ export function FilePreviewPanel({
                     />
                   );
                 }
-                return <div className="flex items-center justify-center h-full text-[#888]">加载图片预览...</div>;
+                return <div className="flex items-center justify-center h-full text-forensics-muted-light">加载图片预览...</div>;
               }
               
               // 视频预览
@@ -274,7 +274,7 @@ export function FilePreviewPanel({
                           fileName={selectedFile?.name}
                         />
                       </div>
-                      <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
+                      <div className="border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
                         受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
                       </div>
                     </div>
@@ -287,7 +287,7 @@ export function FilePreviewPanel({
                           fileName={selectedFile?.name}
                         />
                       </div>
-                      <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
+                      <div className="border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
                         受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
                       </div>
                     </div>
@@ -309,7 +309,7 @@ export function FilePreviewPanel({
                     />
                   );
                 }
-                return <div className="flex items-center justify-center h-full text-[#888]">加载视频预览...</div>;
+                return <div className="flex items-center justify-center h-full text-forensics-muted-light">加载视频预览...</div>;
               }
               
               // 音频预览
@@ -324,7 +324,7 @@ export function FilePreviewPanel({
                           fileName={selectedFile?.name}
                         />
                       </div>
-                      <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
+                      <div className="border-t border-forensics-text-secondary bg-forensics-text px-3 py-1 text-[10px] text-forensics-muted-lighter">
                         受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
                       </div>
                     </div>
@@ -337,7 +337,7 @@ export function FilePreviewPanel({
                           fileName={selectedFile?.name}
                         />
                       </div>
-                      <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
+                      <div className="border-t border-forensics-text-secondary bg-forensics-text px-3 py-1 text-[10px] text-forensics-muted-lighter">
                         受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
                       </div>
                     </div>
@@ -359,12 +359,12 @@ export function FilePreviewPanel({
                     />
                   );
                 }
-                return <div className="flex items-center justify-center h-full text-[#888]">加载音频预览...</div>;
+                return <div className="flex items-center justify-center h-full text-forensics-muted-light">加载音频预览...</div>;
               }
               
               // 默认
               return (
-                <div className="flex items-center justify-center h-full text-[#888]">
+                <div className="flex items-center justify-center h-full text-forensics-muted-light">
                   选择图片、视频或音频文件后显示预览
                 </div>
               );
@@ -374,7 +374,7 @@ export function FilePreviewPanel({
             value: 'metadata',
             label: '元数据',
             content: (
-              <div className="space-y-2 font-mono text-[11px] text-[#444]">
+              <div className="space-y-2 font-mono text-[11px] text-forensics-text-secondary">
                 <div>
                   handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}
                 </div>

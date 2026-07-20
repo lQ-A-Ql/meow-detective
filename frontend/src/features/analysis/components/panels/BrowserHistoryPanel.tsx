@@ -8,8 +8,6 @@ import type {
 } from '@/types/models';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   DenseTableFrame,
   ExtractionTableSection,
   formatSize,
@@ -36,10 +34,8 @@ function browserOrder(a: string, b: string): number {
 
 export function BrowserHistoryPanel({
   summary,
-  progress,
 }: {
   summary?: BrowserHistorySummary;
-  progress?: AnalysisExtractionProgressInfo;
 }) {
   const info = summary ?? {
     status: 'unavailable' as const,
@@ -116,7 +112,6 @@ export function BrowserHistoryPanel({
         ['浏览器', Object.keys(visitGroups).sort(browserOrder).join(' / ') || '-'],
       ]}
     >
-      <AnalysisExtractionProgress progress={progress} />
       <div className="space-y-4">
         <TableBlock title="访问历史">
           {info.visits.length === 0 ? (
@@ -134,7 +129,7 @@ export function BrowserHistoryPanel({
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
                 <DenseTableFrame key={`visits-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-semibold text-[#111]">{browser}</div>
+                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
                   <DenseDataTable
                     rows={rows}
                     columns={visitColumns}
@@ -163,7 +158,7 @@ export function BrowserHistoryPanel({
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
                 <DenseTableFrame key={`downloads-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-semibold text-[#111]">{browser}</div>
+                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
                   <DenseDataTable
                     rows={rows}
                     columns={downloadColumns}
@@ -192,7 +187,7 @@ export function BrowserHistoryPanel({
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
                 <DenseTableFrame key={`cookies-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-semibold text-[#111]">{browser}</div>
+                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
                   <DenseDataTable
                     rows={rows}
                     columns={cookieColumns}
@@ -221,7 +216,7 @@ export function BrowserHistoryPanel({
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
                 <DenseTableFrame key={`sessions-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-semibold text-[#111]">{browser}</div>
+                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
                   <DenseDataTable
                     rows={rows}
                     columns={sessionColumns}
@@ -250,7 +245,7 @@ export function BrowserHistoryPanel({
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
                 <DenseTableFrame key={`passwords-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-semibold text-[#111]">{browser}</div>
+                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
                   <DenseDataTable
                     rows={rows}
                     columns={passwordColumns}

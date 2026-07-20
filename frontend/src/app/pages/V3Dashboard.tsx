@@ -42,7 +42,7 @@ export function V3Dashboard() {
   }
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-white">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
       <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -57,9 +57,9 @@ export function V3Dashboard() {
               variant="outline"
               onClick={refresh}
               disabled={!hasCase || loading}
-              className="h-8 rounded border-forensics-350 bg-white px-3 text-[12px] hover:bg-forensics-panel-strong"
+              className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
             >
-              <RefreshCw size={14} className={graph.isFetching || timeline.isFetching ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={graph.isFetching || timeline.isFetching ? 'opacity-70' : ''} />
               刷新
             </Button>
           </div>

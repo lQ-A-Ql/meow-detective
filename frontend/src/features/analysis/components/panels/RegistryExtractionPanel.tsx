@@ -21,8 +21,6 @@ import type {
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   DenseTableFrame,
   ExtractionTableSection,
 } from './helpers';
@@ -30,11 +28,9 @@ import {
 export function RegistryExtractionPanel({
   summary,
   structured,
-  progress,
 }: {
   summary?: RegistryExtractionSummary;
   structured?: RegistryStructuredSummary;
-  progress?: AnalysisExtractionProgressInfo;
 }) {
   const [activeTab, setActiveTab] = useState<'users' | 'activity' | 'network' | 'software' | 'usb' | 'raw'>('users');
 
@@ -47,9 +43,9 @@ export function RegistryExtractionPanel({
   // SAM users columns
   const samColumns: DenseColumn<SamUserAccount>[] = [
     {
-      key: 'username', title: '用户名', className: 'w-[130px] font-medium',
+      key: 'username', title: '用户名', className: 'w-[130px] font-light',
       render: (row) => (
-        <span className={row.accountStatus === 'disabled' ? 'text-[#999]' : ''}>
+        <span className={row.accountStatus === 'disabled' ? 'text-forensics-muted-lighter' : ''}>
           {row.username}
         </span>
       ),
@@ -59,7 +55,7 @@ export function RegistryExtractionPanel({
     {
       key: 'accountStatus', title: '状态', className: 'w-[60px]',
       render: (row) => (
-        <span className={row.accountStatus === 'enabled' ? 'text-[#027a48]' : 'text-[#667085]'}>
+        <span className={row.accountStatus === 'enabled' ? 'text-forensics-success-text' : 'text-forensics-muted'}>
           {row.accountStatus === 'enabled' ? '启用' : row.accountStatus === 'locked' ? '锁定' : '禁用'}
         </span>
       ),
@@ -71,8 +67,8 @@ export function RegistryExtractionPanel({
     {
       key: 'passwordHash', title: '密码哈希 (LM:NT)', className: 'min-w-[180px] font-mono text-[10px]',
       render: (row) => row.passwordHash
-        ? <span className="select-all text-[#b42318] truncate block">{row.passwordHash}</span>
-        : <span className="text-[#999]">—</span>,
+        ? <span className="select-all text-forensics-error-text truncate block">{row.passwordHash}</span>
+        : <span className="text-forensics-muted-lighter">—</span>,
     },
     { key: 'passwordHint', title: '密码提示', className: 'w-[120px]', render: (row) => row.passwordHint ?? '-' },
   ];
@@ -82,7 +78,7 @@ export function RegistryExtractionPanel({
     {
       key: 'programPath', title: '程序路径', className: 'min-w-[320px] font-mono text-[10px]',
       render: (row) => (
-        <span className={row.isSuspicious ? 'text-[#b42318] font-semibold' : ''}>
+        <span className={row.isSuspicious ? 'text-forensics-error-text font-light' : ''}>
           {row.isSuspicious ? '🚩 ' : ''}{row.programPath}
         </span>
       ),
@@ -110,13 +106,13 @@ export function RegistryExtractionPanel({
     {
       key: 'displayName', title: '软件名称', className: 'min-w-[220px]',
       render: (row) => (
-        <span className={row.isSuspicious ? 'text-[#b42318] font-semibold' : ''}>
+        <span className={row.isSuspicious ? 'text-forensics-error-text font-light' : ''}>
           {row.isSuspicious ? '🚩 ' : ''}{row.displayName}
         </span>
       ),
     },
     { key: 'version', title: '版本', className: 'w-[130px] font-mono text-[10px]', render: (row) => row.version },
-    { key: 'publisher', title: '发布商', className: 'min-w-[200px]', render: (row) => row.publisher ?? <span className="text-[#b42318]">未知</span> },
+    { key: 'publisher', title: '发布商', className: 'min-w-[200px]', render: (row) => row.publisher ?? <span className="text-forensics-error-text">未知</span> },
     { key: 'installDate', title: '安装日期', className: 'w-[100px]', render: (row) => row.installDate ?? '-' },
     { key: 'estimatedSize', title: '大小', className: 'w-[80px] text-right', render: (row) => row.estimatedSize ?? '-' },
   ];
@@ -126,7 +122,7 @@ export function RegistryExtractionPanel({
     {
       key: 'deviceName', title: '设备名称', className: 'min-w-[200px]',
       render: (row) => (
-        <span className={row.isSuspicious ? 'text-[#b42318] font-semibold' : ''}>
+        <span className={row.isSuspicious ? 'text-forensics-error-text font-light' : ''}>
           {row.isSuspicious ? '🚩 ' : ''}{row.deviceName}
         </span>
       ),
@@ -174,8 +170,6 @@ export function RegistryExtractionPanel({
         ['来源 Hive', new Set(info.values.map((v) => v.hivePath)).size.toString()],
       ]}
     >
-      <AnalysisExtractionProgress progress={progress} />
-
       <PanelTabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as typeof activeTab)}

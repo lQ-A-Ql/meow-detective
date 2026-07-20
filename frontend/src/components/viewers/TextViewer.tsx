@@ -127,7 +127,7 @@ export function TextViewer({
 
       return parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase() ? (
-          <mark key={i} className="bg-yellow-200 px-0.5 rounded">
+          <mark key={i} className="bg-forensics-warning-bg px-0.5 rounded-none">
             {part}
           </mark>
         ) : (
@@ -150,14 +150,14 @@ export function TextViewer({
       {/* 工具栏 */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-forensics-panel text-[11px] shrink-0">
         <FileText size={12} className="text-forensics-muted" />
-        <span className="text-forensics-muted font-medium">{encoding}</span>
+        <span className="text-forensics-muted font-light">{encoding}</span>
         <span className="text-forensics-border-strong">|</span>
         <span className="text-forensics-muted">{t('textViewer.lineCount', { count: lines.length })}</span>
 
         {isTruncated && (
           <>
             <span className="text-forensics-border-strong">|</span>
-            <span className="text-amber-600">{t('textViewer.truncated')}</span>
+            <span className="text-forensics-warning-text">{t('textViewer.truncated')}</span>
           </>
         )}
 
@@ -224,7 +224,7 @@ export function TextViewer({
       <div
         ref={containerRef}
         data-testid="text-scroll-container"
-        className="flex-1 overflow-auto bg-white"
+        className="flex-1 overflow-auto bg-forensics-surface"
         onScroll={handleScroll}
       >
         <div
@@ -254,7 +254,7 @@ export function TextViewer({
                   key={lineNum}
                   data-line-number={lineNum}
                   className={`flex hover:bg-forensics-highlight ${
-                    hasMatch ? 'bg-yellow-50' : ''
+                    hasMatch ? 'bg-forensics-warning-bg' : ''
                   }`}
                   style={{ height: ROW_HEIGHT }}
                 >

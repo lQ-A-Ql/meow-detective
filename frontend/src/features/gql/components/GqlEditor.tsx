@@ -21,7 +21,7 @@ export function GqlEditor({
   onQueryChange,
 }: GqlEditorProps) {
   return (
-    <div className="flex flex-col h-full bg-white border border-[#e0e0e0] rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-forensics-surface border border-forensics-border rounded-none overflow-hidden">
       <GqlQueryInput
         onExecute={onExecute}
         loading={loading}

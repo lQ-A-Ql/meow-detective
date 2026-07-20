@@ -9,8 +9,6 @@ import type {
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   DenseTableFrame,
   ExtractionTableSection,
 } from './helpers';
@@ -21,10 +19,8 @@ const TABS: EventLogTabKey[] = ['boot', 'logon', 'process', 'account', 'applicat
 
 export function EventLogPanel({
   summary,
-  progress,
 }: {
   summary?: EvtxEventSummary;
-  progress?: AnalysisExtractionProgressInfo;
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<EventLogTabKey>('boot');
@@ -176,8 +172,6 @@ export function EventLogPanel({
         [t('eventLog.stats.application'), info.applicationCrashCount.toString()],
       ]}
     >
-      <AnalysisExtractionProgress progress={progress} />
-
       <PanelTabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as EventLogTabKey)}

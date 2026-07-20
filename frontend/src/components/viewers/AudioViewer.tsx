@@ -150,34 +150,34 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex flex-col h-full bg-[#1a1a1a] text-white p-6">
+    <div className="flex flex-col h-full bg-forensics-850 text-white p-6">
       {/* 音频图标 */}
       <div className="flex items-center justify-center mb-6">
-        <div className="w-24 h-24 rounded-full bg-[#2a2a2a] flex items-center justify-center">
-          <Music size={48} className="text-[#666]" />
+        <div className="w-24 h-24 rounded-none bg-forensics-800 flex items-center justify-center">
+          <Music size={48} className="text-forensics-muted" />
         </div>
       </div>
 
       {/* 文件名 */}
       {fileName && (
-        <div className="text-[14px] font-medium mb-2 text-center truncate">
+        <div className="text-[14px] font-light mb-2 text-center truncate">
           {fileName}
         </div>
       )}
 
       {/* 加载/错误状态 */}
       {isLoading && (
-        <div className="text-center text-[#999] text-[12px] mb-4">加载中...</div>
+        <div className="text-center text-forensics-muted-lighter text-[12px] mb-4">加载中...</div>
       )}
       {error && (
-        <div className="text-center text-red-400 text-[12px] mb-4">{error}</div>
+        <div className="text-center text-forensics-error-text text-[12px] mb-4">{error}</div>
       )}
 
       {/* 进度条 */}
       <div className="relative w-full mb-4 focus-within:ring-2 focus-within:ring-white/40">
-        <div className="relative h-1.5 bg-[#333] rounded-full overflow-hidden">
+        <div className="relative h-1.5 bg-forensics-text-secondary rounded-none overflow-hidden">
           <div
-            className="absolute left-0 top-0 h-full bg-white rounded-full transition-all duration-100"
+            className="absolute left-0 top-0 h-full bg-forensics-surface rounded-none transition-colors duration-500 duration-100"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -200,7 +200,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       </div>
 
       {/* 时间显示 */}
-      <div className="flex justify-between text-[11px] text-[#999] mb-6 font-mono">
+      <div className="flex justify-between text-[11px] text-forensics-muted-lighter mb-6 font-mono">
         <span>{formatTime(currentTime)}</span>
         <span>{formatTime(duration)}</span>
       </div>
@@ -266,15 +266,15 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
               audioRef.current.volume = vol;
             }
           }}
-          className="w-24 h-1 bg-[#333] rounded-lg appearance-none cursor-pointer"
+          className="w-24 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
         />
-        <span className="text-[10px] text-[#666] w-8">
+        <span className="text-[10px] text-forensics-muted w-8">
           {Math.round((isMuted ? 0 : volume) * 100)}%
         </span>
       </div>
 
       {/* 文件信息 */}
-      <div className="mt-6 text-center text-[10px] text-[#666]">
+      <div className="mt-6 text-center text-[10px] text-forensics-muted">
         <span>{mimeType || 'audio'}</span>
       </div>
 

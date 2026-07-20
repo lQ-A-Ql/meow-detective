@@ -194,7 +194,7 @@ export function HexViewer({
   }, [byteWindow, lines, rowCount]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white font-mono text-[11px]">
+    <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[11px]">
       <div
         ref={containerRef}
         className="min-h-0 flex-1 overflow-auto"
@@ -214,11 +214,11 @@ export function HexViewer({
                 <div
                   key={lineIndex}
                   data-row-index={lineIndex}
-                  className="flex hover:bg-[#f5f5f5]"
+                  className="flex hover:bg-forensics-panel-strong"
                   style={{ height: lineHeight }}
                 >
                   <div
-                    className="shrink-0 border-r border-[#eee] bg-[#fafafa] pr-2 text-right text-[#999] select-none"
+                    className="shrink-0 border-r border-forensics-border-light bg-forensics-panel pr-2 text-right text-forensics-muted-lighter select-none"
                     style={{ width: offsetWidth }}
                   >
                     {line.offset}
@@ -228,26 +228,26 @@ export function HexViewer({
                     {(line.bytes ?? line.hex.split(' ')).map((byte, i) => (
                       <span key={i} className="text-center">
                         {byte === '00' ? (
-                          <span className="text-[#ccc]">{byte}</span>
+                          <span className="text-forensics-muted-lighter">{byte}</span>
                         ) : byte === 'FF' ? (
-                          <span className="text-[#e74c3c]">{byte}</span>
+                          <span className="text-forensics-error-text">{byte}</span>
                         ) : (
-                          <span className="text-[#333]">{byte}</span>
+                          <span className="text-forensics-text-secondary">{byte}</span>
                         )}
                       </span>
                     ))}
                   </div>
 
-                  <div className="shrink-0 min-w-[6rem] w-[8rem] border-l border-[#eee] pl-2 text-[#666] grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0">
+                  <div className="shrink-0 min-w-[6rem] w-[8rem] border-l border-forensics-border-light pl-2 text-forensics-muted grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0">
                     {line.ascii.split('').map((char, i) => (
                       <span
                         key={i}
                         className={
                           char === '.'
-                            ? 'text-[#ccc]'
+                            ? 'text-forensics-muted-lighter'
                             : char === ' '
-                              ? 'text-[#999]'
-                              : 'text-[#333]'
+                              ? 'text-forensics-muted-lighter'
+                              : 'text-forensics-text-secondary'
                         }
                       >
                         {char}
@@ -261,14 +261,14 @@ export function HexViewer({
         </div>
 
         {rowCount === 0 && (
-          <div className="flex h-full items-center justify-center text-[#999]">
+          <div className="flex h-full items-center justify-center text-forensics-muted-lighter">
             选择文件后显示十六进制预览
           </div>
         )}
       </div>
 
       {loadedRanges?.length ? (
-        <div className="shrink-0 border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-1 text-[10px] text-[#777]">
+        <div className="shrink-0 border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
           已加载区间: {loadedRanges.map((range) => `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1).toString(16).toUpperCase()}`).join(', ')}
         </div>
       ) : null}

@@ -23,28 +23,28 @@ export function confidenceLabel(value: CorrelationConfidence) {
 export function confidenceTone(value: CorrelationConfidence) {
   switch (value) {
     case 'direct':
-      return 'border-[#0d7a32] bg-[#effaf2] text-[#0d7a32]';
+      return 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text';
     case 'strong':
-      return 'border-[#175cd3] bg-[#eff6ff] text-[#175cd3]';
+      return 'border-forensics-info-border bg-forensics-info-bg text-forensics-info-text';
     case 'weak':
-      return 'border-[#b54708] bg-[#fff7ed] text-[#b54708]';
+      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     case 'heuristic':
-      return 'border-[#667085] bg-[#f8fafc] text-[#475467]';
+      return 'border-forensics-border-strong bg-forensics-panel text-forensics-text-secondary';
     default:
-      return 'border-[#ddd] bg-white text-[#555]';
+      return 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   }
 }
 
 export function coverageTone(value: CorrelationCoverageStatus) {
   switch (value) {
     case 'covered':
-      return 'border-[#0d7a32] bg-[#effaf2] text-[#0d7a32]';
+      return 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text';
     case 'review':
-      return 'border-[#b54708] bg-[#fff7ed] text-[#b54708]';
+      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     case 'missing':
-      return 'border-[#667085] bg-[#f8fafc] text-[#475467]';
+      return 'border-forensics-border-strong bg-forensics-panel text-forensics-text-secondary';
     default:
-      return 'border-[#ddd] bg-white text-[#555]';
+      return 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   }
 }
 
@@ -117,7 +117,7 @@ export function FamilyPills({ families, testId }: { families: string[]; testId: 
       {families.map((family) => (
         <span
           key={`${testId}-${family}`}
-          className="rounded border border-[#d0d5dd] bg-white px-2 py-1 text-[10px] font-mono text-[#344054]"
+          className="rounded-none border border-forensics-border-strong bg-forensics-surface px-2 py-1 text-[10px] font-mono text-forensics-text-secondary"
         >
           {family}
         </span>

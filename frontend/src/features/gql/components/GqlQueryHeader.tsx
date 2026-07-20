@@ -13,13 +13,13 @@ export function GqlQueryHeader({ loading, executeQuery, code }: GqlQueryHeaderPr
 
   return (
     <div className="flex items-center justify-between px-3 py-2 border-b border-forensics-border bg-forensics-highlight">
-      <span className="text-[11px] font-semibold text-forensics-gql-muted uppercase tracking-wider">
+      <span className="text-[11px] font-light text-forensics-gql-muted uppercase tracking-wider">
         {t('gql.header.title')}
       </span>
       <div className="flex items-center gap-2">
         {loading && (
           <span className="text-[11px] text-forensics-gql-muted flex items-center gap-1">
-            <RefreshCw size={12} className="animate-spin" />
+            <RefreshCw size={12} className="opacity-70" />
             {t('gql.header.running')}
           </span>
         )}
@@ -29,7 +29,7 @@ export function GqlQueryHeader({ loading, executeQuery, code }: GqlQueryHeaderPr
           size="xs"
           onClick={executeQuery}
           disabled={loading || !code.trim()}
-          className="bg-[#2ea44f] font-medium hover:bg-[#2c974b]"
+          className="bg-forensics-success font-light hover:bg-forensics-success-text"
         >
           <Play size={12} />
           {t('gql.header.run')}

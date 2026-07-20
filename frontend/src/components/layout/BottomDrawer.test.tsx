@@ -114,6 +114,18 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('41%')).toBeDefined();
   });
 
+  it('truncates the collapsed headline while preserving its full status as a tooltip', () => {
+    mocks.uiStore.mockReturnValue({
+      drawerOpen: false,
+      setDrawerOpen: vi.fn(),
+      toggleDrawer: vi.fn(),
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getByTitle('Enumerating').className).toContain('truncate');
+  });
+
   it('shows typed import signals for partial freshness, cache state, cancellation, and report readiness', () => {
     mocks.importSignals.mockReturnValue({
       latestPhase: {

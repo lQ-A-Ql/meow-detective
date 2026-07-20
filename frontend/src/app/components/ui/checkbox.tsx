@@ -9,10 +9,10 @@ import { cn } from "./utils";
 
 const checkboxVariants = cva(
   [
-    "peer shrink-0 rounded-[4px] border bg-input-background shadow-xs transition-shadow outline-none",
+    "peer shrink-0 rounded-none border bg-transparent transition-colors outline-none",
     "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary",
-    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-    "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:data-[state=checked]:bg-primary",
+    "focus-visible:border-ring focus-visible:ring-ring/20 focus-visible:ring-1",
+    "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ].join(" "),
   {
@@ -20,7 +20,7 @@ const checkboxVariants = cva(
       variant: {
         default: "",
         forensics:
-          "border-forensics-border-strong bg-white data-[state=checked]:border-forensics-sakura-500 data-[state=checked]:bg-forensics-sakura-500 focus-visible:border-forensics-sakura-500 focus-visible:ring-forensics-sakura-400/20",
+          "border-forensics-border-strong data-[state=checked]:border-forensics-primary-blue data-[state=checked]:bg-forensics-primary-blue focus-visible:border-forensics-primary-blue focus-visible:ring-forensics-primary-blue/20",
       },
       checkboxSize: {
         default: "size-4",

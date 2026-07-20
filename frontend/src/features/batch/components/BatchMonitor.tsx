@@ -44,7 +44,7 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
       case 'paused':
         return <Badge variant="secondary" className="text-[10px]">Paused</Badge>;
       case 'completed':
-        return <Badge variant="outline" className="text-[10px] border-green-300 text-green-700">Completed</Badge>;
+        return <Badge variant="outline" className="text-[10px] border-forensics-success-border text-forensics-success-text">Completed</Badge>;
       case 'failed':
         return <Badge variant="destructive" className="text-[10px]">Failed</Badge>;
       case 'cancelled':
@@ -60,7 +60,7 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <CardTitle className="truncate text-[14px] font-semibold">{job.label}</CardTitle>
+              <CardTitle className="truncate text-[14px] font-light">{job.label}</CardTitle>
               {statusBadge}
             </div>
           </div>
@@ -79,17 +79,17 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
 
         {/* Phase list */}
         <div className="space-y-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Phases</span>
+          <span className="text-[11px] font-light text-muted-foreground">Phases</span>
           {job.phases.map((phase) => {
             const config = PHASE_STATE_CONFIG[phase.state];
             return (
               <div key={phase.kind} className="space-y-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {phase.state === 'completed' && <CheckCircle2 size={13} className="text-green-600" />}
+                    {phase.state === 'completed' && <CheckCircle2 size={13} className="text-forensics-success-text" />}
                     {phase.state === 'failed' && <XCircle size={13} className="text-destructive" />}
-                    {phase.state === 'running' && <Loader2 size={13} className="animate-spin text-primary" />}
-                    {phase.state === 'pending' && <div className="size-[13px] rounded-full border border-muted-foreground/30" />}
+                    {phase.state === 'running' && <Loader2 size={13} className="opacity-70 text-primary" />}
+                    {phase.state === 'pending' && <div className="size-[13px] rounded-none border border-muted-foreground/30" />}
                     {phase.state === 'skipped' && <AlertTriangle size={13} className="text-muted-foreground" />}
                     <span className="text-[12px]">{phase.kind}</span>
                   </div>
@@ -104,9 +104,9 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
         </div>
 
         {/* Stats */}
-        <div className="flex gap-4 rounded border p-2">
+        <div className="flex gap-4 rounded-none border p-2">
           <div className="text-center">
-            <div className="font-mono text-[13px] font-medium">
+            <div className="font-mono text-[13px] font-light">
               {dataSourceCount}
             </div>
             <div className="text-[10px] text-muted-foreground">Sources</div>
@@ -119,7 +119,7 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
           {isRunning && onPause && (
             <Button variant="outline" size="sm" onClick={onPause} disabled={isPausing}>
               {isPausing ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={14} className="opacity-70" />
               ) : (
                 <Pause size={14} />
               )}
@@ -129,7 +129,7 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
           {isPaused && onResume && (
             <Button variant="outline" size="sm" onClick={onResume} disabled={isResuming}>
               {isResuming ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={14} className="opacity-70" />
               ) : (
                 <Play size={14} />
               )}
@@ -139,7 +139,7 @@ export function BatchMonitor({ job, onPause, onResume, onCancel, isPausing, isRe
           {onCancel && (
             <Button variant="destructive" size="sm" onClick={onCancel} disabled={isCancelling}>
               {isCancelling ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={14} className="opacity-70" />
               ) : (
                 <X size={14} />
               )}

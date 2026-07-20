@@ -182,14 +182,14 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
   };
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full bg-black">
+    <div ref={containerRef} className="flex flex-col h-full bg-forensics-900">
       {/* 视频区域 */}
       <div className="flex-1 flex items-center justify-center relative">
         {isLoading && (
           <div className="absolute text-white text-[14px]">加载中...</div>
         )}
         {error && (
-          <div className="absolute text-red-400 text-[14px]">{error}</div>
+          <div className="absolute text-forensics-error-text text-[14px]">{error}</div>
         )}
         <video
           ref={videoRef}
@@ -201,7 +201,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       </div>
 
       {/* 控制栏 */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-[#1a1a1a] text-white text-[12px] shrink-0">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-forensics-850 text-white text-[12px] shrink-0">
         {/* 播放/暂停 */}
         <Button type="button" variant="mediaControl" size="mediaIcon" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
@@ -231,7 +231,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
             }
             setCurrentTime(time);
           }}
-          className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+          className="flex-1 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
         />
 
         {/* 时间 */}
@@ -257,7 +257,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
               videoRef.current.volume = vol;
             }
           }}
-          className="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+          className="w-20 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
         />
 
         {/* 全屏 */}
@@ -267,12 +267,12 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       </div>
 
       {/* 状态栏 */}
-      <div className="flex items-center gap-3 px-3 py-1 bg-[#111] text-[10px] text-[#666] shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1 bg-forensics-text text-[10px] text-forensics-muted shrink-0">
         <Video size={10} />
         <span>{mimeType || 'video'}</span>
         {fileName && (
           <>
-            <span className="text-[#444]">|</span>
+            <span className="text-forensics-text-secondary">|</span>
             <span className="max-w-[50%] truncate">{fileName}</span>
           </>
         )}

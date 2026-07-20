@@ -51,12 +51,12 @@ export function FileIconWithStatusOverlay({
     >
       <IconComponent size={size} style={{ color: iconInfo.color }} />
       {hidden || system ? (
-        <span className="absolute -right-0.5 -top-0.5 flex size-2.5 items-center justify-center rounded-full border border-white bg-[#555] text-white">
+        <span className="absolute -right-0.5 -top-0.5 flex size-2.5 items-center justify-center rounded-none border border-forensics-surface bg-forensics-text-tertiary text-white">
           <EyeOff size={7} strokeWidth={2.5} aria-hidden="true" />
         </span>
       ) : null}
       {deleted ? (
-        <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full border border-white bg-[#d92d20] text-white">
+        <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-none border border-forensics-surface bg-forensics-error-text text-white">
           <X size={7} strokeWidth={3} aria-hidden="true" />
         </span>
       ) : null}

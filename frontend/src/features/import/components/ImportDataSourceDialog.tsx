@@ -147,37 +147,35 @@ export function ImportDataSourceDialog({
               <ToggleGroupItem
                 value="windows"
                 aria-label="Windows"
-                className="relative h-16 flex-1 justify-start overflow-hidden rounded border border-[#f1dbe4] bg-[linear-gradient(135deg,#fff_0%,#fffdfd_58%,#fff4f7_100%)] px-3 text-left shadow-sm transition-all hover:border-[#e8c4d1] hover:bg-[#fffafb] hover:shadow-[0_8px_26px_rgba(217,145,170,0.08)] data-[state=on]:border-[#e2adc0] data-[state=on]:bg-[linear-gradient(135deg,#fff_0%,#fff6f8_100%)] data-[state=on]:shadow-[0_10px_30px_rgba(217,145,170,0.12)]"
+                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
               >
-                <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-[#fff0f4]/70 blur-2xl" />
                 <div className="relative z-10 flex flex-col items-start gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-[#261219]">
+                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
                     <Monitor size={20} />
                     Windows
                   </span>
-                  <span className="text-[10px] font-medium text-[#8a5f6c]">NTFS / Registry / EVTX</span>
+                  <span className="text-[10px] font-light text-forensics-muted">NTFS / Registry / EVTX</span>
                 </div>
                 <BrandArt
                   variant="windows"
-                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-[0_10px_16px_rgba(120,50,70,0.12)]"
+                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-none"
                 />
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="linux"
                 aria-label="Linux"
-                className="relative h-16 flex-1 justify-start overflow-hidden rounded border border-[#f1dbe4] bg-[linear-gradient(135deg,#fff_0%,#fffdfd_58%,#fff4f7_100%)] px-3 text-left shadow-sm transition-all hover:border-[#e8c4d1] hover:bg-[#fffafb] hover:shadow-[0_8px_26px_rgba(217,145,170,0.08)] data-[state=on]:border-[#e2adc0] data-[state=on]:bg-[linear-gradient(135deg,#fff_0%,#fff6f8_100%)] data-[state=on]:shadow-[0_10px_30px_rgba(217,145,170,0.12)]"
+                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
               >
-                <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-[#fff0f4]/70 blur-2xl" />
                 <div className="relative z-10 flex flex-col items-start gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-[#261219]">
+                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
                     <Server size={20} />
                     Linux
                   </span>
-                  <span className="text-[10px] font-medium text-[#8a5f6c]">XFS / LVM / systemd</span>
+                  <span className="text-[10px] font-light text-forensics-muted">XFS / LVM / systemd</span>
                 </div>
                 <BrandArt
                   variant="linux"
-                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-[0_10px_16px_rgba(120,50,70,0.12)]"
+                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-none"
                 />
               </ToggleGroupItem>
             </ToggleGroup>
@@ -215,7 +213,7 @@ export function ImportDataSourceDialog({
                     {t('importDataSource.modes.linuxCluster')}
                   </ToggleGroupItem>
                 </ToggleGroup>
-                <p className="text-[11px] text-[#8a5f6c]">
+                <p className="text-[11px] text-forensics-muted">
                   {sourceKind === 'linuxCluster'
                     ? t('importDataSource.hints.linuxCluster')
                     : t('importDataSource.hints.single')}
@@ -249,7 +247,7 @@ export function ImportDataSourceDialog({
                 ) : null}
               </div>
               {error ? (
-                <p className="text-[11px] text-red-600">{error}</p>
+                <p className="text-[11px] text-forensics-error-text">{error}</p>
               ) : null}
             </div>
 
@@ -264,7 +262,7 @@ export function ImportDataSourceDialog({
               >
                 {importPending ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="opacity-70" />
                     {t('importDataSource.buttons.importing')}
                   </>
                 ) : (

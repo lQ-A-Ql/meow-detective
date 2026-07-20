@@ -77,8 +77,8 @@
 
 /* ── Tailwind 主题变量 ── */
 @theme {
-  --font-sans: 'MaoKenWangXingYuan', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'MaoKenWangXingYuan', 'Noto Serif CJK SC', 'Source Han Serif SC', SimSun, serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
   --font-display: 'Playlist Script', cursive;
-  --font-serif: 'IBM Plex Serif', ui-serif, Georgia, serif;
+  --font-serif: 'MaoKenWangXingYuan', 'Noto Serif CJK SC', 'Source Han Serif SC', SimSun, serif;
 }

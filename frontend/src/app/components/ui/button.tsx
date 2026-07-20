@@ -5,63 +5,62 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-none bg-transparent text-sm font-light transition-colors duration-500 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus:outline-none focus-visible:border-forensics-primary-blue focus-visible:ring-1 focus-visible:ring-forensics-primary-blue/20 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "border border-forensics-primary-blue text-forensics-primary-blue hover:bg-forensics-hover",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "border border-destructive text-destructive hover:bg-forensics-error-bg focus-visible:ring-destructive/20",
         outline:
-          "border bg-background text-foreground hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border border-forensics-border-strong text-foreground hover:border-forensics-sakura-500 hover:bg-forensics-hover",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+          "border border-forensics-border text-secondary-foreground hover:bg-forensics-hover",
+        ghost: "text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         link: "text-primary underline-offset-4 hover:underline",
         forensicsPrimary:
-          "rounded-[2px] bg-forensics-text text-white hover:bg-forensics-text-secondary",
+          "border border-forensics-primary-blue text-forensics-primary-blue hover:bg-forensics-hover",
         forensicsOutline:
-          "rounded-[2px] border border-forensics-border-strong bg-white text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
+          "border border-forensics-border-strong text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover",
         forensicsSurface:
-          "rounded-[2px] border border-forensics-border-strong bg-forensics-surface text-forensics-text shadow-[0_8px_24px_rgba(240,138,170,0.08)] hover:border-forensics-sakura-500 hover:bg-forensics-hover",
+          "border border-forensics-border text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover",
         forensicsGhost:
-          "rounded-[2px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
+          "text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         forensicsDangerGhost:
-          "rounded-[2px] text-forensics-muted-lighter hover:bg-red-50 hover:text-red-600",
+          "text-forensics-muted-lighter hover:bg-forensics-error-bg hover:text-forensics-error-text",
         forensicsLink:
-          "rounded-[2px] text-forensics-muted underline hover:text-forensics-text hover:no-underline",
+          "text-forensics-muted underline hover:text-forensics-text hover:no-underline",
         viewerControl:
-          "rounded-[2px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
+          "text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         mediaControl:
-          "rounded-[2px] text-[#999] hover:bg-white/10 hover:text-white",
+          "text-forensics-150 hover:bg-forensics-surface/10 hover:text-white",
         mediaPrimaryControl:
-          "rounded-full bg-white text-black hover:bg-gray-200",
+          "border border-forensics-150 text-forensics-150 hover:bg-forensics-surface/10",
         treeControl:
-          "rounded-none text-left text-[#555] hover:bg-forensics-hover data-[active=true]:bg-forensics-sakura-250 data-[active=true]:font-medium data-[active=true]:text-[#111]",
+          "text-left text-forensics-text-tertiary hover:bg-forensics-hover data-[active=true]:bg-forensics-sakura-250 data-[active=true]:font-light data-[active=true]:text-forensics-text",
         canvasControl:
-          "pointer-events-auto rounded border border-forensics-border bg-white text-forensics-muted shadow-sm hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
+          "pointer-events-auto border border-forensics-border text-forensics-muted hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
         autocompleteOption:
           "rounded-none text-left font-mono hover:bg-forensics-highlight",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9 rounded-md",
-        xs: "h-7 gap-1.5 rounded-[2px] px-2 py-1 text-[11px] has-[>svg]:px-1.5",
+        sm: "h-8 gap-1.5 px-3 has-[>svg]:px-2.5",
+        lg: "h-10 px-6 has-[>svg]:px-4",
+        icon: "size-9",
+        xs: "h-7 gap-1.5 px-2 py-1 text-[11px] has-[>svg]:px-1.5",
         compact:
-          "h-6 gap-1 rounded-[2px] px-2 py-0.5 text-[11px] has-[>svg]:px-1.5",
-        iconXs: "size-5 rounded-[2px]",
-        iconSm: "size-6 rounded-[2px]",
-        viewerIcon: "size-7 rounded-[2px]",
-        mediaIcon: "size-7 rounded-[2px]",
-        mediaPrimary: "size-14 rounded-full",
+          "h-6 gap-1 px-2 py-0.5 text-[11px] has-[>svg]:px-1.5",
+        iconXs: "size-5",
+        iconSm: "size-6",
+        viewerIcon: "size-7",
+        mediaIcon: "size-7",
+        mediaPrimary: "size-14",
         treeRow: "h-6 min-w-0 w-full justify-start gap-1 overflow-hidden px-2 py-1 text-[11px]",
         menuItem: "h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-[12px]",
         autocompleteItem: "h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-[12px]",
         canvasIcon: "size-7",
-        inline: "h-auto rounded-[2px] p-0",
+        inline: "h-auto p-0",
       },
     },
     defaultVariants: {

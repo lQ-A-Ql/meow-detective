@@ -57,29 +57,29 @@ export const CATEGORY_ICONS: Record<string, typeof Monitor> = {
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  Executables: '#b42318',
-  Documents: '#175cd3',
-  Images: '#027a48',
-  Archives: '#b54708',
-  Databases: '#6941c6',
-  System: '#475467',
-  Forensics: '#0e9384',
-  Logs: '#344054',
-  Registry: '#7a5af8',
-  BrowserHistory: '#026aa2',
-  Email: '#b54708',
-  Prefetch: '#9a6700',
-  Shortcuts: '#026aa2',
-  SystemInformation: '#344054',
-  EventLogs: '#175cd3',
-  ProgramExecution: '#b42318',
-  UserActivity: '#9a6700',
-  RecycleBin: '#b54708',
-  Thumbnails: '#027a48',
-  ResourceUsage: '#6941c6',
-  BrowserData: '#026aa2',
-  FileTypeInventory: '#667085',
-  Other: '#667085',
+  Executables: 'var(--forensics-error-text)',
+  Documents: 'var(--forensics-info-text)',
+  Images: 'var(--forensics-success-text)',
+  Archives: 'var(--forensics-warning-text)',
+  Databases: 'var(--forensics-primary-blue)',
+  System: 'var(--forensics-text-secondary)',
+  Forensics: 'var(--forensics-info-text)',
+  Logs: 'var(--forensics-text-secondary)',
+  Registry: 'var(--forensics-primary-blue)',
+  BrowserHistory: 'var(--forensics-info-text)',
+  Email: 'var(--forensics-warning-text)',
+  Prefetch: 'var(--forensics-warning-text)',
+  Shortcuts: 'var(--forensics-info-text)',
+  SystemInformation: 'var(--forensics-text-secondary)',
+  EventLogs: 'var(--forensics-info-text)',
+  ProgramExecution: 'var(--forensics-error-text)',
+  UserActivity: 'var(--forensics-warning-text)',
+  RecycleBin: 'var(--forensics-warning-text)',
+  Thumbnails: 'var(--forensics-success-text)',
+  ResourceUsage: 'var(--forensics-primary-blue)',
+  BrowserData: 'var(--forensics-info-text)',
+  FileTypeInventory: 'var(--forensics-muted)',
+  Other: 'var(--forensics-muted)',
 };
 
 export function formatSize(bytes: number) {
@@ -140,24 +140,24 @@ export function AnalysisExtractionProgress({
       ? 0
       : 100;
   const tone = progress.status === 'failed'
-    ? 'border-red-200 bg-red-50 text-red-700'
+    ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text'
     : progress.status === 'partial'
-      ? 'border-amber-200 bg-amber-50 text-amber-800'
-      : 'border-[#e0e0e0] bg-[#fcfcfc] text-[#555]';
+      ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
+      : 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   return (
-    <div className={`rounded border px-3 py-2 ${tone}`}>
+    <div className={`rounded-none border px-3 py-2 ${tone}`}>
       <div className="mb-2 flex items-center justify-between gap-3 text-[11px]">
-        <span className="font-semibold text-[#111]">{progress.label}</span>
+        <span className="font-light text-forensics-text">{progress.label}</span>
         <span className="font-mono">{extractionProgressLabel(progress.status)}</span>
       </div>
-      <Progress value={value} className="h-1.5 rounded-none bg-white" />
+      <Progress value={value} className="h-1.5 rounded-none bg-forensics-surface" />
       <div className="mt-2 flex flex-wrap gap-3 font-mono text-[10px]">
         <span>scanned={progress.scannedCount}</span>
         <span>artifacts={progress.artifactCount}</span>
         <span>timeline={progress.timelineEventCount}</span>
       </div>
       {progress.error ? (
-        <div className="mt-1 text-[11px] text-red-700">{progress.error}</div>
+        <div className="mt-1 text-[11px] text-forensics-error-text">{progress.error}</div>
       ) : null}
       {progress.warnings.length > 0 ? (
         <div className="mt-1 text-[11px]">{progress.warnings.slice(0, 2).join('；')}</div>
@@ -185,14 +185,14 @@ export function ExtractionTableSection({
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-[14px] font-semibold text-[#111]">{title}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#666]">
+          <h3 className="text-[14px] font-light text-forensics-text">{title}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
             <StatusPill status={status} />
             <span>生成时间：{generatedAt || '-'}</span>
           </div>
         </div>
       </div>
-      <SummaryStrip items={stats} />
+      {stats.length > 0 ? <SummaryStrip items={stats} /> : null}
       {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
       {children}
     </div>
@@ -212,7 +212,7 @@ export function SummaryStrip({ items }: { items: Array<[string, string]> }) {
 export function TableBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <div className="mb-2 text-[12px] font-semibold text-[#111]">{title}</div>
+      <div className="mb-2 text-[12px] font-light text-forensics-text">{title}</div>
       {children}
     </section>
   );
@@ -220,7 +220,7 @@ export function TableBlock({ title, children }: { title: string; children: React
 
 export function DenseTableFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded border border-[#e0e0e0] bg-white">
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-none border border-forensics-border bg-forensics-surface">
       {children}
     </div>
   );
@@ -239,20 +239,20 @@ export function ProvenancePanel({
 }) {
   return (
     <div className={compact ? 'mb-2' : 'space-y-2'}>
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#777]">{title}</div>
+      <div className="mb-2 text-[11px] font-light uppercase tracking-wider text-forensics-muted">{title}</div>
       {provenance.length > 0 ? (
         <div className="space-y-2">
           {provenance.map((item, index) => (
-            <div key={`${item.parser}-${item.artifactPath}-${index}`} className="rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] text-[#666]">
+            <div key={`${item.parser}-${item.artifactPath}-${index}`} className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-muted">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={item.status} />
-                <span className="font-mono text-[#333]">{item.parser || '-'}</span>
-                <span className="font-mono text-[#777]">{item.artifactPath || '-'}</span>
+                <span className="font-mono text-forensics-text-secondary">{item.parser || '-'}</span>
+                <span className="font-mono text-forensics-muted">{item.artifactPath || '-'}</span>
               </div>
-              <div className="mt-1 font-mono text-[10px] text-[#888]">
+              <div className="mt-1 font-mono text-[10px] text-forensics-muted-light">
                 dataSource={item.dataSourceId || '-'} · parsedAt={item.parsedAt || '-'}
               </div>
-              {item.warnings.length > 0 ? <div className="mt-1 text-amber-800">{item.warnings.join('；')}</div> : null}
+              {item.warnings.length > 0 ? <div className="mt-1 text-forensics-warning-text">{item.warnings.join('；')}</div> : null}
             </div>
           ))}
         </div>
@@ -299,7 +299,7 @@ export function FieldProvenancePanel({ fieldProvenance }: { fieldProvenance: Ana
 
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Database size={16} />
         字段级来源
       </h3>
@@ -326,16 +326,12 @@ export function formatProvenanceSummary(provenance: AnalysisProvenance) {
   return `${provenance.parser || '-'} · ${provenance.artifactPath || '-'} · ${statusLabel(provenance.status)}`;
 }
 
-export function RunMetric({ label, value }: { label: string; value: string }) {
-  return <MetricCard label={label} value={value} size="sm" className="rounded-none border-y-0 border-l-0 border-r border-[#e0e0e0] last:border-r-0" />;
-}
-
 export function InfoCard({ label, value }: { label: string; value?: string }) {
-  return <MetricCard label={label} value={value || '未解析'} size="md" className="bg-[#f8f8f8]" />;
+  return <MetricCard label={label} value={value || '未解析'} size="md" className="bg-forensics-panel" />;
 }
 
 export function StatCard({ label, value }: { label: string; value: string }) {
-  return <MetricCard label={label} value={value} mono={false} align="center" size="lg" className="bg-[#f8f8f8]" />;
+  return <MetricCard label={label} value={value} mono={false} align="center" size="lg" className="bg-forensics-panel" />;
 }
 
 export function Metric({ label, value }: { label: string; value: string }) {
@@ -344,7 +340,7 @@ export function Metric({ label, value }: { label: string; value: string }) {
 
 export function StatusPill({ status }: { status: string }) {
   return (
-    <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px] text-[#555]">
+    <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-tertiary">
       {statusLabel(status)}
     </span>
   );
@@ -352,7 +348,7 @@ export function StatusPill({ status }: { status: string }) {
 
 export function WarningList({ warnings }: { warnings: string[] }) {
   return (
-    <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+    <div className="rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-3 py-2 text-[11px] leading-5 text-forensics-warning-text">
       {warnings.map((warning) => (
         <div key={warning}>{warning}</div>
       ))}
@@ -361,5 +357,5 @@ export function WarningList({ warnings }: { warnings: string[] }) {
 }
 
 export function EmptyLine({ text }: { text: string }) {
-  return <EmptyState className="px-3 py-2 text-left text-[#777]">{text}</EmptyState>;
+  return <EmptyState className="px-3 py-2 text-left text-forensics-muted">{text}</EmptyState>;
 }

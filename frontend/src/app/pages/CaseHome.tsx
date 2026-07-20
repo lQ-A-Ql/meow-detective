@@ -90,33 +90,33 @@ export function CaseHome() {
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white overflow-hidden">
-      <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-6 shrink-0">
+    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface overflow-hidden">
+      <div className="border-b border-forensics-border bg-forensics-panel p-6 shrink-0">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <div className="font-serif text-2xl text-[#111] mb-1 tracking-tight">案件 #{currentCase.number ?? '-'}</div>
-            <div className="text-[#666] font-mono text-[11px]">{currentCase.name}</div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wider text-[#666]">
-              <span className="border border-[#d9d9d9] bg-white px-2 py-1">当前状态: 活跃</span>
-              <span className="border border-[#d9d9d9] bg-white px-2 py-1">数据源: {metrics?.dataSourceCount ?? 0}</span>
-              <span className="border border-[#e7d9b4] bg-white px-2 py-1">告警: {warnings?.length ?? 0}</span>
-              <span className="border border-[#e7d9b4] bg-white px-2 py-1">部分完成任务: {partialJobCount}</span>
+            <div className="font-serif text-2xl text-forensics-text mb-1 tracking-tight">案件 #{currentCase.number ?? '-'}</div>
+            <div className="text-forensics-muted font-mono text-[11px]">{currentCase.name}</div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wider text-forensics-muted">
+              <span className="border border-forensics-border-strong bg-forensics-surface px-2 py-1">当前状态: 活跃</span>
+              <span className="border border-forensics-border-strong bg-forensics-surface px-2 py-1">数据源: {metrics?.dataSourceCount ?? 0}</span>
+              <span className="border border-forensics-warning-border bg-forensics-surface px-2 py-1">告警: {warnings?.length ?? 0}</span>
+              <span className="border border-forensics-warning-border bg-forensics-surface px-2 py-1">部分完成任务: {partialJobCount}</span>
             </div>
           </div>
           <div className="flex gap-8 text-right">
             <div>
-              <div className="text-[#888] text-[10px] uppercase tracking-wider mb-1">状态</div>
-              <div className="flex items-center gap-1.5 text-[#111] text-[13px] justify-end">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#111]"></div> 活跃
+              <div className="text-forensics-muted-light text-[10px] uppercase tracking-wider mb-1">状态</div>
+              <div className="flex items-center gap-1.5 text-forensics-text text-[13px] justify-end">
+                <div className="w-1.5 h-1.5 rounded-none bg-forensics-text"></div> 活跃
               </div>
             </div>
             <div>
-              <div className="text-[#888] text-[10px] uppercase tracking-wider mb-1">创建时间</div>
-              <div className="text-[#111] text-[13px] font-mono">{currentCase.createdAt}</div>
+              <div className="text-forensics-muted-light text-[10px] uppercase tracking-wider mb-1">创建时间</div>
+              <div className="text-forensics-text text-[13px] font-mono">{currentCase.createdAt}</div>
             </div>
             <div>
-              <div className="text-[#888] text-[10px] uppercase tracking-wider mb-1">检验人</div>
-              <div className="text-[#111] text-[13px]">{currentCase.examiner ?? '-'}</div>
+              <div className="text-forensics-muted-light text-[10px] uppercase tracking-wider mb-1">检验人</div>
+              <div className="text-forensics-text text-[13px]">{currentCase.examiner ?? '-'}</div>
             </div>
             <Button
               type="button"
@@ -156,7 +156,7 @@ export function CaseHome() {
           partialJobCount={partialJobCount}
         />
 
-        <div className="w-1/2 flex flex-col min-h-0 bg-[#fafafa]">
+        <div className="w-1/2 flex flex-col min-h-0 bg-forensics-panel">
           <DataSourcesPanel
             dataSources={dataSources}
             editingDataSourceId={editingDataSourceId}

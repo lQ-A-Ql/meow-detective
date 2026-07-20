@@ -174,12 +174,12 @@ export function TreeContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[180px] bg-white border border-[#ddd] shadow-lg rounded py-1"
+      className="fixed z-50 min-w-[180px] bg-forensics-surface border border-forensics-border shadow-none rounded-none py-1"
       style={{ left: adjustedX, top: adjustedY }}
     >
       {items.map((item, index) => (
         <div key={index}>
-          {item.divider && <div className="border-t border-[#eee] my-1" />}
+          {item.divider && <div className="border-t border-forensics-border-light my-1" />}
           <Button
             type="button"
             variant="forensicsGhost"
@@ -191,12 +191,12 @@ export function TreeContextMenu({
               }
             }}
             disabled={item.disabled}
-            className={item.disabled ? 'text-[#ccc]' : 'text-[#333] hover:bg-[#f0f0f0]'}
+            className={item.disabled ? 'text-forensics-muted-lighter' : 'text-forensics-text-secondary hover:bg-forensics-panel-strong'}
           >
-            <item.icon size={14} className={item.disabled ? 'text-[#ccc]' : 'text-[#666]'} />
+            <item.icon size={14} className={item.disabled ? 'text-forensics-muted-lighter' : 'text-forensics-muted'} />
             <span className="flex-1">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[10px] text-[#999]">{item.shortcut}</span>
+              <span className="text-[10px] text-forensics-muted-lighter">{item.shortcut}</span>
             )}
           </Button>
         </div>

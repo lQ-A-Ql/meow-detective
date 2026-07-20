@@ -18,9 +18,9 @@ import { useLoadedRulePacks, useLoadRulePack, useValidateRulePack } from '@/feat
 import type { RulePackSummary } from '@/types/models';
 
 const STATUS_CONFIG: Record<RulePackSummary['status'], { label: string; icon: typeof Shield; tone: string }> = {
-  loaded: { label: '已加载', icon: CheckCircle, tone: 'bg-green-50 border-green-200 text-green-700' },
-  validating: { label: '校验中', icon: Loader2, tone: 'bg-amber-50 border-amber-200 text-amber-700' },
-  error: { label: '错误', icon: XCircle, tone: 'bg-red-50 border-red-200 text-red-700' },
+  loaded: { label: '已加载', icon: CheckCircle, tone: 'bg-forensics-success-bg border-forensics-success-border text-forensics-success-text' },
+  validating: { label: '校验中', icon: Loader2, tone: 'bg-forensics-warning-bg border-forensics-warning-border text-forensics-warning-text' },
+  error: { label: '错误', icon: XCircle, tone: 'bg-forensics-error-bg border-forensics-error-border text-forensics-error-text' },
 };
 
 const ALL_KNOWN_FAMILIES = [
@@ -80,8 +80,8 @@ export function RulePackManager() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#999]">
-        <Loader2 size={24} className="mr-2 animate-spin" />
+      <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
+        <Loader2 size={24} className="mr-2 opacity-70" />
         正在加载规则包...
       </div>
     );
@@ -90,13 +90,13 @@ export function RulePackManager() {
   if (isError) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
-        <XCircle size={32} className="text-red-400" />
-        <div className="text-[13px] text-[#666]">无法加载规则包列表</div>
+        <XCircle size={32} className="text-forensics-error-text" />
+        <div className="text-[13px] text-forensics-muted">无法加载规则包列表</div>
         <Button
           type="button"
           variant="outline"
           onClick={() => refetch()}
-          className="h-8 rounded border-[#ddd] bg-white px-4 text-[12px] hover:bg-[#f5f5f5]"
+          className="h-8 rounded-none border-forensics-border bg-forensics-surface px-4 text-[12px] hover:bg-forensics-panel-strong"
         >
           重试
         </Button>
@@ -107,11 +107,11 @@ export function RulePackManager() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
+      <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="font-serif text-xl tracking-tight text-[#111]">规则包管理</div>
-            <div className="mt-1 font-mono text-[11px] text-[#666]">
+            <div className="font-serif text-xl tracking-tight text-forensics-text">规则包管理</div>
+            <div className="mt-1 font-mono text-[11px] text-forensics-muted">
               加载、校验并查看规则包覆盖范围
             </div>
           </div>
@@ -121,9 +121,9 @@ export function RulePackManager() {
               variant="outline"
               onClick={() => refetch()}
               disabled={isLoading}
-              className="h-8 rounded border-[#ddd] bg-white px-3 text-[12px] hover:bg-[#f5f5f5]"
+              className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
             >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={isLoading ? 'opacity-70' : ''} />
               刷新
             </Button>
           </div>
@@ -131,23 +131,23 @@ export function RulePackManager() {
 
         {/* Summary strip */}
         <div className="mt-4 grid grid-cols-3 gap-4">
-          <div className="rounded border border-[#e0e0e0] bg-white px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-[#111]">{packs.length}</div>
-            <div className="mt-1 text-[11px] text-[#666]">规则包</div>
+          <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
+            <div className="text-2xl font-light text-forensics-text">{packs.length}</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">规则包</div>
           </div>
-          <div className="rounded border border-[#e0e0e0] bg-white px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-[#111]">{totalRules}</div>
-            <div className="mt-1 text-[11px] text-[#666]">规则总数</div>
+          <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
+            <div className="text-2xl font-light text-forensics-text">{totalRules}</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">规则总数</div>
           </div>
-          <div className="rounded border border-[#e0e0e0] bg-white px-4 py-3 text-center">
-            <div className="text-2xl font-bold text-[#111]">{coveragePercent}%</div>
-            <div className="mt-1 text-[11px] text-[#666]">覆盖率</div>
+          <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
+            <div className="text-2xl font-light text-forensics-text">{coveragePercent}%</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">覆盖率</div>
           </div>
         </div>
       </div>
 
       {/* Load section */}
-      <Card className="border-[#e0e0e0] bg-[#fcfcfc]">
+      <Card className="border-forensics-border bg-forensics-surface">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-[14px]">
             <FileUp size={16} />
@@ -172,10 +172,10 @@ export function RulePackManager() {
               type="button"
               onClick={handleLoad}
               disabled={!loadPath.trim() || loadMutation.isPending}
-              className="h-8 rounded border border-[#111] bg-[#111] px-4 text-[12px] text-white hover:bg-[#333]"
+              className="h-8 rounded-none border border-forensics-text bg-forensics-text px-4 text-[12px] text-white hover:bg-forensics-text-secondary"
             >
               {loadMutation.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={14} className="opacity-70" />
               ) : (
                 <PackageOpen size={14} />
               )}
@@ -183,7 +183,7 @@ export function RulePackManager() {
             </Button>
           </div>
           {loadMutation.isError && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] text-red-700">
+            <div className="mt-2 rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[11px] text-forensics-error-text">
               {(loadMutation.error as Error)?.message ?? '加载失败'}
             </div>
           )}
@@ -200,8 +200,8 @@ export function RulePackManager() {
           return (
             <Card
               key={pack.id}
-              className={`cursor-pointer border-[#e0e0e0] transition-colors hover:border-[#999] ${
-                isSelected ? 'border-[#111] bg-[#fafafa]' : 'bg-white'
+              className={`cursor-pointer border-forensics-border transition-colors hover:border-forensics-border-strong ${
+                isSelected ? 'border-forensics-text bg-forensics-panel' : 'bg-forensics-surface'
               }`}
               onClick={() => setSelectedPackId(isSelected ? null : pack.id)}
             >
@@ -211,7 +211,7 @@ export function RulePackManager() {
                     <CardTitle className="flex items-center gap-2 text-[13px]">
                       <PackageOpen size={15} />
                       <span className="truncate">{pack.name}</span>
-                      <span className="font-mono text-[11px] text-[#888]">v{pack.version}</span>
+                      <span className="font-mono text-[11px] text-forensics-muted-light">v{pack.version}</span>
                     </CardTitle>
                     {pack.author && (
                       <CardDescription className="mt-0.5 text-[10px]">
@@ -225,21 +225,21 @@ export function RulePackManager() {
                   >
                     <StatusIcon
                       size={12}
-                      className={`mr-1 ${pack.status === 'validating' ? 'animate-spin' : ''}`}
+                      className={`mr-1 ${pack.status === 'validating' ? 'opacity-70' : ''}`}
                     />
                     {config.label}
                   </Badge>
                 </div>
                 {pack.description && (
-                  <p className="mt-1 text-[11px] leading-5 text-[#666]">{pack.description}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-forensics-muted">{pack.description}</p>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#666]">
+                <div className="flex flex-wrap items-center gap-4 text-[11px] text-forensics-muted">
                   <span>
-                    规则数: <span className="font-mono font-semibold text-[#111]">{pack.ruleCount}</span>
+                    规则数: <span className="font-mono font-light text-forensics-text">{pack.ruleCount}</span>
                   </span>
-                  <span className="text-[#bbb]">|</span>
+                  <span className="text-forensics-muted-lighter">|</span>
                   <span>加载时间: {formatTimestamp(pack.loadedAt)}</span>
                 </div>
 
@@ -250,7 +250,7 @@ export function RulePackManager() {
                       <Badge
                         key={family}
                         variant="secondary"
-                        className="bg-[#f0f0f0] text-[10px] text-[#555]"
+                        className="bg-forensics-panel-strong text-[10px] text-forensics-text-tertiary"
                       >
                         {family}
                       </Badge>
@@ -260,7 +260,7 @@ export function RulePackManager() {
 
                 {/* Warnings */}
                 {pack.warnings.length > 0 && (
-                  <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] text-amber-800">
+                  <div className="mt-2 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-3 py-1.5 text-[10px] text-forensics-warning-text">
                     {pack.warnings.slice(0, 2).map((w, i) => (
                       <div key={i} className="flex items-start gap-1">
                         <AlertTriangle size={10} className="mt-0.5 shrink-0" />
@@ -268,7 +268,7 @@ export function RulePackManager() {
                       </div>
                     ))}
                     {pack.warnings.length > 2 && (
-                      <div className="mt-0.5 text-amber-600">
+                      <div className="mt-0.5 text-forensics-warning-text">
                         ...以及 {pack.warnings.length - 2} 条更多
                       </div>
                     )}
@@ -277,7 +277,7 @@ export function RulePackManager() {
 
                 {/* Errors */}
                 {pack.errors.length > 0 && (
-                  <div className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] text-red-700">
+                  <div className="mt-2 rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[10px] text-forensics-error-text">
                     {pack.errors.slice(0, 3).map((e, i) => (
                       <div key={i} className="flex items-start gap-1">
                         <XCircle size={10} className="mt-0.5 shrink-0" />
@@ -298,10 +298,10 @@ export function RulePackManager() {
                       handleValidate(pack.id);
                     }}
                     disabled={validateMutation.isPending}
-                    className="h-7 rounded border-[#ddd] bg-white px-3 text-[11px] hover:bg-[#f5f5f5]"
+                    className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
                   >
                     {validateMutation.isPending && validateMutation.variables === pack.id ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Loader2 size={12} className="opacity-70" />
                     ) : (
                       <Shield size={12} />
                     )}
@@ -315,10 +315,10 @@ export function RulePackManager() {
       </div>
 
       {packs.length === 0 && (
-        <div className="flex h-40 flex-col items-center justify-center rounded border border-dashed border-[#d8d8d8] bg-[#fcfcfc]">
-          <PackageOpen size={32} className="text-[#ccc]" />
-          <div className="mt-3 text-[13px] text-[#777]">暂未加载任何规则包</div>
-          <div className="mt-1 text-[11px] text-[#999]">使用上方输入框加载您的第一个规则包</div>
+        <div className="flex h-40 flex-col items-center justify-center rounded-none border border-dashed border-forensics-border-strong bg-forensics-surface">
+          <PackageOpen size={32} className="text-forensics-muted-lighter" />
+          <div className="mt-3 text-[13px] text-forensics-muted">暂未加载任何规则包</div>
+          <div className="mt-1 text-[11px] text-forensics-muted-lighter">使用上方输入框加载您的第一个规则包</div>
         </div>
       )}
 
@@ -345,7 +345,7 @@ function CoveragePanel({
   const uncovered = allFamilies.filter((f) => !coveredSet.has(f));
 
   return (
-    <Card className="border-[#e0e0e0] bg-[#fcfcfc]">
+    <Card className="border-forensics-border bg-forensics-surface">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[14px]">
           <Shield size={16} />
@@ -358,32 +358,32 @@ function CoveragePanel({
       <CardContent>
         <div className="mb-4">
           <div className="mb-1 flex items-center justify-between text-[11px]">
-            <span className="text-[#666]">整体覆盖率</span>
-            <span className="font-mono font-semibold text-[#111]">{coveragePercent}%</span>
+            <span className="text-forensics-muted">整体覆盖率</span>
+            <span className="font-mono font-light text-forensics-text">{coveragePercent}%</span>
           </div>
-          <Progress value={coveragePercent} className="h-1.5 rounded-none bg-[#eee]" />
+          <Progress value={coveragePercent} className="h-1.5 rounded-none bg-forensics-panel-strong" />
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-green-700">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-light text-forensics-success-text">
               <CheckCircle size={12} />
               已覆盖 ({covered.length})
             </div>
             <div className="flex flex-wrap gap-1.5">
               {covered.map((f) => (
-                <Badge key={f} className="bg-green-50 text-[10px] text-green-700 hover:bg-green-100">
+                <Badge key={f} className="bg-forensics-success-bg text-[10px] text-forensics-success-text hover:bg-forensics-success-bg">
                   {f}
                 </Badge>
               ))}
               {covered.length === 0 && (
-                <span className="text-[10px] text-[#999]">无</span>
+                <span className="text-[10px] text-forensics-muted-lighter">无</span>
               )}
             </div>
           </div>
 
           <div>
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-red-700">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-light text-forensics-error-text">
               <AlertTriangle size={12} />
               未覆盖 ({uncovered.length})
             </div>
@@ -392,13 +392,13 @@ function CoveragePanel({
                 <Badge
                   key={f}
                   variant="outline"
-                  className="border-amber-200 bg-amber-50 text-[10px] text-amber-800"
+                  className="border-forensics-warning-border bg-forensics-warning-bg text-[10px] text-forensics-warning-text"
                 >
                   {f}
                 </Badge>
               ))}
               {uncovered.length === 0 && (
-                <span className="text-[10px] text-[#999]">无</span>
+                <span className="text-[10px] text-forensics-muted-lighter">无</span>
               )}
             </div>
           </div>

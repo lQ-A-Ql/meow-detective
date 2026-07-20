@@ -48,17 +48,17 @@ export function FileTreePanel({
 }: FileTreePanelProps) {
   return (
     <div
-      className="border-r border-[#e0e0e0] bg-[#fafafa] flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
+      className="border-r border-forensics-border bg-forensics-panel flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
       style={{ width: `${treeWidth}px`, minWidth: `${treeWidth}px`, maxWidth: `${treeWidth}px` }}
     >
       <div
         className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10 transition-colors ${
-          isResizing ? 'bg-blue-400' : 'hover:bg-blue-200'
+          isResizing ? 'bg-forensics-info-bg' : 'hover:bg-forensics-info-bg'
         }`}
         onMouseDown={onResizeStart}
         title="拖拽调整宽度"
       />
-      <div className="h-7 shrink-0 border-b border-[#e0e0e0] flex items-center px-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider bg-[#f5f5f5]">
+      <div className="h-7 shrink-0 border-b border-forensics-border flex items-center px-3 text-[10px] font-light text-forensics-text-tertiary uppercase tracking-wider bg-forensics-panel-strong">
         目录树
       </div>
       <TreeSearch onFilter={setFilterQuery} />
@@ -68,12 +68,12 @@ export function FileTreePanel({
         tabIndex={0}
       >
         {filteredTreeNodes.length === 0 ? (
-          <div className="px-3 py-4 text-[#888]">
+          <div className="px-3 py-4 text-forensics-muted-light">
             {filterQuery ? '没有匹配的目录。' : '导入数据源后显示目录树。'}
           </div>
         ) : null}
         {activeChildrenPage?.truncated ? (
-          <div className="mx-2 mb-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800">
+          <div className="mx-2 mb-1 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-2 py-1 text-[10px] leading-4 text-forensics-warning-text">
             当前目录子目录很多，仅加载前 {activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT} 个；请用右侧列表或搜索继续定位。
           </div>
         ) : null}
@@ -112,9 +112,9 @@ export function FileTreePanel({
               )}
               {node.hasChildren ? (
                 node.expanded ? (
-                  <ChevronDown size={12} className="text-[#888] shrink-0" />
+                  <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
                 ) : (
-                  <ChevronRight size={12} className="text-[#aaa] shrink-0" />
+                  <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
                 )
               ) : (
                 <span className="w-3 shrink-0" />
@@ -131,7 +131,7 @@ export function FileTreePanel({
               />
               <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth, node.dataSourceId)}</span>
               {node.status && node.status !== 'ready' ? (
-                <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#888]">
+                <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                   {node.status}
                 </span>
               ) : null}
@@ -140,7 +140,7 @@ export function FileTreePanel({
         })}
         {canLoadMoreTreeChildren ? (
           <div className="px-2 py-2">
-            <div className="flex items-center justify-between rounded border border-[#e0e0e0] bg-white px-2 py-1.5 text-[10px] text-[#666]">
+            <div className="flex items-center justify-between rounded-none border border-forensics-border bg-forensics-surface px-2 py-1.5 text-[10px] text-forensics-muted">
               <span>
                 已加载 {activeTreeChildrenLoaded} / {activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded} 个子目录
               </span>

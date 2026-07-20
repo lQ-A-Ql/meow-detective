@@ -18,12 +18,9 @@ import type {
 } from '@/types/models';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   DenseTableFrame,
   EmptyLine,
   ExtractionTableSection,
-  StatCard,
 } from './helpers';
 
 export type LinuxArtifactTabKey =
@@ -53,13 +50,9 @@ const TABS: LinuxArtifactTabKey[] = [
 
 export function LinuxArtifactsPanel({
   summary,
-  progress,
-  progressByTab,
   activeTab = 'overview',
 }: {
   summary?: LinuxArtifactSummary;
-  progress?: AnalysisExtractionProgressInfo;
-  progressByTab?: Partial<Record<LinuxArtifactTabKey, AnalysisExtractionProgressInfo>>;
   activeTab?: LinuxArtifactTabKey;
 }) {
   const { t } = useTranslation();
@@ -155,8 +148,8 @@ export function LinuxArtifactsPanel({
         <span
           className={
             row.success
-              ? 'rounded bg-[#e6f4ea] px-1.5 py-0.5 text-[10px] text-[#0f7b3c]'
-              : 'rounded bg-[#fdecea] px-1.5 py-0.5 text-[10px] text-[#c02626]'
+              ? 'rounded-none bg-forensics-success-bg px-1.5 py-0.5 text-[10px] text-forensics-success-text'
+              : 'rounded-none bg-forensics-error-bg px-1.5 py-0.5 text-[10px] text-forensics-error-text'
           }
         >
           {row.success ? t('linuxArtifacts.columns.success') : '✕'}
@@ -242,27 +235,8 @@ export function LinuxArtifactsPanel({
     { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
   ];
 
-  const overviewContent = (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-      <StatCard label={t('linuxArtifacts.stats.journal')} value={info.journalCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.login')} value={info.loginCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.commands')} value={info.bashCommandCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.packages')} value={info.aptEventCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.cron')} value={info.cronJobCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.sudo')} value={info.sudoEventCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.systemConfig')} value={info.systemConfigCount.toString()} />
-      <StatCard label={t('linuxArtifacts.stats.webServices')} value={(info.webSiteCount + info.webAccessLogCount + info.webErrorLogCount + info.webFindingCount).toString()} />
-      <StatCard label={t('linuxArtifacts.stats.mysqlServices')} value={(info.mysqlConfigCount + info.mysqlLogCount + info.mysqlFindingCount).toString()} />
-    </div>
-  );
-
   const tabContent: Record<LinuxArtifactTabKey, React.ReactNode> = {
-    overview:
-      info.totalCount === 0 ? (
-        <EmptyLine text={t('linuxArtifacts.empty.overview.description')} />
-      ) : (
-        overviewContent
-      ),
+    overview: info.totalCount === 0 ? <EmptyLine text={t('linuxArtifacts.empty.overview.description')} /> : null,
     journal: (
       <DenseTableFrame>
         <DenseDataTable
@@ -413,28 +387,14 @@ export function LinuxArtifactsPanel({
       </div>
     ),
   };
-  const tabProgress = progressByTab?.[activeTab] ?? progress;
-
   return (
     <ExtractionTableSection
       title={t('linuxArtifacts.title')}
       status={info.status}
       generatedAt={info.generatedAt}
       warnings={info.warnings}
-      stats={[
-        [t('linuxArtifacts.stats.total'), info.totalCount.toString()],
-        [t('linuxArtifacts.stats.journal'), info.journalCount.toString()],
-        [t('linuxArtifacts.stats.login'), info.loginCount.toString()],
-        [t('linuxArtifacts.stats.commands'), info.bashCommandCount.toString()],
-        [t('linuxArtifacts.stats.systemConfig'), info.systemConfigCount.toString()],
-        [t('linuxArtifacts.stats.webServices'), (info.webSiteCount + info.webAccessLogCount + info.webErrorLogCount + info.webFindingCount).toString()],
-        [t('linuxArtifacts.stats.mysqlServices'), (info.mysqlConfigCount + info.mysqlLogCount + info.mysqlFindingCount).toString()],
-        [t('linuxArtifacts.stats.coverage'), `${Math.round(info.coverageRatio * 100)}%`],
-        [t('linuxArtifacts.stats.truncated'), info.truncated ? t('linuxArtifacts.values.yes') : t('linuxArtifacts.values.no')],
-      ]}
+      stats={[]}
     >
-      <AnalysisExtractionProgress progress={tabProgress} />
-
       <div className="min-h-0">{tabContent[activeTab]}</div>
     </ExtractionTableSection>
   );

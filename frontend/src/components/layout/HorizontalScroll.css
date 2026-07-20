@@ -36,32 +36,15 @@
   border: none;
 }
 
-/* Visible 1px line track with soft fading ends */
+/* A quiet, continuous track keeps horizontal navigation legible. */
 .scrollbar-thin-glow-track-line {
   height: 1px;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    var(--scrollbar-line) 8%,
-    var(--scrollbar-line) 92%,
-    transparent 100%
-  );
+  background: var(--scrollbar-line);
   opacity: 0.45;
 }
 
-/* Point-light glowing thumb: white core -> transparent */
 .scrollbar-thin-glow-thumb {
   min-width: 40px;
-  background: radial-gradient(
-    ellipse 55% 75% at center,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.5) 28%,
-    rgba(255, 255, 255, 0.15) 52%,
-    transparent 75%
-  );
-  box-shadow:
-    0 0 3px 1px rgba(255, 255, 255, 0.7),
-    0 0 8px 2px rgba(224, 224, 224, 0.55),
-    0 0 16px 4px rgba(204, 204, 204, 0.35),
-    0 0 28px 6px rgba(204, 204, 204, 0.15);
+  background: var(--scrollbar-glow-outer);
+  border: 1px solid var(--scrollbar-line);
 }

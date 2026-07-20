@@ -26,7 +26,7 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "border border-forensics-border bg-forensics-sakura-150 text-forensics-muted inline-flex h-9 w-fit items-center justify-center rounded-xl p-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] flex",
+        "border-b border-forensics-border bg-transparent text-forensics-muted inline-flex h-9 w-fit items-center justify-center rounded-none p-0 flex",
         className,
       )}
       {...props}
@@ -42,7 +42,7 @@ function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "data-[state=active]:border-forensics-sakura-300 data-[state=active]:bg-white data-[state=active]:text-forensics-text data-[state=active]:shadow-sm focus-visible:border-forensics-sakura-500 focus-visible:ring-forensics-sakura-400/20 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-forensics-muted dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-xl border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "data-[state=active]:border-forensics-sakura-500 data-[state=active]:text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-forensics-sakura-400/20 focus-visible:outline-none text-forensics-muted inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-none border-b border-transparent px-3 py-1 text-sm font-light whitespace-nowrap transition-colors duration-500 focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

@@ -35,9 +35,9 @@ export function PanelTabs<T extends string = string>({
       <TabsList
         className={cn(
           isUnderline
-            ? 'h-auto justify-start overflow-x-auto rounded-none border-b border-[#e0e0e0] bg-[#fafafa] p-0'
+            ? 'h-auto justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0'
             : 'mb-3 h-auto flex-wrap justify-start rounded-none bg-transparent p-0',
-          isCompact && 'mb-2 h-7 rounded-md bg-[#f0f0f0] p-1',
+          isCompact && 'mb-2 h-7 rounded-none bg-forensics-panel-strong p-0',
           listClassName,
         )}
       >
@@ -48,9 +48,9 @@ export function PanelTabs<T extends string = string>({
             onClick={() => onValueChange?.(value)}
             className={cn(
               isUnderline
-                ? 'h-auto flex-none whitespace-nowrap rounded-none border-b-2 border-transparent px-4 py-2 text-[11px] font-medium text-[#667085] data-[state=active]:border-[#175cd3] data-[state=active]:bg-white data-[state=active]:text-[#175cd3]'
-                : 'h-7 flex-none rounded-[2px] border border-transparent px-2 text-[11px] data-[state=active]:border-forensics-border-strong data-[state=active]:bg-forensics-primary-blue data-[state=active]:text-white',
-              isCompact && 'h-5 rounded px-2 text-[11px]',
+                ? 'h-auto flex-none whitespace-nowrap rounded-none border-b border-transparent px-4 py-2 text-[11px] font-light text-forensics-muted data-[state=active]:border-forensics-sakura-500 data-[state=active]:text-forensics-text'
+                : 'h-7 flex-none rounded-none border border-transparent px-2 text-[11px] data-[state=active]:border-forensics-border-strong data-[state=active]:bg-forensics-highlight data-[state=active]:text-forensics-text',
+              isCompact && 'h-5 rounded-none px-2 text-[11px]',
               triggerClassName,
             )}
           >

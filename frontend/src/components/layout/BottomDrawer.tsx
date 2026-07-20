@@ -16,6 +16,7 @@ import {
   useImportEventState,
 } from '@/features/jobs/import-event-state';
 import { useDataSources } from '@/features/case/hooks';
+import { AnalysisProgressDrawer } from '@/features/analysis/components/AnalysisProgressDrawer';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { useUiStore } from '@/stores/ui-store';
 import type {
@@ -119,18 +120,18 @@ export function BottomDrawer() {
       className={`shrink-0 border-t border-forensics-border bg-forensics-panel z-10 transition-[height] duration-150 ${drawerOpen ? 'flex flex-col' : 'h-8 overflow-hidden'}`}
       style={drawerOpen ? { height: `${drawerHeight}px` } : undefined}
     >
-      <div className="h-8 flex items-center px-4 text-forensics-muted text-[11px] font-mono justify-between gap-4">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
+      <div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 text-[11px] font-mono text-forensics-muted">
+        <div className="flex min-w-0 items-center gap-3 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <Terminal size={12} className="text-forensics-muted-light shrink-0" />
-            <span className="truncate">[{t('bottomDrawer.jobs.title')}] {headline}</span>
+            <span className="block truncate" title={headline}>[{t('bottomDrawer.jobs.title')}] {headline}</span>
           </div>
-          <div className="hidden lg:flex px-3 border-l border-forensics-border items-center gap-3 text-forensics-text-tertiary">
+          <div className="hidden 2xl:flex shrink-0 items-center gap-3 border-l border-forensics-border px-3 text-forensics-text-tertiary whitespace-nowrap">
             <span>
               <span className="text-forensics-text">{runningCount}</span> {t('bottomDrawer.jobs.running')}
             </span>
             <span>
-              <span className={issueCount > 0 ? 'text-red-600' : 'text-forensics-text'}>{issueCount}</span> {t('bottomDrawer.issues.errors')}
+              <span className={issueCount > 0 ? 'text-forensics-error-text' : 'text-forensics-text'}>{issueCount}</span> {t('bottomDrawer.issues.errors')}
             </span>
             <span>
               <span className="text-forensics-text">{warningSignalCount}</span> {t('bottomDrawer.jobs.warnings')}
@@ -143,7 +144,7 @@ export function BottomDrawer() {
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             type="button"
             variant="forensicsSurface"
@@ -154,8 +155,9 @@ export function BottomDrawer() {
             <span>{drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </Button>
-          <div className="hidden xl:flex border-l border-forensics-border pl-4">
-            {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || warningJobs[0]?.scope || cancellingJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
+          <div className="hidden 2xl:flex min-w-0 max-w-72 border-l border-forensics-border pl-3">
+            <span className="shrink-0">{t('bottomDrawer.status.recent')} </span>
+            <span className="truncate text-forensics-text">{runningJobs[0]?.scope || warningJobs[0]?.scope || cancellingJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
           </div>
         </div>
       </div>
@@ -163,14 +165,14 @@ export function BottomDrawer() {
         <>
           <div
             className={`shrink-0 h-1 cursor-row-resize transition-colors ${
-              isResizingDrawer ? 'bg-blue-400' : 'hover:bg-blue-200'
+              isResizingDrawer ? 'bg-forensics-info-bg' : 'hover:bg-forensics-info-bg'
             }`}
             onMouseDown={onDrawerResizeStart}
             title="拖拽调整抽屉高度"
           />
           <div className="grid flex-1 min-h-0 grid-cols-3 overflow-hidden border-t border-forensics-border">
           <div className="overflow-auto border-r border-forensics-border p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.jobs.title')}</span>
               <span className="font-mono text-forensics-muted-light">
                 {t('bottomDrawer.jobs.stats', {
@@ -182,12 +184,13 @@ export function BottomDrawer() {
               </span>
             </div>
             <div className="space-y-3">
+              <AnalysisProgressDrawer />
               {importSignals.latestPhase || importSignals.latestCancellation || importSignals.partialResults.length || importSignals.cacheStatuses.length || importSignals.latestReport ? (
                 <div className="border border-forensics-350 bg-forensics-surface p-3 text-[11px]">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.importSignals.title')}</div>
-                      <div className="mt-1 text-forensics-text font-medium">
+                      <div className="text-[10px] font-light uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.importSignals.title')}</div>
+                      <div className="mt-1 text-forensics-text font-light">
                         {importSignals.latestPhase
                           ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
                           : importSignals.latestCancellation
@@ -268,7 +271,7 @@ export function BottomDrawer() {
                   {importSignals.latestReport ? (
                     <div className="mt-3 border-t border-forensics-border-light pt-2 text-forensics-text-tertiary">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.performance.title')}</span>
+                        <span className="text-[10px] font-light uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.performance.title')}</span>
                         <span className="font-mono text-forensics-text">{importSignals.latestReport.summary.elapsedMs}ms</span>
                       </div>
                       <div className="mt-1 text-forensics-muted">{importSignals.latestReport.summary.summary}</div>
@@ -279,7 +282,7 @@ export function BottomDrawer() {
               {runningJobs.map((job) => (
                 <div key={job.id} className="border border-forensics-border bg-forensics-surface p-3 text-[11px]">
                   <div className="flex items-center justify-between gap-3 text-forensics-text">
-                    <span className="font-medium">{job.name}</span>
+                    <span className="font-light">{job.name}</span>
                     <span className="text-forensics-muted-light truncate">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-forensics-muted truncate">{job.scope}</div>
@@ -298,7 +301,7 @@ export function BottomDrawer() {
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="flex-1 h-1.5 overflow-hidden border border-forensics-border bg-forensics-surface">
                           <div
-                            className="h-full transition-all duration-300"
+                            className="h-full transition-colors duration-500 duration-300"
                             style={{
                               width: `${job.partitionProgress ?? 0}%`,
                               backgroundColor:
@@ -312,7 +315,7 @@ export function BottomDrawer() {
                           {job.partitionProgress ?? 0}%
                         </span>
                       </div>
-                      <div className="mt-1 text-[11px] text-forensics-text-secondary font-medium">
+                      <div className="mt-1 text-[11px] text-forensics-text-secondary font-light">
                         {job.currentPartition}
                       </div>
                     </div>
@@ -331,7 +334,7 @@ export function BottomDrawer() {
                     <span className="flex items-center gap-2">
                       {job.name}
                       {job.partial ? (
-                        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 text-[9px] font-semibold text-forensics-warning-text-strong">
+                        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 text-[9px] font-light text-forensics-warning-text-strong">
                           {t('bottomDrawer.labels.partial')}
                         </span>
                       ) : null}
@@ -343,19 +346,19 @@ export function BottomDrawer() {
                 </div>
               ))}
               {failedJobs.map((job) => (
-                <div key={job.id} className="border border-red-200 bg-red-50 p-3 text-[11px] text-red-700">
+                <div key={job.id} className="border border-forensics-error-border bg-forensics-error-bg p-3 text-[11px] text-forensics-error-text">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{job.name}</span>
+                    <span className="font-light">{job.name}</span>
                     <span className="truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-red-600/80 truncate">{job.scope || t('bottomDrawer.jobs.failedFallback')}</div>
+                  <div className="mt-1 text-forensics-error-text/80 truncate">{job.scope || t('bottomDrawer.jobs.failedFallback')}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}
               {warningJobs.map((job) => (
                 <div key={job.id} className="border border-forensics-warning-border bg-forensics-warning-bg p-3 text-[11px] text-forensics-warning-text">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{job.name}</span>
+                    <span className="font-light">{job.name}</span>
                     <span className="truncate">{job.detail}</span>
                   </div>
                   <div className="mt-1 truncate opacity-80">{job.scope}</div>
@@ -365,7 +368,7 @@ export function BottomDrawer() {
               {cancellingJobs.map((job) => (
                 <div key={job.id} className="border border-forensics-border bg-forensics-surface p-3 text-[11px] text-forensics-text-tertiary">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium text-forensics-text">{job.name}</span>
+                    <span className="font-light text-forensics-text">{job.name}</span>
                     <span className="truncate">{job.detail}</span>
                   </div>
                   <div className="mt-1 truncate">{job.scope}</div>
@@ -375,7 +378,7 @@ export function BottomDrawer() {
               {cancelledJobs.map((job) => (
                 <div key={job.id} className="border border-forensics-border-light bg-forensics-panel p-3 text-[11px] text-forensics-text-tertiary">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{job.name}</span>
+                    <span className="font-light">{job.name}</span>
                     <span className="truncate">{job.detail}</span>
                   </div>
                   <div className="mt-1 truncate">{job.scope}</div>
@@ -385,7 +388,7 @@ export function BottomDrawer() {
             </div>
           </div>
           <div className="overflow-auto border-r border-forensics-border p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.issues.title')}</span>
               <span className="font-mono text-forensics-muted-light">
                 {issueCount} {t('bottomDrawer.issues.errors')} / {warningSignalCount} {t('bottomDrawer.jobs.warnings')}
@@ -406,7 +409,7 @@ export function BottomDrawer() {
             </div>
           </div>
           <div className="overflow-auto p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.trace.title')}</span>
               <span className="font-mono text-forensics-muted-light">{t('bottomDrawer.trace.recentStream')}</span>
             </div>
@@ -641,12 +644,12 @@ function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
   const isError = issue.severity === 'error';
 
   return (
-    <div className={`border p-3 text-[11px] ${isError ? 'border-red-200 bg-red-50 text-red-700' : 'border-forensics-warning-border bg-forensics-surface text-forensics-text'}`}>
+    <div className={`border p-3 text-[11px] ${isError ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text' : 'border-forensics-warning-border bg-forensics-surface text-forensics-text'}`}>
       <div className="flex items-start gap-2">
-        <AlertCircle size={12} className={`mt-0.5 shrink-0 ${isError ? 'text-red-600' : 'text-forensics-warning'}`} />
+        <AlertCircle size={12} className={`mt-0.5 shrink-0 ${isError ? 'text-forensics-error-text' : 'text-forensics-warning'}`} />
         <div className="min-w-0 flex-1">
-          <div className="font-medium break-words">{issue.title}</div>
-          <div className={`mt-1 whitespace-pre-wrap break-words ${isError ? 'text-red-700/90' : 'text-forensics-muted'}`}>
+          <div className="font-light break-words">{issue.title}</div>
+          <div className={`mt-1 whitespace-pre-wrap break-words ${isError ? 'text-forensics-error-text/90' : 'text-forensics-muted'}`}>
             {issue.detail}
           </div>
         </div>
@@ -654,21 +657,21 @@ function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
       {issue.meta.length > 0 ? (
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           {issue.meta.map((item) => (
-            <div key={`${item.label}-${item.value}`} className={`border px-1.5 py-1 ${isError ? 'border-red-200 bg-white/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
-              <span className={isError ? 'text-red-500/80' : 'text-forensics-muted-light'}>{item.label}: </span>
+            <div key={`${item.label}-${item.value}`} className={`border px-1.5 py-1 ${isError ? 'border-forensics-error-border bg-forensics-surface/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
+              <span className={isError ? 'text-forensics-error-text/80' : 'text-forensics-muted-light'}>{item.label}: </span>
               <span className="font-mono break-all">{item.value}</span>
             </div>
           ))}
         </div>
       ) : null}
       {issue.suggestion ? (
-        <div className={`mt-2 border px-2 py-1.5 ${isError ? 'border-red-200 bg-white/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
-          <span className="font-semibold">{t('bottomDrawer.issues.suggestion')}: </span>
+        <div className={`mt-2 border px-2 py-1.5 ${isError ? 'border-forensics-error-border bg-forensics-surface/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
+          <span className="font-light">{t('bottomDrawer.issues.suggestion')}: </span>
           <span className="break-words">{issue.suggestion}</span>
         </div>
       ) : null}
       {issue.details ? (
-        <pre className={`mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words border px-2 py-1.5 font-mono text-[10px] ${isError ? 'border-red-200 bg-white/70 text-red-800' : 'border-forensics-border-light bg-forensics-panel text-forensics-text-tertiary'}`}>
+        <pre className={`mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words border px-2 py-1.5 font-mono text-[10px] ${isError ? 'border-forensics-error-border bg-forensics-surface/70 text-forensics-error-text' : 'border-forensics-border-light bg-forensics-panel text-forensics-text-tertiary'}`}>
           {issue.details}
         </pre>
       ) : null}
@@ -680,7 +683,7 @@ function DrawerChip({ label, detail, tone }: { label: string; detail?: string; t
   const toneClass = getToneClass(tone);
 
   return (
-    <span className={`border px-1.5 py-0.5 text-[10px] font-medium ${toneClass}`}>
+    <span className={`border px-1.5 py-0.5 text-[10px] font-light ${toneClass}`}>
       {label}
       {detail ? <span className="ml-1 font-mono opacity-80">{detail}</span> : null}
     </span>
@@ -704,7 +707,7 @@ function getToneClass(tone: string) {
     case 'stale':
     case 'invalidated':
     case 'cancelled':
-      return 'border-red-200 bg-red-50 text-red-700';
+      return 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text';
     case 'warning':
       return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     default:
@@ -722,7 +725,7 @@ function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
       {job.partial ? (
-        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 font-semibold text-forensics-warning-text-strong">
+        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 font-light text-forensics-warning-text-strong">
           {t('bottomDrawer.labels.partial')}
         </span>
       ) : null}
@@ -732,7 +735,7 @@ function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
       <span className="border border-forensics-350 bg-forensics-surface px-1.5 py-0.5 text-forensics-text-tertiary">
         {t('bottomDrawer.labels.skipped')} {job.skippedCount}
       </span>
-      <span className="border border-red-200 bg-forensics-surface px-1.5 py-0.5 text-red-700">
+      <span className="border border-forensics-error-border bg-forensics-surface px-1.5 py-0.5 text-forensics-error-text">
         {t('bottomDrawer.labels.failed')} {job.failedCount}
       </span>
     </div>

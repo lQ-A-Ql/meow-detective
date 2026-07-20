@@ -9,11 +9,11 @@ import type { DataSourceSummary, DataSourcePartition, JobSnapshot, RecentObject 
 // ── Shared helper ──
 
 const processingStatePresentation = {
-  pending: { label: '等待处理', tone: 'border-[#e3e3e3] bg-[#fafafa] text-[#666]' },
-  running: { label: '处理中', tone: 'border-[#cfdde9] bg-[#f5f9fc] text-[#315a75]' },
-  ready: { label: '处理完成', tone: 'border-[#d7e7d7] bg-[#f7fbf7] text-[#234b23]' },
-  failed: { label: '处理失败', tone: 'border-red-200 bg-red-50 text-red-700' },
-  deferred: { label: '部分延后', tone: 'border-[#ead8ab] bg-[#fff9ec] text-[#8a5a00]' },
+  pending: { label: '等待处理', tone: 'border-forensics-border bg-forensics-panel text-forensics-muted' },
+  running: { label: '处理中', tone: 'border-forensics-info-border bg-forensics-info-bg text-forensics-info-text' },
+  ready: { label: '处理完成', tone: 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text' },
+  failed: { label: '处理失败', tone: 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text' },
+  deferred: { label: '部分延后', tone: 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text' },
 } as const;
 
 export function MetricBlock({
@@ -26,11 +26,11 @@ export function MetricBlock({
   value: number;
 }) {
   return (
-    <div className="p-4 flex flex-col gap-3 bg-white">
-      <div className="text-[#888] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+    <div className="p-4 flex flex-col gap-3 bg-forensics-surface">
+      <div className="text-forensics-muted-light text-[11px] uppercase tracking-wider flex items-center gap-1.5">
         {icon} {title}
       </div>
-      <div className="text-2xl font-serif text-[#111]">{value.toLocaleString()}</div>
+      <div className="text-2xl font-serif text-forensics-text">{value.toLocaleString()}</div>
     </div>
   );
 }
@@ -49,8 +49,8 @@ export function CaseMetricsStrip({
   artifactCount: number;
 }) {
   return (
-    <div className="border-b border-[#e0e0e0] shrink-0">
-      <div className="grid grid-cols-4 divide-x divide-[#e0e0e0]">
+    <div className="border-b border-forensics-border shrink-0">
+      <div className="grid grid-cols-4 divide-x divide-forensics-border">
         <MetricBlock icon={<Database size={12} />} title="数据源" value={dataSourceCount} />
         <MetricBlock icon={<FileText size={12} />} title="已索引文件" value={indexedFileCount} />
         <MetricBlock icon={<Clock size={12} />} title="时间线事件" value={timelineEventCount} />
@@ -72,10 +72,10 @@ export function RecentTasksPanel({
   partialJobCount: number;
 }) {
   return (
-    <div className="w-1/2 border-r border-[#e0e0e0] flex flex-col min-h-0 bg-white">
-      <div className="h-8 border-b border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between px-4 text-[11px] font-semibold uppercase text-[#555] tracking-wider shrink-0">
+    <div className="w-1/2 border-r border-forensics-border flex flex-col min-h-0 bg-forensics-surface">
+      <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
         <span>最近任务</span>
-        <span className="font-mono text-[10px] text-[#888]">
+        <span className="font-mono text-[10px] text-forensics-muted-light">
           完成 {completedJobs.length} / 部分 {partialJobCount} / 运行 {runningJob ? 1 : 0}
         </span>
       </div>
@@ -89,26 +89,26 @@ export function RecentTasksPanel({
           />
         ) : null}
         {completedJobs.map((job) => (
-          <div key={job.id} className="border-t border-[#eee] pt-3 flex items-start gap-3">
-            <CheckCircle2 size={14} className="text-[#888] mt-0.5" />
+          <div key={job.id} className="border-t border-forensics-border-light pt-3 flex items-start gap-3">
+            <CheckCircle2 size={14} className="text-forensics-muted-light mt-0.5" />
             <div className="flex-1">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[#333] text-[13px]">{job.name}</div>
-                <div className="text-[#888] font-mono text-[10px]">{job.detail}</div>
+                <div className="text-forensics-text-secondary text-[13px]">{job.name}</div>
+                <div className="text-forensics-muted-light font-mono text-[10px]">{job.detail}</div>
               </div>
-              <div className="text-[#666] text-[11px] mt-0.5">{job.scope}</div>
+              <div className="text-forensics-muted text-[11px] mt-0.5">{job.scope}</div>
               {job.partial ? (
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-mono">
-                  <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 text-[#8a5a00]">
+                  <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 text-forensics-warning-text">
                     PARTIAL
                   </span>
-                  <span className="border border-[#e7d9b4] bg-white px-1.5 py-0.5 text-[#6f4d00]">
+                  <span className="border border-forensics-warning-border bg-forensics-surface px-1.5 py-0.5 text-forensics-warning-text">
                     warnings {job.warningCount}
                   </span>
-                  <span className="border border-[#d9d9d9] bg-white px-1.5 py-0.5 text-[#555]">
+                  <span className="border border-forensics-border-strong bg-forensics-surface px-1.5 py-0.5 text-forensics-text-tertiary">
                     skipped {job.skippedCount}
                   </span>
-                  <span className="border border-red-200 bg-white px-1.5 py-0.5 text-red-700">
+                  <span className="border border-forensics-error-border bg-forensics-surface px-1.5 py-0.5 text-forensics-error-text">
                     failed {job.failedCount}
                   </span>
                 </div>
@@ -144,17 +144,17 @@ export function DataSourcesPanel({
 }: DataSourcesPanelProps) {
   return (
     <>
-      <div className="h-8 border-b border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between px-4 text-[11px] font-semibold uppercase text-[#555] tracking-wider shrink-0">
+      <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
         <span>已有数据源</span>
-        <span className="font-mono text-[10px] text-[#888]">{dataSources?.length ?? 0} 个</span>
+        <span className="font-mono text-[10px] text-forensics-muted-light">{dataSources?.length ?? 0} 个</span>
       </div>
-      <div className="max-h-64 overflow-auto border-b border-[#e0e0e0] bg-white">
+      <div className="max-h-64 overflow-auto border-b border-forensics-border bg-forensics-surface">
         {dataSources?.length ? (
           dataSources.map((source) => {
             const isEditing = editingDataSourceId === source.id;
             const partitionCount = source.partitions?.length ?? 0;
             return (
-              <div key={source.id} className="border-b border-[#eee] px-4 py-3 last:border-b-0">
+              <div key={source.id} className="border-b border-forensics-border-light px-4 py-3 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     {isEditing ? (
@@ -189,7 +189,7 @@ export function DataSourcesPanel({
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <div className="text-[13px] text-[#111] font-medium truncate">{source.name}</div>
+                        <div className="text-[13px] text-forensics-text font-light truncate">{source.name}</div>
                         <Button
                           type="button"
                           variant="forensicsGhost"
@@ -215,26 +215,26 @@ export function DataSourcesPanel({
                         </Button>
                       </div>
                     )}
-                    <div className="mt-1 text-[10px] uppercase tracking-wider text-[#888]">{source.kind}</div>
-                    <div className="mt-1 text-[11px] text-[#666] font-mono break-all">{source.sourcePath}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{source.kind}</div>
+                    <div className="mt-1 text-[11px] text-forensics-muted font-mono break-all">{source.sourcePath}</div>
                     {source.processing ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                         <span
-                          className={`border px-2 py-0.5 font-medium ${processingStatePresentation[source.processing.state].tone}`}
+                          className={`border px-2 py-0.5 font-light ${processingStatePresentation[source.processing.state].tone}`}
                           title={source.processing.lastError}
                         >
                           {processingStatePresentation[source.processing.state].label}
                         </span>
-                        <span className="font-mono text-[#666]">
+                        <span className="font-mono text-forensics-muted">
                           phase {source.processing.readyCount}/{source.processing.totalCount}
                         </span>
                         {source.processing.failedCount > 0 ? (
-                          <span className="font-mono text-red-700">
+                          <span className="font-mono text-forensics-error-text">
                             failed {source.processing.failedCount}
                           </span>
                         ) : null}
                         {source.processing.deferredCount > 0 ? (
-                          <span className="font-mono text-[#8a5a00]">
+                          <span className="font-mono text-forensics-warning-text">
                             deferred {source.processing.deferredCount}
                           </span>
                         ) : null}
@@ -242,7 +242,7 @@ export function DataSourcesPanel({
                     ) : null}
                     {partitionCount > 0 ? (
                       <div className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-[#777]">
+                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-forensics-muted">
                           <span>分区结构</span>
                           <span className="font-mono">{partitionCount} 项</span>
                         </div>
@@ -250,10 +250,10 @@ export function DataSourcesPanel({
                           {source.partitions?.map((partition: DataSourcePartition) => {
                             const statusTone =
                               partition.status === 'supported'
-                                ? 'border-[#d7e7d7] bg-[#f7fbf7] text-[#234b23]'
+                                ? 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text'
                                 : partition.status === 'locked'
-                                  ? 'border-[#ead8ab] bg-[#fff9ec] text-[#8a5a00]'
-                                  : 'border-[#e3e3e3] bg-[#fafafa] text-[#666]';
+                                  ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
+                                  : 'border-forensics-border bg-forensics-panel text-forensics-muted';
                             const statusLabel =
                               partition.status === 'supported'
                                 ? '可浏览'
@@ -265,29 +265,29 @@ export function DataSourcesPanel({
                               <div key={`${source.id}-${partition.index}`} className={`border px-3 py-2 text-[11px] ${statusTone}`}>
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <div className="text-[#111] font-medium">
+                                    <div className="text-forensics-text font-light">
                                       {formatPartitionDisplayName(partition)}
                                     </div>
-                                    <div className="mt-1 text-[#555]">{partition.name}</div>
-                                    <div className="mt-1 font-mono text-[10px] break-all text-[#777]">
+                                    <div className="mt-1 text-forensics-text-tertiary">{partition.name}</div>
+                                    <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted">
                                       offset {partition.offset} / length {partition.length}
                                     </div>
                                     {partition.typeGuid ? (
-                                      <div className="mt-1 font-mono text-[10px] break-all text-[#888]">
+                                      <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
                                         GUID {partition.typeGuid}
                                       </div>
                                     ) : null}
                                     {partition.unlockHint ? (
-                                      <div className="mt-2 text-[10px] font-medium text-[#8a5a00]">
+                                      <div className="mt-2 text-[10px] font-light text-forensics-warning-text">
                                         {partition.unlockHint}
                                       </div>
                                     ) : null}
                                   </div>
                                   <div className="shrink-0 text-right">
-                                    <div className="text-[10px] uppercase tracking-wider font-semibold">
+                                    <div className="text-[10px] uppercase tracking-wider font-light">
                                       {statusLabel}
                                     </div>
-                                    <div className="mt-1 font-mono text-[10px] text-[#888]">
+                                    <div className="mt-1 font-mono text-[10px] text-forensics-muted-light">
                                       {partitionDisplayLabel(partition)}
                                     </div>
                                   </div>
@@ -300,15 +300,15 @@ export function DataSourcesPanel({
                     ) : null}
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-[11px] text-[#111] font-mono">{source.fileCount ?? 0}</div>
-                    <div className="text-[10px] text-[#888]">objects</div>
+                    <div className="text-[11px] text-forensics-text font-mono">{source.fileCount ?? 0}</div>
+                    <div className="text-[10px] text-forensics-muted-light">objects</div>
                   </div>
                 </div>
               </div>
             );
           })
         ) : (
-          <div className="px-4 py-6 text-[12px] text-[#777]">导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。</div>
+          <div className="px-4 py-6 text-[12px] text-forensics-muted">导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。</div>
         )}
       </div>
     </>
@@ -320,27 +320,27 @@ export function DataSourcesPanel({
 export function RecentObjectsPanel({ recentObjects }: { recentObjects: RecentObject[] | undefined }) {
   return (
     <>
-      <div className="h-8 border-b border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between px-4 text-[11px] font-semibold uppercase text-[#555] tracking-wider shrink-0">
+      <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
         <span>高价值对象</span>
-        <span className="font-mono text-[10px] text-[#888]">最近发现 {recentObjects?.length ?? 0} 项</span>
+        <span className="font-mono text-[10px] text-forensics-muted-light">最近发现 {recentObjects?.length ?? 0} 项</span>
       </div>
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col border-b border-[#e0e0e0]">
+        <div className="flex flex-col border-b border-forensics-border">
           {recentObjects?.length ? (
             recentObjects.map((item) => (
-              <div key={item.id} className="flex items-center px-4 py-2 border-b border-[#eee] hover:bg-[#f0f0f0] cursor-pointer bg-white">
+              <div key={item.id} className="flex items-center px-4 py-2 border-b border-forensics-border-light hover:bg-forensics-panel-strong cursor-pointer bg-forensics-surface">
                 <div className="w-8">
-                  {item.kind === 'file' ? <FileText size={12} className="text-[#888]" /> : <Activity size={12} className="text-[#888]" />}
+                  {item.kind === 'file' ? <FileText size={12} className="text-forensics-muted-light" /> : <Activity size={12} className="text-forensics-muted-light" />}
                 </div>
                 <div className="flex-1 font-mono text-[11px]">
-                  <div className="text-[#111] font-medium">{item.title}</div>
-                  <div className="text-[#666] text-[10px] mt-0.5 font-sans">{item.detail}</div>
+                  <div className="text-forensics-text font-light">{item.title}</div>
+                  <div className="text-forensics-muted text-[10px] mt-0.5 font-sans">{item.detail}</div>
                 </div>
-                <div className="text-[#888] text-[11px]">{item.time}</div>
+                <div className="text-forensics-muted-light text-[11px]">{item.time}</div>
               </div>
             ))
           ) : (
-            <div className="px-4 py-6 text-[12px] text-[#777]">导入并完成初步解析后，这里会展示最近发现的高价值对象。</div>
+            <div className="px-4 py-6 text-[12px] text-forensics-muted">导入并完成初步解析后，这里会展示最近发现的高价值对象。</div>
           )}
         </div>
       </div>

@@ -61,7 +61,7 @@ export function Artifacts() {
     tableRows[0];
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
+    <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
       <PageSubbar
         title="痕迹家族控制"
         meta={`Family ${selectedArtifactFamily} / 记录 ${tableRows.length} 条 / 来源范围：Windows 用户活动 / 壳对象`}
@@ -81,7 +81,7 @@ export function Artifacts() {
                 onClick={() => setSelectedArtifactFamily(family)}
                 className="shrink-0 whitespace-nowrap font-mono"
               >
-                {family} <span className="text-[#999]">{count}</span>
+                {family} <span className="text-forensics-muted-lighter">{count}</span>
               </Button>
             );
           })}
@@ -89,7 +89,7 @@ export function Artifacts() {
       </PageSubbar>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 border-r border-[#e0e0e0]">
+        <div className="min-w-0 flex-1 border-r border-forensics-border">
           <DenseDataTable<ArtifactRow>
             rows={tableRows}
             getRowKey={(row) => row.id}
@@ -101,25 +101,25 @@ export function Artifacts() {
               {
                 key: 'title',
                 title: `${selectedArtifactFamily} 路径`,
-                className: 'w-[38%] text-[#666]',
+                className: 'w-[38%] text-forensics-muted',
                 render: (row) => row.title,
               },
               {
                 key: 'summary',
                 title: '目标路径',
-                className: 'w-[34%] text-[#333]',
+                className: 'w-[34%] text-forensics-text-secondary',
                 render: (row) => row.summary.replace('目标路径: ', ''),
               },
               {
                 key: 'createdAt',
                 title: '创建时间',
-                className: 'w-40 text-[#888]',
+                className: 'w-40 text-forensics-muted-light',
                 render: (row) => row.createdAt,
               },
               {
                 key: 'args',
                 title: '参数',
-                className: 'text-[#555]',
+                className: 'text-forensics-text-tertiary',
                 render: (row) => String(row.attrs.arguments ?? '-'),
               },
             ]}
@@ -173,7 +173,7 @@ export function Artifacts() {
                   size="xs"
                   onClick={() => openArtifactSource(selectedArtifact)}
                   disabled={!selectedArtifact?.sourceObjectId}
-                  className="w-full font-medium"
+                  className="w-full font-light"
                 >
                   在文件浏览中定位目标
                 </Button>

@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<BatchJobStatus, { badge: 'default' | 'secondary' | '
   pending: { badge: 'secondary' as const, label: 'Pending', icon: <Clock size={12} /> },
   running: { badge: 'default' as const, label: 'Running', icon: <Clock size={12} /> },
   paused: { badge: 'secondary' as const, label: 'Paused', icon: <Pause size={12} /> },
-  completed: { badge: 'outline' as const, label: 'Completed', icon: <CheckCircle2 size={12} className="text-green-600" /> },
+  completed: { badge: 'outline' as const, label: 'Completed', icon: <CheckCircle2 size={12} className="text-forensics-success-text" /> },
   failed: { badge: 'destructive' as const, label: 'Failed', icon: <XCircle size={12} className="text-destructive" /> },
   cancelled: { badge: 'secondary' as const, label: 'Cancelled', icon: <AlertTriangle size={12} /> },
 };
@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<BatchJobStatus, { badge: 'default' | 'secondary' | '
 const PHASE_STATE_CONFIG: Record<BatchPhaseState, { badge: 'default' | 'secondary' | 'destructive' | 'outline'; label: string; icon: React.ReactNode }> = {
   pending: { badge: 'secondary' as const, label: 'Pending', icon: <Clock size={12} /> },
   running: { badge: 'default' as const, label: 'Running', icon: <Clock size={12} /> },
-  completed: { badge: 'outline' as const, label: 'Completed', icon: <CheckCircle2 size={12} className="text-green-600" /> },
+  completed: { badge: 'outline' as const, label: 'Completed', icon: <CheckCircle2 size={12} className="text-forensics-success-text" /> },
   failed: { badge: 'destructive' as const, label: 'Failed', icon: <XCircle size={12} className="text-destructive" /> },
   skipped: { badge: 'secondary' as const, label: 'Skipped', icon: <AlertTriangle size={12} /> },
 };
@@ -64,7 +64,7 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
       className: 'w-[240px]',
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-medium">{row.label}</span>
+          <span className="truncate font-light">{row.label}</span>
         </div>
       ),
     },
@@ -128,7 +128,7 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
   return (
     <Card className="w-full max-w-4xl">
       <CardHeader>
-        <CardTitle className="text-[14px] font-semibold">Batch Job History</CardTitle>
+        <CardTitle className="text-[14px] font-light">Batch Job History</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-0">
         <DenseDataTable
@@ -149,7 +149,7 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
           <div className="border-t px-6 pb-4 pt-3">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-medium">{expandedJob.label} - Phases</span>
+                <span className="text-[12px] font-light">{expandedJob.label} - Phases</span>
                 <span className="font-mono text-[11px] text-muted-foreground">
                   {expandedJob.plan.dataSourceRefs.length} source
                   {expandedJob.plan.dataSourceRefs.length !== 1 ? 's' : ''}
@@ -164,10 +164,10 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
                     return (
                       <div
                         key={phase.kind}
-                        className="flex items-center gap-3 rounded border px-3 py-2"
+                        className="flex items-center gap-3 rounded-none border px-3 py-2"
                       >
                         <div className="shrink-0">{config.icon}</div>
-                        <div className="min-w-[100px] text-[12px] font-medium">{phase.kind}</div>
+                        <div className="min-w-[100px] text-[12px] font-light">{phase.kind}</div>
                         <div className="flex-1 space-y-1">
                           <Progress value={phase.progress} className="h-1" />
                         </div>

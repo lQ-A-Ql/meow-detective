@@ -79,8 +79,8 @@ function TableRowMemoBase<T>({
       data-state={selected ? 'selected' : undefined}
       className={`h-[31px] cursor-pointer border-b ${
         selected
-          ? 'bg-forensics-sakura-150 text-[#111]'
-          : 'text-[#333] hover:bg-forensics-hover'
+          ? 'bg-forensics-sakura-150 text-forensics-text'
+          : 'text-forensics-text-secondary hover:bg-forensics-hover'
       }`}
       onClick={() => onRowClick?.(row)}
     >
@@ -178,7 +178,7 @@ export function DenseDataTable<T>({
   return (
     <div
       ref={containerRef}
-      className="min-h-0 flex-1 overflow-auto bg-white font-mono text-[11px]"
+      className="min-h-0 flex-1 overflow-auto bg-transparent font-mono text-[11px]"
       onScroll={handleScroll}
     >
       <Table className="text-[11px]">
@@ -187,7 +187,7 @@ export function DenseDataTable<T>({
             {columns.map((column) => (
               <TableHead
                 key={column.key}
-                className={`group h-7 border-r border-forensics-border px-2 text-[11px] font-medium tracking-wider text-[#555] last:border-r-0 ${
+                className={`group h-7 border-r border-forensics-border px-2 text-[11px] font-light tracking-wide text-forensics-text-tertiary last:border-r-0 ${
                   column.sortable ? 'cursor-pointer select-none hover:bg-forensics-hover' : ''
                 } ${column.className ?? ''}`}
                 onClick={() => column.sortable && handleSort(column.sortKey ?? column.key)}
@@ -207,13 +207,13 @@ export function DenseDataTable<T>({
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
-            <TableRow className="hover:bg-white">
+            <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columns.length} className="px-4 py-8">
-                <div className="space-y-1 text-center font-sans">
-                  <div className="text-[12px] font-medium text-[#222]">
+                <div className="space-y-1 text-center font-serif">
+                  <div className="text-[12px] font-light text-forensics-text">
                     {emptyTitle}
                   </div>
-                  <div className="text-[11px] text-[#777]">
+                  <div className="text-[11px] text-forensics-muted">
                     {emptyDescription}
                   </div>
                 </div>
@@ -221,7 +221,7 @@ export function DenseDataTable<T>({
             </TableRow>
           ) : null}
           {rows.length > 0 && topSpacerHeight > 0 ? (
-            <TableRow aria-hidden="true" className="hover:bg-white">
+            <TableRow aria-hidden="true" className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
                 className="border-r-0 p-0"
@@ -243,7 +243,7 @@ export function DenseDataTable<T>({
             );
           })}
           {rows.length > 0 && bottomSpacerHeight > 0 ? (
-            <TableRow aria-hidden="true" className="hover:bg-white">
+            <TableRow aria-hidden="true" className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
                 className="border-r-0 p-0"

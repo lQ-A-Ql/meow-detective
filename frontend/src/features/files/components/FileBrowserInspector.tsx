@@ -103,7 +103,7 @@ export function FileBrowserInspector({
                 }
               }}
               disabled={!selectedFile || extractFile.isPending}
-              className="w-full font-medium"
+              className="w-full font-light"
             >
               {extractFile.isPending
                 ? t('fileBrowser.inspector.extract.pending')

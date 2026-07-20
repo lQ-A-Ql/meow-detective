@@ -15,7 +15,7 @@ export function BatchStatusSection({ data }: { data: BatchStatus | undefined }) 
           <StatCard title="总计" value={data.totalJobs} icon={GitBranch} />
         </div>
       ) : (
-        <div className="mt-3 rounded border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">
+        <div className="mt-3 rounded-none border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">
           暂无批处理作业。
         </div>
       )}

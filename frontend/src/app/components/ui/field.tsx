@@ -26,7 +26,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<"label">) {
   return (
     <label
       data-slot="field-label"
-      className={cn("block text-[12px] font-medium text-forensics-text-secondary", className)}
+      className={cn("block text-[12px] font-light text-forensics-text-secondary", className)}
       {...props}
     />
   );
@@ -46,7 +46,7 @@ function FieldError({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="field-error"
-      className={cn("text-[11px] leading-5 text-red-600", className)}
+      className={cn("text-[11px] leading-5 text-forensics-error-text", className)}
       {...props}
     />
   );

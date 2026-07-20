@@ -11,8 +11,6 @@ import { KeyValueField } from '@/components/data-display';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   DenseTableFrame,
   ExtractionTableSection,
   formatSize,
@@ -26,10 +24,8 @@ import {
 
 export function EmailExtractionPanel({
   summary,
-  progress,
 }: {
   summary?: EmailExtractionSummary;
-  progress?: AnalysisExtractionProgressInfo;
 }) {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [showHeaders, setShowHeaders] = useState(false);
@@ -126,7 +122,6 @@ export function EmailExtractionPanel({
         ],
       ]}
     >
-      <AnalysisExtractionProgress progress={progress} />
       <DenseTableFrame>
         <DenseDataTable
           rows={info.messages}
@@ -167,16 +162,16 @@ function EmailDetailCard({
   const defaultTab = hasPlain ? 'plain' : hasHtml ? 'html' : 'preview';
 
   return (
-    <div className="mt-4 rounded border border-[#e0e0e0] bg-[#fcfcfc]">
-      <div className="flex items-start gap-3 border-b border-[#e0e0e0] p-3">
-        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f0f0f0]">
-          <Mail className="size-4 text-[#555]" />
+    <div className="mt-4 rounded-none border border-forensics-border bg-forensics-surface">
+      <div className="flex items-start gap-3 border-b border-forensics-border p-3">
+        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none bg-forensics-panel-strong">
+          <Mail className="size-4 text-forensics-text-tertiary" />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="text-[13px] font-semibold text-[#111]">
+          <div className="text-[13px] font-light text-forensics-text">
             {message.subject || '(no subject)'}
           </div>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-[11px] text-[#555] md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-[11px] text-forensics-text-tertiary md:grid-cols-2">
             <Field label="From" value={message.from} />
             <Field label="To" value={joinAddresses(message.to)} />
             {message.cc.length > 0 ? (
@@ -225,8 +220,8 @@ function EmailDetailCard({
       </div>
 
       {message.attachmentDetails.length > 0 ? (
-        <div className="border-b border-[#e0e0e0] p-3">
-          <div className="mb-2 text-[11px] font-semibold text-[#111]">
+        <div className="border-b border-forensics-border p-3">
+          <div className="mb-2 text-[11px] font-light text-forensics-text">
             附件 ({message.attachmentDetails.length})
           </div>
           <div className="flex flex-wrap gap-2">
@@ -264,12 +259,12 @@ function EmailDetailCard({
       </div>
 
       {message.headers.length > 0 ? (
-        <div className="border-t border-[#e0e0e0] p-3">
+        <div className="border-t border-forensics-border p-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={onToggleHeaders}
-            className="h-7 gap-1 px-2 text-[11px] text-[#555]"
+            className="h-7 gap-1 px-2 text-[11px] text-forensics-text-tertiary"
           >
             {showHeaders ? (
               <ChevronUp className="size-3" />
@@ -306,9 +301,9 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
     <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[10px]">
       <Paperclip className="size-3" />
       <span className="max-w-[200px] truncate">{attachment.fileName}</span>
-      {sizeText ? <span className="text-[#888]">({sizeText})</span> : null}
+      {sizeText ? <span className="text-forensics-muted-light">({sizeText})</span> : null}
       {attachment.mimeType ? (
-        <span className="text-[#888]">· {attachment.mimeType}</span>
+        <span className="text-forensics-muted-light">· {attachment.mimeType}</span>
       ) : null}
     </Badge>
   );
@@ -316,8 +311,8 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
 
 function BodyPreview({ text }: { text?: string }) {
   return (
-    <div className="max-h-[240px] overflow-auto rounded border border-[#e8e8e8] bg-white p-3 text-[12px] leading-relaxed text-[#333]">
-      {text?.trim() ? text : <span className="text-[#999]">无正文内容</span>}
+    <div className="max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
+      {text?.trim() ? text : <span className="text-forensics-muted-lighter">无正文内容</span>}
     </div>
   );
 }
@@ -325,14 +320,14 @@ function BodyPreview({ text }: { text?: string }) {
 function HtmlPreview({ html }: { html?: string }) {
   if (!html) {
     return (
-      <div className="rounded border border-[#e8e8e8] bg-white p-3 text-[12px] text-[#999]">
+      <div className="rounded-none border border-forensics-border bg-forensics-surface p-3 text-[12px] text-forensics-muted-lighter">
         无 HTML 内容
       </div>
     );
   }
   return (
-    <div className="max-h-[240px] overflow-auto rounded border border-[#e8e8e8] bg-white p-3">
-      <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-[#333]">
+    <div className="max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-3">
+      <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-forensics-text-secondary">
         {html}
       </pre>
     </div>
@@ -341,12 +336,12 @@ function HtmlPreview({ html }: { html?: string }) {
 
 function HeaderList({ headers }: { headers: EmailHeader[] }) {
   return (
-    <div className="mt-2 max-h-[240px] overflow-auto rounded border border-[#e8e8e8] bg-white p-2">
-      <div className="divide-y divide-[#f5f5f5] text-[11px]">
+    <div className="mt-2 max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-2">
+      <div className="divide-y divide-forensics-border-light text-[11px]">
         {headers.map((header, index) => (
           <div key={index} className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 py-1">
-            <div className="font-medium text-[#666]">{header.name}</div>
-            <div className="break-all font-mono text-[10px] text-[#333]">
+            <div className="font-light text-forensics-muted">{header.name}</div>
+            <div className="break-all font-mono text-[10px] text-forensics-text-secondary">
               {header.value}
             </div>
           </div>

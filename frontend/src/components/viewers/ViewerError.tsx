@@ -24,21 +24,21 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
   const handleCopy = useCallback(() => copyErrorToClipboard(error), [error]);
 
   return (
-    <div className="flex h-full min-h-0 items-center justify-center bg-white p-8">
+    <div className="flex h-full min-h-0 items-center justify-center bg-forensics-surface p-8">
       <div className="max-w-lg text-center">
-        <AlertCircle size={36} className="mx-auto mb-3 text-[#e74c3c]" />
+        <AlertCircle size={36} className="mx-auto mb-3 text-forensics-error-text" />
 
-        <h3 className="mb-2 font-mono text-[13px] font-semibold text-[#111]">
+        <h3 className="mb-2 font-mono text-[13px] font-light text-forensics-text">
           [{error.code}] 文件预览失败
         </h3>
 
-        <p className="mb-4 text-[13px] leading-relaxed text-[#666]">
+        <p className="mb-4 text-[13px] leading-relaxed text-forensics-muted">
           {error.message}
         </p>
 
         {error.suggestion && (
-          <div className="mb-4 rounded border border-[#f0d478] bg-[#fef9e7] px-4 py-3 text-left">
-            <p className="text-[12px] leading-relaxed text-[#8a6d3b]">
+          <div className="mb-4 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-4 py-3 text-left">
+            <p className="text-[12px] leading-relaxed text-forensics-warning-text">
               💡 {error.suggestion}
             </p>
           </div>

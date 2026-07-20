@@ -41,7 +41,7 @@ export function CaseWelcomeForms({
   onDeleteCase,
 }: CaseWelcomeFormsProps) {
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
+    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface overflow-auto">
       <div className="border-b border-forensics-border bg-forensics-panel p-8">
         <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">{BRAND_DISPLAY_NAME}</div>
         <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
@@ -50,8 +50,8 @@ export function CaseWelcomeForms({
       </div>
 
       <div className="grid grid-cols-2 gap-6 p-8">
-        <div className="border border-forensics-border bg-white p-5">
-          <div className="text-[13px] font-semibold text-forensics-text-secondary mb-3">新建案件</div>
+        <div className="border border-forensics-border bg-forensics-surface p-5">
+          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">新建案件</div>
           <div className="space-y-2 mb-3">
             <Input
               type="text"
@@ -80,12 +80,12 @@ export function CaseWelcomeForms({
             {createPending ? '创建中...' : '创建案件'}
           </Button>
           {createError ? (
-            <div className="mt-2 text-[11px] text-red-600">{createError}</div>
+            <div className="mt-2 text-[11px] text-forensics-error-text">{createError}</div>
           ) : null}
         </div>
 
-        <div className="border border-forensics-border bg-white p-5">
-          <div className="text-[13px] font-semibold text-forensics-text-secondary mb-3">打开已有案件</div>
+        <div className="border border-forensics-border bg-forensics-surface p-5">
+          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">打开已有案件</div>
           <div className="space-y-2 mb-3">
             <Input
               type="text"
@@ -106,15 +106,15 @@ export function CaseWelcomeForms({
             {openPending ? '打开中...' : '打开案件'}
           </Button>
           {openError ? (
-            <div className="mt-2 text-[11px] text-red-600">{openError}</div>
+            <div className="mt-2 text-[11px] text-forensics-error-text">{openError}</div>
           ) : null}
         </div>
       </div>
 
       <div className="px-8 pb-8">
-        <div className="border border-forensics-border bg-white">
+        <div className="border border-forensics-border bg-forensics-surface">
           <div className="border-b border-forensics-border bg-forensics-panel px-5 py-3 flex items-center justify-between">
-            <div className="text-[13px] font-semibold text-forensics-text-secondary">最近打开案件</div>
+            <div className="text-[13px] font-light text-forensics-text-secondary">最近打开案件</div>
             <div className="text-[10px] font-mono text-forensics-muted-light">{recentCases.length} 项</div>
           </div>
           {recentCases.length ? (
@@ -126,7 +126,7 @@ export function CaseWelcomeForms({
                   onClick={() => onOpenCase(item.caseRoot)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-forensics-text font-medium truncate">{item.name}</div>
+                    <div className="text-[13px] text-forensics-text font-light truncate">{item.name}</div>
                     <div className="text-[11px] text-forensics-muted font-mono truncate mt-1">{item.caseRoot}</div>
                   </div>
                   <div className="text-[10px] text-forensics-muted-light font-mono shrink-0 mr-3">{item.openedAt}</div>
@@ -260,12 +260,12 @@ export function ImportSection({
       </div>
       {importPending ? (
         <div className="mt-2 flex items-center gap-2 text-[11px] text-forensics-muted">
-          <div className="w-3 h-3 border-2 border-forensics-muted border-t-transparent rounded-full animate-spin" />
+          <div className="w-3 h-3 border-2 border-forensics-muted border-t-transparent rounded-none opacity-70" />
           正在提交导入任务，后台进度会在任务列表中持续更新。
         </div>
       ) : null}
       {importJob ? (
-        <div className="mt-2 text-[11px] text-forensics-text-tertiary font-mono bg-white border border-forensics-350 p-2">
+        <div className="mt-2 text-[11px] text-forensics-text-tertiary font-mono bg-forensics-surface border border-forensics-350 p-2">
           <div>后台导入进行中: {importJob.name} · {importJob.progress}% · {importJob.detail}</div>
           <Button
             type="button"
@@ -273,24 +273,24 @@ export function ImportSection({
             size="inline"
             onClick={onCancelImport}
             disabled={cancelImportPending}
-            className="mt-1 text-[10px] text-red-600 hover:text-red-800"
+            className="mt-1 text-[10px] text-forensics-error-text hover:text-forensics-error-text"
           >
             {cancelImportPending ? '取消中...' : '取消导入'}
           </Button>
         </div>
       ) : null}
       {importSuccess ? (
-        <div className="mt-2 text-[11px] text-green-700 font-mono bg-green-50 border border-green-200 p-2">
+        <div className="mt-2 text-[11px] text-forensics-success-text font-mono bg-forensics-success-bg border border-forensics-success-border p-2">
           {importSuccess}
         </div>
       ) : null}
       {importError ? (
-        <div className="mt-2 text-[11px] text-red-600 font-mono bg-red-50 border border-red-200 p-2">
+        <div className="mt-2 text-[11px] text-forensics-error-text font-mono bg-forensics-error-bg border border-forensics-error-border p-2">
           导入失败: {importError}
         </div>
       ) : null}
       {failedImportJob ? (
-        <div className="mt-2 text-[11px] text-red-700 font-mono bg-red-50 border border-red-200 p-2">
+        <div className="mt-2 text-[11px] text-forensics-error-text font-mono bg-forensics-error-bg border border-forensics-error-border p-2">
           后台导入失败: {failedImportJob.detail || failedImportJob.name}
         </div>
       ) : null}

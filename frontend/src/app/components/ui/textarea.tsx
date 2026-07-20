@@ -5,19 +5,19 @@ import { cn } from "./utils";
 
 const textareaVariants = cva(
   [
-    "border-input placeholder:text-muted-foreground flex field-sizing-content w-full rounded-md border bg-input-background",
-    "transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
-    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-    "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30",
+    "border-input placeholder:text-muted-foreground flex field-sizing-content w-full rounded-none border bg-transparent",
+    "transition-colors duration-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+    "focus-visible:border-ring focus-visible:ring-ring/20 focus-visible:ring-1",
+    "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
   ].join(" "),
   {
     variants: {
       variant: {
         default: "resize-none",
         forensics:
-          "resize-y rounded-[2px] border-forensics-border-strong bg-white text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+          "resize-y border-forensics-border-strong text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
         mono:
-          "resize-y rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+          "resize-y border-forensics-border-strong font-mono text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
       },
       textareaSize: {
         default: "min-h-16 px-3 py-2 text-base md:text-sm",

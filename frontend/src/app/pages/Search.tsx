@@ -59,11 +59,11 @@ export function Search() {
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
+    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface min-w-0">
       <PageSubbar title="搜索控制台" meta={`共 ${data?.total ?? 0} 项命中 / 高置信 ${highScoreHits} 项`}>
         <div className="shrink-0 p-3 flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex items-center bg-white border border-forensics-border-strong px-3 py-1.5 flex-1 focus-within:border-forensics-text transition-colors">
+            <div className="flex items-center bg-forensics-surface border border-forensics-border-strong px-3 py-1.5 flex-1 focus-within:border-forensics-text transition-colors">
               <span className="text-forensics-muted-light font-mono text-[11px] mr-2 shrink-0">QUERY</span>
               <Input
                 type="text"
@@ -79,7 +79,7 @@ export function Search() {
                 variant="forensicsPrimary"
                 size="compact"
                 onClick={() => setActiveQuery(queryInput)}
-                className="ml-2 shrink-0 font-semibold uppercase tracking-wider"
+                className="ml-2 shrink-0 font-light uppercase tracking-wider"
               >
                 执行
               </Button>
@@ -95,7 +95,7 @@ export function Search() {
                 <span>已保存查询</span>
               </Button>
               {savedOpen ? (
-                <div className="absolute right-0 top-8 z-20 w-80 border border-forensics-border-strong bg-white shadow-lg">
+                <div className="absolute right-0 top-8 z-20 w-80 border border-forensics-border-strong bg-forensics-surface shadow-none">
                   <div className="border-b border-forensics-border p-2">
                     <Input
                       value={savedName}
@@ -130,7 +130,7 @@ export function Search() {
                             onClick={() => runSavedQuery(item.query)}
                             className="min-w-0 flex-1 flex-col items-start gap-0 justify-start text-left"
                           >
-                            <div className="truncate text-[12px] font-medium text-forensics-text">
+                            <div className="truncate text-[12px] font-light text-forensics-text">
                               {item.name}
                             </div>
                             <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-forensics-muted">
@@ -176,9 +176,9 @@ export function Search() {
       <div className="flex-1 flex overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-4 py-2 flex gap-2 text-[10px] uppercase tracking-wider text-forensics-muted">
-            <span className="border border-forensics-350 bg-white px-2 py-0.5">高分命中 {highScoreHits}</span>
-            <span className="border border-forensics-350 bg-white px-2 py-0.5">文档对象</span>
-            <span className="border border-forensics-350 bg-white px-2 py-0.5">上下文已提取</span>
+            <span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">高分命中 {highScoreHits}</span>
+            <span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">文档对象</span>
+            <span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">上下文已提取</span>
           </div>
 
           <div className="flex-[2] flex flex-col border-b border-forensics-border min-h-0">
@@ -203,12 +203,12 @@ export function Search() {
           </div>
 
           <div className="flex-1 min-h-[8rem] bg-forensics-panel flex flex-col shrink-0">
-            <div className="h-7 border-b border-forensics-border flex items-center px-4 text-[10px] font-semibold uppercase text-forensics-text-tertiary tracking-wider shrink-0 bg-forensics-panel">
+            <div className="h-7 border-b border-forensics-border flex items-center px-4 text-[10px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0 bg-forensics-panel">
               上下文预览
             </div>
             <div className="flex-1 overflow-auto p-4 font-mono text-[11px] text-forensics-text-secondary leading-[1.6]">
               <div className="text-forensics-muted-light mb-2">在偏移 0x00A145 处找到匹配项</div>
-              <div className="bg-white border border-forensics-border p-3 text-forensics-text-secondary whitespace-pre-wrap">
+              <div className="bg-forensics-surface border border-forensics-border p-3 text-forensics-text-secondary whitespace-pre-wrap">
                 {selectedHit?.snippets[0]?.text ?? '无上下文预览'}
               </div>
             </div>
@@ -231,11 +231,11 @@ export function Search() {
 
             <InspectorSection title="命中字段">
               <div className="space-y-2 text-[10px] font-mono text-forensics-muted">
-                <div className="flex items-center justify-between border border-forensics-border bg-white p-2">
+                <div className="flex items-center justify-between border border-forensics-border bg-forensics-surface p-2">
                   <span>score</span>
                   <span className="text-forensics-text">{selectedHit?.score.toFixed(2) ?? '-'}</span>
                 </div>
-                <div className="flex items-center justify-between border border-forensics-border bg-white p-2">
+                <div className="flex items-center justify-between border border-forensics-border bg-forensics-surface p-2">
                   <span>snippet_count</span>
                   <span className="text-forensics-text">{selectedHit?.snippets.length ?? 0}</span>
                 </div>

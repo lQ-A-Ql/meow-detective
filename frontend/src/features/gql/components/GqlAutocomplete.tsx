@@ -19,7 +19,7 @@ export function GqlAutocomplete({
 
   return (
     <div
-      className="absolute z-50 bg-forensics-surface border border-forensics-border rounded-md shadow-lg
+      className="absolute z-50 bg-forensics-surface border border-forensics-border rounded-none shadow-none
                  max-h-[200px] overflow-y-auto"
       style={{
         left: '16px',
@@ -35,13 +35,13 @@ export function GqlAutocomplete({
           onMouseEnter={() => setSelectedSuggestion(i)}
           variant="autocompleteOption"
           size="autocompleteItem"
-          className={i === selectedSuggestion ? 'bg-[#0366d6] text-white' : undefined}
+          className={i === selectedSuggestion ? 'bg-forensics-primary-blue text-white' : undefined}
           data-active={i === selectedSuggestion ? 'true' : undefined}
         >
           <span
-            className={`text-[10px] px-1 py-0.5 rounded ${
+            className={`text-[10px] px-1 py-0.5 rounded-none ${
               i === selectedSuggestion
-                ? 'bg-white/20'
+                ? 'bg-forensics-surface/20'
                 : s.kind === 'keyword'
                   ? 'bg-forensics-gql-keyword/10 text-forensics-gql-keyword'
                   : s.kind === 'type'

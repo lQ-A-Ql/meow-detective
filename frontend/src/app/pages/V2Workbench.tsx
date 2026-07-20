@@ -37,12 +37,12 @@ export function V2Workbench() {
   }
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-white">
-      <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
+      <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="font-serif text-xl tracking-tight text-[#111]">V2 治理工作台</div>
-            <div className="mt-1 font-mono text-[11px] text-[#666]">
+            <div className="font-serif text-xl tracking-tight text-forensics-text">V2 治理工作台</div>
+            <div className="mt-1 font-mono text-[11px] text-forensics-muted">
               可信验证 / 支持矩阵 / Benchmark / 安全治理 / 发布评分卡
             </div>
           </div>
@@ -52,9 +52,9 @@ export function V2Workbench() {
               variant="outline"
               onClick={refresh}
               disabled={!hasCase || loading}
-              className="h-8 rounded border-[#ddd] bg-white px-3 text-[12px] hover:bg-[#f5f5f5]"
+              className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
             >
-              <RefreshCw size={14} className={snapshot.isFetching ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={snapshot.isFetching ? 'opacity-70' : ''} />
               刷新
             </Button>
           </div>

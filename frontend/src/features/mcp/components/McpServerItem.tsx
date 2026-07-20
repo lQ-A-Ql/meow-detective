@@ -49,9 +49,9 @@ export function McpServerItem({
   };
 
   const getStatusColor = () => {
-    if (server.connected) return 'bg-green-500';
-    if (server.lastError) return 'bg-red-500';
-    return 'bg-gray-400';
+    if (server.connected) return 'bg-forensics-success-bg';
+    if (server.lastError) return 'bg-forensics-error-bg';
+    return 'bg-forensics-panel';
   };
 
   const getStatusText = () => {
@@ -62,43 +62,43 @@ export function McpServerItem({
 
   return (
     <div
-      className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
+      className={`flex items-center gap-3 p-2 rounded-none cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-blue-50 border border-blue-200'
-          : 'hover:bg-gray-50 border border-transparent'
+          ? 'bg-forensics-info-bg border border-forensics-info-border'
+          : 'hover:bg-forensics-panel border border-transparent'
       }`}
       onClick={onSelect}
     >
-      <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
+      <div className={`w-2 h-2 rounded-none ${getStatusColor()}`} />
 
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] font-medium text-gray-900 truncate">
+        <div className="text-[12px] font-light text-forensics-muted truncate">
           {server.name}
         </div>
-        <div className="text-[10px] text-gray-500 truncate">
+        <div className="text-[10px] text-forensics-muted truncate">
           {server.transportType === 'sse' ? server.url : server.command}
         </div>
       </div>
 
       <div className="flex gap-1">
         {server.hasResources && (
-          <span className="px-1 py-0.5 text-[9px] bg-blue-100 text-blue-700 rounded">
+          <span className="px-1 py-0.5 text-[9px] bg-forensics-info-bg text-forensics-info-text rounded-none">
             R
           </span>
         )}
         {server.hasTools && (
-          <span className="px-1 py-0.5 text-[9px] bg-green-100 text-green-700 rounded">
+          <span className="px-1 py-0.5 text-[9px] bg-forensics-success-bg text-forensics-success-text rounded-none">
             T
           </span>
         )}
         {server.hasPrompts && (
-          <span className="px-1 py-0.5 text-[9px] bg-purple-100 text-purple-700 rounded">
+          <span className="px-1 py-0.5 text-[9px] bg-forensics-info-bg text-forensics-info-text rounded-none">
             P
           </span>
         )}
       </div>
 
-      <span className="text-[10px] text-gray-500 w-12 text-center">
+      <span className="text-[10px] text-forensics-muted w-12 text-center">
         {getStatusText()}
       </span>
 
@@ -115,11 +115,11 @@ export function McpServerItem({
           title={server.connected ? '断开' : '连接'}
         >
           {loading ? (
-            <Loader2 size={14} className="animate-spin text-gray-500" />
+            <Loader2 size={14} className="opacity-70 text-forensics-muted" />
           ) : server.connected ? (
-            <WifiOff size={14} className="text-gray-600" />
+            <WifiOff size={14} className="text-forensics-muted" />
           ) : (
-            <Wifi size={14} className="text-gray-600" />
+            <Wifi size={14} className="text-forensics-muted" />
           )}
         </Button>
 
@@ -133,7 +133,7 @@ export function McpServerItem({
           }}
           title="删除"
         >
-          <Trash2 size={14} className="text-gray-600 hover:text-red-600" />
+          <Trash2 size={14} className="text-forensics-muted hover:text-forensics-error-text" />
         </Button>
       </div>
     </div>

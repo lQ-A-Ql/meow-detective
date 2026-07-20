@@ -18,7 +18,7 @@ export function StoragePathsSection({ caseRoot, imageSearchPaths, setSettings }:
       <section>
         <div className="flex items-center gap-2 mb-3">
           <FolderOpen size={14} className="text-forensics-muted-light" />
-          <FieldLabel htmlFor="settings-case-root" className="text-[13px] font-semibold">
+          <FieldLabel htmlFor="settings-case-root" className="text-[13px] font-light">
             {t('settings.sections.storagePaths.caseRoot')}
           </FieldLabel>
         </div>
@@ -40,7 +40,7 @@ export function StoragePathsSection({ caseRoot, imageSearchPaths, setSettings }:
       <section>
         <div className="flex items-center gap-2 mb-3">
           <HardDrive size={14} className="text-forensics-muted-light" />
-          <FieldLabel htmlFor="settings-image-search-paths" className="text-[13px] font-semibold">
+          <FieldLabel htmlFor="settings-image-search-paths" className="text-[13px] font-light">
             {t('settings.sections.storagePaths.imageSearchPaths')}
           </FieldLabel>
         </div>

@@ -42,7 +42,7 @@ export function FileBrowser() {
             <HardDrive size={12} />
             {fb.treeNodes.length > 0 ? (
               <>
-                <span className="text-forensics-text font-semibold truncate max-w-[200px]">
+                <span className="text-forensics-text font-light truncate max-w-[200px]">
                   {fb.activeRootNode
                     ? fb.displayNodeName(fb.activeRootNode.name, fb.activeRootNode.depth, fb.activeRootNode.dataSourceId)
                     : '/'}
@@ -51,7 +51,7 @@ export function FileBrowser() {
                 fb.currentDirectory.id !== fb.activeRootNode?.id ? (
                   <>
                     <ChevronRight size={12} className="text-forensics-500" />
-                    <span className="text-forensics-text font-semibold truncate max-w-[200px]">
+                    <span className="text-forensics-text font-light truncate max-w-[200px]">
                       {fb.displayNodeName(fb.currentDirectory.name, fb.currentDirectory.depth, fb.currentDirectory.dataSourceId)}
                     </span>
                   </>
@@ -59,7 +59,7 @@ export function FileBrowser() {
                 {fb.selectedFile ? (
                   <>
                     <ChevronRight size={12} className="text-forensics-500" />
-                    <span className="text-forensics-text font-semibold truncate max-w-[200px]">
+                    <span className="text-forensics-text font-light truncate max-w-[200px]">
                       {fb.selectedFile.name}
                     </span>
                   </>

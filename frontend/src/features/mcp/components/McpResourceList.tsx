@@ -17,9 +17,9 @@ export function McpResourceList({ serverId }: McpResourceListProps) {
   }, [refreshResources, serverId]);
 
   return (
-    <div className="bg-[#f8f8f8] border border-[#e0e0e0] p-3">
+    <div className="bg-forensics-panel border border-forensics-border p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[11px] font-semibold text-[#666]">
+        <div className="text-[11px] font-light text-forensics-muted">
           暴露的 Resources
         </div>
         <Button
@@ -31,15 +31,15 @@ export function McpResourceList({ serverId }: McpResourceListProps) {
           title="刷新"
         >
           {loading ? (
-            <Loader2 size={12} className="animate-spin text-gray-500" />
+            <Loader2 size={12} className="opacity-70 text-forensics-muted" />
           ) : (
-            <RefreshCw size={12} className="text-gray-500" />
+            <RefreshCw size={12} className="text-forensics-muted" />
           )}
         </Button>
       </div>
 
       {resources.length === 0 ? (
-        <div className="text-[11px] text-gray-500 py-2">
+        <div className="text-[11px] text-forensics-muted py-2">
           {loading ? '加载中...' : '暂无资源'}
         </div>
       ) : (
@@ -47,18 +47,18 @@ export function McpResourceList({ serverId }: McpResourceListProps) {
           {resources.map((resource) => (
             <div
               key={resource.uri}
-              className="flex items-start gap-2 p-2 rounded hover:bg-white transition-colors"
+              className="flex items-start gap-2 p-2 rounded-none hover:bg-forensics-surface transition-colors"
             >
-              <FileText size={12} className="text-blue-500 mt-0.5 shrink-0" />
+              <FileText size={12} className="text-forensics-info-text mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <div className="text-[11px] font-medium text-gray-900 truncate">
+                <div className="text-[11px] font-light text-forensics-muted truncate">
                   {resource.name}
                 </div>
-                <div className="text-[10px] text-gray-500 font-mono truncate">
+                <div className="text-[10px] text-forensics-muted font-mono truncate">
                   {resource.uri}
                 </div>
                 {resource.description && (
-                  <div className="text-[10px] text-gray-400 mt-0.5">
+                  <div className="text-[10px] text-forensics-muted mt-0.5">
                     {resource.description}
                   </div>
                 )}

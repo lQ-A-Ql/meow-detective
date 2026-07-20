@@ -17,7 +17,7 @@ export function DataSourceCoverageSection({ dataSources }: { dataSources: DataSo
         <StatCard title="RAW 源" value={dataSources?.filter((ds) => ds.kind === 'raw').length ?? 0} subtitle="原始镜像" />
       </div>
       {dataSources && dataSources.length > 0 ? (
-        <div className="mt-3 rounded border border-forensics-border bg-white p-4">
+        <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">源明细</div>
           <div className="space-y-2">
             {dataSources.map((ds) => (

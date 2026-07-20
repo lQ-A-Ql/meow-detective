@@ -1,63 +1,18 @@
 import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { BrandEmptyState } from '@/components/brand';
 import type {
-  AnalysisExtractionRun,
   AnalysisSystemInfo,
 } from '@/types/models';
-import { DataSourceSelector } from '@/features/analysis/components/DataSourceSelector';
 import {
   EmptyLine,
-  AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
   FieldProvenancePanel,
   formatProvenanceSummary,
   InfoCard,
   ProvenancePanel,
-  RunMetric,
   StatusPill,
   WarningList,
 } from './helpers';
-
-export function AnalysisProgressOverview({
-  progress,
-  expanded,
-  onExpandedChange,
-}: {
-  progress: AnalysisExtractionProgressInfo[];
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div
-      data-testid="analysis-progress-overview"
-      className="shrink-0 border-b border-forensics-border bg-forensics-panel"
-    >
-      <div className="flex items-center justify-between border-b border-forensics-border px-6 py-2">
-        <span className="text-xs font-medium text-forensics-text-secondary">
-          {t('analysis.progressDrawer.title')}
-        </span>
-        <Button
-          type="button"
-          variant="forensicsSurface"
-          size="compact"
-          onClick={() => onExpandedChange(!expanded)}
-        >
-          {expanded ? t('analysis.progressDrawer.collapse') : t('analysis.progressDrawer.expand')}
-        </Button>
-      </div>
-      {expanded ? (
-        <div className="grid grid-cols-1 gap-3 px-6 py-4 lg:grid-cols-3">
-          {progress.map((item, index) => (
-            <AnalysisExtractionProgress key={`${item.label}-${index}`} progress={item} />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
   const info = systemInfo ?? {
@@ -75,11 +30,11 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Monitor size={16} />
           系统信息
         </h3>
-        <div className="mb-3 flex items-center gap-2 text-[12px] text-[#666]">
+        <div className="mb-3 flex items-center gap-2 text-[12px] text-forensics-muted">
           <StatusPill status={info.status} />
           {info.warnings[0] ? <span>{info.warnings[0]}</span> : null}
         </div>
@@ -106,19 +61,19 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
       <FieldProvenancePanel fieldProvenance={info.fieldProvenance} />
 
       <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Network size={16} />
           网络适配器
         </h3>
         {info.networkAdapters.length > 0 ? (
           <div className="space-y-2">
             {info.networkAdapters.map((adapter) => (
-              <div key={adapter.name} className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-                <div className="text-[12px] font-medium">{adapter.name}</div>
-                <div className="mt-1 font-mono text-[11px] text-[#666]">
+              <div key={adapter.name} className="rounded-none border border-forensics-border bg-forensics-panel p-3">
+                <div className="text-[12px] font-light">{adapter.name}</div>
+                <div className="mt-1 font-mono text-[11px] text-forensics-muted">
                   MAC: {adapter.macAddress ?? '-'}
                 </div>
-                <div className="font-mono text-[11px] text-[#666]">
+                <div className="font-mono text-[11px] text-forensics-muted">
                   IP: {adapter.ipAddresses.join(', ') || '-'}
                 </div>
               </div>
@@ -130,28 +85,28 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
       </section>
 
       <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Clock size={16} />
           开关机历史
         </h3>
         {info.bootHistory.length > 0 ? (
           <div className="space-y-1">
             {info.bootHistory.map((boot) => (
-              <div key={`${boot.timestamp}-${boot.source}`} className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3 text-[12px]">
+              <div key={`${boot.timestamp}-${boot.source}`} className="rounded-none border border-forensics-border bg-forensics-panel p-3 text-[12px]">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-mono text-[#666]">{boot.timestamp}</span>
-                  <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px]">
+                  <span className="font-mono text-forensics-muted">{boot.timestamp}</span>
+                  <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 text-[10px]">
                     {boot.bootType}
                   </span>
                   {boot.eventId ? (
-                    <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
+                    <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px]">
                       EventID {boot.eventId}
                     </span>
                   ) : null}
-                  <span className="text-[#999]">{boot.source}</span>
+                  <span className="text-forensics-muted-lighter">{boot.source}</span>
                 </div>
-                {boot.note ? <div className="mt-2 text-[11px] text-[#666]">{boot.note}</div> : null}
-                <div className="mt-2 text-[11px] text-[#777]">
+                {boot.note ? <div className="mt-2 text-[11px] text-forensics-muted">{boot.note}</div> : null}
+                <div className="mt-2 text-[11px] text-forensics-muted">
                   {formatProvenanceSummary(boot.provenance)}
                 </div>
               </div>
@@ -169,49 +124,32 @@ export function AnalysisHeader({
   loading,
   hasCase,
   extractionPending,
-  dataSourceSwitchDisabled = extractionPending,
-  extractionRun,
   onRefresh,
   onRunExtraction,
-  dataSources,
   selectedDataSourceId,
-  onSelectDataSource,
 }: {
   loading: boolean;
   hasCase: boolean;
   extractionPending: boolean;
-  dataSourceSwitchDisabled?: boolean;
-  extractionRun?: AnalysisExtractionRun;
   onRefresh: () => void;
   onRunExtraction: () => void;
-  dataSources?: import('@/types/models').DataSourceSummary[];
   selectedDataSourceId?: string;
-  onSelectDataSource?: (id: string) => void;
 }) {
   return (
-    <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="font-serif text-xl tracking-tight text-[#111]">数据源分析</div>
-          <div className="mt-1 font-mono text-[11px] text-[#666]">
-            证据分类 · 注册表提取 · 浏览器记录 · 邮件信息
+    <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <div className="font-serif text-lg tracking-wide text-forensics-text">数据源分析</div>
+            <div className="font-mono text-[10px] text-forensics-muted">
+              证据分类 · 注册表提取 · 浏览器记录 · 邮件信息
+            </div>
+            <div className="text-[10px] leading-4 text-forensics-muted-lighter">
+              {selectedDataSourceId
+                ? '分析结果绑定当前数据源，Windows/Linux 视图会按数据源平台独立执行。'
+                : '请从左侧数据源树选择一个来源后再刷新或运行提取。'}
+            </div>
           </div>
-          {dataSources && dataSources.length > 0 && onSelectDataSource ? (
-            <>
-              <DataSourceSelector
-                dataSources={dataSources}
-                selectedId={selectedDataSourceId}
-                onSelect={onSelectDataSource}
-                disabled={dataSourceSwitchDisabled}
-                className="mt-3"
-              />
-              <div className="mt-2 max-w-md text-[11px] leading-5 text-[#999]">
-                {selectedDataSourceId
-                  ? '分析结果绑定当前数据源，Windows/Linux 视图会按数据源平台独立执行。'
-                  : '请选择一个数据源后再刷新或运行提取。'}
-              </div>
-            </>
-          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -219,29 +157,22 @@ export function AnalysisHeader({
             variant="outline"
             onClick={onRefresh}
             disabled={!hasCase || loading || !selectedDataSourceId}
-            className="h-8 rounded border-[#ddd] bg-white px-3 text-[12px] hover:bg-[#f5f5f5]"
+            className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={loading ? 'opacity-70' : ''} />
             刷新
           </Button>
           <Button
             type="button"
             onClick={onRunExtraction}
             disabled={!hasCase || extractionPending || !selectedDataSourceId}
-            className="h-8 rounded border border-[#111] bg-[#111] px-3 text-[12px] text-white hover:bg-[#333]"
+            className="h-8 rounded-none border border-forensics-text bg-forensics-text px-3 text-[12px] text-white hover:bg-forensics-text-secondary"
           >
-            {extractionPending ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
+            {extractionPending ? <RefreshCw size={14} className="opacity-70" /> : <Shield size={14} />}
             {extractionPending ? '提取中...' : '运行提取'}
           </Button>
         </div>
       </div>
-      {extractionRun ? (
-        <div className="mt-4 grid min-w-[360px] grid-cols-3 rounded border border-[#e0e0e0] bg-white text-center">
-          <RunMetric label="扫描" value={extractionRun.scannedCount.toString()} />
-          <RunMetric label="Artifact" value={extractionRun.artifactCount.toString()} />
-          <RunMetric label="Timeline" value={extractionRun.timelineEventCount.toString()} />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -267,13 +198,13 @@ export function AnalysisErrorBanner({
   onRetry: () => void;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-none border border-forensics-error-border bg-forensics-error-bg p-3 text-[12px] text-forensics-error-text">
       <span>{message}</span>
       <Button
         type="button"
         variant="outline"
         onClick={onRetry}
-        className="h-7 shrink-0 rounded border-red-200 bg-white px-3 text-[12px] text-red-700 hover:bg-red-100"
+        className="h-7 shrink-0 rounded-none border-forensics-error-border bg-forensics-surface px-3 text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
       >
         重试
       </Button>
@@ -283,8 +214,8 @@ export function AnalysisErrorBanner({
 
 export function AnalysisLoadingPanel({ text }: { text: string }) {
   return (
-    <div className="flex h-64 items-center justify-center text-[#999]">
-      <RefreshCw size={24} className="mr-2 animate-spin" />
+    <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
+      <RefreshCw size={24} className="mr-2 opacity-70" />
       {text}
     </div>
   );

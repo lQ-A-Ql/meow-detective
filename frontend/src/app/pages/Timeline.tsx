@@ -143,7 +143,7 @@ export function Timeline() {
   }, [events]);
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
+    <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
       <PageSubbar title="时间线控制带" meta={`事件 ${events.length} 条 / 数据源 ${sourceCount} 个`}>
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
           <div className="flex items-center gap-4 whitespace-nowrap">
@@ -156,7 +156,7 @@ export function Timeline() {
             <div className="h-4 border-l border-forensics-border" />
             <div className="flex items-center gap-2 text-[11px] text-forensics-muted-light">
               粒度:
-              <span className="border border-forensics-border-strong bg-white px-1.5 py-0.5 text-forensics-text">
+              <span className="border border-forensics-border-strong bg-forensics-surface px-1.5 py-0.5 text-forensics-text">
                 自适应
               </span>
             </div>
@@ -169,7 +169,7 @@ export function Timeline() {
                 onChange={(event) => setDraftTimeStart(event.target.value)}
                 variant="mono"
                 inputSize="inline"
-                className={isValidDateInput(draftTimeStart) ? '' : 'border-red-500'}
+                className={isValidDateInput(draftTimeStart) ? '' : 'border-forensics-error-border'}
               />
             </label>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
@@ -180,11 +180,11 @@ export function Timeline() {
                 onChange={(event) => setDraftTimeEnd(event.target.value)}
                 variant="mono"
                 inputSize="inline"
-                className={isValidDateInput(draftTimeEnd) ? '' : 'border-red-500'}
+                className={isValidDateInput(draftTimeEnd) ? '' : 'border-forensics-error-border'}
               />
             </label>
             {!draftDatesValid ? (
-              <span className="text-[11px] text-red-600">日期无效</span>
+              <span className="text-[11px] text-forensics-error-text">日期无效</span>
             ) : null}
             <Button
               type="button"
@@ -269,7 +269,7 @@ export function Timeline() {
         </div>
         <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-forensics-muted-light">
           <span>{timeRange.start}</span>
-          <span className="font-medium text-forensics-text-secondary">
+          <span className="font-light text-forensics-text-secondary">
             {events.length > 0 ? formatTs(events[Math.floor(events.length / 2)].ts) : ''}
           </span>
           <span>{timeRange.end}</span>
@@ -352,7 +352,7 @@ export function Timeline() {
                 disabled={!selectedEvent}
                 className="w-full justify-between font-mono text-forensics-text-tertiary"
               >
-                <span className="font-medium">跳转到来源对象</span>
+                <span className="font-light">跳转到来源对象</span>
                 <ChevronRight size={12} className="text-forensics-muted-light" />
               </Button>
             </InspectorSection>

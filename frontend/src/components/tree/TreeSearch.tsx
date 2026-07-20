@@ -43,11 +43,11 @@ export function TreeSearch({
   }, [onFilter]);
 
   return (
-    <div className="px-2 py-1.5 border-b border-[#e0e0e0] bg-[#fafafa]">
+    <div className="px-2 py-1.5 border-b border-forensics-border bg-forensics-panel">
       <div className="relative">
         <Search
           size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-[#999]"
+          className="absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted-lighter"
         />
         <Input
           type="text"
@@ -64,11 +64,11 @@ export function TreeSearch({
             variant="viewerControl"
             size="iconXs"
             onClick={handleClear}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#999]"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forensics-muted-lighter"
             title="清除"
             aria-label="清除"
           >
-            <X size={10} className="text-[#999]" />
+            <X size={10} className="text-forensics-muted-lighter" />
           </Button>
         )}
       </div>

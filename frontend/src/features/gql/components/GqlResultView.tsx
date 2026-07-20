@@ -24,7 +24,7 @@ function CopyButton({ id, copiedId, copyId }: { id: string; copiedId: string | n
       aria-label={t('gql.result.copyTitle')}
     >
       {copiedId === id ? (
-        <Check size={10} className="text-green-600" />
+        <Check size={10} className="text-forensics-success-text" />
       ) : (
         <Copy size={10} className="text-forensics-muted-light" />
       )}
@@ -52,7 +52,7 @@ function ExpandRow({
           onToggle();
         }
       }}
-      className="w-full flex items-center gap-1 px-2 py-1 rounded hover:bg-forensics-highlight text-left cursor-pointer"
+      className="w-full flex items-center gap-1 px-2 py-1 rounded-none hover:bg-forensics-highlight text-left cursor-pointer"
     >
       {expanded ? (
         <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
@@ -100,20 +100,20 @@ export function GqlResultView({ result }: GqlResultViewProps) {
       {/* Result stats */}
       <div className="flex items-center gap-4 px-3 py-2 bg-forensics-highlight border-b border-forensics-border text-[11px]">
         <span className="text-forensics-muted">
-          <span className="font-semibold text-forensics-text">{result.nodes?.length ?? 0}</span> {t('gql.result.nodes')}
+          <span className="font-light text-forensics-text">{result.nodes?.length ?? 0}</span> {t('gql.result.nodes')}
         </span>
         <span className="text-forensics-muted">
-          <span className="font-semibold text-forensics-text">{result.edges?.length ?? 0}</span> {t('gql.result.edges')}
+          <span className="font-light text-forensics-text">{result.edges?.length ?? 0}</span> {t('gql.result.edges')}
         </span>
         <span className="text-forensics-muted">
-          <span className="font-semibold text-forensics-text">{result.nodeCount}</span> {t('gql.result.totalMatched')}
+          <span className="font-light text-forensics-text">{result.nodeCount}</span> {t('gql.result.totalMatched')}
         </span>
       </div>
 
       {/* Node list */}
       {result.nodes && result.nodes.length > 0 && (
         <div className="px-2 py-1">
-          <div className="text-[10px] font-semibold text-forensics-muted uppercase tracking-wider px-1 py-1">
+          <div className="text-[10px] font-light text-forensics-muted uppercase tracking-wider px-1 py-1">
             {t('gql.result.nodeList')}
           </div>
           {result.nodes.map((node: GraphNode, i: number) => {
@@ -125,10 +125,10 @@ export function GqlResultView({ result }: GqlResultViewProps) {
                   expanded={isExpanded}
                   onToggle={() => toggleNodeExpand(key)}
                 >
-                  <span className="text-[11px] px-1 py-0.5 rounded bg-forensics-gql-type/10 text-forensics-gql-type font-mono shrink-0">
+                  <span className="text-[11px] px-1 py-0.5 rounded-none bg-forensics-gql-type/10 text-forensics-gql-type font-mono shrink-0">
                     {node.nodeType}
                   </span>
-                  <span className="text-[12px] font-medium text-forensics-text truncate">
+                  <span className="text-[12px] font-light text-forensics-text truncate">
                     {node.label}
                   </span>
                   <CopyButton id={node.id} copiedId={copiedId} copyId={copyId} />
@@ -153,7 +153,7 @@ export function GqlResultView({ result }: GqlResultViewProps) {
       {/* Edge list */}
       {result.edges && result.edges.length > 0 && (
         <div className="px-2 py-1 border-t border-forensics-border-light">
-          <div className="text-[10px] font-semibold text-forensics-muted uppercase tracking-wider px-1 py-1">
+          <div className="text-[10px] font-light text-forensics-muted uppercase tracking-wider px-1 py-1">
             {t('gql.result.edgeList')}
           </div>
           {result.edges.map((edge: GraphEdge, i: number) => {
@@ -165,7 +165,7 @@ export function GqlResultView({ result }: GqlResultViewProps) {
                   expanded={isExpanded}
                   onToggle={() => toggleNodeExpand(key)}
                 >
-                  <span className="text-[11px] px-1 py-0.5 rounded bg-forensics-gql-variable/10 text-forensics-gql-variable font-mono shrink-0">
+                  <span className="text-[11px] px-1 py-0.5 rounded-none bg-forensics-gql-variable/10 text-forensics-gql-variable font-mono shrink-0">
                     {edge.edgeType}
                   </span>
                   <span className="text-[11px] text-forensics-muted font-mono truncate">

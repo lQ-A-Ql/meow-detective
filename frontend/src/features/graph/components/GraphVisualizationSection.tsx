@@ -175,7 +175,7 @@ export function GraphVisualizationSection() {
             variant="outline"
             onClick={() => setRunning((r) => !r)}
             disabled={!hasNodes}
-            className="h-7 rounded border-[#ddd] bg-white px-2 text-[11px] hover:bg-[#f5f5f5]"
+            className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
             {running ? <Pause size={12} className="mr-1" /> : <Play size={12} className="mr-1" />}
             {running ? '暂停' : '继续'}
@@ -185,9 +185,9 @@ export function GraphVisualizationSection() {
             variant="outline"
             onClick={refresh}
             disabled={isLoadingGraph}
-            className="h-7 rounded border-[#ddd] bg-white px-2 text-[11px] hover:bg-[#f5f5f5]"
+            className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
-            <RefreshCw size={12} className={isLoadingGraph ? 'mr-1 animate-spin' : 'mr-1'} />
+            <RefreshCw size={12} className={isLoadingGraph ? 'mr-1 opacity-70' : 'mr-1'} />
             刷新
           </Button>
         </div>
@@ -207,7 +207,7 @@ export function GraphVisualizationSection() {
         {ALL_EDGE_TYPES.map((type) => (
           <label
             key={type}
-            className="flex cursor-pointer items-center gap-1 rounded border border-[#e8e8e8] bg-white px-2 py-1 text-[10px] hover:bg-[#f5f5f5]"
+            className="flex cursor-pointer items-center gap-1 rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] hover:bg-forensics-panel-strong"
           >
             <Checkbox
               checked={selectedEdgeTypes.includes(type)}
@@ -216,7 +216,7 @@ export function GraphVisualizationSection() {
               checkboxSize="compact"
             />
             <span
-              className="inline-block h-2 w-2 rounded-full"
+              className="inline-block h-2 w-2 rounded-none"
               style={{ backgroundColor: edgeTypeColor(type) }}
             />
             <span>{EDGE_LABELS[type]}</span>
@@ -224,7 +224,7 @@ export function GraphVisualizationSection() {
         ))}
       </div>
 
-      <div className="mt-3 flex h-[420px] overflow-hidden rounded border border-[#e0e0e0] bg-[#fafafa]">
+      <div className="mt-3 flex h-[420px] overflow-hidden rounded-none border border-forensics-border bg-forensics-panel">
         <div ref={canvasRef} className="relative flex-1">
           {!hasNodes && !isLoadingGraph ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-forensics-muted">
@@ -256,16 +256,16 @@ export function GraphVisualizationSection() {
             />
           )}
           {isLoadingGraph ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/60">
-              <div className="flex items-center gap-2 rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[11px] shadow-sm">
-                <RefreshCw size={12} className="animate-spin" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
+              <div className="flex items-center gap-2 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] shadow-sm">
+                <RefreshCw size={12} className="opacity-70" />
                 加载图数据...
               </div>
             </div>
           ) : null}
         </div>
 
-        <div className="w-64 shrink-0 overflow-auto border-l border-[#e0e0e0] bg-white p-3">
+        <div className="w-64 shrink-0 overflow-auto border-l border-forensics-border bg-forensics-surface p-3">
           {selectedNode ? (
             <NodeMiniDetails
               node={selectedNode}
@@ -286,7 +286,7 @@ export function GraphVisualizationSection() {
               <p>单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。</p>
               <p>拖拽节点调整位置，拖拽空白处平移，滚轮缩放。</p>
               {snapshot.data ? (
-                <div className="space-y-1 rounded border border-[#e8e8e8] bg-white p-2">
+                <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
                   <div className="flex justify-between">
                     <span>节点</span>
                     <span className="font-mono text-forensics-text">{snapshot.data.totalNodes}</span>
@@ -323,23 +323,23 @@ function NodeMiniDetails({
   const degree = edges.filter((e) => e.sourceId === node.id || e.targetId === node.id).length;
   return (
     <div className="space-y-3 text-[11px]">
-      <div className="font-medium text-forensics-text">{node.label || '(无标签)'}</div>
+      <div className="font-light text-forensics-text">{node.label || '(无标签)'}</div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded border border-forensics-border bg-forensics-surface p-1.5 text-center">
+        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
           <div className="text-[10px] text-forensics-muted">类型</div>
-          <div className="font-medium text-forensics-text">
+          <div className="font-light text-forensics-text">
             {NODE_LABELS[node.nodeType as NodeType] ?? node.nodeType}
           </div>
         </div>
-        <div className="rounded border border-forensics-border bg-forensics-surface p-1.5 text-center">
+        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
           <div className="text-[10px] text-forensics-muted">度</div>
-          <div className="font-medium text-forensics-text">{degree}</div>
+          <div className="font-light text-forensics-text">{degree}</div>
         </div>
       </div>
-      <div className="break-all rounded border border-forensics-border bg-forensics-surface p-2 font-mono text-[10px] text-forensics-text-secondary">
+      <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-2 font-mono text-[10px] text-forensics-text-secondary">
         {node.id}
       </div>
-      <div className="break-words rounded border border-forensics-border bg-forensics-surface p-2 text-forensics-text-secondary">
+      <div className="break-words rounded-none border border-forensics-border bg-forensics-surface p-2 text-forensics-text-secondary">
         {node.summary || '(无摘要)'}
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -374,24 +374,24 @@ function EdgeMiniDetails({
   const target = nodeMap.get(edge.targetId);
   return (
     <div className="space-y-3 text-[11px]">
-      <div className="font-medium text-forensics-text">{EDGE_LABELS[edge.edgeType]}</div>
+      <div className="font-light text-forensics-text">{EDGE_LABELS[edge.edgeType]}</div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded border border-forensics-border bg-forensics-surface p-1.5 text-center">
+        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
           <div className="text-[10px] text-forensics-muted">置信度</div>
-          <div className="font-medium text-forensics-text">
+          <div className="font-light text-forensics-text">
             {edge.confidence !== undefined ? edge.confidence : '-'}
           </div>
         </div>
       </div>
       <div className="space-y-1">
         <div className="text-[10px] text-forensics-muted">源</div>
-        <div className="break-all rounded border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
+        <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
           {source?.label ?? edge.sourceId}
         </div>
       </div>
       <div className="space-y-1">
         <div className="text-[10px] text-forensics-muted">目标</div>
-        <div className="break-all rounded border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
+        <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
           {target?.label ?? edge.targetId}
         </div>
       </div>
@@ -402,7 +402,7 @@ function EdgeMiniDetails({
         ) : provenance && provenance.length > 0 ? (
           <div className="space-y-1">
             {provenance.map((entry, i) => (
-              <div key={`${entry.edgeId}-${i}`} className="rounded border border-forensics-border bg-forensics-surface p-1.5">
+              <div key={`${entry.edgeId}-${i}`} className="rounded-none border border-forensics-border bg-forensics-surface p-1.5">
                 {entry.sourceParser ? <div>解析器: {entry.sourceParser}</div> : null}
                 {entry.sourceRuleId ? <div>规则: {entry.sourceRuleId}</div> : null}
                 {entry.parserVersion ? <div>版本: {entry.parserVersion}</div> : null}

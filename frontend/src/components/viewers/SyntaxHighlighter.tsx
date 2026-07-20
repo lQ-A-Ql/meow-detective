@@ -124,9 +124,9 @@ export function SyntaxHighlighter({
   return (
     <div className="font-mono text-[11px] leading-[18px]">
       {lines.map((lineHtml, index) => (
-        <div key={index} className="flex hover:bg-[#f8f8f8]">
+        <div key={index} className="flex hover:bg-forensics-panel">
           {/* 行号 */}
-          <div className="w-16 shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2">
+          <div className="w-16 shrink-0 text-right text-forensics-muted-lighter select-none border-r border-forensics-border-light bg-forensics-panel px-2">
             {index + 1}
           </div>
           {/* 代码 */}

@@ -133,7 +133,7 @@ export function HorizontalScroll({
         {showThumb && (
           <div
             className={cn(
-              'scrollbar-thin-glow-thumb pointer-events-auto absolute top-1/2 h-[7px] -translate-y-1/2 rounded-full cursor-pointer',
+              'scrollbar-thin-glow-thumb pointer-events-auto absolute top-1/2 h-[7px] -translate-y-1/2 rounded-none cursor-pointer',
               dragging && 'cursor-grabbing',
             )}
             style={{ left: thumbLeft, width: thumbWidth }}

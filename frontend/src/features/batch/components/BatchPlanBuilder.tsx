@@ -117,7 +117,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-[14px] font-semibold">New Batch Job</CardTitle>
+            <CardTitle className="text-[14px] font-light">New Batch Job</CardTitle>
             <CardDescription className="text-[12px]">
               Step {step}/4: {stepTitles[step]}
             </CardDescription>
@@ -126,7 +126,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
             {([1, 2, 3, 4] as WizardStep[]).map((s) => (
               <div
                 key={s}
-                className={`h-2 w-8 rounded-full transition-colors ${
+                className={`h-2 w-8 rounded-none transition-colors ${
                   s <= step ? 'bg-primary' : 'bg-muted'
                 }`}
               />
@@ -140,7 +140,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
         {step === 1 && (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[12px] font-medium">Plan Name</Label>
+              <Label className="text-[12px] font-light">Plan Name</Label>
               <Input
                 value={planName}
                 onChange={(e) => setPlanName(e.target.value)}
@@ -149,7 +149,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label className="text-[12px] font-medium">Data Sources</Label>
+              <Label className="text-[12px] font-light">Data Sources</Label>
               <Button
                 type="button"
                 variant="link"
@@ -160,7 +160,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 {selectedDataSourceIds.size === dataSources.length ? 'Deselect All' : 'Select All'}
               </Button>
             </div>
-            <div className="max-h-60 space-y-1 overflow-auto rounded border p-2">
+            <div className="max-h-60 space-y-1 overflow-auto rounded-none border p-2">
               {dataSources.length === 0 ? (
                 <p className="py-4 text-center text-[12px] text-muted-foreground">
                   No data sources available. Import evidence first.
@@ -169,14 +169,14 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 dataSources.map((ds) => (
                   <label
                     key={ds.id}
-                    className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-muted/50"
+                    className="flex cursor-pointer items-start gap-2 rounded-none px-2 py-1.5 hover:bg-muted/50"
                   >
                     <Checkbox
                       checked={selectedDataSourceIds.has(ds.id)}
                       onCheckedChange={() => toggleDataSource(ds.id)}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] font-medium">{ds.name}</div>
+                      <div className="truncate text-[12px] font-light">{ds.name}</div>
                       <div className="truncate text-[11px] text-muted-foreground">
                         {ds.kind} &middot; {ds.sourcePath}
                       </div>
@@ -195,7 +195,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
         {step === 2 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-[12px] font-medium">Pipeline Phases</Label>
+              <Label className="text-[12px] font-light">Pipeline Phases</Label>
               <Button
                 type="button"
                 variant="link"
@@ -210,14 +210,14 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
               {ALL_PHASES.map((phase) => (
                 <label
                   key={phase.key}
-                  className="flex cursor-pointer items-start gap-3 rounded border p-3 hover:bg-muted/30 transition-colors"
+                  className="flex cursor-pointer items-start gap-3 rounded-none border p-3 hover:bg-muted/30 transition-colors"
                 >
                   <Checkbox
                     checked={selectedPhases.has(phase.key)}
                     onCheckedChange={() => togglePhase(phase.key)}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-medium">{phase.label}</div>
+                    <div className="text-[12px] font-light">{phase.label}</div>
                     <div className="text-[11px] text-muted-foreground">{phase.description}</div>
                   </div>
                 </label>
@@ -230,7 +230,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
         {step === 3 && (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-[12px] font-medium" htmlFor="rl-memory">
+              <Label className="text-[12px] font-light" htmlFor="rl-memory">
                 Memory Limit (MB)
               </Label>
               <Input
@@ -252,7 +252,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[12px] font-medium" htmlFor="rl-threads">
+              <Label className="text-[12px] font-light" htmlFor="rl-threads">
                 Thread Count
               </Label>
               <Input
@@ -280,10 +280,10 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
         {/* Step 4: Review & Start */}
         {step === 4 && (
           <div className="space-y-4">
-            <div className="rounded border p-3 space-y-2">
+            <div className="rounded-none border p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground">Plan Name</span>
-                <span className="text-[12px] font-medium">{planName || '(unnamed)'}</span>
+                <span className="text-[12px] font-light">{planName || '(unnamed)'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground">Data Sources</span>
@@ -310,7 +310,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 <span className="text-[12px] font-mono">{resourceLimits.maxThreads}</span>
               </div>
             </div>
-            <div className="rounded bg-muted/50 p-3 text-[11px] text-muted-foreground">
+            <div className="rounded-none bg-muted/50 p-3 text-[11px] text-muted-foreground">
               <Check size={14} className="inline mr-1" />
               Phases will run sequentially. You can pause or cancel during execution.
             </div>
@@ -344,7 +344,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
             <Button size="sm" onClick={handleStart} disabled={isStarting}>
               {isStarting ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={14} className="opacity-70" />
                   Starting...
                 </>
               ) : (

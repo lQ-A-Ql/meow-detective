@@ -90,24 +90,24 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[90vh] overflow-auto">
+    <div className="fixed inset-0 bg-forensics-text/40 flex items-center justify-center z-50">
+      <div className="bg-forensics-surface rounded-none shadow-none w-[480px] max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-[14px] font-semibold text-gray-900">添加 MCP 服务器</h2>
+          <h2 className="font-serif text-[14px] font-light tracking-wide text-forensics-text">添加 MCP 服务器</h2>
           <Button
             type="button"
             variant="forensicsGhost"
             size="iconSm"
             onClick={onClose}
           >
-            <X size={16} className="text-gray-500" />
+            <X size={16} className="text-forensics-muted" />
           </Button>
         </div>
 
         <div className="p-4 space-y-4">
           <Field>
             <FieldLabel>
-              服务器名称 <span className="text-red-500">*</span>
+              服务器名称 <span className="text-forensics-error-text">*</span>
             </FieldLabel>
             <Input
               type="text"
@@ -120,7 +120,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
           </Field>
 
           <div>
-            <label className="block text-[12px] font-medium text-gray-700 mb-1">
+            <label className="block text-[12px] font-light text-forensics-muted mb-1">
               传输类型
             </label>
             <div className="flex gap-2">
@@ -129,7 +129,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
                 variant={transportType === 'sse' ? 'forensicsSurface' : 'forensicsOutline'}
                 size="sm"
                 onClick={() => setTransportType('sse')}
-                className={transportType === 'sse' ? 'flex-1 border-blue-300 bg-blue-50 text-blue-700' : 'flex-1'}
+                className={transportType === 'sse' ? 'flex-1 border-forensics-info-border bg-forensics-info-bg text-forensics-info-text' : 'flex-1'}
               >
                 HTTP/SSE
               </Button>
@@ -138,7 +138,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
                 variant={transportType === 'stdio' ? 'forensicsSurface' : 'forensicsOutline'}
                 size="sm"
                 onClick={() => setTransportType('stdio')}
-                className={transportType === 'stdio' ? 'flex-1 border-blue-300 bg-blue-50 text-blue-700' : 'flex-1'}
+                className={transportType === 'stdio' ? 'flex-1 border-forensics-info-border bg-forensics-info-bg text-forensics-info-text' : 'flex-1'}
               >
                 Stdio
               </Button>
@@ -148,7 +148,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
           {transportType === 'sse' && (
             <Field>
               <FieldLabel>
-                SSE URL <span className="text-red-500">*</span>
+                SSE URL <span className="text-forensics-error-text">*</span>
               </FieldLabel>
               <Input
                 type="text"
@@ -165,7 +165,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
             <>
               <Field>
                 <FieldLabel>
-                  命令 <span className="text-red-500">*</span>
+                  命令 <span className="text-forensics-error-text">*</span>
                 </FieldLabel>
                 <Input
                   type="text"
@@ -199,7 +199,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
                 onCheckedChange={(checked) => setEnabled(checked === true)}
                 variant="forensics"
               />
-              <span className="text-[12px] text-gray-700">启用</span>
+              <span className="text-[12px] text-forensics-muted">启用</span>
             </label>
             <label className="flex items-center gap-2">
               <Checkbox
@@ -207,16 +207,16 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
                 onCheckedChange={(checked) => setAutoConnect(checked === true)}
                 variant="forensics"
               />
-              <span className="text-[12px] text-gray-700">自动连接</span>
+              <span className="text-[12px] text-forensics-muted">自动连接</span>
             </label>
           </div>
 
           {testResult && (
             <div
-              className={`p-3 rounded text-[12px] ${
+              className={`p-3 rounded-none text-[12px] ${
                 testResult.success
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
+                  ? 'bg-forensics-success-bg text-forensics-success-text border border-forensics-success-border'
+                  : 'bg-forensics-error-bg text-forensics-error-text border border-forensics-error-border'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -234,13 +234,13 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
           )}
 
           {error && (
-            <div className="p-3 rounded text-[12px] bg-red-50 text-red-700 border border-red-200">
+            <div className="p-3 rounded-none text-[12px] bg-forensics-error-bg text-forensics-error-text border border-forensics-error-border">
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between p-4 border-t bg-gray-50">
+        <div className="flex items-center justify-between p-4 border-t bg-forensics-panel">
           <Button
             type="button"
             variant="forensicsOutline"
@@ -250,7 +250,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
           >
             {testing ? (
               <span className="flex items-center gap-2">
-                <Loader2 size={12} className="animate-spin" />
+                <Loader2 size={12} className="opacity-70" />
                 测试中...
               </span>
             ) : (
@@ -273,11 +273,11 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
               size="sm"
               onClick={handleSave}
               disabled={saving}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-forensics-info-bg hover:bg-forensics-info-bg"
             >
               {saving ? (
                 <span className="flex items-center gap-2">
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="opacity-70" />
                   保存中...
                 </span>
               ) : (

@@ -65,7 +65,7 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('暂无 sudo/提权事件')).toBeDefined();
   });
 
-  it('renders overview stat cards when summary is provided', () => {
+  it('keeps overview counts out of the work area', () => {
     const summary = baseSummary({
       journalCount: 3,
       loginCount: 2,
@@ -77,7 +77,7 @@ describe('LinuxArtifactsPanel', () => {
       totalCount: 28,
     });
     render(createElement(LinuxArtifactsPanel, { summary }));
-    expect(screen.getByText('28')).toBeDefined();
+    expect(screen.queryByText('28')).toBeNull();
   });
 
   it('renders bash commands with monospace command text', () => {

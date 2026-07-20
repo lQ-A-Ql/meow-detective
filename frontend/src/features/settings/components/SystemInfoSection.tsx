@@ -7,7 +7,7 @@ export function SystemInfoSection() {
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.systemInfo.title')}</span>
+        <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.systemInfo.title')}</span>
       </div>
       <div className="space-y-2 text-[12px] font-mono text-forensics-muted">
         <div className="flex justify-between border-b border-forensics-border-light pb-1">

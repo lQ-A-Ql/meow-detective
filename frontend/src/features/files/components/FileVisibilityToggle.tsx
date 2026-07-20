@@ -9,7 +9,7 @@ export function FileVisibilityToggle({
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="inline-flex h-7 items-center gap-2 rounded border border-[#d8d8d8] bg-white px-2 text-[11px] text-[#555] hover:bg-[#f5f5f5]">
+    <label className="inline-flex h-7 items-center gap-2 rounded-none border border-forensics-border-strong bg-forensics-surface px-2 text-[11px] text-forensics-text-tertiary hover:bg-forensics-panel-strong">
       <Checkbox
         checked={checked}
         onCheckedChange={(value) => onCheckedChange(value === true)}

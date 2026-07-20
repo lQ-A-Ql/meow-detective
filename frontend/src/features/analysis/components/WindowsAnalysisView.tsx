@@ -1,15 +1,5 @@
-import {
-  Database,
-  Download,
-  FileClock,
-  FileText,
-  Globe,
-  Mail,
-  Monitor,
-  Shield,
-} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { Tabs, TabsContent } from '@/app/components/ui/tabs';
 import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
@@ -21,7 +11,6 @@ import {
   FileClassificationPanel,
   RegistryExtractionPanel,
   SystemInfoPanel,
-  type AnalysisExtractionProgressInfo,
 } from '@/features/analysis/components/AnalysisPanels';
 import type {
   AnalysisFileClassification,
@@ -33,29 +22,7 @@ import type {
   RegistryExtractionSummary,
   RegistryStructuredSummary,
 } from '@/types/models';
-import type { AnalysisTabKey, ExtractionCategory } from '@/features/analysis/types';
-
-const TAB_KEYS: AnalysisTabKey[] = [
-  'system',
-  'evidence',
-  'registry',
-  'browser',
-  'email',
-  'eventlogs',
-  'files',
-  'report',
-];
-
-const TAB_ICONS: Record<AnalysisTabKey, typeof Monitor> = {
-  system: Monitor,
-  evidence: Shield,
-  registry: Database,
-  browser: Globe,
-  email: Mail,
-  eventlogs: FileClock,
-  files: FileText,
-  report: Download,
-};
+import type { AnalysisTabKey } from '@/features/analysis/types';
 
 interface QueryState<T> {
   data?: T;
@@ -76,7 +43,6 @@ export interface WindowsAnalysisViewProps {
   emailSummary: QueryState<EmailExtractionSummary>;
   eventLogSummary: QueryState<EvtxEventSummary>;
   classifications: QueryState<AnalysisFileClassification[]>;
-  progress: Record<ExtractionCategory, AnalysisExtractionProgressInfo>;
   evidencePending: boolean;
   onRunEvidence: () => void;
   summaryPending: boolean;
@@ -97,7 +63,6 @@ export function WindowsAnalysisView({
   emailSummary,
   eventLogSummary,
   classifications,
-  progress,
   evidencePending,
   onRunEvidence,
   summaryPending,
@@ -111,22 +76,6 @@ export function WindowsAnalysisView({
       onValueChange={(value) => onActiveTabChange(value as AnalysisTabKey)}
       className="h-full min-h-0 flex-1 gap-0"
     >
-      <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0">
-        {TAB_KEYS.map((value) => {
-          const Icon = TAB_ICONS[value];
-          return (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className="h-auto flex-none items-center gap-2 whitespace-nowrap rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-forensics-text data-[state=active]:bg-transparent"
-            >
-              <Icon size={14} />
-              {t(`analysis.tabs.${value}`)}
-            </TabsTrigger>
-          );
-        })}
-      </TabsList>
-
       <div className="min-h-0 flex-1 overflow-auto p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {loading ? (
@@ -160,7 +109,6 @@ export function WindowsAnalysisView({
                 <RegistryExtractionPanel
                   summary={registrySummary.data}
                   structured={registryStructured}
-                  progress={progress.Registry}
                 />
               )}
             </TabsContent>
@@ -171,7 +119,6 @@ export function WindowsAnalysisView({
               ) : (
                 <BrowserHistoryPanel
                   summary={browserSummary.data}
-                  progress={progress.BrowserHistory}
                 />
               )}
             </TabsContent>
@@ -180,7 +127,7 @@ export function WindowsAnalysisView({
               {emailSummary.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.email')} />
               ) : (
-                <EmailExtractionPanel summary={emailSummary.data} progress={progress.Email} />
+                <EmailExtractionPanel summary={emailSummary.data} />
               )}
             </TabsContent>
 
@@ -188,7 +135,7 @@ export function WindowsAnalysisView({
               {eventLogSummary.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.eventLogs')} />
               ) : (
-                <EventLogPanel summary={eventLogSummary.data} progress={progress.EventLogs} />
+                <EventLogPanel summary={eventLogSummary.data} />
               )}
             </TabsContent>
 

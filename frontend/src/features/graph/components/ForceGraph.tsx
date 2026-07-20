@@ -256,7 +256,7 @@ export function ForceGraph({
                   y1={source.y}
                   x2={target.x}
                   y2={target.y}
-                  stroke="#111"
+                  stroke="var(--forensics-text)"
                   strokeWidth={5}
                   strokeOpacity={0.1}
                   pointerEvents="none"
@@ -287,7 +287,7 @@ export function ForceGraph({
                 <circle
                   r={pos.radius + 4}
                   fill="none"
-                  stroke="#111"
+                  stroke="var(--forensics-text)"
                   strokeWidth={2}
                   pointerEvents="none"
                 />
@@ -295,7 +295,7 @@ export function ForceGraph({
               <circle
                 r={pos.radius}
                 fill={nodeTypeColor(node.nodeType)}
-                stroke="#fff"
+                stroke="var(--forensics-surface)"
                 strokeWidth={1.5}
                 className="cursor-pointer"
                 onPointerDown={(event) => handleNodePointerDown(event, node)}

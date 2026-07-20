@@ -22,13 +22,13 @@ export function ClusterCard({
       : undefined;
 
   return (
-    <div className="rounded border border-[#e0e0e0] bg-[#fcfcfc] p-4">
+    <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[13px] font-semibold text-[#111]">{cluster.title}</div>
-          <div className="mt-1 text-[11px] text-[#555]">{cluster.summary}</div>
+          <div className="text-[13px] font-light text-forensics-text">{cluster.title}</div>
+          <div className="mt-1 text-[11px] text-forensics-text-tertiary">{cluster.summary}</div>
         </div>
-        <span className={`rounded border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(cluster.confidence)}`}>
+        <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(cluster.confidence)}`}>
           {confidenceLabel(cluster.confidence)}
         </span>
       </div>
@@ -40,7 +40,7 @@ export function ClusterCard({
       </div>
       <FamilyPills families={cluster.families} testId={`cluster-families-${cluster.id}`} />
       {cluster.edgeIds.length > 0 ? (
-        <div className="mt-3 text-[11px] text-[#555]">Edge IDs: {cluster.edgeIds.join(', ')}</div>
+        <div className="mt-3 text-[11px] text-forensics-text-tertiary">Edge IDs: {cluster.edgeIds.join(', ')}</div>
       ) : null}
       {primaryJump ? (
         <div className="mt-3 flex flex-wrap gap-2">

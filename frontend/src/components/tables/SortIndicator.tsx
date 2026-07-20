@@ -18,14 +18,14 @@ export function SortIndicator({ active, direction }: SortIndicatorProps) {
     return (
       <ArrowUpDown
         size={10}
-        className="text-[#ccc] opacity-0 group-hover:opacity-100 transition-opacity"
+        className="text-forensics-muted-lighter opacity-0 group-hover:opacity-100 transition-opacity"
       />
     );
   }
 
   return direction === 'asc' ? (
-    <ArrowUp size={10} className="text-[#666]" />
+    <ArrowUp size={10} className="text-forensics-muted" />
   ) : (
-    <ArrowDown size={10} className="text-[#666]" />
+    <ArrowDown size={10} className="text-forensics-muted" />
   );
 }

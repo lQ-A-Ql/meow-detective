@@ -22,7 +22,7 @@ export function TreeConnector({ depth, isLast }: TreeConnectorProps) {
       {Array.from({ length: depth - 1 }, (_, i) => (
         <span
           key={i}
-          className="inline-block w-4 border-l border-[#d0d0d0]"
+          className="inline-block w-4 border-l border-forensics-border-strong"
         />
       ))}
       {/* 当前层级的连接线 */}
@@ -31,14 +31,14 @@ export function TreeConnector({ depth, isLast }: TreeConnectorProps) {
         style={{ height: '24px' }}
       >
         {/* 横线 */}
-        <span className="absolute top-0 left-0 w-4 border-b border-[#d0d0d0]" style={{ top: '12px' }} />
+        <span className="absolute top-0 left-0 w-4 border-b border-forensics-border-strong" style={{ top: '12px' }} />
         {/* 竖线 (如果不是最后一个节点，竖线延伸到底部) */}
         {!isLast && (
-          <span className="absolute top-0 left-0 h-full border-l border-[#d0d0d0]" />
+          <span className="absolute top-0 left-0 h-full border-l border-forensics-border-strong" />
         )}
         {/* 竖线 (如果是最后一个节点，竖线只到中间) */}
         {isLast && (
-          <span className="absolute top-0 left-0 border-l border-[#d0d0d0]" style={{ height: '12px' }} />
+          <span className="absolute top-0 left-0 border-l border-forensics-border-strong" style={{ height: '12px' }} />
         )}
       </span>
     </span>

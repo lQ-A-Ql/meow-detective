@@ -192,13 +192,9 @@ describe('AnalysisPanels sub-components', () => {
           extractionPending: false,
           onRefresh: () => {},
           onRunExtraction: () => {},
-          dataSources: [
-            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z', platform: 'windows' },
-          ],
-          onSelectDataSource: () => {},
         }),
       );
-      expect(screen.getByText(/请选择一个数据源/)).toBeDefined();
+      expect(screen.getByText(/左侧数据源树选择一个来源/)).toBeDefined();
       expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
       expect(screen.getByRole('button', { name: /运行提取/ }).hasAttribute('disabled')).toBe(true);
     });
@@ -211,11 +207,7 @@ describe('AnalysisPanels sub-components', () => {
           extractionPending: false,
           onRefresh: () => {},
           onRunExtraction: () => {},
-          dataSources: [
-            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z', platform: 'windows' },
-          ],
           selectedDataSourceId: 'ds-1',
-          onSelectDataSource: () => {},
         }),
       );
       expect(screen.getByText(/分析结果绑定当前数据源/)).toBeDefined();

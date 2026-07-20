@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type ComponentType } from 'react';
-import { Monitor, Server } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
@@ -20,19 +19,17 @@ import {
   AnalysisEmptyState,
   AnalysisHeader,
 } from '@/features/analysis/components/AnalysisPanels';
-import { AnalysisProgressOverview } from '@/features/analysis/components/panels/SystemInfoPanel';
+import { AnalysisSourceSidebar } from '@/features/analysis/components/AnalysisSourceSidebar';
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { errorMessage } from '@/lib/errors';
 import {
   AnalysisSourceEpoch,
   EXTRACTION_CATEGORIES_BY_PLATFORM,
   LINUX_PROGRESS_CATEGORIES,
-  PROGRESS_CATEGORIES_BY_PLATFORM,
   analysisSourceContextKey,
-  type AnalysisPlatformView,
   type ExtractionCategory,
+  type LinuxAnalysisTabKey,
   isExtractionCategory,
 } from '@/features/analysis/types';
 import {
@@ -40,11 +37,7 @@ import {
   statusFromRun,
   useAnalysisStore,
 } from '@/stores/analysis-store';
-
-const PLATFORM_ICONS: Record<AnalysisPlatformView, ComponentType<{ size?: number | string }>> = {
-  windows: Monitor,
-  linux: Server,
-};
+import { useUiStore } from '@/stores/ui-store';
 
 export function AnalysisWorkspace() {
   const { t } = useTranslation();
@@ -89,29 +82,48 @@ export function AnalysisWorkspace() {
 
   const extractionProgress = useAnalysisStore((s) => s.extractionProgress);
   const extractionRunning = useAnalysisStore((s) => s.extractionRunning);
-  const progressExpanded = useAnalysisStore((s) => s.progressExpanded);
   const activeTab = useAnalysisStore((s) => s.activeTab);
   const activeLinuxTab = useAnalysisStore((s) => s.activeLinuxTab);
   const updateExtractionProgress = useAnalysisStore((s) => s.updateExtractionProgress);
   const resetExtractionProgress = useAnalysisStore((s) => s.resetExtractionProgress);
   const setExtractionRunning = useAnalysisStore((s) => s.setExtractionRunning);
-  const setProgressExpanded = useAnalysisStore((s) => s.setProgressExpanded);
   const setActiveTab = useAnalysisStore((s) => s.setActiveTab);
   const setActiveLinuxTab = useAnalysisStore((s) => s.setActiveLinuxTab);
+  const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
 
   const analysisMutationPending = evidenceScan.isPending
     || extractionRun.isPending
     || summaryMutation.isPending
     || extractionRunning;
 
-  const progressCategories = selectedPlatform
-    ? PROGRESS_CATEGORIES_BY_PLATFORM[selectedPlatform]
-    : [];
-
   const labeledExtractionProgress = useMemo(
     () => labeledProgress(extractionProgress, t),
     [extractionProgress, t],
   );
+  const linuxNodeCounts = useMemo<Partial<Record<LinuxAnalysisTabKey, number>>>(() => {
+    const summary = selectedPlatform === 'linux' ? linuxSummary.data : undefined;
+    if (!summary) {
+      return {};
+    }
+
+    return {
+      overview: summary.totalCount,
+      journal: summary.journalCount,
+      login: summary.loginCount,
+      commands: summary.bashCommandCount,
+      packages: summary.aptEventCount,
+      cron: summary.cronJobCount,
+      sudo: summary.sudoEventCount,
+      systemConfig: summary.systemConfigCount,
+      webServices: (summary.webSiteCount ?? 0)
+        + (summary.webAccessLogCount ?? 0)
+        + (summary.webErrorLogCount ?? 0)
+        + (summary.webFindingCount ?? 0),
+      mysqlServices: (summary.mysqlConfigCount ?? 0)
+        + (summary.mysqlLogCount ?? 0)
+        + (summary.mysqlFindingCount ?? 0),
+    };
+  }, [linuxSummary.data, selectedPlatform]);
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading;
@@ -129,8 +141,6 @@ export function AnalysisWorkspace() {
   const linuxError = currentCase.error
     ?? extractionRun.error
     ?? linuxSummary.error;
-  const PlatformIcon = selectedPlatform ? PLATFORM_ICONS[selectedPlatform] : null;
-
   useLayoutEffect(() => {
     if (sourceEpoch.sync(selectedSourceContextKey)) {
       resetExtractionProgress();
@@ -246,6 +256,7 @@ export function AnalysisWorkspace() {
     const categories = EXTRACTION_CATEGORIES_BY_PLATFORM[source.platform];
     extractionOperationRef.current = operation;
     setExtractionRunning(true);
+    setDrawerOpen(true);
     resetExtractionProgress();
     const refetchByCategory: Record<ExtractionCategory, () => Promise<unknown>> = {
       Registry: registrySummary.refetch,
@@ -407,84 +418,65 @@ export function AnalysisWorkspace() {
   }
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-white">
-      <AnalysisHeader
-        loading={loading}
-        hasCase={hasCase}
-        extractionPending={extractionRun.isPending || extractionRunning}
-        dataSourceSwitchDisabled={analysisMutationPending}
-        extractionRun={extractionRun.data}
-        onRefresh={refresh}
-        onRunExtraction={runExtraction}
-        dataSources={readyDataSources}
-        selectedDataSourceId={selectedDataSourceId}
-        onSelectDataSource={selectDataSource}
-      />
-
+    <div className="flex h-full w-full flex-1 overflow-hidden bg-forensics-surface">
       {hasCase ? (
-        <AnalysisProgressOverview
-          progress={progressCategories.map((category) => labeledExtractionProgress[category])}
-          expanded={progressExpanded}
-          onExpandedChange={setProgressExpanded}
+        <AnalysisSourceSidebar
+          dataSources={readyDataSources}
+          selectedDataSourceId={selectedDataSourceId}
+          disabled={analysisMutationPending}
+          progress={labeledExtractionProgress}
+          linuxNodeCounts={linuxNodeCounts}
+          activeWindowsTab={activeTab}
+          activeLinuxTab={activeLinuxTab}
+          onSelectDataSource={selectDataSource}
+          onWindowsTabChange={setActiveTab}
+          onLinuxTabChange={setActiveLinuxTab}
         />
       ) : null}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <AnalysisHeader
+          loading={loading}
+          hasCase={hasCase}
+          extractionPending={extractionRun.isPending || extractionRunning}
+          onRefresh={refresh}
+          onRunExtraction={runExtraction}
+          selectedDataSourceId={selectedDataSourceId}
+        />
 
-      {!hasCase && currentCase.isSuccess ? (
-        <AnalysisEmptyState />
-      ) : (
-        <Tabs
-          value={selectedPlatform ?? ''}
-          className="min-h-0 flex-1 gap-0"
-        >
-          {selectedPlatform && PlatformIcon ? (
-            <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-bg-subtle px-6 py-2">
-              <TabsTrigger
-                value={selectedPlatform}
-                className="h-8 flex-none items-center gap-2 rounded-md border border-transparent px-4 text-[12px] data-[state=active]:border-forensics-border data-[state=active]:bg-white"
-              >
-                <PlatformIcon size={14} />
-                {t(`analysis.platformViews.${selectedPlatform}`)}
-              </TabsTrigger>
-            </TabsList>
-          ) : null}
-
-          <TabsContent value="windows" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
-            <WindowsAnalysisView
-              activeTab={activeTab}
-              onActiveTabChange={setActiveTab}
-              error={windowsError ? errorMessage(windowsError) : undefined}
-              onRetry={refresh}
-              loading={loading}
-              systemInfo={systemInfo}
-              evidenceSummary={evidenceSummary}
-              registrySummary={registrySummary}
-              registryStructured={registryStructured.data}
-              browserSummary={browserSummary}
-              emailSummary={emailSummary}
-              eventLogSummary={eventLogSummary}
-              classifications={classifications}
-              progress={labeledExtractionProgress}
-              evidencePending={evidenceScan.isPending}
-              onRunEvidence={runEvidenceScan}
-              summaryPending={summaryMutation.isPending}
-              onDownloadSummary={downloadSummary}
-            />
-          </TabsContent>
-
-          <TabsContent value="linux" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
-            <LinuxAnalysisView
-              activeTab={activeLinuxTab}
-              onActiveTabChange={setActiveLinuxTab}
-              error={linuxError ? errorMessage(linuxError) : undefined}
-              onRetry={refresh}
-              loading={loading}
-              summary={linuxSummary.data}
-              summaryLoading={linuxSummary.isLoading}
-              progress={labeledExtractionProgress}
-            />
-          </TabsContent>
-        </Tabs>
-      )}
+        {!hasCase && currentCase.isSuccess ? (
+          <AnalysisEmptyState />
+        ) : selectedPlatform === 'windows' ? (
+          <WindowsAnalysisView
+            activeTab={activeTab}
+            onActiveTabChange={setActiveTab}
+            error={windowsError ? errorMessage(windowsError) : undefined}
+            onRetry={refresh}
+            loading={loading}
+            systemInfo={systemInfo}
+            evidenceSummary={evidenceSummary}
+            registrySummary={registrySummary}
+            registryStructured={registryStructured.data}
+            browserSummary={browserSummary}
+            emailSummary={emailSummary}
+            eventLogSummary={eventLogSummary}
+            classifications={classifications}
+            evidencePending={evidenceScan.isPending}
+            onRunEvidence={runEvidenceScan}
+            summaryPending={summaryMutation.isPending}
+            onDownloadSummary={downloadSummary}
+          />
+        ) : selectedPlatform === 'linux' ? (
+          <LinuxAnalysisView
+            activeTab={activeLinuxTab}
+            onActiveTabChange={setActiveLinuxTab}
+            error={linuxError ? errorMessage(linuxError) : undefined}
+            onRetry={refresh}
+            loading={loading}
+            summary={linuxSummary.data}
+            summaryLoading={linuxSummary.isLoading}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

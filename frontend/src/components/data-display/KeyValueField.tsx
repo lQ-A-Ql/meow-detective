@@ -25,9 +25,9 @@ export function KeyValueField({
   if (layout === 'inline') {
     return (
       <div className={cn('flex min-w-0 gap-2', className)}>
-        <span className="shrink-0 text-[#888]">{label}:</span>
+        <span className="shrink-0 text-forensics-muted-light">{label}:</span>
         <span
-          className={cn('min-w-0 truncate text-[#333]', mono && 'font-mono text-[10px]', valueClassName)}
+          className={cn('min-w-0 truncate text-forensics-text-secondary', mono && 'font-mono text-[10px]', valueClassName)}
           title={typeof displayValue === 'string' ? displayValue : undefined}
         >
           {displayValue}
@@ -37,9 +37,9 @@ export function KeyValueField({
   }
 
   return (
-    <div className={cn('flex flex-col gap-0.5 border border-[#e0e0e0] bg-white p-2', className)}>
-      <span className="text-[#888]">{label}</span>
-      <span className={cn('text-[#333]', mono && 'font-mono text-[10px]', valueClassName)}>
+    <div className={cn('flex flex-col gap-0.5 border border-forensics-border bg-transparent p-2', className)}>
+      <span className="text-forensics-muted-light">{label}</span>
+      <span className={cn('text-forensics-text-secondary', mono && 'font-mono text-[10px]', valueClassName)}>
         {displayValue}
       </span>
     </div>

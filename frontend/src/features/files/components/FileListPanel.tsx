@@ -46,8 +46,8 @@ export function FileListPanel({
   const selectedFile = sortedRows.find((row) => row.id === selectedFileId);
 
   return (
-    <div className="flex-1 flex flex-col border-b border-[#e0e0e0] bg-white min-h-0">
-      <div className="shrink-0 flex items-center gap-2 border-b border-[#e0e0e0] bg-[#fafafa] px-3 py-1.5">
+    <div className="flex-1 flex flex-col border-b border-forensics-border bg-forensics-surface min-h-0">
+      <div className="shrink-0 flex items-center gap-2 border-b border-forensics-border bg-forensics-panel px-3 py-1.5">
         <Button
           type="button"
           variant="outline"
@@ -110,7 +110,7 @@ export function FileListPanel({
           {
             key: 'size',
             title: '大小',
-            className: 'w-28 text-[#666]',
+            className: 'w-28 text-forensics-muted',
             sortable: true,
             sortKey: 'size',
             render: (row) =>
@@ -123,7 +123,7 @@ export function FileListPanel({
           {
             key: 'modifiedAt',
             title: '修改时间',
-            className: 'w-44 text-[#666]',
+            className: 'w-44 text-forensics-muted',
             sortable: true,
             sortKey: 'modifiedAt',
             render: (row) => row.modifiedAt ?? '-',
@@ -131,7 +131,7 @@ export function FileListPanel({
           {
             key: 'attr',
             title: '属性',
-            className: 'text-[#888]',
+            className: 'text-forensics-muted-light',
             render: (row) =>
               row.entryType === 'directory'
                 ? 'DIR'
@@ -140,7 +140,7 @@ export function FileListPanel({
         ]}
       />
       {rowsPage && viewerTab !== 'hex' ? (
-        <div className="flex items-center justify-between border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-2 text-[11px] text-[#666]">
+        <div className="flex items-center justify-between border-t border-forensics-border bg-forensics-panel px-3 py-2 text-[11px] text-forensics-muted">
           <span>
             显示第 {rowsPage.totalCount === 0 ? 0 : rowsPage.offset + 1} - {Math.min(rowsPage.offset + rowsPage.rows.length, rowsPage.totalCount)} 项，共 {rowsPage.totalCount} 项
           </span>

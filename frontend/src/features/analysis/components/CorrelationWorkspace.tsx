@@ -216,7 +216,7 @@ export function CorrelationWorkspace({
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+        <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Network size={16} />
           关联分析工作台
         </div>
@@ -226,9 +226,9 @@ export function CorrelationWorkspace({
             variant="outline"
             size="sm"
             onClick={onRefresh}
-            className="h-8 rounded border-[#ddd] bg-white px-3 text-[12px] hover:bg-[#f5f5f5]"
+            className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
           >
-            <TimerReset size={14} className={refreshing ? 'animate-spin' : ''} />
+            <TimerReset size={14} className={refreshing ? 'opacity-70' : ''} />
             刷新关联
           </Button>
         ) : null}
@@ -245,10 +245,10 @@ export function CorrelationWorkspace({
 
       <CorrelationFamilyCoveragePanel items={snapshot.familyCoverage} />
 
-      <div className="flex flex-col gap-3 rounded border border-[#e0e0e0] bg-white p-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-3 rounded-none border border-forensics-border bg-forensics-surface p-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
           <label className="relative block w-full xl:max-w-[320px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#888]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-forensics-muted-light" />
             <Input
               value={leadSearch}
               onChange={(event) => setLeadSearch(event.target.value)}
@@ -298,20 +298,20 @@ export function CorrelationWorkspace({
           </Select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#555]">
-          <div className="flex items-center gap-2 rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2">
-            <ListFilter size={14} className="text-[#888]" />
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-forensics-text-tertiary">
+          <div className="flex items-center gap-2 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+            <ListFilter size={14} className="text-forensics-muted-light" />
             <span>
               显示 {filteredLeads.length} / {snapshot.leadCount} 条线索
             </span>
           </div>
-          <div className="rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2">
+          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
             高置信 {highConfidenceLeadCount}
           </div>
-          <div className="rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2">
+          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
             待复核 {reviewLeadCount}
           </div>
-          <div className="rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2">
+          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
             生成时间 {snapshot.generatedAt.slice(0, 19).replace('T', ' ')}
           </div>
         </div>
@@ -319,8 +319,8 @@ export function CorrelationWorkspace({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="space-y-4">
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[#111]">
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <GitBranch size={14} />
               线索总览
             </div>
@@ -336,13 +336,13 @@ export function CorrelationWorkspace({
                   />
                 ))
               ) : (
-                <div className="text-[12px] text-[#666]">当前筛选条件下没有可展示的关联线索。</div>
+                <div className="text-[12px] text-forensics-muted">当前筛选条件下没有可展示的关联线索。</div>
               )}
             </div>
           </div>
 
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[#111]">
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Link2 size={14} />
               证据聚合
             </div>
@@ -352,7 +352,7 @@ export function CorrelationWorkspace({
                   <ClusterCard key={cluster.id} cluster={cluster} onJump={jumpToTarget} />
                 ))
               ) : (
-                <div className="text-[12px] text-[#666]">当前筛选条件下没有可展示的聚合 cluster。</div>
+                <div className="text-[12px] text-forensics-muted">当前筛选条件下没有可展示的聚合 cluster。</div>
               )}
             </div>
           </div>
@@ -369,29 +369,29 @@ export function CorrelationWorkspace({
               onJump={jumpToTarget}
             />
           ) : (
-            <div className="rounded border border-[#e0e0e0] bg-white p-4 text-[12px] text-[#666]">
+            <div className="rounded-none border border-forensics-border bg-forensics-surface p-4 text-[12px] text-forensics-muted">
               当前暂无可展开的 lead 明细。
             </div>
           )}
 
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 text-[12px] font-semibold text-[#111]">节点分布</div>
-            <div className="space-y-2 text-[11px] text-[#555]">
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 text-[12px] font-light text-forensics-text">节点分布</div>
+            <div className="space-y-2 text-[11px] text-forensics-text-tertiary">
               {distributionNodes.map((node) => (
-                <div key={node.id} className="rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2">
+                <div key={node.id} className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="truncate font-medium text-[#111]">{node.title}</div>
-                    <span className="font-mono text-[10px] uppercase text-[#888]">{node.kind}</span>
+                    <div className="truncate font-light text-forensics-text">{node.title}</div>
+                    <span className="font-mono text-[10px] uppercase text-forensics-muted-light">{node.kind}</span>
                   </div>
-                  {node.subtitle ? <div className="mt-1 break-all text-[#666]">{node.subtitle}</div> : null}
+                  {node.subtitle ? <div className="mt-1 break-all text-forensics-muted">{node.subtitle}</div> : null}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 text-[12px] font-semibold text-[#111]">当前规则边界</div>
-            <ul className="space-y-2 text-[11px] text-[#555]">
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 text-[12px] font-light text-forensics-text">当前规则边界</div>
+            <ul className="space-y-2 text-[11px] text-forensics-text-tertiary">
               <li>当前已接入 source object、路径匹配、名称匹配与 Recycle Bin 原路径恢复。</li>
               <li>线索用于 investigator 导航，不输出结论型判定。</li>
               <li>名称类与时间线类命中仍需回跳原始事件或工件字段复核。</li>

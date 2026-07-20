@@ -40,11 +40,11 @@ export function FileTreeDataSourceNode({
         <span className="w-[10px] mr-1 shrink-0" />
       )}
       <Icon size={13} className="text-forensics-primary-blue mr-1.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate font-medium text-forensics-text text-[11px]">
+      <span className="min-w-0 flex-1 truncate font-light text-forensics-text text-[11px]">
         {node.name}
       </span>
       {kind ? (
-        <span className="ml-1.5 shrink-0 text-[9px] text-forensics-muted-light bg-forensics-surface-muted px-1 py-px rounded">
+        <span className="ml-1.5 shrink-0 text-[9px] text-forensics-muted-light bg-forensics-surface-muted px-1 py-px rounded-none">
           {sourceKindLabel(kind)}
         </span>
       ) : null}

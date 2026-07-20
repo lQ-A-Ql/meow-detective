@@ -34,26 +34,26 @@ export function McpSection() {
         onClick={() => setExpanded(!expanded)}
       >
         <Bot size={14} className="text-forensics-muted-light" />
-        <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.mcp.title')}</span>
+        <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.mcp.title')}</span>
         {expanded ? (
           <ChevronDown size={14} className="text-forensics-muted-light" />
         ) : (
           <ChevronRight size={14} className="text-forensics-muted-light" />
         )}
         {loading && (
-          <span className="text-[10px] text-blue-500">{t('settings.sections.mcp.loading')}</span>
+          <span className="text-[10px] text-forensics-info-text">{t('settings.sections.mcp.loading')}</span>
         )}
       </div>
 
       {expanded && (
         <div className="space-y-4">
           <div className="bg-forensics-input-bg border border-forensics-border p-3">
-            <div className="text-[11px] font-semibold text-forensics-muted mb-2">
+            <div className="text-[11px] font-light text-forensics-muted mb-2">
               {t('settings.sections.mcp.connectionTitle')}
             </div>
             <div className="space-y-1">
               {servers.length === 0 ? (
-                <div className="text-[11px] text-gray-500 py-2">{t('settings.sections.mcp.noServers')}</div>
+                <div className="text-[11px] text-forensics-muted py-2">{t('settings.sections.mcp.noServers')}</div>
               ) : (
                 servers.map((server) => (
                   <McpServerItem
@@ -73,7 +73,7 @@ export function McpSection() {
               variant="forensicsGhost"
               size="xs"
               onClick={() => setShowAddDialog(true)}
-              className="mt-2 text-blue-600 hover:text-blue-800"
+              className="mt-2 text-forensics-info-text hover:text-forensics-info-text"
             >
               <Plus size={12} />
               {t('settings.sections.mcp.addServer')}
@@ -92,7 +92,7 @@ export function McpSection() {
           </div>
 
           {error && (
-            <div className="p-3 rounded text-[12px] bg-red-50 text-red-700 border border-red-200">
+            <div className="p-3 rounded-none text-[12px] bg-forensics-error-bg text-forensics-error-text border border-forensics-error-border">
               {error}
             </div>
           )}

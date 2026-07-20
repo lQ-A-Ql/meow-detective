@@ -153,8 +153,8 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
-      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b bg-[#fafafa] text-[11px] shrink-0">
-        <Image size={12} className="text-[#666]" />
+      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b bg-forensics-panel text-[11px] shrink-0">
+        <Image size={12} className="text-forensics-muted" />
 
         {/* 缩放控制 */}
         <Button
@@ -167,7 +167,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         >
           <ZoomIn size={14} />
         </Button>
-        <span className="min-w-[3.5rem] text-center font-mono text-[#666]">
+        <span className="min-w-[3.5rem] text-center font-mono text-forensics-muted">
           {Math.round(scale * 100)}%
         </span>
         <Button
@@ -181,7 +181,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           <ZoomOut size={14} />
         </Button>
 
-        <div className="w-px h-4 bg-[#ddd]" />
+        <div className="w-px h-4 bg-forensics-border-strong" />
 
         {/* 旋转 */}
         <Button
@@ -223,7 +223,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
 
         {/* 图片信息 */}
         {imageSize.width > 0 && (
-          <span className="text-[#999] font-mono">
+          <span className="text-forensics-muted-lighter font-mono">
             {imageSize.width} × {imageSize.height}
           </span>
         )}
@@ -233,7 +233,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           <a
             href={src}
             download={fileName}
-            className="p-1 hover:bg-[#e0e0e0] rounded"
+            className="p-1 hover:bg-forensics-hover rounded-none"
             title="下载"
           >
             <Download size={14} />
@@ -244,7 +244,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
       {/* 图片容器 */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-hidden bg-[#f0f0f0] ${
+        className={`flex-1 overflow-hidden bg-forensics-panel-strong ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         onWheel={handleWheel}
@@ -255,14 +255,14 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
       >
         {/* 加载状态 */}
         {isLoading && (
-          <div className="flex items-center justify-center h-full text-[#999]">
+          <div className="flex items-center justify-center h-full text-forensics-muted-lighter">
             加载中...
           </div>
         )}
 
         {/* 错误状态 */}
         {error && (
-          <div className="flex items-center justify-center h-full text-red-500">
+          <div className="flex items-center justify-center h-full text-forensics-error-text">
             {error}
           </div>
         )}
@@ -289,11 +289,11 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
       </div>
 
       {/* 状态栏 */}
-      <div className="flex items-center gap-3 px-3 py-1 border-t bg-[#fafafa] text-[10px] text-[#999] shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1 border-t bg-forensics-panel text-[10px] text-forensics-muted-lighter shrink-0">
         <span>{mimeType || '图片'}</span>
         {fileName && (
           <>
-            <span className="text-[#ddd]">|</span>
+            <span className="text-forensics-muted-lighter">|</span>
             <span className="max-w-[50%] truncate">{fileName}</span>
           </>
         )}

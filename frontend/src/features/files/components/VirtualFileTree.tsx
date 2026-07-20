@@ -96,9 +96,9 @@ export function VirtualFileTree({
                 {/* 展开/折叠箭头 */}
                 {node.hasChildren ? (
                   node.expanded ? (
-                    <ChevronDown size={12} className="text-[#888] shrink-0" />
+                    <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
                   ) : (
-                    <ChevronRight size={12} className="text-[#aaa] shrink-0" />
+                    <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
                   )
                 ) : (
                   <span className="w-3 shrink-0" />
@@ -121,7 +121,7 @@ export function VirtualFileTree({
 
                 {/* 状态标签 */}
                 {node.status && node.status !== 'ready' ? (
-                  <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#888]">
+                  <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                     {node.status}
                   </span>
                 ) : null}

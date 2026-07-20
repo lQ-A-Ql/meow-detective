@@ -8,13 +8,13 @@ import { Metric, MessageBlock } from './V2GovernancePanels';
 function coverageTone(status: 'covered' | 'review' | 'missing') {
   switch (status) {
     case 'covered':
-      return 'border-[#0d7a32] bg-[#effaf2] text-[#0d7a32]';
+      return 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text';
     case 'review':
-      return 'border-[#b54708] bg-[#fff7ed] text-[#b54708]';
+      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     case 'missing':
-      return 'border-[#667085] bg-[#f8fafc] text-[#475467]';
+      return 'border-forensics-border-strong bg-forensics-panel text-forensics-text-secondary';
     default:
-      return 'border-[#ddd] bg-white text-[#555]';
+      return 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   }
 }
 
@@ -40,16 +40,16 @@ export function ReleaseScorecardPanel({
 }) {
   return (
     <section className="space-y-4">
-      <div className="flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+      <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <BarChart3 size={16} />
         发布评分卡
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-        <div className="rounded border border-[#e0e0e0] bg-white p-4">
-          <div className="text-[11px] uppercase tracking-wider text-[#888]">总评</div>
+        <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">总评</div>
           <div className="mt-2 flex items-end gap-3">
-            <div className="text-[40px] font-semibold text-[#111]">{scorecard.totalScore}</div>
-            <div className="mb-1 rounded border border-[#ddd] px-2 py-0.5 font-mono text-[12px] text-[#555]">
+            <div className="text-[40px] font-light text-forensics-text">{scorecard.totalScore}</div>
+            <div className="mb-1 rounded-none border border-forensics-border px-2 py-0.5 font-mono text-[12px] text-forensics-text-tertiary">
               {scorecard.grade}
             </div>
           </div>
@@ -62,8 +62,8 @@ export function ReleaseScorecardPanel({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[#111]">
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Database size={14} />
               运行信号
             </div>
@@ -84,17 +84,17 @@ export function ReleaseScorecardPanel({
               <Metric label="失败任务" value={runtimeSummary.failedJobCount.toString()} />
               <Metric label="warning 证据源" value={runtimeSummary.warningDataSourceCount.toString()} />
             </div>
-            <div className="mt-3 rounded border border-[#eee] bg-[#fcfcfc] px-3 py-2 text-[11px] text-[#555]">
+            <div className="mt-3 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
               关联快照状态：{runtimeSummary.correlationSnapshotAvailable ? '已生成' : '未生成'}
             </div>
-            <div className="mt-4 rounded border border-[#eee] bg-[#fcfcfc] p-3">
-              <div className="mb-2 text-[10px] uppercase tracking-wider text-[#888]">Correlation Family Coverage</div>
+            <div className="mt-4 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Correlation Family Coverage</div>
               <div className="space-y-2">
                 {runtimeSummary.correlationFamilyCoverage.map((item) => (
-                  <div key={item.family} className="rounded border border-[#e5e7eb] bg-white px-3 py-2 text-[11px] text-[#555]">
+                  <div key={item.family} className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium text-[#111]">{item.displayName}</div>
-                      <span className={`rounded border px-2 py-0.5 text-[10px] font-mono ${coverageTone(item.status)}`}>
+                      <div className="font-light text-forensics-text">{item.displayName}</div>
+                      <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${coverageTone(item.status)}`}>
                         {coverageLabel(item.status)}
                       </span>
                     </div>
@@ -105,13 +105,13 @@ export function ReleaseScorecardPanel({
                       <Metric label="Cluster" value={item.clusterCount.toString()} />
                     </div>
                     {item.sampleSignals.length > 0 ? (
-                      <div className="mt-2 space-y-1 text-[11px] text-[#666]">
+                      <div className="mt-2 space-y-1 text-[11px] text-forensics-muted">
                         {item.sampleSignals.map((signal) => (
                           <div key={`${item.family}-${signal}`}>{signal}</div>
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-2 text-[11px] text-[#777]">当前没有可展示的该家族规则命中。</div>
+                      <div className="mt-2 text-[11px] text-forensics-muted">当前没有可展示的该家族规则命中。</div>
                     )}
                   </div>
                 ))}
@@ -119,25 +119,25 @@ export function ReleaseScorecardPanel({
             </div>
           </div>
 
-          <div className="rounded border border-[#e0e0e0] bg-white p-4">
-            <div className="mb-3 text-[12px] font-semibold text-[#111]">评分拆解</div>
+          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mb-3 text-[12px] font-light text-forensics-text">评分拆解</div>
             <div className="space-y-3">
               {scorecard.breakdown.map((entry) => (
-                <div key={entry.dimension} className="rounded border border-[#eee] bg-[#fcfcfc] p-3">
+                <div key={entry.dimension} className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[12px] font-medium text-[#111]">{entry.dimension}</div>
-                    <div className="font-mono text-[11px] text-[#555]">
+                    <div className="text-[12px] font-light text-forensics-text">{entry.dimension}</div>
+                    <div className="font-mono text-[11px] text-forensics-text-tertiary">
                       {entry.actualScore} / {entry.maxScore}
                     </div>
                   </div>
                   {entry.deductions.length > 0 ? (
-                    <div className="mt-2 space-y-1 text-[11px] text-[#666]">
+                    <div className="mt-2 space-y-1 text-[11px] text-forensics-muted">
                       {entry.deductions.map((item) => (
                         <div key={`${entry.dimension}-${item}`}>{item}</div>
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 text-[11px] text-[#777]">当前无扣分项</div>
+                    <div className="mt-2 text-[11px] text-forensics-muted">当前无扣分项</div>
                   )}
                 </div>
               ))}
@@ -146,13 +146,13 @@ export function ReleaseScorecardPanel({
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <MessageBlock
-              icon={<AlertTriangle size={14} className="text-amber-700" />}
+              icon={<AlertTriangle size={14} className="text-forensics-warning-text" />}
               title="阻断项"
               items={scorecard.blockers}
               empty="当前无阻断项"
             />
             <MessageBlock
-              icon={<CheckCircle2 size={14} className="text-[#0d7a32]" />}
+              icon={<CheckCircle2 size={14} className="text-forensics-success-text" />}
               title="残余风险"
               items={scorecard.residualRisks}
               empty="当前无残余风险"

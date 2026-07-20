@@ -127,7 +127,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
         {/* Search & filter bar */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#999]" />
+            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted-lighter" />
             <Input
               type="text"
               value={searchTerm}
@@ -157,13 +157,13 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
         </div>
 
         {/* Node list */}
-        <ScrollArea className="flex-1 min-h-[240px] max-h-[400px] border border-[#e0e0e0] rounded">
+        <ScrollArea className="flex-1 min-h-[240px] max-h-[400px] border border-forensics-border rounded-none">
           {loadingNodes ? (
             <div className="flex h-32 items-center justify-center">
-              <Loader2 size={20} className="animate-spin text-[#ccc]" />
+              <Loader2 size={20} className="opacity-70 text-forensics-muted-lighter" />
             </div>
           ) : filteredNodes.length === 0 ? (
-            <div className="flex h-32 items-center justify-center text-[12px] text-[#999]">
+            <div className="flex h-32 items-center justify-center text-[12px] text-forensics-muted-lighter">
               未找到匹配的节点
             </div>
           ) : (
@@ -171,7 +171,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
               {filteredNodes.map((node) => (
                 <div
                   key={node.id}
-                  className="flex items-start gap-3 border-b border-[#f0f0f0] px-3 py-2 hover:bg-[#fafafa] cursor-pointer last:border-b-0"
+                  className="flex items-start gap-3 border-b border-forensics-border-light px-3 py-2 hover:bg-forensics-panel cursor-pointer last:border-b-0"
                   onClick={() => toggleNode(node.id)}
                 >
                   <Checkbox
@@ -182,17 +182,17 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[12px] font-semibold text-[#111]">
+                      <span className="truncate text-[12px] font-light text-forensics-text">
                         {node.label}
                       </span>
                       <Badge
                         variant="outline"
-                        className={`shrink-0 text-[10px] ${NODE_TYPE_BADGE[node.nodeType] ?? 'bg-gray-50 text-gray-600'}`}
+                        className={`shrink-0 text-[10px] ${NODE_TYPE_BADGE[node.nodeType] ?? 'bg-forensics-panel text-forensics-muted'}`}
                       >
                         {node.nodeType}
                       </Badge>
                     </div>
-                    <div className="mt-0.5 text-[10px] text-[#888] truncate">
+                    <div className="mt-0.5 text-[10px] text-forensics-muted-light truncate">
                       {node.summary}
                     </div>
                     {node.tags.length > 0 && (
@@ -201,7 +201,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
                           <Badge
                             key={tag}
                             variant="secondary"
-                            className="bg-[#f0f0f0] text-[9px] text-[#777] py-0 px-1"
+                            className="bg-forensics-panel-strong text-[9px] text-forensics-muted py-0 px-1"
                           >
                             {tag}
                           </Badge>
@@ -216,7 +216,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
         </ScrollArea>
 
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-[#999]">
+          <span className="text-[11px] text-forensics-muted-lighter">
             已选 {tempSelected.size} 个节点
           </span>
           <div className="flex items-center gap-2">
@@ -224,14 +224,14 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
               type="button"
               variant="outline"
               onClick={handleCancel}
-              className="h-7 rounded border-[#ddd] bg-white px-3 text-[11px] hover:bg-[#f5f5f5]"
+              className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
             >
               取消
             </Button>
             <Button
               type="button"
               onClick={handleConfirm}
-              className="h-7 rounded border border-[#111] bg-[#111] px-3 text-[11px] text-white hover:bg-[#333]"
+              className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
             >
               确认 ({tempSelected.size})
             </Button>
@@ -288,7 +288,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
   };
 
   return (
-    <Card className="mb-4 border-[#111] bg-[#fafafa]">
+    <Card className="mb-4 border-forensics-text bg-forensics-panel">
       <CardHeader className="pb-2">
         <CardTitle className="text-[13px]">
           {parentId ? '回复' : '新建笔记'}
@@ -320,7 +320,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <label className="text-[11px] text-[#666]">类型:</label>
+            <label className="text-[11px] text-forensics-muted">类型:</label>
             <Select value={entryType} onValueChange={(value) => setEntryType(value as NotebookEntryType)}>
               <SelectTrigger size="xs" variant="forensics" className="w-32">
                 <SelectValue />
@@ -339,7 +339,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
         {/* Tag chips */}
         <div>
           <div className="mb-1.5 flex items-center gap-1.5">
-            <Tag size={12} className="text-[#999]" />
+            <Tag size={12} className="text-forensics-muted-lighter" />
             <Input
               type="text"
               value={tagInput}
@@ -362,7 +362,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
                 <Badge
                   key={tag}
                   variant="secondary"
-                  className="cursor-pointer bg-[#f0f0f0] text-[10px] text-[#555] hover:bg-[#e0e0e0]"
+                  className="cursor-pointer bg-forensics-panel-strong text-[10px] text-forensics-text-tertiary hover:bg-forensics-hover"
                 >
                   {tag}
                   <X
@@ -377,7 +377,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
         </div>
 
         {createMutation.isError && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] text-red-700">
+          <div className="rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[11px] text-forensics-error-text">
             {(createMutation.error as Error)?.message ?? '保存失败'}
           </div>
         )}
@@ -387,7 +387,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
             type="button"
             variant="outline"
             onClick={onCancel}
-            className="h-7 rounded border-[#ddd] bg-white px-3 text-[11px] hover:bg-[#f5f5f5]"
+            className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
           >
             取消
           </Button>
@@ -395,10 +395,10 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
             type="button"
             onClick={handleSave}
             disabled={!title.trim() || createMutation.isPending}
-            className="h-7 rounded border border-[#111] bg-[#111] px-3 text-[11px] text-white hover:bg-[#333]"
+            className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
           >
             {createMutation.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
+              <Loader2 size={12} className="opacity-70" />
             ) : (
               <Plus size={12} />
             )}
@@ -430,8 +430,8 @@ export function EntryTreeItem({
   return (
     <div>
       <div
-        className={`flex cursor-pointer items-center gap-2 border-b border-[#f5f5f5] px-3 py-2 hover:bg-[#f8f8f8] ${
-          isSelected ? 'bg-[#f0f0f0]' : ''
+        className={`flex cursor-pointer items-center gap-2 border-b border-forensics-border-light px-3 py-2 hover:bg-forensics-panel ${
+          isSelected ? 'bg-forensics-panel-strong' : ''
         }`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={() => onSelect(item.id)}
@@ -445,7 +445,7 @@ export function EntryTreeItem({
               e.stopPropagation();
               setExpanded(!expanded);
             }}
-            className="shrink-0 text-[#bbb] hover:text-[#666]"
+            className="shrink-0 text-forensics-muted-lighter hover:text-forensics-muted"
             aria-label={expanded ? '折叠条目' : '展开条目'}
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -456,13 +456,13 @@ export function EntryTreeItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             {item.entryType === 'observation' ? (
-              <MessageSquare size={12} className="shrink-0 text-[#aaa]" />
+              <MessageSquare size={12} className="shrink-0 text-forensics-muted-lighter" />
             ) : (
-              <FileText size={12} className="shrink-0 text-[#aaa]" />
+              <FileText size={12} className="shrink-0 text-forensics-muted-lighter" />
             )}
-            <span className="truncate text-[12px] font-medium text-[#222]">{item.title}</span>
+            <span className="truncate text-[12px] font-light text-forensics-text">{item.title}</span>
           </div>
-          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[#999]">
+          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-forensics-muted-lighter">
             <Badge className={`text-[9px] py-0 ${ENTRY_TYPE_BADGE[item.entryType]}`}>
               {ENTRY_TYPE_CONFIG[item.entryType].label}
             </Badge>
@@ -471,7 +471,7 @@ export function EntryTreeItem({
             </Badge>
             <span>{formatTimestampShort(item.updatedAt)}</span>
             {item.replyCount > 0 && (
-              <span className="text-[#bbb]">
+              <span className="text-forensics-muted-lighter">
                 {item.replyCount} 回复
               </span>
             )}

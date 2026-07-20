@@ -84,8 +84,8 @@ export function NotebookPanel() {
 
   if (currentCase.isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#999]">
-        <Loader2 size={24} className="mr-2 animate-spin" />
+      <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
+        <Loader2 size={24} className="mr-2 opacity-70" />
         正在加载案件...
       </div>
     );
@@ -94,16 +94,16 @@ export function NotebookPanel() {
   if (!caseId) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
-        <BookOpen size={32} className="text-[#ccc]" />
-        <div className="text-[13px] text-[#666]">请先打开或创建一个案件</div>
+        <BookOpen size={32} className="text-forensics-muted-lighter" />
+        <div className="text-[13px] text-forensics-muted">请先打开或创建一个案件</div>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center text-[#999]">
-        <Loader2 size={24} className="mr-2 animate-spin" />
+      <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
+        <Loader2 size={24} className="mr-2 opacity-70" />
         正在加载笔记...
       </div>
     );
@@ -112,13 +112,13 @@ export function NotebookPanel() {
   if (isError) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
-        <BookOpen size={32} className="text-[#ccc]" />
-        <div className="text-[13px] text-[#666]">无法加载笔记列表</div>
+        <BookOpen size={32} className="text-forensics-muted-lighter" />
+        <div className="text-[13px] text-forensics-muted">无法加载笔记列表</div>
         <Button
           type="button"
           variant="outline"
           onClick={() => refetch()}
-          className="h-8 rounded border-[#ddd] bg-white px-4 text-[12px] hover:bg-[#f5f5f5]"
+          className="h-8 rounded-none border-forensics-border bg-forensics-surface px-4 text-[12px] hover:bg-forensics-panel-strong"
         >
           重试
         </Button>
@@ -129,15 +129,15 @@ export function NotebookPanel() {
   return (
     <div className="flex h-full min-h-0">
       {/* Left sidebar: entry list */}
-      <div className="flex w-[320px] shrink-0 flex-col border-r border-[#e0e0e0] bg-[#fafafa]">
+      <div className="flex w-[320px] shrink-0 flex-col border-r border-forensics-border bg-forensics-panel">
         {/* Header */}
-        <div className="shrink-0 border-b border-[#e0e0e0] p-4">
+        <div className="shrink-0 border-b border-forensics-border p-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="font-serif text-[15px] tracking-tight text-[#111]">笔记面板</div>
+            <div className="font-serif text-[15px] tracking-tight text-forensics-text">笔记面板</div>
             <Button
               type="button"
               onClick={() => setShowNewEntry(true)}
-              className="h-7 rounded border border-[#111] bg-[#111] px-3 text-[11px] text-white hover:bg-[#333]"
+              className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
             >
               <Plus size={12} />
               新建
@@ -201,7 +201,7 @@ export function NotebookPanel() {
 
           {/* Count badges */}
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="bg-[#f0f0f0] text-[10px] text-[#666]">
+            <Badge variant="secondary" className="bg-forensics-panel-strong text-[10px] text-forensics-muted">
               总计: {rootEntries.length}
             </Badge>
             {Object.entries(typeCounts).map(([key, count]) => (
@@ -219,7 +219,7 @@ export function NotebookPanel() {
         {/* Entry tree */}
         <ScrollArea className="flex-1">
           {showNewEntry && (
-            <div className="border-b border-[#e0e0e0] p-3">
+            <div className="border-b border-forensics-border p-3">
               <EntryEditor
                 onSaved={() => {
                   setShowNewEntry(false);
@@ -230,9 +230,9 @@ export function NotebookPanel() {
           )}
           {rootEntries.length === 0 ? (
             <div className="flex h-40 flex-col items-center justify-center px-4">
-              <BookOpen size={28} className="text-[#ddd]" />
-              <div className="mt-3 text-[12px] text-[#999]">暂无笔记</div>
-              <div className="mt-1 text-[10px] text-[#bbb]">点击"新建"创建第一条分析笔记</div>
+              <BookOpen size={28} className="text-forensics-muted-lighter" />
+              <div className="mt-3 text-[12px] text-forensics-muted-lighter">暂无笔记</div>
+              <div className="mt-1 text-[10px] text-forensics-muted-lighter">点击"新建"创建第一条分析笔记</div>
             </div>
           ) : (
             rootEntries.map((item) => (
@@ -249,18 +249,18 @@ export function NotebookPanel() {
       </div>
 
       {/* Right content pane */}
-      <div className="flex flex-1 flex-col min-w-0 bg-white">
+      <div className="flex flex-1 flex-col min-w-0 bg-forensics-surface">
         {selectedId ? (
           <div className="flex flex-1 flex-col">
             {/* Detail header bar */}
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e0e0e0] bg-[#fafafa] px-6 py-3">
-              <div className="text-[11px] text-[#888]">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-forensics-border bg-forensics-panel px-6 py-3">
+              <div className="text-[11px] text-forensics-muted-light">
                 笔记详情
                 {(() => {
                   const entry = entries.find((e) => e.id === selectedId);
                   if (!entry) return null;
                   return (
-                    <span className="ml-2 font-mono text-[#bbb]">
+                    <span className="ml-2 font-mono text-forensics-muted-lighter">
                       #{entry.id}
                     </span>
                   );
@@ -269,7 +269,7 @@ export function NotebookPanel() {
               <Button
                 type="button"
                 onClick={() => setShowNewReply(true)}
-                className="h-7 rounded border border-[#111] bg-[#111] px-3 text-[11px] text-white hover:bg-[#333]"
+                className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
               >
                 <MessageSquare size={12} />
                 回复
@@ -301,7 +301,7 @@ export function NotebookPanel() {
             </ScrollArea>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[#bbb]">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-forensics-muted-lighter">
             <BookOpen size={40} />
             <div className="text-[14px]">从左侧列表选择一条笔记</div>
             <div className="text-[11px]">支持 Markdown 格式分析和丰富类型</div>
