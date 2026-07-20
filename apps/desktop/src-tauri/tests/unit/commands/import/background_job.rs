@@ -233,6 +233,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
 
     let total_started = Instant::now();
     let cancel_token = Arc::new(AtomicBool::new(false));
+    let scheduler_before = app_services::import_scheduler::global_import_admission().snapshot();
     let browseable_started = Instant::now();
     let processing = run_background_linux_cluster_import_until_browseable(
         BackgroundLinuxClusterImportJob {
@@ -241,14 +242,25 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
             case_root: case_root.clone(),
             plan: plan.clone(),
             job_id: job_id.clone(),
-            max_import_workers: Some(1),
-            max_analysis_workers: Some(1),
+            max_import_workers: None,
+            max_analysis_workers: None,
             analysis_mode: ImportAnalysisMode::MetadataOnly,
         },
         None,
         cancel_token.clone(),
     );
     let browseable_elapsed = browseable_started.elapsed();
+    let scheduler_after = app_services::import_scheduler::global_import_admission().snapshot();
+    eprintln!(
+        "PVE scheduler: activeBefore={} activeAfter={} peakSources={} peakCpuWeight={} peakMemoryReservationMb={} rssMb={} peakRssMb={}",
+        scheduler_before.active_sources,
+        scheduler_after.active_sources,
+        scheduler_after.peak_active_sources,
+        scheduler_after.peak_cpu_in_use,
+        scheduler_after.peak_memory_in_use_mb,
+        app_services::import_analysis::current_rss_mb(),
+        app_services::import_analysis::peak_rss_mb()
+    );
     let parent_snapshots = if processing.is_ok() {
         let browseable_conn =
             persistence_sqlite::connection::open_existing(&case_root.join("app.db"))

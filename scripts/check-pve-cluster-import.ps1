@@ -149,7 +149,7 @@ if (-not $useRetainedCase) {
     Write-Host "PVE fixture preflight passed in exact import order:"
     $expectedMembers | ForEach-Object { Write-Host "  $_" }
 }
-Write-Host "Running exact serial regression ($timeoutContext) with timeout ${TimeoutSeconds}s: cargo $($startInfo.Arguments)"
+Write-Host "Running bounded-scheduler regression ($timeoutContext) with timeout ${TimeoutSeconds}s: cargo $($startInfo.Arguments)"
 
 $result = Invoke-RustGuardProcess `
     -StartInfo $startInfo `

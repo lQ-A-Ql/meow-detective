@@ -2,6 +2,12 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+#[cfg(windows)]
+#[link(name = "resource", kind = "static")]
+// SAFETY: The block declares no foreign functions; it only links Tauri's generated
+// Windows resource into this unit-test harness.
+unsafe extern "C" {}
+
 #[test]
 fn every_tauri_command_is_registered_in_invoke_handler() {
     let defined = collect_command_function_names();

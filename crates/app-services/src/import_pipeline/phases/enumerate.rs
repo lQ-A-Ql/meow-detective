@@ -204,12 +204,19 @@ fn enumerate_pending_partitions(
     pending: PartitionWorkQueue,
 ) -> Result<(), CommandError> {
     let max_workers = crate::parallel_enum::resolve_worker_count(ctx.options.max_import_workers);
+    let active_workers = crate::parallel_enum::effective_worker_count(&pending, max_workers);
     let started = Instant::now();
     let results = run_parallel_enumeration(ctx, data_source, manifest, pending, max_workers)?;
     if ctx.cancel_requested() {
         mark_draining_enumeration(ctx);
     }
-    report_enumeration_complete(ctx, data_source, &results, max_workers, started.elapsed());
+    report_enumeration_complete(
+        ctx,
+        data_source,
+        &results,
+        active_workers,
+        started.elapsed(),
+    );
     apply_partition_results(manifest, &results);
     manifest.phase = staging::ImportPhase::Enumerating;
     manifest
@@ -217,7 +224,6 @@ fn enumerate_pending_partitions(
         .map_err(CommandError::from_service_error)?;
     validate_successful_results(ctx, &results)
 }
-
 fn run_parallel_enumeration(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
@@ -252,7 +258,6 @@ fn run_parallel_enumeration(
     )
     .map_err(CommandError::from_service_error)
 }
-
 fn apply_partition_results(
     manifest: &mut staging::StagingManifest,
     results: &[crate::parallel_enum::PartitionResult],

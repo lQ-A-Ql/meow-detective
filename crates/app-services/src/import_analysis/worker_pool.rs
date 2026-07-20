@@ -183,16 +183,11 @@ fn post_import_message(stats: &ImportAnalysisStats, counts: &JobOutcomeCounts) -
 }
 
 pub fn default_analysis_worker_count() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| n.get().min(4))
-        .unwrap_or(4)
+    crate::import_scheduler::default_cpu_budget()
 }
 
 pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usize {
-    match max_analysis_workers {
-        Some(n) if n > 0 => n.min(default_analysis_worker_count()),
-        _ => default_analysis_worker_count(),
-    }
+    crate::import_scheduler::resolve_analysis_worker_count(max_analysis_workers)
 }
 
 pub fn run_import_analysis_staging(

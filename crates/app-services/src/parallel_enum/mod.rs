@@ -11,7 +11,10 @@ mod ntfs;
 mod partition_work;
 mod progress;
 
-pub use coordinator::{default_worker_count, enumerate_partitions_parallel, resolve_worker_count};
+pub use coordinator::{
+    default_worker_count, effective_worker_count, enumerate_partitions_parallel,
+    resolve_worker_count,
+};
 pub use error::ParallelEnumError;
 pub use partition_work::{PartitionResult, PartitionWork};
 

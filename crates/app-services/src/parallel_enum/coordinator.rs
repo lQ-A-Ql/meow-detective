@@ -77,7 +77,8 @@ pub fn enumerate_partitions_parallel(
     Ok(results)
 }
 
-fn effective_worker_count(partitions: &[PartitionWork], requested: usize) -> usize {
+/// Resolve the actual partition-worker count after evidence-reader safeguards.
+pub fn effective_worker_count(partitions: &[PartitionWork], requested: usize) -> usize {
     let bounded = partitions.len().min(requested.max(1)).max(1);
     if partitions.iter().any(PartitionWork::uses_e01_reader) {
         1
@@ -233,15 +234,10 @@ fn join_workers(handles: Vec<JoinHandle<()>>) -> Result<(), String> {
 
 /// Get the opt-in upper bound for explicit worker settings.
 pub fn default_worker_count() -> usize {
-    std::thread::available_parallelism()
-        .map(|count| count.get())
-        .unwrap_or(4)
+    crate::import_scheduler::default_cpu_budget()
 }
 
 /// Resolve worker count from settings.
 pub fn resolve_worker_count(max_import_workers: Option<usize>) -> usize {
-    match max_import_workers {
-        Some(count) if count > 0 => count.min(default_worker_count()),
-        _ => 1,
-    }
+    crate::import_scheduler::resolve_import_worker_count(max_import_workers)
 }
