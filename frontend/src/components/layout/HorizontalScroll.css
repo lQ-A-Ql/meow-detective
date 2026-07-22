@@ -36,6 +36,14 @@
   border: none;
 }
 
+.scrollbar-thin-glow--cell .scrollbar-thin-glow-scroll {
+  /* Reserve the lower edge for the custom thumb so evidence text remains
+     completely visible when the scrollbar fades in. */
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  overflow-y: hidden;
+}
+
 /* A quiet, continuous track keeps horizontal navigation legible. */
 .scrollbar-thin-glow-track-line {
   height: 1px;
@@ -47,4 +55,34 @@
   min-width: 40px;
   background: var(--scrollbar-glow-outer);
   border: 1px solid var(--scrollbar-line);
+}
+
+.scrollbar-thin-glow--cell .scrollbar-thin-glow-track-line {
+  height: 2px;
+  background: var(--forensics-sakura-400, var(--scrollbar-line));
+  opacity: 0.7;
+}
+
+.scrollbar-thin-glow--cell .scrollbar-thin-glow-thumb {
+  height: 4px;
+  border: 0;
+  background: var(--forensics-sakura-500, var(--scrollbar-glow-outer));
+  opacity: 0.8;
+}
+
+.scrollbar-thin-glow--reveal-on-hover .scrollbar-thin-glow-track-line,
+.scrollbar-thin-glow--reveal-on-hover .scrollbar-thin-glow-thumb {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1000ms ease;
+}
+
+.scrollbar-thin-glow--reveal-on-hover:hover .scrollbar-thin-glow-track-line,
+.scrollbar-thin-glow--reveal-on-hover:hover .scrollbar-thin-glow-thumb,
+.scrollbar-thin-glow--reveal-on-hover:focus-within .scrollbar-thin-glow-track-line,
+.scrollbar-thin-glow--reveal-on-hover:focus-within .scrollbar-thin-glow-thumb,
+.scrollbar-thin-glow--dragging .scrollbar-thin-glow-track-line,
+.scrollbar-thin-glow--dragging .scrollbar-thin-glow-thumb {
+  opacity: 1;
+  pointer-events: auto;
 }

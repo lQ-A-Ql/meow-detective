@@ -73,6 +73,8 @@
   --forensics-surface: #faf8f4;
   --forensics-input-bg: #faf8f4;
   --forensics-highlight: #e6ddcf;
+  --forensics-selection-bg: #d9cbb6;
+  --forensics-selection-text: #302d27;
   --forensics-hover: #e1d7c7;
   --forensics-border: #d4cdc5;
   --forensics-border-light: #e3dcd1;
@@ -357,8 +359,15 @@
   }
 
   ::selection {
-    background: var(--forensics-highlight);
-    color: var(--forensics-text);
+    background: var(--forensics-selection-bg);
+    color: var(--forensics-selection-text);
+    text-shadow: none;
+  }
+
+  ::-moz-selection {
+    background: var(--forensics-selection-bg);
+    color: var(--forensics-selection-text);
+    text-shadow: none;
   }
 
   @media (prefers-reduced-motion: reduce) {

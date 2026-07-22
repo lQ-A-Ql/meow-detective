@@ -14,6 +14,13 @@ interface Metrics {
   scrollLeft: number;
 }
 
+type HorizontalScrollVariant = 'default' | 'cell';
+
+interface HorizontalScrollProps extends ComponentPropsWithoutRef<'div'> {
+  variant?: HorizontalScrollVariant;
+  revealOnHover?: boolean;
+}
+
 /**
  * HorizontalScroll - 自定义横向滚动容器
  *
@@ -26,8 +33,10 @@ interface Metrics {
 export function HorizontalScroll({
   className,
   children,
+  variant = 'default',
+  revealOnHover = false,
   ...props
-}: ComponentPropsWithoutRef<'div'>) {
+}: HorizontalScrollProps) {
   const innerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
   const [metrics, setMetrics] = useState<Metrics>({
@@ -120,10 +129,22 @@ export function HorizontalScroll({
   );
 
   return (
-    <div className="scrollbar-thin-glow relative w-full min-w-0 flex-1">
+    <div
+      className={cn(
+        'scrollbar-thin-glow relative w-full min-w-0',
+        variant === 'default' ? 'flex-1' : 'scrollbar-thin-glow--cell h-full',
+        revealOnHover && 'scrollbar-thin-glow--reveal-on-hover',
+        dragging && 'scrollbar-thin-glow--dragging',
+      )}
+    >
       <div
         ref={innerRef}
-        className={cn('scrollbar-thin-glow-scroll flex', className)}
+        className={cn(
+          'scrollbar-thin-glow-scroll flex',
+          variant === 'cell' && 'block h-full',
+          className,
+        )}
+        tabIndex={showThumb ? 0 : undefined}
         {...props}
       >
         {children}

@@ -121,4 +121,51 @@ describe('DenseDataTable', () => {
     expect(renderedRowsAfterFilter[0]?.textContent).toContain('Charlie');
     expect(renderedRowsAfterFilter[1]?.textContent).toContain('Alpha');
   });
+
+  it('uses fixed columns with independent hover-revealed cell scroll regions', () => {
+    const { container } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={[{ id: 'row-1', name: 'A long value that remains selectable inside its own cell' }]}
+        getRowKey={(row) => row.id}
+      />,
+    );
+
+    const table = container.querySelector('[data-slot="table"]');
+    expect(table?.className).toContain('table-fixed');
+
+    const cellScroller = container.querySelector('.scrollbar-thin-glow--cell');
+    expect(cellScroller).not.toBeNull();
+    expect(cellScroller?.className).toContain('scrollbar-thin-glow--reveal-on-hover');
+    expect(cellScroller?.querySelector('.select-text')?.textContent).toContain('A long value');
+    expect(
+      cellScroller
+        ?.querySelector('.scrollbar-thin-glow-scroll')
+        ?.getAttribute('tabindex'),
+    ).toBeNull();
+  });
+
+  it('does not activate a row while selecting cell text', () => {
+    const onRowClick = vi.fn();
+    render(
+      <DenseDataTable
+        columns={columns}
+        rows={[{ id: 'row-1', name: 'Selectable evidence value' }]}
+        getRowKey={(row) => row.id}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    const text = screen.getByText('Selectable evidence value');
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.click(text);
+    expect(onRowClick).not.toHaveBeenCalled();
+
+    selection?.removeAllRanges();
+  });
 });

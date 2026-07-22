@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
+import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
 import { SortIndicator } from './SortIndicator';
 
 export interface DenseColumn<T> {
@@ -74,6 +75,16 @@ function TableRowMemoBase<T>({
   selected,
   onRowClick,
 }: TableRowMemoProps<T>) {
+  const handleRowClick = () => {
+    if (typeof window !== 'undefined') {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) {
+        return;
+      }
+    }
+    onRowClick?.(row);
+  };
+
   return (
     <TableRow
       data-state={selected ? 'selected' : undefined}
@@ -82,7 +93,7 @@ function TableRowMemoBase<T>({
           ? 'bg-forensics-sakura-150 text-forensics-text'
           : 'text-forensics-text-secondary hover:bg-forensics-hover'
       }`}
-      onClick={() => onRowClick?.(row)}
+      onClick={handleRowClick}
     >
       {columns.map((column, index) => (
         <TableCell
@@ -93,9 +104,15 @@ function TableRowMemoBase<T>({
               : ''
           } ${column.className ?? ''}`}
         >
-          <div className="truncate">
-            {column.render(row)}
-          </div>
+          <HorizontalScroll
+            variant="cell"
+            revealOnHover
+            className="whitespace-nowrap text-inherit"
+          >
+            <div className="min-w-full w-max select-text pr-2">
+              {column.render(row)}
+            </div>
+          </HorizontalScroll>
         </TableCell>
       ))}
     </TableRow>
@@ -178,7 +195,7 @@ export function DenseDataTable<T>({
   return (
     <div
       ref={containerRef}
-      className="min-h-0 flex-1 overflow-auto bg-transparent font-mono text-[11px]"
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-transparent font-mono text-[11px]"
       onScroll={handleScroll}
     >
       <Table className="text-[11px]">
