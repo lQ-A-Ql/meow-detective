@@ -4,23 +4,15 @@ import { I18nextProvider } from 'react-i18next';
 import i18n from '@/i18n';
 import { subscribeToEvent } from '@/lib/events/subscribers';
 import {
+  PROJECTION_EVENT_TOPICS,
   invalidateCacheStatusQueries,
   invalidateEventProjectionQueries,
   invalidatePartialResultQueries,
 } from '@/features/cache-invalidation';
-import type { EventTopic, IndexCacheStatus, PartialResult } from '@/types/models';
-
-const projectionEventTopics: EventTopic[] = [
-  'case-opened',
-  'case-closed',
-  'data-source-imported',
-  'artifact-added',
-  'timeline-updated',
-  'search-index-progress',
-];
+import type { IndexCacheStatus, PartialResult } from '@/types/models';
 
 function subscribeToProjectionInvalidations(queryClient: QueryClient) {
-  const unsubs = projectionEventTopics.map((topic) =>
+  const unsubs = PROJECTION_EVENT_TOPICS.map((topic) =>
     subscribeToEvent(topic, () => {
       invalidateEventProjectionQueries(queryClient, topic);
     }),

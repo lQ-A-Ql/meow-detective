@@ -34,6 +34,10 @@ export const COMMANDS = {
     READ_MEDIA_RANGE: 'read_media_range',
     EXTRACT_FILE: 'extract_file',
     GET_FILE_JUMP_CONTEXT: 'get_file_jump_context',
+    LIST_DELETED_RECOVERIES: 'list_deleted_recoveries',
+    RUN_DELETED_RECOVERY: 'run_deleted_recovery',
+    READ_DELETED_RECOVERY_RANGE: 'read_deleted_recovery_range',
+    EXPORT_DELETED_RECOVERY: 'export_deleted_recovery',
   },
   jobs: {
     GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',

@@ -2,13 +2,17 @@
 pub struct NetworkAdapterInfo {
     pub guid: String,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub mac_address: Option<String>,
-    pub ip_address: Option<String>,
-    pub subnet_mask: Option<String>,
-    pub gateway: Option<String>,
+    pub permanent_mac_address: Option<String>,
+    pub ip_addresses: Vec<String>,
+    pub subnet_masks: Vec<String>,
+    pub gateways: Vec<String>,
     pub dhcp_server: Option<String>,
     pub dhcp_enabled: Option<bool>,
     pub dns_servers: Vec<String>,
+    pub pnp_instance_id: Option<String>,
+    pub service_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

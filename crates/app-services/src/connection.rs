@@ -17,3 +17,12 @@ pub fn open_case_db(path: &Path) -> Result<Connection, persistence_sqlite::DbErr
     persistence_sqlite::runner::run_all(&conn)?;
     Ok(conn)
 }
+
+/// Open an already initialized case database without rerunning migrations.
+///
+/// Background workers use this path after the parent job has initialized the
+/// case. Avoiding repeated migration checks keeps concurrent cluster members
+/// out of the schema runner and leaves SQLite writes to the normal WAL path.
+pub fn open_existing_case_db(path: &Path) -> Result<Connection, persistence_sqlite::DbError> {
+    persistence_sqlite::connection::open_existing(path)
+}

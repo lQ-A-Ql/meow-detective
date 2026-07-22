@@ -56,8 +56,11 @@ fn extract_boot_events(
 
         if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
             let event_type = match event.kind {
-                EvtxBootEventKind::EventLogStarted => "Boot",
-                EvtxBootEventKind::EventLogStopped
+                EvtxBootEventKind::OperatingSystemStarted | EvtxBootEventKind::EventLogStarted => {
+                    "Boot"
+                }
+                EvtxBootEventKind::OperatingSystemShutdown
+                | EvtxBootEventKind::EventLogStopped
                 | EvtxBootEventKind::PlannedShutdown
                 | EvtxBootEventKind::UnexpectedShutdown => "Shutdown",
                 _ => event.kind.as_str(),
@@ -163,6 +166,10 @@ fn boot_event_attrs(
     event: &EvtxBootEvent,
 ) -> BTreeMap<String, Value> {
     let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "timestamp".to_string(),
+        Value::String(event.timestamp.clone()),
+    );
     attrs.insert(
         "eventId".to_string(),
         Value::Number(serde_json::Number::from(event.event_id)),
@@ -354,3 +361,7 @@ fn parse_event_timestamp(raw: &str) -> Result<DateTime<Utc>, AnalysisServiceErro
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|err| AnalysisServiceError::Other(format!("parse EVTX timestamp {raw}: {err}")))
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/analysis_service/extraction/evtx.rs"]
+mod tests;

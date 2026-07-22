@@ -1,9 +1,12 @@
 use transport::commands::{
-    AppSettingsDto, ClassifyFilesRequest, ExportScopeDto, ExtractFileRequest, FileSortDirectionDto,
-    FileSortKeyDto, GetArtifactByIdRequest, GetFileChildrenRequest, GetFileJumpContextRequest,
+    AppSettingsDto, ClassifyFilesRequest, ExportDeletedRecoveryRequest, ExportScopeDto,
+    ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto, GetArtifactByIdRequest,
+    GetEvtxEventSummaryRequest, GetFileChildrenRequest, GetFileJumpContextRequest,
     GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest, GetTimelineRequest,
     ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
+    ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest, RunDeletedRecoveryRequest,
 };
+use transport::dto::EvtxEventViewDto;
 
 #[test]
 fn classify_files_request_deserializes_sample_size() {
@@ -13,6 +16,19 @@ fn classify_files_request_deserializes_sample_size() {
 
     assert_eq!(request.data_source_id, "ds-1");
     assert_eq!(request.sample_size, Some(1000));
+}
+
+#[test]
+fn evtx_summary_request_deserializes_view_and_bounds_page_size() {
+    let mut request: GetEvtxEventSummaryRequest = serde_json::from_str(
+        r#"{"dataSourceId":"ds-1","view":"process","offset":500,"limit":999999}"#,
+    )
+    .unwrap();
+
+    request.validate().unwrap();
+    assert_eq!(request.view, Some(EvtxEventViewDto::Process));
+    assert_eq!(request.offset, 500);
+    assert_eq!(request.limit, 500);
 }
 
 #[test]
@@ -240,6 +256,50 @@ fn file_jump_context_request_deserializes_sort_and_limit() {
     assert_eq!(request.page_limit, 250);
     assert_eq!(request.sort_key, FileSortKeyDto::ModifiedAt);
     assert_eq!(request.sort_direction, FileSortDirectionDto::Desc);
+}
+
+#[test]
+fn deleted_recovery_requests_validate_source_and_bound_page_size() {
+    let run: RunDeletedRecoveryRequest =
+        serde_json::from_str(r#"{"dataSourceId":"source-1","partitionIndex":2}"#).unwrap();
+    assert!(run.validate().is_ok());
+
+    let mut list: ListDeletedRecoveriesRequest = serde_json::from_str(
+        r#"{"dataSourceId":"source-1","partitionIndex":2,"offset":100,"limit":999999}"#,
+    )
+    .unwrap();
+    list.validate().unwrap();
+    assert_eq!(list.limit, 500);
+
+    let invalid = RunDeletedRecoveryRequest {
+        data_source_id: "../source".to_string(),
+        partition_index: None,
+    };
+    assert!(invalid.validate().is_err());
+}
+
+#[test]
+fn deleted_recovery_content_requests_validate_identity_range_and_destination() {
+    let recovery_id = format!("recovery:{}", "a".repeat(64));
+    let mut read = ReadDeletedRecoveryRangeRequest {
+        data_source_id: "source-1".to_string(),
+        recovery_id: recovery_id.clone(),
+        offset: 0,
+        length: u32::MAX,
+    };
+    read.validate().unwrap();
+    assert_eq!(read.length, 1024 * 1024);
+
+    let export = ExportDeletedRecoveryRequest {
+        data_source_id: "source-1".to_string(),
+        recovery_id,
+        destination_path: "D:/exports/recovered.bin".to_string(),
+        overwrite: false,
+    };
+    export.validate().unwrap();
+
+    read.recovery_id = "candidate-1".to_string();
+    assert!(read.validate().is_err());
 }
 
 #[test]

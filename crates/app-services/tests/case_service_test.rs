@@ -212,6 +212,97 @@ fn open_case_reads_metadata() {
 }
 
 #[test]
+fn open_case_migrates_ready_source_partition_routing_before_reads() {
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(tmp.path(), "source-reopen", None).unwrap();
+    let case_root = active.case_root.clone();
+    let source = test_data_source(
+        "ds-source-reopen",
+        "Linux source",
+        tmp.path().join("linux.E01"),
+    );
+    let mut storage = DataSourceStorage::source_db(&source.id.0, Some("linux"), None);
+    storage.import_state = "ready".to_string();
+
+    active
+        .with_conn(|case_conn| {
+            DataSourceRepo::new(case_conn).insert_with_storage(
+                &active.meta.id,
+                &source,
+                &storage,
+            )?;
+            let source_conn = source_db::open_source_db(&case_root, &source.id)?;
+            DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(&active.meta.id, &source)?;
+            source_conn.execute(
+                "INSERT INTO file_entries
+                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
+                 VALUES (?1, NULL, ?2, '', 'Partition 2 (XFS) - cl/root', 'directory', NULL)",
+                rusqlite::params!["root-2", source.id.0],
+            )?;
+            source_conn.execute(
+                "INSERT INTO file_entries
+                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
+                 VALUES (?1, ?2, ?3, 'etc', 'etc', 'directory', NULL)",
+                rusqlite::params!["etc", "root-2", source.id.0],
+            )?;
+            source_conn.execute(
+                "INSERT INTO file_entries
+                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
+                 VALUES (?1, ?2, ?3, 'etc/passwd', 'passwd', 'file', NULL)",
+                rusqlite::params!["passwd", "etc", source.id.0],
+            )?;
+            source_conn.execute(
+                "DELETE FROM schema_migrations
+                 WHERE name = 'source_022_file_partition_index_repair'",
+                [],
+            )?;
+            source_db::checkpoint_source_db(&source_conn)?;
+            drop(source_conn);
+            case_conn.execute(
+                "UPDATE data_sources
+                 SET schema_version = 'source_021_cephfs_assembly_capability'
+                 WHERE id = ?1",
+                [&source.id.0],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    drop(active);
+
+    let reopened = case_service::open_case(&case_root).unwrap();
+    reopened
+        .with_conn(|case_conn| {
+            let updated = DataSourceRepo::new(case_conn)
+                .find_storage(&source.id)?
+                .expect("source storage metadata");
+            assert_eq!(
+                updated.schema_version.as_deref(),
+                Some(persistence_sqlite::runner::latest_source_version())
+            );
+            Ok(())
+        })
+        .unwrap();
+
+    let source_conn = source_db::open_source_db(&case_root, &source.id).unwrap();
+    let schema_version = persistence_sqlite::runner::current_version(&source_conn).unwrap();
+    assert_eq!(
+        schema_version.as_deref(),
+        Some(persistence_sqlite::runner::latest_source_version())
+    );
+    for (id, expected) in [("root-2", 2_i64), ("etc", 2_i64), ("passwd", 2_i64)] {
+        let partition_index: Option<i64> = source_conn
+            .query_row(
+                "SELECT partition_index FROM file_entries WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(partition_index, Some(expected), "{id}");
+    }
+}
+
+#[test]
 fn case_platform_validation_rejects_retired_macos_without_blocking_deletion() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(&tmp.path().join("cases"), "retired-macos", None)

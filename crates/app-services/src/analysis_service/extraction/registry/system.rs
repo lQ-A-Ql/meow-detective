@@ -20,15 +20,39 @@ pub(super) fn network_adapter_artifacts(
                 "name".to_string(),
                 Value::String(adapter.name.clone().unwrap_or_else(|| adapter.guid.clone())),
             );
+            if let Some(description) = &adapter.description {
+                attrs.insert(
+                    "description".to_string(),
+                    Value::String(description.clone()),
+                );
+            }
             if let Some(mac) = &adapter.mac_address {
                 attrs.insert("macAddress".to_string(), Value::String(mac.clone()));
             }
-            if let Some(ip) = &adapter.ip_address {
+            if let Some(mac) = &adapter.permanent_mac_address {
+                attrs.insert(
+                    "permanentMacAddress".to_string(),
+                    Value::String(mac.clone()),
+                );
+            }
+            if let Some(ip) = adapter.ip_addresses.first() {
                 attrs.insert("ipAddress".to_string(), Value::String(ip.clone()));
             }
-            if let Some(gateway) = &adapter.gateway {
+            attrs.insert(
+                "ipAddresses".to_string(),
+                string_array_value(&adapter.ip_addresses),
+            );
+            attrs.insert(
+                "subnetMasks".to_string(),
+                string_array_value(&adapter.subnet_masks),
+            );
+            if let Some(gateway) = adapter.gateways.first() {
                 attrs.insert("gateway".to_string(), Value::String(gateway.clone()));
             }
+            attrs.insert(
+                "gateways".to_string(),
+                string_array_value(&adapter.gateways),
+            );
             if let Some(dhcp_server) = &adapter.dhcp_server {
                 attrs.insert("dhcpServer".to_string(), Value::String(dhcp_server.clone()));
             }
@@ -37,15 +61,20 @@ pub(super) fn network_adapter_artifacts(
             }
             attrs.insert(
                 "dnsServers".to_string(),
-                Value::Array(
-                    adapter
-                        .dns_servers
-                        .iter()
-                        .cloned()
-                        .map(Value::String)
-                        .collect(),
-                ),
+                string_array_value(&adapter.dns_servers),
             );
+            if let Some(pnp_instance_id) = &adapter.pnp_instance_id {
+                attrs.insert(
+                    "pnpInstanceId".to_string(),
+                    Value::String(pnp_instance_id.clone()),
+                );
+            }
+            if let Some(service_name) = &adapter.service_name {
+                attrs.insert(
+                    "serviceName".to_string(),
+                    Value::String(service_name.clone()),
+                );
+            }
             attrs.insert(
                 "parser".to_string(),
                 Value::String("registry.system.network".to_string()),
@@ -59,7 +88,11 @@ pub(super) fn network_adapter_artifacts(
                 format!(
                     "Adapter {} (IP: {}, MAC: {})",
                     adapter.name.as_deref().unwrap_or(&adapter.guid),
-                    adapter.ip_address.as_deref().unwrap_or("-"),
+                    adapter
+                        .ip_addresses
+                        .first()
+                        .map(String::as_str)
+                        .unwrap_or("-"),
                     adapter.mac_address.as_deref().unwrap_or("-")
                 ),
                 candidate,

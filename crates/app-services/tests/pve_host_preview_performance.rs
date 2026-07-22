@@ -27,6 +27,8 @@ const SEQUENTIAL_64_KIB_COUNT: usize = 16;
 const SEQUENTIAL_1_MIB_COUNT: usize = 4;
 const WARM_REPEAT_COUNT: usize = 12;
 const MAX_DIRECTORY_DEPTH: usize = 64;
+const MAX_EXT4_JOURNAL_BYTES: usize = 128 * 1024 * 1024;
+const MAX_EXT4_RECOVERY_SECONDS: u64 = 180;
 const FINGERPRINT_SAMPLE_BYTES: usize = 64 * 1024;
 const FIXED_ORACLE_JSON: &str =
     include_str!("../../../testdata/real-samples/pve-host-ext4-preview-oracle.json");
@@ -202,6 +204,75 @@ fn pve_host_ext4_native_preview_performance() {
     println!(
         "PVE_HOST_PREVIEW_METRICS {}",
         serde_json::to_string(&report).expect("serialize PVE host preview metrics")
+    );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT with the private PVE cluster E01 sample"]
+fn pve_host_ext4_deleted_recovery_is_bounded_and_proven() {
+    let started = Instant::now();
+    let cluster_root = required_cluster_root();
+    let member = select_host_member(&cluster_root);
+    let candidate = discover_pve_root_ext4(&member);
+    let filesystem = open_pve_root_ext4(&member, &candidate);
+    let journal = filesystem
+        .read_internal_journal(MAX_EXT4_JOURNAL_BYTES)
+        .expect("pve/root internal ext4 journal should fit the bounded recovery snapshot");
+    assert!(!journal.is_empty());
+    assert!(journal.len() <= MAX_EXT4_JOURNAL_BYTES);
+
+    let candidates = fs_ext4::journal::recover_deleted_inodes(&filesystem, &journal)
+        .expect("pve/root JBD2 journal should remain parseable");
+    for candidate in &candidates {
+        for range in &candidate.content_mapping.ranges {
+            if range.kind == fs_ext4::journal::DeletedContentRangeKind::RecoverableData {
+                assert_eq!(
+                    range.allocation_state,
+                    fs_ext4::journal::RecoveryAllocationState::Free
+                );
+                assert!(range.filesystem_source_offset.is_some());
+                assert!(range.sha256.is_some());
+            }
+        }
+        match candidate.completeness {
+            fs_ext4::journal::RecoveryCompleteness::Complete => {
+                assert_eq!(
+                    candidate.content_mapping.inode_allocation_state,
+                    fs_ext4::journal::RecoveryAllocationState::Free
+                );
+                assert_eq!(candidate.recoverable_bytes, candidate.declared_size);
+                assert!(candidate.content_mapping.content_sha256.is_some());
+                assert_eq!(
+                    candidate.content_mapping.data_allocation_state,
+                    fs_ext4::journal::RecoveryAllocationState::Free
+                );
+            }
+            fs_ext4::journal::RecoveryCompleteness::Partial => {
+                assert!(candidate.recoverable_bytes > 0);
+                assert!(candidate.recoverable_bytes < candidate.declared_size);
+            }
+            fs_ext4::journal::RecoveryCompleteness::MetadataOnly => {
+                assert_eq!(candidate.recoverable_bytes, 0);
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    eprintln!(
+        "PVE ext4 deleted recovery: member={} journal_bytes={} candidates={} elapsed_ms={} peak_rss_mb={}",
+        member
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown"),
+        journal.len(),
+        candidates.len(),
+        elapsed.as_millis(),
+        peak_rss_mb()
+    );
+    assert!(
+        elapsed <= Duration::from_secs(MAX_EXT4_RECOVERY_SECONDS),
+        "bounded PVE ext4 journal recovery exceeded {} seconds: {:?}",
+        MAX_EXT4_RECOVERY_SECONDS,
+        elapsed
     );
 }
 

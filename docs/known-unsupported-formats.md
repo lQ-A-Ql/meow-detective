@@ -43,7 +43,9 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | ext4 raw disk 完整支持 | 部分支持 | PVE 私有样本已验证 E01 -> LVM direct root LV -> 64-bit EXT4（64-byte group descriptor）-> 完整文件树、inode size 与 `FileEntryId` 预览；仍缺公开 fixture / expected JSON、metadata checksum 与全部 feature 组合覆盖 |
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
-| Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
+| Linux 文件系统 | ext4 已删除文件恢复的全部组合 | Partial | 当前只支持 JBD2 证据驱动的 direct extent depth-0 候选；complete 候选可导出，partial 候选只能读取连续 verified range；间接 extent、目录恢复、复杂 feature 组合和全盘 carving 不承诺 |
+| Linux 文件系统 | XFS 已删除文件内容恢复 | Partial | XFS log 可报告明确删除证据与 metadata-only 候选；未经过 allocation/SHA-256 完整验证的内容不会提供预览或导出 |
+| Linux 文件系统 | Btrfs 已删除文件恢复与 carving | 不承诺 | 当前没有 Btrfs 删除恢复实现 |
 | Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore/RocksDB/semantic/OMAP、source-bound RADOS range reader 已验证。私有样本显式加载的三 OSD inventory 可重建 `vm-100-disk-0`，派生独立 source DB 含直接 XFS、`centos/home`、`centos/root` 和 114,260 条文件记录。代表文件覆盖 `1,019 B` 至 `614,794,240 B`、连续/随机/文件尾 bounded range；大文件整文件 materialize 与 request-local runtime 缺陷已修复。提交 `db49698a` 的三轮统一门禁以检材3原生 XFS 和 PVE 宿主 EXT4 为固定对照，验证 viewer/media 字节一致及 source/case invalidation 冷重建；RBD cold runtime 中位为 `3.186s`，RSS delta 为 `399-448 MiB`。浏览器端 media 时序与容量 LRU eviction 尚未建立私有样本门禁。inventory 完整性尚未独立证明，通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联仍不支持 |
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
@@ -99,7 +101,7 @@ V2 长期计划与能力评级请同时参考：
 - macOS 数据源分析、制品提取、治理覆盖字段或前端入口；Windows/Linux 是仅有生产平台
 - APFS/HFS+ 内容解析；已知 Apple 分区类型标识符识别仅是 metadata，不得被表述为 filesystem magic/signature 或 reader 支持
 - 旧 `platform='macos'` 案件迁移；必须返回 typed unsupported，并仅对可归类为 Windows/Linux 的证据重新建案导入
-- Linux 文件系统已删除文件恢复；APFS/HFS+ 当前连内容 reader 都不提供
+- Btrfs 已删除文件恢复与全盘 carving；XFS 未验证内容恢复；APFS/HFS+ 当前连内容 reader 都不提供
 - PST 加密消息支持
 - PST 全 MAPI 属性级精度
 - iOS/Android 移动设备制品

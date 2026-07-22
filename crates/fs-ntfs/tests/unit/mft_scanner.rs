@@ -16,6 +16,7 @@ fn make_test_record(_record_number: u64, name: &str, parent: u64, is_dir: bool) 
     // Flags: bit 0 = in use, bit 1 = directory
     let flags: u16 = if is_dir { 0x03 } else { 0x01 };
     rec[0x16..0x18].copy_from_slice(&flags.to_le_bytes());
+    rec[0x10..0x12].copy_from_slice(&7u16.to_le_bytes());
 
     let mut pos = attr_off as usize;
 
@@ -191,6 +192,7 @@ fn parse_valid_file_record() {
     let rec = make_test_record(100, "test.txt", 5, false);
     let result = parser.parse(&rec, 100).unwrap();
     assert_eq!(result.name, "test.txt");
+    assert_eq!(result.sequence_number, 7);
     assert_eq!(result.parent_ref, 5);
     assert!(!result.is_dir);
     assert!(!result.deleted);
@@ -252,6 +254,7 @@ fn parse_inactive_record() {
     let result = parser.parse(&rec, 500).unwrap();
     assert_eq!(result.name, "deleted.txt");
     assert!(result.deleted);
+    assert_eq!(result.sequence_number, 7);
     assert!(!result.is_dir);
 }
 
@@ -305,4 +308,20 @@ fn ntfs_time_conversion() {
 #[test]
 fn zero_time_returns_none() {
     assert!(ntfs_to_datetime(0).is_none());
+}
+
+#[test]
+fn active_and_inactive_records_keep_the_same_mft_sequence_identity() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let active = parser
+        .parse(&make_test_record(600, "active.txt", 5, false), 600)
+        .unwrap();
+    let mut inactive_bytes = make_test_record(600, "deleted.txt", 5, false);
+    inactive_bytes[0x16..0x18].copy_from_slice(&0u16.to_le_bytes());
+    let inactive = parser.parse(&inactive_bytes, 600).unwrap();
+
+    assert!(!active.deleted);
+    assert!(inactive.deleted);
+    assert_eq!(active.record_number, inactive.record_number);
+    assert_eq!(active.sequence_number, inactive.sequence_number);
 }

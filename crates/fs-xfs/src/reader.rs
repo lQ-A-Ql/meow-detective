@@ -1,5 +1,6 @@
 use crate::directory::BoundedDirectoryEntryCache;
 use crate::inode_cache::BoundedInodeBlockCache;
+use crate::log::XfsLogGeometry;
 use evidence_core::filesystem::{invalid_fs_data, FileSystemDiagnostic, FileSystemReadMetrics};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -11,6 +12,7 @@ pub(crate) const XFS_SUPER_MAGIC: u32 = 0x5846_5342;
 pub(crate) const XFS_INODE_MAGIC: u16 = 0x494E;
 pub(crate) const BMAP_MAGIC: u32 = 0x424D_4150;
 pub(crate) const BMA3_MAGIC: u32 = 0x424D_4133;
+pub(crate) const S_IFMT: u16 = 0xF000;
 pub(crate) const S_IFDIR: u16 = 0x4000;
 pub(crate) const FORMAT_LOCAL: u8 = 1;
 pub(crate) const FORMAT_EXTENTS: u8 = 2;
@@ -37,9 +39,14 @@ pub(crate) mod sb_off {
     pub const MAGIC: usize = 0x00;
     pub const BLOCKSIZE: usize = 0x04;
     pub const DBLOCKS: usize = 0x08;
+    pub const UUID: usize = 0x20;
+    pub const LOGSTART: usize = 0x30;
     pub const ROOTINO: usize = 0x38;
     pub const AGBLOCKS: usize = 0x54;
     pub const AGCOUNT: usize = 0x58;
+    pub const LOGBLOCKS: usize = 0x60;
+    pub const VERSIONNUM: usize = 0x64;
+    pub const SECTSIZE: usize = 0x66;
     pub const INODESIZE: usize = 0x68;
     pub const INOPBLOCK: usize = 0x6A;
     pub const INOPBLOG: usize = 0x7B;
@@ -48,6 +55,7 @@ pub(crate) mod sb_off {
     pub const BAD_FEATURES2: usize = 0xCC;
     pub const FEATURES_INCOMPAT: usize = 0xD8;
     pub const DIRBLKLOG: usize = 0xC0;
+    pub const LOGSECTSIZE: usize = 0xC2;
 }
 
 pub(crate) mod di_off {
@@ -110,6 +118,7 @@ pub struct XfsReader {
     pub(crate) inopblog: u8,
     pub(crate) dirblklog: u8,
     pub(crate) has_ftype: bool,
+    pub(crate) log_geometry: XfsLogGeometry,
 }
 
 impl XfsReader {
@@ -153,6 +162,7 @@ impl XfsReader {
         let features_incompat = be_u32(&sb_buf, sb_off::FEATURES_INCOMPAT);
         let has_ftype = (features2 & XFS_SB_VERSION2_FTYPE) != 0
             || (features_incompat & XFS_SB_FEAT_INCOMPAT_FTYPE) != 0;
+        let log_geometry = XfsLogGeometry::from_superblock(&sb_buf);
         let inode_cache_page_size =
             aligned_inode_cache_page_size(block_size, reader.preferred_read_granularity());
         let mut directory_path_cache = HashMap::new();
@@ -182,6 +192,7 @@ impl XfsReader {
             inopblog,
             dirblklog,
             has_ftype,
+            log_geometry,
         })
     }
 
@@ -359,7 +370,9 @@ impl XfsReader {
     }
 
     pub(crate) fn inode_is_dir(inode: &[u8]) -> bool {
-        (be_u16(inode, di_off::MODE) & S_IFDIR) != 0
+        // Compare the complete POSIX file-type field; sockets and symlinks
+        // also carry the directory bit when tested with a bare bitwise AND.
+        (be_u16(inode, di_off::MODE) & S_IFMT) == S_IFDIR
     }
 }
 

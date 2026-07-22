@@ -19,14 +19,23 @@ import type {
   EmailExtractionSummary,
   EvidenceClassificationSummary,
   EvtxEventSummary,
+  EvtxEventView,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
 } from '@/types/models';
 import type { AnalysisTabKey } from '@/features/analysis/types';
+import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
+import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
 
 interface QueryState<T> {
   data?: T;
   isLoading: boolean;
+}
+
+interface InfiniteQueryState<T> extends QueryState<T> {
+  hasNextPage?: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
 }
 
 export interface WindowsAnalysisViewProps {
@@ -41,12 +50,15 @@ export interface WindowsAnalysisViewProps {
   registryStructured?: RegistryStructuredSummary;
   browserSummary: QueryState<BrowserHistorySummary>;
   emailSummary: QueryState<EmailExtractionSummary>;
-  eventLogSummary: QueryState<EvtxEventSummary>;
+  eventLogSummary: InfiniteQueryState<EvtxEventSummary>;
+  eventLogView: EvtxEventView;
+  onEventLogViewChange: (view: EvtxEventView) => void;
   classifications: QueryState<AnalysisFileClassification[]>;
   evidencePending: boolean;
   onRunEvidence: () => void;
   summaryPending: boolean;
   onDownloadSummary: () => void;
+  recoveryModel: DeletedRecoveryViewModel;
 }
 
 export function WindowsAnalysisView({
@@ -62,11 +74,14 @@ export function WindowsAnalysisView({
   browserSummary,
   emailSummary,
   eventLogSummary,
+  eventLogView,
+  onEventLogViewChange,
   classifications,
   evidencePending,
   onRunEvidence,
   summaryPending,
   onDownloadSummary,
+  recoveryModel,
 }: WindowsAnalysisViewProps) {
   const { t } = useTranslation();
 
@@ -135,7 +150,16 @@ export function WindowsAnalysisView({
               {eventLogSummary.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.eventLogs')} />
               ) : (
-                <EventLogPanel summary={eventLogSummary.data} />
+                <EventLogPanel
+                  summary={eventLogSummary.data}
+                  activeView={eventLogView}
+                  onActiveViewChange={onEventLogViewChange}
+                  hasMore={Boolean(eventLogSummary.hasNextPage)}
+                  loadingMore={eventLogSummary.isFetchingNextPage}
+                  onLoadMore={() => {
+                    void eventLogSummary.fetchNextPage();
+                  }}
+                />
               )}
             </TabsContent>
 
@@ -149,6 +173,10 @@ export function WindowsAnalysisView({
 
             <TabsContent value="report" className="m-0 data-[state=inactive]:hidden">
               <AnalysisReportPanel pending={summaryPending} onDownload={onDownloadSummary} />
+            </TabsContent>
+
+            <TabsContent value="deletedRecovery" className="m-0 data-[state=inactive]:hidden">
+              <DeletedRecoveryPanel model={recoveryModel} />
             </TabsContent>
           </>
         )}

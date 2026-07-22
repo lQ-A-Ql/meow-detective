@@ -44,7 +44,7 @@ pub(super) fn linux_summary_observability(
         ));
     } else if candidate_count > parsed_candidate_count && total_count > 0 {
         warnings.push(format!(
-            "Parsed {parsed_candidate_count} of {candidate_count} Linux artifact candidate source(s); unsupported or empty sources may require manual review."
+            "Structured output coverage is {parsed_candidate_count} of {candidate_count} Linux artifact candidate source(s). Sources without structured output may be empty, unsupported, or handled by the generic text parser; this is a coverage summary, not live extraction progress."
         ));
     }
 

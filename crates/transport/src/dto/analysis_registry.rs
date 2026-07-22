@@ -108,6 +108,32 @@ pub struct NetworkProfileDto {
     pub source_key_path: String,
 }
 
+/// A network adapter and its TCP/IP configuration recovered from the SYSTEM hive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryNetworkAdapterDto {
+    pub guid: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mac_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permanent_mac_address: Option<String>,
+    pub ip_addresses: Vec<String>,
+    pub subnet_masks: Vec<String>,
+    pub gateways: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dhcp_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dhcp_server: Option<String>,
+    pub dns_servers: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pnp_instance_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_name: Option<String>,
+}
+
 // Installed Software (structured view)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -405,6 +431,7 @@ pub struct RegistryStructuredSummaryDto {
     pub hive_overviews: Vec<RegistryHiveOverviewDto>,
     pub sam_users: Vec<SamUserAccountDto>,
     pub user_assist_entries: Vec<UserAssistEntryDto>,
+    pub network_adapters: Vec<RegistryNetworkAdapterDto>,
     pub network_profiles: Vec<NetworkProfileDto>,
     pub installed_software: Vec<InstalledSoftwareDto>,
     pub usb_devices: Vec<UsbDeviceHistoryDto>,

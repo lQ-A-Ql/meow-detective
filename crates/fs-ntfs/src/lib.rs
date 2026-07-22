@@ -11,14 +11,17 @@ mod compression;
 mod data_runs;
 mod directory;
 mod mft;
+mod mft_stream;
 mod path;
 mod reader;
+mod recovery;
 mod utils;
 
 pub use attribute::{AttributeListEntry, DataAttributeExtent};
 pub use data_runs::DataRun;
 pub use directory::NtfsDirectoryEntry;
 pub use mft::{NtfsPreviewFile, NtfsReader};
+pub use recovery::{NtfsAllocationState, NtfsDataExtent, NtfsDeletedFileRecord};
 pub use utils::parse_mft_data_real_size;
 
 pub(crate) use evidence_core::filesystem::{

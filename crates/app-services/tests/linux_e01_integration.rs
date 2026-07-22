@@ -25,7 +25,8 @@ use app_services::{
     },
     file_service,
     import_pipeline::{
-        enumerate_image_data_source, format_partition_record_root_name, format_partition_root_name,
+        enumerate_image_data_source, execute_import_job_with_counts,
+        format_partition_record_root_name, format_partition_root_name, ImportJobOptions,
     },
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, FileEntryId};
@@ -38,9 +39,12 @@ use persistence_sqlite::repositories::{
 };
 use rusqlite::Connection;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use transport::dto::{AnalysisExtractionRunDto, AnalysisParseStatusDto, ViewerRangeRequestDto};
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
@@ -949,26 +953,121 @@ fn open_root_lv_xfs() -> fs_xfs::XfsReader {
     fs_xfs::XfsReader::open(Box::new(root_reader), 0).expect("root LV should mount as XFS")
 }
 
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_xfs_log_scan_is_bounded_and_never_promotes_unproven_metadata() {
+    let started = Instant::now();
+    let fs = open_root_lv_xfs();
+    let snapshot = fs
+        .read_internal_log_snapshot(fs_xfs::log::XFS_LOG_MAX_SNAPSHOT_BYTES)
+        .expect("the real root LV should expose a readable internal XFS log");
+    assert!(!snapshot.bytes.is_empty());
+    assert!(snapshot.bytes.len() <= fs_xfs::log::XFS_LOG_MAX_SNAPSHOT_BYTES);
+
+    let analysis =
+        fs_xfs::log::analyze_log_snapshot(&snapshot, fs_xfs::log::XfsLogParseLimits::default())
+            .expect("the bounded real XFS log snapshot should be analyzable");
+    assert!(analysis.metadata_candidates.iter().all(|candidate| {
+        candidate.deletion_status == fs_xfs::log::XfsDeletionStatus::NotProven
+    }));
+    assert!(analysis
+        .deleted_file_candidates
+        .iter()
+        .all(|candidate| { candidate.proof == fs_xfs::log::XfsDeletionProof::InodeCoreNlinkZero }));
+    assert!(
+        !analysis.deleted_file_candidates.is_empty()
+            || analysis.issues.iter().any(|issue| {
+                issue.kind == fs_xfs::log::XfsLogIssueKind::DeletionEvidenceUnavailable
+            }),
+        "an empty deleted-file set must retain the explicit proof boundary"
+    );
+    let elapsed = started.elapsed();
+    let issue_summary =
+        analysis
+            .issues
+            .iter()
+            .fold(BTreeMap::<String, usize>::new(), |mut counts, issue| {
+                let key = format!("{:?}: {}", issue.kind, issue.message);
+                *counts.entry(key).or_default() += 1;
+                counts
+            });
+    eprintln!(
+        "XFS recovery baseline: snapshot_bytes={} complete={} records={} transactions={} metadata_candidates={} deleted_candidates={} issues={} elapsed_ms={}",
+        snapshot.bytes.len(),
+        snapshot.complete,
+        analysis.records.len(),
+        analysis.transactions.len(),
+        analysis.metadata_candidates.len(),
+        analysis.deleted_file_candidates.len(),
+        analysis.issues.len(),
+        elapsed.as_millis(),
+    );
+    for (issue, count) in issue_summary.iter().take(20) {
+        eprintln!("XFS recovery issue summary: count={count} issue={issue}");
+    }
+    assert!(
+        elapsed < Duration::from_secs(180),
+        "bounded XFS log scan exceeded the three-minute real-sample safety budget: {elapsed:?}"
+    );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_xfs_special_file_directories_preserve_catalog_completeness() {
+    let fs = open_root_lv_xfs();
+    for (directory, expected_entry) in [
+        ("var/lib/mysql", "mysql.sock"),
+        ("var/spool/postfix/private", "tlsmgr"),
+        ("var/spool/postfix/public", "qmgr"),
+    ] {
+        let children = fs
+            .list_children(directory)
+            .unwrap_or_else(|error| panic!("list_children({directory}) failed: {error}"));
+        assert!(
+            children.iter().any(|child| child.name == expected_entry),
+            "{directory} should retain {expected_entry} from the real XFS directory entry"
+        );
+
+        let diagnostics = fs.take_diagnostics();
+        for diagnostic in &diagnostics {
+            eprintln!(
+                "{directory}: kind={:?} inode={:?} path={:?} message={}",
+                diagnostic.kind, diagnostic.inode, diagnostic.path, diagnostic.message
+            );
+        }
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| !diagnostic.kind.affects_catalog_completeness()),
+            "special-file metadata must not hide directory entries in {directory}: {diagnostics:?}"
+        );
+        assert!(
+            diagnostics.iter().all(|diagnostic| {
+                diagnostic.kind
+                    != evidence_core::filesystem::FileSystemDiagnosticKind::MetadataDegraded
+            }),
+            "valid special-file inodes must not produce degraded metadata diagnostics in {directory}: {diagnostics:?}"
+        );
+    }
+}
+
 fn create_linux_test_data_source(conn: &Connection, case_id: &str, ds_id: &DataSourceId) {
+    let source = DataSource {
+        id: ds_id.clone(),
+        name: "Linux E01".to_string(),
+        kind: DataSourceKind::E01,
+        source_path: fixture_path(),
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
     DataSourceRepo::new(conn)
-        .insert(
-            &CaseId(case_id.to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "Linux E01".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: fixture_path(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
+        .upsert_source_local_metadata(&CaseId(case_id.to_string()), &source)
         .unwrap();
 }
 
 fn setup_linux_fixture_case(case_id: &str, ds_id: &DataSourceId) -> Connection {
     let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    setup_case(&conn, case_id);
+    persistence_sqlite::runner::run_source_all(&conn).unwrap();
     create_linux_test_data_source(&conn, case_id, ds_id);
     conn
 }
@@ -1881,8 +1980,8 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
         summary
             .warnings
             .iter()
-            .any(|warning| warning.contains("Parsed ")
-                && warning.contains("Linux artifact candidate source(s)")),
+            .any(|warning| warning.contains("Structured output coverage is")
+                && warning.contains("coverage summary, not live extraction progress")),
         "post-extraction summary should report parsed/candidate coverage: {:?}",
         summary.warnings
     );
@@ -2003,12 +2102,8 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
         "tree regression should exercise the real cl/root logical volume"
     );
 
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    setup_case(&conn, "linux-e01-test");
-
     let ds_id = DataSourceId("e01-linux-ds".to_string());
-    create_linux_test_data_source(&conn, "linux-e01-test", &ds_id);
+    let conn = setup_linux_fixture_case("linux-e01-test", &ds_id);
     file_service::store_data_source_partitions(&conn, &ds_id, &probe.partitions).unwrap();
 
     let fs = open_root_lv_xfs();
@@ -3202,91 +3297,165 @@ fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
                 root.display()
             )
         });
-    let case_id = "pve-host-ext4-import-test";
-    let ds_id = DataSourceId("pve-host-ext4-source".to_string());
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    setup_case(&conn, case_id);
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId(case_id.to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "PVE host disk01".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: image_path.clone(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-
-    let stats = enumerate_image_data_source(
-        &conn,
-        &ds_id,
-        E01Reader::open(&image_path).unwrap(),
-        |pct, detail| {
-            eprintln!("PVE host import {pct}%: {detail}");
-            Ok(())
-        },
-        None,
-        None,
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "pve-host-ext4-import-test",
+        Some("PVE regression"),
+    )
+    .unwrap();
+    let config = app_services::import_precheck::prepare_import_source_config_from_path(
+        &image_path.to_string_lossy(),
+        domain::DataSourcePlatform::Linux,
     )
     .unwrap_or_else(|error| {
         panic!(
-            "PVE host image {} should import through the production pipeline: {error}",
+            "PVE host image {} should pass the production import pre-check: {error}",
             image_path.display()
         )
     });
-    eprintln!(
-        "PVE host import summary: files={} dirs={} total_bytes={} warnings={}",
-        stats.file_count,
-        stats.dir_count,
-        stats.total_size,
-        stats.warnings.len()
-    );
-    assert!(
-        stats.file_count >= 50_000
-            && stats.dir_count >= 5_000
-            && stats.total_size >= 4 * 1024 * 1024 * 1024,
-        "PVE host import should preserve the full tree and inode sizes, got files={} dirs={} total_bytes={} warnings={:?}",
-        stats.file_count,
-        stats.dir_count,
-        stats.total_size,
-        stats.warnings
-    );
-
-    for path in [
-        "/etc/passwd",
-        "/etc/os-release",
-        "/etc/hostname",
-        "/var/lib/pve-cluster/config.db",
-    ] {
-        let entry = find_linux_file_entry(&conn, &ds_id, path).unwrap_or_else(|| {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let job_id = active
+        .with_conn(|conn| {
+            persistence_sqlite::repositories::job_repo::JobRepo::new(conn)
+                .create(&active.meta.id.0, "PVE host import")
+        })
+        .unwrap();
+    let (_message, counts) = active
+        .with_conn(|conn| {
+            execute_import_job_with_counts(
+                conn,
+                &active.meta.id,
+                &active.case_root,
+                config,
+                &job_id,
+                ImportJobOptions {
+                    event_sink: None,
+                    cancel_token: &cancel,
+                    max_import_workers: Some(1),
+                    max_analysis_workers: Some(1),
+                    analysis_mode: app_services::import_analysis::ImportAnalysisMode::MetadataOnly,
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap_or_else(|error| {
             panic!(
-                "PVE host production import should persist {} from {}",
-                path,
+                "PVE host image {} should import through the production source-db pipeline: {error}",
                 image_path.display()
             )
         });
-        assert!(
-            entry.size > 0,
-            "PVE host imported file {} should persist its EXT4 inode size",
-            path
-        );
-        let bytes = file_service::read_file_header_by_id(&conn, &entry.file_id, 512)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "PVE host imported file {} should preview by FileEntryId {}: {error}",
-                    path, entry.file_id.0
+    let source = active
+        .with_conn(|conn| {
+            let sources = DataSourceRepo::new(conn).find_by_case(&active.meta.id)?;
+            assert_eq!(
+                sources.len(),
+                1,
+                "representative PVE case should register one source"
+            );
+            Ok(sources.into_iter().next().expect("registered PVE source"))
+        })
+        .unwrap();
+    let ds_id = source.id.clone();
+    let (file_count, dir_count, total_size) = active
+        .with_conn(|case_conn| {
+            let source_conn = app_services::source_db::open_ready_source_by_id(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                &ds_id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+            .connection;
+            let file_count: u64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM file_entries
+                 WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE",
+                [&ds_id.0],
+                |row| row.get(0),
+            )?;
+            let dir_count: u64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM file_entries
+                 WHERE data_source_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
+                [&ds_id.0],
+                |row| row.get(0),
+            )?;
+            let total_size: u64 = source_conn.query_row(
+                "SELECT COALESCE(SUM(size), 0) FROM file_entries
+                 WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE",
+                [&ds_id.0],
+                |row| row.get(0),
+            )?;
+            for path in [
+                "/etc/passwd",
+                "/etc/os-release",
+                "/etc/hostname",
+                "/var/lib/pve-cluster/config.db",
+            ] {
+                let entry =
+                    find_linux_file_entry(&source_conn, &ds_id, path).unwrap_or_else(|| {
+                        panic!(
+                            "PVE host production source.db should persist {} from {}",
+                            path,
+                            image_path.display()
+                        )
+                    });
+                assert!(
+                    entry.size > 0,
+                    "PVE host imported file {} should persist its EXT4 inode size",
+                    path
+                );
+                let global_id =
+                    app_services::source_db::GlobalFileId::new(ds_id.clone(), entry.file_id)
+                        .encode();
+                let handle = file_service::open_file_handle_for_case(
+                    case_conn,
+                    &active.case_root,
+                    &active.meta.id,
+                    &global_id.0,
                 )
-            });
-        assert!(
-            !bytes.is_empty(),
-            "PVE host imported file {} should return preview bytes",
-            path
-        );
-    }
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "PVE host file {} should open through the global file-id route: {error}",
+                        path
+                    )
+                });
+                let response = file_service::read_file_range_for_source_case(
+                    case_conn,
+                    &active.case_root,
+                    &active.meta.id,
+                    &ViewerRangeRequestDto {
+                        handle_id: handle.handle_id,
+                        offset: 0,
+                        length: 512,
+                    },
+                )
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "PVE host file {} should preview through the global file-id route: {error}",
+                        path
+                    )
+                });
+                assert!(
+                    response
+                        .raw_bytes
+                        .as_ref()
+                        .is_some_and(|bytes| !bytes.is_empty()),
+                    "PVE host file {} should return preview bytes",
+                    path
+                );
+            }
+            Ok((file_count, dir_count, total_size))
+        })
+        .unwrap();
+    eprintln!(
+        "PVE host import summary: source={} files={} dirs={} total_bytes={} warnings={} failed={}",
+        ds_id.0, file_count, dir_count, total_size, counts.warning_count, counts.failed_count
+    );
+    assert!(
+        file_count >= 50_000 && dir_count >= 5_000 && total_size >= 4 * 1024 * 1024 * 1024,
+        "PVE host import should preserve the full tree and inode sizes, got files={} dirs={} total_bytes={} warnings={:?}",
+        file_count, dir_count, total_size, counts.warning_count
+    );
 }
 
 fn assert_lvm_root_lv_visible_without_expanded_pool_root(

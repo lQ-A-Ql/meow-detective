@@ -7,7 +7,7 @@
 
 pub const EVTX_PARSER_ID: &str = "evtx.boot_shutdown";
 pub const SUPPORTED_EVENT_IDS: &[u32] = &[
-    6005, 6006, 6008, 1074, // boot/shutdown
+    12, 13, 6005, 6006, 6008, 1074, // boot/shutdown
     4104, // PowerShell script block logging
     1,    // Sysmon process creation
     21,   // RDP session connect

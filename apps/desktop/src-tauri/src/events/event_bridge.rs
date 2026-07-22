@@ -1,15 +1,15 @@
 use tauri::{AppHandle, Emitter};
 use transport::dto::{
-    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
-    PartialResultDto, PerformanceReportDto,
+    AnalysisExtractionProgressDto, DataSourceSummaryDto, ImportPhaseProgressDto,
+    IndexCacheStatusDto, JobCancellationDto, PartialResultDto, PerformanceReportDto,
 };
 use transport::events::{
-    EventEnvelope, EventTopic, TOPIC_ARTIFACT_ADDED, TOPIC_CACHE_INDEX_STATUS, TOPIC_CASE_CLOSED,
-    TOPIC_CASE_OPENED, TOPIC_DATA_SOURCE_IMPORTED, TOPIC_IMPORT_PARTIAL_RESULT,
-    TOPIC_IMPORT_PHASE_PROGRESS, TOPIC_JOB_CANCELLATION, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED,
-    TOPIC_JOB_CREATED, TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED,
-    TOPIC_PARTITION_PROGRESS, TOPIC_PERFORMANCE_REPORT_READY, TOPIC_SEARCH_INDEX_PROGRESS,
-    TOPIC_TIMELINE_UPDATED,
+    EventEnvelope, EventTopic, TOPIC_ANALYSIS_EXTRACTION_PROGRESS, TOPIC_ARTIFACT_ADDED,
+    TOPIC_CACHE_INDEX_STATUS, TOPIC_CASE_CLOSED, TOPIC_CASE_OPENED, TOPIC_DATA_SOURCE_IMPORTED,
+    TOPIC_IMPORT_PARTIAL_RESULT, TOPIC_IMPORT_PHASE_PROGRESS, TOPIC_JOB_CANCELLATION,
+    TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED, TOPIC_JOB_FAILED,
+    TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
+    TOPIC_PERFORMANCE_REPORT_READY, TOPIC_SEARCH_INDEX_PROGRESS, TOPIC_TIMELINE_UPDATED,
 };
 
 pub fn emit_event<T: serde::Serialize + Clone>(
@@ -147,6 +147,51 @@ pub fn emit_job_cancellation(app: &AppHandle, cancellation: &JobCancellationDto)
             e
         );
     }
+}
+
+pub fn emit_analysis_extraction_progress(
+    app: &AppHandle,
+    progress: &AnalysisExtractionProgressDto,
+) {
+    let envelope = envelope(EventTopic::AnalysisExtractionProgress, progress.clone());
+    if let Err(error) = emit_event(app, TOPIC_ANALYSIS_EXTRACTION_PROGRESS, &envelope) {
+        tracing::warn!(
+            run_id = %progress.run_id,
+            category = %progress.category,
+            error = %error,
+            "Failed to emit analysis extraction progress"
+        );
+    }
+}
+
+pub fn emit_analysis_extraction_failed(
+    app: &AppHandle,
+    run_id: &str,
+    case_id: &str,
+    data_source_id: &str,
+    category: &str,
+    detail: &str,
+) {
+    let progress = AnalysisExtractionProgressDto {
+        run_id: run_id.to_string(),
+        case_id: case_id.to_string(),
+        data_source_id: data_source_id.to_string(),
+        category: category.to_string(),
+        label: category.to_string(),
+        phase: transport::dto::AnalysisExtractionPhaseDto::Failed,
+        total_candidates: 0,
+        processed_candidates: 0,
+        structured_candidates: 0,
+        unsupported_candidates: 0,
+        text_fallback_candidates: 0,
+        warning_candidates: 1,
+        checkpoint_hit_count: 0,
+        artifact_count: 0,
+        timeline_event_count: 0,
+        current_path: None,
+        detail: detail.to_string(),
+    };
+    emit_analysis_extraction_progress(app, &progress);
 }
 
 pub fn emit_data_source_imported(

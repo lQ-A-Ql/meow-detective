@@ -117,7 +117,7 @@
         "maxImportWorkers": "枚举 Worker 上限",
         "maxImportWorkersHint": "E01/RAW 分区枚举，空值使用自动。",
         "maxAnalysisWorkers": "分析 Worker 上限",
-        "maxAnalysisWorkersHint": "artifact/timeline/text 分析池，空值使用逻辑核心。",
+        "maxAnalysisWorkersHint": "artifact/timeline/text 分析池，空值使用有界自动调度（最多 6 个 Worker，内存紧张时自动降档）。",
         "importAnalysisMode": "导入分析模式",
         "metadataOnly": "Metadata only (E01/RAW 推荐)",
         "budgetedContent": "Budgeted content (目录导入推荐)",
@@ -444,7 +444,7 @@
     "empty": {
       "boot": {
         "title": "暂无开关机事件",
-        "description": "System.evtx 开关机候选事件（6005、6006、6008、1074）。"
+        "description": "System.evtx 操作系统与事件日志服务生命周期事件（12、13、6005、6006、6008、1074）。"
       },
       "logon": {
         "title": "暂无登录事件",

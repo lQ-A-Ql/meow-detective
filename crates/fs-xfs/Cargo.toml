@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-serde.workspace = true
 thiserror.workspace = true
 evidence-core.workspace = true
 

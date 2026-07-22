@@ -1,0 +1,153 @@
+[
+  {
+    "id": "1bcb02f3-0c83-4c74-a9df-03d2f2c2aced",
+    "family": "RegistrySamUser",
+    "title": "SAM User: Administrator",
+    "summary": "Local account Administrator (RID 500) status enabled",
+    "source_object_id": "sam",
+    "extractor_id": "registry.sam.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803493100Z",
+    "attrs": {
+      "accountStatus": "enabled",
+      "dataSourceId": "liuyang-ds",
+      "groups": [
+        "Administrators"
+      ],
+      "loginCount": 529,
+      "parser": "registry.sam",
+      "passwordHash": "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0",
+      "passwordHashType": "NTLM",
+      "rid": 500,
+      "ridHex": "000001f4",
+      "sid": "S-1-5-21-3769272433-4215870398-1251094-500",
+      "sourcePath": "Windows/System32/config/SAM",
+      "subjectSid": "S-1-5-21-3769272433-4215870398-1251094-500",
+      "subjectUsername": "Administrator",
+      "username": "Administrator"
+    }
+  },
+  {
+    "id": "c996d5b0-b10c-492e-b693-0df8d23fd897",
+    "family": "RegistrySamUser",
+    "title": "SAM User: DefaultAccount",
+    "summary": "Local account DefaultAccount (RID 503) status enabled",
+    "source_object_id": "sam",
+    "extractor_id": "registry.sam.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803501100Z",
+    "attrs": {
+      "accountStatus": "enabled",
+      "dataSourceId": "liuyang-ds",
+      "groups": [
+        "System Managed Accounts Group"
+      ],
+      "loginCount": 533,
+      "parser": "registry.sam",
+      "passwordHash": "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0",
+      "passwordHashType": "NTLM",
+      "rid": 503,
+      "ridHex": "000001f7",
+      "sid": "S-1-5-21-3769272433-4215870398-1251094-503",
+      "sourcePath": "Windows/System32/config/SAM",
+      "subjectSid": "S-1-5-21-3769272433-4215870398-1251094-503",
+      "subjectUsername": "DefaultAccount",
+      "username": "DefaultAccount"
+    }
+  },
+  {
+    "id": "e0e00034-e1bf-4059-aba3-6b1b6842656e",
+    "family": "RegistrySamUser",
+    "title": "SAM User: Guest",
+    "summary": "Local account Guest (RID 501) status enabled",
+    "source_object_id": "sam",
+    "extractor_id": "registry.sam.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803509500Z",
+    "attrs": {
+      "accountStatus": "enabled",
+      "dataSourceId": "liuyang-ds",
+      "groups": [
+        "Guests"
+      ],
+      "loginCount": 533,
+      "parser": "registry.sam",
+      "passwordHash": "aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0",
+      "passwordHashType": "NTLM",
+      "rid": 501,
+      "ridHex": "000001f5",
+      "sid": "S-1-5-21-3769272433-4215870398-1251094-501",
+      "sourcePath": "Windows/System32/config/SAM",
+      "subjectSid": "S-1-5-21-3769272433-4215870398-1251094-501",
+      "subjectUsername": "Guest",
+      "username": "Guest"
+    }
+  },
+  {
+    "id": "4735e311-56a1-4487-b94c-f83f6ee5f6c0",
+    "family": "RegistrySamUser",
+    "title": "SAM User: WDAGUtilityAccount",
+    "summary": "Local account WDAGUtilityAccount (RID 504) status enabled",
+    "source_object_id": "sam",
+    "extractor_id": "registry.sam.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803531600Z",
+    "attrs": {
+      "accountCreated": "2025-08-08T04:17:32.798593300+00:00",
+      "accountStatus": "enabled",
+      "dataSourceId": "liuyang-ds",
+      "groups": [],
+      "loginCount": 17,
+      "parser": "registry.sam",
+      "passwordHash": "aad3b435b51404eeaad3b435b51404ee:38cc74ce8a5fa05f3b5c84a529175aa7",
+      "passwordHashType": "NTLM",
+      "rid": 504,
+      "ridHex": "000001f8",
+      "sid": "S-1-5-21-3769272433-4215870398-1251094-504",
+      "sourcePath": "Windows/System32/config/SAM",
+      "subjectSid": "S-1-5-21-3769272433-4215870398-1251094-504",
+      "subjectUsername": "WDAGUtilityAccount",
+      "username": "WDAGUtilityAccount"
+    }
+  },
+  {
+    "id": "90329c2f-e614-42e4-b3b6-e1697ef577a3",
+    "family": "RegistrySamUser",
+    "title": "SAM User: 刘洋",
+    "summary": "Local account 刘洋 (RID 1002) status enabled",
+    "source_object_id": "sam",
+    "extractor_id": "registry.sam.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803549200Z",
+    "attrs": {
+      "accountCreated": "2026-04-19T12:59:41.805687800+00:00",
+      "accountStatus": "enabled",
+      "dataSourceId": "liuyang-ds",
+      "groups": [
+        "Administrators"
+      ],
+      "lastLogin": "2026-04-20T16:22:05.387900800+00:00",
+      "loginCount": 528,
+      "parser": "registry.sam",
+      "passwordHash": "aad3b435b51404eeaad3b435b51404ee:876dfe7bd78730b7b0baaf451414de8e",
+      "passwordHashType": "NTLM",
+      "rid": 1002,
+      "ridHex": "000003ea",
+      "sid": "S-1-5-21-3769272433-4215870398-1251094-1002",
+      "sourcePath": "Windows/System32/config/SAM",
+      "subjectSid": "S-1-5-21-3769272433-4215870398-1251094-1002",
+      "subjectUsername": "刘洋",
+      "username": "刘洋"
+    }
+  }
+]

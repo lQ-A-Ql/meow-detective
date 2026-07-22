@@ -28,6 +28,16 @@ export interface AnalysisExtractionProgressInfo {
   timelineEventCount: number;
   warnings: string[];
   error?: string;
+  totalCandidateCount?: number;
+  processedCandidateCount?: number;
+  structuredCandidateCount?: number;
+  unsupportedCandidateCount?: number;
+  textFallbackCandidateCount?: number;
+  warningCandidateCount?: number;
+  checkpointHitCount?: number;
+  phase?: string;
+  currentPath?: string;
+  detail?: string;
 }
 
 export const CATEGORY_ICONS: Record<string, typeof Monitor> = {
@@ -134,11 +144,13 @@ export function AnalysisExtractionProgress({
   if (!progress) {
     return null;
   }
-  const value = progress.status === 'running'
-    ? 50
-    : progress.status === 'idle'
-      ? 0
-      : 100;
+  const totalCandidates = progress.totalCandidateCount ?? 0;
+  const processedCandidates = progress.processedCandidateCount ?? progress.scannedCount;
+  const value = totalCandidates > 0
+    ? Math.min(100, Math.round((processedCandidates / totalCandidates) * 100))
+    : progress.status === 'success'
+      ? 100
+      : 0;
   const tone = progress.status === 'failed'
     ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text'
     : progress.status === 'partial'
@@ -148,14 +160,31 @@ export function AnalysisExtractionProgress({
     <div className={`rounded-none border px-3 py-2 ${tone}`}>
       <div className="mb-2 flex items-center justify-between gap-3 text-[11px]">
         <span className="font-light text-forensics-text">{progress.label}</span>
-        <span className="font-mono">{extractionProgressLabel(progress.status)}</span>
+        <span className="font-mono">
+          {totalCandidates > 0
+            ? `${processedCandidates}/${totalCandidates} (${value}%)`
+            : extractionProgressLabel(progress.status)}
+        </span>
       </div>
       <Progress value={value} className="h-1.5 rounded-none bg-forensics-surface" />
       <div className="mt-2 flex flex-wrap gap-3 font-mono text-[10px]">
         <span>scanned={progress.scannedCount}</span>
+        {totalCandidates > 0 ? <span>candidates={processedCandidates}/{totalCandidates}</span> : null}
         <span>artifacts={progress.artifactCount}</span>
         <span>timeline={progress.timelineEventCount}</span>
+        {progress.unsupportedCandidateCount ? (
+          <span>unsupported={progress.unsupportedCandidateCount}</span>
+        ) : null}
+        {progress.textFallbackCandidateCount ? (
+          <span>fallback={progress.textFallbackCandidateCount}</span>
+        ) : null}
       </div>
+      {progress.detail ? <div className="mt-1 text-[11px] text-forensics-muted">{progress.detail}</div> : null}
+      {progress.currentPath ? (
+        <div className="mt-1 truncate font-mono text-[10px] text-forensics-muted" title={progress.currentPath}>
+          {progress.currentPath}
+        </div>
+      ) : null}
       {progress.error ? (
         <div className="mt-1 text-[11px] text-forensics-error-text">{progress.error}</div>
       ) : null}

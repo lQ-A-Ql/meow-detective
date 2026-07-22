@@ -151,7 +151,7 @@ fn jc2_evtx_extraction_surfaces_boot_and_security_events() {
                 .insert_batch(&all_artifacts, &case_id.0, &data_source_id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            let summary = get_evtx_event_summary(conn, 0, 100)
+            let summary = get_evtx_event_summary(conn, None, 0, 100)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             eprintln!(
                 "jc2 EVTX summary: total={} boot={} security={} application={}",
@@ -257,7 +257,7 @@ fn liuyang_evtx_extraction_surfaces_boot_and_security_events() {
                 .insert_batch(&all_artifacts, &case_id.0, &data_source_id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            let summary = get_evtx_event_summary(conn, 0, 100)
+            let summary = get_evtx_event_summary(conn, None, 0, 100)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             eprintln!(
                 "Liu Yang EVTX summary: total={} boot={} security={} application={}",
@@ -274,6 +274,28 @@ fn liuyang_evtx_extraction_surfaces_boot_and_security_events() {
             assert!(
                 summary.boot_shutdown_count > 0,
                 "Liu Yang System.evtx should produce boot/shutdown events"
+            );
+            assert!(
+                summary.boot_events.iter().all(|event| {
+                    !event.timestamp.trim().is_empty()
+                        && event.timestamp != "unknown"
+                        && chrono::DateTime::parse_from_rfc3339(&event.timestamp).is_ok()
+                }),
+                "all persisted Liu Yang boot/shutdown events must carry parseable timestamps"
+            );
+            let boundary_ids = summary
+                .boot_events
+                .iter()
+                .map(|event| event.event_id)
+                .collect::<std::collections::BTreeSet<_>>();
+            eprintln!("Liu Yang EVTX boot boundary IDs: {boundary_ids:?}");
+            assert!(
+                boundary_ids.contains(&12),
+                "Liu Yang System.evtx should expose Kernel-General event 12 startup completion"
+            );
+            assert!(
+                boundary_ids.contains(&13),
+                "Liu Yang System.evtx should expose Kernel-General event 13 shutdown boundary"
             );
 
             Ok(())

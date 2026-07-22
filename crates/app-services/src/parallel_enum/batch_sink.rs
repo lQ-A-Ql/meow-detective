@@ -35,6 +35,7 @@ pub(super) fn enumerate_fs_to_staging(
     conn: &Connection,
     fs: &dyn FileSystemReader,
     data_source_id: &str,
+    partition_index: usize,
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
 ) -> Result<EnumerationStats, String> {
@@ -49,7 +50,15 @@ pub(super) fn enumerate_fs_to_staging(
 
     conn.execute_batch("BEGIN TRANSACTION")
         .map_err(|error| format!("Begin transaction: {error}"))?;
-    let result = enumerate_transaction(conn, fs, data_source_id, roots, cancel_token, progress_cb);
+    let result = enumerate_transaction(
+        conn,
+        fs,
+        data_source_id,
+        partition_index,
+        roots,
+        cancel_token,
+        progress_cb,
+    );
     if result.is_err() {
         conn.execute_batch("ROLLBACK").ok();
     }
@@ -60,6 +69,7 @@ fn enumerate_transaction(
     conn: &Connection,
     fs: &dyn FileSystemReader,
     data_source_id: &str,
+    partition_index: usize,
     roots: Vec<FsNode>,
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
@@ -74,6 +84,7 @@ fn enumerate_transaction(
             fs,
             &mut statement,
             data_source_id,
+            partition_index,
             entries,
             parent_id,
             &mut stack,
@@ -94,6 +105,7 @@ fn enumerate_batch(
     fs: &dyn FileSystemReader,
     statement: &mut CachedStatement<'_>,
     data_source_id: &str,
+    partition_index: usize,
     entries: Vec<FsNode>,
     parent_id: Option<String>,
     stack: &mut Vec<(Vec<FsNode>, Option<String>)>,
@@ -107,6 +119,7 @@ fn enumerate_batch(
         insert_node(
             statement,
             data_source_id,
+            partition_index,
             parent_id.as_deref(),
             &entry,
             &entry_id,
@@ -129,8 +142,9 @@ fn prepare_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {
     conn.prepare_cached(
         "INSERT INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          partition_index)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
     )
     .map_err(|error| format!("Prepare error: {error}"))
 }
@@ -138,6 +152,7 @@ fn prepare_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {
 fn insert_node(
     statement: &mut CachedStatement<'_>,
     data_source_id: &str,
+    partition_index: usize,
     parent_id: Option<&str>,
     node: &FsNode,
     entry_id: &str,
@@ -161,6 +176,7 @@ fn insert_node(
             node.accessed_at.as_ref().map(|value| value.to_rfc3339()),
             None::<String>,
             None::<String>,
+            partition_index as i64,
         ])
         .map_err(|error| format!("Insert error: {error}"))?;
     Ok(())
@@ -215,8 +231,9 @@ pub(super) fn prepare_mft_insert(conn: &Connection) -> rusqlite::Result<CachedSt
     conn.prepare_cached(
         "INSERT OR IGNORE INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL)",
+          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          partition_index)
+         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15)",
     )
 }
 
@@ -252,6 +269,7 @@ pub(super) fn stage_mft_record(
             record.modified_at.as_ref().map(|value| value.to_rfc3339()),
             record.accessed_at.as_ref().map(|value| value.to_rfc3339()),
             record.changed_at.as_ref().map(|value| value.to_rfc3339()),
+            partition_index as i64,
         ])
         .map_err(|error| format!("Insert MFT staging row: {error}"))?;
     Ok((parent_key, name))
@@ -261,8 +279,9 @@ pub(super) fn prepare_ntfs_index_insert(conn: &Connection) -> Result<CachedState
     conn.prepare_cached(
         "INSERT OR IGNORE INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, NULL, NULL, NULL, NULL, NULL)",
+          size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          partition_index)
+         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, NULL, NULL, NULL, NULL, NULL, ?10)",
     )
     .map_err(|error| format!("Prepare NTFS directory index backfill: {error}"))
 }
@@ -292,6 +311,7 @@ pub(super) fn insert_ntfs_index_entry(
             (!is_dir).then(|| extension_from_name(name)).flatten(),
             hidden as i32,
             system as i32,
+            partition_index as i64,
         ])
         .map_err(|error| format!("Insert NTFS directory index backfill row: {error}"))
 }

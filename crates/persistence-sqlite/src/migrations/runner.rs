@@ -223,6 +223,18 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_021_cephfs_assembly_capability",
         include_str!("scripts/source_021_cephfs_assembly_capability.sql"),
     ),
+    (
+        "source_022_file_partition_index_repair",
+        include_str!("scripts/source_022_file_partition_index_repair.sql"),
+    ),
+    (
+        "source_023_deleted_recovery",
+        include_str!("scripts/source_023_deleted_recovery.sql"),
+    ),
+    (
+        "source_024_ntfs_deleted_recovery",
+        include_str!("scripts/source_024_ntfs_deleted_recovery.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -295,10 +307,15 @@ fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u3
                 add_missing_lvm_partition_identity_columns(conn)
             } else if *name == "source_015_ceph_bluestore_rbd_header_context" {
                 add_ceph_bluestore_rbd_header_context(conn)
-            } else if *name == "source_016_file_partition_index" {
+            } else if matches!(
+                *name,
+                "source_016_file_partition_index" | "source_022_file_partition_index_repair"
+            ) {
                 add_file_partition_index_and_backfill(conn, sql)
             } else if *name == "source_017_timeline_projection_identity" {
                 add_timeline_projection_identity(conn, sql)
+            } else if *name == "source_024_ntfs_deleted_recovery" {
+                super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -441,24 +458,5 @@ fn add_timeline_projection_identity(conn: &Connection, sql: &str) -> DbResult<()
 }
 
 pub fn current_version(conn: &Connection) -> DbResult<Option<String>> {
-    let has_table: bool = conn.query_row(
-        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-        [],
-        |row| row.get(0),
-    )?;
-
-    if !has_table {
-        return Ok(None);
-    }
-
-    let result = conn.query_row(
-        "SELECT name FROM schema_migrations ORDER BY id DESC LIMIT 1",
-        [],
-        |row| row.get::<_, String>(0),
-    );
-    match result {
-        Ok(name) => Ok(Some(name)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    super::version::current_version(conn, MIGRATIONS, SOURCE_MIGRATIONS)
 }

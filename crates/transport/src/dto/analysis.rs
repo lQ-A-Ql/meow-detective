@@ -1,6 +1,7 @@
 pub use crate::dto::analysis_base::{
-    AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto,
-    AnalysisParseStatusDto, AnalysisProvenanceDto,
+    AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto, AnalysisExtractionRunDto,
+    AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
+    AnalysisProvenanceDto,
 };
 pub use crate::dto::analysis_browser::{
     BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserPasswordDto,
@@ -14,7 +15,8 @@ pub use crate::dto::analysis_email::{
     EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
 };
 pub use crate::dto::analysis_evtx::{
-    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto,
+    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,
+    EvtxSecurityEventDto,
 };
 pub use crate::dto::analysis_linux::{
     LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
@@ -26,9 +28,10 @@ pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,
     InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,
     MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto, RegistryExtractionSummaryDto,
-    RegistryHiveOverviewDto, RegistryStructuredSummaryDto, RegistryValueDto, RunMruEntryDto,
-    SamUserAccountDto, SecurityPolicyDto, ShellbagEntryDto, ShimCacheEntryDto, ShutdownTimeDto,
-    SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto, WinlogonConfigDto,
+    RegistryHiveOverviewDto, RegistryNetworkAdapterDto, RegistryStructuredSummaryDto,
+    RegistryValueDto, RunMruEntryDto, SamUserAccountDto, SecurityPolicyDto, ShellbagEntryDto,
+    ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto,
+    WinlogonConfigDto,
 };
 pub use crate::dto::analysis_system::{
     AnalysisBootRecordDto, AnalysisNetworkAdapterDto, AnalysisSystemInfoDto,

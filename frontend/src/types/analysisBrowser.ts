@@ -55,6 +55,8 @@ export interface BrowserCookie {
   secure: boolean;
   httpOnly: boolean;
   sameSite?: number;
+  decryptionStatus?: BrowserDecryptionStatus;
+  decryptionDetail?: string;
 }
 
 export interface BrowserSessionTab {
@@ -81,4 +83,14 @@ export interface BrowserPassword {
   passwordPreview?: string;
   createdAt?: string;
   timesUsed: number;
+  decryptionStatus?: BrowserDecryptionStatus;
+  decryptionDetail?: string;
 }
+
+export type BrowserDecryptionStatus =
+  | 'plaintext'
+  | 'decrypted'
+  | 'encrypted'
+  | 'unsupported'
+  | 'failed'
+  | 'unavailable';

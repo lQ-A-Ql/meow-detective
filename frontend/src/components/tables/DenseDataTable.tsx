@@ -53,6 +53,10 @@ interface DenseDataTableProps<T> {
   sortDirection?: 'asc' | 'desc';
   /** 排序回调 */
   onSort?: (key: string) => void;
+  /** 接近当前数据末尾时请求下一段。 */
+  onReachEnd?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 interface TableRowMemoProps<T> {
@@ -134,8 +138,12 @@ export function DenseDataTable<T>({
   sortKey,
   sortDirection,
   onSort,
+  onReachEnd,
+  hasMore = false,
+  loadingMore = false,
 }: DenseDataTableProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const requestedRowCountRef = useRef<number | undefined>(undefined);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
 
@@ -170,8 +178,32 @@ export function DenseDataTable<T>({
   }, []);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  }, []);
+    const container = event.currentTarget;
+    setScrollTop(container.scrollTop);
+    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (
+      hasMore
+      && !loadingMore
+      && remaining <= ROW_HEIGHT * OVERSCAN_ROWS
+      && requestedRowCountRef.current !== rows.length
+    ) {
+      requestedRowCountRef.current = rows.length;
+      onReachEnd?.();
+    }
+  }, [hasMore, loadingMore, onReachEnd, rows.length]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !hasMore || loadingMore || !onReachEnd) return;
+    if (container.clientHeight <= 0) return;
+
+    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (remaining > ROW_HEIGHT * OVERSCAN_ROWS) return;
+    if (requestedRowCountRef.current === rows.length) return;
+
+    requestedRowCountRef.current = rows.length;
+    onReachEnd();
+  }, [containerHeight, hasMore, loadingMore, onReachEnd, rows.length]);
 
   const visibleRange = useMemo(() => {
     const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
@@ -266,6 +298,16 @@ export function DenseDataTable<T>({
                 className="border-r-0 p-0"
                 style={{ height: bottomSpacerHeight }}
               />
+            </TableRow>
+          ) : null}
+          {loadingMore ? (
+            <TableRow aria-live="polite" className="hover:bg-transparent">
+              <TableCell
+                colSpan={columns.length}
+                className="border-r-0 px-3 py-2 text-center text-forensics-muted"
+              >
+                正在加载更多记录...
+              </TableCell>
             </TableRow>
           ) : null}
         </TableBody>

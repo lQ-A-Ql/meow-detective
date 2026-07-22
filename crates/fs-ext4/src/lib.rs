@@ -11,6 +11,7 @@ mod filesystem;
 mod format;
 pub mod journal;
 mod reader;
+mod superblock;
 
 pub use reader::Ext4Reader;
 

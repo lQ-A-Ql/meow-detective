@@ -1,6 +1,6 @@
 use super::sqlite::{open_sqlite_from_bytes, table_exists};
 use super::time::unix_seconds_to_dt;
-use crate::browser::chromium::BrowserCookie;
+use crate::browser::chromium::{BrowserCookie, BrowserDecryptionStatus};
 use rusqlite::params;
 
 pub fn parse_firefox_cookies(data: &[u8]) -> Result<Vec<BrowserCookie>, String> {
@@ -17,10 +17,16 @@ pub fn parse_firefox_cookies(data: &[u8]) -> Result<Vec<BrowserCookie>, String> 
     let rows = stmt
         .query_map(params![], |row| {
             let raw_value: Option<String> = row.get(2).ok();
+            let value_preview = raw_value.as_deref().and_then(cookie_value_preview);
+            let decryption_status = if value_preview.is_some() {
+                BrowserDecryptionStatus::Plaintext
+            } else {
+                BrowserDecryptionStatus::Unavailable
+            };
             Ok(BrowserCookie {
                 domain: row.get(0)?,
                 name: row.get(1)?,
-                value_preview: raw_value.as_deref().and_then(cookie_value_preview),
+                value_preview,
                 expiry: unix_seconds_to_dt(row.get(3).unwrap_or(0)),
                 secure: row
                     .get::<_, i64>(4)
@@ -31,6 +37,9 @@ pub fn parse_firefox_cookies(data: &[u8]) -> Result<Vec<BrowserCookie>, String> 
                     .map(|value| value != 0)
                     .unwrap_or(false),
                 same_site: row.get(6).ok(),
+                decryption_status,
+                decryption_detail: (decryption_status == BrowserDecryptionStatus::Unavailable)
+                    .then(|| "Firefox NSS decryption is not configured".to_string()),
             })
         })
         .map_err(|e| format!("query cookies: {}", e))?;

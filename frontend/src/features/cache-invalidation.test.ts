@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  PROJECTION_EVENT_TOPICS,
   invalidateCacheStatusQueries,
   invalidateEventProjectionQueries,
   invalidateImportProjectionQueries,
@@ -16,11 +17,22 @@ function createClient() {
   return { queryClient, invalidateSpy };
 }
 
-function invalidatedKeys(invalidateSpy: ReturnType<typeof vi.spyOn>) {
-  return invalidateSpy.mock.calls.map(([filters]: [{ queryKey?: unknown }?]) => filters?.queryKey);
+function invalidatedKeys(invalidateSpy: ReturnType<typeof vi.spyOn>): unknown[][] {
+  return invalidateSpy.mock.calls.map(([filters]: [{ queryKey?: unknown }?]) => {
+    const key = filters?.queryKey;
+    return Array.isArray(key) ? key : [];
+  });
 }
 
 describe('projection cache invalidation', () => {
+  it('subscribes every terminal job event to projection invalidation', () => {
+    expect(PROJECTION_EVENT_TOPICS).toEqual(expect.arrayContaining([
+      'job-completed',
+      'job-failed',
+      'job-cancelled',
+    ]));
+  });
+
   it('uses one canonical timeline events query key builder', () => {
     expect(timelineQueryKeys.events()).toEqual(['timeline', 'events', 0, 100, null, null, null]);
     expect(timelineQueryKeys.events({ offset: 10, limit: 25, timeStart: 'a', timeEnd: 'b', eventType: 'FileAccess' })).toEqual([
@@ -96,6 +108,19 @@ describe('projection cache invalidation', () => {
     invalidateEventProjectionQueries(queryClient, 'search-index-progress');
 
     expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['timeline'], ['search']]);
+  });
+
+  it('refreshes projections when a background job reaches a terminal state', () => {
+    const { queryClient, invalidateSpy } = createClient();
+
+    invalidateEventProjectionQueries(queryClient, 'job-completed');
+    invalidateEventProjectionQueries(queryClient, 'job-failed');
+    invalidateEventProjectionQueries(queryClient, 'job-cancelled');
+
+    const keys = invalidatedKeys(invalidateSpy);
+    expect(keys).toHaveLength(30);
+    expect(keys.filter((key) => Array.isArray(key) && key[0] === 'analysis')).toHaveLength(3);
+    expect(keys.filter((key) => Array.isArray(key) && key[0] === 'jobs')).toHaveLength(6);
   });
 
   it('routes cache status updates by cache key when materialized', () => {

@@ -8,7 +8,8 @@ export type AnalysisTabKey =
   | 'email'
   | 'eventlogs'
   | 'files'
-  | 'report';
+  | 'report'
+  | 'deletedRecovery';
 
 export type AnalysisPlatformView = DataSourceSummary['platform'];
 
@@ -22,7 +23,8 @@ export type LinuxAnalysisTabKey =
   | 'sudo'
   | 'systemConfig'
   | 'webServices'
-  | 'mysqlServices';
+  | 'mysqlServices'
+  | 'deletedRecovery';
 
 export type ExtractionCategory =
   | 'Registry'

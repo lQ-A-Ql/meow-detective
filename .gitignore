@@ -21,6 +21,8 @@
 /.omo/
 /.pi/
 /.context/
+/.understand-anything/
+
 
 # OS
 .DS_Store
@@ -36,7 +38,10 @@ Thumbs.db
 
 # Private regression fixtures (real disk images, not for CI)
 /testdata/fixtures/private-real-regression/
-/artifacts/
+/testdata/
+/output/
 /development-reports/
 AGENTS.md
+*.log
+/*.md
 *.bat

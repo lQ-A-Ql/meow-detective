@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventLogPanel } from './EventLogPanel';
 import type { EvtxEventSummary } from '@/types/models';
 
@@ -26,6 +26,7 @@ describe('EventLogPanel', () => {
   it('renders boot events when summary is provided', () => {
     const summary: EvtxEventSummary = {
       status: 'parsed',
+      pageTotal: 1,
       bootShutdownCount: 1,
       logonLogoffCount: 0,
       privilegeEscalationCount: 0,
@@ -46,5 +47,41 @@ describe('EventLogPanel', () => {
     };
     render(createElement(EventLogPanel, { summary }));
     expect(screen.getByText('6005')).toBeDefined();
+  });
+
+  it('labels operating-system lifecycle boundaries distinctly', () => {
+    const summary: EvtxEventSummary = {
+      status: 'parsed', bootShutdownCount: 2, logonLogoffCount: 0,
+      pageTotal: 2,
+      privilegeEscalationCount: 0, processExecutionCount: 0, accountManagementCount: 0,
+      scheduledTaskCount: 0, applicationCrashCount: 0, softwareInstallationCount: 0,
+      otherCount: 0, totalCount: 2, securityEvents: [], applicationEvents: [], warnings: [],
+      generatedAt: '2026-06-01T10:00:00Z',
+      bootEvents: [
+        { eventId: 12, kind: 'operatingSystemStarted', timestamp: '2026-06-01T08:00:00Z', provider: 'Microsoft-Windows-Kernel-General', recordId: 1, sourcePath: 'System.evtx', note: 'startup' },
+        { eventId: 13, kind: 'operatingSystemShutdown', timestamp: '2026-06-01T18:00:00Z', provider: 'Microsoft-Windows-Kernel-General', recordId: 2, sourcePath: 'System.evtx', note: 'shutdown' },
+      ],
+    };
+    render(createElement(EventLogPanel, { summary }));
+    expect(screen.getByText('操作系统启动完成')).toBeDefined();
+    expect(screen.getByText('操作系统进入关闭阶段')).toBeDefined();
+  });
+
+  it('requests the selected server-side view when changing tabs', () => {
+    const onActiveViewChange = vi.fn();
+    render(createElement(EventLogPanel, { onActiveViewChange }));
+
+    fireEvent.click(screen.getByRole('tab', { name: '进程创建' }));
+
+    expect(onActiveViewChange).toHaveBeenCalledWith('process');
+  });
+
+  it('owns vertical scrolling inside the active event table viewport', () => {
+    const { container } = render(createElement(EventLogPanel, {}));
+    const activeContent = container.querySelector('[data-slot="tabs-content"][data-state="active"]');
+
+    expect(activeContent?.className).toContain('flex-col');
+    expect(activeContent?.className).toContain('overflow-hidden');
+    expect(activeContent?.querySelector('.overflow-y-auto')).not.toBeNull();
   });
 });

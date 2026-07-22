@@ -1,82 +1,30 @@
-use super::artifact_query::already_has_v1_artifacts;
-use super::browser::extract_browser_candidate;
+use super::browser_preload::prepare_browser_preload;
 use super::candidate_order::order_candidates_for_extraction;
-use super::checkpoint_validation::existing_complete_scan_keys;
-use super::email::extract_email_candidate;
-use super::evtx::extract_evtx_candidate;
-use super::linux::{extract_linux_candidate, linux_candidate_read_limit};
-use super::linux_sections::{linux_artifact_section, LinuxArtifactSection};
-use super::output_persistence::flush_pending_outputs;
-use super::registry::extract_registry_candidate;
-use super::registry_preload::{preload_registry_context, RegistryPreloadContext};
-use super::state::{
-    existing_clean_scan_keys, existing_diagnostic_scan_keys, AnalysisCheckpointKey, CleanScanKeys,
-    DiagnosticScanKeys, ExtractionState,
+use super::candidate_processing::{
+    capability_for_candidate, discovery_categories, process_candidates, CandidateProcessingContext,
+    CandidateSource, ExistingCheckpoints,
 };
-use super::ExtractionOutcome;
+use super::checkpoint_validation::existing_complete_scan_keys;
+use super::output_persistence::flush_pending_outputs;
+use super::preparation::prepare_registry_preload;
+use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
+use super::scheduler::acquire_extraction_slot;
+use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
-    evidence_candidates_for_categories_with_cancel, normalize_evidence_path, EvidenceCandidate,
+    evidence_candidates_for_categories_with_cancel, EvidenceCandidate,
 };
-use crate::analysis_service::capability::{
-    AnalysisCapability, CandidateReadPolicy, LINUX_UMBRELLA_KEY,
-};
+use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::platforms::analyzer_for;
 use chrono::Utc;
 use domain::{DataSourcePlatform, FileEntryId};
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
 use rusqlite::Connection;
-use std::collections::HashMap;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use transport::dto::AnalysisExtractionRunDto;
-
-const READ_BUFFER_BYTES: usize = 64 * 1024;
-
-#[derive(Debug)]
-enum CandidateExtractionError {
-    Warning(String),
-    Cancelled,
-}
-
-enum CandidateSource {
-    Reader(Box<dyn Read>),
-    Bytes(Vec<u8>),
-}
-
-struct ExistingCheckpoints<'a> {
-    clean: &'a CleanScanKeys,
-    diagnostic: &'a DiagnosticScanKeys,
-    complete: &'a HashMap<
-        AnalysisCheckpointKey,
-        persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan,
-    >,
-    storage_available: bool,
-}
-
-struct CandidateProcessingContext<'a> {
-    conn: &'a Connection,
-    selected: &'a [AnalysisCapability],
-    checkpoints: &'a ExistingCheckpoints<'a>,
-    preload: &'a RegistryPreloadContext,
-    cancel_token: &'a AtomicBool,
-}
-
-impl ExistingCheckpoints<'_> {
-    fn has_candidate(&self, candidate: &EvidenceCandidate, capability: AnalysisCapability) -> bool {
-        let key = (
-            candidate.file_id.0.clone(),
-            capability.key.to_string(),
-            candidate.size,
-            candidate.content_identity.clone(),
-        );
-        self.clean.contains(&key)
-            || self.diagnostic.contains_key(&key)
-            || self.complete.contains_key(&key)
-    }
-}
 
 pub(crate) struct AnalysisExtractionExecution {
     pub(crate) dto: AnalysisExtractionRunDto,
@@ -134,12 +82,14 @@ pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
     cancel_token: &AtomicBool,
     mut file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
     run_analysis_extraction_with_source(
         conn,
         case_id,
         platform,
         categories,
         cancel_token,
+        &mut ignore_progress,
         |candidate, read_limit| {
             file_reader(&candidate.file_id, read_limit)
                 .map(CandidateSource::Reader)
@@ -149,12 +99,13 @@ pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
     .map(|execution| execution.dto)
 }
 
-pub(crate) fn run_analysis_extraction_with_bytes_and_cancel<E: std::fmt::Display>(
+pub(crate) fn run_analysis_extraction_with_bytes_and_cancel_and_progress<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
+    progress: &mut dyn FnMut(ExtractionProgressUpdate),
     mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<Vec<u8>, E>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     run_analysis_extraction_with_source(
@@ -163,6 +114,7 @@ pub(crate) fn run_analysis_extraction_with_bytes_and_cancel<E: std::fmt::Display
         platform,
         categories,
         cancel_token,
+        progress,
         |candidate, read_limit| {
             file_reader(candidate, read_limit)
                 .map(CandidateSource::Bytes)
@@ -177,15 +129,23 @@ fn run_analysis_extraction_with_source(
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
+    progress: &mut dyn FnMut(ExtractionProgressUpdate),
     mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let discovery_started = Instant::now();
     ensure_not_cancelled(cancel_token)?;
     let selected = analyzer_for(platform)?.select_capabilities(categories)?;
+    let mut progress_reporter = ExtractionProgressReporter::new(platform, &selected, progress);
+    let _extraction_slot = acquire_extraction_slot(cancel_token, |waited| {
+        progress_reporter.emit_waiting_for_scheduler(waited);
+    })?;
+    progress_reporter.emit_discovering();
     let discovery_categories = discovery_categories(&selected);
     let mut candidates =
         evidence_candidates_for_categories_with_cancel(conn, &discovery_categories, cancel_token)?;
     order_candidates_for_extraction(conn, platform, &mut candidates);
+    register_candidates(&mut progress_reporter, &selected, &candidates);
+    progress_reporter.emit_preparing();
     let existing_clean_scans = existing_clean_scan_keys(conn)?;
     let existing_diagnostic_scans = existing_diagnostic_scan_keys(conn)?;
     let existing_complete_scans = existing_complete_scan_keys(conn)?;
@@ -204,7 +164,10 @@ fn run_analysis_extraction_with_source(
         cancel_token,
         &mut file_reader,
     )?;
+    let browser_preload =
+        prepare_browser_preload(conn, &candidates, cancel_token, &mut file_reader)?;
     ensure_not_cancelled(cancel_token)?;
+    progress_reporter.begin_extraction();
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
     let mut state = ExtractionState::new(&selected);
     if let Some(registry) = selected
@@ -215,25 +178,37 @@ fn run_analysis_extraction_with_source(
             state.record_warning(*registry, warning);
         }
     }
+    if let Some(browser) = selected
+        .iter()
+        .find(|capability| capability.key == "BrowserHistory")
+    {
+        for warning in browser_preload.warnings.iter().cloned() {
+            state.record_warning(*browser, warning);
+        }
+    }
     let processing_started = Instant::now();
-    let processing_context = CandidateProcessingContext {
+    let processing_context = CandidateProcessingContext::new(
         conn,
-        selected: &selected,
-        checkpoints: &checkpoints,
-        preload: &preload,
+        &selected,
+        &checkpoints,
+        &preload,
+        &browser_preload,
         cancel_token,
-    };
+    );
     process_candidates(
         &processing_context,
         candidates,
         &mut file_reader,
         &mut state,
+        &mut progress_reporter,
     )?;
     let processing_elapsed_ms = elapsed_millis(processing_started);
     ensure_not_cancelled(cancel_token)?;
+    progress_reporter.begin_persisting();
     let persistence_elapsed_ms = flush_pending_outputs(conn, case_id, &mut state)?;
     let retryable_failure_count = state.retryable_failure_count;
-    let dto = build_run_dto(conn, state)?;
+    let dto = state.into_dto(conn, Utc::now().to_rfc3339())?;
+    progress_reporter.complete();
     Ok(AnalysisExtractionExecution {
         dto,
         retryable_failure_count,
@@ -247,220 +222,16 @@ fn run_analysis_extraction_with_source(
     })
 }
 
-fn prepare_registry_preload(
-    conn: &Connection,
+fn register_candidates(
+    progress: &mut ExtractionProgressReporter<'_>,
+    selected: &[AnalysisCapability],
     candidates: &[EvidenceCandidate],
-    selected: &[AnalysisCapability],
-    checkpoints: &ExistingCheckpoints<'_>,
-    cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Result<RegistryPreloadContext, AnalysisServiceError> {
-    let candidates_by_id = candidates
-        .iter()
-        .map(|candidate| (candidate.file_id.0.as_str(), candidate))
-        .collect::<HashMap<_, _>>();
-    let mut registry_reader = |file_id: &FileEntryId, read_limit: usize| {
-        let candidate = candidates_by_id
-            .get(file_id.0.as_str())
-            .ok_or_else(|| format!("analysis candidate '{}' was not discovered", file_id.0))?;
-        file_reader(candidate, read_limit).map(|source| match source {
-            CandidateSource::Reader(reader) => reader,
-            CandidateSource::Bytes(bytes) => Box::new(Cursor::new(bytes)) as Box<dyn Read>,
-        })
-    };
-    preload_registry_context(
-        conn,
-        candidates,
-        cancel_token,
-        &mut registry_reader,
-        |candidate| {
-            let checkpoint_exists = capability_for_candidate(selected, candidate)
-                .is_some_and(|capability| checkpoints.has_candidate(candidate, capability));
-            if checkpoint_exists {
-                Ok(true)
-            } else if checkpoints.storage_available {
-                Ok(false)
-            } else {
-                already_has_v1_artifacts(conn, candidate)
-            }
-        },
-    )
-}
-
-fn process_candidates(
-    context: &CandidateProcessingContext<'_>,
-    candidates: Vec<EvidenceCandidate>,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-    state: &mut ExtractionState,
-) -> Result<(), AnalysisServiceError> {
+) {
     for candidate in candidates {
-        ensure_not_cancelled(context.cancel_token)?;
-        let Some(capability) = capability_for_candidate(context.selected, &candidate) else {
-            continue;
-        };
-        let checkpoint_key = (
-            candidate.file_id.0.clone(),
-            capability.key.to_string(),
-            candidate.size,
-            candidate.content_identity.clone(),
-        );
-        if let Some(warnings) = context.checkpoints.diagnostic.get(&checkpoint_key) {
-            state.replay_diagnostic(capability, warnings);
-            continue;
-        }
-        if context.checkpoints.clean.contains(&checkpoint_key) {
-            state.replay_clean(capability);
-            continue;
-        }
-        if let Some(scan) = context.checkpoints.complete.get(&checkpoint_key) {
-            state.replay_complete(capability, scan);
-            continue;
-        }
-        if !context.checkpoints.storage_available
-            && already_has_v1_artifacts(context.conn, &candidate)?
-        {
-            continue;
-        }
-        match extract_candidate(
-            &candidate,
-            capability,
-            context.preload,
-            context.cancel_token,
-            file_reader,
-        ) {
-            Ok(outcome) => state.record_outcome(capability, &candidate, outcome),
-            Err(CandidateExtractionError::Warning(warning)) => {
-                state.record_warning(capability, warning);
-            }
-            Err(CandidateExtractionError::Cancelled) => {
-                return ensure_not_cancelled(context.cancel_token);
-            }
-        }
-        ensure_not_cancelled(context.cancel_token)?;
-    }
-    Ok(())
-}
-
-fn extract_candidate(
-    candidate: &EvidenceCandidate,
-    capability: AnalysisCapability,
-    preload: &RegistryPreloadContext,
-    cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Result<ExtractionOutcome, CandidateExtractionError> {
-    check_candidate_cancelled(cancel_token)?;
-    if capability.read_policy == CandidateReadPolicy::RegistryPreload {
-        let bytes = preload.registry_bytes(candidate).ok_or_else(|| {
-            CandidateExtractionError::Warning(format!(
-                "{} registry bytes not preloaded",
-                candidate.path
-            ))
-        })?;
-        let boot_key = preload.boot_key(candidate);
-        let (txlog1, txlog2) = preload.txlogs(candidate);
-        let outcome = extract_registry_candidate(candidate, bytes, boot_key, txlog1, txlog2);
-        check_candidate_cancelled(cancel_token)?;
-        return Ok(outcome);
-    }
-
-    let normalized = normalize_evidence_path(&candidate.path);
-    let read_limit = match capability.read_policy {
-        CandidateReadPolicy::Bounded(limit) => limit,
-        CandidateReadPolicy::LinuxPathAware => linux_candidate_read_limit(&normalized),
-        CandidateReadPolicy::RegistryPreload => {
-            return Err(CandidateExtractionError::Warning(format!(
-                "{} has an invalid registry read policy",
-                candidate.path
-            )));
-        }
-    };
-    let bytes = read_candidate_bytes(candidate, read_limit, cancel_token, file_reader)?;
-    let outcome = match candidate.category.as_str() {
-        "BrowserHistory" => extract_browser_candidate(candidate, &bytes),
-        "Email" => extract_email_candidate(candidate, &bytes),
-        "EventLogs" => extract_evtx_candidate(candidate, &bytes),
-        LINUX_UMBRELLA_KEY => extract_linux_candidate(candidate, &bytes),
-        _ => ExtractionOutcome::default(),
-    };
-    check_candidate_cancelled(cancel_token)?;
-    Ok(outcome)
-}
-
-fn read_candidate_bytes(
-    candidate: &EvidenceCandidate,
-    read_limit: usize,
-    cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Result<Vec<u8>, CandidateExtractionError> {
-    check_candidate_cancelled(cancel_token)?;
-    let source = file_reader(candidate, read_limit).map_err(|error| {
-        CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
-    })?;
-    check_candidate_cancelled(cancel_token)?;
-    let mut reader = match source {
-        CandidateSource::Reader(reader) => reader,
-        CandidateSource::Bytes(mut bytes) => {
-            bytes.truncate(read_limit);
-            return Ok(bytes);
-        }
-    };
-    let mut bytes = Vec::with_capacity(read_limit.min(READ_BUFFER_BYTES));
-    let mut buffer = [0u8; READ_BUFFER_BYTES];
-    let mut limited = reader.by_ref().take(read_limit as u64);
-    loop {
-        check_candidate_cancelled(cancel_token)?;
-        let read = limited.read(&mut buffer).map_err(|error| {
-            CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
-        })?;
-        if read == 0 {
-            break;
-        }
-        bytes.extend_from_slice(&buffer[..read]);
-    }
-    check_candidate_cancelled(cancel_token)?;
-    Ok(bytes)
-}
-
-fn check_candidate_cancelled(cancel_token: &AtomicBool) -> Result<(), CandidateExtractionError> {
-    ensure_not_cancelled(cancel_token).map_err(|_| CandidateExtractionError::Cancelled)
-}
-
-fn capability_for_candidate(
-    selected: &[AnalysisCapability],
-    candidate: &EvidenceCandidate,
-) -> Option<AnalysisCapability> {
-    if candidate.category == LINUX_UMBRELLA_KEY {
-        let normalized = normalize_evidence_path(&candidate.path);
-        let section = linux_artifact_section(&normalized);
-        debug_assert!(LinuxArtifactSection::ALL.contains(&section));
-        debug_assert_eq!(LinuxArtifactSection::from_key(section.key()), Some(section));
-        let capability = selected
-            .iter()
-            .find(|item| item.key == section.key())
-            .copied();
-        return capability;
-    }
-    selected
-        .iter()
-        .find(|item| item.candidate_category == candidate.category)
-        .copied()
-}
-
-fn discovery_categories(selected: &[AnalysisCapability]) -> Vec<&str> {
-    let mut categories = Vec::new();
-    for capability in selected {
-        if !categories.contains(&capability.candidate_category) {
-            categories.push(capability.candidate_category);
+        if let Some(capability) = capability_for_candidate(selected, candidate) {
+            progress.register_candidate(capability, candidate);
         }
     }
-    categories
-}
-
-fn build_run_dto(
-    conn: &Connection,
-    state: ExtractionState,
-) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
-    state.into_dto(conn, Utc::now().to_rfc3339())
 }
 
 fn elapsed_millis(started: Instant) -> u64 {

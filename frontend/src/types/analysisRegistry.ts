@@ -78,6 +78,22 @@ export interface NetworkProfileEntry {
   sourceKeyPath: string;
 }
 
+export interface RegistryNetworkAdapter {
+  guid: string;
+  name: string;
+  description?: string;
+  macAddress?: string;
+  permanentMacAddress?: string;
+  ipAddresses: string[];
+  subnetMasks: string[];
+  gateways: string[];
+  dhcpEnabled?: boolean;
+  dhcpServer?: string;
+  dnsServers: string[];
+  pnpInstanceId?: string;
+  serviceName?: string;
+}
+
 // Installed Software (structured view)
 export interface InstalledSoftware {
   displayName: string;
@@ -228,6 +244,7 @@ export interface RegistryStructuredSummary {
   hiveOverviews: RegistryHiveOverview[];
   samUsers: SamUserAccount[];
   userAssistEntries: UserAssistEntry[];
+  networkAdapters: RegistryNetworkAdapter[];
   networkProfiles: NetworkProfileEntry[];
   installedSoftware: InstalledSoftware[];
   usbDevices: UsbDeviceHistory[];

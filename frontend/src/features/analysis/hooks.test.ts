@@ -144,8 +144,21 @@ describe('analysis hooks', () => {
     });
     mocks.getEvtxEventSummary.mockResolvedValue({
       status: 'notFound',
-      total: 0,
-      events: [],
+      pageTotal: 0,
+      bootShutdownCount: 0,
+      logonLogoffCount: 0,
+      privilegeEscalationCount: 0,
+      processExecutionCount: 0,
+      accountManagementCount: 0,
+      scheduledTaskCount: 0,
+      applicationCrashCount: 0,
+      softwareInstallationCount: 0,
+      otherCount: 0,
+      totalCount: 0,
+      bootEvents: [],
+      securityEvents: [],
+      applicationEvents: [],
+      generatedAt: '2026-06-01T10:14:00Z',
       warnings: [],
     });
     mocks.getLinuxArtifactSummary.mockResolvedValue({
@@ -474,6 +487,53 @@ describe('analysis hooks', () => {
     expect(mocks.classifyFiles).not.toHaveBeenCalled();
   });
 
+  it('loads EVTX records in bounded view-specific pages', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+    mocks.getEvtxEventSummary.mockResolvedValueOnce({
+      status: 'parsed',
+      pageTotal: 1,
+      bootShutdownCount: 0,
+      logonLogoffCount: 0,
+      privilegeEscalationCount: 0,
+      processExecutionCount: 1,
+      accountManagementCount: 0,
+      scheduledTaskCount: 0,
+      applicationCrashCount: 0,
+      softwareInstallationCount: 0,
+      otherCount: 0,
+      totalCount: 1,
+      bootEvents: [],
+      securityEvents: [{
+        timestamp: '2026-07-22T00:00:00Z',
+        eventId: 4688,
+        recordId: 1,
+        kind: 'processCreated',
+        sourcePath: 'Security.evtx',
+      }],
+      applicationEvents: [],
+      generatedAt: '2026-07-22T00:00:00Z',
+      warnings: [],
+    });
+
+    const { result } = renderHook(
+      () => useEvtxEventSummary({ source: windowsSource, view: 'process' }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.getEvtxEventSummary).toHaveBeenCalledWith({
+      dataSourceId: 'ds-windows',
+      view: 'process',
+      offset: 0,
+      limit: 500,
+    });
+    expect(result.current.data?.securityEvents).toHaveLength(1);
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
   it('keeps the Linux query idle for a persisted Windows data source', () => {
     mocks.useCurrentCase.mockReturnValue({
       isSuccess: true,
@@ -527,6 +587,50 @@ describe('analysis hooks', () => {
       dataSourceId: 'ds-1',
       categories: ['Registry', 'BrowserHistory', 'Email'],
     });
+  });
+
+  it('refreshes an active Linux summary before extraction mutation resolves', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+    let extracted = false;
+    mocks.getLinuxArtifactSummary.mockImplementation(async () => ({
+      status: extracted ? 'parsed' : 'candidateFound',
+      total: extracted ? 4 : 0,
+      artifacts: [],
+      warnings: [],
+    }));
+    mocks.runAnalysisExtraction.mockImplementation(async () => {
+      extracted = true;
+      return {
+        status: 'parsed',
+        scannedCount: 4,
+        checkpointHitCount: 0,
+        artifactCount: 4,
+        timelineEventCount: 0,
+        sections: [],
+        generatedAt: '2026-06-01T10:20:00Z',
+        warnings: [],
+      };
+    });
+
+    const { result } = renderHook(
+      () => ({
+        summary: useLinuxArtifactSummary({ source: linuxSource }),
+        extraction: useRunAnalysisExtraction(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.summary.data?.status).toBe('candidateFound'));
+    await result.current.extraction.mutateAsync({
+      dataSourceId: 'ds-linux',
+      categories: ['LinuxArtifacts'],
+    });
+
+    await waitFor(() => expect(result.current.summary.data?.status).toBe('parsed'));
+    expect(mocks.getLinuxArtifactSummary).toHaveBeenCalledTimes(2);
   });
 
   it('loads v2 governance snapshot when current case exists', async () => {

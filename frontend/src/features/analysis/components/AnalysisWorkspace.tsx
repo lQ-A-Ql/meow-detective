@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
@@ -23,21 +23,23 @@ import { AnalysisSourceSidebar } from '@/features/analysis/components/AnalysisSo
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
 import { errorMessage } from '@/lib/errors';
+import { subscribeToEvent } from '@/lib/events/subscribers';
+import { refreshAnalysisQueries } from '@/features/analysis/refresh';
+import { runSelectedSourceExtraction } from '@/features/analysis/extraction-runner';
+import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import {
   AnalysisSourceEpoch,
-  EXTRACTION_CATEGORIES_BY_PLATFORM,
-  LINUX_PROGRESS_CATEGORIES,
   analysisSourceContextKey,
-  type ExtractionCategory,
   type LinuxAnalysisTabKey,
   isExtractionCategory,
 } from '@/features/analysis/types';
 import {
   labeledProgress,
-  statusFromRun,
   useAnalysisStore,
 } from '@/stores/analysis-store';
 import { useUiStore } from '@/stores/ui-store';
+import type { AnalysisExtractionProgress } from '@/types/models';
+import type { EvtxEventView } from '@/types/models';
 
 export function AnalysisWorkspace() {
   const { t } = useTranslation();
@@ -63,6 +65,8 @@ export function AnalysisWorkspace() {
   );
   const sourceEpoch = useRef(new AnalysisSourceEpoch(selectedSourceContextKey)).current;
   const extractionOperationRef = useRef<ReturnType<AnalysisSourceEpoch['begin']>>();
+  const [analysisRefreshError, setAnalysisRefreshError] = useState<unknown>();
+  const [eventLogView, setEventLogView] = useState<EvtxEventView>('boot');
 
   const systemInfo = useAnalysisSystemInfo(selectedDataSource);
   const evidenceSummary = useEvidenceClassificationSummary(selectedDataSource);
@@ -72,7 +76,10 @@ export function AnalysisWorkspace() {
   const registryStructured = useRegistryStructuredSummary(selectedDataSource);
   const browserSummary = useBrowserHistorySummary({ source: selectedDataSource, limit: 200 });
   const emailSummary = useEmailExtractionSummary({ source: selectedDataSource, limit: 200 });
-  const eventLogSummary = useEvtxEventSummary({ source: selectedDataSource, limit: 200 });
+  const eventLogSummary = useEvtxEventSummary({
+    source: selectedDataSource,
+    view: eventLogView,
+  });
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
   const classifications = useAnalysisClassifications(selectedDataSource, 1000);
   const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
@@ -90,11 +97,19 @@ export function AnalysisWorkspace() {
   const setActiveTab = useAnalysisStore((s) => s.setActiveTab);
   const setActiveLinuxTab = useAnalysisStore((s) => s.setActiveLinuxTab);
   const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
+  const deletedRecovery = useDeletedRecoveryModel(
+    selectedDataSource,
+    (selectedPlatform === 'windows' && activeTab === 'deletedRecovery')
+      || (selectedPlatform === 'linux' && activeLinuxTab === 'deletedRecovery'),
+  );
 
   const analysisMutationPending = evidenceScan.isPending
     || extractionRun.isPending
     || summaryMutation.isPending
-    || extractionRunning;
+    || extractionRunning
+    || deletedRecovery.scanning
+    || deletedRecovery.reading
+    || deletedRecovery.exporting;
 
   const labeledExtractionProgress = useMemo(
     () => labeledProgress(extractionProgress, t),
@@ -102,28 +117,31 @@ export function AnalysisWorkspace() {
   );
   const linuxNodeCounts = useMemo<Partial<Record<LinuxAnalysisTabKey, number>>>(() => {
     const summary = selectedPlatform === 'linux' ? linuxSummary.data : undefined;
-    if (!summary) {
-      return {};
+    const counts: Partial<Record<LinuxAnalysisTabKey, number>> = {};
+    if (summary) {
+      Object.assign(counts, {
+        overview: summary.totalCount,
+        journal: summary.journalCount,
+        login: summary.loginCount,
+        commands: summary.bashCommandCount,
+        packages: summary.aptEventCount,
+        cron: summary.cronJobCount,
+        sudo: summary.sudoEventCount,
+        systemConfig: summary.systemConfigCount,
+        webServices: (summary.webSiteCount ?? 0)
+          + (summary.webAccessLogCount ?? 0)
+          + (summary.webErrorLogCount ?? 0)
+          + (summary.webFindingCount ?? 0),
+        mysqlServices: (summary.mysqlConfigCount ?? 0)
+          + (summary.mysqlLogCount ?? 0)
+          + (summary.mysqlFindingCount ?? 0),
+      });
     }
-
-    return {
-      overview: summary.totalCount,
-      journal: summary.journalCount,
-      login: summary.loginCount,
-      commands: summary.bashCommandCount,
-      packages: summary.aptEventCount,
-      cron: summary.cronJobCount,
-      sudo: summary.sudoEventCount,
-      systemConfig: summary.systemConfigCount,
-      webServices: (summary.webSiteCount ?? 0)
-        + (summary.webAccessLogCount ?? 0)
-        + (summary.webErrorLogCount ?? 0)
-        + (summary.webFindingCount ?? 0),
-      mysqlServices: (summary.mysqlConfigCount ?? 0)
-        + (summary.mysqlLogCount ?? 0)
-        + (summary.mysqlFindingCount ?? 0),
-    };
-  }, [linuxSummary.data, selectedPlatform]);
+    if (deletedRecovery.state === 'ready') {
+      counts.deletedRecovery = deletedRecovery.total;
+    }
+    return counts;
+  }, [deletedRecovery.state, deletedRecovery.total, linuxSummary.data, selectedPlatform]);
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading;
@@ -137,12 +155,15 @@ export function AnalysisWorkspace() {
     ?? emailSummary.error
     ?? eventLogSummary.error
     ?? classifications.error
-    ?? summaryMutation.error;
+    ?? summaryMutation.error
+    ?? analysisRefreshError;
   const linuxError = currentCase.error
     ?? extractionRun.error
-    ?? linuxSummary.error;
+    ?? linuxSummary.error
+    ?? analysisRefreshError;
   useLayoutEffect(() => {
     if (sourceEpoch.sync(selectedSourceContextKey)) {
+      setAnalysisRefreshError(undefined);
       resetExtractionProgress();
       resetEvidenceScan();
       resetExtractionRun();
@@ -206,23 +227,64 @@ export function AnalysisWorkspace() {
     }
   }, [setExtractionRunning, sourceEpoch]);
 
-  async function refresh() {
-    if (selectedPlatform === 'windows') {
-      await Promise.all([
-        systemInfo.refetch(),
-        evidenceSummary.refetch(),
-        registrySummary.refetch(),
-        registryStructured.refetch(),
-        browserSummary.refetch(),
-        emailSummary.refetch(),
-        eventLogSummary.refetch(),
-        classifications.refetch(),
-      ]);
-      return;
-    }
+  useEffect(() => {
+    const unsubscribe = subscribeToEvent<AnalysisExtractionProgress>('analysis-extraction-progress', (event) => {
+      const progress = event.payload;
+      if (
+        progress.caseId !== currentCase.data?.id
+        || progress.dataSourceId !== selectedDataSource?.id
+        || !isExtractionCategory(progress.category)
+      ) {
+        return;
+      }
+      const completed = progress.phase === 'completed';
+      const failed = progress.phase === 'failed';
+      updateExtractionProgress(progress.category, {
+        status: failed ? 'failed' : completed ? 'success' : 'running',
+        scannedCount: progress.processedCandidates,
+        artifactCount: progress.artifactCount,
+        timelineEventCount: progress.timelineEventCount,
+        totalCandidateCount: progress.totalCandidates,
+        processedCandidateCount: progress.processedCandidates,
+        structuredCandidateCount: progress.structuredCandidates,
+        unsupportedCandidateCount: progress.unsupportedCandidates,
+        textFallbackCandidateCount: progress.textFallbackCandidates,
+        warningCandidateCount: progress.warningCandidates,
+        checkpointHitCount: progress.checkpointHitCount,
+        phase: progress.phase,
+        currentPath: progress.currentPath ?? undefined,
+        detail: progress.detail,
+        error: failed ? progress.detail : undefined,
+      });
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [
+    currentCase.data?.id,
+    selectedDataSource?.id,
+    updateExtractionProgress,
+  ]);
 
-    if (selectedPlatform === 'linux') {
-      await linuxSummary.refetch();
+  async function refresh() {
+    try {
+      await refreshAnalysisQueries(
+        selectedPlatform,
+        [
+          systemInfo.refetch,
+          evidenceSummary.refetch,
+          registrySummary.refetch,
+          registryStructured.refetch,
+          browserSummary.refetch,
+          emailSummary.refetch,
+          eventLogSummary.refetch,
+          classifications.refetch,
+        ],
+        linuxSummary.refetch,
+      );
+      setAnalysisRefreshError(undefined);
+    } catch (error) {
+      setAnalysisRefreshError(error);
     }
   }
 
@@ -236,139 +298,27 @@ export function AnalysisWorkspace() {
     }
     try {
       await evidenceScan.mutateAsync({ dataSourceId: selectedDataSource.id, categories: [] });
-      if (sourceEpoch.isCurrent(operation)) {
-        await evidenceSummary.refetch();
-      }
     } finally {
       sourceEpoch.finish(operation);
     }
   }
 
   async function runExtraction() {
-    if (!selectedDataSource) {
-      return;
-    }
-    const operation = sourceEpoch.begin(selectedSourceContextKey);
-    if (!operation) {
-      return;
-    }
-    const source = selectedDataSource;
-    const categories = EXTRACTION_CATEGORIES_BY_PLATFORM[source.platform];
-    extractionOperationRef.current = operation;
-    setExtractionRunning(true);
-    setDrawerOpen(true);
-    resetExtractionProgress();
-    const refetchByCategory: Record<ExtractionCategory, () => Promise<unknown>> = {
-      Registry: registrySummary.refetch,
-      BrowserHistory: browserSummary.refetch,
-      Email: emailSummary.refetch,
-      EventLogs: eventLogSummary.refetch,
-      LinuxArtifacts: linuxSummary.refetch,
-      LinuxJournal: linuxSummary.refetch,
-      LinuxLogin: linuxSummary.refetch,
-      LinuxCommands: linuxSummary.refetch,
-      LinuxPackages: linuxSummary.refetch,
-      LinuxCron: linuxSummary.refetch,
-      LinuxSudo: linuxSummary.refetch,
-      LinuxSystemConfig: linuxSummary.refetch,
-      LinuxWebServices: linuxSummary.refetch,
-      LinuxMysqlServices: linuxSummary.refetch,
-    };
-
-    const refetchRegistryStructured = async () => {
-      await registryStructured.refetch();
-    };
-
-    try {
-      for (const category of categories) {
-        if (!sourceEpoch.isCurrent(operation)) {
-          return;
-        }
-        const pendingCategories = category === 'LinuxArtifacts' ? LINUX_PROGRESS_CATEGORIES : [category];
-        for (const progressCategory of pendingCategories) {
-          updateExtractionProgress(progressCategory, {
-            status: 'running',
-            warnings: [],
-            error: undefined,
-          });
-        }
-        updateExtractionProgress(category, {
-          status: 'running',
-          warnings: [],
-          error: undefined,
-        });
-
-        try {
-          const run = await extractionRun.mutateAsync({
-            dataSourceId: source.id,
-            categories: [category],
-          });
-          if (!sourceEpoch.isCurrent(operation)) {
-            return;
-          }
-          let hasRequestedSection = false;
-          let sectionArtifactCount = 0;
-          for (const section of run.sections ?? []) {
-            if (!isExtractionCategory(section.key)) {
-              continue;
-            }
-            hasRequestedSection ||= section.key === category;
-            sectionArtifactCount += section.artifactCount;
-            updateExtractionProgress(section.key, {
-              status: statusFromRun(section.status),
-              scannedCount: section.scannedCount,
-              artifactCount: section.artifactCount,
-              timelineEventCount: section.timelineEventCount,
-              warnings: section.warnings,
-              error: undefined,
-            });
-          }
-          if (!hasRequestedSection) {
-            updateExtractionProgress(category, {
-              status: statusFromRun(run.status),
-              scannedCount: run.scannedCount,
-              artifactCount: sectionArtifactCount,
-              timelineEventCount: run.timelineEventCount,
-              warnings: run.warnings,
-              error: undefined,
-            });
-          }
-          if (!sourceEpoch.isCurrent(operation)) {
-            return;
-          }
-          await refetchByCategory[category]();
-          if (category === 'Registry' && sourceEpoch.isCurrent(operation)) {
-            await refetchRegistryStructured();
-          }
-        } catch (err) {
-          if (!sourceEpoch.isCurrent(operation)) {
-            return;
-          }
-          updateExtractionProgress(category, {
-            status: 'failed',
-            error: errorMessage(err),
-          });
-          if (category === 'LinuxArtifacts') {
-            for (const progressCategory of LINUX_PROGRESS_CATEGORIES) {
-              updateExtractionProgress(progressCategory, {
-                status: 'failed',
-                error: errorMessage(err),
-              });
-            }
-          }
-        }
-      }
-
-      if (source.platform === 'windows' && sourceEpoch.isCurrent(operation)) {
-        await evidenceSummary.refetch();
-      }
-    } finally {
-      sourceEpoch.finish(operation);
-      if (extractionOperationRef.current === operation) {
-        extractionOperationRef.current = undefined;
-        setExtractionRunning(false);
-      }
-    }
+    await runSelectedSourceExtraction({
+      source: selectedDataSource,
+      sourceContextKey: selectedSourceContextKey,
+      sourceEpoch,
+      execute: extractionRun.mutateAsync,
+      updateProgress: updateExtractionProgress,
+      resetProgress: resetExtractionProgress,
+      setExtractionRunning,
+      setDrawerOpen,
+      setRefreshError: setAnalysisRefreshError,
+      setActiveOperation: (operation) => {
+        extractionOperationRef.current = operation;
+      },
+      isActiveOperation: (operation) => extractionOperationRef.current === operation,
+    });
   }
 
   function selectDataSource(id: string) {
@@ -459,11 +409,14 @@ export function AnalysisWorkspace() {
             browserSummary={browserSummary}
             emailSummary={emailSummary}
             eventLogSummary={eventLogSummary}
+            eventLogView={eventLogView}
+            onEventLogViewChange={setEventLogView}
             classifications={classifications}
             evidencePending={evidenceScan.isPending}
             onRunEvidence={runEvidenceScan}
-            summaryPending={summaryMutation.isPending}
-            onDownloadSummary={downloadSummary}
+             summaryPending={summaryMutation.isPending}
+             onDownloadSummary={downloadSummary}
+             recoveryModel={deletedRecovery}
           />
         ) : selectedPlatform === 'linux' ? (
           <LinuxAnalysisView
@@ -474,6 +427,8 @@ export function AnalysisWorkspace() {
             loading={loading}
             summary={linuxSummary.data}
             summaryLoading={linuxSummary.isLoading}
+            extractionRunning={extractionRunning}
+            recoveryModel={deletedRecovery}
           />
         ) : null}
       </div>

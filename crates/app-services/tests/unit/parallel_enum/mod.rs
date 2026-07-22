@@ -207,6 +207,7 @@ fn fake_partitions(
 fn fake_mft_record(record_number: u64, parent_ref: u64, name: &str, is_dir: bool) -> MftRecord {
     MftRecord {
         record_number,
+        sequence_number: 0,
         name: name.to_string(),
         parent_ref,
         is_dir,
@@ -256,8 +257,8 @@ fn test_default_worker_count() {
 
 #[test]
 fn test_resolve_worker_count() {
-    assert_eq!(resolve_worker_count(None), 1);
-    assert_eq!(resolve_worker_count(Some(0)), 1);
+    assert_eq!(resolve_worker_count(None), default_worker_count());
+    assert_eq!(resolve_worker_count(Some(0)), default_worker_count());
     assert_eq!(resolve_worker_count(Some(2)), 2.min(default_worker_count()));
     assert_eq!(resolve_worker_count(Some(999)), default_worker_count());
 }
@@ -297,6 +298,50 @@ fn ntfs_mft_fast_path_writes_partition_prefixed_ids() {
         .unwrap();
     assert!(root_parent.is_none());
     assert_eq!(child_parent.as_deref(), Some("mft:3:42"));
+    let partition_indexes: Vec<i64> = conn
+        .prepare("SELECT partition_index FROM file_entries ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(partition_indexes, vec![3, 3, 3]);
+}
+
+#[test]
+fn recursive_enum_persists_partition_index_for_every_row() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let active_lists = Arc::new(AtomicUsize::new(0));
+    let max_active_lists = Arc::new(AtomicUsize::new(0));
+    let partition = fake_partition_work(7, 3, Duration::ZERO, active_lists, max_active_lists);
+
+    let result = enumerate_single_partition(
+        tmp.path(),
+        "ds-recursive-partition-index",
+        partition,
+        &AtomicBool::new(false),
+        None,
+    );
+
+    assert!(result.error.is_none());
+    let conn =
+        staging::open_partition_staging(tmp.path(), "ds-recursive-partition-index", 7).unwrap();
+    let missing: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE partition_index IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let wrong: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE partition_index <> 7",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(missing, 0);
+    assert_eq!(wrong, 0);
 }
 
 fn insert_staging_entry(conn: &rusqlite::Connection, id: &str, ds_id: &str) {

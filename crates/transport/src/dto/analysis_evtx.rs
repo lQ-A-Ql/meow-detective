@@ -3,10 +3,21 @@ use std::collections::BTreeMap;
 
 use crate::dto::analysis_base::AnalysisParseStatusDto;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EvtxEventViewDto {
+    Boot,
+    Logon,
+    Process,
+    Account,
+    Application,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EvtxEventSummaryDto {
     pub status: AnalysisParseStatusDto,
+    pub page_total: u64,
     pub boot_shutdown_count: u64,
     pub logon_logoff_count: u64,
     pub privilege_escalation_count: u64,

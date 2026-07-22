@@ -1,5 +1,5 @@
 use super::time::unix_millis_to_dt;
-use crate::browser::chromium::BrowserPassword;
+use crate::browser::chromium::{BrowserDecryptionStatus, BrowserPassword};
 use serde_json::Value;
 
 pub fn parse_firefox_passwords(data: &[u8]) -> Result<Vec<BrowserPassword>, String> {
@@ -38,6 +38,13 @@ pub fn parse_firefox_passwords(data: &[u8]) -> Result<Vec<BrowserPassword>, Stri
                     .max(0),
                 browser: "Firefox".to_string(),
                 profile: None,
+                decryption_status: if password.is_empty() {
+                    BrowserDecryptionStatus::Unavailable
+                } else {
+                    BrowserDecryptionStatus::Encrypted
+                },
+                decryption_detail: (!password.is_empty())
+                    .then(|| "Firefox NSS decryption is not configured".to_string()),
             }
         })
         .collect())

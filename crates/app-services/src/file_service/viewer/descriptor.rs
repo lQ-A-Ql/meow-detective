@@ -150,10 +150,17 @@ where
             {
                 return Ok(descriptor);
             }
-            Ok(_) | Err(_) => {
+            Ok(_) => {
+                tracing::debug!(
+                    cache_key = %key,
+                    "Discarding stale preview descriptor cache entry"
+                );
+            }
+            Err(error) => {
                 tracing::warn!(
                     cache_key = %key,
-                    "Ignoring stale or invalid preview descriptor cache entry"
+                    %error,
+                    "Discarding malformed preview descriptor cache entry"
                 );
             }
         }
@@ -248,5 +255,5 @@ fn cephfs_descriptor_is_fresh(
 }
 
 pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
-    format!("preview-descriptor:v4:{case_id}:{}", file_id.0)
+    format!("preview-descriptor:v5:{case_id}:{}", file_id.0)
 }

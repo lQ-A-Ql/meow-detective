@@ -30,6 +30,14 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_021_cephfs_assembly_capability",
         "source_020_cephfs_namespace_layout"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_022_file_partition_index_repair",
+        "source_021_cephfs_assembly_capability"
+    ));
+    assert!(runner::source_version_is_at_least(
+        "source_024_ntfs_deleted_recovery",
+        "source_022_file_partition_index_repair"
+    ));
 }
 
 #[test]
@@ -46,4 +54,133 @@ fn source_version_order_rejects_older_and_unknown_versions() {
         "source_017_timeline_projection_identity",
         "source_999_unknown"
     ));
+}
+
+#[test]
+fn source_024_upgrade_preserves_old_recovery_rows_and_adds_ntfs_sequence() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE schema_migrations (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../src/migrations/scripts/source_001.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../src/migrations/scripts/source_023_deleted_recovery.sql"
+        ))
+        .unwrap();
+    connection
+        .execute_batch(
+            "INSERT INTO schema_migrations (name) VALUES
+                ('source_001'),
+                ('source_002_data_source_metadata'),
+                ('source_003_correlation_cache'),
+                ('source_004_graph_node_order_index'),
+                ('source_005_ceph_osd_inventory'),
+                ('source_006_ceph_bluefs_inventory'),
+                ('source_007_ceph_bluefs_replay'),
+                ('source_008_ceph_rocksdb_inventory'),
+                ('source_009_ceph_sst_inventory'),
+                ('source_010_ceph_wal_inventory'),
+                ('source_011_ceph_latest_state'),
+                ('source_012_ceph_bluestore_semantics'),
+                ('source_013_ceph_bluestore_omap'),
+                ('source_014_ceph_osd_device_bindings'),
+                ('source_015_ceph_bluestore_rbd_header_context'),
+                ('source_016_file_partition_index'),
+                ('source_017_timeline_projection_identity'),
+                ('source_018_cephfs_metadata_inventory'),
+                ('source_019_cephfs_journal_replay'),
+                ('source_020_cephfs_namespace_layout'),
+                ('source_021_cephfs_assembly_capability'),
+                ('source_022_file_partition_index_repair'),
+                ('source_023_deleted_recovery')",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+             VALUES ('source-migration', 'case-1', 'Migration fixture', 'e01', 'fixture.E01', '2026-07-21T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO filesystem_recovery_scans (
+                id, data_source_id, partition_index, filesystem_type,
+                parser_version, log_kind, snapshot_identity_sha256,
+                state, candidate_count, started_at, completed_at
+             ) VALUES (
+                'scan-old', 'source-migration', 2, 'xfs', 'xfs-log-v1',
+                'internal_log', ?1, 'partial', 1,
+                '2026-07-21T00:00:00Z', '2026-07-21T00:00:01Z'
+             )",
+            ["a".repeat(64)],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO deleted_file_recoveries (
+                id, scan_id, inode, entry_type, declared_size,
+                completeness, recovery_method, confidence, allocation_state
+             ) VALUES (
+                'recovery-old', 'scan-old', '77', 'file', 0,
+                'metadata_only', 'xfs-log-inode', 0.5, 'unverified'
+             )",
+            [],
+        )
+        .unwrap();
+
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 1);
+
+    let old_sequence: Option<u16> = connection
+        .query_row(
+            "SELECT mft_sequence FROM deleted_file_recoveries WHERE id = 'recovery-old'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_sequence, None);
+
+    connection
+        .execute(
+            "INSERT INTO filesystem_recovery_scans (
+                id, data_source_id, partition_index, filesystem_type,
+                parser_version, log_kind, snapshot_identity_sha256,
+                state, candidate_count, started_at, completed_at
+             ) VALUES (
+                'scan-ntfs', 'source-migration', 3, 'ntfs', 'ntfs-mft-v1',
+                'internal_log', ?1, 'complete', 1,
+                '2026-07-21T00:00:00Z', '2026-07-21T00:00:02Z'
+             )",
+            ["b".repeat(64)],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO deleted_file_recoveries (
+                id, scan_id, inode, entry_type, mft_sequence, declared_size,
+                completeness, recovery_method, confidence, allocation_state
+             ) VALUES (
+                'recovery-ntfs', 'scan-ntfs', '88', 'file', 17, 0,
+                'complete', 'ntfs-mft-v1', 0.92, 'free'
+             )",
+            [],
+        )
+        .unwrap();
+    let sequence: u16 = connection
+        .query_row(
+            "SELECT mft_sequence FROM deleted_file_recoveries WHERE id = 'recovery-ntfs'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(sequence, 17);
 }

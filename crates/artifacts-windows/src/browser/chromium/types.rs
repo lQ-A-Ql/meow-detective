@@ -1,6 +1,46 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::dpapi::BrowserDecryption;
+
+/// Auditable status for a browser secret value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BrowserDecryptionStatus {
+    Plaintext,
+    Decrypted,
+    Encrypted,
+    Unsupported,
+    Failed,
+    Unavailable,
+}
+
+impl BrowserDecryptionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plaintext => "plaintext",
+            Self::Decrypted => "decrypted",
+            Self::Encrypted => "encrypted",
+            Self::Unsupported => "unsupported",
+            Self::Failed => "failed",
+            Self::Unavailable => "unavailable",
+        }
+    }
+}
+
+impl From<BrowserDecryption> for BrowserDecryptionStatus {
+    fn from(value: BrowserDecryption) -> Self {
+        match value {
+            BrowserDecryption::Plaintext => Self::Plaintext,
+            BrowserDecryption::Decrypted => Self::Decrypted,
+            BrowserDecryption::Encrypted => Self::Encrypted,
+            BrowserDecryption::Unsupported => Self::Unsupported,
+            BrowserDecryption::Failed => Self::Failed,
+            BrowserDecryption::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
 /// A single browser history visit (navigation record).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserVisit {
@@ -37,6 +77,8 @@ pub struct BrowserCookie {
     pub http_only: bool,
     /// Raw `same_site` column value: -1 = unspecified, 0 = none, 1 = lax, 2 = strict.
     pub same_site: Option<i64>,
+    pub decryption_status: BrowserDecryptionStatus,
+    pub decryption_detail: Option<String>,
 }
 
 /// A single tab entry from a restored browser session.
@@ -62,4 +104,6 @@ pub struct BrowserPassword {
     pub times_used: i64,
     pub browser: String,
     pub profile: Option<String>,
+    pub decryption_status: BrowserDecryptionStatus,
+    pub decryption_detail: Option<String>,
 }

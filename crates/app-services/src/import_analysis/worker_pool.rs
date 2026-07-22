@@ -83,7 +83,7 @@ fn finish_disabled_post_import(
             84,
             &format!(
                 "Post-import skipped: phase=post-import-skip scheduling=deferred workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks=0 timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
-                resolve_analysis_worker_count(options.max_analysis_workers).max(1)
+                scheduled_worker_count(options.max_analysis_workers)
             ),
         );
     }
@@ -111,7 +111,7 @@ fn emit_post_import_scheduled(
         &format!(
             "Post-import analysis scheduled: phase=analysis-start scheduling=queued mode={} workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks=unknown contentDeferred={} textDeferred={}",
             options.analysis_mode.as_str(),
-            resolve_analysis_worker_count(options.max_analysis_workers).max(1),
+            scheduled_worker_count(options.max_analysis_workers),
             bool_word(content_deferred),
             bool_word(text_deferred)
         ),
@@ -190,6 +190,18 @@ pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usi
     crate::import_scheduler::resolve_analysis_worker_count(max_analysis_workers)
 }
 
+pub fn resolve_analysis_worker_count_for_memory(
+    max_analysis_workers: Option<usize>,
+    rss_mb: u64,
+    memory_soft_limit_mb: u64,
+) -> usize {
+    crate::import_scheduler::resolve_analysis_worker_count_for_memory(
+        max_analysis_workers,
+        rss_mb,
+        memory_soft_limit_mb,
+    )
+}
+
 pub fn run_import_analysis_staging(
     options: ImportAnalysisOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
@@ -266,7 +278,6 @@ struct AnalysisRunSetup {
 
 impl AnalysisRunSetup {
     fn for_options(options: &ImportAnalysisOptions) -> Self {
-        let worker_count = resolve_analysis_worker_count(options.max_analysis_workers).max(1);
         let memory_soft_limit_mb = if options.memory_soft_limit_mb == 0 {
             default_memory_soft_limit_mb()
         } else {
@@ -277,6 +288,11 @@ impl AnalysisRunSetup {
         } else {
             options.memory_hard_limit_mb.max(memory_soft_limit_mb + 1)
         };
+        let worker_count = resolve_analysis_worker_count_for_memory(
+            options.max_analysis_workers,
+            current_rss_mb(),
+            memory_soft_limit_mb,
+        );
         Self {
             worker_count,
             worker_ids: (0..worker_count).collect(),
@@ -284,6 +300,14 @@ impl AnalysisRunSetup {
             memory_hard_limit_mb,
         }
     }
+}
+
+fn scheduled_worker_count(max_analysis_workers: Option<usize>) -> usize {
+    resolve_analysis_worker_count_for_memory(
+        max_analysis_workers,
+        current_rss_mb(),
+        default_memory_soft_limit_mb(),
+    )
 }
 
 fn finish_already_merged_analysis(

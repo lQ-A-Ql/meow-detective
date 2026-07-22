@@ -88,6 +88,41 @@ fn insert_entry(
     .unwrap();
 }
 
+fn source_021_connection_with_late_file_rows() -> Connection {
+    let conn = legacy_source_connection();
+    for migration in [
+        "source_016_file_partition_index",
+        "source_017_timeline_projection_identity",
+        "source_018_cephfs_metadata_inventory",
+        "source_019_cephfs_journal_replay",
+        "source_020_cephfs_namespace_layout",
+        "source_021_cephfs_assembly_capability",
+    ] {
+        conn.execute(
+            "INSERT INTO schema_migrations(name) VALUES (?1)",
+            params![migration],
+        )
+        .unwrap();
+    }
+    insert_entry(
+        &conn,
+        "late-root",
+        None,
+        "ds-late",
+        "Partition 2 (XFS) - cl/root",
+        None,
+    );
+    insert_entry(
+        &conn,
+        "late-child",
+        Some("late-root"),
+        "ds-late",
+        "usr",
+        None,
+    );
+    conn
+}
+
 #[test]
 fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     let conn = legacy_source_connection();
@@ -99,10 +134,10 @@ fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     insert_entry(&conn, "unknown", None, "ds-a", "Volume (XFS)", None);
     insert_entry(&conn, "preset", None, "ds-a", "Partition 3", Some(99));
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 6);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 9);
     assert_eq!(
         runner::latest_source_version(),
-        "source_021_cephfs_assembly_capability"
+        "source_024_ntfs_deleted_recovery"
     );
 
     for id in ["root-2", "etc", "ssh"] {
@@ -211,7 +246,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 6);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 9);
     for id in ["root-4", "child"] {
         let partition_index: Option<i64> = conn
             .query_row(
@@ -222,4 +257,85 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
             .unwrap();
         assert_eq!(partition_index, Some(4), "{id}");
     }
+}
+
+#[test]
+fn source_022_repairs_rows_added_after_source_016() {
+    let conn = source_021_connection_with_late_file_rows();
+
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
+    for id in ["late-root", "late-child"] {
+        let partition_index: Option<i64> = conn
+            .query_row(
+                "SELECT partition_index FROM file_entries WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(partition_index, Some(2), "{id}");
+    }
+}
+
+#[test]
+fn source_022_repairs_a_catalog_created_after_source_016_was_skipped() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE schema_migrations (
+             id INTEGER PRIMARY KEY,
+             name TEXT NOT NULL UNIQUE,
+             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE file_entries (
+             id TEXT PRIMARY KEY NOT NULL,
+             parent_id TEXT REFERENCES file_entries(id),
+             data_source_id TEXT NOT NULL,
+             path TEXT NOT NULL,
+             name TEXT NOT NULL,
+             entry_type TEXT NOT NULL
+         );
+         INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type)
+         VALUES
+             ('late-root-no-column', NULL, 'ds-late', '', 'Partition 3 (XFS)', 'directory');",
+    )
+    .unwrap();
+    for migration in [
+        "source_001",
+        "source_002_data_source_metadata",
+        "source_003_correlation_cache",
+        "source_004_graph_node_order_index",
+        "source_005_ceph_osd_inventory",
+        "source_006_ceph_bluefs_inventory",
+        "source_007_ceph_bluefs_replay",
+        "source_008_ceph_rocksdb_inventory",
+        "source_009_ceph_sst_inventory",
+        "source_010_ceph_wal_inventory",
+        "source_011_ceph_latest_state",
+        "source_012_ceph_bluestore_semantics",
+        "source_013_ceph_bluestore_omap",
+        "source_014_ceph_osd_device_bindings",
+        "source_015_ceph_bluestore_rbd_header_context",
+        "source_016_file_partition_index",
+        "source_017_timeline_projection_identity",
+        "source_018_cephfs_metadata_inventory",
+        "source_019_cephfs_journal_replay",
+        "source_020_cephfs_namespace_layout",
+        "source_021_cephfs_assembly_capability",
+    ] {
+        conn.execute(
+            "INSERT INTO schema_migrations(name) VALUES (?1)",
+            params![migration],
+        )
+        .unwrap();
+    }
+
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 3);
+    let partition_index: Option<i64> = conn
+        .query_row(
+            "SELECT partition_index FROM file_entries WHERE id = 'late-root-no-column'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(partition_index, Some(3));
 }

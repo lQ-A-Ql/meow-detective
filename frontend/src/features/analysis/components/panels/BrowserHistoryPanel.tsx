@@ -75,6 +75,7 @@ export function BrowserHistoryPanel({
     { key: 'expiry', title: '过期时间', className: 'w-[170px]', render: (row) => row.expiry ?? '-' },
     { key: 'secure', title: '安全标记', className: 'w-[80px]', render: (row) => (row.secure ? '是' : '否') },
     { key: 'httpOnly', title: '仅 HTTP', className: 'w-[80px]', render: (row) => (row.httpOnly ? '是' : '否') },
+    { key: 'decryptionStatus', title: '解密状态', className: 'w-[110px]', render: (row) => row.decryptionStatus ?? '未知' },
   ];
   const sessionColumns: DenseColumn<BrowserSessionTab>[] = [
     { key: 'title', title: '标题', className: 'min-w-[220px]', render: (row) => row.title ?? '-' },
@@ -89,6 +90,7 @@ export function BrowserHistoryPanel({
     { key: 'passwordPreview', title: '密码预览', className: 'min-w-[160px]', render: (row) => row.passwordPreview ?? '-' },
     { key: 'createdAt', title: '创建时间', className: 'w-[170px]', render: (row) => row.createdAt ?? '-' },
     { key: 'timesUsed', title: '使用次数', className: 'w-[90px]', render: (row) => row.timesUsed.toString() },
+    { key: 'decryptionStatus', title: '解密状态', className: 'w-[110px]', render: (row) => row.decryptionStatus ?? '未知' },
   ];
 
   const visitGroups = groupByBrowser(info.visits);

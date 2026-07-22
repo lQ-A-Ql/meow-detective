@@ -9,10 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
-const DEFAULT_CPU_CAP: usize = 4;
+const DEFAULT_CPU_CAP: usize = 6;
 const CLUSTER_MEMBER_CAP: usize = 2;
+const CLUSTER_MEMBER_WORKER_CAP: usize = 3;
 const MEMORY_CAPACITY_MB: u64 = 4096;
 const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 4096;
+const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 512;
 const ADMISSION_WAIT: Duration = Duration::from_millis(100);
 
 /// Work topology used to derive a bounded import policy.
@@ -66,10 +68,11 @@ impl ImportSchedulingPolicy {
     ) -> Self {
         let cpu_budget = cpu_budget.max(1);
         // A cluster member is an independent evidence reader.  Cap its local
-        // worker budget at two so two members can make progress without
-        // multiplying the ordinary four-worker source budget.
-        let import_workers = requested_import_workers.clamp(1, 2);
-        let analysis_workers = requested_analysis_workers.clamp(1, 2);
+        // worker budget at three so two members can make progress without
+        // multiplying the ordinary six-worker source budget.
+        let member_worker_cap = cpu_budget.clamp(1, CLUSTER_MEMBER_WORKER_CAP);
+        let import_workers = requested_import_workers.clamp(1, member_worker_cap);
+        let analysis_workers = requested_analysis_workers.clamp(1, member_worker_cap);
         let per_member_cpu = import_workers.max(analysis_workers);
         let source_concurrency = member_count
             .min(CLUSTER_MEMBER_CAP)
@@ -297,6 +300,26 @@ pub fn resolve_import_worker_count(max_import_workers: Option<usize>) -> usize {
 
 pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usize {
     resolve_requested(max_analysis_workers, default_cpu_budget())
+}
+
+/// Resolve analysis workers against both CPU capacity and the process RSS
+/// soft limit. A worker is given a conservative memory reservation so a small
+/// CPU increase cannot turn into an unbounded peak when several content files
+/// are processed at once. A zero RSS/limit keeps deterministic callers from
+/// being throttled when the platform cannot provide memory telemetry.
+pub fn resolve_analysis_worker_count_for_memory(
+    max_analysis_workers: Option<usize>,
+    rss_mb: u64,
+    memory_soft_limit_mb: u64,
+) -> usize {
+    let cpu_bound = resolve_analysis_worker_count(max_analysis_workers);
+    if rss_mb == 0 || memory_soft_limit_mb == 0 {
+        return cpu_bound;
+    }
+    let available_mb = memory_soft_limit_mb.saturating_sub(rss_mb);
+    let memory_bound = (available_mb / ANALYSIS_WORKER_MEMORY_RESERVATION_MB).max(1);
+    let memory_bound = usize::try_from(memory_bound).unwrap_or(usize::MAX);
+    cpu_bound.min(memory_bound).max(1)
 }
 
 fn resolve_requested(requested: Option<usize>, capacity: usize) -> usize {

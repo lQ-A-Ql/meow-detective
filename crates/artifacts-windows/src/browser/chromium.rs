@@ -13,10 +13,13 @@ mod time;
 mod types;
 
 pub use cookies::parse_chrome_cookies;
+pub use cookies::parse_chrome_cookies_with_decryptor;
 pub use downloads::parse_chrome_downloads;
 pub use history::parse_chrome_history;
 pub use passwords::parse_chrome_passwords;
+pub use passwords::parse_chrome_passwords_with_decryptor;
 pub use session::parse_chrome_session;
+pub use types::BrowserDecryptionStatus;
 pub use types::{BrowserCookie, BrowserDownload, BrowserPassword, BrowserSessionTab, BrowserVisit};
 
 #[cfg(test)]

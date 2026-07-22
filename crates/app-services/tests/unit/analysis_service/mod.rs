@@ -5,17 +5,19 @@ use super::*;
 use chrono::{DateTime, Utc};
 use domain::DataSourcePlatform::{Linux as L, Windows as W};
 use domain::{
-    CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry, FileEntryId,
+    Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType,
+    FileEntry, FileEntryId,
 };
 use persistence_sqlite::repositories::{
-    case_repo::CaseRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
+    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
+    file_repo::FileRepo,
 };
 use persistence_sqlite::{open_in_memory, runner};
 use rusqlite::{params, Connection};
 use std::{cell::Cell, collections::HashMap, io::Read, io::Write, path::Path, rc::Rc};
 use tempfile::TempDir;
 use testing::{builders::registry, fixtures};
-use transport::dto::AnalysisParseStatusDto;
+use transport::dto::{AnalysisParseStatusDto, EvtxEventViewDto};
 
 mod cancellation;
 
@@ -80,6 +82,178 @@ fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
         .unwrap();
 
     (conn, tmp, ds_id)
+}
+
+#[test]
+fn registry_structured_summary_includes_physical_network_adapters() {
+    let (conn, _tmp, data_source_id) = setup_case_db();
+    let attrs = serde_json::from_value(serde_json::json!({
+        "guid": "{ADAPTER-GUID}",
+        "name": "Ethernet",
+        "description": "Intel Ethernet Controller",
+        "macAddress": "00:11:22:33:44:55",
+        "ipAddresses": ["192.0.2.10"],
+        "subnetMasks": ["255.255.255.0"],
+        "gateways": ["192.0.2.1"],
+        "dhcpEnabled": true,
+        "dhcpServer": "192.0.2.2",
+        "dnsServers": ["192.0.2.53"],
+        "pnpInstanceId": "PCI\\VEN_8086&DEV_1234",
+        "serviceName": "e1dexpress"
+    }))
+    .unwrap();
+    let artifact = Artifact {
+        id: ArtifactId("network-adapter-1".to_string()),
+        family: "RegistryNetworkAdapter".to_string(),
+        title: "Network Adapter: Ethernet".to_string(),
+        summary: "physical adapter".to_string(),
+        source_object_id: Some(FileEntryId("system-hive".to_string())),
+        extractor_id: Some("registry.system.network.v1".to_string()),
+        extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        confidence: Some(0.85),
+        source_attribution: Some("Windows/System32/config/SYSTEM".to_string()),
+        created_at: Utc::now(),
+        attrs,
+    };
+    ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact], "case-analysis", &data_source_id.0)
+        .unwrap();
+
+    let summary = get_registry_structured_summary(&conn).unwrap();
+
+    assert_eq!(summary.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(summary.network_adapters.len(), 1);
+    let adapter = &summary.network_adapters[0];
+    assert_eq!(adapter.name, "Ethernet");
+    assert_eq!(adapter.ip_addresses, ["192.0.2.10"]);
+    assert_eq!(adapter.subnet_masks, ["255.255.255.0"]);
+    assert_eq!(
+        adapter.pnp_instance_id.as_deref(),
+        Some("PCI\\VEN_8086&DEV_1234")
+    );
+}
+
+#[test]
+fn evtx_summary_preserves_boot_event_timestamp_from_persisted_artifact() {
+    let (conn, _tmp, data_source_id) = setup_case_db();
+    let attrs = serde_json::from_value(serde_json::json!({
+        "timestamp": "2026-07-22T01:02:03+00:00",
+        "eventId": 13,
+        "recordId": 42,
+        "provider": "Microsoft-Windows-Kernel-General",
+        "eventKind": "operatingSystemShutdown",
+        "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+        "note": "Windows entered the operating-system shutdown phase."
+    }))
+    .unwrap();
+    let artifact = Artifact {
+        id: ArtifactId("evtx-boot-1".to_string()),
+        family: "EvtxBootShutdown".to_string(),
+        title: "EVTX operatingSystemShutdown event 13".to_string(),
+        summary: "shutdown phase".to_string(),
+        source_object_id: Some(FileEntryId("system-evtx".to_string())),
+        extractor_id: Some("evtx.structured".to_string()),
+        extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        confidence: Some(0.85),
+        source_attribution: Some("Windows/System32/winevt/Logs/System.evtx".to_string()),
+        created_at: Utc::now(),
+        attrs,
+    };
+    ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact], "case-analysis", &data_source_id.0)
+        .unwrap();
+
+    let summary = get_evtx_event_summary(&conn, None, 0, 100).unwrap();
+
+    assert_eq!(summary.boot_events.len(), 1);
+    assert_eq!(
+        summary.boot_events[0].timestamp,
+        "2026-07-22T01:02:03+00:00"
+    );
+    assert_eq!(summary.boot_events[0].kind, "operatingSystemShutdown");
+}
+
+#[test]
+fn evtx_summary_pages_the_requested_view_and_counts_the_full_dataset() {
+    let (conn, _tmp, data_source_id) = setup_case_db();
+    let artifacts = (0..3)
+        .map(|index| Artifact {
+            id: ArtifactId(format!("evtx-process-{index}")),
+            family: "EvtxSecurityEvent".to_string(),
+            title: format!("EVTX process event {index}"),
+            summary: "process created".to_string(),
+            source_object_id: Some(FileEntryId("security-evtx".to_string())),
+            extractor_id: Some("evtx.structured".to_string()),
+            extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+            confidence: Some(0.85),
+            source_attribution: Some("Windows/System32/winevt/Logs/Security.evtx".to_string()),
+            created_at: Utc::now(),
+            attrs: serde_json::from_value(serde_json::json!({
+                "timestamp": format!("2026-07-22T00:00:0{index}+00:00"),
+                "eventId": 4688,
+                "recordId": index + 1,
+                "kind": "processCreated",
+                "sourcePath": "Windows/System32/winevt/Logs/Security.evtx"
+            }))
+            .unwrap(),
+        })
+        .collect::<Vec<_>>();
+    ArtifactRepo::new(&conn)
+        .insert_batch(&artifacts, "case-analysis", &data_source_id.0)
+        .unwrap();
+
+    let first_page = get_evtx_event_summary(&conn, Some(EvtxEventViewDto::Process), 0, 1).unwrap();
+    let second_page = get_evtx_event_summary(&conn, Some(EvtxEventViewDto::Process), 1, 1).unwrap();
+    let third_page = get_evtx_event_summary(&conn, Some(EvtxEventViewDto::Process), 2, 1).unwrap();
+
+    assert_eq!(first_page.page_total, 3);
+    assert_eq!(first_page.process_execution_count, 3);
+    assert_eq!(first_page.security_events.len(), 1);
+    assert_eq!(first_page.security_events[0].record_id, Some(3));
+    assert_eq!(second_page.security_events[0].record_id, Some(2));
+    assert_eq!(third_page.security_events[0].record_id, Some(1));
+    assert!(first_page.boot_events.is_empty());
+    assert!(first_page.application_events.is_empty());
+}
+
+#[test]
+fn evtx_summary_places_invalid_timestamps_after_valid_events() {
+    let (conn, _tmp, data_source_id) = setup_case_db();
+    let artifacts = [
+        ("evtx-invalid", "unknown", 99),
+        ("evtx-valid", "2026-07-22T00:00:00+00:00", 1),
+    ]
+    .into_iter()
+    .map(|(id, timestamp, record_id)| Artifact {
+        id: ArtifactId(id.to_string()),
+        family: "EvtxSecurityEvent".to_string(),
+        title: "EVTX process event".to_string(),
+        summary: "process created".to_string(),
+        source_object_id: Some(FileEntryId("security-evtx".to_string())),
+        extractor_id: Some("evtx.structured".to_string()),
+        extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        confidence: Some(0.85),
+        source_attribution: Some("Windows/System32/winevt/Logs/Security.evtx".to_string()),
+        created_at: Utc::now(),
+        attrs: serde_json::from_value(serde_json::json!({
+            "timestamp": timestamp,
+            "eventId": 4688,
+            "recordId": record_id,
+            "kind": "processCreated",
+            "sourcePath": "Windows/System32/winevt/Logs/Security.evtx"
+        }))
+        .unwrap(),
+    })
+    .collect::<Vec<_>>();
+    ArtifactRepo::new(&conn)
+        .insert_batch(&artifacts, "case-analysis", &data_source_id.0)
+        .unwrap();
+
+    let summary = get_evtx_event_summary(&conn, Some(EvtxEventViewDto::Process), 0, 10).unwrap();
+
+    assert_eq!(summary.security_events.len(), 2);
+    assert_eq!(summary.security_events[0].record_id, Some(1));
+    assert_eq!(summary.security_events[1].record_id, Some(99));
 }
 
 fn sqlite_db_bytes(build: impl FnOnce(&Connection)) -> Vec<u8> {
@@ -832,6 +1006,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     assert!(hive_names.contains(&"SOFTWARE"));
     assert!(structured.sam_users.is_empty());
     assert!(structured.user_assist_entries.is_empty());
+    assert!(structured.network_adapters.is_empty());
 
     let browser = get_browser_history_summary(&conn, 0, 20).unwrap();
     assert_eq!(browser.visit_total, 3);

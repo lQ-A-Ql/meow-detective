@@ -10,11 +10,15 @@ import {
   getImagePreview,
   getMediaUrl,
   getTextPreview,
+  exportDeletedRecovery,
   importDataSource,
+  listDeletedRecoveries,
   openFileHandle,
   closeFileHandle,
+  readDeletedRecoveryRange,
   readFileRange,
   readMediaRange,
+  runDeletedRecovery,
 } from './files';
 
 vi.mock('./client', () => ({
@@ -238,6 +242,56 @@ describe('files API', () => {
         pageLimit: 500,
         sortKey: 'name',
         sortDirection: 'asc',
+      },
+    });
+  });
+
+  it('lists persisted deleted recoveries for one source partition', async () => {
+    requestMock.mockResolvedValueOnce({ recoveries: [], total: 0 } as never);
+
+    await listDeletedRecoveries('source-1', 2, 100, 50);
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.LIST_DELETED_RECOVERIES, {
+      request: { dataSourceId: 'source-1', partitionIndex: 2, offset: 100, limit: 50 },
+    });
+  });
+
+  it('runs deleted recovery for the selected partition', async () => {
+    requestMock.mockResolvedValueOnce({ dataSourceId: 'source-1', scans: [], failures: [] } as never);
+
+    await runDeletedRecovery('source-1', 2);
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.RUN_DELETED_RECOVERY, {
+      request: { dataSourceId: 'source-1', partitionIndex: 2 },
+    });
+  });
+
+  it('reads a verified deleted recovery range', async () => {
+    requestMock.mockResolvedValueOnce({ bytesBase64: 'AA==' } as never);
+
+    await readDeletedRecoveryRange('source-1', `recovery:${'a'.repeat(64)}`, 4096, 1024);
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.READ_DELETED_RECOVERY_RANGE, {
+      request: {
+        dataSourceId: 'source-1',
+        recoveryId: `recovery:${'a'.repeat(64)}`,
+        offset: 4096,
+        length: 1024,
+      },
+    });
+  });
+
+  it('exports a complete deleted recovery without overwrite by default', async () => {
+    requestMock.mockResolvedValueOnce({ bytesWritten: 12, sha256: 'abc' } as never);
+
+    await exportDeletedRecovery('source-1', `recovery:${'b'.repeat(64)}`, 'D:/exports/file.bin');
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.EXPORT_DELETED_RECOVERY, {
+      request: {
+        dataSourceId: 'source-1',
+        recoveryId: `recovery:${'b'.repeat(64)}`,
+        destinationPath: 'D:/exports/file.bin',
+        overwrite: false,
       },
     });
   });

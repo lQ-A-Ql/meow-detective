@@ -64,8 +64,8 @@ fn e01_registry_network_adapters_and_default_browser() {
         eprintln!(
             "  name={:?} ip={:?} gateway={:?} mac={:?} dhcp={:?}",
             adapter.name,
-            adapter.ip_address,
-            adapter.gateway,
+            adapter.ip_addresses,
+            adapter.gateways,
             adapter.mac_address,
             adapter.dhcp_enabled
         );
@@ -77,7 +77,7 @@ fn e01_registry_network_adapters_and_default_browser() {
     assert!(
         adapters
             .iter()
-            .any(|a| a.ip_address.is_some() || a.gateway.is_some()),
+            .any(|a| !a.ip_addresses.is_empty() || !a.gateways.is_empty()),
         "Expected at least one adapter with IP or gateway"
     );
 

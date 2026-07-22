@@ -25,6 +25,7 @@ pub(super) fn load_registry_structured_summary(
         hive_overviews: core.hive_overviews,
         sam_users: core.sam_users,
         user_assist_entries: core.user_assist_entries,
+        network_adapters: system.network_adapters,
         network_profiles: core.network_profiles,
         installed_software: core.installed_software,
         usb_devices: system.usb_devices,
@@ -62,6 +63,7 @@ fn structured_status(
         && core.user_assist_entries.is_empty()
         && core.hive_overviews.is_empty()
         && core.network_profiles.is_empty()
+        && system.network_adapters.is_empty()
         && system.usb_devices.is_empty()
         && system.mounted_devices.is_empty()
         && system.shutdown_times.is_empty()

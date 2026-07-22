@@ -99,15 +99,45 @@ fn decrypt_user_hashes_aes_roundtrip() {
     let intermediate = des_encrypt_16(&k1, &k2, &final_nt);
     let encrypted = aes128_cbc_encrypt(&hashed_boot_key[..16], &salt, &intermediate);
 
-    let mut user_v = vec![0u8; USER_V_HEADER_LEN + 48];
+    let blob_len = 24 + encrypted.len();
+    let mut user_v = vec![0u8; USER_V_HEADER_LEN + blob_len];
     user_v[0xA8..0xAC].copy_from_slice(&0u32.to_le_bytes());
-    user_v[0xAC..0xB0].copy_from_slice(&48u32.to_le_bytes());
+    user_v[0xAC..0xB0].copy_from_slice(&(blob_len as u32).to_le_bytes());
     let blob_offset = USER_V_HEADER_LEN;
-    user_v[blob_offset + 12..blob_offset + 16].copy_from_slice(&16u32.to_le_bytes());
-    user_v[blob_offset + 16..blob_offset + 32].copy_from_slice(&salt);
-    user_v[blob_offset + 32..blob_offset + 48].copy_from_slice(&encrypted);
+    user_v[blob_offset..blob_offset + 2].copy_from_slice(&1u16.to_le_bytes());
+    user_v[blob_offset + 2..blob_offset + 4].copy_from_slice(&2u16.to_le_bytes());
+    user_v[blob_offset + 4..blob_offset + 8].copy_from_slice(&24u32.to_le_bytes());
+    user_v[blob_offset + 8..blob_offset + 24].copy_from_slice(&salt);
+    user_v[blob_offset + 24..].copy_from_slice(&encrypted);
 
     let hashes = decrypt_user_hashes(hashed_boot_key, rid, &user_v).expect("decrypt failed");
     assert_eq!(hashes.nt, NT_HASH_EMPTY);
     assert_eq!(hashes.lm, LM_HASH_EMPTY);
+}
+
+#[test]
+fn encrypted_hash_format_is_selected_by_revision_not_pek_id() {
+    let salt = [0x5au8; 16];
+    let encrypted = [0xa5u8; 16];
+    let mut blob = vec![0u8; 40];
+    blob[..2].copy_from_slice(&1u16.to_le_bytes());
+    blob[2..4].copy_from_slice(&2u16.to_le_bytes());
+    blob[4..8].copy_from_slice(&24u32.to_le_bytes());
+    blob[8..24].copy_from_slice(&salt);
+    blob[24..].copy_from_slice(&encrypted);
+
+    match parse_encrypted_hash(&blob, 0, blob.len()).expect("parse SAM_HASH_AES") {
+        EncryptedHash::Aes { salt: actual, data } => {
+            assert_eq!(actual, salt);
+            assert_eq!(data, encrypted);
+        }
+        EncryptedHash::Rc4(_) => panic!("PekID must not select the hash format"),
+    }
+}
+
+#[test]
+fn encrypted_hash_rejects_unknown_revision() {
+    let mut blob = vec![0u8; 40];
+    blob[2..4].copy_from_slice(&3u16.to_le_bytes());
+    assert!(parse_encrypted_hash(&blob, 0, blob.len()).is_none());
 }

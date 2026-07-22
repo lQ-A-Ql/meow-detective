@@ -124,6 +124,7 @@ fn enumerate_partition(
             conn,
             &*partition.fs,
             data_source_id,
+            partition.index,
             cancel_token,
             progress_cb,
         );
@@ -146,6 +147,7 @@ fn enumerate_partition(
                 conn,
                 &*partition.fs,
                 data_source_id,
+                partition.index,
                 cancel_token,
                 progress_cb,
             )

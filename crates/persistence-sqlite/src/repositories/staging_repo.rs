@@ -301,10 +301,13 @@ impl StagingRepo {
         conn: &Connection,
         root_id: &str,
         partition_name: &str,
+        partition_index: usize,
     ) -> rusqlite::Result<()> {
         conn.execute(
-            "UPDATE file_entries SET path = '', name = ?2 WHERE id = ?1",
-            params![root_id, partition_name],
+            "UPDATE file_entries
+             SET path = '', name = ?2, partition_index = ?3
+             WHERE id = ?1",
+            params![root_id, partition_name, partition_index as i64],
         )?;
         Ok(())
     }
@@ -342,13 +345,14 @@ impl StagingRepo {
                     let id = uuid::Uuid::new_v4().to_string();
                     main_conn.execute(
                         "INSERT INTO main.file_entries
-                         (id, parent_id, data_source_id, path, name, entry_type)
-                         VALUES (?1, NULL, ?2, ?3, ?4, 'directory')",
+                         (id, parent_id, data_source_id, path, name, entry_type, partition_index)
+                         VALUES (?1, NULL, ?2, ?3, ?4, 'directory', ?5)",
                         params![
                             id,
                             data_source_id,
                             format!("__partition_placeholder__/{partition_index}/queued"),
                             partition_name,
+                            partition_index as i64,
                         ],
                     )?;
                     id
@@ -358,12 +362,14 @@ impl StagingRepo {
                 main_conn,
                 &placeholder_root_id,
                 partition_name,
+                partition_index,
             )?;
 
             let inserted = main_conn.execute(
                 "INSERT INTO main.file_entries
-                     (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                    (id, parent_id, data_source_id, path, name, entry_type,
+                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+                      partition_index)
                      SELECT
                         id,
                         CASE
@@ -382,14 +388,15 @@ impl StagingRepo {
                         END,
                         data_source_id, path, name, LOWER(entry_type),
                         size, ext, deleted, hidden, system,
-                        created_at, modified_at, accessed_at, changed_at, hash_sha256
+                        created_at, modified_at, accessed_at, changed_at, hash_sha256,
+                        ?2
                      FROM staging.file_entries
                      WHERE NOT (
                         entry_type = 'directory'
                         AND (parent_id IS NULL OR parent_id = id)
                         AND name IN ('\\', '/', '.')
                      )",
-                params![placeholder_root_id],
+                params![placeholder_root_id, partition_index as i64],
             )?;
             main_conn.execute_batch("COMMIT")?;
             Ok(inserted as u64)

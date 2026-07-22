@@ -6,6 +6,7 @@ use std::io;
 #[derive(Debug, Clone)]
 pub struct MftRecord {
     pub record_number: u64,
+    pub sequence_number: u16,
     pub name: String,
     pub parent_ref: u64,
     pub is_dir: bool,
@@ -63,6 +64,13 @@ impl MftRecordParser {
         }
         parse_mft_record(&self.buf, record_number)
     }
+
+    pub(crate) fn parse_fixed(&mut self, record: &[u8], record_number: u64) -> Option<MftRecord> {
+        if record.len() < 42 || &record[0..4] != b"FILE" {
+            return None;
+        }
+        parse_mft_record(record, record_number)
+    }
 }
 
 /// Core MFT record parsing logic. Extracted from MftRecordParser to allow
@@ -70,8 +78,7 @@ impl MftRecordParser {
 fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
     let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
     let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
-    let in_use = flags & 0x01 != 0;
-    let deleted = !in_use;
+    let deleted = flags & 0x01 == 0;
     let is_dir = flags & 0x02 != 0;
 
     let mut name = String::new();
@@ -199,6 +206,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
 
     Some(MftRecord {
         record_number,
+        sequence_number: u16::from_le_bytes([rec[0x10], rec[0x11]]),
         name,
         parent_ref,
         is_dir,

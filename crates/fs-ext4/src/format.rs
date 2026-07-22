@@ -4,7 +4,12 @@ use std::io;
 pub(crate) const EXT4_SUPERBLOCK_OFFSET: u64 = 1024;
 pub(crate) const EXT4_MAGIC: u16 = 0xEF53;
 pub(crate) const EXT4_EXTENT_MAGIC: u16 = 0xF30A;
+pub(crate) const EXT4_FEATURE_COMPAT_HAS_JOURNAL: u32 = 0x0004;
+pub(crate) const EXT4_FEATURE_RO_COMPAT_GDT_CSUM: u32 = 0x0010;
+pub(crate) const EXT4_FEATURE_RO_COMPAT_BIGALLOC: u32 = 0x0200;
+pub(crate) const EXT4_FEATURE_RO_COMPAT_METADATA_CSUM: u32 = 0x0400;
 pub(crate) const EXT4_FEATURE_INCOMPAT_64BIT: u32 = 0x0080;
+pub(crate) const EXT4_FEATURE_INCOMPAT_CSUM_SEED: u32 = 0x2000;
 pub(crate) const EXT4_MIN_GROUP_DESCRIPTOR_SIZE: u16 = 32;
 pub(crate) const EXT4_64BIT_GROUP_DESCRIPTOR_SIZE: u16 = 64;
 pub(crate) const EXT4_METADATA_CACHE_BYTES: usize = 16 * 1024 * 1024;
@@ -63,12 +68,17 @@ impl Ext4Extent {
         })
     }
 
-    pub(crate) fn block_count(&self) -> u16 {
-        self.ee_len & 0x7FFF
+    pub(crate) fn block_count(&self) -> u32 {
+        match self.ee_len {
+            0 => 0,
+            0x8000 => 32_768,
+            value if value > 0x8000 => u32::from(value - 0x8000),
+            value => u32::from(value),
+        }
     }
 
     pub(crate) fn is_unwritten(&self) -> bool {
-        self.ee_len & 0x8000 != 0
+        self.ee_len > 0x8000
     }
 }
 

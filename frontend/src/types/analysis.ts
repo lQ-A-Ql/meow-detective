@@ -125,10 +125,42 @@ export interface AnalysisExtractionRequest {
   categories: string[];
 }
 
+export type AnalysisExtractionPhase =
+  | 'discovering'
+  | 'preparing'
+  | 'extracting'
+  | 'persisting'
+  | 'completed'
+  | 'failed';
+
+export interface AnalysisExtractionProgress {
+  runId: string;
+  caseId: string;
+  dataSourceId: string;
+  category: string;
+  label: string;
+  phase: AnalysisExtractionPhase;
+  totalCandidates: number;
+  processedCandidates: number;
+  structuredCandidates: number;
+  unsupportedCandidates: number;
+  textFallbackCandidates: number;
+  warningCandidates: number;
+  checkpointHitCount: number;
+  artifactCount: number;
+  timelineEventCount: number;
+  currentPath: string | null;
+  detail: string;
+}
+
 export interface AnalysisExtractionPageRequest {
   dataSourceId: string;
   offset?: number;
   limit?: number;
+}
+
+export interface EvtxEventPageRequest extends AnalysisExtractionPageRequest {
+  view?: import('./eventLog').EvtxEventView;
 }
 
 export interface AnalysisExtractionRun {

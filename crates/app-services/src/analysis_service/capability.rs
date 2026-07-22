@@ -62,7 +62,7 @@ pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
         DataSourcePlatform::Windows,
         "Windows Event Logs",
         "EventLogs",
-        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+        CandidateReadPolicy::Bounded(artifacts_windows::MAX_EVTX_ANALYSIS_BYTES),
     ),
 ];
 

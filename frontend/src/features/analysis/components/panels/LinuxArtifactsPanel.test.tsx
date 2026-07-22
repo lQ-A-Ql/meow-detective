@@ -55,6 +55,19 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('尚未从当前数据源发现或提取 Linux 痕迹。')).toBeDefined();
   });
 
+  it('does not present the persisted coverage summary as live extraction progress', () => {
+    const warning = 'Structured output coverage is 414 of 749 Linux artifact candidate source(s).';
+    const summary = baseSummary({ warnings: [warning] });
+    const { rerender } = render(createElement(LinuxArtifactsPanel, {
+      summary,
+      extractionRunning: true,
+    }));
+
+    expect(screen.queryByText(warning)).toBeNull();
+    rerender(createElement(LinuxArtifactsPanel, { summary, extractionRunning: false }));
+    expect(screen.getByText(warning)).toBeDefined();
+  });
+
   it('renders journal content when activeTab is journal', () => {
     render(createElement(LinuxArtifactsPanel, { activeTab: 'journal' }));
     expect(screen.getByText('暂无 systemd 日志')).toBeDefined();

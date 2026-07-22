@@ -87,6 +87,21 @@ Observed on 2026-07-12:
 - Candidate coverage was 0.552737 with explicit partial/unsupported warnings;
   unsupported sources were not fabricated as parsed artifacts.
 
+Focused recovery verification on 2026-07-21 against the same sample also
+passed:
+
+- XFS log snapshot: 10 MiB bounded snapshot, 3,007 records, 2,872
+  transactions, 31,334 metadata candidates, and 1,973 deletion candidates;
+  all deletion candidates carried verified zero-link evidence and no parser
+  issues were reported.
+- Root LV completeness: 50,934 files and 7,140 directories were enumerated
+  with zero warnings; `/etc/passwd`, `/etc/os-release`, and `/etc/hostname`
+  were read through the stored file-entry preview path.
+- Linux extraction: 749 candidate sources produced 50,991 persisted
+  artifacts and 446 timeline events. The nine Linux sections reported their
+  own status; partial results remained explicitly warned rather than promoted
+  to fabricated structured artifacts.
+
 ### 4.2 Windows/Linux source isolation
 
 Command:

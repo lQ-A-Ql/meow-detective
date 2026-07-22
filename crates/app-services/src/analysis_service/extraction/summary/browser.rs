@@ -136,6 +136,8 @@ fn map_cookies(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserCookieDto> {
             secure: bool_attr(&row.attrs, "secure"),
             http_only: bool_attr(&row.attrs, "httpOnly"),
             same_site: optional_i64_attr(&row.attrs, "sameSite"),
+            decryption_status: optional_string_attr(&row.attrs, "decryptionStatus"),
+            decryption_detail: optional_string_attr(&row.attrs, "decryptionDetail"),
         })
         .collect()
 }
@@ -170,6 +172,8 @@ fn map_passwords(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserPasswordDto> {
             password_preview: optional_string_attr(&row.attrs, "passwordPreview"),
             created_at: optional_string_attr(&row.attrs, "createdAt"),
             times_used: u64_attr(&row.attrs, "timesUsed"),
+            decryption_status: optional_string_attr(&row.attrs, "decryptionStatus"),
+            decryption_detail: optional_string_attr(&row.attrs, "decryptionDetail"),
         })
         .collect()
 }

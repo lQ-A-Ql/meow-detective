@@ -5,6 +5,7 @@ import {
   Database,
   FileClock,
   FileText,
+  FileX2,
   Globe,
   Mail,
   Monitor,
@@ -42,6 +43,12 @@ const WINDOWS_NODES: SourceTreeNode[] = [
   { label: '分析报告', icon: FileText, windowsTab: 'report' },
 ];
 
+const WINDOWS_DELETED_RECOVERY_NODE: SourceTreeNode = {
+  label: '删除恢复',
+  icon: FileX2,
+  windowsTab: 'deletedRecovery',
+};
+
 const LINUX_NODES: SourceTreeNode[] = [
   { label: '概览', icon: Server, category: 'LinuxArtifacts', linuxTab: 'overview' },
   { label: '系统日志', icon: FileClock, category: 'LinuxJournal', linuxTab: 'journal' },
@@ -53,6 +60,7 @@ const LINUX_NODES: SourceTreeNode[] = [
   { label: '系统配置', icon: Database, category: 'LinuxSystemConfig', linuxTab: 'systemConfig' },
   { label: 'Web 服务', icon: Globe, category: 'LinuxWebServices', linuxTab: 'webServices' },
   { label: 'MySQL 服务', icon: Database, category: 'LinuxMysqlServices', linuxTab: 'mysqlServices' },
+  { label: '删除恢复', icon: FileX2, linuxTab: 'deletedRecovery' },
 ];
 
 export interface AnalysisSourceSidebarProps {
@@ -118,7 +126,9 @@ export function AnalysisSourceSidebar({
           {dataSources.map((source) => {
             const selected = source.id === selectedDataSourceId;
             const expanded = !collapsedSourceIds.has(source.id);
-            const nodes = source.platform === 'windows' ? WINDOWS_NODES : LINUX_NODES;
+            const nodes = source.platform === 'windows'
+              ? [...WINDOWS_NODES, WINDOWS_DELETED_RECOVERY_NODE]
+              : LINUX_NODES;
             const SourceIcon = sourceKindIconLarge(source.kind);
 
             return (

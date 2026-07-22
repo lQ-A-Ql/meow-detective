@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod dpapi;
 pub mod evtx;
 pub mod jumplist;
 pub mod lnk;

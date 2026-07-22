@@ -21,7 +21,7 @@ pub(crate) fn resolve_partition_index_for_entry(
     }
 
     if let Some(index) = mft_partition_index_from_entry_id(&entry.id.0) {
-        tracing::warn!(
+        tracing::debug!(
             file_id = %entry.id.0,
             partition_index = index,
             "Preview routing is using the legacy MFT identifier fallback"
@@ -46,7 +46,7 @@ pub(crate) fn resolve_partition_index_for_entry(
             .ok()
     });
     if let Some(index) = resolved {
-        tracing::warn!(
+        tracing::debug!(
             file_id = %entry.id.0,
             root_name = %current.name,
             partition_index = index,

@@ -108,6 +108,32 @@ fn provenance_serializes_required_camel_case_fields() {
 }
 
 #[test]
+fn registry_network_adapter_serializes_complete_tcpip_contract() {
+    let dto = RegistryNetworkAdapterDto {
+        guid: "{ADAPTER-GUID}".to_string(),
+        name: "Ethernet".to_string(),
+        description: Some("Intel Ethernet Controller".to_string()),
+        mac_address: Some("00:11:22:33:44:55".to_string()),
+        permanent_mac_address: Some("00:11:22:33:44:56".to_string()),
+        ip_addresses: vec!["192.0.2.10".to_string()],
+        subnet_masks: vec!["255.255.255.0".to_string()],
+        gateways: vec!["192.0.2.1".to_string()],
+        dhcp_enabled: Some(true),
+        dhcp_server: Some("192.0.2.2".to_string()),
+        dns_servers: vec!["192.0.2.53".to_string()],
+        pnp_instance_id: Some("PCI\\VEN_8086&DEV_1234".to_string()),
+        service_name: Some("e1dexpress".to_string()),
+    };
+
+    let json = serde_json::to_value(dto).unwrap();
+    assert_eq!(json["ipAddresses"][0], "192.0.2.10");
+    assert_eq!(json["subnetMasks"][0], "255.255.255.0");
+    assert_eq!(json["permanentMacAddress"], "00:11:22:33:44:56");
+    assert_eq!(json["pnpInstanceId"], "PCI\\VEN_8086&DEV_1234");
+    assert!(json.get("ip_addresses").is_none());
+}
+
+#[test]
 fn current_provenance_contract_is_bounded_to_source_attribution() {
     let dto = EvidenceCategoryDto {
         category: "ProgramExecution".to_string(),

@@ -69,6 +69,10 @@ pub struct BrowserCookieDto {
     pub http_only: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub same_site: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decryption_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decryption_detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,4 +109,8 @@ pub struct BrowserPasswordDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     pub times_used: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decryption_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decryption_detail: Option<String>,
 }

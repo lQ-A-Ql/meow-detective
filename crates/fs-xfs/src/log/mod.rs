@@ -1,42 +1,48 @@
-//! XFS log parsing and deleted-inode metadata recovery.
+//! Read-only parsing of the native XFS journal wire format.
+//!
+//! The implementation follows `xfs_log_format.h`, `xfs_log_recover.c`, and
+//! xfsprogs' log-print/recovery code. It reports transaction metadata only;
+//! journal regions are never presented as recovered file contents.
 
+mod checksum;
+mod error;
+mod geometry;
+mod inode_item;
+mod operation;
 mod record;
+mod record_validation;
 mod recovery;
+mod transaction;
+mod wire;
 
-use serde::Serialize;
+pub use error::{XfsLogError, XfsLogIssue, XfsLogIssueKind};
+pub use geometry::{XfsLogGeometry, XfsLogLocation, XfsLogSnapshot, XFS_LOG_MAX_SNAPSHOT_BYTES};
+pub use operation::{
+    XfsLogClient, XfsLogOperation, XfsLogOperationFlags, XLOG_COMMIT_TRANS, XLOG_CONTINUE_TRANS,
+    XLOG_END_TRANS, XLOG_START_TRANS, XLOG_UNMOUNT_TRANS, XLOG_WAS_CONT_TRANS,
+};
+pub use record::{
+    LogRecordHeader, XfsLogChecksumStatus, XfsLogRecord, XfsLogRecordProvenance, XfsLogSourceSpan,
+};
+pub use recovery::{analyze_log_snapshot, XfsLogAnalysis, XfsLogParseLimits, XfsParsedLogRecord};
+pub use transaction::{
+    XfsDeletedFileCandidate, XfsDeletionProof, XfsDeletionStatus, XfsLogTransaction,
+    XfsMetadataCandidate, XfsMetadataCandidateKind, XfsRecoveryCompleteness, XfsTransactionHeader,
+    XFS_LI_ATTRD, XFS_LI_ATTRI, XFS_LI_BUD, XFS_LI_BUF, XFS_LI_BUI, XFS_LI_CUD, XFS_LI_CUI,
+    XFS_LI_DQUOT, XFS_LI_EFD, XFS_LI_EFI, XFS_LI_ICREATE, XFS_LI_INODE, XFS_LI_IUNLINK,
+    XFS_LI_QUOTAOFF, XFS_LI_RUD, XFS_LI_RUI, XFS_LI_XMD, XFS_LI_XMI,
+};
+pub use wire::XfsLogFormat;
 
-pub use record::{collect_log_records, parse_log_entries, LogRecordHeader};
-pub use recovery::{recover_deleted_inodes, recover_metadata_operations};
-
-pub const XLOG_HEADER_MAGIC: u16 = 0xFEED;
-pub const XLOG_REC_HEADER_SIZE: usize = 32;
-pub const XLOG_DEFAULT_BLOCK_SIZE: u64 = 4096;
-pub const XLOG_ITEM_BUF: u16 = 0x1234;
-pub const XLOG_ITEM_INODE: u16 = 0x1235;
-pub const XLOG_ITEM_EFI: u16 = 0x1236;
-pub const XLOG_ITEM_EFD: u16 = 0x1237;
-pub const XLOG_ITEM_QUOTAOFF: u16 = 0x1238;
-pub const XLOG_ITEM_BUF_CANCEL: u16 = 0x1239;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct RecoveredFile {
-    pub original_path: String,
-    pub inode: u64,
-    pub blocks: Vec<Vec<u8>>,
-    pub declared_size: u64,
-    pub recovery_method: String,
-    pub confidence: f64,
-    pub block_count: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct XfsLogEntry {
-    pub operation: String,
-    pub target_ino: u64,
-    pub timestamp: u64,
-    pub data: Vec<u8>,
-    pub item_type: u16,
-}
+pub const XLOG_HEADER_MAGIC_NUM: u32 = 0xFEED_BABE;
+pub const XLOG_BASIC_BLOCK_SIZE: usize = 512;
+pub const XLOG_HEADER_CYCLE_SIZE: usize = 32 * 1024;
+pub const XLOG_MIN_RECORD_BSIZE: usize = 16 * 1024;
+pub const XLOG_BIG_RECORD_BSIZE: usize = 32 * 1024;
+pub const XLOG_MAX_RECORD_BSIZE: usize = 256 * 1024;
+pub const XLOG_OP_HEADER_SIZE: usize = 12;
+pub const XFS_TRANSACTION_CLIENT: u8 = 0x69;
+pub const XFS_LOG_CLIENT: u8 = 0xAA;
 
 #[cfg(test)]
 #[path = "../../tests/unit/log.rs"]

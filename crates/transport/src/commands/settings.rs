@@ -8,10 +8,10 @@ pub struct AppSettingsDto {
     pub case_root: String,
     pub image_search_paths: Vec<String>,
     pub dev_event_trace: bool,
-    /// Maximum parallel workers for import. None = conservative single-worker I/O.
+    /// Maximum parallel workers for import. None = bounded automatic scheduling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_import_workers: Option<usize>,
-    /// Maximum parallel workers for post-import analysis. None = use all available cores.
+    /// Maximum parallel workers for post-import analysis. None = bounded automatic scheduling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_analysis_workers: Option<usize>,
     /// Default analysis depth for import-time post processing.
@@ -37,7 +37,7 @@ impl Default for AppSettingsDto {
             case_root: default_case_root(),
             image_search_paths: Vec::new(),
             dev_event_trace: false,
-            max_import_workers: Some(1),
+            max_import_workers: None,
             max_analysis_workers: None,
             import_analysis_mode: default_import_analysis_mode(),
             hex_chunk_bytes: default_hex_chunk_bytes(),

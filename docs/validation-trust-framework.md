@@ -235,8 +235,92 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
 - 当前不保证：
   - PVE cluster 语义解析、多 E01 聚合分析或跨节点关联
   - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活
-  - XFS/ext4/Btrfs 已删除文件恢复或 carving
+  - Btrfs 已删除文件恢复与全盘 carving；XFS 未验证内容恢复不作完整文件承诺
   - 原始 Linux 文件系统支持超出当前实现可枚举范围时的完整恢复
+
+### 4.7a EXT4/XFS deleted recovery baseline
+
+删除恢复是独立于普通文件树与 Hex 预览的只读取证链路。扫描结果持久化到 source DB，并以数据源、扫描身份和恢复候选身份隔离；未验证内容不得进入普通文件表或被导出为完整文件。
+
+- EXT4：JBD2 descriptor/commit/revoke、v1/v2/v3 tag、CRC32C 与 direct extent depth-0 候选已覆盖；complete 候选要求所有 content range 连续、allocation 为 `free`、每段 SHA-256 与完整内容 digest 均匹配。partial 候选只允许读取后端验证的连续 range。
+- XFS：internal log checkpoint、ring wrap、transaction provenance 和显式 `nlink=0` 删除证据已覆盖；当前候选默认为 metadata-only，除非后端建立完整 allocation 与 digest 证据，不提供内容读取或导出。
+- 检材3私有 baseline：`D:\獬豸杯\检材3.E01`，XFS log snapshot 记录 `3007` 条、`2872` 个 transaction、`31334` 个 metadata candidate、`1973` 个 deleted candidate、`0` 个 issue，扫描耗时约 `677 ms`。该路径只通过环境变量注入，不能硬编码进生产代码。
+- 服务回归命令：`cargo test -p app-services deleted_recovery --lib -- --test-threads=1`。
+- 前端回归覆盖：未扫描状态、EXT4/XFS 分区筛选、已验证 range 读取、metadata-only 禁止读取/导出、complete 候选经 platform save adapter 导出。
+
+当前不保证：间接 extent、目录内容恢复、XFS 未验证文件内容、Btrfs 删除恢复、全盘 carving，以及所有 journal/log 损坏和 filesystem feature 组合。
+
+#### 4.7b Deleted recovery defect ledger
+
+The following limitations are recorded defects of the current implementation,
+not accepted evidence claims:
+
+- EXT4 and XFS recovery candidates do not reconstruct the original filename or
+  parent path; `originalPath` is currently absent, so inode identity cannot be
+  presented as a recovered namespace path.
+- XFS candidates are metadata-only. File type, mode, deletion time, declared
+  size, allocation state, and file content are not reconstructed.
+- The recovery UI always requests a selected range from logical offset zero
+  and has no arbitrary offset control. Verified ranges whose logical offset is
+  non-zero cannot currently be inspected through the UI.
+- The UI caps a range preview at 1 MiB, exposes only a spinner during scanning,
+  and does not render the persisted scan issue list or all scan warnings.
+- JBD2 revoke status is retained internally but is not exposed as a dedicated
+  DTO/UI evidence field, so reviewers cannot directly distinguish revoked
+  historical mappings from ordinary candidates.
+- A replacement scan removes the previous partition result. Snapshot hashes
+  provide identity, but the source database does not retain scan history.
+- XFS log provenance is currently serialized with `sourceKind=filesystem` even
+  though its byte spans originate from the internal log; this must be corrected
+  before provenance is used for content claims.
+
+These defects remain outside the current recovery acceptance boundary and must
+be closed before the feature is promoted beyond experimental status.
+
+#### 4.7c Windows deleted-file recovery audit ledger
+
+The Windows path is currently a deleted-entry visibility path, not a
+forensic recovery path. The following defects are recorded from the current
+source implementation:
+
+- `app-services::deleted_recovery::source::recovery_filesystem` and
+  `scan_target` only admit EXT4 and XFS. NTFS is rejected before a recovery
+  scan can be created, so the Linux recovery DTOs and range/export commands
+  must not be presented as Windows recovery support.
+- `fs-ntfs::mft_scanner` maps an inactive MFT record (`FILE` flags without
+  `in-use`) to `file_entries.deleted`, but the persisted `mft:<partition>:<record>`
+  identity discards the MFT sequence number. A reused record number can
+  therefore be mistaken for the historical deleted object. No independent
+  recovery candidate, scan identity, allocation state, overwrite check,
+  provenance range, or content digest is persisted for these records.
+- `NtfsReader::read_file_data_range` accepts a `FILE` record without checking
+  its in-use state, sequence number, or deleted-record evidence. The MFT ID
+  preview fallback can consequently read bytes from a stale record when data
+  runs still look valid, but the result has no recovery-grade integrity claim.
+- The Recycle Bin extractor consumes only `$I` metadata. It does not discover
+  or bind the corresponding `$R` payload, and it stores the artifact against
+  the `$I` file object. `recovered_file_size` is metadata and must not be
+  treated as recovered content.
+- The current `$I` parser assumes a synthetic header-size field. Real
+  Windows 8+ `$I` files use the first eight bytes as a version field and keep
+  size, deletion FILETIME, and original path at offsets `0x08`, `0x10`, and
+  `0x18`. The existing fixture only exercises the synthetic `0x20` header
+  shape and does not protect the real version-1/version-2 layouts.
+- `fs-ntfs::logfile::build_file_change_history` is not called by the import,
+  analysis, persistence, or recovery services. Its operation mapping is
+  therefore diagnostic-only; `$LogFile` output currently cannot create a
+  reviewable or exportable Windows deletion candidate.
+- Existing real-sample Recycle Bin checks tolerate an empty bin and assert
+  extraction counts only as diagnostic output. There is no positive contract
+  requiring a real `$I` metadata row, a paired `$R` payload, or a verified
+  content read when the sample contains such a pair.
+
+The first Windows implementation boundary is therefore: recoverable NTFS
+MFT data only after sequence-aware identity and allocation/provenance checks;
+use Recycle Bin `$I` as deletion/path metadata and `$R` as a separately
+verified payload; keep `$LogFile` as corroborating evidence until transaction
+replay is validated. No Windows candidate should be exported merely because
+`file_entries.deleted = 1`.
 
 ### 4.8 Windows/Linux 双源隔离 baseline
 
@@ -253,7 +337,7 @@ Stage 2 使用两个不入库的私有 E01 样本验证独立 `source.db` 与平
 
 PVE 私有集群样本通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in，默认 CI 不运行。当前只把每个节点宿主 OS 作为独立成员验证，不把 Ceph OSD 或 VM 磁盘伪装成普通文件系统。
 
-PVE 集群导入链路另有桌面层串行真实样本门禁：
+PVE 集群导入链路另有桌面层真实样本门禁：
 
 ```powershell
 $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
@@ -274,7 +358,7 @@ cargo test -p rocksdb-wire --test sst_real_sample -- --ignored
 `35/40/33` live set 由六成员门禁写入 disposable spool，并通过每 OSD 12 行
 column-family summary 与 aggregate digest 验证。
 
-该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST/live-SST/active-WAL/latest-state，并在同一 reducer 生命周期内生成 `S/C/O/X` super/collection/onode/shard/blob/logical+physical extent/checksum/shared-ref semantic snapshot。OSD、BlueFS、RocksDB 与 semantic snapshot 原子写入 source DB，保持零普通文件行且不伪装为 POSIX 文件系统。
+该门禁使用实际后台集群 runner 和共享导入调度器，默认自动选择最多两个活跃成员；为诊断可显式设置 `max_import_workers=1`、`max_analysis_workers=1`，但这不会把成员并发降为串行。分析模式仍为 metadata-only。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST/live-SST/active-WAL/latest-state，并在同一 reducer 生命周期内生成 `S/C/O/X` super/collection/onode/shard/blob/logical+physical extent/checksum/shared-ref semantic snapshot。OSD、BlueFS、RocksDB 与 semantic snapshot 原子写入 source DB，保持零普通文件行且不伪装为 POSIX 文件系统。
 
 Stage 6.4 semantic persistence 另有保留真实 source DB 的 phase benchmark，用于在
 不重复执行 E01/BlueFS/RocksDB 前置阶段时精确约束约 210 万 semantic child

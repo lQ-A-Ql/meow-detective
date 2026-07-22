@@ -209,7 +209,7 @@ enum EncryptedHash {
     /// RC4-protected hash: PekID(2) + Revision(2) + Hash(16).
     Rc4([u8; 16]),
     /// AES-CBC-protected hash: PekID(2) + Revision(2) + DataOffset(4) +
-    /// DataLength(4) + Salt(16) + Data(...).
+    /// Salt(16) + Hash(...).
     Aes { salt: [u8; 16], data: Vec<u8> },
 }
 
@@ -243,28 +243,28 @@ fn parse_encrypted_hash(data: &[u8], offset: usize, length: usize) -> Option<Enc
         return None;
     }
     let blob = &data[offset..end];
-    let marker = blob.first()?;
+    let revision = u16::from_le_bytes(blob.get(2..4)?.try_into().ok()?);
 
-    if *marker == 1 && length >= 20 {
-        let mut hash = [0u8; 16];
-        hash.copy_from_slice(&blob[4..20]);
-        return Some(EncryptedHash::Rc4(hash));
-    }
-
-    // AES variant: marker != 1 and length is at least the fixed header.
-    if length >= 24 {
-        let data_length = u32::from_le_bytes(blob[12..16].try_into().ok()?) as usize;
-        if length >= 24 + data_length {
-            let mut salt = [0u8; 16];
-            salt.copy_from_slice(&blob[16..32]);
-            return Some(EncryptedHash::Aes {
-                salt,
-                data: blob[32..32 + data_length].to_vec(),
-            });
+    match revision {
+        1 if blob.len() >= 20 => {
+            let mut hash = [0u8; 16];
+            hash.copy_from_slice(&blob[4..20]);
+            Some(EncryptedHash::Rc4(hash))
         }
+        2 if blob.len() >= 24 => {
+            let encrypted = blob.get(24..)?;
+            if encrypted.is_empty() || !encrypted.len().is_multiple_of(16) {
+                return None;
+            }
+            let mut salt = [0u8; 16];
+            salt.copy_from_slice(&blob[8..24]);
+            Some(EncryptedHash::Aes {
+                salt,
+                data: encrypted.to_vec(),
+            })
+        }
+        _ => None,
     }
-
-    None
 }
 
 // ── Per-hash decryption ──────────────────────────────────────────────────────

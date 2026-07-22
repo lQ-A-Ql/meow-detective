@@ -12,6 +12,8 @@ export type EvtxEventCategory =
   | 'softwareInstallation'
   | 'other';
 
+export type EvtxEventView = 'boot' | 'logon' | 'process' | 'account' | 'application';
+
 /** Boot/shutdown event from System.evtx. */
 export interface EvtxBootEvent {
   timestamp: string;
@@ -64,6 +66,7 @@ export interface EvtxApplicationEvent {
 /** Unified EVTX event log summary. */
 export interface EvtxEventSummary {
   status: AnalysisParseStatus;
+  pageTotal: number;
   bootShutdownCount: number;
   logonLogoffCount: number;
   privilegeEscalationCount: number;

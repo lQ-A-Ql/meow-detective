@@ -24,6 +24,13 @@ function emptyProgress(): Omit<AnalysisExtractionProgressInfo, 'label'> {
     artifactCount: 0,
     timelineEventCount: 0,
     warnings: [],
+    totalCandidateCount: 0,
+    processedCandidateCount: 0,
+    structuredCandidateCount: 0,
+    unsupportedCandidateCount: 0,
+    textFallbackCandidateCount: 0,
+    warningCandidateCount: 0,
+    checkpointHitCount: 0,
   };
 }
 

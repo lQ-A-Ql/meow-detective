@@ -1,3 +1,4 @@
+use super::browser_preload::BrowserPreloadContext;
 use super::ExtractionOutcome;
 use crate::analysis_service::candidates::{
     is_browser_history_path, normalize_evidence_path, EvidenceCandidate,
@@ -18,6 +19,7 @@ use sqlite::with_temp_sqlite;
 pub(super) fn extract_browser_candidate(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
+    browser_preload: &BrowserPreloadContext,
 ) -> ExtractionOutcome {
     let normalized = normalize_evidence_path(&candidate.path);
     if !is_browser_history_path(&normalized) {
@@ -31,6 +33,7 @@ pub(super) fn extract_browser_candidate(
     }
 
     let (browser, profile) = browser_profile_from_path(&normalized);
+    let decryptor = browser_preload.decryptor_for(candidate);
     let parse_result = if normalized.ends_with("/places.sqlite") {
         with_temp_sqlite(bytes, "browser-history", |db| {
             extract_firefox_history(db, candidate, &browser, &profile)
@@ -40,9 +43,9 @@ pub(super) fn extract_browser_candidate(
             extract_chromium_history(db, candidate, &browser, &profile)
         })
     } else if normalized.ends_with("/cookies") || normalized.ends_with("/cookies.sqlite") {
-        extract_browser_cookies(candidate, bytes, &browser, &profile)
+        extract_browser_cookies(candidate, bytes, &browser, &profile, decryptor)
     } else if normalized.ends_with("/login data") || normalized.ends_with("/logins.json") {
-        extract_browser_passwords(candidate, bytes, &browser, &profile)
+        extract_browser_passwords(candidate, bytes, &browser, &profile, decryptor)
     } else {
         extract_browser_sessions(candidate, bytes, &browser, &profile)
     };

@@ -10,6 +10,7 @@ import {
 import type {
   InstalledSoftware,
   NetworkProfileEntry,
+  RegistryNetworkAdapter,
   RegistryExtractionSummary,
   RegistryHiveOverview,
   RegistryStructuredSummary,
@@ -99,6 +100,22 @@ export function RegistryExtractionPanel({
     { key: 'dateCreated', title: '创建时间', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.dateCreated?.slice(0, 10) ?? '-' },
     { key: 'dateLastConnected', title: '最后连接', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.dateLastConnected?.slice(0, 10) ?? '-' },
     { key: 'description', title: '备注', className: 'w-[120px]', render: (row) => row.description ?? '-' },
+  ];
+
+  const adapterColumns: DenseColumn<RegistryNetworkAdapter>[] = [
+    { key: 'name', title: '适配器', className: 'w-[120px]', render: (row) => row.name },
+    { key: 'description', title: '设备描述', className: 'w-[220px]', render: (row) => row.description ?? '-' },
+    { key: 'macAddress', title: '当前 MAC', className: 'w-[128px] font-mono text-[10px]', render: (row) => row.macAddress ?? '-' },
+    { key: 'permanentMacAddress', title: '物理 MAC', className: 'w-[128px] font-mono text-[10px]', render: (row) => row.permanentMacAddress ?? '-' },
+    { key: 'ipAddresses', title: 'IP 地址', className: 'w-[132px] font-mono text-[10px]', render: (row) => row.ipAddresses.join(', ') || '-' },
+    { key: 'subnetMasks', title: '子网掩码', className: 'w-[120px] font-mono text-[10px]', render: (row) => row.subnetMasks.join(', ') || '-' },
+    { key: 'gateways', title: '默认网关', className: 'w-[116px] font-mono text-[10px]', render: (row) => row.gateways.join(', ') || '-' },
+    { key: 'dhcpEnabled', title: 'DHCP', className: 'w-[56px] text-center', render: (row) => row.dhcpEnabled == null ? '-' : row.dhcpEnabled ? '启用' : '禁用' },
+    { key: 'dhcpServer', title: 'DHCP 服务器', className: 'w-[120px] font-mono text-[10px]', render: (row) => row.dhcpServer ?? '-' },
+    { key: 'dnsServers', title: 'DNS 服务器', className: 'w-[132px] font-mono text-[10px]', render: (row) => row.dnsServers.join(', ') || '-' },
+    { key: 'pnpInstanceId', title: 'PnP 实例', className: 'w-[260px] font-mono text-[10px]', render: (row) => row.pnpInstanceId ?? '-' },
+    { key: 'serviceName', title: '驱动服务', className: 'w-[100px] font-mono text-[10px]', render: (row) => row.serviceName ?? '-' },
+    { key: 'guid', title: '接口 GUID', className: 'w-[180px] font-mono text-[10px]', render: (row) => row.guid },
   ];
 
   // Installed software columns
@@ -196,13 +213,32 @@ export function RegistryExtractionPanel({
             />
           </TabsContent>
           <TabsContent value="network" className="min-h-0">
-            <DenseDataTable
-              rows={s?.networkProfiles ?? []}
-              columns={networkColumns}
-              getRowKey={(row) => row.profileGuid}
-              emptyTitle="暂无网络配置数据"
-              emptyDescription="从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取网络配置文件及 Wi-Fi 连接历史。"
-            />
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+              <section className="flex min-h-[220px] flex-1 flex-col">
+                <div className="mb-2 text-[12px] font-light text-forensics-text">网络适配器（物理与虚拟）</div>
+                <div className="flex min-h-0 flex-1 overflow-hidden border border-forensics-border">
+                  <DenseDataTable
+                    rows={s?.networkAdapters ?? []}
+                    columns={adapterColumns}
+                    getRowKey={(row) => row.guid}
+                    emptyTitle="暂无物理网卡信息"
+                    emptyDescription="从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。"
+                  />
+                </div>
+              </section>
+              <section className="flex min-h-[220px] flex-1 flex-col">
+                <div className="mb-2 text-[12px] font-light text-forensics-text">网络配置文件与连接历史</div>
+                <div className="flex min-h-0 flex-1 overflow-hidden border border-forensics-border">
+                  <DenseDataTable
+                    rows={s?.networkProfiles ?? []}
+                    columns={networkColumns}
+                    getRowKey={(row) => row.profileGuid}
+                    emptyTitle="暂无网络配置文件"
+                    emptyDescription="从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取。"
+                  />
+                </div>
+              </section>
+            </div>
           </TabsContent>
           <TabsContent value="software" className="min-h-0">
             <DenseDataTable

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::validation::{validate_required_data_source_id, MAX_PAGE_LIMIT};
+use crate::dto::EvtxEventViewDto;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +65,40 @@ pub struct GetAnalysisExtractionRequest {
     pub offset: u64,
     #[serde(default = "default_analysis_extraction_limit")]
     pub limit: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetEvtxEventSummaryRequest {
+    pub data_source_id: String,
+    #[serde(default)]
+    pub view: Option<EvtxEventViewDto>,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_analysis_extraction_limit")]
+    pub limit: u32,
+}
+
+impl Default for GetEvtxEventSummaryRequest {
+    fn default() -> Self {
+        Self {
+            data_source_id: String::new(),
+            view: None,
+            offset: 0,
+            limit: default_analysis_extraction_limit(),
+        }
+    }
+}
+
+impl GetEvtxEventSummaryRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)?;
+        if self.limit == 0 {
+            self.limit = default_analysis_extraction_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
 }
 
 impl Default for GetAnalysisExtractionRequest {

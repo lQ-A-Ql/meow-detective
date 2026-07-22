@@ -1,6 +1,6 @@
 use super::ntuser::user_assist_artifacts;
 use super::sam::sam_user_artifacts;
-use super::system::shutdown_time_artifacts;
+use super::system::{network_adapter_artifacts, shutdown_time_artifacts};
 use super::*;
 use chrono::Utc;
 use domain::FileEntryId;
@@ -127,6 +127,35 @@ fn system_shutdown_emits_timeline_event() {
     assert_eq!(outcome.artifacts[0].family, "RegistryShutdownTime");
     assert_eq!(outcome.timeline_events.len(), 1);
     assert_eq!(outcome.timeline_events[0].event_type, "REGISTRY_SHUTDOWN");
+}
+
+#[test]
+fn network_adapter_artifact_preserves_physical_and_tcpip_fields() {
+    let adapters = vec![artifacts_windows::NetworkAdapterInfo {
+        guid: "{ADAPTER-GUID}".to_string(),
+        name: Some("Ethernet".to_string()),
+        description: Some("Intel Ethernet Controller".to_string()),
+        mac_address: Some("00:11:22:33:44:55".to_string()),
+        permanent_mac_address: Some("00:11:22:33:44:56".to_string()),
+        ip_addresses: vec!["192.0.2.10".to_string()],
+        subnet_masks: vec!["255.255.255.0".to_string()],
+        gateways: vec!["192.0.2.1".to_string()],
+        dhcp_server: Some("192.0.2.2".to_string()),
+        dhcp_enabled: Some(true),
+        dns_servers: vec!["192.0.2.53".to_string()],
+        pnp_instance_id: Some("PCI\\VEN_8086&DEV_1234".to_string()),
+        service_name: Some("e1dexpress".to_string()),
+    }];
+
+    let artifacts =
+        network_adapter_artifacts(&candidate("Windows/System32/config/SYSTEM"), &adapters);
+    let attrs = &artifacts[0].attrs;
+    assert_eq!(attrs["description"], "Intel Ethernet Controller");
+    assert_eq!(attrs["permanentMacAddress"], "00:11:22:33:44:56");
+    assert_eq!(attrs["ipAddresses"][0], "192.0.2.10");
+    assert_eq!(attrs["subnetMasks"][0], "255.255.255.0");
+    assert_eq!(attrs["gateways"][0], "192.0.2.1");
+    assert_eq!(attrs["pnpInstanceId"], "PCI\\VEN_8086&DEV_1234");
 }
 
 #[test]

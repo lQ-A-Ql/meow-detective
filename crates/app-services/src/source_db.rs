@@ -7,11 +7,13 @@ use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
 mod build;
+mod migration;
 mod ready;
 pub(crate) use build::{
     discard_source_build_db, finalize_source_build_db, open_fresh_source_build_db,
     preserve_unpublished_source_build_db, publish_source_build_db, verify_finalized_source_db,
 };
+pub use migration::migrate_ready_source_databases;
 pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
     open_ready_source_by_id, open_ready_source_read_only_by_id, open_reconstruction_source_by_id,

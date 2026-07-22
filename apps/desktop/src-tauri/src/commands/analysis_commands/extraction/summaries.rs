@@ -2,7 +2,9 @@ use app_services::analysis_service;
 use domain::DataSourceId;
 use tauri::State;
 use transport::{
-    commands::{GetAnalysisExtractionRequest, GetAnalysisSourceRequest},
+    commands::{
+        GetAnalysisExtractionRequest, GetAnalysisSourceRequest, GetEvtxEventSummaryRequest,
+    },
     dto::{
         BrowserHistorySummaryDto, EmailExtractionSummaryDto, EvtxEventSummaryDto,
         LinuxArtifactSummaryDto, RegistryExtractionSummaryDto, RegistryStructuredSummaryDto,
@@ -109,7 +111,7 @@ pub async fn get_email_extraction_summary(
 #[tauri::command]
 pub async fn get_evtx_event_summary(
     state: State<'_, AppState>,
-    request: Option<GetAnalysisExtractionRequest>,
+    request: Option<GetEvtxEventSummaryRequest>,
 ) -> Result<EvtxEventSummaryDto, CommandError> {
     let mut request = request.unwrap_or_default();
     request.validate().map_err(CommandError::invalid_input)?;
@@ -122,6 +124,7 @@ pub async fn get_evtx_event_summary(
             &active.case_root,
             &active.meta.id,
             &data_source_id,
+            request.view,
             request.offset,
             request.limit,
         )

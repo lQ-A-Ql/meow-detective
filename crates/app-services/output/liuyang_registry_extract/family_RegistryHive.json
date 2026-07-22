@@ -1,0 +1,102 @@
+[
+  {
+    "id": "e70e3f3e-56ad-4d27-a37f-784a5b4a1b3d",
+    "family": "RegistryHive",
+    "title": "Registry Hive: Windows/System32/config/SYSTEM",
+    "summary": "Recognized registry hive Windows/System32/config/SYSTEM (txlog_merged=false, deleted_keys_found=47)",
+    "source_object_id": "system",
+    "extractor_id": "registry.hive.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SYSTEM",
+    "created_at": "2026-07-22T04:49:31.684898700Z",
+    "attrs": {
+      "dataSourceId": "liuyang-ds",
+      "deletedKeysFound": 47,
+      "hiveName": "SYSTEM",
+      "recognized": "v1 metadata only",
+      "sourcePath": "Windows/System32/config/SYSTEM",
+      "txlogMerged": false
+    }
+  },
+  {
+    "id": "57c92aed-8cf5-4813-b77f-9d9d4d2f2557",
+    "family": "RegistryHive",
+    "title": "Registry Hive: Windows/System32/config/SOFTWARE",
+    "summary": "Recognized registry hive Windows/System32/config/SOFTWARE (txlog_merged=false, deleted_keys_found=36)",
+    "source_object_id": "software",
+    "extractor_id": "registry.hive.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SOFTWARE",
+    "created_at": "2026-07-22T04:49:31.801088600Z",
+    "attrs": {
+      "dataSourceId": "liuyang-ds",
+      "deletedKeysFound": 36,
+      "hiveName": "SOFTWARE",
+      "recognized": "v1 metadata only",
+      "sourcePath": "Windows/System32/config/SOFTWARE",
+      "txlogMerged": false
+    }
+  },
+  {
+    "id": "68f3f775-3b4f-410b-ae15-2230f6786345",
+    "family": "RegistryHive",
+    "title": "Registry Hive: Windows/System32/config/SAM",
+    "summary": "Recognized registry hive Windows/System32/config/SAM (txlog_merged=false, deleted_keys_found=5)",
+    "source_object_id": "sam",
+    "extractor_id": "registry.hive.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SAM",
+    "created_at": "2026-07-22T04:49:31.803561900Z",
+    "attrs": {
+      "dataSourceId": "liuyang-ds",
+      "deletedKeysFound": 5,
+      "hiveName": "SAM",
+      "recognized": "v1 metadata only",
+      "sourcePath": "Windows/System32/config/SAM",
+      "txlogMerged": false
+    }
+  },
+  {
+    "id": "7d4ccb55-b596-4431-b8c3-d1e27bb223f1",
+    "family": "RegistryHive",
+    "title": "Registry Hive: Windows/System32/config/SECURITY",
+    "summary": "Recognized registry hive Windows/System32/config/SECURITY (txlog_merged=false, deleted_keys_found=4)",
+    "source_object_id": "security",
+    "extractor_id": "registry.hive.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/System32/config/SECURITY",
+    "created_at": "2026-07-22T04:49:31.803755600Z",
+    "attrs": {
+      "dataSourceId": "liuyang-ds",
+      "deletedKeysFound": 4,
+      "hiveName": "SECURITY",
+      "recognized": "v1 metadata only",
+      "sourcePath": "Windows/System32/config/SECURITY",
+      "txlogMerged": false
+    }
+  },
+  {
+    "id": "f5cc495b-26a0-4e73-98ac-0dfad97ebeea",
+    "family": "RegistryHive",
+    "title": "Registry Hive: Windows/appcompat/Programs/Amcache.hve",
+    "summary": "Recognized registry hive Windows/appcompat/Programs/Amcache.hve (txlog_merged=false, deleted_keys_found=1)",
+    "source_object_id": "amcache",
+    "extractor_id": "registry.hive.v1",
+    "extractor_version": "1.2.0",
+    "confidence": 0.85,
+    "source_attribution": "Windows/appcompat/Programs/Amcache.hve",
+    "created_at": "2026-07-22T04:49:31.804885300Z",
+    "attrs": {
+      "dataSourceId": "liuyang-ds",
+      "deletedKeysFound": 1,
+      "hiveName": "Amcache.hve",
+      "recognized": "v1 metadata only",
+      "sourcePath": "Windows/appcompat/Programs/Amcache.hve",
+      "txlogMerged": false
+    }
+  }
+]

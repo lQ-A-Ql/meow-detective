@@ -1,6 +1,7 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::{
-    count_artifacts_by_type, query_artifact_rows, status_from_total, AnalysisArtifactRow,
+    count_artifacts_by_type, query_evtx_artifact_rows, query_evtx_artifact_rows_by_kinds,
+    status_from_total, AnalysisArtifactRow,
 };
 use crate::analysis_service::extraction::attr_mapping::{
     details_attr, optional_string_attr, optional_u64_attr, string_attr, u32_attr,
@@ -8,36 +9,50 @@ use crate::analysis_service::extraction::attr_mapping::{
 use chrono::Utc;
 use rusqlite::Connection;
 use transport::dto::{
-    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto,
+    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,
+    EvtxSecurityEventDto,
 };
 
 pub fn get_evtx_event_summary(
     conn: &Connection,
+    view: Option<EvtxEventViewDto>,
     offset: u64,
     limit: u32,
 ) -> Result<EvtxEventSummaryDto, AnalysisServiceError> {
     let counts = EvtxCounts::load(conn)?;
-    let boot_events = map_boot_events(query_artifact_rows(
-        conn,
-        &["EvtxBootShutdown"],
-        offset,
-        limit,
-    )?);
-    let security_events = map_security_events(query_artifact_rows(
-        conn,
-        &["EvtxSecurityEvent"],
-        offset,
-        limit,
-    )?);
-    let application_events = map_application_events(query_artifact_rows(
-        conn,
-        &["EvtxApplicationEvent"],
-        offset,
-        limit,
-    )?);
-    let metrics = EvtxMetrics::from_events(&counts, &security_events, &application_events);
+    let metrics = EvtxMetrics::load(conn, &counts)?;
+    let boot_events = if view.is_none() || view == Some(EvtxEventViewDto::Boot) {
+        map_boot_events(query_evtx_artifact_rows(
+            conn,
+            &["EvtxBootShutdown"],
+            offset,
+            limit,
+        )?)
+    } else {
+        Vec::new()
+    };
+    let security_events = query_security_view(conn, view, offset, limit)?;
+    let application_events = if view.is_none() || view == Some(EvtxEventViewDto::Application) {
+        map_application_events(query_evtx_artifact_rows(
+            conn,
+            &["EvtxApplicationEvent"],
+            offset,
+            limit,
+        )?)
+    } else {
+        Vec::new()
+    };
+    let page_total = match view {
+        Some(EvtxEventViewDto::Boot) => counts.boot_shutdown,
+        Some(EvtxEventViewDto::Logon) => metrics.logon_logoff + metrics.privilege_escalation,
+        Some(EvtxEventViewDto::Process) => metrics.process_execution,
+        Some(EvtxEventViewDto::Account) => metrics.account_management + metrics.scheduled_task,
+        Some(EvtxEventViewDto::Application) => counts.application,
+        None => counts.total(),
+    };
     Ok(EvtxEventSummaryDto {
         status: status_from_total(counts.total()),
+        page_total,
         boot_shutdown_count: counts.boot_shutdown,
         logon_logoff_count: metrics.logon_logoff,
         privilege_escalation_count: metrics.privilege_escalation,
@@ -54,6 +69,35 @@ pub fn get_evtx_event_summary(
         generated_at: Utc::now().to_rfc3339(),
         warnings: Vec::new(),
     })
+}
+
+fn query_security_view(
+    conn: &Connection,
+    view: Option<EvtxEventViewDto>,
+    offset: u64,
+    limit: u32,
+) -> Result<Vec<EvtxSecurityEventDto>, AnalysisServiceError> {
+    let kinds: Option<&[&str]> = match view {
+        Some(EvtxEventViewDto::Logon) => {
+            Some(&["logonSuccess", "logonFailure", "explicitCredentials"])
+        }
+        Some(EvtxEventViewDto::Process) => Some(&["processCreated"]),
+        Some(EvtxEventViewDto::Account) => Some(&[
+            "scheduledTaskCreated",
+            "scheduledTaskModified",
+            "accountCreated",
+            "groupMemberAdded",
+        ]),
+        None => None,
+        Some(EvtxEventViewDto::Boot | EvtxEventViewDto::Application) => return Ok(Vec::new()),
+    };
+    let rows = match kinds {
+        Some(kinds) => {
+            query_evtx_artifact_rows_by_kinds(conn, "EvtxSecurityEvent", kinds, offset, limit)?
+        }
+        None => query_evtx_artifact_rows(conn, &["EvtxSecurityEvent"], offset, limit)?,
+    };
+    Ok(map_security_events(rows))
 }
 
 struct EvtxCounts {
@@ -76,6 +120,7 @@ impl EvtxCounts {
     }
 }
 
+#[derive(Default)]
 struct EvtxMetrics {
     logon_logoff: u64,
     privilege_escalation: u64,
@@ -88,66 +133,63 @@ struct EvtxMetrics {
 }
 
 impl EvtxMetrics {
-    fn from_events(
-        counts: &EvtxCounts,
-        security_events: &[EvtxSecurityEventDto],
-        application_events: &[EvtxApplicationEventDto],
-    ) -> Self {
-        let logon_logoff = count_security_kinds(security_events, &["logonSuccess", "logonFailure"]);
-        let privilege_escalation = count_security_kinds(security_events, &["explicitCredentials"]);
-        let process_execution = count_security_kinds(security_events, &["processCreated"]);
-        let account_management =
-            count_security_kinds(security_events, &["accountCreated", "groupMemberAdded"]);
-        let scheduled_task = count_security_kinds(
-            security_events,
-            &["scheduledTaskCreated", "scheduledTaskModified"],
-        );
-        let application_crash = count_application_kinds(
-            application_events,
-            &[
-                "applicationCrash",
-                "applicationHang",
-                "windowsErrorReporting",
-            ],
-        );
-        let software_installation =
-            count_application_kinds(application_events, &["softwareInstallation"]);
+    fn load(conn: &Connection, counts: &EvtxCounts) -> Result<Self, AnalysisServiceError> {
+        let mut metrics = Self::default();
+        let mut stmt = conn.prepare(
+            "SELECT artifact_type, COALESCE(json_extract(attrs, '$.kind'), ''), COUNT(*)
+             FROM artifacts
+             WHERE artifact_type IN ('EvtxSecurityEvent', 'EvtxApplicationEvent')
+             GROUP BY artifact_type, COALESCE(json_extract(attrs, '$.kind'), '')",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (artifact_type, kind, count) = row?;
+            metrics.add_kind_count(&artifact_type, &kind, count);
+        }
         let other = counts
             .security
-            .saturating_sub(logon_logoff)
-            .saturating_sub(privilege_escalation)
-            .saturating_sub(process_execution)
-            .saturating_sub(account_management)
-            .saturating_sub(scheduled_task)
+            .saturating_sub(metrics.logon_logoff)
+            .saturating_sub(metrics.privilege_escalation)
+            .saturating_sub(metrics.process_execution)
+            .saturating_sub(metrics.account_management)
+            .saturating_sub(metrics.scheduled_task)
             + counts
                 .application
-                .saturating_sub(application_crash)
-                .saturating_sub(software_installation);
-        Self {
-            logon_logoff,
-            privilege_escalation,
-            process_execution,
-            account_management,
-            scheduled_task,
-            application_crash,
-            software_installation,
-            other,
+                .saturating_sub(metrics.application_crash)
+                .saturating_sub(metrics.software_installation);
+        metrics.other = other;
+        Ok(metrics)
+    }
+
+    fn add_kind_count(&mut self, artifact_type: &str, kind: &str, count: u64) {
+        match (artifact_type, kind) {
+            ("EvtxSecurityEvent", "logonSuccess" | "logonFailure") => {
+                self.logon_logoff += count;
+            }
+            ("EvtxSecurityEvent", "explicitCredentials") => self.privilege_escalation += count,
+            ("EvtxSecurityEvent", "processCreated") => self.process_execution += count,
+            ("EvtxSecurityEvent", "accountCreated" | "groupMemberAdded") => {
+                self.account_management += count;
+            }
+            ("EvtxSecurityEvent", "scheduledTaskCreated" | "scheduledTaskModified") => {
+                self.scheduled_task += count;
+            }
+            (
+                "EvtxApplicationEvent",
+                "applicationCrash" | "applicationHang" | "windowsErrorReporting",
+            ) => self.application_crash += count,
+            ("EvtxApplicationEvent", "softwareInstallation") => {
+                self.software_installation += count;
+            }
+            _ => {}
         }
     }
-}
-
-fn count_security_kinds(events: &[EvtxSecurityEventDto], kinds: &[&str]) -> u64 {
-    events
-        .iter()
-        .filter(|event| kinds.contains(&event.kind.as_str()))
-        .count() as u64
-}
-
-fn count_application_kinds(events: &[EvtxApplicationEventDto], kinds: &[&str]) -> u64 {
-    events
-        .iter()
-        .filter(|event| kinds.contains(&event.kind.as_str()))
-        .count() as u64
 }
 
 fn map_boot_events(rows: Vec<AnalysisArtifactRow>) -> Vec<EvtxBootEventDto> {

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   classifyFiles,
   generateAnalysisSummary,
@@ -17,9 +17,9 @@ import {
   runEvidenceClassification,
 } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
-import { useQueryClient } from '@tanstack/react-query';
 import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
 import type { DataSourceSummary } from '@/types/models';
+import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
 
 type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
 type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 'dataSourceId'> & {
@@ -33,6 +33,84 @@ const ANALYSIS_QUERY_OPTIONS = {
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,
 } as const;
+
+const EVTX_PAGE_SIZE = 500;
+
+function mergeEvtxPages(pages: EvtxEventSummary[]): EvtxEventSummary | undefined {
+  const first = pages[0];
+  if (!first) return undefined;
+  return {
+    ...first,
+    bootEvents: pages.flatMap((page) => page.bootEvents),
+    securityEvents: pages.flatMap((page) => page.securityEvents),
+    applicationEvents: pages.flatMap((page) => page.applicationEvents),
+    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
+  };
+}
+
+const ALL_EXTRACTION_QUERY_FAMILIES = [
+  'evidence-classification',
+  'system-info',
+  'registry-extraction',
+  'registry-structured',
+  'browser-history',
+  'email-extraction',
+  'evtx-events',
+  'linux-artifacts',
+] as const;
+
+const EXTRACTION_QUERY_FAMILIES: Readonly<Record<string, readonly string[]>> = {
+  SystemInformation: ['evidence-classification', 'system-info'],
+  Registry: [
+    'evidence-classification',
+    'system-info',
+    'registry-extraction',
+    'registry-structured',
+  ],
+  BrowserHistory: ['evidence-classification', 'browser-history'],
+  Email: ['evidence-classification', 'email-extraction'],
+  EventLogs: ['evidence-classification', 'evtx-events'],
+  LinuxArtifacts: ['linux-artifacts'],
+  LinuxJournal: ['linux-artifacts'],
+  LinuxLogin: ['linux-artifacts'],
+  LinuxCommands: ['linux-artifacts'],
+  LinuxPackages: ['linux-artifacts'],
+  LinuxCron: ['linux-artifacts'],
+  LinuxSudo: ['linux-artifacts'],
+  LinuxSystemConfig: ['linux-artifacts'],
+  LinuxWebServices: ['linux-artifacts'],
+  LinuxMysqlServices: ['linux-artifacts'],
+};
+
+function extractionQueryFamilies(categories: readonly string[]): readonly string[] {
+  if (categories.length === 0) {
+    return ALL_EXTRACTION_QUERY_FAMILIES;
+  }
+
+  return [...new Set(categories.flatMap((category) => EXTRACTION_QUERY_FAMILIES[category] ?? []))];
+}
+
+async function refreshExtractionQueries(
+  queryClient: QueryClient,
+  caseId: string | null,
+  request: AnalysisExtractionRequest,
+): Promise<void> {
+  const sourceQueries = extractionQueryFamilies(request.categories).map((family) =>
+    queryClient.invalidateQueries({
+      queryKey: ['analysis', family, caseId, request.dataSourceId],
+      refetchType: 'active',
+    }));
+
+  await Promise.all([
+    ...sourceQueries,
+    queryClient.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
+    queryClient.invalidateQueries({ queryKey: ['timeline'], refetchType: 'active' }),
+    queryClient.invalidateQueries({
+      queryKey: ['graph', 'snapshot', caseId],
+      refetchType: 'active',
+    }),
+  ]);
+}
 
 export function useAnalysisSystemInfo(source?: AnalysisSource) {
   const currentCase = useCurrentCase();
@@ -145,14 +223,32 @@ export function useEmailExtractionSummary(request: OptionalAnalysisPageRequest =
   });
 }
 
-export function useEvtxEventSummary(request: OptionalAnalysisPageRequest = {}) {
+export function useEvtxEventSummary(
+  request: OptionalAnalysisPageRequest & { view?: EvtxEventView } = {},
+) {
   const currentCase = useCurrentCase();
   const dataSourceId = request.source?.id;
-  const offset = request.offset ?? 0;
-  const limit = request.limit ?? 200;
-  return useQuery({
-    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, offset, limit],
-    queryFn: () => getEvtxEventSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+  const view = request.view ?? 'boot';
+  const limit = Math.min(request.limit ?? EVTX_PAGE_SIZE, EVTX_PAGE_SIZE);
+  const query = useInfiniteQuery({
+    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, view, limit],
+    queryFn: ({ pageParam }) => getEvtxEventSummary({
+      dataSourceId: dataSourceId ?? '',
+      view,
+      offset: pageParam,
+      limit,
+    }),
+    initialPageParam: request.offset ?? 0,
+    getNextPageParam: (lastPage, pages) => {
+      const loaded = pages.reduce(
+        (total, page) => total
+          + page.bootEvents.length
+          + page.securityEvents.length
+          + page.applicationEvents.length,
+        0,
+      );
+      return loaded < lastPage.pageTotal ? (request.offset ?? 0) + loaded : undefined;
+    },
     enabled: currentCase.isSuccess
       && Boolean(currentCase.data)
       && Boolean(dataSourceId)
@@ -160,6 +256,10 @@ export function useEvtxEventSummary(request: OptionalAnalysisPageRequest = {}) {
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
+  return {
+    ...query,
+    data: mergeEvtxPages(query.data?.pages ?? []),
+  };
 }
 
 export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {}) {
@@ -218,11 +318,14 @@ export function useRunEvidenceClassification() {
   return useMutation({
     mutationFn: (request: { dataSourceId: string; categories?: string[] }) =>
       runEvidenceClassification(request.dataSourceId, request.categories ?? []),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({
-        queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId],
-      });
-      qc.invalidateQueries({ queryKey: ['artifacts'] });
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId],
+          refetchType: 'active',
+        }),
+        qc.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
+      ]);
     },
   });
 }
@@ -232,19 +335,11 @@ export function useRunAnalysisExtraction() {
   const currentCase = useCurrentCase();
   return useMutation({
     mutationFn: (request: AnalysisExtractionRequest) => runAnalysisExtraction(request),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, variables.dataSourceId] });
-      qc.invalidateQueries({ queryKey: ['artifacts'] });
-      qc.invalidateQueries({ queryKey: ['timeline'] });
-      qc.invalidateQueries({ queryKey: ['graph', 'snapshot', currentCase.data?.id ?? null] });
-    },
+    onSuccess: (_data, variables) => refreshExtractionQueries(
+      qc,
+      currentCase.data?.id ?? null,
+      variables,
+    ),
   });
 }
 

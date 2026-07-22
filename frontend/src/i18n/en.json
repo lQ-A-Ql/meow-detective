@@ -117,7 +117,7 @@
         "maxImportWorkers": "Enumeration Worker Limit",
         "maxImportWorkersHint": "E01/RAW partition enumeration; empty means automatic.",
         "maxAnalysisWorkers": "Analysis Worker Limit",
-        "maxAnalysisWorkersHint": "Artifact / timeline / text analysis pool; empty means logical cores.",
+        "maxAnalysisWorkersHint": "Artifact / timeline / text analysis pool; empty means bounded automatic scheduling (up to 6 workers, reduced under memory pressure).",
         "importAnalysisMode": "Import Analysis Mode",
         "metadataOnly": "Metadata only (recommended for E01/RAW)",
         "budgetedContent": "Budgeted content (recommended for directory import)",
@@ -444,7 +444,7 @@
     "empty": {
       "boot": {
         "title": "No boot/shutdown events",
-        "description": "System.evtx boot/shutdown candidates (6005, 6006, 6008, 1074)."
+        "description": "System.evtx operating-system and Event Log service lifecycle events (12, 13, 6005, 6006, 6008, 1074)."
       },
       "logon": {
         "title": "No logon events",

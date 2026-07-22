@@ -1,6 +1,18 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { EventTopic, IndexCacheStatus, PartialResult, PartialResultKind } from '@/types/models';
 
+export const PROJECTION_EVENT_TOPICS = [
+  'case-opened',
+  'case-closed',
+  'job-completed',
+  'job-failed',
+  'job-cancelled',
+  'data-source-imported',
+  'artifact-added',
+  'timeline-updated',
+  'search-index-progress',
+] as const satisfies readonly EventTopic[];
+
 export const timelineQueryKeys = {
   root: ['timeline'] as const,
   eventsRoot: ['timeline', 'events'] as const,
@@ -117,6 +129,11 @@ export function invalidateEventProjectionQueries(queryClient: QueryInvalidator, 
       return;
     case 'search-index-progress':
       invalidateProjectionKeys(queryClient, ['search']);
+      return;
+    case 'job-completed':
+    case 'job-failed':
+    case 'job-cancelled':
+      invalidatePostJobProjectionQueries(queryClient);
       return;
     case 'case-opened':
     case 'case-closed':

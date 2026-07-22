@@ -3,9 +3,9 @@ use crate::analysis_service::artifact_builders::{browser_attrs, make_artifact};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::error::AnalysisServiceError;
 use artifacts_windows::browser::{
-    parse_chrome_cookies, parse_chrome_passwords, parse_chrome_session, parse_firefox_cookies,
-    parse_firefox_passwords, parse_firefox_session, BrowserCookie, BrowserPassword,
-    BrowserSessionTab,
+    parse_chrome_cookies_with_decryptor, parse_chrome_passwords_with_decryptor,
+    parse_chrome_session, parse_firefox_cookies, parse_firefox_passwords, parse_firefox_session,
+    BrowserCookie, BrowserPassword, BrowserSessionTab,
 };
 use serde_json::Value;
 
@@ -14,12 +14,14 @@ pub(super) fn extract_browser_cookies(
     bytes: &[u8],
     browser: &str,
     profile: &str,
+    decryptor: Option<&artifacts_windows::dpapi::ChromiumDecryptor>,
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
     let mut outcome = ExtractionOutcome::default();
     let cookies: Vec<BrowserCookie> = if browser == "Firefox" {
         parse_firefox_cookies(bytes).unwrap_or_default()
     } else {
-        parse_chrome_cookies(bytes, browser, Some(profile)).unwrap_or_default()
+        parse_chrome_cookies_with_decryptor(bytes, browser, Some(profile), decryptor)
+            .map_err(AnalysisServiceError::Extraction)?
     };
     for cookie in cookies {
         let mut attrs = browser_attrs(candidate, browser, profile);
@@ -27,6 +29,16 @@ pub(super) fn extract_browser_cookies(
         attrs.insert("name".to_string(), Value::String(cookie.name.clone()));
         if let Some(preview) = &cookie.value_preview {
             attrs.insert("valuePreview".to_string(), Value::String(preview.clone()));
+        }
+        attrs.insert(
+            "decryptionStatus".to_string(),
+            Value::String(cookie.decryption_status.as_str().to_string()),
+        );
+        if let Some(detail) = &cookie.decryption_detail {
+            attrs.insert(
+                "decryptionDetail".to_string(),
+                Value::String(detail.clone()),
+            );
         }
         if let Some(expiry) = cookie.expiry {
             attrs.insert("expiry".to_string(), Value::String(expiry.to_rfc3339()));
@@ -53,12 +65,14 @@ pub(super) fn extract_browser_passwords(
     bytes: &[u8],
     browser: &str,
     profile: &str,
+    decryptor: Option<&artifacts_windows::dpapi::ChromiumDecryptor>,
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
     let mut outcome = ExtractionOutcome::default();
     let passwords: Vec<BrowserPassword> = if browser == "Firefox" {
         parse_firefox_passwords(bytes).unwrap_or_default()
     } else {
-        parse_chrome_passwords(bytes, browser, Some(profile)).unwrap_or_default()
+        parse_chrome_passwords_with_decryptor(bytes, browser, Some(profile), decryptor)
+            .map_err(AnalysisServiceError::Extraction)?
     };
     for password in passwords {
         let mut attrs = browser_attrs(candidate, browser, profile);
@@ -71,6 +85,16 @@ pub(super) fn extract_browser_passwords(
             attrs.insert(
                 "passwordPreview".to_string(),
                 Value::String(preview.clone()),
+            );
+        }
+        attrs.insert(
+            "decryptionStatus".to_string(),
+            Value::String(password.decryption_status.as_str().to_string()),
+        );
+        if let Some(detail) = &password.decryption_detail {
+            attrs.insert(
+                "decryptionDetail".to_string(),
+                Value::String(detail.clone()),
             );
         }
         if let Some(created_at) = password.created_at {

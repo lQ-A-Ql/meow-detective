@@ -77,6 +77,12 @@ enum EventClass {
 fn classify_event(event_id: u32, provider: Option<&str>, channel: Option<&str>) -> EventClass {
     let channel = channel.unwrap_or("");
     match event_id {
+        12 if provider_matches(provider, "microsoft-windows-kernel-general") => {
+            EventClass::Boot(EvtxBootEventKind::OperatingSystemStarted)
+        }
+        13 if provider_matches(provider, "microsoft-windows-kernel-general") => {
+            EventClass::Boot(EvtxBootEventKind::OperatingSystemShutdown)
+        }
         6005 => EventClass::Boot(EvtxBootEventKind::EventLogStarted),
         6006 => EventClass::Boot(EvtxBootEventKind::EventLogStopped),
         6008 => EventClass::Boot(EvtxBootEventKind::UnexpectedShutdown),
@@ -297,6 +303,7 @@ fn extract_named_data_item(item: &Value) -> Option<(String, String)> {
     let name = obj
         .get("@Name")
         .or_else(|| obj.get("Name"))
+        .or_else(|| nested_attribute(obj, "Name"))
         .and_then(Value::as_str)?;
     let value = obj
         .get("#text")
@@ -337,6 +344,7 @@ fn event_timestamp(system: &Value) -> Option<String> {
         Value::Object(map) => map
             .get("@SystemTime")
             .or_else(|| map.get("SystemTime"))
+            .or_else(|| nested_attribute(map, "SystemTime"))
             .and_then(Value::as_str),
         Value::String(text) => Some(text.as_str()),
         _ => None,
@@ -361,11 +369,18 @@ fn provider_name(system: &Value) -> Option<String> {
         Value::Object(map) => map
             .get("@Name")
             .or_else(|| map.get("Name"))
+            .or_else(|| nested_attribute(map, "Name"))
             .and_then(Value::as_str)
             .map(str::to_string),
         Value::String(text) => Some(text.clone()),
         _ => None,
     }
+}
+
+fn nested_attribute<'a>(map: &'a serde_json::Map<String, Value>, name: &str) -> Option<&'a Value> {
+    map.get("#attributes")
+        .and_then(Value::as_object)
+        .and_then(|attributes| attributes.get(name))
 }
 
 fn event_channel(system: &Value) -> Option<String> {

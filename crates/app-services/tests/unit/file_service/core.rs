@@ -296,6 +296,7 @@ fn mft_root_record_becomes_tree_root() {
     let records = vec![
         MftRecord {
             record_number: 5,
+            sequence_number: 0,
             name: ".".to_string(),
             parent_ref: 5,
             is_dir: true,
@@ -311,6 +312,7 @@ fn mft_root_record_becomes_tree_root() {
         },
         MftRecord {
             record_number: 42,
+            sequence_number: 0,
             name: "Windows".to_string(),
             parent_ref: 5,
             is_dir: true,
@@ -377,6 +379,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
         &[
             MftRecord {
                 record_number: 5,
+                sequence_number: 0,
                 name: ".".to_string(),
                 parent_ref: 5,
                 is_dir: true,
@@ -392,6 +395,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
             },
             MftRecord {
                 record_number: 77,
+                sequence_number: 0,
                 name: "old.txt".to_string(),
                 parent_ref: 999,
                 is_dir: false,

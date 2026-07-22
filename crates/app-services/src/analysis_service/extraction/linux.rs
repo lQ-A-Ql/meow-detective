@@ -181,3 +181,11 @@ fn warn_unsupported_candidate(candidate: &EvidenceCandidate, outcome: &mut Extra
         "{source_path} is a Linux artifact candidate, but this first-pass parser does not yet extract structured records for it"
     ));
 }
+
+pub(super) fn unsupported_linux_candidate_outcome(
+    candidate: &EvidenceCandidate,
+) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
+    warn_unsupported_candidate(candidate, &mut outcome);
+    outcome
+}

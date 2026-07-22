@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS file_entries (
     modified_at TEXT,
     accessed_at TEXT,
     changed_at TEXT,
-    hash_sha256 TEXT
+    hash_sha256 TEXT,
+    partition_index INTEGER
 );
 
 -- Metadata table for tracking partition state within the staging DB.

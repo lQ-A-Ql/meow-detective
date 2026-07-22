@@ -333,7 +333,10 @@ impl crate::NtfsReader {
         self.read_data_extents_range(&extents, offset, length)
     }
 
-    fn collect_unnamed_data_extents(&self, inode: u64) -> io::Result<Vec<DataAttributeExtent>> {
+    pub(crate) fn collect_unnamed_data_extents(
+        &self,
+        inode: u64,
+    ) -> io::Result<Vec<DataAttributeExtent>> {
         let rec = self.read_mft_record(inode)?;
         self.collect_unnamed_data_extents_from_base(inode, rec)
     }

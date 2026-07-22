@@ -9,8 +9,9 @@ and Linux artifact extraction.
 
 Cluster import modeling is now enabled as a Stage 1 capability. The UI can
 submit a Linux cluster folder, the backend scans nested image members,
-registers a case-level cluster record, writes a manifest, and serially imports
-each member image into its own source database. A failed member is recorded
+registers a case-level cluster record, writes a manifest, and imports members
+through the shared bounded scheduler (at most two active members by default),
+with each member image written to its own source database. A failed member is recorded
 without aborting later members; the final cluster and job remain failed with
 partial counts when any member fails. Cluster-level parsing,
 PVE thin-pool reconstruction, VM disk reconstruction, and cross-node analysis
@@ -182,8 +183,11 @@ Current milestone:
 - Linux artifact extraction produces structured results from the real sample.
 - `cluster_service::parse_cluster` returns `Unsupported` for semantic cluster
   reconstruction.
-- Linux cluster import modeling can register and serially import member images.
-- The private six-member PVE gate attempts every member in deterministic order,
+- Linux cluster import modeling can register and bounded-parallel import member
+  images; each member remains source-isolated and the parent coordinator keeps
+  aggregate state updates ordered.
+- The private six-member PVE gate attempts every member in deterministic member
+  order through the bounded scheduler,
   keeps `app.db` free of file-tree rows, verifies unique source DB paths, and
   records the expected host-ready/BlueStore-metadata aggregate outcome.
 

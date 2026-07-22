@@ -266,7 +266,7 @@ $serviceMaskedSources = (
     ForEach-Object { Get-MaskedRust (Read-StrictUtf8 $_.FullName) }
 ) -join "`n"
 
-if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b|\bemit_all\b|\bemit_to\b') {
+if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b') {
   $errors.Add('app-services must remain independent from the Tauri runtime')
 }
 

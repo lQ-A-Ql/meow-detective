@@ -3,7 +3,7 @@
 use crate::invalid_fs_data;
 use std::io;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DataRun {
     pub lcn: Option<i64>,
     pub cluster_count: u64,

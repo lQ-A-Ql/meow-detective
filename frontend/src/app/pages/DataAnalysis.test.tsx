@@ -455,6 +455,7 @@ describe('DataAnalysis page', () => {
     mocks.eventLogSummary.mockReturnValue(queryState({
       data: {
         status: 'parsed',
+        pageTotal: 1,
         bootShutdownCount: 1,
         logonLogoffCount: 0,
         privilegeEscalationCount: 0,

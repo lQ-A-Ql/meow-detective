@@ -7,6 +7,8 @@ import {
 } from '@/features/analysis/components/AnalysisPanels';
 import type { LinuxArtifactSummary } from '@/types/models';
 import type { LinuxAnalysisTabKey } from '@/features/analysis/types';
+import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
+import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
 
 export interface LinuxAnalysisViewProps {
   activeTab: LinuxAnalysisTabKey;
@@ -16,6 +18,8 @@ export interface LinuxAnalysisViewProps {
   loading: boolean;
   summary?: LinuxArtifactSummary;
   summaryLoading: boolean;
+  extractionRunning: boolean;
+  recoveryModel: DeletedRecoveryViewModel;
 }
 
 export function LinuxAnalysisView({
@@ -26,6 +30,8 @@ export function LinuxAnalysisView({
   loading,
   summary,
   summaryLoading,
+  extractionRunning,
+  recoveryModel,
 }: LinuxAnalysisViewProps) {
   const { t } = useTranslation();
 
@@ -37,7 +43,9 @@ export function LinuxAnalysisView({
     >
       <div className="min-h-0 flex-1 overflow-auto p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
-        {loading || summaryLoading ? (
+        {activeTab === 'deletedRecovery' ? (
+          <DeletedRecoveryPanel model={recoveryModel} />
+        ) : loading || summaryLoading ? (
           <AnalysisLoadingPanel
             text={loading ? t('analysis.loading.case') : t('analysis.loading.linuxArtifacts')}
           />
@@ -45,6 +53,7 @@ export function LinuxAnalysisView({
           <LinuxArtifactsPanel
             summary={summary}
             activeTab={activeTab}
+            extractionRunning={extractionRunning}
           />
         )}
       </div>

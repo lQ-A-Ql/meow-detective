@@ -1,5 +1,8 @@
 use super::*;
+use crate::analysis_service::capability::LINUX_UMBRELLA_KEY;
+use crate::analysis_service::extraction::candidate_processing::read_candidate_bytes_with_progress;
 use crate::analysis_service::extraction::output_persistence::persist_outputs;
+use crate::analysis_service::extraction::ExtractionOutcome;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, TimelineEvent, TimelineEventId};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
@@ -23,15 +26,56 @@ fn owned_candidate_bytes_are_reused_without_a_second_content_copy() {
     let input_ptr = input.as_ptr();
     let mut input = Some(input);
 
-    let bytes = read_candidate_bytes(&candidate, 4, &AtomicBool::new(false), &mut |_, _| {
-        Ok::<CandidateSource, String>(CandidateSource::Bytes(
-            input.take().expect("candidate bytes requested once"),
-        ))
-    })
+    let bytes = read_candidate_bytes_with_progress(
+        &candidate,
+        4,
+        &AtomicBool::new(false),
+        &mut |_, _| {
+            Ok::<CandidateSource, String>(CandidateSource::Bytes(
+                input.take().expect("candidate bytes requested once"),
+            ))
+        },
+        |_| {},
+    )
     .expect("read owned candidate bytes");
 
     assert_eq!(bytes, vec![1, 2, 3, 4]);
     assert_eq!(bytes.as_ptr(), input_ptr);
+}
+
+#[test]
+fn candidate_reader_reports_monotonic_byte_progress() {
+    let candidate = EvidenceCandidate {
+        file_id: FileEntryId("streamed-bytes".to_string()),
+        data_source_id: "source-linux".to_string(),
+        partition_index: None,
+        path: "var/log/messages".to_string(),
+        size: 192 * 1024,
+        content_identity: "test:streamed-bytes".to_string(),
+        evidence_kind: "File".to_string(),
+        parser: "XFS".to_string(),
+        category: LINUX_UMBRELLA_KEY.to_string(),
+    };
+    let expected = vec![0x5a; candidate.size as usize];
+    let mut expected = Some(expected);
+    let mut byte_progress = Vec::new();
+
+    let bytes = read_candidate_bytes_with_progress(
+        &candidate,
+        candidate.size as usize,
+        &AtomicBool::new(false),
+        &mut |_, _| {
+            Ok::<CandidateSource, String>(CandidateSource::Reader(Box::new(std::io::Cursor::new(
+                expected.take().expect("candidate requested once"),
+            ))))
+        },
+        |bytes_read| byte_progress.push(bytes_read),
+    )
+    .expect("read streamed candidate bytes");
+
+    assert_eq!(bytes.len(), candidate.size as usize);
+    assert_eq!(byte_progress.last().copied(), Some(candidate.size as usize));
+    assert!(byte_progress.windows(2).all(|pair| pair[0] < pair[1]));
 }
 
 fn output_candidate() -> EvidenceCandidate {
@@ -468,6 +512,7 @@ fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
         )
         .expect("insert analysis candidate");
     let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
 
     let execution = run_analysis_extraction_with_source(
         &connection,
@@ -475,6 +520,7 @@ fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
         DataSourcePlatform::Linux,
         &["LinuxWebServices"],
         &cancel,
+        &mut ignore_progress,
         |_, _| Err::<CandidateSource, String>("injected evidence read failure".to_string()),
     )
     .expect("return retryable extraction result");

@@ -19,6 +19,9 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     let (case_from_json, db_path) = validate_case_workspace(root)?;
     let stored = preflight_case_workspace(&db_path, &case_from_json.id)?;
     let active = ActiveCase::new(stored, root.to_path_buf(), open_existing(&db_path)?);
+    active.with_conn(|conn| {
+        crate::source_db::migrate_ready_source_databases(conn, root, &active.meta.id)
+    })?;
     let _ = active.with_conn(|conn| {
         AuditRepo::new(conn).log_simple(
             Some(&active.meta.id.0),

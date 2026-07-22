@@ -9,6 +9,8 @@ license.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 evidence-core.workspace = true
+hex.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

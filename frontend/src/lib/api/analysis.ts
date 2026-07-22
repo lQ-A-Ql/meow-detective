@@ -8,6 +8,7 @@ import {
   CorrelationSnapshot,
   EmailExtractionSummary,
   EvtxEventSummary,
+  EvtxEventPageRequest,
   EvidenceClassificationSummary,
   LinuxArtifactSummary,
   RegistryExtractionSummary,
@@ -71,7 +72,7 @@ export async function getEmailExtractionSummary(
 }
 
 export async function getEvtxEventSummary(
-  request: AnalysisExtractionPageRequest,
+  request: EvtxEventPageRequest,
 ): Promise<EvtxEventSummary> {
   return apiClient.request(COMMANDS.analysis.GET_EVTX_EVENT_SUMMARY, { request });
 }

@@ -8,7 +8,7 @@ their existing ownership in the import pipeline.
 ## Baseline and scope
 
 Windows is the baseline for the scheduler: one source may use a bounded CPU
-budget of at most four workers, while evidence reads remain subject to the
+budget of at most six workers, while evidence reads remain subject to the
 reader safety rules. Linux single-source imports use the same
 `ImportWorkload::SingleSource` policy; they do not have a separate Linux
 thread pool or a separate progress state machine. This means:
@@ -32,12 +32,14 @@ controller. The defaults are:
 
 | Workload | Active source limit | Per-source import workers | Per-source analysis workers | CPU budget | Memory reservation |
 |---|---:|---:|---:|---:|---:|
-| Windows or Linux single source | 1 | auto, up to 4 | auto, up to 4 | 4 | 4096 MiB |
-| Linux cluster | 2 members | auto, up to 2 | auto, up to 2 | 4 total | 4096 MiB total, normally 2048 MiB/member |
+| Windows or Linux single source | 1 | auto, up to 6 | auto, up to 6 | 6 | 4096 MiB |
+| Linux cluster | 2 members | auto, up to 3 | auto, up to 3 | 6 total | 4096 MiB total, normally 2048 MiB/member |
 
 The settings values are upper bounds, not a request to exceed the global
 budget. An explicit value is clamped to the scheduler capacity; an empty
-value selects automatic scheduling. A cluster with six members creates a
+value selects automatic scheduling. Analysis worker counts are additionally
+reduced when process RSS approaches the 4096 MiB soft limit, using a
+conservative 512 MiB reservation per worker. A cluster with six members creates a
 bounded set of member workers, but only members admitted by the controller
 read evidence at the same time.
 
@@ -95,10 +97,10 @@ admission capacity.
 The scheduler unit tests in
 `crates/app-services/tests/import_scheduler.rs` verify:
 
-- Windows/Linux single-source and cluster policies share the four-worker CPU
+- Windows/Linux single-source and cluster policies share the six-worker CPU
   cap;
 - two low-weight cluster members can be active while total weight remains at
-  or below four;
+  or below six;
 - memory and CPU reservations are released after normal completion;
 - multiple waiting members cancel without leaking capacity; and
 - panic unwind releases the permit.

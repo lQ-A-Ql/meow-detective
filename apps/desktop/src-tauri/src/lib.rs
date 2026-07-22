@@ -28,10 +28,11 @@ use commands::{
         open_case, remove_case_from_list, rename_data_source,
     },
     file_commands::{
-        close_file_handle, extract_file, get_file_children, get_file_children_request,
-        get_file_jump_context, get_file_rows, get_file_rows_request, get_file_tree,
-        get_file_tree_request, get_image_preview, get_media_url, get_text_preview,
-        open_file_handle, open_file_handle_request, read_file_range, read_media_range,
+        close_file_handle, export_deleted_recovery, extract_file, get_file_children,
+        get_file_children_request, get_file_jump_context, get_file_rows, get_file_rows_request,
+        get_file_tree, get_file_tree_request, get_image_preview, get_media_url, get_text_preview,
+        list_deleted_recoveries, open_file_handle, open_file_handle_request,
+        read_deleted_recovery_range, read_file_range, read_media_range, run_deleted_recovery,
     },
     graph_commands::{
         get_graph_snapshot, get_node_neighborhood, get_provenance_chain, list_graph_nodes,
@@ -60,8 +61,7 @@ use commands::{
 use state::AppState;
 
 pub fn run() {
-    let builder = tauri::Builder::default();
-    match media_protocol::register(builder)
+    media_protocol::register(tauri::Builder::default())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             cache_invalidation::register(app.handle().clone());
@@ -91,6 +91,10 @@ pub fn run() {
             get_file_rows,
             get_file_rows_request,
             get_file_jump_context,
+            list_deleted_recoveries,
+            run_deleted_recovery,
+            read_deleted_recovery_range,
+            export_deleted_recovery,
             open_file_handle,
             open_file_handle_request,
             close_file_handle,
@@ -150,7 +154,6 @@ pub fn run() {
             list_loaded_rule_packs,
             load_rule_pack,
             validate_rule_pack,
-            // MCP commands
             get_mcp_config,
             save_mcp_config,
             add_mcp_server,
@@ -163,7 +166,6 @@ pub fn run() {
             call_mcp_tool,
             list_mcp_prompts,
             get_mcp_prompt,
-            // Notebook commands
             create_notebook_entry,
             update_notebook_entry,
             list_notebook_entries,
@@ -172,13 +174,10 @@ pub fn run() {
             list_investigation_steps,
         ])
         .run(tauri::generate_context!())
-    {
-        Ok(_) => {}
-        Err(e) => {
-            tracing::error!("Failed to run Tauri application: {e}");
+        .unwrap_or_else(|error| {
+            tracing::error!("Failed to run Tauri application: {error}");
             std::process::exit(1);
-        }
-    }
+        });
 }
 
 #[cfg(test)]

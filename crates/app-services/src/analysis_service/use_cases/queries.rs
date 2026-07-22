@@ -3,7 +3,7 @@ use std::path::Path;
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::dto::{
-    BrowserHistorySummaryDto, EmailExtractionSummaryDto, EvtxEventSummaryDto,
+    BrowserHistorySummaryDto, EmailExtractionSummaryDto, EvtxEventSummaryDto, EvtxEventViewDto,
     LinuxArtifactSummaryDto, RegistryExtractionSummaryDto, RegistryStructuredSummaryDto,
 };
 
@@ -77,12 +77,18 @@ paged_summary!(
     EmailExtractionSummaryDto,
     get_email_extraction_summary
 );
-paged_summary!(
-    get_source_evtx_summary,
-    "EventLogs",
-    EvtxEventSummaryDto,
-    get_evtx_event_summary
-);
+pub fn get_source_evtx_summary(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    view: Option<EvtxEventViewDto>,
+    offset: u64,
+    limit: u32,
+) -> Result<EvtxEventSummaryDto, AnalysisServiceError> {
+    let source = open_for_capability(case_conn, case_root, case_id, data_source_id, "EventLogs")?;
+    get_evtx_event_summary(&source.connection, view, offset, limit)
+}
 paged_summary!(
     get_source_linux_summary,
     "LinuxArtifacts",

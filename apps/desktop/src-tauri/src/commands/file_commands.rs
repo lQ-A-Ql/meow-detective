@@ -3,6 +3,7 @@
 mod browse;
 mod extract;
 mod media;
+mod recovery;
 mod support;
 mod viewer;
 
@@ -12,6 +13,10 @@ pub use browse::{
 };
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
+pub use recovery::{
+    export_deleted_recovery, list_deleted_recoveries, read_deleted_recovery_range,
+    run_deleted_recovery,
+};
 pub use viewer::{
     close_file_handle, get_image_preview, get_text_preview, open_file_handle,
     open_file_handle_request, read_file_range,

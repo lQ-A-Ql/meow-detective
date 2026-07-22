@@ -4,6 +4,10 @@ import {
   FileJumpContext,
   FileRowsPage,
   FileTreeNode,
+  DeletedRecoveryContentRange,
+  DeletedRecoveryExport,
+  DeletedRecoveryPage,
+  DeletedRecoveryRun,
   ImagePreviewResponse,
   ImportDataSourceRequest,
   MediaRangeRequest,
@@ -133,5 +137,48 @@ export async function getFileJumpContext(
   } = options;
   return apiClient.request<FileJumpContext>(COMMANDS.files.GET_FILE_JUMP_CONTEXT, {
     request: { fileId, showHidden, pageLimit, sortKey, sortDirection },
+  });
+}
+
+export async function listDeletedRecoveries(
+  dataSourceId: string,
+  partitionIndex: number,
+  offset = 0,
+  limit = 100,
+): Promise<DeletedRecoveryPage> {
+  return apiClient.request<DeletedRecoveryPage>(COMMANDS.files.LIST_DELETED_RECOVERIES, {
+    request: { dataSourceId, partitionIndex, offset, limit },
+  });
+}
+
+export async function runDeletedRecovery(
+  dataSourceId: string,
+  partitionIndex?: number,
+): Promise<DeletedRecoveryRun> {
+  return apiClient.request<DeletedRecoveryRun>(COMMANDS.files.RUN_DELETED_RECOVERY, {
+    request: { dataSourceId, partitionIndex: partitionIndex ?? null },
+  });
+}
+
+export async function readDeletedRecoveryRange(
+  dataSourceId: string,
+  recoveryId: string,
+  offset: number,
+  length: number,
+): Promise<DeletedRecoveryContentRange> {
+  return apiClient.request<DeletedRecoveryContentRange>(
+    COMMANDS.files.READ_DELETED_RECOVERY_RANGE,
+    { request: { dataSourceId, recoveryId, offset, length } },
+  );
+}
+
+export async function exportDeletedRecovery(
+  dataSourceId: string,
+  recoveryId: string,
+  destinationPath: string,
+  overwrite = false,
+): Promise<DeletedRecoveryExport> {
+  return apiClient.request<DeletedRecoveryExport>(COMMANDS.files.EXPORT_DELETED_RECOVERY, {
+    request: { dataSourceId, recoveryId, destinationPath, overwrite },
   });
 }

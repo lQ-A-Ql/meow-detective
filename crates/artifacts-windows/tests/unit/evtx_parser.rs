@@ -56,6 +56,102 @@ fn extract_shutdown_candidates_from_json_string_event_id() {
 }
 
 #[test]
+fn extract_kernel_general_operating_system_boundaries() {
+    let records = [
+        json!({"Event":{"System":{
+            "Provider":{"@Name":"Microsoft-Windows-Kernel-General"},
+            "EventID":12,
+            "EventRecordID":10,
+            "TimeCreated":{"@SystemTime":"2026-01-01T00:00:00Z"}
+        }}}),
+        json!({"Event":{"System":{
+            "Provider":{"@Name":"Microsoft-Windows-Kernel-General"},
+            "EventID":13,
+            "EventRecordID":11,
+            "TimeCreated":{"@SystemTime":"2026-01-01T01:00:00Z"}
+        }}}),
+    ];
+    let extraction = extract_boot_shutdown_events_from_json_records(&records, SYSTEM_PATH)
+        .expect("Kernel-General records should parse");
+
+    assert_eq!(extraction.events.len(), 2);
+    assert_eq!(
+        extraction.events[0].kind,
+        EvtxBootEventKind::OperatingSystemStarted
+    );
+    assert_eq!(
+        extraction.events[1].kind,
+        EvtxBootEventKind::OperatingSystemShutdown
+    );
+    assert_eq!(extraction.events[0].timestamp, "2026-01-01T00:00:00+00:00");
+}
+
+#[test]
+fn extract_kernel_boundaries_from_nested_json_attributes() {
+    let records = [
+        json!({"Event":{"System":{
+            "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "EventID":12,
+            "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T00:00:00Z"}}
+        }}}),
+        json!({"Event":{"System":{
+            "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "EventID":13,
+            "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T01:00:00Z"}}
+        }}}),
+    ];
+    let extraction = extract_boot_shutdown_events_from_json_records(&records, SYSTEM_PATH)
+        .expect("nested attributes should parse");
+
+    assert_eq!(extraction.events.len(), 2);
+    assert_eq!(extraction.events[0].event_id, 12);
+    assert_eq!(extraction.events[1].event_id, 13);
+    assert_eq!(extraction.events[0].timestamp, "2026-01-01T00:00:00+00:00");
+}
+
+#[test]
+fn nested_event_data_attributes_preserve_named_values() {
+    let records = [json!({"Event":{
+        "System":{
+            "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "EventID":13,
+            "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T01:00:00Z"}}
+        },
+        "EventData":{"Data":{"#attributes":{"Name":"StopTime"},"#text":"2026-01-01 01:00:00.0000000"}}
+    }})];
+    let extraction = extract_boot_shutdown_events_from_json_records(&records, SYSTEM_PATH)
+        .expect("nested event data attributes should parse");
+
+    assert_eq!(
+        extraction.events[0]
+            .details
+            .get("StopTime")
+            .map(String::as_str),
+        Some("2026-01-01 01:00:00.0000000")
+    );
+}
+
+#[test]
+fn kernel_general_ids_require_the_expected_provider() {
+    let records = [
+        json!({"Event":{"System":{
+            "Provider":{"@Name":"Unrelated-Provider"},
+            "EventID":12,
+            "TimeCreated":{"@SystemTime":"2026-01-01T00:00:00Z"}
+        }}}),
+        json!({"Event":{"System":{
+            "Provider":{"@Name":"Unrelated-Provider"},
+            "EventID":13,
+            "TimeCreated":{"@SystemTime":"2026-01-01T01:00:00Z"}
+        }}}),
+    ];
+    let extraction = extract_boot_shutdown_events_from_json_records(&records, SYSTEM_PATH)
+        .expect("unrelated records should be ignored");
+
+    assert!(extraction.events.is_empty());
+}
+
+#[test]
 fn ignores_unsupported_event_ids() {
     let extraction = extract_boot_shutdown_events_from_json_records(
         &[json!({"Event":{"System":{"EventID":7045}}})],

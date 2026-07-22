@@ -8,7 +8,8 @@ use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
 use domain::{FileEntry, FileEntryId};
 use rusqlite::Connection;
 use transport::dto::analysis::{
-    AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisProvenanceDto,
+    AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisNetworkAdapterDto,
+    AnalysisProvenanceDto,
 };
 use transport::dto::{AnalysisParseStatusDto, AnalysisSystemInfoDto};
 
@@ -22,6 +23,7 @@ struct SystemInfoExtraction {
     organization: Option<String>,
     product_id: Option<String>,
     timezone: Option<String>,
+    network_adapters: Vec<AnalysisNetworkAdapterDto>,
     boot_history: Vec<AnalysisBootRecordDto>,
     field_provenance: Vec<AnalysisFieldProvenanceDto>,
 }
@@ -41,6 +43,7 @@ impl SystemInfoExtraction {
             || self.organization.is_some()
             || self.product_id.is_some()
             || self.timezone.is_some()
+            || !self.network_adapters.is_empty()
     }
 }
 
@@ -115,7 +118,7 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
         registered_owner: extraction.registered_owner,
         organization: extraction.organization,
         product_id: extraction.product_id,
-        network_adapters: Vec::new(),
+        network_adapters: extraction.network_adapters,
         boot_history: extraction.boot_history,
         timezone: extraction.timezone,
         language: None,
@@ -251,7 +254,30 @@ fn inspect_system_registry_fields(
         &mut extraction.timezone,
         &mut extraction.field_provenance,
     );
-    (parsed_any, info.warnings)
+    match artifacts_windows::extract_network_adapters_from_system_hive(bytes, &entry.path) {
+        Ok(adapters) => {
+            parsed_any |= !adapters.is_empty();
+            extraction.network_adapters = adapters
+                .into_iter()
+                .map(|adapter| AnalysisNetworkAdapterDto {
+                    name: adapter.name.unwrap_or(adapter.guid),
+                    mac_address: adapter.mac_address,
+                    ip_addresses: adapter.ip_addresses,
+                    dhcp_enabled: adapter.dhcp_enabled,
+                    dhcp_server: adapter.dhcp_server,
+                })
+                .collect();
+            (parsed_any, info.warnings)
+        }
+        Err(error) => {
+            let mut warnings = info.warnings;
+            warnings.push(format!(
+                "{} network adapter parsing failed: {error}",
+                entry.path
+            ));
+            (parsed_any, warnings)
+        }
+    }
 }
 
 fn inspect_software_registry_fields(

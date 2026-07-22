@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EvtxBootEventKind {
+    OperatingSystemStarted,
+    OperatingSystemShutdown,
     EventLogStarted,
     EventLogStopped,
     UnexpectedShutdown,
@@ -17,6 +19,8 @@ pub enum EvtxBootEventKind {
 impl EvtxBootEventKind {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::OperatingSystemStarted => "operatingSystemStarted",
+            Self::OperatingSystemShutdown => "operatingSystemShutdown",
             Self::EventLogStarted => "eventLogStarted",
             Self::EventLogStopped => "eventLogStopped",
             Self::UnexpectedShutdown => "unexpectedShutdown",
@@ -30,6 +34,12 @@ impl EvtxBootEventKind {
 
     pub(super) fn note(&self) -> &'static str {
         match self {
+            Self::OperatingSystemStarted => {
+                "Kernel-General 12 candidate; indicates Windows completed the operating-system startup phase."
+            }
+            Self::OperatingSystemShutdown => {
+                "Kernel-General 13 candidate; indicates Windows entered the operating-system shutdown phase."
+            }
             Self::EventLogStarted => {
                 "EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion."
             }

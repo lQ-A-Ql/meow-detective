@@ -11,7 +11,7 @@ mod validation;
 
 pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
-    RunAnalysisExtractionRequest, RunEvidenceClassificationRequest,
+    GetEvtxEventSummaryRequest, RunAnalysisExtractionRequest, RunEvidenceClassificationRequest,
 };
 pub use artifacts::{GetArtifactByIdRequest, GetArtifactRowsRequest};
 pub use case::{
@@ -19,9 +19,10 @@ pub use case::{
     RenameDataSourceRequest,
 };
 pub use files::{
-    ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto, GetFileChildrenRequest,
-    GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, OpenFileHandleRequest,
-    SearchFilesRequest,
+    ExportDeletedRecoveryRequest, ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto,
+    GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,
+    ListDeletedRecoveriesRequest, OpenFileHandleRequest, ReadDeletedRecoveryRangeRequest,
+    RunDeletedRecoveryRequest, SearchFilesRequest,
 };
 pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;

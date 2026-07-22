@@ -180,7 +180,7 @@ fn liuyang_registry_extractors_surface_families() {
             let summary = analysis_service::get_registry_structured_summary(conn)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             eprintln!(
-                "Structured summary: services={} usb={} mounted={} shutdown={} shimcache={} run_keys={} winlogon={} lsa_packages={} network={} shellbags={} muicache={} amcache_apps={} amcache_files={} appcompat={} sec_policy={} lsa_secrets={} cached_creds={}",
+                "Structured summary: services={} usb={} mounted={} shutdown={} shimcache={} run_keys={} winlogon={} lsa_packages={} adapters={} profiles={} shellbags={} muicache={} amcache_apps={} amcache_files={} appcompat={} sec_policy={} lsa_secrets={} cached_creds={}",
                 summary.system_services.len(),
                 summary.usb_devices.len(),
                 summary.mounted_devices.len(),
@@ -189,6 +189,7 @@ fn liuyang_registry_extractors_surface_families() {
                 summary.run_keys.len(),
                 summary.winlogon_config.as_ref().map(|_| 1).unwrap_or(0),
                 summary.lsa_packages.len(),
+                summary.network_adapters.len(),
                 summary.network_profiles.len(),
                 summary.shellbag_entries.len(),
                 summary.muicache_entries.len(),
@@ -198,6 +199,15 @@ fn liuyang_registry_extractors_surface_families() {
                 summary.security_policies.len(),
                 summary.lsa_secrets.len(),
                 summary.cached_credentials.len(),
+            );
+            assert!(
+                summary.network_adapters.iter().any(|adapter| {
+                    adapter.description.is_some()
+                        && !adapter.ip_addresses.is_empty()
+                        && (adapter.mac_address.is_some()
+                            || adapter.permanent_mac_address.is_some())
+                }),
+                "Liu Yang SYSTEM hive should join TCP/IP configuration with physical adapter identity"
             );
 
             // Persist full extraction results to output/liuyang_registry_extract.

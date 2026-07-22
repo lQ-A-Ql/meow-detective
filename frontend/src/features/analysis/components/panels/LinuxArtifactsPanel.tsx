@@ -51,9 +51,11 @@ const TABS: LinuxArtifactTabKey[] = [
 export function LinuxArtifactsPanel({
   summary,
   activeTab = 'overview',
+  extractionRunning = false,
 }: {
   summary?: LinuxArtifactSummary;
   activeTab?: LinuxArtifactTabKey;
+  extractionRunning?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -392,7 +394,7 @@ export function LinuxArtifactsPanel({
       title={t('linuxArtifacts.title')}
       status={info.status}
       generatedAt={info.generatedAt}
-      warnings={info.warnings}
+      warnings={extractionRunning ? [] : info.warnings}
       stats={[]}
     >
       <div className="min-h-0">{tabContent[activeTab]}</div>

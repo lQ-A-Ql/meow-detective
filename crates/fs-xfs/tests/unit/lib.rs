@@ -548,6 +548,16 @@ fn test_inode_magic() {
     assert!(!XfsReader::inode_is_dir(&file_inode));
 }
 
+#[test]
+fn test_inode_type_mask_does_not_classify_special_files_as_directories() {
+    for file_type in [0x6000u16, 0xA000, 0xC000] {
+        let mut inode = vec![0u8; INODE_CORE_SIZE];
+        inode[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(file_type | 0o666).to_be_bytes());
+
+        assert!(!XfsReader::inode_is_dir(&inode), "mode 0x{file_type:04X}");
+    }
+}
+
 // -----------------------------------------------------------------------
 // test_root_directory
 // -----------------------------------------------------------------------

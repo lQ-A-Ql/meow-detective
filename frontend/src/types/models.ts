@@ -13,6 +13,7 @@ export * from './eventLog';
 export * from './linuxArtifacts';
 export * from './governance';
 export * from './files';
+export * from './recovery';
 export * from './viewer';
 export * from './timeline';
 export * from './search';

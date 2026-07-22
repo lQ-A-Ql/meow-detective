@@ -1,15 +1,17 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::query_artifact_rows;
 use crate::analysis_service::extraction::attr_mapping::{
-    bool_attr, optional_string_attr, optional_u32_attr, string_attr, string_vec_attr,
+    bool_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
+    string_vec_attr,
 };
 use rusqlite::Connection;
 use transport::dto::{
-    LsaPackageDto, MountedDeviceDto, RegistryRunKeyDto, ShimCacheEntryDto, ShutdownTimeDto,
-    SystemServiceDto, UsbDeviceHistoryDto, WinlogonConfigDto,
+    LsaPackageDto, MountedDeviceDto, RegistryNetworkAdapterDto, RegistryRunKeyDto,
+    ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto, WinlogonConfigDto,
 };
 
 pub(super) struct SystemRegistryData {
+    pub(super) network_adapters: Vec<RegistryNetworkAdapterDto>,
     pub(super) system_services: Vec<SystemServiceDto>,
     pub(super) usb_devices: Vec<UsbDeviceHistoryDto>,
     pub(super) mounted_devices: Vec<MountedDeviceDto>,
@@ -22,6 +24,7 @@ pub(super) struct SystemRegistryData {
 
 impl SystemRegistryData {
     pub(super) fn load(conn: &Connection) -> Result<Self, AnalysisServiceError> {
+        let network_adapters = load_network_adapters(conn)?;
         let system_services = load_system_services(conn)?;
         let usb_devices = load_usb_devices(conn)?;
         let mounted_devices = load_mounted_devices(conn)?;
@@ -31,6 +34,7 @@ impl SystemRegistryData {
         let winlogon_config = load_winlogon_config(conn)?;
         let lsa_packages = load_lsa_packages(conn)?;
         Ok(Self {
+            network_adapters,
             system_services,
             usb_devices,
             mounted_devices,
@@ -40,6 +44,46 @@ impl SystemRegistryData {
             winlogon_config,
             lsa_packages,
         })
+    }
+}
+
+fn load_network_adapters(
+    conn: &Connection,
+) -> Result<Vec<RegistryNetworkAdapterDto>, AnalysisServiceError> {
+    Ok(
+        query_artifact_rows(conn, &["RegistryNetworkAdapter"], 0, 10_000)?
+            .into_iter()
+            .map(|row| RegistryNetworkAdapterDto {
+                guid: string_attr(&row.attrs, "guid"),
+                name: string_attr(&row.attrs, "name"),
+                description: optional_string_attr(&row.attrs, "description"),
+                mac_address: optional_string_attr(&row.attrs, "macAddress"),
+                permanent_mac_address: optional_string_attr(&row.attrs, "permanentMacAddress"),
+                ip_addresses: string_vec_or_legacy(&row.attrs, "ipAddresses", "ipAddress"),
+                subnet_masks: string_vec_attr(&row.attrs, "subnetMasks"),
+                gateways: string_vec_or_legacy(&row.attrs, "gateways", "gateway"),
+                dhcp_enabled: optional_bool_attr(&row.attrs, "dhcpEnabled"),
+                dhcp_server: optional_string_attr(&row.attrs, "dhcpServer"),
+                dns_servers: string_vec_attr(&row.attrs, "dnsServers"),
+                pnp_instance_id: optional_string_attr(&row.attrs, "pnpInstanceId"),
+                service_name: optional_string_attr(&row.attrs, "serviceName"),
+            })
+            .collect(),
+    )
+}
+
+fn string_vec_or_legacy(
+    attrs: &std::collections::BTreeMap<String, serde_json::Value>,
+    array_key: &str,
+    legacy_key: &str,
+) -> Vec<String> {
+    let values = string_vec_attr(attrs, array_key);
+    if values.is_empty() {
+        optional_string_attr(attrs, legacy_key)
+            .into_iter()
+            .collect()
+    } else {
+        values
     }
 }
 

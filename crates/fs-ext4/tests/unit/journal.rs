@@ -1,389 +1,794 @@
-pub(crate) use super::*;
-use crate::journal::parser::align_up;
-use crate::journal::recovery::{compute_confidence, is_plausible_deleted_inode, TAG_FLAG_DELETED};
-const TAG_FLAG_ESCAPE: u32 = 1;
+use super::*;
+use crate::journal::checksum::{crc32c, crc32c_with_zeroed_range, journal_checksum_seed};
+use crate::journal::types::JBD2_CRC32C_CHKSUM;
+use crate::Ext4Reader;
+use evidence_core::{EvidenceReader, ReaderInfo};
+use std::io::{self, Read, Seek, SeekFrom};
+use std::path::PathBuf;
 
-// ===========================================================================
-// Tests
-// ===========================================================================
+const BLOCK_SIZE: usize = 1024;
+const JOURNAL_UUID: [u8; 16] = *b"journal-wire-001";
+const FILESYSTEM_UUID: [u8; 16] = *b"ext4-wire-fs-001";
+
+#[path = "journal_content_recovery.rs"]
+mod content_recovery;
 
 mod cases {
     use super::*;
 
-    // -----------------------------------------------------------------------
-    // Fixture builder: minimal journal image
-    // -----------------------------------------------------------------------
-
-    /// Build a minimal JBD2 journal superblock image.
-    fn build_journal_superblock() -> Vec<u8> {
-        let mut sb = vec![0u8; 1024];
-        // magic 0xC03B399B (big-endian)
-        sb[0..4].copy_from_slice(&JBD2_MAGIC.to_be_bytes());
-        // block_type
-        sb[4..8].copy_from_slice(&4u32.to_be_bytes());
-        // sequence
-        sb[8..12].copy_from_slice(&1u32.to_be_bytes());
-        // blocksize = 4096
-        sb[12..16].copy_from_slice(&4096u32.to_be_bytes());
-        // maxlen = 1024
-        sb[20..24].copy_from_slice(&1024u32.to_be_bytes());
-        // first = 1
-        sb[24..28].copy_from_slice(&1u32.to_be_bytes());
-        // sequence_num = 100
-        sb[28..32].copy_from_slice(&100u32.to_be_bytes());
-        // start = 0
-        sb[32..36].copy_from_slice(&0u32.to_be_bytes());
-        sb
+    #[test]
+    fn crc32c_matches_the_castagnoli_check_vector() {
+        assert_eq!(crc32c(u32::MAX, b"123456789"), 0x1CF9_6D7C);
     }
-
-    /// Build a journal descriptor block with one tag pointing to an inode.
-    fn build_descriptor_block(num_tags: u32, block_nums: &[u32]) -> Vec<u8> {
-        let block_size: usize = 4096;
-        let mut data = vec![0u8; block_size];
-
-        // Header
-        data[0..4].copy_from_slice(&JBD2_DESCRIPTOR_MAGIC.to_be_bytes());
-        // block_type high 16 bits = num_tags
-        let block_type = num_tags << 16;
-        data[4..8].copy_from_slice(&block_type.to_be_bytes());
-        // sequence
-        data[8..12].copy_from_slice(&1u32.to_be_bytes());
-
-        // Tags at offset 12
-        let mut off = 12usize;
-        for (i, &blk) in block_nums.iter().enumerate() {
-            if i as u32 >= num_tags {
-                break;
-            }
-            data[off..off + 4].copy_from_slice(&blk.to_be_bytes());
-            // flags: DELETED flag set
-            data[off + 8..off + 12].copy_from_slice(&TAG_FLAG_DELETED.to_be_bytes());
-            off += JBD2_TAG_SIZE_V2;
-        }
-
-        // Data blocks start at aligned offset after tags
-        let data_start = align_up(off as u64, block_size as u64) as usize;
-        for i in 0..block_nums.len().min(num_tags as usize) {
-            let ds = data_start + i * 512;
-            if ds + 128 <= data.len() {
-                // Simulate a deleted inode
-                data[ds] = 0xA4u8; // i_mode low byte (regular file)
-                data[ds + 1] = 0x81u8; // i_mode high byte (regular file 0644)
-                data[ds + 0x04..ds + 0x08].copy_from_slice(&4096u32.to_le_bytes()); // size = 4096
-                data[ds + 0x14..ds + 0x18].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes()); // dtime = non-zero
-                data[ds + 0x1A] = 0; // i_links_count = 0 (deleted)
-                data[ds + 0x1B] = 0;
-            }
-        }
-
-        data
-    }
-
-    /// Build a commit block.
-    fn build_commit_block() -> Vec<u8> {
-        let mut data = vec![0u8; 4096];
-        data[0..4].copy_from_slice(&JBD2_COMMIT_MAGIC.to_be_bytes());
-        data[4..8].copy_from_slice(&0u32.to_be_bytes());
-        data[8..12].copy_from_slice(&1u32.to_be_bytes());
-        data
-    }
-
-    /// Build a full journal: superblock + descriptor + commit.
-    fn build_journal() -> Vec<u8> {
-        let block_size: usize = 4096;
-        let sb = build_journal_superblock();
-        let desc = build_descriptor_block(2, &[100, 101]);
-        let commit = build_commit_block();
-
-        let mut journal = Vec::new();
-        journal.extend_from_slice(&sb);
-        journal.resize(block_size, 0u8); // pad sb to block
-        journal.extend_from_slice(&desc);
-        journal.extend_from_slice(&commit);
-        journal
-    }
-
-    // -----------------------------------------------------------------------
-    // test_parse_journal_superblock
-    // -----------------------------------------------------------------------
 
     #[test]
-    fn test_parse_journal_superblock() {
-        let sb_data = build_journal_superblock();
-        let sb = JournalSuperblock::parse(&sb_data).unwrap();
-        assert_eq!(sb.magic, JBD2_MAGIC);
-        assert_eq!(sb.blocksize, 4096);
-        assert_eq!(sb.maxlen, 1024);
-        assert_eq!(sb.first, 1);
-        assert_eq!(sb.sequence_num, 100);
-        assert_eq!(sb.start, 0);
+    fn parses_v2_superblock_and_single_common_magic() {
+        let bytes = build_superblock(SuperblockSpec::default());
+        let superblock = JournalSuperblock::parse(&bytes).unwrap();
+
+        assert_eq!(JBD2_MAGIC_NUMBER, 0xC03B_3998);
+        assert_eq!(superblock.version, JournalSuperblockVersion::V2);
+        assert_eq!(superblock.header.block_type, JournalBlockType::SuperblockV2);
+        assert_eq!(superblock.block_size, BLOCK_SIZE as u32);
+        assert_eq!(superblock.max_len, 12);
+        assert_eq!(superblock.first, 1);
+        assert_eq!(superblock.sequence, 7);
+        assert_eq!(superblock.uuid, JOURNAL_UUID);
     }
 
-    // -----------------------------------------------------------------------
-    // test_journal_superblock_invalid_magic
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_journal_superblock_invalid_magic() {
-        let mut sb_data = build_journal_superblock();
-        // Corrupt magic
-        sb_data[0] = 0xFF;
-        let result = JournalSuperblock::parse(&sb_data);
-        assert!(result.is_err());
+    fn parses_v1_superblock_without_v2_feature_fields() {
+        let mut bytes = build_superblock(SuperblockSpec::default());
+        put_header(&mut bytes, JournalBlockType::SuperblockV1, 0);
+        bytes[0x24..0x100].fill(0xA5);
+
+        let superblock = JournalSuperblock::parse(&bytes).unwrap();
+
+        assert_eq!(superblock.version, JournalSuperblockVersion::V1);
+        assert_eq!(superblock.feature_compat, 0);
+        assert_eq!(superblock.feature_incompat, 0);
+        assert_eq!(superblock.uuid, [0; 16]);
+        assert_eq!(superblock.tag_format(), JournalTagFormat::Legacy32);
     }
 
-    // -----------------------------------------------------------------------
-    // test_parse_journal_header
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_parse_journal_header() {
-        let desc = build_descriptor_block(1, &[50]);
-        let header = JournalHeader::parse(&desc[0..12]).unwrap();
-        assert!(header.is_descriptor());
-        assert!(!header.is_commit());
-
-        let commit = build_commit_block();
-        let ch = JournalHeader::parse(&commit[0..12]).unwrap();
-        assert!(ch.is_commit());
-        assert!(!ch.is_descriptor());
+    fn rejects_invalid_and_truncated_superblocks() {
+        let mut invalid = build_superblock(SuperblockSpec::default());
+        invalid[0] ^= 0xFF;
+        assert!(matches!(
+            JournalSuperblock::parse(&invalid),
+            Err(JournalError::Invalid(_))
+        ));
+        assert!(matches!(
+            JournalSuperblock::parse(&invalid[..128]),
+            Err(JournalError::Truncated { .. })
+        ));
     }
 
-    // -----------------------------------------------------------------------
-    // test_parse_descriptor_block
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_parse_descriptor_block() {
-        let desc = build_descriptor_block(2, &[100, 101]);
-        let parsed = parse_descriptor_block(&desc, 4096).unwrap();
-        assert_eq!(parsed.tags.len(), 2);
-        assert_eq!(parsed.tags[0].block_number, 100);
-        assert_eq!(parsed.tags[1].block_number, 101);
-        // Both tags should have DELETED flag
-        assert_eq!(parsed.tags[0].flags & TAG_FLAG_DELETED, TAG_FLAG_DELETED);
-        assert_eq!(parsed.tags[1].flags & TAG_FLAG_DELETED, TAG_FLAG_DELETED);
+    fn rejects_unknown_incompatible_features_with_typed_error() {
+        let bytes = build_superblock(SuperblockSpec {
+            incompat: 0x8000_0000,
+            ..SuperblockSpec::default()
+        });
+
+        assert!(matches!(
+            JournalSuperblock::parse(&bytes),
+            Err(JournalError::Unsupported(_))
+        ));
     }
 
-    // -----------------------------------------------------------------------
-    // test_collect_descriptor_blocks
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_collect_descriptor_blocks() {
-        let journal = build_journal();
-        let blocks = collect_descriptor_blocks(&journal, 4096).unwrap();
-        // Should find one descriptor block
-        assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].tags.len(), 2);
-    }
-
-    // -----------------------------------------------------------------------
-    // test_recover_deleted_inodes_from_journal
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_recover_deleted_inodes_from_journal() {
-        // We test recover_deleted_inodes directly without an Ext4Reader.
-        // Create raw journal data with a descriptor block containing
-        // a deleted-inode entry.
-        let block_size: usize = 4096;
-        let mut journal = vec![0u8; block_size * 4];
-
-        // Block 0: journal superblock
-        let sb_off = 0;
-        journal[sb_off..sb_off + 4].copy_from_slice(&JBD2_MAGIC.to_be_bytes());
-        journal[sb_off + 4..sb_off + 8].copy_from_slice(&4u32.to_be_bytes());
-        journal[sb_off + 8..sb_off + 12].copy_from_slice(&1u32.to_be_bytes());
-        journal[sb_off + 12..sb_off + 16].copy_from_slice(&4096u32.to_be_bytes());
-        journal[sb_off + 20..sb_off + 24].copy_from_slice(&1024u32.to_be_bytes());
-        journal[sb_off + 24..sb_off + 28].copy_from_slice(&1u32.to_be_bytes());
-        journal[sb_off + 28..sb_off + 32].copy_from_slice(&100u32.to_be_bytes());
-        journal[sb_off + 32..sb_off + 36].copy_from_slice(&0u32.to_be_bytes());
-
-        // Block 1: descriptor block with 1 tag -> inode block 200
-        let desc_off = block_size;
-        journal[desc_off..desc_off + 4].copy_from_slice(&JBD2_DESCRIPTOR_MAGIC.to_be_bytes());
-        journal[desc_off + 4..desc_off + 8].copy_from_slice(&(1u32 << 16).to_be_bytes());
-        journal[desc_off + 8..desc_off + 12].copy_from_slice(&1u32.to_be_bytes());
-        // Tag: block 200, DELETED
-        journal[desc_off + 12..desc_off + 16].copy_from_slice(&200u32.to_be_bytes());
-        journal[desc_off + 20..desc_off + 24].copy_from_slice(&TAG_FLAG_DELETED.to_be_bytes());
-        // Data block: simulate deleted inode at offset 512 (aligned after tags)
-        let data_off = desc_off + 512;
-        journal[data_off] = 0xA4; // mode low
-        journal[data_off + 1] = 0x81; // mode high
-        journal[data_off + 0x04..data_off + 0x08].copy_from_slice(&1024u32.to_le_bytes()); // size
-        journal[data_off + 0x14..data_off + 0x18].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes()); // dtime
-                                                                                                  // i_links_count = 0
-
-        // Block 2: commit
-        let commit_off = block_size * 2;
-        journal[commit_off..commit_off + 4].copy_from_slice(&JBD2_COMMIT_MAGIC.to_be_bytes());
-
-        // Block 3: another descriptor with data block
-        let desc2_off = block_size * 3;
-        journal[desc2_off..desc2_off + 4].copy_from_slice(&JBD2_DESCRIPTOR_MAGIC.to_be_bytes());
-        journal[desc2_off + 4..desc2_off + 8].copy_from_slice(&(1u32 << 16).to_be_bytes());
-        journal[desc2_off + 8..desc2_off + 12].copy_from_slice(&2u32.to_be_bytes());
-        journal[desc2_off + 12..desc2_off + 16].copy_from_slice(&300u32.to_be_bytes());
-        journal[desc2_off + 20..desc2_off + 24].copy_from_slice(&TAG_FLAG_DELETED.to_be_bytes());
-        let data2_off = desc2_off + 512;
-        journal[data2_off] = 0xA4;
-        journal[data2_off + 1] = 0x81;
-        journal[data2_off + 0x04..data2_off + 0x08].copy_from_slice(&2048u32.to_le_bytes());
-        journal[data2_off + 0x14..data2_off + 0x18].copy_from_slice(&0xBEEF_DEADu32.to_le_bytes());
-        // Add some data content for the i_block extraction
-        journal[data2_off + 512..data2_off + 512 + 20].copy_from_slice(b"recovered file data!");
-
-        // We need a dummy Ext4Reader — wrap in a FakeReader
-        // But recover_deleted_inodes doesn't use the _fs param directly,
-        // so we can just pass a reference through an unsafe hack for testing.
-        // Actually, we'll test with collect_descriptor_blocks first and
-        // test the full recovery via the function signature.
-        //
-        // Since we can't easily create a real Ext4Reader without a valid
-        // ext4 image, we test the journal parsing independently and the
-        // recovery function with a test that verifies descriptor collection.
-
-        let blocks = collect_descriptor_blocks(&journal, block_size).unwrap();
-        assert!(
-            blocks.len() >= 2,
-            "should find at least 2 descriptor blocks, found {}",
-            blocks.len()
+    fn parses_legacy_tags_with_uuid_omission_and_escape() {
+        let superblock = parsed_superblock(SuperblockSpec::default());
+        let payloads = [payload(0x11), payload(0x22)];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[
+                TagSpec::new(40, JBD2_FLAG_ESCAPE),
+                TagSpec::new(41, JBD2_FLAG_SAME_UUID | JBD2_FLAG_LAST_TAG),
+            ],
+            &payloads,
         );
+
+        let parsed = parse_descriptor_block(&descriptor, &superblock).unwrap();
+
+        assert_eq!(parsed.tags.len(), 2);
+        assert_eq!(parsed.tags[0].target_block, 40);
+        assert_eq!(parsed.tags[1].target_block, 41);
+        assert_eq!(parsed.tags[0].uuid, FILESYSTEM_UUID);
+        assert_eq!(parsed.tags[1].uuid, FILESYSTEM_UUID);
+        assert!(parsed.tags[0].is_escaped());
+        assert!(parsed.tags[1].is_last());
     }
 
-    // -----------------------------------------------------------------------
-    // test_block_tag_flags
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_block_tag_flags() {
-        let desc = build_descriptor_block(1, &[42]);
-        let parsed = parse_descriptor_block(&desc, 4096).unwrap();
-        let tag = &parsed.tags[0];
-        assert_eq!(tag.block_number, 42);
-        assert_eq!(tag.flags & TAG_FLAG_DELETED, TAG_FLAG_DELETED);
-        assert_eq!(tag.flags & TAG_FLAG_ESCAPE, 0);
+    fn parses_checksum_v2_64bit_tag_layout() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_CSUM_V2 | JBD2_FEATURE_INCOMPAT_64BIT,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x31)];
+        let target = (3u64 << 32) | 0x1234;
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(target, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+
+        let parsed = parse_descriptor_block(&descriptor, &superblock).unwrap();
+
+        assert_eq!(superblock.tag_format(), JournalTagFormat::ChecksumV2_64);
+        assert_eq!(parsed.tags[0].target_block, target);
+        assert!(matches!(
+            parsed.tags[0].checksum,
+            Some(JournalTagChecksum::V2(_))
+        ));
+        assert!(parsed.checksum.is_some());
     }
 
-    // -----------------------------------------------------------------------
-    // test_non_descriptor_block_rejected
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_non_descriptor_block_rejected() {
-        let commit = build_commit_block();
-        let result = parse_descriptor_block(&commit, 4096);
-        assert!(result.is_err());
+    fn parses_checksum_v3_tag_layout() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_CSUM_V3 | JBD2_FEATURE_INCOMPAT_64BIT,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x41)];
+        let target = (5u64 << 32) | 0x4321;
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(target, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+
+        let parsed = parse_descriptor_block(&descriptor, &superblock).unwrap();
+
+        assert_eq!(superblock.tag_format(), JournalTagFormat::ChecksumV3);
+        assert_eq!(parsed.tags[0].target_block, target);
+        assert!(matches!(
+            parsed.tags[0].checksum,
+            Some(JournalTagChecksum::V3(_))
+        ));
     }
 
-    // -----------------------------------------------------------------------
-    // test_is_plausible_deleted_inode
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_is_plausible_deleted_inode() {
-        let mut inode = vec![0u8; 128];
-        // Valid mode, non-zero size, zero links_count, non-zero dtime
-        inode[0] = 0xA4;
-        inode[1] = 0x81; // regular file 0644
-        inode[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes()); // size
-        inode[0x14..0x18].copy_from_slice(&0x1234_5678u32.to_le_bytes()); // dtime
-        inode[0x1A] = 0; // links_count = 0
-        inode[0x1B] = 0;
+    fn descriptor_rejects_missing_first_uuid_and_last_marker() {
+        let superblock = parsed_superblock(SuperblockSpec::default());
+        let payloads = [payload(0x51)];
+        let missing_uuid = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(20, JBD2_FLAG_SAME_UUID | JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        assert!(matches!(
+            parse_descriptor_block(&missing_uuid, &superblock),
+            Err(JournalError::Invalid(_))
+        ));
 
-        assert!(is_plausible_deleted_inode(&inode));
-
-        // Inode with non-zero links_count should not be plausible
-        let mut inode2 = inode.clone();
-        inode2[0x1A] = 1; // links_count = 1 (still linked)
-        assert!(!is_plausible_deleted_inode(&inode2));
-
-        // Inode with zero mode is not plausible
-        let mut inode3 = vec![0u8; 128];
-        inode3[0x04..0x08].copy_from_slice(&100u32.to_le_bytes());
-        assert!(!is_plausible_deleted_inode(&inode3));
+        let mut missing_last = vec![0u8; BLOCK_SIZE];
+        put_header(&mut missing_last, JournalBlockType::Descriptor, 7);
+        write_legacy_tag(&mut missing_last[12..20], 20, 0);
+        missing_last[20..36].copy_from_slice(&FILESYSTEM_UUID);
+        assert!(matches!(
+            parse_descriptor_block(&missing_last, &superblock),
+            Err(JournalError::Invalid(_))
+        ));
     }
 
-    // -----------------------------------------------------------------------
-    // test_confidence_scoring
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_confidence_scoring() {
-        let mut inode = vec![0u8; 128];
-        // Size known
-        inode[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes());
-        // Deletion time known
-        inode[0x14..0x18].copy_from_slice(&0x1u32.to_le_bytes());
+    fn ring_maps_descriptor_payload_blocks_and_commit() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_CSUM_V3,
+            start: 1,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x61), payload(0x62)];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[
+                TagSpec::new(100, 0),
+                TagSpec::new(101, JBD2_FLAG_SAME_UUID | JBD2_FLAG_LAST_TAG),
+            ],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &payloads[1]);
+        put_block(&mut journal, 4, &build_commit(&superblock, 7));
 
-        // With 0 data blocks
-        let c0 = compute_confidence(&inode, 0);
-        assert!(c0 > 0.4, "confidence {:?} too low with metadata", c0);
+        let scan = parse_journal(&journal).unwrap();
 
-        // With 1 data block
-        let c1 = compute_confidence(&inode, 1);
-        assert!(c1 > c0, "confidence should increase with data blocks");
-
-        // With enough data blocks (size=4096 => 1 expected block)
-        let c2 = compute_confidence(&inode, 1);
-        assert!(c2 > 0.7, "confidence {:?} too low with full data", c2);
+        assert_eq!(scan.transactions.len(), 1);
+        let transaction = &scan.transactions[0];
+        assert_eq!(transaction.sequence, 7);
+        assert_eq!(transaction.commit.journal_block, 4);
+        assert_eq!(transaction.mappings[0].payload_journal_block, 2);
+        assert_eq!(transaction.mappings[1].payload_journal_block, 3);
+        assert_eq!(transaction.mappings[1].target_filesystem_block, 101);
+        assert!(scan.incomplete_transaction.is_none());
     }
 
-    // -----------------------------------------------------------------------
-    // test_align_up
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_align_up() {
-        assert_eq!(align_up(0, 4096), 0);
-        assert_eq!(align_up(1, 4096), 4096);
-        assert_eq!(align_up(4095, 4096), 4096);
-        assert_eq!(align_up(4096, 4096), 4096);
-        assert_eq!(align_up(4097, 4096), 8192);
+    fn ring_wraps_descriptor_payloads_before_commit() {
+        let spec = SuperblockSpec {
+            max_len: 8,
+            start: 6,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x71), payload(0x72)];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[
+                TagSpec::new(200, 0),
+                TagSpec::new(201, JBD2_FLAG_SAME_UUID | JBD2_FLAG_LAST_TAG),
+            ],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 6, &descriptor);
+        put_block(&mut journal, 7, &payloads[0]);
+        put_block(&mut journal, 1, &payloads[1]);
+        put_block(&mut journal, 2, &build_commit(&superblock, 7));
+
+        let scan = parse_journal(&journal).unwrap();
+
+        assert_eq!(scan.transactions.len(), 1);
+        assert_eq!(scan.transactions[0].mappings[0].payload_journal_block, 7);
+        assert_eq!(scan.transactions[0].mappings[1].payload_journal_block, 1);
+        assert_eq!(scan.transactions[0].commit.journal_block, 2);
+        assert_eq!(scan.next_journal_block, 3);
     }
 
-    // -----------------------------------------------------------------------
-    // test_recover_deleted_inodes_empty_journal
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn test_recover_deleted_inodes_empty_journal() {
-        // A journal with only a superblock and commit, no descriptor blocks.
-        let block_size: usize = 4096;
-        let mut journal = vec![0u8; block_size * 3];
+    fn later_revoke_suppresses_earlier_mapping() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_REVOKE,
+            start: 1,
+            sequence: 10,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x81)];
+        let descriptor = build_descriptor(
+            &superblock,
+            10,
+            &[TagSpec::new(300, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &build_commit(&superblock, 10));
+        put_block(&mut journal, 4, &build_revoke(&superblock, 11, &[300]));
+        put_block(&mut journal, 5, &build_commit(&superblock, 11));
 
-        journal[0..4].copy_from_slice(&JBD2_MAGIC.to_be_bytes());
-        journal[4..8].copy_from_slice(&4u32.to_be_bytes());
-        journal[8..12].copy_from_slice(&1u32.to_be_bytes());
-        journal[12..16].copy_from_slice(&(block_size as u32).to_be_bytes());
-        journal[20..24].copy_from_slice(&1024u32.to_be_bytes());
-        journal[24..28].copy_from_slice(&1u32.to_be_bytes());
-        journal[28..32].copy_from_slice(&100u32.to_be_bytes());
-        journal[32..36].copy_from_slice(&0u32.to_be_bytes());
+        let scan = parse_journal(&journal).unwrap();
 
-        journal[block_size..block_size + 4].copy_from_slice(&JBD2_COMMIT_MAGIC.to_be_bytes());
-
-        let descriptors = collect_descriptor_blocks(&journal, block_size).unwrap();
-        assert!(descriptors.is_empty());
+        assert_eq!(scan.transactions.len(), 2);
+        assert!(scan.transactions[0].mappings[0].revoked);
+        assert_eq!(scan.transactions[1].revokes[0].revoke.revoked_blocks, [300]);
     }
 
-    // -----------------------------------------------------------------------
-    // test_journal_header_revoke
-    // -----------------------------------------------------------------------
+    #[test]
+    fn parses_64bit_revoke_records() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_REVOKE | JBD2_FEATURE_INCOMPAT_64BIT,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let blocks = [(2u64 << 32) | 9, (4u64 << 32) | 11];
+        let revoke = build_revoke(&superblock, 7, &blocks);
+
+        let parsed = parse_revoke_block(&revoke, &superblock).unwrap();
+
+        assert_eq!(parsed.revoked_blocks, blocks);
+        assert_eq!(parsed.bytes_used, 32);
+    }
 
     #[test]
-    fn test_journal_header_revoke() {
-        let mut data = vec![0u8; 4096];
-        data[0..4].copy_from_slice(&JBD2_REVOKE_MAGIC.to_be_bytes());
-        data[4..8].copy_from_slice(&0u32.to_be_bytes());
-        data[8..12].copy_from_slice(&5u32.to_be_bytes());
+    fn rejects_truncated_snapshot_and_corrupt_payload_checksum() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_CSUM_V3,
+            start: 1,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0x91)];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(400, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
 
-        let header = JournalHeader::parse(&data[0..12]).unwrap();
-        assert!(header.is_revoke());
-        assert!(!header.is_descriptor());
-        assert!(!header.is_commit());
+        assert!(matches!(
+            parse_journal(&journal[..journal.len() - BLOCK_SIZE]),
+            Err(JournalError::Truncated { .. })
+        ));
+
+        journal[2 * BLOCK_SIZE + 50] ^= 0xFF;
+        assert!(matches!(
+            parse_journal(&journal),
+            Err(JournalError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn reports_incomplete_transaction_without_publishing_it() {
+        let spec = SuperblockSpec {
+            start: 1,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let payloads = [payload(0xA1)];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(500, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+
+        let scan = parse_journal(&journal).unwrap();
+
+        assert!(scan.transactions.is_empty());
+        assert_eq!(scan.incomplete_transaction.unwrap().sequence, 7);
+    }
+
+    #[test]
+    fn deleted_recovery_only_emits_inode_table_metadata() {
+        let filesystem = build_ext4_reader(false, None);
+        let spec = SuperblockSpec::default();
+        let superblock = parsed_superblock(spec);
+        let mut inode_table_payload = vec![0u8; BLOCK_SIZE];
+        write_deleted_inode(&mut inode_table_payload[512..768], 1234, 0x1234_5678);
+        let payloads = [inode_table_payload];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(10, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
+
+        assert!(parse_journal(&journal).unwrap().transactions.is_empty());
+        assert_eq!(
+            parse_journal_history(&journal).unwrap().transactions.len(),
+            1
+        );
+
+        let candidates = recover_deleted_inodes(&filesystem, &journal).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].inode, 3);
+        assert_eq!(candidates[0].declared_size, 1234);
+        assert_eq!(candidates[0].inode_table_group, 0);
+        assert_eq!(candidates[0].inode_table_block, 10);
+        assert_eq!(candidates[0].payload_journal_block, 2);
+        assert_eq!(candidates[0].inode_offset_within_payload, 512);
+        assert_eq!(
+            candidates[0].journal_source_offset,
+            2 * BLOCK_SIZE as u64 + 512
+        );
+        assert_eq!(candidates[0].journal_source_length, 256);
+        assert_eq!(
+            candidates[0].completeness,
+            RecoveryCompleteness::MetadataOnly
+        );
+        assert_eq!(candidates[0].recoverable_bytes, 0);
+        assert!(!candidates[0].tag_marked_deleted);
+        assert!(!candidates[0].replay_revoked);
+        assert!(!candidates[0].inode_checksum_verified);
+    }
+
+    #[test]
+    fn rejects_misaligned_revoke_record_bytes() {
+        let spec = SuperblockSpec {
+            incompat: JBD2_FEATURE_INCOMPAT_REVOKE,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let mut revoke = build_revoke(&superblock, 7, &[42]);
+        write_be_u32(&mut revoke, 12, 19);
+
+        assert!(matches!(
+            parse_revoke_block(&revoke, &superblock),
+            Err(JournalError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn recovery_ignores_plausible_inode_bytes_outside_inode_table() {
+        let filesystem = build_ext4_reader(false, None);
+        let spec = SuperblockSpec {
+            start: 1,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let mut unrelated_payload = vec![0u8; BLOCK_SIZE];
+        write_deleted_inode(&mut unrelated_payload[0..256], 4096, 0x2222_3333);
+        let payloads = [unrelated_payload];
+        let descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(30, JBD2_FLAG_DELETED | JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
+
+        assert!(recover_deleted_inodes(&filesystem, &journal)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn recovery_rejects_inode_table_mapping_for_another_filesystem_uuid() {
+        let filesystem = build_ext4_reader(false, None);
+        let spec = SuperblockSpec::default();
+        let superblock = parsed_superblock(spec);
+        let mut inode_table_payload = vec![0u8; BLOCK_SIZE];
+        write_deleted_inode(&mut inode_table_payload[0..256], 512, 0x4455_6677);
+        let payloads = [inode_table_payload];
+        let mut descriptor = build_descriptor(
+            &superblock,
+            7,
+            &[TagSpec::new(10, JBD2_FLAG_LAST_TAG)],
+            &payloads,
+        );
+        descriptor[20..36].copy_from_slice(b"another-fs-uuid!");
+        let mut journal = journal_image(spec);
+        put_block(&mut journal, 1, &descriptor);
+        put_block(&mut journal, 2, &payloads[0]);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
+
+        assert!(recover_deleted_inodes(&filesystem, &journal)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn reads_bounded_internal_journal_from_declared_inode() {
+        let spec = SuperblockSpec {
+            max_len: 8,
+            start: 0,
+            ..SuperblockSpec::default()
+        };
+        let journal = journal_image(spec);
+        let filesystem = build_ext4_reader(true, Some(&journal));
+
+        assert!(matches!(
+            filesystem.read_internal_journal(journal.len() - 1),
+            Err(JournalError::Unsupported(_))
+        ));
+        let read = filesystem.read_internal_journal(journal.len()).unwrap();
+        assert_eq!(read, journal);
+        assert!(filesystem
+            .scan_internal_journal(journal.len())
+            .unwrap()
+            .transactions
+            .is_empty());
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuperblockSpec {
+    max_len: u32,
+    first: u32,
+    start: u32,
+    sequence: u32,
+    compat: u32,
+    incompat: u32,
+}
+
+impl Default for SuperblockSpec {
+    fn default() -> Self {
+        Self {
+            max_len: 12,
+            first: 1,
+            start: 0,
+            sequence: 7,
+            compat: 0,
+            incompat: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TagSpec {
+    target: u64,
+    flags: u32,
+}
+
+impl TagSpec {
+    fn new(target: u64, flags: u32) -> Self {
+        Self { target, flags }
+    }
+}
+
+fn build_superblock(spec: SuperblockSpec) -> Vec<u8> {
+    let mut block = vec![0u8; BLOCK_SIZE];
+    put_header(&mut block, JournalBlockType::SuperblockV2, 0);
+    write_be_u32(&mut block, 0x0C, BLOCK_SIZE as u32);
+    write_be_u32(&mut block, 0x10, spec.max_len);
+    write_be_u32(&mut block, 0x14, spec.first);
+    write_be_u32(&mut block, 0x18, spec.sequence);
+    write_be_u32(&mut block, 0x1C, spec.start);
+    write_be_u32(&mut block, 0x24, spec.compat);
+    write_be_u32(&mut block, 0x28, spec.incompat);
+    block[0x30..0x40].copy_from_slice(&JOURNAL_UUID);
+    if has_modern_checksums(spec.incompat) {
+        block[0x50] = JBD2_CRC32C_CHKSUM;
+        let checksum = crc32c_with_zeroed_range(u32::MAX, &block, 0xFC..0x100).unwrap();
+        write_be_u32(&mut block, 0xFC, checksum);
+    }
+    block
+}
+
+fn parsed_superblock(spec: SuperblockSpec) -> JournalSuperblock {
+    JournalSuperblock::parse(&build_superblock(spec)).unwrap()
+}
+
+fn journal_image(spec: SuperblockSpec) -> Vec<u8> {
+    let mut journal = vec![0u8; spec.max_len as usize * BLOCK_SIZE];
+    put_block(&mut journal, 0, &build_superblock(spec));
+    journal
+}
+
+fn build_descriptor(
+    superblock: &JournalSuperblock,
+    sequence: u32,
+    tags: &[TagSpec],
+    payloads: &[Vec<u8>],
+) -> Vec<u8> {
+    assert_eq!(tags.len(), payloads.len());
+    let mut block = vec![0u8; BLOCK_SIZE];
+    put_header(&mut block, JournalBlockType::Descriptor, sequence);
+    let format = superblock.tag_format();
+    let mut cursor = JOURNAL_HEADER_SIZE;
+    for (tag, payload) in tags.iter().zip(payloads) {
+        let checksum = payload_checksum(superblock, sequence, payload);
+        write_tag(&mut block[cursor..], format, *tag, checksum);
+        cursor += format.byte_len();
+        if tag.flags & JBD2_FLAG_SAME_UUID == 0 {
+            block[cursor..cursor + 16].copy_from_slice(&FILESYSTEM_UUID);
+            cursor += 16;
+        }
+    }
+    finalize_metadata_checksum(&mut block, superblock);
+    block
+}
+
+fn write_tag(output: &mut [u8], format: JournalTagFormat, tag: TagSpec, checksum: u32) {
+    write_be_u32(output, 0, tag.target as u32);
+    match format {
+        JournalTagFormat::Legacy32 => write_be_u16(output, 6, tag.flags as u16),
+        JournalTagFormat::Legacy64 => {
+            write_be_u16(output, 6, tag.flags as u16);
+            write_be_u32(output, 8, (tag.target >> 32) as u32);
+        }
+        JournalTagFormat::ChecksumV2_32 => {
+            write_be_u16(output, 4, checksum as u16);
+            write_be_u16(output, 6, tag.flags as u16);
+        }
+        JournalTagFormat::ChecksumV2_64 => {
+            write_be_u16(output, 4, checksum as u16);
+            write_be_u16(output, 6, tag.flags as u16);
+            write_be_u32(output, 8, (tag.target >> 32) as u32);
+        }
+        JournalTagFormat::ChecksumV3 => {
+            write_be_u32(output, 4, tag.flags);
+            write_be_u32(output, 8, (tag.target >> 32) as u32);
+            write_be_u32(output, 12, checksum);
+        }
+    }
+}
+
+fn write_legacy_tag(output: &mut [u8], target: u32, flags: u16) {
+    write_be_u32(output, 0, target);
+    write_be_u16(output, 6, flags);
+}
+
+fn build_commit(superblock: &JournalSuperblock, sequence: u32) -> Vec<u8> {
+    let mut block = vec![0u8; BLOCK_SIZE];
+    put_header(&mut block, JournalBlockType::Commit, sequence);
+    block[48..56].copy_from_slice(&1_700_000_000u64.to_be_bytes());
+    block[56..60].copy_from_slice(&123_456_789u32.to_be_bytes());
+    if superblock.uses_v2_or_v3_checksums() {
+        block[12] = JBD2_CRC32C_CHKSUM;
+        block[13] = 4;
+        let checksum =
+            crc32c_with_zeroed_range(journal_checksum_seed(&superblock.uuid), &block, 16..20)
+                .unwrap();
+        write_be_u32(&mut block, 16, checksum);
+    }
+    block
+}
+
+fn build_revoke(superblock: &JournalSuperblock, sequence: u32, blocks: &[u64]) -> Vec<u8> {
+    let mut output = vec![0u8; BLOCK_SIZE];
+    put_header(&mut output, JournalBlockType::Revoke, sequence);
+    let record_size = if superblock.has_64bit_block_numbers() {
+        8
+    } else {
+        4
+    };
+    write_be_u32(&mut output, 12, (16 + record_size * blocks.len()) as u32);
+    let mut cursor = 16;
+    for block in blocks {
+        if record_size == 8 {
+            output[cursor..cursor + 8].copy_from_slice(&block.to_be_bytes());
+        } else {
+            write_be_u32(&mut output, cursor, *block as u32);
+        }
+        cursor += record_size;
+    }
+    finalize_metadata_checksum(&mut output, superblock);
+    output
+}
+
+fn finalize_metadata_checksum(block: &mut [u8], superblock: &JournalSuperblock) {
+    if !superblock.uses_v2_or_v3_checksums() {
+        return;
+    }
+    let checksum_offset = block.len() - 4;
+    let checksum = crc32c_with_zeroed_range(
+        journal_checksum_seed(&superblock.uuid),
+        block,
+        checksum_offset..block.len(),
+    )
+    .unwrap();
+    write_be_u32(block, checksum_offset, checksum);
+}
+
+fn payload_checksum(superblock: &JournalSuperblock, sequence: u32, payload: &[u8]) -> u32 {
+    if !superblock.uses_v2_or_v3_checksums() {
+        return 0;
+    }
+    let checksum = crc32c(
+        journal_checksum_seed(&superblock.uuid),
+        &sequence.to_be_bytes(),
+    );
+    crc32c(checksum, payload)
+}
+
+fn payload(fill: u8) -> Vec<u8> {
+    vec![fill; BLOCK_SIZE]
+}
+
+fn put_header(output: &mut [u8], block_type: JournalBlockType, sequence: u32) {
+    write_be_u32(output, 0, JBD2_MAGIC_NUMBER);
+    write_be_u32(output, 4, block_type as u32);
+    write_be_u32(output, 8, sequence);
+}
+
+fn put_block(image: &mut [u8], block: u32, data: &[u8]) {
+    assert_eq!(data.len(), BLOCK_SIZE);
+    let start = block as usize * BLOCK_SIZE;
+    image[start..start + BLOCK_SIZE].copy_from_slice(data);
+}
+
+fn write_be_u16(output: &mut [u8], offset: usize, value: u16) {
+    output[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
+}
+
+fn write_be_u32(output: &mut [u8], offset: usize, value: u32) {
+    output[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+}
+
+fn has_modern_checksums(incompat: u32) -> bool {
+    incompat & (JBD2_FEATURE_INCOMPAT_CSUM_V2 | JBD2_FEATURE_INCOMPAT_CSUM_V3) != 0
+}
+
+fn write_deleted_inode(inode: &mut [u8], size: u64, deletion_time: u32) {
+    inode[0..2].copy_from_slice(&0x81A4u16.to_le_bytes());
+    inode[4..8].copy_from_slice(&(size as u32).to_le_bytes());
+    inode[0x14..0x18].copy_from_slice(&deletion_time.to_le_bytes());
+    inode[0x1A..0x1C].copy_from_slice(&0u16.to_le_bytes());
+    inode[0x6C..0x70].copy_from_slice(&((size >> 32) as u32).to_le_bytes());
+}
+
+fn build_ext4_reader(with_journal: bool, journal: Option<&[u8]>) -> Ext4Reader {
+    build_ext4_reader_with_mutation(with_journal, journal, |_| {})
+}
+
+fn build_ext4_reader_with_mutation(
+    with_journal: bool,
+    journal: Option<&[u8]>,
+    mutate: impl FnOnce(&mut Vec<u8>),
+) -> Ext4Reader {
+    let total_blocks = 40usize;
+    let mut image = vec![0u8; total_blocks * BLOCK_SIZE];
+    let superblock = &mut image[1024..2048];
+    superblock[0x00..0x04].copy_from_slice(&16u32.to_le_bytes());
+    superblock[0x04..0x08].copy_from_slice(&(total_blocks as u32).to_le_bytes());
+    superblock[0x14..0x18].copy_from_slice(&1u32.to_le_bytes());
+    superblock[0x18..0x1C].copy_from_slice(&0u32.to_le_bytes());
+    superblock[0x20..0x24].copy_from_slice(&(total_blocks as u32).to_le_bytes());
+    superblock[0x28..0x2C].copy_from_slice(&16u32.to_le_bytes());
+    superblock[0x38..0x3A].copy_from_slice(&0xEF53u16.to_le_bytes());
+    superblock[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes());
+    superblock[0x68..0x78].copy_from_slice(&FILESYSTEM_UUID);
+    if with_journal {
+        superblock[0x5C..0x60].copy_from_slice(&0x0004u32.to_le_bytes());
+        superblock[0xE0..0xE4].copy_from_slice(&8u32.to_le_bytes());
+    }
+    image[2 * BLOCK_SIZE..2 * BLOCK_SIZE + 4].copy_from_slice(&3u32.to_le_bytes());
+    image[2 * BLOCK_SIZE + 0x04..2 * BLOCK_SIZE + 0x08].copy_from_slice(&4u32.to_le_bytes());
+    image[2 * BLOCK_SIZE + 0x08..2 * BLOCK_SIZE + 0x0C].copy_from_slice(&10u32.to_le_bytes());
+
+    if let Some(journal) = journal {
+        let inode_offset = 11 * BLOCK_SIZE + 768;
+        let inode = &mut image[inode_offset..inode_offset + 256];
+        inode[0..2].copy_from_slice(&0x8180u16.to_le_bytes());
+        inode[4..8].copy_from_slice(&(journal.len() as u32).to_le_bytes());
+        inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());
+        inode[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes());
+        inode[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes());
+        inode[0x38..0x3A].copy_from_slice(&((journal.len() / BLOCK_SIZE) as u16).to_le_bytes());
+        inode[0x3C..0x40].copy_from_slice(&20u32.to_le_bytes());
+        image[20 * BLOCK_SIZE..20 * BLOCK_SIZE + journal.len()].copy_from_slice(journal);
+    }
+
+    mutate(&mut image);
+    Ext4Reader::open(Box::new(MemoryEvidenceReader::new(image)), 0).unwrap()
+}
+
+struct MemoryEvidenceReader {
+    cursor: io::Cursor<Vec<u8>>,
+    info: ReaderInfo,
+}
+
+impl MemoryEvidenceReader {
+    fn new(data: Vec<u8>) -> Self {
+        let size = data.len() as u64;
+        Self {
+            cursor: io::Cursor::new(data),
+            info: ReaderInfo {
+                path: PathBuf::from("jbd2-wire-fixture"),
+                size,
+                kind: "memory".to_string(),
+            },
+        }
+    }
+}
+
+impl Read for MemoryEvidenceReader {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.cursor.read(buffer)
+    }
+}
+
+impl Seek for MemoryEvidenceReader {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.cursor.seek(position)
+    }
+}
+
+impl EvidenceReader for MemoryEvidenceReader {
+    fn info(&self) -> &ReaderInfo {
+        &self.info
     }
 }

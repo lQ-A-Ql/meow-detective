@@ -19,6 +19,7 @@ pub const TOPIC_IMPORT_PARTIAL_RESULT: &str = "import-partial-result";
 pub const TOPIC_JOB_CANCELLATION: &str = "job-cancellation";
 pub const TOPIC_CACHE_INDEX_STATUS: &str = "cache-index-status";
 pub const TOPIC_PERFORMANCE_REPORT_READY: &str = "performance-report-ready";
+pub const TOPIC_ANALYSIS_EXTRACTION_PROGRESS: &str = "analysis-extraction-progress";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -47,6 +48,8 @@ pub enum EventTopic {
     CacheIndexStatus,
     #[serde(rename = "performance-report-ready")]
     PerformanceReportReady,
+    #[serde(rename = "analysis-extraction-progress")]
+    AnalysisExtractionProgress,
 }
 
 impl EventTopic {
@@ -70,6 +73,7 @@ impl EventTopic {
             Self::JobCancellation => TOPIC_JOB_CANCELLATION,
             Self::CacheIndexStatus => TOPIC_CACHE_INDEX_STATUS,
             Self::PerformanceReportReady => TOPIC_PERFORMANCE_REPORT_READY,
+            Self::AnalysisExtractionProgress => TOPIC_ANALYSIS_EXTRACTION_PROGRESS,
         }
     }
 }

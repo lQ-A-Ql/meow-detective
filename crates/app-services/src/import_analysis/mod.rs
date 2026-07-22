@@ -31,7 +31,8 @@ pub use options::{
 pub use progress::{current_rss_mb, peak_rss_mb};
 pub(crate) use search_phase::run_search_index_phase;
 pub use worker_pool::{
-    default_analysis_worker_count, resolve_analysis_worker_count, run_import_analysis_staging,
+    default_analysis_worker_count, resolve_analysis_worker_count,
+    resolve_analysis_worker_count_for_memory, run_import_analysis_staging,
     run_post_import_pipeline_report, run_post_import_pipeline_with_counts,
 };
 

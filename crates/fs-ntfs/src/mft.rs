@@ -2,10 +2,10 @@
 
 use crate::directory::{parse_indx_entries, DirEntry, NtfsDirectoryEntry};
 use crate::utils::{
-    apply_record_fixup, index_record_bytes, mft_inode_from_path, mft_record_bytes,
-    read_contiguous_mft_record, root_dir_frn,
+    index_record_bytes, mft_inode_from_path, mft_record_bytes, read_contiguous_mft_record,
+    root_dir_frn,
 };
-use crate::{unexpected_fs_eof, MAX_BUFFERED_FILE_BYTES};
+use crate::MAX_BUFFERED_FILE_BYTES;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, invalid_fs_data as core_invalid_fs_data, root_node,
     FileSystemReader, FsNode,
@@ -25,6 +25,8 @@ pub struct NtfsReader {
     pub(crate) index_record_size: u32,
     pub(crate) cluster_size: u64,
     pub(crate) mft_data_runs: Vec<(i64, u64)>,
+    pub(crate) mft_record_count: u64,
+    pub(crate) volume_serial: u64,
     /// Absolute offset of NTFS volume start in evidence.
     pub(crate) volume_offset: u64,
 }
@@ -77,6 +79,13 @@ impl NtfsReader {
         )?;
         let mft_data_runs =
             crate::data_runs::parse_mft_data_runs_from_record(&mft_record0).unwrap_or_default();
+        let mft_data_size = crate::utils::parse_mft_data_real_size(&mft_record0).unwrap_or(0);
+        let mft_record_count = if mft_record_size == 0 {
+            0
+        } else {
+            mft_data_size / u64::from(mft_record_size)
+        };
+        let volume_serial = u64::from_le_bytes(boot[0x48..0x50].try_into().unwrap_or([0; 8]));
 
         Ok(Self {
             reader: RefCell::new(reader),
@@ -87,14 +96,18 @@ impl NtfsReader {
             index_record_size,
             cluster_size,
             mft_data_runs,
+            mft_record_count,
+            volume_serial,
             volume_offset: offset,
         })
     }
 
-    fn mft_offset(&self, record_number: u64) -> u64 {
-        self.volume_offset
-            + self.mft_cluster * self.cluster_size
-            + record_number * self.mft_record_size as u64
+    /// Return the underlying evidence reader after filesystem validation.
+    ///
+    /// Callers that need to validate an MFT identity and then use the reader
+    /// for physical range reads can reuse the same opened source.
+    pub fn into_reader(self) -> Box<dyn EvidenceReader> {
+        self.reader.into_inner()
     }
 
     /// Convert volume-relative cluster number to absolute evidence offset.
@@ -106,73 +119,6 @@ impl NtfsReader {
             )));
         }
         Ok(self.volume_offset + lcn as u64 * self.cluster_size)
-    }
-
-    pub(crate) fn read_mft_record(&self, record_number: u64) -> io::Result<Vec<u8>> {
-        let mut rec = vec![0u8; self.mft_record_size as usize];
-        if self.mft_data_runs.is_empty() {
-            let off = self.mft_offset(record_number);
-            let mut reader = self.reader.borrow_mut();
-            reader.seek(SeekFrom::Start(off))?;
-            reader.read_exact(&mut rec)?;
-        } else {
-            let mft_stream_offset = record_number
-                .checked_mul(self.mft_record_size as u64)
-                .ok_or_else(|| core_invalid_fs_data("MFT record offset overflow"))?;
-            self.read_mft_stream_at(mft_stream_offset, &mut rec)?;
-        }
-        apply_record_fixup(&mut rec, self.bytes_per_sector as usize)?;
-        Ok(rec)
-    }
-
-    fn read_mft_stream_at(&self, mut stream_offset: u64, out: &mut [u8]) -> io::Result<()> {
-        let mut written = 0usize;
-        let mut run_stream_start = 0u64;
-        let mut reader = self.reader.borrow_mut();
-
-        for (lcn, cluster_count) in &self.mft_data_runs {
-            if *lcn < 0 {
-                return Err(core_invalid_fs_data(format!("negative MFT LCN {}", lcn)));
-            }
-            let run_bytes = cluster_count
-                .checked_mul(self.cluster_size)
-                .ok_or_else(|| {
-                    core_invalid_fs_data(format!(
-                        "MFT run overflow: {} clusters × {} bytes/cluster",
-                        cluster_count, self.cluster_size
-                    ))
-                })?;
-            let run_end = run_stream_start.saturating_add(run_bytes);
-            if stream_offset >= run_end {
-                run_stream_start = run_end;
-                continue;
-            }
-
-            let offset_in_run = stream_offset.saturating_sub(run_stream_start);
-            let available = run_bytes.saturating_sub(offset_in_run);
-            let need = out.len() - written;
-            let to_read = available.min(need as u64) as usize;
-            let disk_offset = self
-                .volume_offset
-                .checked_add((*lcn as u64).saturating_mul(self.cluster_size))
-                .and_then(|base| base.checked_add(offset_in_run))
-                .ok_or_else(|| core_invalid_fs_data("MFT run disk offset overflow"))?;
-
-            reader.seek(SeekFrom::Start(disk_offset))?;
-            reader.read_exact(&mut out[written..written + to_read])?;
-            written += to_read;
-            if written == out.len() {
-                return Ok(());
-            }
-            stream_offset = run_end;
-            run_stream_start = run_end;
-        }
-
-        Err(unexpected_fs_eof(format!(
-            "MFT stream ended before record read completed (read {} of {} bytes)",
-            written,
-            out.len()
-        )))
     }
 
     /// List children of any directory by MFT inode number.

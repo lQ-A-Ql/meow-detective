@@ -168,4 +168,57 @@ describe('DenseDataTable', () => {
 
     selection?.removeAllRanges();
   });
+
+  it('requests the next bounded page near the vertical scroll boundary', () => {
+    const onReachEnd = vi.fn();
+    const { container } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={Array.from({ length: 100 }, (_, index) => ({
+          id: `row-${index}`,
+          name: `Row ${index}`,
+        }))}
+        getRowKey={(row) => row.id}
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    Object.defineProperties(scrollContainer, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 3_100 },
+    });
+
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues loading when the current page does not fill the viewport', () => {
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(600);
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(310);
+    const onReachEnd = vi.fn();
+
+    render(
+      <DenseDataTable
+        columns={columns}
+        rows={Array.from({ length: 10 }, (_, index) => ({
+          id: `row-${index}`,
+          name: `Row ${index}`,
+        }))}
+        getRowKey={(row) => row.id}
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+    clientHeight.mockRestore();
+    scrollHeight.mockRestore();
+  });
 });

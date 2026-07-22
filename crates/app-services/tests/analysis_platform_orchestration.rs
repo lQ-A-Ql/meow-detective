@@ -434,7 +434,7 @@ fn linux_candidates_are_read_in_normalized_path_order() {
 }
 
 #[test]
-fn deterministic_linux_diagnostic_is_replayed_without_reopening_evidence() {
+fn deterministic_linux_unsupported_candidate_is_replayed_without_opening_evidence() {
     let conn = source_connection();
     insert_source_file(&conn, "ssh-moduli", "etc/ssh/moduli");
     let reader_calls = Cell::new(0usize);
@@ -470,7 +470,7 @@ fn deterministic_linux_diagnostic_is_replayed_without_reopening_evidence() {
     assert_eq!(second.scanned_count, 1);
     assert_eq!(first.checkpoint_hit_count, 0);
     assert_eq!(second.checkpoint_hit_count, 1);
-    assert_eq!(reader_calls.get(), 1);
+    assert_eq!(reader_calls.get(), 0);
     assert_eq!(second.warnings, first.warnings);
     let diagnostic_count: i64 = conn
         .query_row(

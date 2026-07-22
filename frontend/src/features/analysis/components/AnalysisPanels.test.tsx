@@ -142,6 +142,24 @@ describe('AnalysisPanels sub-components', () => {
       expect(screen.getByText('artifacts=5')).toBeDefined();
       expect(screen.getByText('timeline=3')).toBeDefined();
     });
+
+    it('renders the real processed-to-total ratio instead of a fixed running value', () => {
+      render(createElement(AnalysisExtractionProgress, {
+        progress: {
+          label: 'Linux journal',
+          status: 'running',
+          scannedCount: 414,
+          artifactCount: 120,
+          timelineEventCount: 42,
+          warnings: [],
+          totalCandidateCount: 749,
+          processedCandidateCount: 414,
+        },
+      }));
+
+      expect(screen.getByText('414/749 (55%)')).toBeDefined();
+      expect(screen.queryByText('50%')).toBeNull();
+    });
   });
 
   describe('AnalysisEmptyState', () => {

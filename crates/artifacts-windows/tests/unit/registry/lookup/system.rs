@@ -118,6 +118,213 @@ fn extract_system_fields_from_committed_tiny_fixture() {
     assert!(info.warnings.is_empty());
 }
 
+#[test]
+fn extract_network_adapter_joins_interface_connection_and_class_keys() {
+    const GUID: &str = "{11111111-2222-3333-4444-555555555555}";
+    const CLASS: &str = "{4D36E972-E325-11CE-BFC1-08002BE10318}";
+    let mut data = empty_hive("SYSTEM");
+    write_nk(
+        &mut data,
+        0x20,
+        "SYSTEM",
+        &[("Select", 0x200), ("ControlSet001", 0x300)],
+        &[],
+    );
+    write_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+    write_dword_value(&mut data, 0x1200, "Current", 1);
+    write_nk(
+        &mut data,
+        0x300,
+        "ControlSet001",
+        &[("Services", 0x400), ("Control", 0x500)],
+        &[],
+    );
+    write_nk(&mut data, 0x400, "Services", &[("Tcpip", 0x600)], &[]);
+    write_nk(&mut data, 0x600, "Tcpip", &[("Parameters", 0x700)], &[]);
+    write_nk(
+        &mut data,
+        0x700,
+        "Parameters",
+        &[("Interfaces", 0x800)],
+        &[],
+    );
+    write_nk(&mut data, 0x800, "Interfaces", &[(GUID, 0x900)], &[]);
+    write_nk(
+        &mut data,
+        0x900,
+        GUID,
+        &[],
+        &[0x1300, 0x1380, 0x1400, 0x1480, 0x1500, 0x1580],
+    );
+    write_string_value(&mut data, 0x1300, "DhcpIPAddress", "192.0.2.10", 0x3000);
+    write_string_value(&mut data, 0x1380, "DhcpSubnetMask", "255.255.255.0", 0x3080);
+    write_string_value(&mut data, 0x1400, "DhcpDefaultGateway", "192.0.2.1", 0x3100);
+    write_string_value(&mut data, 0x1480, "DhcpServer", "192.0.2.2", 0x3180);
+    write_dword_value(&mut data, 0x1500, "EnableDHCP", 1);
+    write_string_value(
+        &mut data,
+        0x1580,
+        "DhcpNameServer",
+        "192.0.2.53 192.0.2.54",
+        0x3200,
+    );
+
+    write_nk(
+        &mut data,
+        0x500,
+        "Control",
+        &[("Network", 0xa00), ("Class", 0xb00)],
+        &[],
+    );
+    write_nk(&mut data, 0xa00, "Network", &[(CLASS, 0xc00)], &[]);
+    write_nk(&mut data, 0xc00, CLASS, &[(GUID, 0xd00)], &[]);
+    write_nk(&mut data, 0xd00, GUID, &[("Connection", 0xe00)], &[]);
+    write_nk(&mut data, 0xe00, "Connection", &[], &[0x1600]);
+    write_string_value(&mut data, 0x1600, "Name", "Ethernet 2", 0x3280);
+
+    write_nk(&mut data, 0xb00, "Class", &[(CLASS, 0xf00)], &[]);
+    write_nk(&mut data, 0xf00, CLASS, &[("0000", 0x1000)], &[]);
+    write_nk(
+        &mut data,
+        0x1000,
+        "0000",
+        &[],
+        &[0x1680, 0x1700, 0x1780, 0x1800, 0x1880],
+    );
+    write_string_value(&mut data, 0x1680, "NetCfgInstanceId", GUID, 0x3300);
+    write_string_value(
+        &mut data,
+        0x1700,
+        "DriverDesc",
+        "Intel Ethernet Controller",
+        0x3380,
+    );
+    write_string_value(&mut data, 0x1780, "NetworkAddress", "001122334455", 0x3400);
+    write_string_value(
+        &mut data,
+        0x1800,
+        "PnPInstanceId",
+        "PCI\\VEN_8086&DEV_1234",
+        0x3480,
+    );
+    write_string_value(&mut data, 0x1880, "Service", "e1dexpress", 0x3500);
+
+    let adapters =
+        extract_network_adapters_from_system_hive(&data, "Windows/System32/config/SYSTEM").unwrap();
+
+    assert_eq!(adapters.len(), 1);
+    let adapter = &adapters[0];
+    assert_eq!(adapter.name.as_deref(), Some("Ethernet 2"));
+    assert_eq!(
+        adapter.description.as_deref(),
+        Some("Intel Ethernet Controller")
+    );
+    assert_eq!(adapter.mac_address.as_deref(), Some("00:11:22:33:44:55"));
+    assert_eq!(adapter.permanent_mac_address, None);
+    assert_eq!(adapter.ip_addresses, ["192.0.2.10"]);
+    assert_eq!(adapter.subnet_masks, ["255.255.255.0"]);
+    assert_eq!(adapter.gateways, ["192.0.2.1"]);
+    assert_eq!(adapter.dns_servers, ["192.0.2.53", "192.0.2.54"]);
+    assert_eq!(adapter.service_name.as_deref(), Some("e1dexpress"));
+}
+
+#[test]
+fn network_setup2_enriches_physical_adapter_identity() {
+    const GUID: &str = "{98420441-28EB-43A5-A59F-C9EACCBA714B}";
+    let mut data = empty_hive("SYSTEM");
+    write_nk(
+        &mut data,
+        0x20,
+        "SYSTEM",
+        &[("Select", 0x200), ("ControlSet001", 0x300)],
+        &[],
+    );
+    write_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+    write_dword_value(&mut data, 0x1200, "Current", 1);
+    write_nk(
+        &mut data,
+        0x300,
+        "ControlSet001",
+        &[("Services", 0x400), ("Control", 0x500)],
+        &[],
+    );
+    write_nk(&mut data, 0x400, "Services", &[("Tcpip", 0x600)], &[]);
+    write_nk(&mut data, 0x600, "Tcpip", &[("Parameters", 0x700)], &[]);
+    write_nk(
+        &mut data,
+        0x700,
+        "Parameters",
+        &[("Interfaces", 0x800)],
+        &[],
+    );
+    write_nk(&mut data, 0x800, "Interfaces", &[(GUID, 0x900)], &[]);
+    write_nk(&mut data, 0x900, GUID, &[], &[0x1300]);
+    write_string_value(&mut data, 0x1300, "DhcpIPAddress", "192.0.2.10", 0x3000);
+
+    write_nk(
+        &mut data,
+        0x500,
+        "Control",
+        &[("NetworkSetup2", 0xa00)],
+        &[],
+    );
+    write_nk(
+        &mut data,
+        0xa00,
+        "NetworkSetup2",
+        &[("Interfaces", 0xb00)],
+        &[],
+    );
+    write_nk(&mut data, 0xb00, "Interfaces", &[(GUID, 0xc00)], &[]);
+    write_nk(&mut data, 0xc00, GUID, &[("Kernel", 0xd00)], &[]);
+    write_nk(
+        &mut data,
+        0xd00,
+        "Kernel",
+        &[],
+        &[0x1380, 0x1400, 0x1480, 0x1500],
+    );
+    write_string_value(&mut data, 0x1380, "IfAlias", "Ethernet0", 0x3080);
+    write_string_value(
+        &mut data,
+        0x1400,
+        "IfDescr",
+        "Intel 82574L Gigabit Network Connection",
+        0x3100,
+    );
+    write_binary_value(
+        &mut data,
+        0x1480,
+        "CurrentAddress",
+        &[0x00, 0x0c, 0x29, 0x43, 0x04, 0xa8],
+        0x3180,
+    );
+    write_binary_value(
+        &mut data,
+        0x1500,
+        "PermanentAddress",
+        &[0x00, 0x50, 0x56, 0xfd, 0xb2, 0xd8],
+        0x3200,
+    );
+
+    let adapters =
+        extract_network_adapters_from_system_hive(&data, "Windows/System32/config/SYSTEM").unwrap();
+    assert_eq!(adapters.len(), 1);
+    assert_eq!(adapters[0].name.as_deref(), Some("Ethernet0"));
+    assert_eq!(
+        adapters[0].description.as_deref(),
+        Some("Intel 82574L Gigabit Network Connection")
+    );
+    assert_eq!(
+        adapters[0].mac_address.as_deref(),
+        Some("00:0C:29:43:04:A8")
+    );
+    assert_eq!(
+        adapters[0].permanent_mac_address.as_deref(),
+        Some("00:50:56:FD:B2:D8")
+    );
+}
+
 // ── Txlog-override tests ───────────────────────────────────────────────
 
 use crate::registry::tests::txlog_fixture::{build_synthetic_log1, SyntheticEntry};

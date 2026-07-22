@@ -1,5 +1,6 @@
 use app_services::import_scheduler::{
-    ImportAdmission, ImportAdmissionRequest, ImportSchedulingPolicy, ImportWorkload,
+    resolve_analysis_worker_count_for_memory, ImportAdmission, ImportAdmissionRequest,
+    ImportSchedulingPolicy, ImportWorkload,
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -15,12 +16,12 @@ fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
         None,
     );
 
-    assert!((1..=4).contains(&ordinary.cpu_budget));
+    assert!((1..=6).contains(&ordinary.cpu_budget));
     assert!(ordinary.import_workers <= ordinary.cpu_budget);
     assert!(ordinary.analysis_workers <= ordinary.cpu_budget);
     assert!(cluster.source_concurrency <= 2);
-    assert!(cluster.import_workers <= 2);
-    assert!(cluster.analysis_workers <= 2);
+    assert!(cluster.import_workers <= 3);
+    assert!(cluster.analysis_workers <= 3);
     assert!(
         cluster.admission_request().cpu_weight * cluster.source_concurrency <= cluster.cpu_budget
     );
@@ -36,6 +37,55 @@ fn cluster_policy_keeps_two_low_weight_members_parallel() {
     assert_eq!(policy.import_workers, 1);
     assert_eq!(policy.analysis_workers, 1);
     assert_eq!(policy.memory_reservation_mb, 2048);
+}
+
+#[test]
+fn cluster_policy_uses_three_workers_per_member_with_six_cpu_budget() {
+    let policy = ImportSchedulingPolicy::for_linux_cluster(6, 99, 99, 6);
+
+    assert_eq!(policy.import_workers, 3);
+    assert_eq!(policy.analysis_workers, 3);
+    assert_eq!(policy.source_concurrency, 2);
+    assert_eq!(policy.admission_request().cpu_weight, 3);
+    assert_eq!(
+        policy.admission_request().cpu_weight * policy.source_concurrency,
+        6
+    );
+    assert_eq!(policy.memory_reservation_mb, 2048);
+}
+
+#[test]
+fn cluster_policy_respects_a_small_cpu_budget() {
+    let policy = ImportSchedulingPolicy::for_linux_cluster(1, 6, 6, 6);
+
+    assert_eq!(policy.import_workers, 1);
+    assert_eq!(policy.analysis_workers, 1);
+    assert_eq!(policy.source_concurrency, 1);
+    assert!(policy.admission_request().cpu_weight * policy.source_concurrency <= policy.cpu_budget);
+}
+
+#[test]
+fn analysis_worker_budget_reduces_with_remaining_memory_headroom() {
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 0, 4096),
+        6
+    );
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 1024, 4096),
+        6
+    );
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 2048, 4096),
+        4
+    );
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 3584, 4096),
+        1
+    );
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 6144, 4096),
+        1
+    );
 }
 
 #[test]

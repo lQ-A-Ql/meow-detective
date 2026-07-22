@@ -53,6 +53,22 @@ fn staging_merge_combines_two_partitions_and_reports_progress() {
         .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
         .unwrap();
     assert_eq!(total, 7);
+    let missing_partition_index: i64 = main
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE partition_index IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let unexpected_partition_index: i64 = main
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE partition_index NOT IN (0, 1)",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(missing_partition_index, 0);
+    assert_eq!(unexpected_partition_index, 0);
 }
 
 #[test]
