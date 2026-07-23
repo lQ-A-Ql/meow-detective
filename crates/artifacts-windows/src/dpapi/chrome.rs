@@ -56,6 +56,19 @@ pub enum ChromiumValueKind {
     Unknown,
 }
 
+/// Chromium flavor selecting the App-Bound unwrap chain.
+///
+/// Google Chrome applies a Chrome-only PostProcessData layer (flag-1/2/3
+/// schemes with build-embedded keys), while other Chromium builds (Edge,
+/// Brave, …) return the raw App-Bound key directly after the two DPAPI
+/// layers. Firefox does not use this chain at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChromiumFamily {
+    Chrome,
+    Edge,
+    Chromium,
+}
+
 /// A read-only keyring of recovered DPAPI master keys and a profile's Local
 /// State key. Key material is zeroized when this object is dropped.
 #[derive(Debug, Clone)]
@@ -73,18 +86,27 @@ impl ChromiumDecryptor {
         local_state: &[u8],
         master_keys: &[DecryptedMasterKey],
     ) -> Result<Self, DpapiError> {
-        Self::from_local_state_with_app_bound(local_state, master_keys, None, None)
+        Self::from_local_state_with_app_bound(
+            local_state,
+            master_keys,
+            ChromiumFamily::Chrome,
+            None,
+            None,
+        )
     }
 
-    /// Build a decryptor that additionally attempts the App-Bound (v20) chain.
+    /// Build a decryptor that additionally attempts the App-Bound (v20) chain
+    /// for the given Chromium family.
     ///
     /// `cng_key_file` is the raw `Google Chromekey1` CNG system key file and
-    /// `elevation_exe` the matching `elevation_service.exe`; both may be absent,
-    /// in which case v20 values remain `Unsupported` while v10/v11/legacy keep
-    /// working. App-Bound failures never fail the base decryptor.
+    /// `elevation_exe` the matching `elevation_service.exe`; both are only
+    /// consulted for the Chrome family and may be absent, in which case v20
+    /// values remain `Unsupported` while v10/v11/legacy keep working.
+    /// App-Bound failures never fail the base decryptor.
     pub fn from_local_state_with_app_bound(
         local_state: &[u8],
         master_keys: &[DecryptedMasterKey],
+        family: ChromiumFamily,
         cng_key_file: Option<&[u8]>,
         elevation_exe: Option<&[u8]>,
     ) -> Result<Self, DpapiError> {
@@ -99,7 +121,7 @@ impl ChromiumDecryptor {
             serde_json::from_slice(local_state).map_err(|_| DpapiError::InvalidLocalStateKey)?;
         let local_state_key = decrypt_local_state_key(&root, &keyring)?;
         let (app_bound_key, app_bound_bound_to_elevation, app_bound_error) =
-            match unwrap_app_bound_material(&root, &keyring, cng_key_file, elevation_exe) {
+            match unwrap_app_bound_material(&root, &keyring, family, cng_key_file, elevation_exe) {
                 Ok((key, bound)) => (Some(key), bound, None),
                 Err(error) => (None, false, Some(error.to_string())),
             };
@@ -181,13 +203,14 @@ fn decrypt_local_state_key(
     Ok(key)
 }
 
-/// Run the full App-Bound chain: APPB prefix -> SYSTEM DPAPI outer blob ->
-/// user DPAPI inner blob -> Chrome key blob -> CNG `Google Chromekey1` ->
-/// flag-3 CBC/XOR/GCM unwrap. Returns the key and whether the XOR constant was
-/// bound to the elevation service binary.
+/// Run the App-Bound chain for the given family: APPB prefix -> SYSTEM DPAPI
+/// outer blob -> user DPAPI inner blob -> Chrome key blob -> family-specific
+/// unwrap. Returns the key and whether it was bound to the elevation binary
+/// (only meaningful for the Chrome flag-3 scheme).
 fn unwrap_app_bound_material(
     root: &Value,
     keyring: &HashMap<String, Zeroizing<[u8; 64]>>,
+    family: ChromiumFamily,
     cng_key_file: Option<&[u8]>,
     elevation_exe: Option<&[u8]>,
 ) -> Result<(Zeroizing<[u8; 32]>, bool), DpapiError> {
@@ -205,6 +228,13 @@ fn unwrap_app_bound_material(
     let inner_blob = decrypt_blob_by_guid(keyring, &wrapped[4..], None)?;
     let chrome_cleartext = decrypt_blob_by_guid(keyring, &inner_blob, None)?;
     let key_blob = app_bound::parse_chrome_key_blob(&chrome_cleartext)?;
+
+    if family != ChromiumFamily::Chrome {
+        // Non-Chrome Chromium builds skip the PostProcessData layer: the
+        // content is already the raw App-Bound key.
+        let key = app_bound::unwrap_direct_key_blob(&key_blob.content)?;
+        return Ok((key, false));
+    }
 
     let cng_key = if app_bound::content_requires_cng(&key_blob.content) {
         let cng_bytes = cng_key_file.ok_or(DpapiError::InvalidFormat(

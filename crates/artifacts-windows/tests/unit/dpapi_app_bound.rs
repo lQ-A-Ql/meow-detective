@@ -279,3 +279,12 @@ fn master_key_guid_lookup_is_case_insensitive() {
     );
     assert!(decryptor.is_err());
 }
+
+#[test]
+fn non_chrome_direct_key_blob_requires_exact_key_length() {
+    let content = [0x6A; 32];
+    let key = super::unwrap_direct_key_blob(&content).expect("raw Edge-style key");
+    assert_eq!(key.as_slice(), &content);
+    assert!(super::unwrap_direct_key_blob(&content[..31]).is_err());
+    assert!(super::unwrap_direct_key_blob(&[]).is_err());
+}

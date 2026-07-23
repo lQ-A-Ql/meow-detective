@@ -7,7 +7,9 @@ use super::reader::CandidateExtractionError;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
-use artifacts_windows::dpapi::{decrypt_master_key_file, ChromiumDecryptor, DecryptedMasterKey};
+use artifacts_windows::dpapi::{
+    decrypt_master_key_file, ChromiumDecryptor, ChromiumFamily, DecryptedMasterKey,
+};
 use artifacts_windows::{extract_boot_key, extract_sam_fields};
 use domain::FileEntryId;
 use rusqlite::{params, Connection};
@@ -127,8 +129,10 @@ fn prepare_source_context(
         ));
     }
 
-    let cng_key_file = read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader);
-    let elevation_exe = read_elevation_service(conn, data_source_id, cancel_token, file_reader);
+    // CNG and elevation-service bytes are only needed for Google Chrome's
+    // PostProcessData schemes; read them lazily on the first Chrome root.
+    type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
+    let mut chrome_materials: Option<ChromeMaterials> = None;
 
     for root in roots {
         ensure_not_cancelled(cancel_token)?;
@@ -148,12 +152,25 @@ fn prepare_source_context(
                 continue;
             }
         };
+        let family = chromium_family_for_root(&root);
+        let (cng_key_file, elevation_exe) = if family == ChromiumFamily::Chrome {
+            let materials = chrome_materials.get_or_insert_with(|| {
+                (
+                    read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader),
+                    read_elevation_service(conn, data_source_id, cancel_token, file_reader),
+                )
+            });
+            (materials.0.as_deref(), materials.1.as_deref())
+        } else {
+            (None, None)
+        };
         let decryptor = build_profile_decryptor(
             &root,
             &local_state_bytes,
             &master_keys,
-            cng_key_file.as_deref(),
-            elevation_exe.as_deref(),
+            family,
+            cng_key_file,
+            elevation_exe,
             &mut context.warnings,
         );
         if let Some(decryptor) = decryptor {
@@ -165,10 +182,22 @@ fn prepare_source_context(
     Ok(())
 }
 
+/// Select the App-Bound unwrap chain for a Chromium user-data root.
+fn chromium_family_for_root(root: &str) -> ChromiumFamily {
+    if root.contains("/google/chrome/") {
+        ChromiumFamily::Chrome
+    } else if root.contains("/microsoft/edge/") {
+        ChromiumFamily::Edge
+    } else {
+        ChromiumFamily::Chromium
+    }
+}
+
 fn build_profile_decryptor(
     root: &str,
     local_state_bytes: &[u8],
     master_keys: &[DecryptedMasterKey],
+    family: ChromiumFamily,
     cng_key_file: Option<&[u8]>,
     elevation_exe: Option<&[u8]>,
     warnings: &mut Vec<String>,
@@ -176,6 +205,7 @@ fn build_profile_decryptor(
     match ChromiumDecryptor::from_local_state_with_app_bound(
         local_state_bytes,
         master_keys,
+        family,
         cng_key_file,
         elevation_exe,
     ) {

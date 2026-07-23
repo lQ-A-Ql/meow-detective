@@ -4,10 +4,13 @@
 //! the Liu Yang sample (TBAL LSA secret path, no memory forensics involved).
 
 use app_services::datasource_service::detect_image_filesystem;
-use artifacts_windows::browser::{parse_chrome_passwords_with_decryptor, BrowserDecryptionStatus};
+use artifacts_windows::browser::{
+    parse_chrome_cookies_with_decryptor, parse_chrome_passwords_with_decryptor,
+    BrowserDecryptionStatus,
+};
 use artifacts_windows::dpapi::{
     decrypt_master_key_file, derive_user_prekeys_from_password_sha1, parse_cng_system_key_file,
-    ChromiumDecryptor, DecryptedMasterKey,
+    ChromiumDecryptor, ChromiumFamily, DecryptedMasterKey,
 };
 use artifacts_windows::{
     decrypt_lsa_secrets, extract_boot_key, extract_sam_fields, DpapiSystemKeys, TbalSecret,
@@ -166,6 +169,7 @@ fn liuyang_chrome147_app_bound_chain_from_pure_e01() {
     let decryptor = ChromiumDecryptor::from_local_state_with_app_bound(
         &local_state,
         &master_keys,
+        ChromiumFamily::Chrome,
         Some(&cng_bytes),
         elevation.as_deref(),
     )
@@ -198,6 +202,51 @@ fn liuyang_chrome147_app_bound_chain_from_pure_e01() {
     assert_eq!(record.decryption_status, BrowserDecryptionStatus::Decrypted);
     assert_eq!(record.username, "admin");
     assert_eq!(record.password_preview.as_deref(), Some("admin123"));
+
+    // Edge family chain: raw-key unwrap after the two shared DPAPI layers
+    // (no Chrome PostProcessData, no CNG or elevation material required).
+    let edge_local_state_path =
+        format!("Users/{user_dir}/AppData/Local/Microsoft/Edge/User Data/Local State");
+    let edge_local_state = read_file(&fs, &edge_local_state_path).expect("read Edge Local State");
+    let edge_decryptor = ChromiumDecryptor::from_local_state_with_app_bound(
+        &edge_local_state,
+        &master_keys,
+        ChromiumFamily::Edge,
+        None,
+        None,
+    )
+    .expect("build Edge decryptor");
+    assert!(
+        edge_decryptor.has_app_bound_key(),
+        "Edge App-Bound key must unwrap via the raw-key chain; error: {:?}",
+        edge_decryptor.app_bound_error()
+    );
+
+    let edge_cookies_path =
+        format!("Users/{user_dir}/AppData/Local/Microsoft/Edge/User Data/Default/Network/Cookies");
+    if let Ok(edge_cookies) = read_file(&fs, &edge_cookies_path) {
+        let cookies = parse_chrome_cookies_with_decryptor(
+            &edge_cookies,
+            "Edge",
+            Some("Default"),
+            Some(&edge_decryptor),
+        )
+        .expect("parse Edge cookies");
+        let decrypted = cookies
+            .iter()
+            .filter(|cookie| cookie.decryption_status == BrowserDecryptionStatus::Decrypted)
+            .count();
+        eprintln!(
+            "Edge cookies: total={} decrypted={decrypted}",
+            cookies.len()
+        );
+        if !cookies.is_empty() {
+            assert!(
+                decrypted > 0,
+                "Edge cookies must decrypt via the Edge chain"
+            );
+        }
+    }
 }
 
 fn read_cng_chromekey(fs: &NtfsReader) -> Result<Vec<u8>, String> {

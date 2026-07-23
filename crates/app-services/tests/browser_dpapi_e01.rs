@@ -5,7 +5,8 @@ use artifacts_windows::browser::{
 };
 use artifacts_windows::dpapi::{
     decrypt_master_key_file, derive_user_prekeys, derive_user_prekeys_from_password_sha1,
-    parse_cng_system_key_file, parse_masterkey_file, ChromiumDecryptor, DecryptedMasterKey,
+    parse_cng_system_key_file, parse_masterkey_file, ChromiumDecryptor, ChromiumFamily,
+    DecryptedMasterKey,
 };
 use artifacts_windows::{
     decrypt_lsa_secrets, extract_boot_key, extract_sam_fields, DpapiSystemKeys, TbalSecret,
@@ -373,9 +374,15 @@ fn liuyang_chromium_cookies_and_passwords_decrypt_offline() {
             let Ok(bytes) = read_file(&fs, &local_state) else {
                 continue;
             };
+            let family = if browser == "Chrome" {
+                ChromiumFamily::Chrome
+            } else {
+                ChromiumFamily::Edge
+            };
             if let Ok(decryptor) = ChromiumDecryptor::from_local_state_with_app_bound(
                 &bytes,
                 &master_keys,
+                family,
                 cng_key_file.as_deref(),
                 elevation_exe.as_deref(),
             ) {

@@ -228,6 +228,20 @@ pub fn content_requires_cng(content: &[u8]) -> bool {
     content.first().copied() == Some(FLAG_CNG_XOR_AES_GCM)
 }
 
+/// Non-Chrome Chromium browsers (Edge, Brave, …) skip the Chrome-only
+/// PostProcessData layer: the Chrome key blob content is already the raw
+/// 32-byte App-Bound key.
+pub fn unwrap_direct_key_blob(content: &[u8]) -> Result<Zeroizing<[u8; 32]>, DpapiError> {
+    if content.len() != APP_BOUND_KEY_LEN {
+        return Err(DpapiError::InvalidFormat(
+            "unexpected non-Chrome app-bound key blob length",
+        ));
+    }
+    let mut key = Zeroizing::new([0u8; 32]);
+    key.copy_from_slice(content);
+    Ok(key)
+}
+
 /// Unwrap the 32-byte App-Bound key from Chrome key blob content. Every known
 /// candidate key for the scheme is tried; only an AEAD-authenticated result
 /// is accepted. With `elevation_exe` present, the winning candidate must occur
