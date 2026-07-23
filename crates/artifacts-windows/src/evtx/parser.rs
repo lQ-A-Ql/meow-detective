@@ -9,7 +9,7 @@ mod types;
 
 pub use reader::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
-    extract_structured_events, extract_structured_events_from_json_records,
+    extract_structured_events, extract_structured_events_from_json_records, probe_newest_records,
     MAX_EVTX_ANALYSIS_BYTES,
 };
 pub use types::{

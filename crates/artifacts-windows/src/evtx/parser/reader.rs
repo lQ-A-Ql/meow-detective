@@ -99,22 +99,49 @@ fn validate_path(source_path: &str) -> Result<(), EvtxBootError> {
     }
 }
 
+/// Bound the parser input to complete 64KiB chunks.
+///
+/// The header's declared chunk count is *not* trusted: on images captured
+/// before the log service flushed its header update the count lags behind the
+/// actual file size (with or without the dirty flag), and slicing there
+/// silently discards the newest events. Every complete chunk is kept and the
+/// parser's own per-chunk validation decides what is readable; only a
+/// trailing partial chunk, which cannot hold complete records, is dropped.
 pub(super) fn bounded_clean_evtx_bytes(bytes: &[u8]) -> &[u8] {
-    if bytes.len() < EVTX_FILE_HEADER_SIZE as usize + 128 || !bytes.starts_with(b"ElfFile\0") {
+    if bytes.len() < EVTX_FILE_HEADER_SIZE as usize || !bytes.starts_with(b"ElfFile\0") {
         return bytes;
     }
-    let chunk_count = u16::from_le_bytes(bytes[42..44].try_into().unwrap_or([0; 2])) as usize;
-    let flags = u32::from_le_bytes(bytes[120..124].try_into().unwrap_or([0; 4]));
-    if flags & 0x1 != 0 || chunk_count == 0 {
-        return bytes;
+    let data_len = bytes.len() - EVTX_FILE_HEADER_SIZE as usize;
+    let complete_len = data_len / EVTX_CHUNK_SIZE as usize * EVTX_CHUNK_SIZE as usize;
+    &bytes[..EVTX_FILE_HEADER_SIZE as usize + complete_len]
+}
+
+/// Diagnostic helper for tail-truncation analysis: return the newest `count`
+/// records of *any* kind as `(record_id, event_id, timestamp)` triples,
+/// bypassing the curated kind filter entirely.
+#[doc(hidden)]
+pub fn probe_newest_records(bytes: &[u8], count: usize) -> Vec<(u64, u64, String)> {
+    let parser_bytes = bounded_clean_evtx_bytes(bytes);
+    let Ok(mut parser) = EvtxParser::from_buffer(parser_bytes.to_vec()) else {
+        return Vec::new();
+    };
+    let mut records = Vec::new();
+    for record in parser.records_json_value().flatten() {
+        let event_id = record
+            .data
+            .get("Event")
+            .and_then(|event| event.get("System"))
+            .and_then(|system| system.get("EventID"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        records.push((
+            record.event_record_id,
+            event_id,
+            record.timestamp.to_string(),
+        ));
     }
-    let declared_len = (EVTX_FILE_HEADER_SIZE as usize)
-        .saturating_add(chunk_count.saturating_mul(EVTX_CHUNK_SIZE as usize));
-    if declared_len > EVTX_FILE_HEADER_SIZE as usize && declared_len < bytes.len() {
-        &bytes[..declared_len]
-    } else {
-        bytes
-    }
+    records.sort_by_key(|(record_id, _, _)| *record_id);
+    records.split_off(records.len().saturating_sub(count))
 }
 
 pub(super) fn format_evtx_warning(source_path: &str, err: &EvtxError) -> String {

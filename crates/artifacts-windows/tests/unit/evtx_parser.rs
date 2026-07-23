@@ -189,13 +189,27 @@ fn chunk_warning_includes_chunk_id_offset_and_reason() {
 }
 
 #[test]
-fn clean_evtx_uses_declared_chunk_count_to_ignore_tail_slack() {
+fn stale_declared_chunk_count_does_not_truncate_complete_chunks() {
+    // Header declares 1 chunk but 2 complete chunks are present (stale header
+    // on a captured image): the tail chunk must stay visible.
     let declared_len = EVTX_FILE_HEADER_SIZE as usize + EVTX_CHUNK_SIZE as usize;
     let mut bytes = vec![0; declared_len + EVTX_CHUNK_SIZE as usize];
     bytes[0..8].copy_from_slice(b"ElfFile\0");
     bytes[42..44].copy_from_slice(&1u16.to_le_bytes());
     bytes[120..124].copy_from_slice(&0u32.to_le_bytes());
-    assert_eq!(bounded_clean_evtx_bytes(&bytes).len(), declared_len);
+    assert_eq!(bounded_clean_evtx_bytes(&bytes).len(), bytes.len());
+}
+
+#[test]
+fn trailing_partial_chunk_is_dropped() {
+    // A trailing partial chunk cannot hold complete records; only complete
+    // 64KiB chunks are kept regardless of the declared count.
+    let complete_len = EVTX_FILE_HEADER_SIZE as usize + EVTX_CHUNK_SIZE as usize * 2;
+    let mut bytes = vec![0; complete_len + 1000];
+    bytes[0..8].copy_from_slice(b"ElfFile\0");
+    bytes[42..44].copy_from_slice(&1u16.to_le_bytes());
+    bytes[120..124].copy_from_slice(&0u32.to_le_bytes());
+    assert_eq!(bounded_clean_evtx_bytes(&bytes).len(), complete_len);
 }
 
 #[test]
