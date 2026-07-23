@@ -75,6 +75,16 @@ pub fn decrypt_master_key_file(
     data: &[u8],
     prekeys: &[[u8; 20]],
 ) -> Result<DecryptedMasterKey, DpapiError> {
+    let borrowed = prekeys.iter().map(<[u8; 20]>::as_slice).collect::<Vec<_>>();
+    decrypt_master_key_file_with_keys(data, &borrowed)
+}
+
+/// Like [`decrypt_master_key_file`], but accepts variable-length prekeys such
+/// as the 20-byte `DPAPI_SYSTEM` machine/user keys or 16-byte legacy keys.
+pub fn decrypt_master_key_file_with_keys(
+    data: &[u8],
+    prekeys: &[&[u8]],
+) -> Result<DecryptedMasterKey, DpapiError> {
     let file = parse_masterkey_file(data)?;
     let mut first_section_error = None;
     let mut parsed_section = false;
@@ -110,6 +120,21 @@ pub fn decrypt_master_key_file(
             "master-key file contains no key section",
         )))
     }
+}
+
+/// Derive the offline user pre-keys from a TBAL-recovered
+/// `SHA1(UTF-16LE(password))` secret.
+///
+/// The derived `HMAC-SHA1(password_sha1, UTF-16LE(sid + NUL))` candidate comes
+/// first, followed by the raw password-SHA1 itself (matching common tool
+/// behavior); only candidates that pass the master-key file's internal HMAC
+/// check are accepted downstream.
+pub fn derive_user_prekeys_from_password_sha1(
+    sid: &str,
+    password_sha1: &[u8; 20],
+) -> Vec<[u8; 20]> {
+    let sid_with_nul = utf16le_with_nul(sid);
+    vec![hmac_sha1(password_sha1, &sid_with_nul), *password_sha1]
 }
 
 /// Derive the offline user pre-keys available from a SAM NT hash.
@@ -172,7 +197,7 @@ fn parse_master_key_section(data: &[u8]) -> Result<MasterKeySection, DpapiError>
 
 fn decrypt_master_key_section(
     section: &MasterKeySection,
-    prekey: &[u8; 20],
+    prekey: &[u8],
 ) -> Result<[u8; MASTER_KEY_LEN], DpapiError> {
     let hash = HashAlgorithm::from_id(section.hash_algorithm_id)?;
     let cipher = CipherAlgorithm::from_id(section.cipher_algorithm_id)?;

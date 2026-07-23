@@ -1,6 +1,7 @@
 mod artifact_query;
 mod attr_mapping;
 pub(crate) mod browser;
+mod browser_lsa;
 mod browser_preload;
 mod candidate_order;
 mod candidate_processing;

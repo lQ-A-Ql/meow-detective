@@ -33,6 +33,9 @@ pub use lnk::parser::LnkExtractor;
 pub use prefetch::parser::PrefetchExtractor;
 pub use recycle_bin::parser::RecycleBinExtractor;
 pub use registry::hash_decrypt::{decrypt_user_hashes, derive_hashed_boot_key, SamHashes};
+pub use registry::lookup::lsa::{
+    decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecret, LsaDecryptedSecrets, TbalSecret,
+};
 pub use registry::lookup::{
     extract_amcache_entries, extract_appcompat_layers_from_ntuser_hive,
     extract_appcompat_layers_from_software_hive, extract_cached_credentials_from_security_hive,

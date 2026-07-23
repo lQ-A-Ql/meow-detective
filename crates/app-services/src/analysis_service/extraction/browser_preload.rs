@@ -1,11 +1,13 @@
+use super::browser_lsa::{
+    derive_sam_prekeys, extend_prekeys_from_lsa_secrets, read_cng_chromekey_file,
+    read_elevation_service, PrekeySeed,
+};
 use super::candidate_processing::{read_candidate_bytes_with_progress, CandidateSource};
 use super::reader::CandidateExtractionError;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
-use artifacts_windows::dpapi::{
-    decrypt_master_key_file, derive_user_prekeys, ChromiumDecryptor, DecryptedMasterKey,
-};
+use artifacts_windows::dpapi::{decrypt_master_key_file, ChromiumDecryptor, DecryptedMasterKey};
 use artifacts_windows::{extract_boot_key, extract_sam_fields};
 use domain::FileEntryId;
 use rusqlite::{params, Connection};
@@ -99,22 +101,19 @@ fn prepare_source_context(
         AnalysisServiceError::Other("SAM user hashes could not be derived".to_string())
     })?;
 
-    let mut prekeys = Vec::new();
-    for user in sam_info.users {
-        let Some(password_hash) = user.password_hash else {
-            continue;
-        };
-        let Some((_, nt_hash)) = password_hash.rsplit_once(':') else {
-            continue;
-        };
-        let Ok(decoded) = hex::decode(nt_hash) else {
-            continue;
-        };
-        let Ok(nt_hash) = <[u8; 16]>::try_from(decoded.as_slice()) else {
-            continue;
-        };
-        prekeys.extend(derive_user_prekeys(&user.sid, &nt_hash));
-    }
+    let (mut prekeys, user_nt_hashes) = derive_sam_prekeys(sam_info);
+    extend_prekeys_from_lsa_secrets(
+        conn,
+        data_source_id,
+        &PrekeySeed {
+            boot_key: &boot_key,
+            user_nt_hashes: &user_nt_hashes,
+        },
+        cancel_token,
+        file_reader,
+        &mut prekeys,
+        &mut context.warnings,
+    );
     if prekeys.is_empty() {
         return Err(AnalysisServiceError::Other(
             "no usable user DPAPI pre-key was derived".to_string(),
@@ -127,6 +126,9 @@ fn prepare_source_context(
             "no DPAPI master key could be decrypted".to_string(),
         ));
     }
+
+    let cng_key_file = read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader);
+    let elevation_exe = read_elevation_service(conn, data_source_id, cancel_token, file_reader);
 
     for root in roots {
         ensure_not_cancelled(cancel_token)?;
@@ -146,18 +148,52 @@ fn prepare_source_context(
                 continue;
             }
         };
-        match ChromiumDecryptor::from_local_state(&local_state_bytes, &master_keys) {
-            Ok(decryptor) => {
-                context
-                    .decryptors
-                    .insert((data_source_id.to_string(), root), decryptor);
-            }
-            Err(error) => context.warnings.push(format!(
-                "Chromium Local State could not be unwrapped for profile root {root}: {error}"
-            )),
+        let decryptor = build_profile_decryptor(
+            &root,
+            &local_state_bytes,
+            &master_keys,
+            cng_key_file.as_deref(),
+            elevation_exe.as_deref(),
+            &mut context.warnings,
+        );
+        if let Some(decryptor) = decryptor {
+            context
+                .decryptors
+                .insert((data_source_id.to_string(), root), decryptor);
         }
     }
     Ok(())
+}
+
+fn build_profile_decryptor(
+    root: &str,
+    local_state_bytes: &[u8],
+    master_keys: &[DecryptedMasterKey],
+    cng_key_file: Option<&[u8]>,
+    elevation_exe: Option<&[u8]>,
+    warnings: &mut Vec<String>,
+) -> Option<ChromiumDecryptor> {
+    match ChromiumDecryptor::from_local_state_with_app_bound(
+        local_state_bytes,
+        master_keys,
+        cng_key_file,
+        elevation_exe,
+    ) {
+        Ok(decryptor) => {
+            if let Some(error) = decryptor.app_bound_error() {
+                warnings.push(format!(
+                    "Chromium App-Bound unwrap failed for profile root {root}: {error}"
+                ));
+            }
+            Some(decryptor)
+        }
+        Err(error) => {
+            warnings.push(format!(
+                "Chromium Local State could not be unwrapped for profile root {root}: {error}"
+            ));
+            None
+        }
+    }
 }
 
 fn load_master_keys(
@@ -185,7 +221,7 @@ fn load_master_keys(
     recovered.into_values().collect()
 }
 
-fn read_locator(
+pub(super) fn read_locator(
     locator: &EvidenceCandidate,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
@@ -234,7 +270,7 @@ fn chromium_user_data_root(normalized: &str) -> Option<String> {
         })
 }
 
-fn locate_by_suffix(
+pub(super) fn locate_by_suffix(
     conn: &Connection,
     data_source_id: &str,
     suffix: &str,
@@ -301,16 +337,20 @@ fn is_master_key_path(path: &str) -> bool {
     let Some(name) = normalized.rsplit('/').next() else {
         return false;
     };
-    Uuid::parse_str(name).is_ok()
-        && normalized.contains("/microsoft/protect/")
-        && normalized
-            .split('/')
-            .rev()
-            .nth(1)
-            .is_some_and(|sid| sid.starts_with("s-1-"))
+    if Uuid::parse_str(name).is_err() || !normalized.contains("/microsoft/protect/") {
+        return false;
+    }
+    let parent_is_sid = normalized
+        .split('/')
+        .rev()
+        .nth(1)
+        .is_some_and(|sid| sid.starts_with("s-1-"));
+    let system_protect = normalized.contains("/microsoft/protect/s-1-5-18/user/")
+        || normalized.contains("/microsoft/protect/s-1-5-18/machine/");
+    parent_is_sid || system_protect
 }
 
-fn locator_from_row(
+pub(super) fn locator_from_row(
     data_source_id: &str,
     row: (String, String, u64, Option<usize>),
     category: &str,

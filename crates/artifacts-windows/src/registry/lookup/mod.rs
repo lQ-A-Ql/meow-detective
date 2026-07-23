@@ -1,5 +1,6 @@
 pub mod amcache;
 mod fields;
+pub mod lsa;
 pub mod muicache;
 pub mod ntuser;
 pub(crate) mod reader;
