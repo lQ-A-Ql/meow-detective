@@ -275,7 +275,11 @@ pub(super) fn locate_by_suffix(
     data_source_id: &str,
     suffix: &str,
 ) -> Option<EvidenceCandidate> {
-    let pattern = format!("%{}", suffix.to_ascii_lowercase());
+    // The LIKE prefilter must tolerate every stored path form (partition-
+    // prefixed `[P3]/…`, leading-slash, drive-letter, and bare relative
+    // paths); the ends_with check on the normalized path below is the actual
+    // boundary-precise filter.
+    let pattern = format!("%{}", suffix.trim_start_matches('/').to_ascii_lowercase());
     let mut statement = conn
         .prepare(
             "SELECT id, path, COALESCE(size, 0), partition_index

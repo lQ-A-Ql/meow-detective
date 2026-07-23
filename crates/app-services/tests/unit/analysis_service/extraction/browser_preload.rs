@@ -159,3 +159,51 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
     assert_eq!(record.decryption_status, BrowserDecryptionStatus::Decrypted);
     assert_eq!(record.password_preview.as_deref(), Some("admin123"));
 }
+
+#[test]
+fn locate_by_suffix_tolerates_all_stored_path_forms() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+    conn.execute_batch(
+        "CREATE TABLE file_entries(
+            id TEXT PRIMARY KEY,
+            data_source_id TEXT,
+            path TEXT,
+            entry_type TEXT,
+            size INTEGER,
+            partition_index INTEGER
+        );",
+    )
+    .expect("create file_entries");
+    for (index, path) in [
+        "Windows/System32/config/SYSTEM",
+        "[P3]/Windows/System32/config/SAM",
+        "/Windows/System32/config/SECURITY",
+        "ConfigWindows/System32/config/SOFTWARE",
+    ]
+    .iter()
+    .enumerate()
+    {
+        conn.execute(
+            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 3)",
+            rusqlite::params![format!("file:{index}"), path],
+        )
+        .expect("insert file entry");
+    }
+
+    assert!(
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/system").is_some(),
+        "bare relative path without partition prefix must be found"
+    );
+    assert!(
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/sam").is_some(),
+        "partition-prefixed path must still be found"
+    );
+    assert!(
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/security").is_some(),
+        "leading-slash path must be found"
+    );
+    assert!(
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/software").is_none(),
+        "segment-boundary mismatches must stay rejected"
+    );
+}
