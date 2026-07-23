@@ -206,24 +206,28 @@ fn unwrap_app_bound_material(
     let chrome_cleartext = decrypt_blob_by_guid(keyring, &inner_blob, None)?;
     let key_blob = app_bound::parse_chrome_key_blob(&chrome_cleartext)?;
 
-    let cng_bytes = cng_key_file.ok_or(DpapiError::InvalidFormat(
-        "CNG system key file is unavailable",
-    ))?;
-    let cng = app_bound::parse_cng_system_key_file(cng_bytes)?;
-    let _properties = decrypt_blob_by_guid(
-        keyring,
-        &cng.properties_blob,
-        Some(app_bound::KSP_PROPERTY_ENTROPY),
-    )?;
-    let private = decrypt_blob_by_guid(
-        keyring,
-        &cng.private_blob,
-        Some(app_bound::KSP_PRIVATE_KEY_ENTROPY),
-    )?;
-    let cng_key = app_bound::parse_cng_private_key(&private)?;
-    let (xor_constant, bound) = app_bound::select_xor_constant(elevation_exe)?;
-    let key = app_bound::unwrap_app_bound_key(&cng_key, &key_blob.content, &xor_constant)?;
-    Ok((key, bound))
+    let cng_key = if app_bound::content_requires_cng(&key_blob.content) {
+        let cng_bytes = cng_key_file.ok_or(DpapiError::InvalidFormat(
+            "CNG system key file is unavailable",
+        ))?;
+        let cng = app_bound::parse_cng_system_key_file(cng_bytes)?;
+        let _properties = decrypt_blob_by_guid(
+            keyring,
+            &cng.properties_blob,
+            Some(app_bound::KSP_PROPERTY_ENTROPY),
+        )?;
+        let private = decrypt_blob_by_guid(
+            keyring,
+            &cng.private_blob,
+            Some(app_bound::KSP_PRIVATE_KEY_ENTROPY),
+        )?;
+        Some(app_bound::parse_cng_private_key(&private)?)
+    } else {
+        None
+    };
+    let unwrapped =
+        app_bound::unwrap_app_bound_key(&key_blob.content, cng_key.as_deref(), elevation_exe)?;
+    Ok((unwrapped.key, unwrapped.bound_to_elevation))
 }
 
 /// Parse a DPAPI blob, look up its master key by GUID, and decrypt it.

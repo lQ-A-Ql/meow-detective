@@ -1,16 +1,20 @@
 use super::chrome::{decrypt_chromium_value, BrowserDecryption};
 use super::master_key::DecryptedMasterKey;
 use super::{
-    parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file, select_xor_constant,
-    unwrap_app_bound_key, CHROME_147_XOR_CONSTANT,
+    content_requires_cng, parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file,
+    unwrap_app_bound_key, AppBoundScheme, CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS,
 };
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use cbc::Encryptor;
+use chacha20poly1305::{ChaCha20Poly1305, Nonce as ChaChaNonce};
 use cipher::{BlockEncryptMut, KeyIvInit};
 use std::collections::HashMap;
+
+const FLAG1_AES_KEY: [u8; 32] = KNOWN_APP_BOUND_KEYS[0].key;
+const FLAG2_CHACHA_KEY: [u8; 32] = KNOWN_APP_BOUND_KEYS[1].key;
 
 fn build_chrome_key_blob(path: &str, content: &[u8]) -> Vec<u8> {
     let mut header = vec![0x02];
@@ -100,22 +104,25 @@ fn cng_private_key_validates_kdbm_layout() {
 }
 
 #[test]
-fn xor_constant_requires_exactly_one_occurrence_when_bound() {
-    let (constant, bound) = select_xor_constant(None).expect("constant table fallback");
-    assert_eq!(constant, CHROME_147_XOR_CONSTANT);
-    assert!(!bound);
-
+fn candidates_bind_to_elevation_binary_only_when_unique() {
     let mut exe = vec![0u8; 4096];
     exe[1024..1056].copy_from_slice(&CHROME_147_XOR_CONSTANT);
-    let (_, bound) = select_xor_constant(Some(&exe)).expect("bound constant");
-    assert!(bound);
+    let flag3 = build_flag3(&[0x42; 32], &[0x07; 32], &[0x01; 12]);
+
+    let unwrapped =
+        unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), Some(&exe)).expect("bound flag-3 unwrap");
+    assert!(unwrapped.bound_to_elevation);
+    assert_eq!(unwrapped.scheme, AppBoundScheme::CngXorAesGcm);
 
     let without = vec![0u8; 4096];
-    assert!(select_xor_constant(Some(&without)).is_err());
+    assert!(unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), Some(&without)).is_err());
 
     let mut twice = exe;
     twice[2048..2080].copy_from_slice(&CHROME_147_XOR_CONSTANT);
-    assert!(select_xor_constant(Some(&twice)).is_err());
+    assert!(unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), Some(&twice)).is_err());
+
+    let unbound = unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), None).expect("unbound unwrap");
+    assert!(!unbound.bound_to_elevation);
 }
 
 fn aes256_cbc_encrypt_no_padding(key: &[u8; 32], iv: &[u8; 16], plaintext: &[u8]) -> Vec<u8> {
@@ -157,19 +164,66 @@ fn flag3_unwrap_recovers_app_bound_key_and_authenticates() {
     let nonce = [0x01; 12];
     let flag3 = build_flag3(&cng_key, &app_bound_key, &nonce);
     assert_eq!(flag3.len(), 93);
+    assert!(content_requires_cng(&flag3));
 
-    let key = unwrap_app_bound_key(&cng_key, &flag3, &CHROME_147_XOR_CONSTANT)
-        .expect("unwrap app-bound key");
-    assert_eq!(key.as_slice(), &app_bound_key);
+    let unwrapped =
+        unwrap_app_bound_key(&flag3, Some(&cng_key), None).expect("unwrap app-bound key");
+    assert_eq!(unwrapped.key.as_slice(), &app_bound_key);
+    assert!(!unwrapped.bound_to_elevation);
 
     let mut tampered = flag3.clone();
     let last = tampered.len() - 1;
     tampered[last] ^= 0x01;
-    assert!(unwrap_app_bound_key(&cng_key, &tampered, &CHROME_147_XOR_CONSTANT).is_err());
+    assert!(unwrap_app_bound_key(&tampered, Some(&cng_key), None).is_err());
 
     let mut bad_flag = flag3;
     bad_flag[0] = 0x02;
-    assert!(unwrap_app_bound_key(&cng_key, &bad_flag, &CHROME_147_XOR_CONSTANT).is_err());
+    assert!(unwrap_app_bound_key(&bad_flag, Some(&cng_key), None).is_err());
+
+    assert!(
+        unwrap_app_bound_key(&build_flag3(&cng_key, &app_bound_key, &nonce), None, None).is_err()
+    );
+}
+
+fn build_direct_blob(flag: u8, key: &[u8; 32], plaintext: &[u8; 32], nonce: &[u8; 12]) -> Vec<u8> {
+    let ciphertext = match flag {
+        0x01 => Aes256Gcm::new_from_slice(key)
+            .expect("direct key")
+            .encrypt(Nonce::from_slice(nonce), plaintext.as_slice())
+            .expect("GCM encrypt"),
+        0x02 => ChaCha20Poly1305::new_from_slice(key)
+            .expect("direct key")
+            .encrypt(ChaChaNonce::from_slice(nonce), plaintext.as_slice())
+            .expect("ChaCha encrypt"),
+        _ => unreachable!("direct blob flags are 0x01/0x02"),
+    };
+    let mut blob = vec![flag];
+    blob.extend_from_slice(nonce);
+    blob.extend_from_slice(&ciphertext);
+    blob
+}
+
+#[test]
+fn flag1_and_flag2_direct_blobs_unwrap_with_known_keys() {
+    let app_bound_key = [0x07; 32];
+    let nonce = [0x02; 12];
+
+    let flag1 = build_direct_blob(0x01, &FLAG1_AES_KEY, &app_bound_key, &nonce);
+    assert_eq!(flag1.len(), 61);
+    assert!(!content_requires_cng(&flag1));
+    let unwrapped = unwrap_app_bound_key(&flag1, None, None).expect("flag-1 unwrap");
+    assert_eq!(unwrapped.key.as_slice(), &app_bound_key);
+    assert_eq!(unwrapped.scheme, AppBoundScheme::AesGcmDirect);
+
+    let flag2 = build_direct_blob(0x02, &FLAG2_CHACHA_KEY, &app_bound_key, &nonce);
+    let unwrapped = unwrap_app_bound_key(&flag2, None, None).expect("flag-2 unwrap");
+    assert_eq!(unwrapped.key.as_slice(), &app_bound_key);
+    assert_eq!(unwrapped.scheme, AppBoundScheme::ChaCha20Direct);
+
+    let mut tampered = flag1;
+    let last = tampered.len() - 1;
+    tampered[last] ^= 0x01;
+    assert!(unwrap_app_bound_key(&tampered, None, None).is_err());
 }
 
 #[test]

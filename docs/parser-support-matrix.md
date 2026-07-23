@@ -111,7 +111,7 @@ V2 长期执行与发布口径见：
 | JumpList | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
 | SRU | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
 | Thumbcache | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
-| Browser History | Windows analysis / cross-platform container parser | Experimental | Supported / GA | Chromium/Firefox parser 与生产提取链路已存在；仍需公开 medium fixture、expected.json、版本边界与加密字段说明。加密字段离线解密：v10/v11（Local State `encrypted_key` + 用户 DPAPI MasterKey）与 v20 App-Bound（Chrome 147 链路：`DPAPI_SYSTEM`→SYSTEM MasterKey、TBAL password-SHA1→用户 MasterKey、CNG `Google Chromekey1` + flag-3 + 版本绑定 XOR 常量）已在 liuyang_pc.E01 端到端验证；前置条件为 SYSTEM+SECURITY+SAM hive、用户与 S-1-5-18 Protect 目录、CNG SystemKeys 文件（elevation_service.exe 可选，缺失时 XOR 常量不绑定版本）。无 TBAL/明文/域备份私钥时用户 MasterKey 不可恢复，v20 降级为 Unsupported |
+| Browser History | Windows analysis / cross-platform container parser | Experimental | Supported / GA | Chromium/Firefox parser 与生产提取链路已存在；仍需公开 medium fixture、expected.json、版本边界与加密字段说明。加密字段离线解密：v10/v11（Local State `encrypted_key` + 用户 DPAPI MasterKey）与 v20 App-Bound 已在 liuyang_pc.E01 端到端验证。v20 按 Chrome key blob flag 覆盖三种方案：`0x01` AES-256-GCM 直接密钥（Chrome ~127-132）、`0x02` ChaCha20-Poly1305（133-136）、`0x03` CNG `Google Chromekey1` + XOR 包装（137+）；已知构建密钥见 `KNOWN_APP_BOUND_KEYS`，前置条件为 SYSTEM+SECURITY+SAM hive、用户与 S-1-5-18 Protect 目录、用户侧秘密（TBAL password-SHA1/明文/域备份私钥），flag-3 另需 CNG SystemKeys 文件（elevation_service.exe 可选，用于构建绑定）。无用户侧秘密时用户 MasterKey 不可恢复，v20 降级为 Unsupported |
 | Email extraction | 跨平台 | Supported | Supported / GA | public-small fixture 已覆盖 EML/EMLX/MBOX/PST/OST；medium fixture 规划中。加密 PST/OST 延后 |
 
 ## 8. V3 目标状态 (Linux / 容器邮件)

@@ -12,9 +12,10 @@ mod error;
 mod master_key;
 
 pub use app_bound::{
-    parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file, select_xor_constant,
-    unwrap_app_bound_key, ChromeKeyBlob, CngSystemKeyFile, CHROME_147_XOR_CONSTANT,
-    KSP_PRIVATE_KEY_ENTROPY, KSP_PROPERTY_ENTROPY,
+    content_requires_cng, parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file,
+    unwrap_app_bound_key, AppBoundKeyCandidate, AppBoundScheme, ChromeKeyBlob, CngSystemKeyFile,
+    UnwrappedAppBoundKey, CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS, KSP_PRIVATE_KEY_ENTROPY,
+    KSP_PROPERTY_ENTROPY,
 };
 pub use blob::{parse_dpapi_blob, DpapiBlob};
 pub use chrome::{BrowserDecryption, ChromiumDecryptor, ChromiumValueKind};
