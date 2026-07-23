@@ -1,0 +1,179 @@
+{
+  "events": [
+    {
+      "timestamp": "2017-07-12T17:16:28.214161+00:00",
+      "eventId": 6005,
+      "recordId": 2,
+      "provider": "EventLog",
+      "kind": "eventLogStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.",
+      "details": {
+        "Binary": "E107070003000C00110010001C00D6000000000000000000"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:16:05.539450+00:00",
+      "eventId": 12,
+      "recordId": 3,
+      "provider": "Microsoft-Windows-Kernel-General",
+      "kind": "operatingSystemStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "Kernel-General 12 candidate; indicates Windows completed the operating-system startup phase.",
+      "details": {
+        "BootMode": "0",
+        "BuildVersion": "15063",
+        "MajorVersion": "10",
+        "MinorVersion": "0",
+        "QfeVersion": "413",
+        "ServiceVersion": "0",
+        "StartTime": "2017-07-12T17:16:05.499259Z"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:17:45.433295+00:00",
+      "eventId": 6006,
+      "recordId": 168,
+      "provider": "EventLog",
+      "kind": "eventLogStopped",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "EventLog 6006 candidate; indicates the Event Log service stopped, not a direct shutdown assertion.",
+      "details": {
+        "Binary": "0100000000000000"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:17:44.948945+00:00",
+      "eventId": 1074,
+      "recordId": 169,
+      "provider": "User32",
+      "kind": "plannedShutdown",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "User32 1074 candidate; indicates a planned shutdown or restart event.",
+      "details": {
+        "param1": "C:\\Windows\\system32\\winlogon.exe (MINWINPC)",
+        "param2": "WIN-P4SIAA0SQCO",
+        "param3": "Operating System: Upgrade (Planned)",
+        "param4": "0x80020003",
+        "param5": "restart",
+        "param6": "",
+        "param7": "NT AUTHORITY\\SYSTEM"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:18:17.772384+00:00",
+      "eventId": 6005,
+      "recordId": 176,
+      "provider": "EventLog",
+      "kind": "eventLogStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.",
+      "details": {
+        "Binary": "E107070003000C0011001200110004030000000000000000"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:17:46.211351+00:00",
+      "eventId": 13,
+      "recordId": 179,
+      "provider": "Microsoft-Windows-Kernel-General",
+      "kind": "operatingSystemShutdown",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "Kernel-General 13 candidate; indicates Windows entered the operating-system shutdown phase.",
+      "details": {
+        "StopTime": "2017-07-12T17:17:46.211350Z"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:18:03.651022+00:00",
+      "eventId": 12,
+      "recordId": 180,
+      "provider": "Microsoft-Windows-Kernel-General",
+      "kind": "operatingSystemStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "Kernel-General 12 candidate; indicates Windows completed the operating-system startup phase.",
+      "details": {
+        "BootMode": "0",
+        "BuildVersion": "15063",
+        "MajorVersion": "10",
+        "MinorVersion": "0",
+        "QfeVersion": "413",
+        "ServiceVersion": "0",
+        "StartTime": "2017-07-12T17:18:03.495918Z"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:20:04.791341+00:00",
+      "eventId": 1074,
+      "recordId": 298,
+      "provider": "User32",
+      "kind": "plannedShutdown",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "User32 1074 candidate; indicates a planned shutdown or restart event.",
+      "details": {
+        "param1": "msiexec.exe",
+        "param2": "DESKTOP-2KGM189",
+        "param3": "No title for this reason could be found",
+        "param4": "0x80030002",
+        "param5": "restart",
+        "param6": "The Windows Installer initiated a system restart to complete or continue the configuration of 'VMware Tools'.",
+        "param7": "NT AUTHORITY\\SYSTEM"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:20:11.393977+00:00",
+      "eventId": 6006,
+      "recordId": 301,
+      "provider": "EventLog",
+      "kind": "eventLogStopped",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "EventLog 6006 candidate; indicates the Event Log service stopped, not a direct shutdown assertion.",
+      "details": {
+        "Binary": "0100000067FCFFFF"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:20:37.344883+00:00",
+      "eventId": 6005,
+      "recordId": 310,
+      "provider": "EventLog",
+      "kind": "eventLogStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.",
+      "details": {
+        "Binary": "E107070003000C0011001400250058010000000000000000"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:20:13.692276+00:00",
+      "eventId": 13,
+      "recordId": 313,
+      "provider": "Microsoft-Windows-Kernel-General",
+      "kind": "operatingSystemShutdown",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "Kernel-General 13 candidate; indicates Windows entered the operating-system shutdown phase.",
+      "details": {
+        "StopTime": "2017-07-12T17:20:13.692275Z"
+      }
+    },
+    {
+      "timestamp": "2017-07-12T17:20:28.617913+00:00",
+      "eventId": 12,
+      "recordId": 314,
+      "provider": "Microsoft-Windows-Kernel-General",
+      "kind": "operatingSystemStarted",
+      "sourcePath": "Windows/System32/winevt/Logs/System.evtx",
+      "note": "Kernel-General 12 candidate; indicates Windows completed the operating-system startup phase.",
+      "details": {
+        "BootMode": "0",
+        "BuildVersion": "15063",
+        "MajorVersion": "10",
+        "MinorVersion": "0",
+        "QfeVersion": "413",
+        "ServiceVersion": "0",
+        "StartTime": "2017-07-12T17:20:28.497091Z"
+      }
+    }
+  ],
+  "warnings": []
+}

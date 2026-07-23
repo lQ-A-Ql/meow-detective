@@ -73,5 +73,5 @@ fn evtx_fixture_expected_regression() {
     assert!(extraction
         .events
         .iter()
-        .all(|event| matches!(event.event_id, 6005 | 6006 | 6008 | 1074)));
+        .all(|event| matches!(event.event_id, 12 | 13 | 6005 | 6006 | 6008 | 1074)));
 }
