@@ -186,3 +186,46 @@ fn probe_all_channels_newest_records() {
         rows.len()
     );
 }
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn probe_final_shutdown_sequence_events() {
+    let fixture = std::env::var_os("FORENSICS_LIUYANG_E01_FIXTURE")
+        .map(PathBuf::from)
+        .expect("set FORENSICS_LIUYANG_E01_FIXTURE");
+    let mut image = E01Reader::open(&fixture).expect("open E01");
+    let probe = detect_image_filesystem(&mut image).expect("probe E01");
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(
+                candidate.kind,
+                app_services::datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("NTFS candidate");
+    let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture).expect("reopen E01"));
+    let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).expect("open NTFS");
+    let mut file = fs
+        .open_file("Windows/System32/winevt/Logs/System.evtx")
+        .expect("open System.evtx");
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).expect("read System.evtx");
+    let extraction = artifacts_windows::extract_boot_shutdown_events(
+        &bytes,
+        "Windows/System32/winevt/Logs/System.evtx",
+    )
+    .expect("boot extraction");
+    let mut events = extraction.events;
+    events.sort_by_key(|event| event.record_id.unwrap_or(0));
+    for event in events.iter().rev().take(16).rev() {
+        eprintln!(
+            "  record={:?} id={} kind={} ts={}",
+            event.record_id,
+            event.event_id,
+            event.kind.as_str(),
+            event.timestamp
+        );
+    }
+}
