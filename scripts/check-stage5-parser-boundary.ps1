@@ -95,13 +95,6 @@ $facadeGroups = @(
     )
   },
   @{
-    Capability = 'GQL parser'
-    Candidates = @(
-      'crates/gql/src/parser.rs',
-      'crates/gql/src/parser/mod.rs'
-    )
-  },
-  @{
     Capability = 'Linux journal parser'
     Candidates = @(
       'crates/artifacts-linux/src/journal.rs',
@@ -132,8 +125,7 @@ $crateRoots = @(
   'crates/fs-lvm/src',
   'crates/artifacts-windows/src',
   'crates/artifacts-linux/src',
-  'crates/containers-pst/src',
-  'crates/gql/src'
+  'crates/containers-pst/src'
 )
 
 $allSources = New-Object System.Collections.Generic.List[string]

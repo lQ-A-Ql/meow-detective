@@ -98,7 +98,7 @@
   真实数据验证为 `68.34..77.69s / 311MB`。`E:` 重新挂载后的单成员全链复跑为
   `92.673s / 537MB`，相同命令的本轮优化前结果为 `544.105s / 589MB`；
   semantic digest、精确行数、单事务提交和零普通文件行均保持不变。
-- Stage 7 后续清理事实：模块 baseline 0 行、正式临时例外 5 行、函数 baseline 9 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
+- Stage 7 后续清理事实：模块 baseline 0 行、正式临时例外 4 行、函数 baseline 8 行（历史硬债务 0 个，新代码硬上限 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 
 ## 更新规则

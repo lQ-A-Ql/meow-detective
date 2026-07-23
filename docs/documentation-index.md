@@ -83,18 +83,18 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 36 | `crates/`（Tauri shell 为独立 workspace package） |
+| Rust workspace crate | 28 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 103 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 28 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
-| SQLite migration scripts | 65 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0041 + source_001-source_023 + staging_001) |
+| SQLite migration scripts | 66 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0041 + source_001-source_024 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 90 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 8 | 历史 V3 文档清单；当前支持事实以 parser matrix 为准 |
 | V3 保留新增 crate | 2 | `crates/containers-pst/`, `crates/artifacts-linux/` |
 | V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
-| V4 保留新增 crate | 4 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/exchange/` |
+| V4 保留新增 crate | 3 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/` |
 | Rust tests | ~2,061 | `cargo test --workspace` 汇总 (2026-06 校准) |
 
 ## 3. 路径级事实校准
@@ -104,7 +104,7 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 88 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 103 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 65 | SQLite migration 脚本 (0001-0041 + source_001-source_023 + staging_001) |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 66 | SQLite migration 脚本 (0001-0041 + source_001-source_024 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |
@@ -177,7 +177,7 @@
 
 - V4 主计划位于 `docs/v4-plan.md`，作为历史阶段设计保留；其中 APFS/HFS+ 设计不再构成当前产品范围或支持声明
 - V4 阶段为 V4-1(实体规范化与合并引擎) → V4-2(多OS文件系统crate) → V4-3(AI辅助调查) → V4-4(调查交换与保管链) → V4-5(实时流式采集)
-- V4 当前保留 ext4、XFS、Btrfs 三个 Linux 文件系统 crate 和 exchange 交换 crate；APFS/HFS+ reader 已退出生产边界
+- V4 当前保留 ext4、XFS、Btrfs 三个 Linux 文件系统 crate 和 `app-services/src/entity_resolution/` 实体解析；exchange 交换 crate 已退役（无消费者，随孤儿 crate 清理移除）；APFS/HFS+ reader 已退出生产边界
 - V4 文档入口：`docs/v4-plan.md`（主计划）
 - V4 参考文档（待创建）：`docs/v4-entity-resolution.md`、`docs/v4-multi-os-filesystems.md`、`docs/v4-ai-models.md`、`docs/v4-ai-privacy.md`、`docs/v4-release-signing.md`、`docs/v4-release-checklist.md`
 - V4 将在完工后替代 V2 治理工作台为 `/v4`，引入实体解析统计、跨案关联指标、文件系统覆盖、AI使用审计、保管链验证、流式采集状态等信号

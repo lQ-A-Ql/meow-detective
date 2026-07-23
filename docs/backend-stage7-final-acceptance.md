@@ -44,8 +44,8 @@ new SQL must not return to Tauri commands.
 | Metric | Before Stage 5/6 | Stage 7 result | Policy |
 |---|---:|---:|---|
 | Module-size baseline rows | 83 | 0 | Header-only baseline; no new migration debt |
-| Function-size baseline rows | 65 | 9 | Existing identities may only shrink or be deleted |
-| Historic functions above 150 lines | not separately closed | 1 | Locked; no new function above 100 lines |
+| Function-size baseline rows | 65 | 8 | Existing identities may only shrink or be deleted |
+| Historic functions above 150 lines | not separately closed | 0 | Locked; no new function above 100 lines |
 | Test-layout baseline rows | 206 | 0 | Header-only baseline; no new production test bodies |
 | Formal module exceptions | 0 | 5 | Reviewed normal-module exceptions expire on 2026-09-30 |
 
