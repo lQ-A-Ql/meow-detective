@@ -1,9 +1,9 @@
 use crate::analysis_service::candidates::find_candidate_by_path_suffix;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::{
-    entry_provenance, registry_field_provenance, EVTX_BOOT_SHUTDOWN_PARSER,
-    REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
+    entry_provenance, registry_field_provenance, REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
 };
+use crate::analysis_service::system_info_boot::inspect_evtx_boot_source;
 use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
 use domain::{FileEntry, FileEntryId};
 use rusqlite::Connection;
@@ -23,14 +23,15 @@ struct SystemInfoExtraction {
     organization: Option<String>,
     product_id: Option<String>,
     timezone: Option<String>,
+    shutdown_time: Option<String>,
     network_adapters: Vec<AnalysisNetworkAdapterDto>,
     boot_history: Vec<AnalysisBootRecordDto>,
     field_provenance: Vec<AnalysisFieldProvenanceDto>,
 }
 
-struct AnalysisProvenanceContext<'a> {
-    parsed_at: &'a str,
-    data_source_id: Option<&'a str>,
+pub(crate) struct AnalysisProvenanceContext<'a> {
+    pub(crate) parsed_at: &'a str,
+    pub(crate) data_source_id: Option<&'a str>,
 }
 
 impl SystemInfoExtraction {
@@ -121,6 +122,7 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
         network_adapters: extraction.network_adapters,
         boot_history: extraction.boot_history,
         timezone: extraction.timezone,
+        shutdown_time: extraction.shutdown_time,
         language: None,
         status,
         warnings,
@@ -254,6 +256,19 @@ fn inspect_system_registry_fields(
         &mut extraction.timezone,
         &mut extraction.field_provenance,
     );
+    let mut warnings = info.warnings;
+    match artifacts_windows::extract_shutdown_time_from_system_hive(bytes, &entry.path) {
+        Ok(entries) => {
+            if let Some(entry) = entries.into_iter().next() {
+                parsed_any = true;
+                extraction.shutdown_time = Some(entry.shutdown_time);
+            }
+        }
+        Err(error) => warnings.push(format!(
+            "{} shutdown time parsing failed: {error}",
+            entry.path
+        )),
+    }
     match artifacts_windows::extract_network_adapters_from_system_hive(bytes, &entry.path) {
         Ok(adapters) => {
             parsed_any |= !adapters.is_empty();
@@ -267,10 +282,9 @@ fn inspect_system_registry_fields(
                     dhcp_server: adapter.dhcp_server,
                 })
                 .collect();
-            (parsed_any, info.warnings)
+            (parsed_any, warnings)
         }
         Err(error) => {
-            let mut warnings = info.warnings;
             warnings.push(format!(
                 "{} network adapter parsing failed: {error}",
                 entry.path
@@ -382,7 +396,7 @@ fn record_missing_registry_hive(
     );
 }
 
-fn push_unavailable_provenance(
+pub(crate) fn push_unavailable_provenance(
     provenance: &mut Vec<AnalysisProvenanceDto>,
     data_source_id: Option<&str>,
     artifact_path: &str,
@@ -415,80 +429,4 @@ fn assign_registry_field(
     *target = Some(parsed.value.clone());
     field_provenance.push(registry_field_provenance(field, parsed));
     true
-}
-
-fn inspect_evtx_boot_source<E: std::fmt::Display>(
-    entry: Option<&FileEntry>,
-    context: &AnalysisProvenanceContext<'_>,
-    read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
-    warnings: &mut Vec<String>,
-    provenance: &mut Vec<AnalysisProvenanceDto>,
-    boot_history: &mut Vec<AnalysisBootRecordDto>,
-) {
-    match entry {
-        Some(entry) => {
-            let mut parser_warnings = Vec::new();
-            let mut parsed_any = false;
-            match read_header_fn(&entry.id, artifacts_windows::MAX_EVTX_ANALYSIS_BYTES) {
-                Ok(bytes) => {
-                    match artifacts_windows::extract_boot_shutdown_events(&bytes, &entry.path) {
-                        Ok(extraction) => {
-                            parser_warnings.extend(extraction.warnings);
-                            if !extraction.events.is_empty() {
-                                parsed_any = true;
-                            }
-                            let event_provenance = entry_provenance(
-                                entry,
-                                EVTX_BOOT_SHUTDOWN_PARSER,
-                                context.parsed_at,
-                                AnalysisParseStatusDto::Parsed,
-                                Vec::new(),
-                            );
-                            boot_history.extend(extraction.events.into_iter().map(|event| {
-                                AnalysisBootRecordDto {
-                                    timestamp: event.timestamp,
-                                    boot_type: event.kind.as_str().to_string(),
-                                    source: event.source_path,
-                                    event_id: Some(event.event_id),
-                                    record_id: event.record_id,
-                                    note: Some(event.note),
-                                    details: event.details,
-                                    provenance: event_provenance.clone(),
-                                }
-                            }));
-                        }
-                        Err(err) => parser_warnings.push(err.to_string()),
-                    }
-                }
-                Err(err) => parser_warnings.push(format!("{} 读取失败: {}", entry.path, err)),
-            }
-            provenance.push(entry_provenance(
-                entry,
-                EVTX_BOOT_SHUTDOWN_PARSER,
-                context.parsed_at,
-                if parsed_any {
-                    AnalysisParseStatusDto::Parsed
-                } else {
-                    AnalysisParseStatusDto::NotParsed
-                },
-                parser_warnings,
-            ));
-        }
-        None => {
-            let artifact_path = "Windows/System32/winevt/Logs/System.evtx";
-            let warning = format!(
-                "未在证据文件目录中发现 {}；EVTX boot/shutdown 解析不可用。",
-                artifact_path
-            );
-            warnings.push(warning.clone());
-            push_unavailable_provenance(
-                provenance,
-                context.data_source_id,
-                artifact_path,
-                EVTX_BOOT_SHUTDOWN_PARSER,
-                context.parsed_at,
-                warning,
-            );
-        }
-    }
 }

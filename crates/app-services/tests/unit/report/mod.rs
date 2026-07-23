@@ -748,6 +748,7 @@ fn analysis_rows_include_field_and_boot_provenance() {
             },
         }],
         timezone: Some("China Standard Time".to_string()),
+        shutdown_time: Some("2026-06-01T09:00:00Z".to_string()),
         language: None,
         status: AnalysisParseStatusDto::Parsed,
         warnings: Vec::new(),

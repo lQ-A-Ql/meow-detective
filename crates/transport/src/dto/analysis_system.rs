@@ -27,6 +27,8 @@ pub struct AnalysisSystemInfoDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub shutdown_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     pub status: AnalysisParseStatusDto,
     pub warnings: Vec<String>,

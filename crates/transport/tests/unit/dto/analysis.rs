@@ -35,6 +35,7 @@ fn system_info_serializes_camel_case_and_status() {
             },
         }],
         timezone: None,
+        shutdown_time: Some("2026-01-01T01:00:00Z".to_string()),
         language: None,
         status: AnalysisParseStatusDto::NotParsed,
         warnings: vec!["parser unavailable".to_string()],
@@ -57,6 +58,7 @@ fn system_info_serializes_camel_case_and_status() {
 
     let json = serde_json::to_value(dto).unwrap();
     assert_eq!(json["computerName"], "host");
+    assert_eq!(json["shutdownTime"], "2026-01-01T01:00:00Z");
     assert_eq!(
         json["networkAdapters"][0]["macAddress"],
         "00:11:22:33:44:55"

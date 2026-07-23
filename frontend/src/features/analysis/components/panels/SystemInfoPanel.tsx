@@ -49,6 +49,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
           <InfoCard label="注册用户" value={info.registeredOwner} />
           <InfoCard label="时区" value={info.timezone} />
           <InfoCard label="安装日期" value={info.installDate} />
+          <InfoCard label="最后关机时间" value={info.shutdownTime} />
         </div>
       </section>
 

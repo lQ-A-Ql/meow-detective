@@ -35,6 +35,7 @@ export interface AnalysisSystemInfo {
   networkAdapters: AnalysisNetworkAdapter[];
   bootHistory: AnalysisBootRecord[];
   timezone?: string;
+  shutdownTime?: string;
   language?: string;
   status: AnalysisParseStatus;
   warnings: string[];
