@@ -5,7 +5,7 @@ import {
   useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
 import type { FileEntryRow } from '@/types/models';
-import type { FilePreviewKind } from '@/features/files/components/FilePreviewPanel';
+import type { FilePreviewKind } from '@/components/preview/FilePreviewTabs';
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);

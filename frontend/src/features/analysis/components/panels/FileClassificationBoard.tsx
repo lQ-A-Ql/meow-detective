@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
-import { FilePreviewPanel, type FilePreviewKind } from '@/features/files/components/FilePreviewPanel';
+import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
+import { FilePreviewDialog } from '@/components/preview/FilePreviewDialog';
+import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
 import {
   useDocumentPreview,
   useFileHandle,
@@ -28,8 +28,6 @@ import {
   WarningList,
 } from './helpers';
 
-type ViewerTab = 'metadata' | 'text' | 'hex' | 'preview';
-
 const FAMILY_KEY: Record<string, string> = {
   documents: 'Documents',
   images: 'Images',
@@ -44,7 +42,7 @@ const FAMILY_KEY: Record<string, string> = {
 
 const TEXT_EXTENSIONS = new Set(['log', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'htm', 'evtx']);
 
-function defaultTabFor(row: ClassifiedFileRow): ViewerTab {
+function defaultTabFor(row: ClassifiedFileRow): PreviewViewerTab {
   const ext = row.name.split('.').pop()?.toLowerCase() ?? '';
   if (row.magicType && ['JPEG', 'PNG', 'GIF', 'BMP', 'WEBP', 'ICO'].includes(row.magicType)) {
     return 'preview';
@@ -76,27 +74,28 @@ function toFileEntryRow(row: ClassifiedFileRow): FileEntryRow {
   };
 }
 
+function previewKindFor(row: ClassifiedFileRow): FilePreviewKind | undefined {
+  const ext = row.name.split('.').pop()?.toLowerCase() ?? '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'].includes(ext)) return 'image';
+  if (['mp4', 'webm', 'avi', 'mkv'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(ext)) return 'audio';
+  if (['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3'].includes(ext)) {
+    return 'document';
+  }
+  return undefined;
+}
+
 export function FileClassificationBoard({ board }: { board?: FileClassificationBoardData }) {
   const [selected, setSelected] = useState<ClassifiedFileRow | null>(null);
-  const [viewerTab, setViewerTab] = useState<ViewerTab>('hex');
+  const [viewerTab, setViewerTab] = useState<PreviewViewerTab>('hex');
   const selectedFile = useMemo(
     () => (selected ? toFileEntryRow(selected) : undefined),
     [selected],
   );
-  // Preview state is composed from the shared primitive hooks directly so
-  // this board stays decoupled from react-router (the analysis workspace is
-  // also rendered in non-router test contexts).
-  const previewKind = useMemo<FilePreviewKind | undefined>(() => {
-    if (!selected) return undefined;
-    const ext = selected.name.split('.').pop()?.toLowerCase() ?? '';
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'].includes(ext)) return 'image';
-    if (['mp4', 'webm', 'avi', 'mkv'].includes(ext)) return 'video';
-    if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(ext)) return 'audio';
-    if (['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3'].includes(ext)) {
-      return 'document';
-    }
-    return undefined;
-  }, [selected]);
+  const previewKind = useMemo(
+    () => (selected ? previewKindFor(selected) : undefined),
+    [selected],
+  );
   const hexEnabled = viewerTab === 'hex' && Boolean(selectedFile?.id);
   const textEnabled = viewerTab === 'text' && Boolean(selectedFile?.id);
   const imageEnabled = viewerTab === 'preview' && previewKind === 'image' && Boolean(selectedFile?.id);
@@ -194,63 +193,50 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
             const Icon = CATEGORY_ICONS[iconKey] ?? CATEGORY_ICONS.Other;
             const color = CATEGORY_COLORS[iconKey] ?? CATEGORY_COLORS.Other;
             return (
-              <section key={group.category} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+              <CollapsibleSection
+                key={group.category}
+                className="rounded-none border border-forensics-border bg-forensics-surface p-4"
+                contentClassName="mt-3 space-y-3"
+                title={
+                  <>
                     <Icon size={17} style={{ color }} />
                     <h4 className="text-[13px] font-light text-forensics-text">{group.displayName}</h4>
                     <span className="text-[11px] text-forensics-muted-lighter">
                       {group.fileCount} 个 · {formatSize(group.totalSize)}
                     </span>
-                  </div>
-                  <StatusPill status={board.status} />
-                </div>
-                <div className="space-y-3">
-                  {group.subcategories.map((sub) => (
-                    <SubcategoryTable key={sub.name} sub={sub} columns={columns} />
-                  ))}
-                </div>
-              </section>
+                  </>
+                }
+                headerExtra={<StatusPill status={board.status} />}
+              >
+                {group.subcategories.map((sub) => (
+                  <SubcategoryTable key={sub.name} sub={sub} columns={columns} />
+                ))}
+              </CollapsibleSection>
             );
           })}
         </div>
       )}
 
-      {selected && selectedFile ? (
-        <section className="rounded-none border border-forensics-border bg-forensics-surface">
-          <div className="flex items-center justify-between border-b border-forensics-border px-3 py-1.5">
-            <div className="truncate text-[11px] text-forensics-text">
-              预览：<span className="font-mono">{selected.name}</span>
-              <span className="ml-2 text-forensics-muted-light">{selected.path}</span>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-6 w-6 p-0"
-              onClick={() => setSelected(null)}
-              title="关闭预览"
-            >
-              <X size={13} />
-            </Button>
-          </div>
-          <FilePreviewPanel
-            viewerTab={viewerTab}
-            setViewerTab={setViewerTab}
-            viewer={viewerTab === 'hex' ? viewer : undefined}
-            fileHandle={fileHandle}
-            previewKind={previewKind}
-            onHexJumpInputChange={setJumpOffsetInput}
-            onHexJump={jumpToOffset}
-            onLoadNextHexRange={loadNextRange}
-            onLoadPreviousHexRange={loadPreviousRange}
-            textPreview={textPreview}
-            imagePreview={imagePreview}
-            mediaUrl={mediaUrl}
-            documentPreview={documentPreview}
-            selectedFile={selectedFile}
-          />
-        </section>
-      ) : null}
+      <FilePreviewDialog
+        open={Boolean(selected && selectedFile)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+        viewerTab={viewerTab}
+        setViewerTab={setViewerTab}
+        viewer={viewerTab === 'hex' ? viewer : undefined}
+        fileHandle={fileHandle}
+        previewKind={previewKind}
+        onHexJumpInputChange={setJumpOffsetInput}
+        onHexJump={jumpToOffset}
+        onLoadNextHexRange={loadNextRange}
+        onLoadPreviousHexRange={loadPreviousRange}
+        textPreview={textPreview}
+        imagePreview={imagePreview}
+        mediaUrl={mediaUrl}
+        documentPreview={documentPreview}
+        selectedFile={selectedFile}
+      />
     </div>
   );
 }
@@ -283,4 +269,3 @@ function SubcategoryTable({
     </div>
   );
 }
-

@@ -24,6 +24,10 @@ pub fn classify_source_files(
 
 /// Two-level classification board: magic-byte detection on the largest
 /// `magic_read_limit` files, extension/path inference for the rest.
+///
+/// Emitted row ids are wrapped into the global `ds:<dataSourceId>:<localId>`
+/// form so preview/viewer commands can resolve them through the source-scoped
+/// file-id path.
 pub fn get_file_classification_board(
     case_conn: &Connection,
     case_root: &Path,
@@ -32,7 +36,21 @@ pub fn get_file_classification_board(
     magic_read_limit: u32,
 ) -> Result<FileClassificationBoardDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
-    build_file_classification_board(&source.connection, magic_read_limit, |file_id| {
-        read_file_header_by_id(&source.connection, file_id, MAGIC_HEADER_BYTES)
-    })
+    let mut board =
+        build_file_classification_board(&source.connection, magic_read_limit, |file_id| {
+            read_file_header_by_id(&source.connection, file_id, MAGIC_HEADER_BYTES)
+        })?;
+    for group in &mut board.groups {
+        for subcategory in &mut group.subcategories {
+            for file in &mut subcategory.files {
+                file.file_id = crate::source_db::GlobalFileId::new(
+                    data_source_id.clone(),
+                    domain::FileEntryId(file.file_id.clone()),
+                )
+                .encode()
+                .0;
+            }
+        }
+    }
+    Ok(board)
 }
