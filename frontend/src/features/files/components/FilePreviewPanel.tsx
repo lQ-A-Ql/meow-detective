@@ -18,6 +18,7 @@ import type {
   ImagePreviewResponse,
   MediaPreview,
   ViewerHandle,
+  DocumentPreviewResponse,
 } from '@/types/models';
 
 function formatBytes(bytes?: number) {
@@ -66,7 +67,7 @@ function LargeMediaFallback({
   );
 }
 
-export type FilePreviewKind = 'image' | 'video' | 'audio';
+export type FilePreviewKind = 'image' | 'video' | 'audio' | 'document';
 
 export interface FilePreviewPanelProps {
   viewerTab: 'metadata' | 'text' | 'hex' | 'preview';
@@ -81,6 +82,7 @@ export interface FilePreviewPanelProps {
   textPreview: TextPreviewResponse | null | undefined;
   imagePreview: ImagePreviewResponse | null | undefined;
   mediaUrl: MediaPreview | null | undefined;
+  documentPreview: DocumentPreviewResponse | null | undefined;
   selectedFile: FileEntryRow | undefined;
   previewError?: ApiErrorDto | null;
   onRetryPreview?: () => void;
@@ -99,6 +101,7 @@ export function FilePreviewPanel({
   textPreview,
   imagePreview,
   mediaUrl,
+  documentPreview,
   selectedFile,
   previewError,
   onRetryPreview,
@@ -260,6 +263,45 @@ export function FilePreviewPanel({
                   );
                 }
                 return <div className="flex items-center justify-center h-full text-forensics-muted-light">加载图片预览...</div>;
+              }
+
+              // 文档预览（PDF / Office / SQLite）
+              if (previewKind === 'document') {
+                if (documentPreview) {
+                  return (
+                    <div className="h-full overflow-auto px-3 py-2">
+                      <div className="mb-2 flex items-center gap-2 text-[11px] text-forensics-muted">
+                        <span className="rounded bg-forensics-info-bg px-1.5 py-0.5 uppercase">{documentPreview.kind}</span>
+                        <span>{documentPreview.summary}</span>
+                        {documentPreview.truncated ? <span>（内容已按预览上限截断）</span> : null}
+                      </div>
+                      {documentPreview.warnings?.length ? (
+                        <div className="mb-2 text-[10px] text-forensics-warning-text">
+                          {documentPreview.warnings.slice(0, 3).map((warning) => (
+                            <div key={warning}>{warning}</div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {documentPreview.sections.length === 0 ? (
+                        <div className="flex h-32 items-center justify-center text-forensics-muted-light">
+                          未提取到可读文本内容
+                        </div>
+                      ) : (
+                        documentPreview.sections.map((section, index) => (
+                          <div key={`${section.title}-${index}`} className="mb-3">
+                            <div className="mb-1 border-b border-forensics-border text-[11px] font-medium text-forensics-text">
+                              {section.title}
+                            </div>
+                            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-forensics-text-secondary">
+                              {section.lines.join('\n')}
+                            </pre>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                }
+                return <div className="flex items-center justify-center h-full text-forensics-muted-light">加载文档预览...</div>;
               }
               
               // 视频预览

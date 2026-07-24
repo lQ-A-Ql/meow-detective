@@ -147,6 +147,7 @@ export function FileBrowser() {
             textPreview={fb.textPreview}
             imagePreview={fb.imagePreview}
             mediaUrl={fb.mediaUrl}
+            documentPreview={fb.documentPreview}
             selectedFile={fb.selectedFile}
           />
         </div>

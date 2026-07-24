@@ -188,6 +188,7 @@ export function useFileBrowserModel() {
     textPreview: preview.textPreview,
     imagePreview: preview.imagePreview,
     mediaUrl: preview.mediaUrl,
+    documentPreview: preview.documentPreview,
     selectedFile,
     activeDirectoryPath: pagination.activeDirectoryPath,
     currentDirectory: tree.currentDirectory,

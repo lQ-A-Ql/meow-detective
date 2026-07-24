@@ -366,6 +366,26 @@ pub fn image_preview_for_source_case(
     )
 }
 
+/// Structured preview for document-like files (PDF, Office Open XML, SQLite).
+pub fn document_preview_for_source_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    file_id: &str,
+) -> Result<transport::dto::DocumentPreviewDto, FileServiceError> {
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
+    crate::file_service::viewer::document_preview_for_file(
+        scoped_context(
+            &source_conn,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+        ),
+        &global_id.local_id.0,
+    )
+}
+
 pub fn media_preview_plan_for_source_case(
     case_conn: &Connection,
     case_root: &Path,

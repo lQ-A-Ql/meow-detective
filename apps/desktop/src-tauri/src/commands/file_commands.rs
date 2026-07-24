@@ -18,7 +18,7 @@ pub use recovery::{
     run_deleted_recovery,
 };
 pub use viewer::{
-    close_file_handle, get_image_preview, get_text_preview, open_file_handle,
+    close_file_handle, get_document_preview, get_image_preview, get_text_preview, open_file_handle,
     open_file_handle_request, read_file_range,
 };
 

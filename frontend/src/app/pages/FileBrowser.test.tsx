@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   textPreview: vi.fn(),
   imagePreview: vi.fn(),
   mediaUrl: vi.fn(),
+  documentPreview: vi.fn(),
   extractMutate: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
@@ -73,6 +74,7 @@ vi.mock('@/features/files/hooks', () => ({
   useTextPreview: mocks.textPreview,
   useImagePreview: mocks.imagePreview,
   useMediaUrl: mocks.mediaUrl,
+  useDocumentPreview: mocks.documentPreview,
 }));
 
 vi.mock('@/hooks/use-resizable-panel', () => ({
@@ -270,6 +272,7 @@ describe('FileBrowser media preview', () => {
     mocks.textPreview.mockReturnValue(queryState(null));
     mocks.imagePreview.mockReturnValue(queryState(null));
     mocks.mediaUrl.mockReturnValue(queryState(null));
+    mocks.documentPreview.mockReturnValue(queryState(null));
   });
 
   it('enables only the hex preview chain on the hex tab', () => {

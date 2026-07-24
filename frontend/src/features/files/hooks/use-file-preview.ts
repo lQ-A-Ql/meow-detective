@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   useExtractFile, useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
-  useTextPreview,
+  useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
 import type { FileEntryRow } from '@/types/models';
 import type { FilePreviewKind } from '@/features/files/components/FilePreviewPanel';
@@ -10,6 +10,9 @@ import type { FilePreviewKind } from '@/features/files/components/FilePreviewPan
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg']);
+const DOCUMENT_EXTENSIONS = new Set([
+  'pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3',
+]);
 
 function getPreviewKindFromExtension(ext?: string): FilePreviewKind | undefined {
   const normalized = ext?.toLowerCase().replace(/^\./, '');
@@ -17,6 +20,7 @@ function getPreviewKindFromExtension(ext?: string): FilePreviewKind | undefined 
   if (IMAGE_EXTENSIONS.has(normalized)) return 'image';
   if (VIDEO_EXTENSIONS.has(normalized)) return 'video';
   if (AUDIO_EXTENSIONS.has(normalized)) return 'audio';
+  if (DOCUMENT_EXTENSIONS.has(normalized)) return 'document';
   return undefined;
 }
 
@@ -66,6 +70,8 @@ export function useFilePreview({
     viewerTab === 'preview' &&
     (previewKind === 'video' || previewKind === 'audio') &&
     Boolean(selectedFile?.id);
+  const documentPreviewEnabled =
+    viewerTab === 'preview' && previewKind === 'document' && Boolean(selectedFile?.id);
   const {
     data: viewer,
     setJumpOffsetInput,
@@ -76,6 +82,7 @@ export function useFilePreview({
   const { data: textPreview } = useTextPreview(selectedFile?.id, textPreviewEnabled);
   const { data: imagePreview } = useImagePreview(selectedFile?.id, imagePreviewEnabled);
   const { data: mediaUrl } = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
+  const { data: documentPreview } = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
   const extractFile = useExtractFile();
 
   const onViewTimeline = () => {
@@ -97,6 +104,7 @@ export function useFilePreview({
     textPreview,
     imagePreview,
     mediaUrl,
+    documentPreview,
     extractFile,
     onViewTimeline,
   };

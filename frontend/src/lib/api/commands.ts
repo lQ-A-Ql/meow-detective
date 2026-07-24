@@ -30,6 +30,7 @@ export const COMMANDS = {
     CANCEL_IMPORT: 'cancel_import',
     GET_TEXT_PREVIEW: 'get_text_preview',
     GET_IMAGE_PREVIEW: 'get_image_preview',
+    GET_DOCUMENT_PREVIEW: 'get_document_preview',
     GET_MEDIA_URL: 'get_media_url',
     READ_MEDIA_RANGE: 'read_media_range',
     EXTRACT_FILE: 'extract_file',

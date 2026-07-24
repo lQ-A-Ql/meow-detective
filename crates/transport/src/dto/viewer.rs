@@ -68,6 +68,36 @@ pub struct TextPreviewDto {
     pub hex_dump: Option<String>,
 }
 
+/// A titled text section inside a document preview (page, sheet, table, …).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentSectionDto {
+    /// Section title (e.g. "Page 1", "Sheet: Summary", "Table: logins")
+    pub title: String,
+    /// Bounded text lines of the section
+    pub lines: Vec<String>,
+}
+
+/// Structured preview for document-like files (PDF, Office Open XML, SQLite).
+///
+/// This is a bounded text extraction, not a layout renderer; binary payloads
+/// and images are never inlined.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPreviewDto {
+    /// Document kind: pdf | docx | xlsx | pptx | sqlite
+    pub kind: String,
+    /// Short summary (e.g. "12 pages", "3 sheets, 2 tables read")
+    pub summary: String,
+    /// Bounded sections
+    pub sections: Vec<DocumentSectionDto>,
+    /// Whether content was truncated by the preview bounds
+    pub truncated: bool,
+    /// Non-fatal per-part warnings
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
 /// Image preview DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

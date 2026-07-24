@@ -107,7 +107,7 @@ fn oversized_media_preview_returns_protocol_plan_without_host_path() {
             else {
                 panic!("large media should use protocol delivery");
             };
-            assert_eq!(mime_type, "application/octet-stream");
+            assert_eq!(mime_type, "video/mp4");
             assert_eq!(size, oversized.len() as u64);
             assert!(can_read_ranges);
             Ok(())

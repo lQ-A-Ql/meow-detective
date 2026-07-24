@@ -3,8 +3,8 @@ use tauri::State;
 use transport::{
     commands::OpenFileHandleRequest,
     dto::{
-        ImagePreviewDto, TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto,
-        ViewerRangeResponseDto,
+        DocumentPreviewDto, ImagePreviewDto, TextPreviewDto, ViewerHandleDto,
+        ViewerRangeRequestDto, ViewerRangeResponseDto,
     },
     CommandError,
 };
@@ -101,6 +101,28 @@ pub async fn get_image_preview(
     tauri::async_runtime::spawn_blocking(move || {
         let connection = crate::commands::command_support::get_case_connection(&app_state)?;
         image_preview_for_file(&app_state, &connection, &file_id)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get a structured document preview (PDF, Office Open XML, SQLite).
+#[tauri::command]
+pub async fn get_document_preview(
+    state: State<'_, AppState>,
+    file_id: String,
+) -> Result<DocumentPreviewDto, CommandError> {
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let active = crate::commands::command_support::require_active_case(&app_state)?;
+        file_service::document_preview_for_source_case(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &file_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

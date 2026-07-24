@@ -92,3 +92,16 @@ export interface ImagePreviewResponse {
   height: number;
   size: number;
 }
+
+export interface DocumentSection {
+  title: string;
+  lines: string[];
+}
+
+export interface DocumentPreviewResponse {
+  kind: string;
+  summary: string;
+  sections: DocumentSection[];
+  truncated: boolean;
+  warnings?: string[];
+}

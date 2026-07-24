@@ -10,6 +10,7 @@ import {
   getFileTree,
   getTextPreview,
   getImagePreview,
+  getDocumentPreview,
   getMediaUrl,
   readMediaRange,
   importDataSource,
@@ -381,6 +382,19 @@ export function useImagePreview(fileId?: string, enabled = true) {
 }
 
 /**
+ * Hook for structured document preview (PDF, Office Open XML, SQLite).
+ */
+export function useDocumentPreview(fileId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['files', 'document', fileId],
+    enabled: Boolean(fileId) && enabled,
+    retry: false,
+    queryFn: async () => {
+      if (!fileId) return null;
+      return await getDocumentPreview(fileId);
+    },
+  });
+}/**
  * Hook to get media URL for video/audio playback.
  * Returns an inline data URL for bounded media previews.
  */

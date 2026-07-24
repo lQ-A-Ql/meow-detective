@@ -154,3 +154,36 @@ fn media_range_request_rejects_zero_length() {
 
     assert!(dto.validate().is_err());
 }
+
+#[test]
+fn test_document_preview_dto_serialization() {
+    let dto = DocumentPreviewDto {
+        kind: "sqlite".to_string(),
+        summary: "2 tables".to_string(),
+        sections: vec![DocumentSectionDto {
+            title: "Table: logins".to_string(),
+            lines: vec![
+                "id | url | username".to_string(),
+                "1 | http://a | admin".to_string(),
+            ],
+        }],
+        truncated: true,
+        warnings: vec![],
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    assert_eq!(json["kind"], "sqlite");
+    assert_eq!(json["summary"], "2 tables");
+    assert_eq!(json["sections"][0]["title"], "Table: logins");
+    assert_eq!(json["truncated"], true);
+    assert!(json.get("warnings").is_none());
+
+    let empty = DocumentPreviewDto {
+        kind: "pdf".to_string(),
+        summary: String::new(),
+        sections: Vec::new(),
+        truncated: false,
+        warnings: Vec::new(),
+    };
+    let json = serde_json::to_value(&empty).unwrap();
+    assert_eq!(json["sections"].as_array().unwrap().len(), 0);
+}

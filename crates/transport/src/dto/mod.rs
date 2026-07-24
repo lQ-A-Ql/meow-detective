@@ -131,7 +131,7 @@ pub use v3_governance::{
     RulePackStatusDto, V3GovernanceSnapshotDto,
 };
 pub use viewer::{
-    ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
-    TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
-    MAX_VIEWER_RANGE_LENGTH,
+    DocumentPreviewDto, DocumentSectionDto, ImagePreviewDto, MediaPreviewModeDto,
+    MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
+    ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
 };

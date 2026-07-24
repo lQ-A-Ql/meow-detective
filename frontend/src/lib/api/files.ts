@@ -8,6 +8,7 @@ import {
   DeletedRecoveryExport,
   DeletedRecoveryPage,
   DeletedRecoveryRun,
+  DocumentPreviewResponse,
   ImagePreviewResponse,
   ImportDataSourceRequest,
   MediaRangeRequest,
@@ -100,6 +101,14 @@ export async function getTextPreview(fileId: string, maxBytes?: number): Promise
  */
 export async function getImagePreview(fileId: string): Promise<ImagePreviewResponse> {
   return apiClient.request(COMMANDS.files.GET_IMAGE_PREVIEW, { fileId });
+}
+
+/**
+ * Get a structured document preview (PDF, Office Open XML, SQLite).
+ * Returns bounded text sections extracted from the document.
+ */
+export async function getDocumentPreview(fileId: string): Promise<DocumentPreviewResponse> {
+  return apiClient.request(COMMANDS.files.GET_DOCUMENT_PREVIEW, { fileId });
 }
 
 /**

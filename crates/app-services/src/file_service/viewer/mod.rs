@@ -1,6 +1,7 @@
 //! Viewer subsystem for source-scoped handles and bounded evidence reads.
 
 mod descriptor;
+mod document;
 mod filesystem;
 mod handle;
 mod image;
@@ -16,6 +17,7 @@ mod range_fs;
 mod text;
 
 pub use crate::e01_reader_cache::{clear_e01_reader_cache, clear_e01_reader_cache_for_case};
+pub use document::document_preview_for_file;
 pub use handle::{get_file_path_for_entry, open_file_handle_real};
 pub use image::image_preview_for_file;
 pub use io::skip_reader_bytes;
