@@ -428,7 +428,7 @@ describe('FileBrowser media preview', () => {
     expect(screen.queryByRole('button', { name: '跳转' })).toBeNull();
   });
 
-  it('hides hidden and system files by default and reloads rows when enabled', async () => {
+  it('shows hidden and system files by default and reloads rows when disabled', async () => {
     const visibleRows = [videoFile, deletedFile];
     const allRows = [videoFile, deletedFile, hiddenFile];
     mocks.fileRows.mockImplementation((_parentId, _offset, _limit, showHidden) =>
@@ -443,17 +443,17 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(mocks.fileTree).toHaveBeenCalledWith(false);
-    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, false, 'name', 'asc');
-    expect(screen.queryByText('System Volume Information')).toBeNull();
+    expect(mocks.fileTree).toHaveBeenCalledWith(true);
+    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, true, 'name', 'asc');
+    expect(screen.getByText('System Volume Information')).toBeDefined();
 
     fireEvent.click(screen.getByTestId('file-visibility-toggle'));
 
-    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(false));
     await waitFor(() =>
-      expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, true, 'name', 'asc'),
+      expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, false, 'name', 'asc'),
     );
-    expect(screen.getByText('System Volume Information')).toBeDefined();
+    expect(screen.queryByText('System Volume Information')).toBeNull();
   });
 
   it('loads more tree children so hidden system directories remain reachable in large roots', async () => {
@@ -511,8 +511,6 @@ describe('FileBrowser media preview', () => {
     );
 
     renderPage();
-
-    fireEvent.click(screen.getByTestId('file-visibility-toggle'));
 
     await waitFor(() => expect(mocks.fileChildren).toHaveBeenCalledWith('root', 0, 500, true));
     expect(screen.queryByText('System Volume Information')).toBeNull();
@@ -669,7 +667,7 @@ describe('FileBrowser media preview', () => {
     // ds-1 (Windows Source) auto-expands first; only its own root should show.
     await waitFor(() => expect(screen.getByText('分区1（NTFS）')).toBeDefined());
     expect(screen.queryByText('分区2（FAT）')).toBeNull();
-    expect(mocks.fileRows).toHaveBeenCalledWith(undefined, 0, 500, false, 'name', 'asc');
+    expect(mocks.fileRows).toHaveBeenCalledWith(undefined, 0, 500, true, 'name', 'asc');
 
     fireEvent.click(windowsTreeNode); // collapse ds-1
     fireEvent.click(linuxTreeNode); // expand ds-2
@@ -831,7 +829,7 @@ describe('FileBrowser media preview', () => {
     await waitFor(() =>
       expect(mocks.fileJumpContext).toHaveBeenCalledWith(
         'hidden-offpage',
-        false,
+        true,
         500,
         'name',
         'asc',

@@ -15,7 +15,7 @@ export function useFileBrowserModel() {
   const { data: dataSources } = useDataSources();
   const viewerTab = useUiStore((s) => s.viewerTab);
   const setViewerTab = useUiStore((s) => s.setViewerTab);
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHidden, setShowHidden] = useState(true);
 
   const {
     selectedDirectoryId,
