@@ -6,7 +6,7 @@ mod source;
 mod summary;
 mod system_info;
 
-pub use classification::classify_source_files;
+pub use classification::{classify_source_files, get_file_classification_board};
 pub use evidence::{get_source_evidence_summary, run_source_evidence_scan};
 pub(crate) use extraction::run_source_analysis_extraction_execution_with_cancel;
 pub use extraction::{

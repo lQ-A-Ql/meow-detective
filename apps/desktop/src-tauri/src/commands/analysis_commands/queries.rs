@@ -3,7 +3,10 @@ use domain::DataSourceId;
 use tauri::State;
 use transport::{
     commands::{ClassifyFilesRequest, GetAnalysisSourceRequest},
-    dto::{AnalysisFileClassificationDto, AnalysisSystemInfoDto, EvidenceClassificationSummaryDto},
+    dto::{
+        AnalysisFileClassificationDto, AnalysisSystemInfoDto, EvidenceClassificationSummaryDto,
+        FileClassificationBoardDto,
+    },
     CommandError,
 };
 
@@ -47,6 +50,29 @@ pub async fn classify_files(
             &active.meta.id,
             &data_source_id,
             sample_size,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+/// Two-level file classification board: magic families with scenario buckets.
+#[tauri::command]
+pub async fn get_file_classification_board(
+    state: State<'_, AppState>,
+    request: ClassifyFilesRequest,
+) -> Result<FileClassificationBoardDto, CommandError> {
+    let magic_read_limit = resolve_sample_size(&request)?;
+    let app_state = state.inner().clone();
+    let data_source_id = DataSourceId(request.data_source_id);
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        analysis_service::get_file_classification_board(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
+            magic_read_limit,
         )
         .map_err(CommandError::from_typed_service_error)
     })

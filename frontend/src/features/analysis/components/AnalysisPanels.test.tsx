@@ -1,13 +1,28 @@
 import { createElement } from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/features/files/hooks', () => ({
+  useFileHandle: () => ({ data: undefined }),
+  useFileViewer: () => ({
+    data: undefined,
+    setJumpOffsetInput: vi.fn(),
+    jumpToOffset: vi.fn(),
+    loadNextRange: vi.fn(),
+    loadPreviousRange: vi.fn(),
+  }),
+  useTextPreview: () => ({ data: null }),
+  useImagePreview: () => ({ data: null }),
+  useMediaUrl: () => ({ data: null }),
+  useDocumentPreview: () => ({ data: null }),
+}));
 import {
   SystemInfoPanel,
   BrowserHistoryPanel,
   EmailExtractionPanel,
   RegistryExtractionPanel,
   EvidenceClassificationPanel,
-  FileClassificationPanel,
+  FileClassificationBoard,
   AnalysisReportPanel,
   AnalysisExtractionProgress,
   AnalysisEmptyState,
@@ -106,10 +121,40 @@ describe('AnalysisPanels sub-components', () => {
     });
   });
 
-  describe('FileClassificationPanel', () => {
-    it('renders empty state when no classifications', () => {
-      render(createElement(FileClassificationPanel, { classifications: [] }));
-      expect(screen.getByText('未发现可分类文件。')).toBeDefined();
+  describe('FileClassificationBoard', () => {
+    it('renders empty state when no board data', () => {
+      render(createElement(FileClassificationBoard, { board: undefined }));
+      expect(screen.getByText('文件分类数据暂不可用。')).toBeDefined();
+    });
+
+    it('renders groups and subcategory rows', () => {
+      render(createElement(FileClassificationBoard, {
+        board: {
+          status: 'parsed',
+          generatedAt: '2026-07-24T00:00:00Z',
+          totalFiles: 1,
+          totalSize: 4,
+          magicClassifiedCount: 1,
+          metadataClassifiedCount: 0,
+          warnings: [],
+          groups: [{
+            category: 'documents',
+            displayName: '文档',
+            fileCount: 1,
+            totalSize: 4,
+            subcategories: [{
+              name: 'PDF 文档',
+              fileCount: 1,
+              totalSize: 4,
+              truncated: false,
+              files: [{ fileId: 'f1', name: 'doc.pdf', path: '[P3]/x/doc.pdf', size: 4, magicType: 'PDF', classificationSource: 'magic' }],
+            }],
+          }],
+        },
+      }));
+      expect(screen.getByText('文档')).toBeDefined();
+      expect(screen.getByText('PDF 文档')).toBeDefined();
+      expect(screen.getByText('doc.pdf')).toBeDefined();
     });
   });
 

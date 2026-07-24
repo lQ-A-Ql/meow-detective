@@ -184,3 +184,39 @@ export interface AnalysisExtractionSectionRun {
   timelineEventCount: number;
   warnings: string[];
 }
+
+export interface ClassifiedFileRow {
+  fileId: string;
+  name: string;
+  path: string;
+  size: number;
+  magicType?: string;
+  classificationSource: 'magic' | 'metadata' | string;
+}
+
+export interface ClassificationSubcategory {
+  name: string;
+  fileCount: number;
+  totalSize: number;
+  files: ClassifiedFileRow[];
+  truncated: boolean;
+}
+
+export interface ClassificationGroup {
+  category: string;
+  displayName: string;
+  fileCount: number;
+  totalSize: number;
+  subcategories: ClassificationSubcategory[];
+}
+
+export interface FileClassificationBoard {
+  status: AnalysisParseStatus;
+  generatedAt: string;
+  totalFiles: number;
+  totalSize: number;
+  magicClassifiedCount: number;
+  metadataClassifiedCount: number;
+  groups: ClassificationGroup[];
+  warnings?: string[];
+}

@@ -8,12 +8,12 @@ import {
   EmailExtractionPanel,
   EventLogPanel,
   EvidenceClassificationPanel,
-  FileClassificationPanel,
+  FileClassificationBoard,
   RegistryExtractionPanel,
   SystemInfoPanel,
 } from '@/features/analysis/components/AnalysisPanels';
 import type {
-  AnalysisFileClassification,
+  FileClassificationBoard as FileClassificationBoardData,
   AnalysisSystemInfo,
   BrowserHistorySummary,
   EmailExtractionSummary,
@@ -53,7 +53,7 @@ export interface WindowsAnalysisViewProps {
   eventLogSummary: InfiniteQueryState<EvtxEventSummary>;
   eventLogView: EvtxEventView;
   onEventLogViewChange: (view: EvtxEventView) => void;
-  classifications: QueryState<AnalysisFileClassification[]>;
+  classificationBoard: QueryState<FileClassificationBoardData>;
   evidencePending: boolean;
   onRunEvidence: () => void;
   summaryPending: boolean;
@@ -76,7 +76,7 @@ export function WindowsAnalysisView({
   eventLogSummary,
   eventLogView,
   onEventLogViewChange,
-  classifications,
+  classificationBoard,
   evidencePending,
   onRunEvidence,
   summaryPending,
@@ -164,10 +164,10 @@ export function WindowsAnalysisView({
             </TabsContent>
 
             <TabsContent value="files" className="m-0 data-[state=inactive]:hidden">
-              {classifications.isLoading ? (
+              {classificationBoard.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.files')} />
               ) : (
-                <FileClassificationPanel classifications={classifications.data ?? []} />
+                <FileClassificationBoard board={classificationBoard.data} />
               )}
             </TabsContent>
 

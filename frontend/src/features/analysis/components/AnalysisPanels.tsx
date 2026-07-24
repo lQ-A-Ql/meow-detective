@@ -10,7 +10,7 @@ export {
   LinuxArtifactsPanel,
   RegistryExtractionPanel,
   EvidenceClassificationPanel,
-  FileClassificationPanel,
+  FileClassificationBoard,
   AnalysisReportPanel,
   AnalysisExtractionProgress,
   LINUX_ARTIFACT_TAB_KEYS,

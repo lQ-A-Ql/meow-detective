@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   useCurrentCase: vi.fn(),
   getSystemInfo: vi.fn(),
-  classifyFiles: vi.fn(),
+  getFileClassificationBoard: vi.fn(),
   getEvidenceClassificationSummary: vi.fn(),
   runEvidenceClassification: vi.fn(),
   runAnalysisExtraction: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('@/features/case/hooks', () => ({
 
 vi.mock('@/lib/api/analysis', () => ({
   getSystemInfo: mocks.getSystemInfo,
-  classifyFiles: mocks.classifyFiles,
+  getFileClassificationBoard: mocks.getFileClassificationBoard,
   getEvidenceClassificationSummary: mocks.getEvidenceClassificationSummary,
   runEvidenceClassification: mocks.runEvidenceClassification,
   runAnalysisExtraction: mocks.runAnalysisExtraction,
@@ -43,7 +43,7 @@ vi.mock('@/lib/api/analysis', () => ({
 }));
 
 import {
-  useAnalysisClassifications,
+  useFileClassificationBoard,
   useAnalysisSystemInfo,
   useBrowserHistorySummary,
   useCorrelationSnapshot,
@@ -80,7 +80,7 @@ describe('analysis hooks', () => {
       warnings: [],
       provenance: [],
     });
-    mocks.classifyFiles.mockResolvedValue([]);
+    mocks.getFileClassificationBoard.mockResolvedValue({ groups: [] } as never);
     mocks.getEvidenceClassificationSummary.mockResolvedValue({
       status: 'notFound',
       categories: [],
@@ -416,18 +416,18 @@ describe('analysis hooks', () => {
     expect(mocks.getSystemInfo).toHaveBeenCalledWith('ds-windows');
   });
 
-  it('passes sample size to classification API', async () => {
+  it('passes magic read limit to classification board API', async () => {
     mocks.useCurrentCase.mockReturnValue({
       isSuccess: true,
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => useAnalysisClassifications(windowsSource, 250), {
+    const { result } = renderHook(() => useFileClassificationBoard(windowsSource, 250), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.classifyFiles).toHaveBeenCalledWith('ds-windows', 250);
+    expect(mocks.getFileClassificationBoard).toHaveBeenCalledWith('ds-windows', 250);
   });
 
   it('exposes summary download mutation', async () => {
@@ -473,7 +473,7 @@ describe('analysis hooks', () => {
       browser: useBrowserHistorySummary({ source: linuxSource }),
       email: useEmailExtractionSummary({ source: linuxSource }),
       eventLogs: useEvtxEventSummary({ source: linuxSource }),
-      classifications: useAnalysisClassifications(linuxSource),
+      classificationBoard: useFileClassificationBoard(linuxSource),
     }), { wrapper: createWrapper() });
 
     expect(Object.values(result.current).every((query) => query.fetchStatus === 'idle')).toBe(true);
@@ -484,7 +484,7 @@ describe('analysis hooks', () => {
     expect(mocks.getBrowserHistorySummary).not.toHaveBeenCalled();
     expect(mocks.getEmailExtractionSummary).not.toHaveBeenCalled();
     expect(mocks.getEvtxEventSummary).not.toHaveBeenCalled();
-    expect(mocks.classifyFiles).not.toHaveBeenCalled();
+    expect(mocks.getFileClassificationBoard).not.toHaveBeenCalled();
   });
 
   it('loads EVTX records in bounded view-specific pages', async () => {

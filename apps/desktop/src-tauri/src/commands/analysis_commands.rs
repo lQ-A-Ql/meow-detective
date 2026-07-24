@@ -13,7 +13,10 @@ pub use extraction::{
 pub use governance::{
     get_correlation_snapshot, get_v2_governance_snapshot, get_v3_governance_snapshot,
 };
-pub use queries::{classify_files, get_evidence_classification_summary, get_system_info};
+pub use queries::{
+    classify_files, get_evidence_classification_summary, get_file_classification_board,
+    get_system_info,
+};
 
 #[cfg(test)]
 #[path = "../../tests/unit/commands/analysis_commands_test.rs"]

@@ -40,7 +40,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useEmailExtractionSummary: mocks.emailSummary,
   useEvtxEventSummary: mocks.eventLogSummary,
   useLinuxArtifactSummary: mocks.linuxSummary,
-  useAnalysisClassifications: mocks.classifications,
+  useFileClassificationBoard: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
 
@@ -507,43 +507,41 @@ describe('DataAnalysis page', () => {
       },
     }));
     mocks.classifications.mockReturnValue(queryState({
-      data: [
-        {
-          category: 'Documents',
-          fileCount: 1,
-          totalSize: 4,
-          status: 'parsed',
-          warnings: [],
-          files: [
-            {
-              fileId: 'file-1',
-              path: 'doc.pdf',
-              name: 'doc.pdf',
-              size: 4,
-              fileType: 'PDF',
-              magicDescription: 'PDF Document',
-              provenance: {
-                dataSourceId: 'ds-1',
-                artifactPath: 'doc.pdf',
-                parser: 'metadata.extension_path',
-                parsedAt: '2026-06-01T10:00:00Z',
-                status: 'parsed',
-                warnings: [],
+      data: {
+        status: 'parsed',
+        generatedAt: '2026-06-01T10:14:00Z',
+        totalFiles: 1,
+        totalSize: 4,
+        magicClassifiedCount: 1,
+        metadataClassifiedCount: 0,
+        warnings: [],
+        groups: [
+          {
+            category: 'documents',
+            displayName: '文档',
+            fileCount: 1,
+            totalSize: 4,
+            subcategories: [
+              {
+                name: 'PDF 文档',
+                fileCount: 1,
+                totalSize: 4,
+                truncated: false,
+                files: [
+                  {
+                    fileId: 'file-1',
+                    name: 'doc.pdf',
+                    path: '[P3]/Users/test/doc.pdf',
+                    size: 4,
+                    magicType: 'PDF',
+                    classificationSource: 'magic',
+                  },
+                ],
               },
-            },
-          ],
-          provenance: [
-            {
-              dataSourceId: 'ds-1',
-              artifactPath: 'doc.pdf',
-              parser: 'metadata.extension_path',
-              parsedAt: '2026-06-01T10:00:00Z',
-              status: 'parsed',
-              warnings: [],
-            },
-          ],
-        },
-      ],
+            ],
+          },
+        ],
+      },
     }));
     mocks.summaryMutation.mockReturnValue({
       error: null,
@@ -1244,14 +1242,15 @@ describe('DataAnalysis page', () => {
     expect(screen.queryByText('Windows 10')).toBeNull();
   });
 
-  it('renders file classifications from hook data', async () => {
+  it('renders file classification board from hook data', async () => {
     renderPage();
     fireEvent.click(screen.getByLabelText('Windows Evidence / 文件分类'));
 
-    await waitFor(() => expect(screen.getByText('Documents')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('文档')).toBeDefined());
+    expect(screen.getByText('PDF 文档')).toBeDefined();
     expect(screen.getAllByText('doc.pdf').length).toBeGreaterThan(0);
-    expect(screen.getByText('PDF Document')).toBeDefined();
-    expect(screen.getAllByText(/metadata\.extension_path/).length).toBeGreaterThan(0);
+    expect(screen.getByText('PDF')).toBeDefined();
+    expect(screen.getByText('魔数')).toBeDefined();
   });
 
   it('downloads markdown report through summary mutation', async () => {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import {
-  classifyFiles,
+  getFileClassificationBoard,
   generateAnalysisSummary,
   getBrowserHistorySummary,
   getCorrelationSnapshot,
@@ -38,19 +38,19 @@ describe('analysis API', () => {
     });
   });
 
-  it('classifyFiles sends sampleSize in request payload', async () => {
-    requestMock.mockResolvedValueOnce([] as never);
-    await classifyFiles('ds-1', 500);
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.CLASSIFY_FILES, {
+  it('getFileClassificationBoard sends magic limit in request payload', async () => {
+    requestMock.mockResolvedValueOnce({} as never);
+    await getFileClassificationBoard('ds-1', 500);
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_FILE_CLASSIFICATION_BOARD, {
       request: { dataSourceId: 'ds-1', sampleSize: 500 },
     });
   });
 
-  it('classifyFiles defaults sampleSize to 1000', async () => {
-    requestMock.mockResolvedValueOnce([] as never);
-    await classifyFiles('ds-1');
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.CLASSIFY_FILES, {
-      request: { dataSourceId: 'ds-1', sampleSize: 1000 },
+  it('getFileClassificationBoard defaults magic limit to 300', async () => {
+    requestMock.mockResolvedValueOnce({} as never);
+    await getFileClassificationBoard('ds-1');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_FILE_CLASSIFICATION_BOARD, {
+      request: { dataSourceId: 'ds-1', sampleSize: 300 },
     });
   });
 

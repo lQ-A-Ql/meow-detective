@@ -1,12 +1,12 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
-  classifyFiles,
   generateAnalysisSummary,
   getBrowserHistorySummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvtxEventSummary,
   getEvidenceClassificationSummary,
+  getFileClassificationBoard,
   getLinuxArtifactSummary,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
@@ -127,12 +127,12 @@ export function useAnalysisSystemInfo(source?: AnalysisSource) {
   });
 }
 
-export function useAnalysisClassifications(source?: AnalysisSource, sampleSize = 1000) {
+export function useFileClassificationBoard(source?: AnalysisSource, magicLimit = 300) {
   const currentCase = useCurrentCase();
   const dataSourceId = source?.id;
   return useQuery({
-    queryKey: ['analysis', 'classifications', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null, sampleSize],
-    queryFn: () => classifyFiles(dataSourceId ?? '', sampleSize),
+    queryKey: ['analysis', 'classification-board', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null, magicLimit],
+    queryFn: () => getFileClassificationBoard(dataSourceId ?? '', magicLimit),
     enabled: currentCase.isSuccess
       && Boolean(currentCase.data)
       && Boolean(dataSourceId)

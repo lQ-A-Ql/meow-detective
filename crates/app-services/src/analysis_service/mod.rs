@@ -10,6 +10,8 @@ mod classification;
 mod demo;
 mod error;
 mod extraction;
+mod file_classification;
+mod file_classification_taxonomy;
 mod platforms;
 mod provenance;
 mod summary;
@@ -32,6 +34,7 @@ pub use extraction::{
     run_analysis_extraction, run_analysis_extraction_with_cancel,
     run_analysis_extraction_with_reader_limits, ExtractionOutcome,
 };
+pub use file_classification::build_file_classification_board;
 pub use platforms::{
     resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,
     validate_data_source_analysis_categories,
@@ -41,10 +44,10 @@ pub use system_info::extract_system_info_for_case;
 mod system_info_boot;
 pub(crate) use use_cases::run_source_analysis_extraction_execution_with_cancel;
 pub use use_cases::{
-    classify_source_files, generate_source_analysis_summary, get_source_browser_summary,
-    get_source_email_summary, get_source_evidence_summary, get_source_evtx_summary,
-    get_source_linux_summary, get_source_registry_structured_summary, get_source_registry_summary,
-    get_source_system_info, run_source_analysis_extraction,
+    classify_source_files, generate_source_analysis_summary, get_file_classification_board,
+    get_source_browser_summary, get_source_email_summary, get_source_evidence_summary,
+    get_source_evtx_summary, get_source_linux_summary, get_source_registry_structured_summary,
+    get_source_registry_summary, get_source_system_info, run_source_analysis_extraction,
     run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
     run_source_evidence_scan,
 };

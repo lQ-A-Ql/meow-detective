@@ -80,6 +80,7 @@ export const COMMANDS = {
   analysis: {
     GET_SYSTEM_INFO: 'get_system_info',
     CLASSIFY_FILES: 'classify_files',
+    GET_FILE_CLASSIFICATION_BOARD: 'get_file_classification_board',
     GET_EVIDENCE_CLASSIFICATION_SUMMARY: 'get_evidence_classification_summary',
     RUN_EVIDENCE_CLASSIFICATION: 'run_evidence_classification',
     RUN_ANALYSIS_EXTRACTION: 'run_analysis_extraction',

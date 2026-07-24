@@ -2,7 +2,6 @@ import {
   AnalysisExtractionPageRequest,
   AnalysisExtractionRequest,
   AnalysisExtractionRun,
-  AnalysisFileClassification,
   AnalysisSystemInfo,
   BrowserHistorySummary,
   CorrelationSnapshot,
@@ -10,6 +9,7 @@ import {
   EvtxEventSummary,
   EvtxEventPageRequest,
   EvidenceClassificationSummary,
+  FileClassificationBoard,
   LinuxArtifactSummary,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
@@ -23,11 +23,13 @@ export async function getSystemInfo(dataSourceId: string): Promise<AnalysisSyste
   return apiClient.request(COMMANDS.analysis.GET_SYSTEM_INFO, { request: { dataSourceId } });
 }
 
-export async function classifyFiles(
+export async function getFileClassificationBoard(
   dataSourceId: string,
-  sampleSize = 1000,
-): Promise<AnalysisFileClassification[]> {
-  return apiClient.request(COMMANDS.analysis.CLASSIFY_FILES, { request: { dataSourceId, sampleSize } });
+  magicLimit = 300,
+): Promise<FileClassificationBoard> {
+  return apiClient.request(COMMANDS.analysis.GET_FILE_CLASSIFICATION_BOARD, {
+    request: { dataSourceId, sampleSize: magicLimit },
+  });
 }
 
 export async function getEvidenceClassificationSummary(dataSourceId: string): Promise<EvidenceClassificationSummary> {

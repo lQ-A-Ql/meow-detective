@@ -9,10 +9,10 @@ use commands::{
     analysis_commands::{
         classify_files, generate_analysis_summary, get_browser_history_summary,
         get_correlation_snapshot, get_email_extraction_summary,
-        get_evidence_classification_summary, get_evtx_event_summary, get_linux_artifact_summary,
-        get_registry_extraction_summary, get_registry_structured_summary, get_system_info,
-        get_v2_governance_snapshot, get_v3_governance_snapshot, run_analysis_extraction,
-        run_evidence_classification,
+        get_evidence_classification_summary, get_evtx_event_summary, get_file_classification_board,
+        get_linux_artifact_summary, get_registry_extraction_summary,
+        get_registry_structured_summary, get_system_info, get_v2_governance_snapshot,
+        get_v3_governance_snapshot, run_analysis_extraction, run_evidence_classification,
     },
     artifact_commands::{
         get_artifact_by_id, get_artifact_families, get_artifact_family_counts, get_artifact_rows,
@@ -134,6 +134,7 @@ pub fn run() {
             get_system_info,
             classify_files,
             get_evidence_classification_summary,
+            get_file_classification_board,
             run_evidence_classification,
             run_analysis_extraction,
             get_registry_extraction_summary,

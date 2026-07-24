@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
-  useAnalysisClassifications,
+  useFileClassificationBoard,
   useAnalysisSystemInfo,
   useBrowserHistorySummary,
   useEmailExtractionSummary,
@@ -81,7 +81,7 @@ export function AnalysisWorkspace() {
     view: eventLogView,
   });
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
-  const classifications = useAnalysisClassifications(selectedDataSource, 1000);
+  const classificationBoard = useFileClassificationBoard(selectedDataSource, 300);
   const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
   const resetEvidenceScan = evidenceScan.reset;
   const resetExtractionRun = extractionRun.reset;
@@ -154,7 +154,7 @@ export function AnalysisWorkspace() {
     ?? browserSummary.error
     ?? emailSummary.error
     ?? eventLogSummary.error
-    ?? classifications.error
+    ?? classificationBoard.error
     ?? summaryMutation.error
     ?? analysisRefreshError;
   const linuxError = currentCase.error
@@ -278,7 +278,7 @@ export function AnalysisWorkspace() {
           browserSummary.refetch,
           emailSummary.refetch,
           eventLogSummary.refetch,
-          classifications.refetch,
+          classificationBoard.refetch,
         ],
         linuxSummary.refetch,
       );
@@ -411,7 +411,7 @@ export function AnalysisWorkspace() {
             eventLogSummary={eventLogSummary}
             eventLogView={eventLogView}
             onEventLogViewChange={setEventLogView}
-            classifications={classifications}
+            classificationBoard={classificationBoard}
             evidencePending={evidenceScan.isPending}
             onRunEvidence={runEvidenceScan}
              summaryPending={summaryMutation.isPending}

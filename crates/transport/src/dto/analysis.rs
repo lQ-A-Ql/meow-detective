@@ -8,8 +8,10 @@ pub use crate::dto::analysis_browser::{
     BrowserSessionTabDto, BrowserVisitDto,
 };
 pub use crate::dto::analysis_classification::{
-    AnalysisClassifiedFileDto, AnalysisFileClassificationDto, EvidenceCategoryDto,
+    AnalysisClassifiedFileDto, AnalysisFileClassificationDto, ClassificationGroupDto,
+    ClassificationSubcategoryDto, ClassifiedFileRowDto, EvidenceCategoryDto,
     EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
+    FileClassificationBoardDto,
 };
 pub use crate::dto::analysis_email::{
     EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
