@@ -26,7 +26,8 @@ pub fn get_artifact_families_for_case(
     case_id: &CaseId,
 ) -> Result<Vec<String>, ArtifactServiceError> {
     let mut families = BTreeMap::<String, ()>::new();
-    for (_, source_conn) in source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+    for (_, source_conn) in
+        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
         for family in get_artifact_families_from_db(&source_conn)? {
             families.insert(family, ());
@@ -43,7 +44,7 @@ pub fn get_artifact_rows_for_case(
 ) -> Result<Vec<ArtifactRowDto>, ArtifactServiceError> {
     let mut rows = Vec::new();
     for (source_id, source_conn) in
-        source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
         rows.extend(
             ArtifactRepo::new(&source_conn)
@@ -88,8 +89,9 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
     for (source, storage) in source_db::ready_data_sources(case_conn, case_id)? {
         let platform = DataSourcePlatform::parse_explicit(&storage.platform)
             .map_err(|error| ArtifactServiceError::Unsupported(error.to_string()))?;
-        let source_db =
-            source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        let source_db = source_db::open_ready_source_read_only_by_id(
+            case_conn, case_root, case_id, &source.id,
+        )?;
         counts.extend(
             ArtifactRepo::new(&source_db.connection)
                 .count_by_family()?

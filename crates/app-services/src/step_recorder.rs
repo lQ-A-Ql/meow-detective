@@ -150,7 +150,7 @@ fn aggregate_source_counts(
     case_id: &str,
 ) -> Result<SourceCounts, persistence_sqlite::DbError> {
     let mut counts = SourceCounts::default();
-    for (_, source_conn) in crate::source_db::open_ready_source_connections(
+    for (_, source_conn) in crate::source_db::open_ready_source_connections_read_only(
         conn,
         case_root,
         &domain::CaseId(case_id.to_string()),

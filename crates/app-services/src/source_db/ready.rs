@@ -229,3 +229,114 @@ fn parse_platform(
         }
     })
 }
+
+/// Open only fully imported source databases for case-wide aggregation.
+pub fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+) -> Result<Vec<(DataSourceId, Connection)>, ReadySourceError> {
+    open_ready_source_connections_with(case_conn, case_root, case_id, open_ready_source_by_id)
+}
+
+/// Read-only variant of [`open_ready_source_connections`] for pure query
+/// paths. Migrations are intentionally not run here; case opening migrates
+/// ready source databases before read-only consumers see them.
+pub fn open_ready_source_connections_read_only(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+) -> Result<Vec<(DataSourceId, Connection)>, ReadySourceError> {
+    open_ready_source_connections_with(
+        case_conn,
+        case_root,
+        case_id,
+        open_ready_source_read_only_by_id,
+    )
+}
+
+fn open_ready_source_connections_with(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    open: fn(
+        &Connection,
+        &std::path::Path,
+        &CaseId,
+        &DataSourceId,
+    ) -> Result<ReadySourceConnection, ReadySourceError>,
+) -> Result<Vec<(DataSourceId, Connection)>, ReadySourceError> {
+    let sources = super::ready_data_sources(case_conn, case_id)?;
+    let mut connections = Vec::with_capacity(sources.len());
+    for (source, _) in sources {
+        let ready = open(case_conn, case_root, case_id, &source.id)?;
+        connections.push((ready.data_source_id, ready.connection));
+    }
+    Ok(connections)
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceConnectionManager {
+    locator: super::SourceDbLocator,
+}
+
+impl SourceConnectionManager {
+    pub fn new(case_root: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            locator: super::SourceDbLocator::new(case_root),
+        }
+    }
+
+    pub fn open_ready(
+        &self,
+        case_conn: &Connection,
+        case_id: &CaseId,
+        data_source_id: &DataSourceId,
+    ) -> Result<Connection, ReadySourceError> {
+        Ok(
+            open_ready_source_by_id(case_conn, &self.locator.case_root, case_id, data_source_id)?
+                .connection,
+        )
+    }
+
+    /// Read-only variant of [`SourceConnectionManager::open_ready`] for pure
+    /// query paths such as file browsing and previews. Does not run
+    /// migrations or journal-mode changes on open.
+    pub fn open_ready_read_only(
+        &self,
+        case_conn: &Connection,
+        case_id: &CaseId,
+        data_source_id: &DataSourceId,
+    ) -> Result<Connection, ReadySourceError> {
+        Ok(open_ready_source_read_only_by_id(
+            case_conn,
+            &self.locator.case_root,
+            case_id,
+            data_source_id,
+        )?
+        .connection)
+    }
+
+    pub fn open_ready_for_global_file_id(
+        &self,
+        case_conn: &Connection,
+        case_id: &CaseId,
+        file_id: &domain::FileEntryId,
+    ) -> Result<(super::GlobalFileId, Connection), ReadySourceError> {
+        let global_id = super::GlobalFileId::parse(file_id)?;
+        let conn = self.open_ready(case_conn, case_id, &global_id.data_source_id)?;
+        Ok((global_id, conn))
+    }
+
+    /// Read-only variant of [`SourceConnectionManager::open_ready_for_global_file_id`].
+    pub fn open_ready_for_global_file_id_read_only(
+        &self,
+        case_conn: &Connection,
+        case_id: &CaseId,
+        file_id: &domain::FileEntryId,
+    ) -> Result<(super::GlobalFileId, Connection), ReadySourceError> {
+        let global_id = super::GlobalFileId::parse(file_id)?;
+        let conn = self.open_ready_read_only(case_conn, case_id, &global_id.data_source_id)?;
+        Ok((global_id, conn))
+    }
+}

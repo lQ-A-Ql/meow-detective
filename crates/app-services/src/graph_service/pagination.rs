@@ -21,7 +21,7 @@ pub fn list_graph_nodes_for_case(
     case_id: &str,
     request: ListGraphNodesRequest,
 ) -> Result<Vec<GraphNodeDto>, GraphServiceError> {
-    let sources = source_db::open_ready_source_connections(
+    let sources = source_db::open_ready_source_connections_read_only(
         case_conn,
         case_root,
         &domain::CaseId(case_id.to_string()),

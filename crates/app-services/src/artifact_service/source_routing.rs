@@ -21,7 +21,8 @@ pub fn get_artifact_row_by_id_for_case(
                 "{error}; source database artifacts require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source = source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source_id)?;
+    let source =
+        source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, &source_id)?;
     Ok(ArtifactRepo::new(&source.connection)
         .find_by_id(&local_id)?
         .as_ref()

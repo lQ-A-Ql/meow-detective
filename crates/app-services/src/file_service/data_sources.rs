@@ -187,8 +187,9 @@ pub fn get_recent_objects_for_case(
     let mut recent = Vec::new();
 
     for (source, _) in source_db::ready_data_sources(case_conn, case_id)? {
-        let source_conn =
-            source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        let source_conn = source_db::open_ready_source_read_only_by_id(
+            case_conn, case_root, case_id, &source.id,
+        )?;
         let mut source_recent = get_recent_objects_real(&source_conn.connection)?;
         for item in &mut source_recent {
             item.id = GlobalFileId::new(source.id.clone(), domain::FileEntryId(item.id.clone()))

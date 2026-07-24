@@ -16,9 +16,10 @@ pub(crate) use build::{
 pub use migration::migrate_ready_source_databases;
 pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
-    open_ready_source_by_id, open_ready_source_read_only_by_id, open_reconstruction_source_by_id,
-    resolve_ready_source_platform, ReadySourceConnection, ReadySourceError,
-    ReconstructionSourceConnection,
+    open_ready_source_by_id, open_ready_source_connections,
+    open_ready_source_connections_read_only, open_ready_source_read_only_by_id,
+    open_reconstruction_source_by_id, resolve_ready_source_platform, ReadySourceConnection,
+    ReadySourceError, ReconstructionSourceConnection, SourceConnectionManager,
 };
 
 const SOURCES_DIR_NAME: &str = "sources";
@@ -294,21 +295,6 @@ pub fn registered_source_index_dir(
     safe_case_managed_destination(case_root, &index_dir)
 }
 
-/// Open only fully imported source databases for case-wide aggregation.
-pub fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(DataSourceId, Connection)>, ReadySourceError> {
-    let sources = ready_data_sources(case_conn, case_id)?;
-    let mut connections = Vec::with_capacity(sources.len());
-    for (source, _) in sources {
-        let ready = open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
-        connections.push((ready.data_source_id, ready.connection));
-    }
-    Ok(connections)
-}
-
 pub(crate) fn ready_data_sources(
     case_conn: &Connection,
     case_id: &domain::CaseId,
@@ -432,42 +418,6 @@ impl SourceDbLocator {
 
     pub fn source_staging_dir(&self, data_source_id: &DataSourceId) -> DbResult<PathBuf> {
         source_staging_dir(&self.case_root, data_source_id)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SourceConnectionManager {
-    locator: SourceDbLocator,
-}
-
-impl SourceConnectionManager {
-    pub fn new(case_root: impl Into<PathBuf>) -> Self {
-        Self {
-            locator: SourceDbLocator::new(case_root),
-        }
-    }
-
-    pub fn open_ready(
-        &self,
-        case_conn: &Connection,
-        case_id: &domain::CaseId,
-        data_source_id: &DataSourceId,
-    ) -> Result<Connection, ReadySourceError> {
-        Ok(
-            open_ready_source_by_id(case_conn, &self.locator.case_root, case_id, data_source_id)?
-                .connection,
-        )
-    }
-
-    pub fn open_ready_for_global_file_id(
-        &self,
-        case_conn: &Connection,
-        case_id: &domain::CaseId,
-        file_id: &FileEntryId,
-    ) -> Result<(GlobalFileId, Connection), ReadySourceError> {
-        let global_id = GlobalFileId::parse(file_id)?;
-        let conn = self.open_ready(case_conn, case_id, &global_id.data_source_id)?;
-        Ok((global_id, conn))
     }
 }
 

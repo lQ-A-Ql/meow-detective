@@ -38,7 +38,7 @@ fn open_source_for_data_source(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<Connection, FileServiceError> {
-    Ok(source_manager(case_root).open_ready(case_conn, case_id, data_source_id)?)
+    Ok(source_manager(case_root).open_ready_read_only(case_conn, case_id, data_source_id)?)
 }
 
 pub(super) fn open_source_for_file_id(
@@ -47,11 +47,13 @@ pub(super) fn open_source_for_file_id(
     case_id: &CaseId,
     file_id: &str,
 ) -> Result<(GlobalFileId, Connection), FileServiceError> {
-    Ok(source_manager(case_root).open_ready_for_global_file_id(
-        case_conn,
-        case_id,
-        &FileEntryId(file_id.to_string()),
-    )?)
+    Ok(
+        source_manager(case_root).open_ready_for_global_file_id_read_only(
+            case_conn,
+            case_id,
+            &FileEntryId(file_id.to_string()),
+        )?,
+    )
 }
 
 fn scoped_context<'a>(
@@ -205,7 +207,7 @@ pub fn get_file_tree_for_case(
 ) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     let mut roots = Vec::new();
     for (_, source_conn) in
-        crate::source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+        crate::source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
         let mut nodes =
             crate::file_service::get_file_tree_real_with_visibility(&source_conn, show_hidden)?;

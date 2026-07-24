@@ -277,6 +277,24 @@ pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
 }
 
 fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
+    // Fast path: when the latest migration is already recorded, every earlier
+    // migration has been applied (they run strictly in order), so skip the
+    // bookkeeping write entirely. Hot read paths open source databases very
+    // frequently, and an unconditional CREATE TABLE write on every open turns
+    // concurrent readers into lock contention.
+    if let Some((latest_name, _)) = migrations.last() {
+        let latest_recorded: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM schema_migrations WHERE name = ?1",
+                [latest_name],
+                |row| row.get(0),
+            )
+            // A missing schema_migrations table simply means nothing was applied yet.
+            .unwrap_or(false);
+        if latest_recorded {
+            return Ok(0);
+        }
+    }
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             id INTEGER PRIMARY KEY,

@@ -358,7 +358,7 @@ pub fn get_case_metrics_for_case(
         artifact_count: 0,
     };
     for (_, source_conn) in
-        crate::source_db::open_ready_source_connections(conn, case_root, case_id)?
+        crate::source_db::open_ready_source_connections_read_only(conn, case_root, case_id)?
     {
         metrics.indexed_file_count = metrics
             .indexed_file_count

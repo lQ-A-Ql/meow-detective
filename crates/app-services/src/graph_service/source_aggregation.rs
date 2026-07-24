@@ -21,7 +21,7 @@ pub fn get_graph_snapshot_for_case(
     case_id: &str,
 ) -> Result<GraphSnapshotDto, GraphServiceError> {
     let mut merged = empty_snapshot();
-    for (_, source_conn) in source_db::open_ready_source_connections(
+    for (_, source_conn) in source_db::open_ready_source_connections_read_only(
         case_conn,
         case_root,
         &CaseId(case_id.to_string()),
@@ -43,7 +43,7 @@ pub fn query_graph_for_case(
     }
 
     let mut merged = empty_query_result();
-    for (source_id, source_conn) in source_db::open_ready_source_connections(
+    for (source_id, source_conn) in source_db::open_ready_source_connections_read_only(
         case_conn,
         case_root,
         &CaseId(case_id.to_string()),
@@ -64,7 +64,7 @@ pub fn get_node_neighborhood_for_case(
     depth: u32,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
     let (source_id, local_id) = parse_scoped_id("Graph node id", node_id, "graph nodes")?;
-    let source = source_db::open_ready_source_by_id(
+    let source = source_db::open_ready_source_read_only_by_id(
         case_conn,
         case_root,
         &CaseId(case_id.to_string()),
@@ -83,7 +83,7 @@ pub fn get_provenance_chain_for_case(
     edge_id: &str,
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
     let (source_id, local_id) = parse_scoped_id("Graph edge id", edge_id, "graph edges")?;
-    let source = source_db::open_ready_source_by_id(
+    let source = source_db::open_ready_source_read_only_by_id(
         case_conn,
         case_root,
         &CaseId(case_id.to_string()),
@@ -131,7 +131,7 @@ fn query_scoped_source(
     local_ids: Vec<String>,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
     query.start_ids = local_ids;
-    let source = source_db::open_ready_source_by_id(
+    let source = source_db::open_ready_source_read_only_by_id(
         case_conn,
         case_root,
         &CaseId(case_id.to_string()),
