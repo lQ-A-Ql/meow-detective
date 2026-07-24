@@ -197,8 +197,14 @@ export function useFileTree({
         : normalizedChildren;
       if (sameTreeNodeList(previousChildren, nextChildren)) return current;
       if (!current[activeDirectoryId] && keys.length >= MAX_TREE_CACHE_SIZE) {
-        const { [keys[0]]: _, ...rest } = current;
-        return { ...rest, [activeDirectoryId]: nextChildren };
+        // Never evict synthetic data-source slots: the pre-population effect
+        // only rewrites them when its deps change, so evicting one would leave
+        // the data-source node permanently unexpandable.
+        const evictKey = keys.find((key) => !isDataSourceTreeNodeId(key));
+        if (evictKey) {
+          const { [evictKey]: _, ...rest } = current;
+          return { ...rest, [activeDirectoryId]: nextChildren };
+        }
       }
       return { ...current, [activeDirectoryId]: nextChildren };
     });

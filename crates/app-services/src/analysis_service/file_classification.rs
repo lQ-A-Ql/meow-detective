@@ -325,6 +325,8 @@ fn system_subcategory(file_type: &str, ext: &str) -> &'static str {
 fn forensics_subcategory(file_type: &str, ext: &str) -> &'static str {
     match file_type {
         "AFF" => "AFF 镜像",
+        "Ex01" => "Ex01 镜像",
+        "L01" => "L01 镜像",
         "VMDK" => "VMDK 磁盘",
         _ if matches!(ext, "raw" | "img" | "dd") => "原始镜像",
         _ => "E01 镜像",

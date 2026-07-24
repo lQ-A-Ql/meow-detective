@@ -9,6 +9,7 @@ mod image_open;
 mod io;
 mod media;
 mod model;
+mod office_preview;
 mod partition;
 mod path;
 mod preview_bytes;

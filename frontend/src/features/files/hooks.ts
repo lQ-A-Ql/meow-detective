@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
   extractFileToPath,
@@ -71,6 +71,7 @@ export function useFileTree(showHidden = false) {
     queryKey: ['files', 'tree', showHidden],
     queryFn: () => getFileTree(showHidden),
     staleTime: 10_000, // reduced from Infinity to pick up post-import tree updates
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -133,6 +134,7 @@ export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, 
     queryFn: () => getFileChildrenPage(parentId!, offset, limit, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -394,7 +396,9 @@ export function useDocumentPreview(fileId?: string, enabled = true) {
       return await getDocumentPreview(fileId);
     },
   });
-}/**
+}
+
+/**
  * Hook to get media URL for video/audio playback.
  * Returns an inline data URL for bounded media previews.
  */

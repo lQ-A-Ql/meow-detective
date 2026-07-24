@@ -28,7 +28,10 @@ type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 
 
 const ANALYSIS_QUERY_OPTIONS = {
   staleTime: Infinity,
-  gcTime: 30 * 60 * 1000,
+  // Keep analysis projections cached indefinitely: they are expensive to
+  // rebuild from evidence and must survive long idle periods without the
+  // UI dropping into a loading state on the next render.
+  gcTime: Infinity,
   refetchOnMount: false,
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,

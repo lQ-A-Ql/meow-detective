@@ -8,6 +8,7 @@ import {
   Image,
   Mail,
   Monitor,
+  Play,
   Shield,
 } from 'lucide-react';
 import { Progress } from '@/app/components/ui/progress';
@@ -54,6 +55,7 @@ export const CATEGORY_ICONS: Record<string, typeof Monitor> = {
   Email: Mail,
   Prefetch: Clock,
   Shortcuts: FileText,
+  Media: Play,
   SystemInformation: Monitor,
   EventLogs: FileText,
   ProgramExecution: Shield,
@@ -80,6 +82,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Email: 'var(--forensics-warning-text)',
   Prefetch: 'var(--forensics-warning-text)',
   Shortcuts: 'var(--forensics-info-text)',
+  Media: 'var(--forensics-warning-text)',
   SystemInformation: 'var(--forensics-text-secondary)',
   EventLogs: 'var(--forensics-info-text)',
   ProgramExecution: 'var(--forensics-error-text)',

@@ -1,4 +1,6 @@
 use super::*;
+use rusqlite::Connection;
+use std::io::Cursor;
 
 fn make_sqlite_bytes() -> Vec<u8> {
     let tmp = tempfile::NamedTempFile::new().expect("temp db");
@@ -158,4 +160,33 @@ fn pdf_preview_extracts_page_text() {
 #[test]
 fn pdf_preview_rejects_garbage() {
     assert!(preview_pdf(b"not a pdf").is_err());
+}
+
+#[test]
+fn pptx_preview_reads_slide_parts() {
+    let bytes = make_zip_bytes(&[
+        (
+            "ppt/presentation.xml",
+            r#"<?xml version="1.0"?><p:presentation><p:sldIdLst><p:sldId id="256"/></p:sldIdLst></p:presentation>"#,
+        ),
+        (
+            "ppt/slides/slide1.xml",
+            r#"<?xml version="1.0"?><p:sld><p:cSld><p:spTree><p:sp>
+               <p:txBody><a:p><a:r><a:t>Slide one title</a:t></a:r></a:p></p:txBody>
+               </p:sp></p:spTree></p:cSld></p:sld>"#,
+        ),
+        (
+            "ppt/slides/slide2.xml",
+            r#"<?xml version="1.0"?><p:sld><p:cSld><p:spTree><p:sp>
+               <p:txBody><a:p><a:r><a:t>Second slide body</a:t></a:r></a:p></p:txBody>
+               </p:sp></p:spTree></p:cSld></p:sld>"#,
+        ),
+    ]);
+    let preview = preview_pptx(&bytes).expect("pptx preview");
+    assert_eq!(preview.kind, "pptx");
+    assert_eq!(preview.summary, "2 slides");
+    assert_eq!(preview.sections.len(), 2);
+    assert_eq!(preview.sections[0].title, "Slide 1");
+    assert_eq!(preview.sections[0].lines[0], "Slide one title");
+    assert_eq!(preview.sections[1].lines[0], "Second slide body");
 }

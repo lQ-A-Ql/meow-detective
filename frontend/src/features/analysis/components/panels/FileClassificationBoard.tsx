@@ -33,7 +33,7 @@ type ViewerTab = 'metadata' | 'text' | 'hex' | 'preview';
 const FAMILY_KEY: Record<string, string> = {
   documents: 'Documents',
   images: 'Images',
-  media: 'Forensics',
+  media: 'Media',
   databases: 'Databases',
   executables: 'Executables',
   archives: 'Archives',
@@ -89,7 +89,7 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
   const previewKind = useMemo<FilePreviewKind | undefined>(() => {
     if (!selected) return undefined;
     const ext = selected.name.split('.').pop()?.toLowerCase() ?? '';
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) return 'image';
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'].includes(ext)) return 'image';
     if (['mp4', 'webm', 'avi', 'mkv'].includes(ext)) return 'video';
     if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(ext)) return 'audio';
     if (['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3'].includes(ext)) {

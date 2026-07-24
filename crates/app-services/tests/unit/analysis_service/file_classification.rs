@@ -67,6 +67,13 @@ fn magic_covers_forensic_key_formats() {
             "E01 镜像",
             "E01",
         ),
+        (
+            b"LVF\x09\x0d\x0a\xff\x00rest",
+            "ex01",
+            "forensics",
+            "Ex01 镜像",
+            "Ex01",
+        ),
         (b"KDMVrest", "vmdk", "forensics", "VMDK 磁盘", "VMDK"),
         (b"!BDNrest", "pst", "documents", "邮件文档", "PST"),
         (b"L\x00\x00\x00rest", "lnk", "documents", "快捷方式", "LNK"),

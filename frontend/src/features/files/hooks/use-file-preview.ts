@@ -7,7 +7,7 @@ import {
 import type { FileEntryRow } from '@/types/models';
 import type { FilePreviewKind } from '@/features/files/components/FilePreviewPanel';
 
-const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg']);
 const DOCUMENT_EXTENSIONS = new Set([

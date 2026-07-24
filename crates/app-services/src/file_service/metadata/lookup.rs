@@ -82,6 +82,7 @@ pub(crate) fn mime_for_entry(entry: &FileEntry) -> Option<String> {
         "png" => "image/png",
         "gif" => "image/gif",
         "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
         "webp" => "image/webp",
         "mp4" => "video/mp4",
         "webm" => "video/webm",
