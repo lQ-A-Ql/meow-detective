@@ -98,6 +98,8 @@ export function FileBrowser() {
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileTreePanel
           filteredTreeNodes={fb.filteredTreeNodes}
+          activeDirectoryId={fb.activeDirectoryId}
+          expandedIds={fb.expandedIdSet}
           activeChildrenPage={fb.activeChildrenPage}
           activeTreeChildrenLoaded={fb.activeTreeChildrenLoaded}
           canLoadMoreTreeChildren={fb.canLoadMoreTreeChildren}

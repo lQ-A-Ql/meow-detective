@@ -1,15 +1,18 @@
+import { memo } from 'react';
 import { Monitor, ChevronDown, ChevronRight } from 'lucide-react';
 import type { FileTreeNode, DataSourceSummary } from '@/types/models';
 import { sourceKindLabel, sourceKindIcon } from '@/lib/data-source-utils';
 
 export interface FileTreeDataSourceNodeProps {
-  node: FileTreeNode & { active: boolean; expanded: boolean };
+  node: FileTreeNode;
+  expanded: boolean;
   dataSource: DataSourceSummary | undefined;
   onClick: () => void;
 }
 
-export function FileTreeDataSourceNode({
+export const FileTreeDataSourceNode = memo(function FileTreeDataSourceNode({
   node,
+  expanded,
   dataSource,
   onClick,
 }: FileTreeDataSourceNodeProps) {
@@ -31,7 +34,7 @@ export function FileTreeDataSourceNode({
       }}
     >
       {node.hasChildren ? (
-        node.expanded ? (
+        expanded ? (
           <ChevronDown size={10} className="text-forensics-500 mr-1 shrink-0" />
         ) : (
           <ChevronRight size={10} className="text-forensics-500 mr-1 shrink-0" />
@@ -50,4 +53,4 @@ export function FileTreeDataSourceNode({
       ) : null}
     </div>
   );
-}
+});

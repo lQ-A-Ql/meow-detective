@@ -252,7 +252,10 @@ export function TableBlock({ title, children }: { title: string; children: React
 
 export function DenseTableFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-none border border-forensics-border bg-forensics-surface">
+    // The max height is what lets DenseDataTable's row windowing engage:
+    // without a bounded container the table sizes to its content and every
+    // row (and per-cell HorizontalScroll) mounts at once.
+    <div className="flex flex-1 flex-col min-h-0 max-h-[min(70vh,720px)] overflow-hidden rounded-none border border-forensics-border bg-forensics-surface">
       {children}
     </div>
   );
@@ -295,39 +298,42 @@ export function ProvenancePanel({
   );
 }
 
+// Module-level columns: stable reference keeps DenseDataTable row memoization
+// intact across panel re-renders.
+const FIELD_PROVENANCE_COLUMNS: DenseColumn<AnalysisFieldProvenance>[] = [
+  {
+    key: 'field',
+    title: '字段',
+    className: 'w-[160px]',
+    render: (item) => item.field,
+  },
+  {
+    key: 'hive',
+    title: 'Hive',
+    className: 'min-w-[220px]',
+    render: (item) => item.hivePath || '-',
+  },
+  {
+    key: 'key',
+    title: 'Key',
+    className: 'min-w-[300px]',
+    render: (item) => item.keyPath || '-',
+  },
+  {
+    key: 'value',
+    title: 'Value',
+    className: 'w-[140px]',
+    render: (item) => item.valueName || '-',
+  },
+  {
+    key: 'parser',
+    title: 'Parser',
+    className: 'w-[160px]',
+    render: (item) => item.parser || '-',
+  },
+];
+
 export function FieldProvenancePanel({ fieldProvenance }: { fieldProvenance: AnalysisFieldProvenance[] }) {
-  const columns: DenseColumn<AnalysisFieldProvenance>[] = [
-    {
-      key: 'field',
-      title: '字段',
-      className: 'w-[160px]',
-      render: (item) => item.field,
-    },
-    {
-      key: 'hive',
-      title: 'Hive',
-      className: 'min-w-[220px]',
-      render: (item) => item.hivePath || '-',
-    },
-    {
-      key: 'key',
-      title: 'Key',
-      className: 'min-w-[300px]',
-      render: (item) => item.keyPath || '-',
-    },
-    {
-      key: 'value',
-      title: 'Value',
-      className: 'w-[140px]',
-      render: (item) => item.valueName || '-',
-    },
-    {
-      key: 'parser',
-      title: 'Parser',
-      className: 'w-[160px]',
-      render: (item) => item.parser || '-',
-    },
-  ];
 
   return (
     <section>
@@ -340,7 +346,7 @@ export function FieldProvenancePanel({ fieldProvenance }: { fieldProvenance: Ana
           <DenseTableFrame>
             <DenseDataTable
               rows={fieldProvenance}
-              columns={columns}
+              columns={FIELD_PROVENANCE_COLUMNS}
               getRowKey={(item) => `${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
               emptyTitle="暂无字段级来源"
               emptyDescription="字段级 Registry provenance 暂不可用。"

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FileTreeDataSourceNode } from './FileTreeDataSourceNode';
 import type { DataSourceSummary, FileTreeNode } from '@/types/models';
 
-const baseNode: FileTreeNode & { active: boolean; expanded: boolean } = {
+const baseNode: FileTreeNode = {
   id: 'data-source:ds-1',
   name: 'Win10-C盘',
   depth: 0,
@@ -12,8 +12,6 @@ const baseNode: FileTreeNode & { active: boolean; expanded: boolean } = {
   deleted: false,
   hidden: false,
   system: false,
-  active: false,
-  expanded: false,
 };
 
 const dsLogical: DataSourceSummary = {
@@ -30,6 +28,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick: vi.fn(),
       }),
@@ -41,6 +40,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick: vi.fn(),
       }),
@@ -52,6 +52,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: undefined,
         onClick: vi.fn(),
       }),
@@ -61,10 +62,10 @@ describe('FileTreeDataSourceNode', () => {
   });
 
   it('shows expanded chevron when node is expanded', () => {
-    const expanded = { ...baseNode, expanded: true };
     render(
       createElement(FileTreeDataSourceNode, {
-        node: expanded,
+        node: baseNode,
+        expanded: true,
         dataSource: dsLogical,
         onClick: vi.fn(),
       }),
@@ -78,6 +79,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick: vi.fn(),
       }),
@@ -91,6 +93,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick,
       }),
@@ -104,6 +107,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick,
       }),
@@ -118,6 +122,7 @@ describe('FileTreeDataSourceNode', () => {
     render(
       createElement(FileTreeDataSourceNode, {
         node: baseNode,
+        expanded: false,
         dataSource: dsLogical,
         onClick,
       }),

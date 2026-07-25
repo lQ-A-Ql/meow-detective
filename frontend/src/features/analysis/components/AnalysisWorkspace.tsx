@@ -30,6 +30,7 @@ import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import {
   AnalysisSourceEpoch,
   analysisSourceContextKey,
+  type ExtractionCategory,
   type LinuxAnalysisTabKey,
   isExtractionCategory,
 } from '@/features/analysis/types';
@@ -228,18 +229,19 @@ export function AnalysisWorkspace() {
   }, [setExtractionRunning, sourceEpoch]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvent<AnalysisExtractionProgress>('analysis-extraction-progress', (event) => {
-      const progress = event.payload;
-      if (
-        progress.caseId !== currentCase.data?.id
-        || progress.dataSourceId !== selectedDataSource?.id
-        || !isExtractionCategory(progress.category)
-      ) {
-        return;
-      }
+    // Extraction progress events fire per candidate batch; applying each one
+    // to the store re-renders the whole workspace at event frequency.
+    // Coalesce per category (~150ms trailing) and apply terminal phases
+    // immediately so completion is never delayed.
+    const pending = new Map<ExtractionCategory, AnalysisExtractionProgress>();
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const applyProgress = (
+      category: ExtractionCategory,
+      progress: AnalysisExtractionProgress,
+    ) => {
       const completed = progress.phase === 'completed';
       const failed = progress.phase === 'failed';
-      updateExtractionProgress(progress.category, {
+      updateExtractionProgress(category, {
         status: failed ? 'failed' : completed ? 'success' : 'running',
         scannedCount: progress.processedCandidates,
         artifactCount: progress.artifactCount,
@@ -256,8 +258,37 @@ export function AnalysisWorkspace() {
         detail: progress.detail,
         error: failed ? progress.detail : undefined,
       });
+    };
+    const flush = () => {
+      flushTimer = undefined;
+      pending.forEach((progress, category) => applyProgress(category, progress));
+      pending.clear();
+    };
+    const unsubscribe = subscribeToEvent<AnalysisExtractionProgress>('analysis-extraction-progress', (event) => {
+      const progress = event.payload;
+      const category = progress.category;
+      if (
+        progress.caseId !== currentCase.data?.id
+        || progress.dataSourceId !== selectedDataSource?.id
+        || !isExtractionCategory(category)
+      ) {
+        return;
+      }
+      if (progress.phase === 'completed' || progress.phase === 'failed') {
+        if (flushTimer !== undefined) {
+          clearTimeout(flushTimer);
+        }
+        flush();
+        applyProgress(category, progress);
+        return;
+      }
+      pending.set(category, progress);
+      flushTimer ??= setTimeout(flush, 150);
     });
     return () => {
+      if (flushTimer !== undefined) {
+        clearTimeout(flushTimer);
+      }
       unsubscribe();
     };
   }, [

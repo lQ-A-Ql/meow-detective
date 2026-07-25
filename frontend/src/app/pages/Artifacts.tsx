@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { PageSubbar } from '@/components/layout/PageSubbar';
-import { DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
   InspectorPane,
   InspectorSection,
@@ -60,6 +60,38 @@ export function Artifacts() {
     tableRows.find((row) => row.id === selectedArtifactId) ??
     tableRows[0];
 
+  // The first column title embeds the family name, so the array is memoized
+  // on the family instead of being rebuilt on every render.
+  const tableColumns = useMemo<DenseColumn<ArtifactRow>[]>(
+    () => [
+      {
+        key: 'title',
+        title: `${selectedArtifactFamily} 路径`,
+        className: 'w-[38%] text-forensics-muted',
+        render: (row) => row.title,
+      },
+      {
+        key: 'summary',
+        title: '目标路径',
+        className: 'w-[34%] text-forensics-text-secondary',
+        render: (row) => row.summary.replace('目标路径: ', ''),
+      },
+      {
+        key: 'createdAt',
+        title: '创建时间',
+        className: 'w-40 text-forensics-muted-light',
+        render: (row) => row.createdAt,
+      },
+      {
+        key: 'args',
+        title: '参数',
+        className: 'text-forensics-text-tertiary',
+        render: (row) => String(row.attrs.arguments ?? '-'),
+      },
+    ],
+    [selectedArtifactFamily],
+  );
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
       <PageSubbar
@@ -97,32 +129,7 @@ export function Artifacts() {
             onRowClick={(row) => setSelectedArtifactId(row.id)}
             emptyTitle="当前痕迹家族无记录"
             emptyDescription="请切换 family 或等待解析任务完成。"
-            columns={[
-              {
-                key: 'title',
-                title: `${selectedArtifactFamily} 路径`,
-                className: 'w-[38%] text-forensics-muted',
-                render: (row) => row.title,
-              },
-              {
-                key: 'summary',
-                title: '目标路径',
-                className: 'w-[34%] text-forensics-text-secondary',
-                render: (row) => row.summary.replace('目标路径: ', ''),
-              },
-              {
-                key: 'createdAt',
-                title: '创建时间',
-                className: 'w-40 text-forensics-muted-light',
-                render: (row) => row.createdAt,
-              },
-              {
-                key: 'args',
-                title: '参数',
-                className: 'text-forensics-text-tertiary',
-                render: (row) => String(row.attrs.arguments ?? '-'),
-              },
-            ]}
+            columns={tableColumns}
           />
         </div>
 

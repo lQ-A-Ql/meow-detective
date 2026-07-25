@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type {
   EmailAttachment,
   EmailExtractionSummary,
@@ -22,6 +22,73 @@ import {
   Paperclip,
 } from 'lucide-react';
 
+// Module-level columns: stable reference keeps DenseDataTable row memoization
+// intact across selection/renders.
+const columns: DenseColumn<EmailMessage>[] = [
+  {
+    key: 'sentAt',
+    title: '时间',
+    className: 'w-[150px]',
+    render: (row) => row.sentAt ?? '-',
+  },
+  {
+    key: 'from',
+    title: 'From',
+    className: 'w-[180px]',
+    render: (row) => row.from || '-',
+  },
+  {
+    key: 'to',
+    title: 'To',
+    className: 'w-[160px]',
+    render: (row) => joinAddresses(row.to),
+  },
+  {
+    key: 'cc',
+    title: 'Cc',
+    className: 'w-[120px]',
+    render: (row) => joinAddresses(row.cc),
+  },
+  {
+    key: 'bcc',
+    title: 'Bcc',
+    className: 'w-[120px]',
+    render: (row) => joinAddresses(row.bcc),
+  },
+  {
+    key: 'subject',
+    title: 'Subject',
+    className: 'min-w-[200px]',
+    render: (row) => row.subject || '-',
+  },
+  {
+    key: 'attachmentCount',
+    title: '附件',
+    className: 'w-[100px]',
+    render: (row) =>
+      row.attachmentCount > 0 ? (
+        <span className="inline-flex items-center gap-1">
+          <Paperclip className="size-3" />
+          {row.attachmentCount}
+        </span>
+      ) : (
+        '-'
+      ),
+  },
+  {
+    key: 'sourcePath',
+    title: 'Source',
+    className: 'min-w-[180px]',
+    render: (row) => row.sourcePath || '-',
+  },
+  {
+    key: 'containerPath',
+    title: 'Folder',
+    className: 'min-w-[140px]',
+    render: (row) => row.containerPath || '-',
+  },
+];
+
 export function EmailExtractionPanel({
   summary,
 }: {
@@ -41,71 +108,13 @@ export function EmailExtractionPanel({
   const selectedMessage = info.messages.find(
     (msg) => msg.artifactId === selectedArtifactId,
   );
-
-  const columns: DenseColumn<EmailMessage>[] = [
-    {
-      key: 'sentAt',
-      title: '时间',
-      className: 'w-[150px]',
-      render: (row) => row.sentAt ?? '-',
-    },
-    {
-      key: 'from',
-      title: 'From',
-      className: 'w-[180px]',
-      render: (row) => row.from || '-',
-    },
-    {
-      key: 'to',
-      title: 'To',
-      className: 'w-[160px]',
-      render: (row) => joinAddresses(row.to),
-    },
-    {
-      key: 'cc',
-      title: 'Cc',
-      className: 'w-[120px]',
-      render: (row) => joinAddresses(row.cc),
-    },
-    {
-      key: 'bcc',
-      title: 'Bcc',
-      className: 'w-[120px]',
-      render: (row) => joinAddresses(row.bcc),
-    },
-    {
-      key: 'subject',
-      title: 'Subject',
-      className: 'min-w-[200px]',
-      render: (row) => row.subject || '-',
-    },
-    {
-      key: 'attachmentCount',
-      title: '附件',
-      className: 'w-[100px]',
-      render: (row) =>
-        row.attachmentCount > 0 ? (
-          <span className="inline-flex items-center gap-1">
-            <Paperclip className="size-3" />
-            {row.attachmentCount}
-          </span>
-        ) : (
-          '-'
-        ),
-    },
-    {
-      key: 'sourcePath',
-      title: 'Source',
-      className: 'min-w-[180px]',
-      render: (row) => row.sourcePath || '-',
-    },
-    {
-      key: 'containerPath',
-      title: 'Folder',
-      className: 'min-w-[140px]',
-      render: (row) => row.containerPath || '-',
-    },
-  ];
+  const handleRowClick = useCallback(
+    (row: EmailMessage) =>
+      setSelectedArtifactId(
+        row.artifactId === selectedArtifactId ? null : row.artifactId,
+      ),
+    [selectedArtifactId],
+  );
 
   return (
     <ExtractionTableSection
@@ -128,11 +137,7 @@ export function EmailExtractionPanel({
           columns={columns}
           getRowKey={(row) => row.artifactId}
           selectedRowKey={selectedArtifactId ?? undefined}
-          onRowClick={(row) =>
-            setSelectedArtifactId(
-              row.artifactId === selectedArtifactId ? null : row.artifactId,
-            )
-          }
+          onRowClick={handleRowClick}
           emptyTitle="暂无邮件信息"
           emptyDescription="支持 EML/EMLX/MBOX/PST/OST 邮件解析：头字段、正文、附件、Cc/Bcc、Message-ID、References、容器路径与文件夹路径。"
         />

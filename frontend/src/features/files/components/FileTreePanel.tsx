@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import { memo, useCallback, type Ref } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { TreeConnector } from '@/components/tree/TreeConnector';
@@ -8,7 +8,9 @@ import { FileTreeDataSourceNode } from '@/features/files/components/FileTreeData
 import type { DataSourceSummary, FileTreeNode } from '@/types/models';
 
 export interface FileTreePanelProps {
-  filteredTreeNodes: (FileTreeNode & { active: boolean; expanded: boolean })[];
+  filteredTreeNodes: FileTreeNode[];
+  activeDirectoryId?: string;
+  expandedIds: ReadonlySet<string>;
   activeChildrenPage: { truncated?: boolean; limit?: number; totalCount: number } | undefined;
   activeTreeChildrenLoaded: number;
   canLoadMoreTreeChildren: boolean;
@@ -29,8 +31,72 @@ function dataSourceIdFromNodeId(nodeId: string): string {
   return nodeId.replace(/^data-source:/, '');
 }
 
+interface TreeNodeRowProps {
+  node: FileTreeNode;
+  active: boolean;
+  expanded: boolean;
+  isLast: boolean;
+  displayNodeName: (name: string, depth: number, dataSourceId?: string) => string;
+  onToggle: (node: FileTreeNode) => void;
+}
+
+// Memoized row: node references stay stable across selection/expansion
+// changes (see use-file-tree), so only rows whose flags actually flipped
+// re-render instead of the whole visible tree.
+const TreeNodeRow = memo(function TreeNodeRow({
+  node,
+  active,
+  expanded,
+  isLast,
+  displayNodeName,
+  onToggle,
+}: TreeNodeRowProps) {
+  const handleClick = useCallback(() => onToggle(node), [onToggle, node]);
+  return (
+    <Button
+      type="button"
+      variant="treeControl"
+      size="treeRow"
+      onClick={handleClick}
+      data-active={active ? 'true' : undefined}
+      className="relative max-w-full"
+    >
+      {node.depth > 0 && (
+        <TreeConnector depth={node.depth} isLast={isLast} />
+      )}
+      {node.hasChildren ? (
+        expanded ? (
+          <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
+        ) : (
+          <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
+        )
+      ) : (
+        <span className="w-3 shrink-0" />
+      )}
+      <FileIconWithStatusOverlay
+        name={node.name}
+        entryType={node.entryType}
+        status={node.status}
+        expanded={expanded}
+        deleted={node.deleted}
+        hidden={node.hidden}
+        system={node.system}
+        size={12}
+      />
+      <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth, node.dataSourceId)}</span>
+      {node.status && node.status !== 'ready' ? (
+        <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+          {node.status}
+        </span>
+      ) : null}
+    </Button>
+  );
+});
+
 export function FileTreePanel({
   filteredTreeNodes,
+  activeDirectoryId,
+  expandedIds,
   activeChildrenPage,
   activeTreeChildrenLoaded,
   canLoadMoreTreeChildren,
@@ -91,6 +157,7 @@ export function FileTreePanel({
               <FileTreeDataSourceNode
                 key={node.id}
                 node={node}
+                expanded={expandedIds.has(node.id)}
                 dataSource={ds}
                 onClick={() => toggleDirectory(node)}
               />
@@ -98,44 +165,15 @@ export function FileTreePanel({
           }
 
           return (
-            <Button
+            <TreeNodeRow
               key={node.id}
-              type="button"
-              variant="treeControl"
-              size="treeRow"
-              onClick={() => toggleDirectory(node)}
-              data-active={node.active ? 'true' : undefined}
-              className="relative max-w-full"
-            >
-              {node.depth > 0 && (
-                <TreeConnector depth={node.depth} isLast={isLast} />
-              )}
-              {node.hasChildren ? (
-                node.expanded ? (
-                  <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
-                ) : (
-                  <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
-                )
-              ) : (
-                <span className="w-3 shrink-0" />
-              )}
-              <FileIconWithStatusOverlay
-                name={node.name}
-                entryType={node.entryType}
-                status={node.status}
-                expanded={node.expanded}
-                deleted={node.deleted}
-                hidden={node.hidden}
-                system={node.system}
-                size={12}
-              />
-              <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth, node.dataSourceId)}</span>
-              {node.status && node.status !== 'ready' ? (
-                <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
-                  {node.status}
-                </span>
-              ) : null}
-            </Button>
+              node={node}
+              active={node.id === activeDirectoryId}
+              expanded={expandedIds.has(node.id)}
+              isLast={isLast}
+              displayNodeName={displayNodeName}
+              onToggle={toggleDirectory}
+            />
           );
         })}
         {canLoadMoreTreeChildren ? (

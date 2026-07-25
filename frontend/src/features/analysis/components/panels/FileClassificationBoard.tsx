@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { FilePreviewDialog } from '@/components/preview/FilePreviewDialog';
@@ -42,6 +42,45 @@ const FAMILY_KEY: Record<string, string> = {
 };
 
 const TEXT_EXTENSIONS = new Set(['log', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'htm', 'evtx']);
+
+// Module-level columns keep a stable reference so DenseDataTable's memoized
+// rows do not re-render whenever dialog/viewer state changes above them.
+const CLASSIFICATION_COLUMNS: DenseColumn<ClassifiedFileRow>[] = [
+  {
+    key: 'name',
+    title: '文件名',
+    className: 'min-w-[220px]',
+    render: (row) => row.name,
+  },
+  {
+    key: 'path',
+    title: '路径',
+    className: 'min-w-[260px]',
+    render: (row) => <span className="font-mono text-[10px] text-forensics-muted-light">{row.path}</span>,
+  },
+  {
+    key: 'magicType',
+    title: '魔数类型',
+    className: 'w-[90px]',
+    render: (row) => row.magicType ?? '-',
+  },
+  {
+    key: 'source',
+    title: '判定',
+    className: 'w-[70px]',
+    render: (row) => (
+      <span className={row.classificationSource === 'magic' ? 'text-forensics-success-text' : 'text-forensics-muted'}>
+        {row.classificationSource === 'magic' ? '魔数' : '推断'}
+      </span>
+    ),
+  },
+  {
+    key: 'size',
+    title: '大小',
+    className: 'w-[100px] text-right',
+    render: (row) => formatSize(row.size),
+  },
+];
 
 function defaultTabFor(row: ClassifiedFileRow): PreviewViewerTab {
   const ext = row.name.split('.').pop()?.toLowerCase() ?? '';
@@ -145,55 +184,10 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
       }
     : undefined;
 
-  const columns: DenseColumn<ClassifiedFileRow>[] = [
-    {
-      key: 'name',
-      title: '文件名',
-      className: 'min-w-[220px]',
-      render: (row) => (
-        <button
-          type="button"
-          className={`w-full text-left hover:text-forensics-info-text ${selected?.fileId === row.fileId ? 'font-medium text-forensics-info-text' : ''}`}
-          onClick={() => selectRow(row)}
-        >
-          {row.name}
-        </button>
-      ),
-    },
-    {
-      key: 'path',
-      title: '路径',
-      className: 'min-w-[260px]',
-      render: (row) => <span className="font-mono text-[10px] text-forensics-muted-light">{row.path}</span>,
-    },
-    {
-      key: 'magicType',
-      title: '魔数类型',
-      className: 'w-[90px]',
-      render: (row) => row.magicType ?? '-',
-    },
-    {
-      key: 'source',
-      title: '判定',
-      className: 'w-[70px]',
-      render: (row) => (
-        <span className={row.classificationSource === 'magic' ? 'text-forensics-success-text' : 'text-forensics-muted'}>
-          {row.classificationSource === 'magic' ? '魔数' : '推断'}
-        </span>
-      ),
-    },
-    {
-      key: 'size',
-      title: '大小',
-      className: 'w-[100px] text-right',
-      render: (row) => formatSize(row.size),
-    },
-  ];
-
-  function selectRow(row: ClassifiedFileRow) {
+  const selectRow = useCallback((row: ClassifiedFileRow) => {
     setSelected(row);
     setViewerTab(defaultTabFor(row));
-  }
+  }, []);
 
   if (!board) {
     return <EmptyLine text="文件分类数据暂不可用。" />;
@@ -238,7 +232,12 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
                 headerExtra={<StatusPill status={board.status} />}
               >
                 {group.subcategories.map((sub) => (
-                  <SubcategoryTable key={sub.name} sub={sub} columns={columns} />
+                  <SubcategoryTable
+                    key={sub.name}
+                    sub={sub}
+                    selectedFileId={selected?.fileId}
+                    onSelect={selectRow}
+                  />
                 ))}
               </CollapsibleSection>
             );
@@ -274,10 +273,12 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
 
 function SubcategoryTable({
   sub,
-  columns,
+  selectedFileId,
+  onSelect,
 }: {
   sub: ClassificationSubcategory;
-  columns: DenseColumn<ClassifiedFileRow>[];
+  selectedFileId?: string;
+  onSelect: (row: ClassifiedFileRow) => void;
 }) {
   return (
     <div>
@@ -291,8 +292,10 @@ function SubcategoryTable({
       <DenseTableFrame>
         <DenseDataTable
           rows={sub.files}
-          columns={columns}
+          columns={CLASSIFICATION_COLUMNS}
           getRowKey={(row) => row.fileId}
+          selectedRowKey={selectedFileId}
+          onRowClick={onSelect}
           emptyTitle="暂无文件"
           emptyDescription="该子分类当前没有可展示的抽样文件。"
         />

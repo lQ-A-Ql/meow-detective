@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   LinuxAptEvent,
@@ -96,7 +97,10 @@ export function LinuxArtifactsPanel({
     generatedAt: '',
   };
 
-  const journalColumns: DenseColumn<LinuxJournalEntry>[] = [
+  // Column titles are translated, so all column arrays are memoized on `t`
+  // instead of being rebuilt on every render.
+  const columns = useMemo(() => ({
+    journal: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'priority', title: t('linuxArtifacts.columns.priority'), className: 'w-[70px]', render: (row) => row.priority?.toString() ?? '-' },
     { key: 'systemdUnit', title: t('linuxArtifacts.columns.systemdUnit'), className: 'w-[140px]', render: (row) => row.systemdUnit ?? '-' },
@@ -104,9 +108,8 @@ export function LinuxArtifactsPanel({
     { key: 'pid', title: t('linuxArtifacts.columns.pid'), className: 'w-[70px]', render: (row) => row.pid?.toString() ?? '-' },
     { key: 'message', title: t('linuxArtifacts.columns.message'), className: 'min-w-[240px]', render: (row) => row.message ?? '-' },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const loginColumns: DenseColumn<LinuxLoginRecord>[] = [
+    ] as DenseColumn<LinuxJournalEntry>[],
+    login: [
     { key: 'loginTime', title: t('linuxArtifacts.columns.loginTime'), className: 'w-[180px]', render: (row) => row.loginTime ?? '-' },
     { key: 'logoutTime', title: t('linuxArtifacts.columns.logoutTime'), className: 'w-[180px]', render: (row) => row.logoutTime ?? '-' },
     { key: 'user', title: t('linuxArtifacts.columns.user'), className: 'w-[120px]', render: (row) => row.user },
@@ -114,31 +117,27 @@ export function LinuxArtifactsPanel({
     { key: 'host', title: t('linuxArtifacts.columns.host'), className: 'w-[140px]', render: (row) => row.host },
     { key: 'recordType', title: t('linuxArtifacts.columns.recordType'), className: 'w-[80px]', render: (row) => row.recordType.toString() },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const commandColumns: DenseColumn<LinuxBashCommand>[] = [
+    ] as DenseColumn<LinuxLoginRecord>[],
+    command: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'command', title: t('linuxArtifacts.columns.command'), className: 'min-w-[300px]', render: (row) => <span className="font-mono">{row.command}</span> },
     { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const packageColumns: DenseColumn<LinuxAptEvent>[] = [
+    ] as DenseColumn<LinuxBashCommand>[],
+    package: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'action', title: t('linuxArtifacts.columns.action'), className: 'w-[100px]', render: (row) => row.action },
     { key: 'package', title: t('linuxArtifacts.columns.package'), className: 'min-w-[200px]', render: (row) => row.package },
     { key: 'version', title: t('linuxArtifacts.columns.version'), className: 'w-[160px]', render: (row) => row.version },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const cronColumns: DenseColumn<LinuxCronJob>[] = [
+    ] as DenseColumn<LinuxAptEvent>[],
+    cron: [
     { key: 'schedule', title: t('linuxArtifacts.columns.schedule'), className: 'w-[140px]', render: (row) => <span className="font-mono">{row.schedule}</span> },
     { key: 'user', title: t('linuxArtifacts.columns.user'), className: 'w-[100px]', render: (row) => row.user ?? '-' },
     { key: 'command', title: t('linuxArtifacts.columns.command'), className: 'min-w-[260px]', render: (row) => <span className="font-mono">{row.command}</span> },
     { key: 'sourceFile', title: t('linuxArtifacts.columns.sourceFile'), className: 'min-w-[180px]', render: (row) => row.sourceFile },
-  ];
-
-  const sudoColumns: DenseColumn<LinuxSudoEvent>[] = [
+    ] as DenseColumn<LinuxCronJob>[],
+    sudo: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'user', title: t('linuxArtifacts.columns.user'), className: 'w-[100px]', render: (row) => row.user },
     { key: 'targetUser', title: t('linuxArtifacts.columns.targetUser'), className: 'w-[100px]', render: (row) => row.targetUser ?? '-' },
@@ -162,9 +161,8 @@ export function LinuxArtifactsPanel({
     { key: 'workingDirectory', title: t('linuxArtifacts.columns.workingDirectory'), className: 'w-[160px]', render: (row) => row.workingDirectory ?? '-' },
     { key: 'command', title: t('linuxArtifacts.columns.command'), className: 'min-w-[240px]', render: (row) => <span className="font-mono">{row.command}</span> },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const systemConfigColumns: DenseColumn<LinuxSystemConfig>[] = [
+    ] as DenseColumn<LinuxSudoEvent>[],
+    systemConfig: [
     { key: 'configKind', title: t('linuxArtifacts.columns.configKind'), className: 'w-[130px]', render: (row) => row.configKind || '-' },
     { key: 'key', title: t('linuxArtifacts.columns.key'), className: 'w-[140px]', render: (row) => row.key ?? row.username ?? '-' },
     { key: 'value', title: t('linuxArtifacts.columns.value'), className: 'min-w-[220px]', render: (row) => row.value ?? row.line ?? '-' },
@@ -173,18 +171,16 @@ export function LinuxArtifactsPanel({
     { key: 'home', title: t('linuxArtifacts.columns.home'), className: 'w-[160px]', render: (row) => row.home ?? '-' },
     { key: 'shell', title: t('linuxArtifacts.columns.shell'), className: 'w-[140px]', render: (row) => row.shell ?? '-' },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const webSiteColumns: DenseColumn<LinuxWebSite>[] = [
+    ] as DenseColumn<LinuxSystemConfig>[],
+    webSite: [
     { key: 'serverKind', title: t('linuxArtifacts.columns.serverKind'), className: 'w-[90px]', render: (row) => row.serverKind },
     { key: 'siteName', title: t('linuxArtifacts.columns.siteName'), className: 'min-w-[160px]', render: (row) => row.siteName },
     { key: 'hostnames', title: t('linuxArtifacts.columns.hostnames'), className: 'min-w-[180px]', render: (row) => row.hostnames.join(', ') || '-' },
     { key: 'listen', title: t('linuxArtifacts.columns.listen'), className: 'w-[140px]', render: (row) => row.listen.join(', ') || '-' },
     { key: 'documentRoots', title: t('linuxArtifacts.columns.documentRoots'), className: 'min-w-[220px]', render: (row) => row.documentRoots.join(', ') || '-' },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const webAccessColumns: DenseColumn<LinuxWebAccessLog>[] = [
+    ] as DenseColumn<LinuxWebSite>[],
+    webAccess: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'clientIp', title: t('linuxArtifacts.columns.clientIp'), className: 'w-[130px]', render: (row) => row.clientIp },
     { key: 'method', title: t('linuxArtifacts.columns.method'), className: 'w-[70px]', render: (row) => row.method },
@@ -192,16 +188,14 @@ export function LinuxArtifactsPanel({
     { key: 'uri', title: t('linuxArtifacts.columns.uri'), className: 'min-w-[260px]', render: (row) => <span className="font-mono">{row.uri}</span> },
     { key: 'userAgent', title: t('linuxArtifacts.columns.userAgent'), className: 'min-w-[200px]', render: (row) => row.userAgent ?? '-' },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const webErrorColumns: DenseColumn<LinuxWebErrorLog>[] = [
+    ] as DenseColumn<LinuxWebAccessLog>[],
+    webError: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[110px]', render: (row) => row.severity ?? '-' },
     { key: 'message', title: t('linuxArtifacts.columns.message'), className: 'min-w-[320px]', render: (row) => row.message },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const webFindingColumns: DenseColumn<LinuxWebFinding>[] = [
+    ] as DenseColumn<LinuxWebErrorLog>[],
+    webFinding: [
     { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[90px]', render: (row) => row.severity },
     { key: 'findingKind', title: t('linuxArtifacts.columns.findingKind'), className: 'w-[150px]', render: (row) => row.findingKind },
     { key: 'confidence', title: t('linuxArtifacts.columns.confidence'), className: 'w-[90px]', render: (row) => `${Math.round(row.confidence * 100)}%` },
@@ -209,33 +203,31 @@ export function LinuxArtifactsPanel({
     { key: 'uri', title: t('linuxArtifacts.columns.uri'), className: 'min-w-[220px]', render: (row) => row.uri ?? '-' },
     { key: 'evidence', title: t('linuxArtifacts.columns.evidence'), className: 'min-w-[260px]', render: (row) => row.evidence },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
-  ];
-
-  const mysqlFindingColumns: DenseColumn<LinuxMysqlFinding>[] = [
+    ] as DenseColumn<LinuxWebFinding>[],
+    mysqlFinding: [
     { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[90px]', render: (row) => row.severity },
     { key: 'findingKind', title: t('linuxArtifacts.columns.findingKind'), className: 'w-[170px]', render: (row) => row.findingKind },
     { key: 'confidence', title: t('linuxArtifacts.columns.confidence'), className: 'w-[90px]', render: (row) => `${Math.round(row.confidence * 100)}%` },
     { key: 'evidence', title: t('linuxArtifacts.columns.evidence'), className: 'min-w-[300px]', render: (row) => row.evidence },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
     { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
-  ];
-
-  const mysqlConfigColumns: DenseColumn<LinuxMysqlConfig>[] = [
+    ] as DenseColumn<LinuxMysqlFinding>[],
+    mysqlConfig: [
     { key: 'section', title: t('linuxArtifacts.columns.section'), className: 'w-[120px]', render: (row) => row.section ?? '-' },
     { key: 'key', title: t('linuxArtifacts.columns.key'), className: 'w-[180px]', render: (row) => <span className="font-mono">{row.key}</span> },
     { key: 'value', title: t('linuxArtifacts.columns.value'), className: 'min-w-[240px]', render: (row) => <span className="font-mono">{row.value}</span> },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
     { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
-  ];
-
-  const mysqlLogColumns: DenseColumn<LinuxMysqlLogEntry>[] = [
+    ] as DenseColumn<LinuxMysqlConfig>[],
+    mysqlLog: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
     { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[110px]', render: (row) => row.severity ?? '-' },
     { key: 'threadId', title: t('linuxArtifacts.columns.threadId'), className: 'w-[90px]', render: (row) => row.threadId ?? '-' },
     { key: 'message', title: t('linuxArtifacts.columns.message'), className: 'min-w-[320px]', render: (row) => row.message },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
     { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
-  ];
+    ] as DenseColumn<LinuxMysqlLogEntry>[],
+  }), [t]);
 
   const tabContent: Record<LinuxArtifactTabKey, React.ReactNode> = {
     overview: info.totalCount === 0 ? <EmptyLine text={t('linuxArtifacts.empty.overview.description')} /> : null,
@@ -243,7 +235,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.journalEntries}
-          columns={journalColumns}
+          columns={columns.journal}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.journal.title')}
           emptyDescription={t('linuxArtifacts.empty.journal.description')}
@@ -254,7 +246,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.loginRecords}
-          columns={loginColumns}
+          columns={columns.login}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.login.title')}
           emptyDescription={t('linuxArtifacts.empty.login.description')}
@@ -265,7 +257,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.bashCommands}
-          columns={commandColumns}
+          columns={columns.command}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.commands.title')}
           emptyDescription={t('linuxArtifacts.empty.commands.description')}
@@ -276,7 +268,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.aptEvents}
-          columns={packageColumns}
+          columns={columns.package}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.packages.title')}
           emptyDescription={t('linuxArtifacts.empty.packages.description')}
@@ -287,7 +279,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.cronJobs}
-          columns={cronColumns}
+          columns={columns.cron}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.cron.title')}
           emptyDescription={t('linuxArtifacts.empty.cron.description')}
@@ -298,7 +290,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.sudoEvents}
-          columns={sudoColumns}
+          columns={columns.sudo}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.sudo.title')}
           emptyDescription={t('linuxArtifacts.empty.sudo.description')}
@@ -309,7 +301,7 @@ export function LinuxArtifactsPanel({
       <DenseTableFrame>
         <DenseDataTable
           rows={info.systemConfigs}
-          columns={systemConfigColumns}
+          columns={columns.systemConfig}
           getRowKey={(row) => row.artifactId}
           emptyTitle={t('linuxArtifacts.empty.systemConfig.title')}
           emptyDescription={t('linuxArtifacts.empty.systemConfig.description')}
@@ -321,7 +313,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.webFindings}
-            columns={webFindingColumns}
+            columns={columns.webFinding}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.webFindings.title')}
             emptyDescription={t('linuxArtifacts.empty.webFindings.description')}
@@ -330,7 +322,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.webSites}
-            columns={webSiteColumns}
+            columns={columns.webSite}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.webSites.title')}
             emptyDescription={t('linuxArtifacts.empty.webSites.description')}
@@ -339,7 +331,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.webAccessLogs}
-            columns={webAccessColumns}
+            columns={columns.webAccess}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.webAccess.title')}
             emptyDescription={t('linuxArtifacts.empty.webAccess.description')}
@@ -348,7 +340,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.webErrorLogs}
-            columns={webErrorColumns}
+            columns={columns.webError}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.webError.title')}
             emptyDescription={t('linuxArtifacts.empty.webError.description')}
@@ -362,7 +354,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.mysqlFindings}
-            columns={mysqlFindingColumns}
+            columns={columns.mysqlFinding}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.mysqlFindings.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlFindings.description')}
@@ -371,7 +363,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.mysqlConfigs}
-            columns={mysqlConfigColumns}
+            columns={columns.mysqlConfig}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.mysqlConfigs.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlConfigs.description')}
@@ -380,7 +372,7 @@ export function LinuxArtifactsPanel({
         <DenseTableFrame>
           <DenseDataTable
             rows={info.mysqlLogs}
-            columns={mysqlLogColumns}
+            columns={columns.mysqlLog}
             getRowKey={(row) => row.artifactId}
             emptyTitle={t('linuxArtifacts.empty.mysqlLogs.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlLogs.description')}

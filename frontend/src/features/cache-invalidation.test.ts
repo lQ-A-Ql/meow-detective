@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PROJECTION_EVENT_TOPICS,
   invalidateCacheStatusQueries,
@@ -25,6 +25,15 @@ function invalidatedKeys(invalidateSpy: ReturnType<typeof vi.spyOn>): unknown[][
 }
 
 describe('projection cache invalidation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('subscribes every terminal job event to projection invalidation', () => {
     expect(PROJECTION_EVENT_TOPICS).toEqual(expect.arrayContaining([
       'job-completed',
@@ -87,6 +96,9 @@ describe('projection cache invalidation', () => {
     const result: Pick<PartialResult, 'kind' | 'freshness'> = { kind: 'timelineEvents', freshness: 'ready' };
 
     invalidatePartialResultQueries(queryClient, result);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(300);
 
     expect(invalidatedKeys(invalidateSpy)).toEqual([['timeline']]);
   });
@@ -96,18 +108,22 @@ describe('projection cache invalidation', () => {
     const result: Pick<PartialResult, 'kind' | 'freshness'> = { kind: 'timelineBuckets', freshness: 'deferred' };
 
     invalidatePartialResultQueries(queryClient, result);
+    vi.advanceTimersByTime(600);
 
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
-  it('routes backend projection events to affected query families', () => {
+  it('coalesces high-frequency backend projection events into one invalidation per family', () => {
     const { queryClient, invalidateSpy } = createClient();
 
     invalidateEventProjectionQueries(queryClient, 'artifact-added');
     invalidateEventProjectionQueries(queryClient, 'timeline-updated');
     invalidateEventProjectionQueries(queryClient, 'search-index-progress');
+    expect(invalidateSpy).not.toHaveBeenCalled();
 
-    expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['timeline'], ['search']]);
+    vi.advanceTimersByTime(300);
+
+    expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['search']]);
   });
 
   it('refreshes projections when a background job reaches a terminal state', () => {
@@ -128,6 +144,7 @@ describe('projection cache invalidation', () => {
 
     invalidateCacheStatusQueries(queryClient, { cacheKey: 'timeline:buckets:case-1', state: 'ready' });
     invalidateCacheStatusQueries(queryClient, { cacheKey: 'search:index:case-1', state: 'pending' });
+    vi.advanceTimersByTime(300);
 
     expect(invalidatedKeys(invalidateSpy)).toEqual([['timeline']]);
   });

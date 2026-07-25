@@ -1,10 +1,10 @@
 import { Filter, ChevronRight, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { PageSubbar } from '@/components/layout/PageSubbar';
-import { DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import { useSearchResults } from '@/features/search/hooks';
 import {
@@ -18,6 +18,19 @@ import { SearchHit } from '@/types/models';
 
 const defaultQuery = 'content:password AND path:doc';
 
+// Module-level columns: stable reference keeps memoized table rows from
+// re-rendering on unrelated state changes.
+const SEARCH_HIT_COLUMNS: DenseColumn<SearchHit>[] = [
+  { key: 'path', title: '路径', className: 'w-[32%]', render: (row) => <span className="truncate block text-forensics-text-secondary">{row.path}</span> },
+  { key: 'score', title: '评分', className: 'w-24 text-forensics-muted', render: (row) => row.score.toFixed(2) },
+  {
+    key: 'snippet',
+    title: '内容预览',
+    className: 'text-forensics-text-tertiary',
+    render: (row) => <span className="line-clamp-2 text-sm leading-tight">{row.snippets[0]?.text ?? '-'}</span>,
+  },
+];
+
 export function Search() {
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get('q');
@@ -30,6 +43,10 @@ export function Search() {
   const { data } = useSearchResults(activeQuery);
   const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
   const openSearchHitInFiles = useOpenSearchHitInFiles();
+  const handleHitRowClick = useCallback(
+    (row: SearchHit) => setSelectedSearchHitId(row.fileId),
+    [setSelectedSearchHitId],
+  );
   const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
   const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
 
@@ -186,19 +203,10 @@ export function Search() {
               rows={data?.items ?? []}
               getRowKey={(row) => row.fileId}
               selectedRowKey={selectedHit?.fileId}
-              onRowClick={(row) => setSelectedSearchHitId(row.fileId)}
+              onRowClick={handleHitRowClick}
               emptyTitle="无搜索命中"
               emptyDescription="请调整检索语句、范围或过滤条件。"
-              columns={[
-                { key: 'path', title: '路径', className: 'w-[32%]', render: (row) => <span className="truncate block text-forensics-text-secondary">{row.path}</span> },
-                { key: 'score', title: '评分', className: 'w-24 text-forensics-muted', render: (row) => row.score.toFixed(2) },
-                {
-                  key: 'snippet',
-                  title: '内容预览',
-                  className: 'text-forensics-text-tertiary',
-                  render: (row) => <span className="line-clamp-2 text-sm leading-tight">{row.snippets[0]?.text ?? '-'}</span>,
-                },
-              ]}
+              columns={SEARCH_HIT_COLUMNS}
             />
           </div>
 

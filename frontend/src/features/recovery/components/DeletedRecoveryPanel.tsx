@@ -5,6 +5,7 @@ import {
   RefreshCw,
   ScanSearch,
 } from 'lucide-react';
+import { useCallback } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -142,40 +143,46 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
   );
 }
 
-export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewModel }) {
-  const columns: DenseColumn<DeletedFileRecovery>[] = [
-    {
-      key: 'inode',
-      title: 'Inode',
-      className: 'w-[110px]',
-      render: (row) => row.inode,
-    },
-    {
-      key: 'path',
-      title: '原始路径',
-      className: 'min-w-[240px]',
-      render: (row) => row.originalPath ?? '-',
-    },
-    {
-      key: 'size',
-      title: '大小',
-      className: 'w-[90px]',
-      render: (row) => formatBytes(row.declaredSize),
-    },
-    {
-      key: 'completeness',
-      title: '恢复状态',
-      className: 'w-[100px]',
-      render: (row) => COMPLETENESS_LABELS[row.completeness],
-    },
-    {
-      key: 'confidence',
-      title: '置信度',
-      className: 'w-[75px]',
-      render: (row) => `${Math.round(row.confidence * 100)}%`,
-    },
-  ];
+// Module-level columns: stable reference keeps DenseDataTable row memoization
+// intact across model state updates.
+const columns: DenseColumn<DeletedFileRecovery>[] = [
+  {
+    key: 'inode',
+    title: 'Inode',
+    className: 'w-[110px]',
+    render: (row) => row.inode,
+  },
+  {
+    key: 'path',
+    title: '原始路径',
+    className: 'min-w-[240px]',
+    render: (row) => row.originalPath ?? '-',
+  },
+  {
+    key: 'size',
+    title: '大小',
+    className: 'w-[90px]',
+    render: (row) => formatBytes(row.declaredSize),
+  },
+  {
+    key: 'completeness',
+    title: '恢复状态',
+    className: 'w-[100px]',
+    render: (row) => COMPLETENESS_LABELS[row.completeness],
+  },
+  {
+    key: 'confidence',
+    title: '置信度',
+    className: 'w-[75px]',
+    render: (row) => `${Math.round(row.confidence * 100)}%`,
+  },
+];
 
+export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewModel }) {
+  const handleRowClick = useCallback(
+    (row: DeletedFileRecovery) => model.selectRecovery(row.id),
+    [model],
+  );
   return (
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
       <SectionHeader
@@ -253,7 +260,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               rows={model.recoveries}
               getRowKey={(row) => row.id}
               selectedRowKey={model.selectedRecoveryId}
-              onRowClick={(row) => model.selectRecovery(row.id)}
+              onRowClick={handleRowClick}
               emptyTitle="没有删除恢复候选"
               emptyDescription="当前扫描未重建出可报告的删除记录。"
             />

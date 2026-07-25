@@ -1,5 +1,5 @@
 import { Clock, ZoomIn, ZoomOut, ChevronRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { PageSubbar } from '@/components/layout/PageSubbar';
-import { DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
   InspectorPane,
   InspectorSection,
@@ -19,6 +19,35 @@ import {
 import { useTimelineEventById, useTimelineEvents } from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import { TimelineEvent } from '@/types/models';
+
+// Module-level columns: stable reference keeps memoized table rows from
+// re-rendering on unrelated state changes.
+const TIMELINE_COLUMNS: DenseColumn<TimelineEvent>[] = [
+  {
+    key: 'ts',
+    title: '时间戳',
+    className: 'w-36 text-forensics-muted',
+    render: (row) => row.ts,
+  },
+  {
+    key: 'source',
+    title: '数据源',
+    className: 'w-28 text-forensics-muted-light',
+    render: (row) => String(row.attrs.source ?? '-'),
+  },
+  {
+    key: 'eventType',
+    title: '类型',
+    className: 'w-28 text-forensics-muted',
+    render: (row) => row.eventType,
+  },
+  {
+    key: 'title',
+    title: '描述',
+    className: 'text-forensics-text-secondary',
+    render: (row) => row.title,
+  },
+];
 
 function buildTimelineBars(
   events: TimelineEvent[],
@@ -92,6 +121,10 @@ export function Timeline() {
     setSelectedTimelineId,
   } = useTimelineSelectionModel();
   const selectedTimelineEvent = useTimelineEventById(eventLookupId);
+  const handleEventRowClick = useCallback(
+    (row: TimelineEvent) => setSelectedTimelineId(row.id),
+    [setSelectedTimelineId],
+  );
 
   const selectedEvent =
     events.find((event) => event.id === selectedTimelineId) ??
@@ -111,7 +144,10 @@ export function Timeline() {
     return [selectedTimelineEvent.data, ...events];
   }, [events, selectedTimelineEvent.data]);
 
-  const sourceCount = new Set(events.map((event) => String(event.attrs.source ?? '-'))).size;
+  const sourceCount = useMemo(
+    () => new Set(events.map((event) => String(event.attrs.source ?? '-'))).size,
+    [events],
+  );
   const eventTypes = useMemo(
     () => Array.from(new Set(events.map((event) => event.eventType))).sort(),
     [events],
@@ -282,35 +318,10 @@ export function Timeline() {
             rows={tableEvents}
             getRowKey={(row) => row.id}
             selectedRowKey={selectedEvent?.id}
-            onRowClick={(row) => setSelectedTimelineId(row.id)}
+            onRowClick={handleEventRowClick}
             emptyTitle="当前时间范围无事件"
             emptyDescription="请扩大时间范围或调整事件过滤条件。"
-            columns={[
-              {
-                key: 'ts',
-                title: '时间戳',
-                className: 'w-36 text-forensics-muted',
-                render: (row) => row.ts,
-              },
-              {
-                key: 'source',
-                title: '数据源',
-                className: 'w-28 text-forensics-muted-light',
-                render: (row) => String(row.attrs.source ?? '-'),
-              },
-              {
-                key: 'eventType',
-                title: '类型',
-                className: 'w-28 text-forensics-muted',
-                render: (row) => row.eventType,
-              },
-              {
-                key: 'title',
-                title: '描述',
-                className: 'text-forensics-text-secondary',
-                render: (row) => row.title,
-              },
-            ]}
+            columns={TIMELINE_COLUMNS}
           />
         </div>
 

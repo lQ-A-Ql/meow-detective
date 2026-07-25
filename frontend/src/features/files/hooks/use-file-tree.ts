@@ -228,19 +228,21 @@ export function useFileTree({
     }
   }, [rootNodes, selectedDirectoryId, setSelectedDirectoryId]);
 
+  const expandedIdSet = useMemo(() => new Set(expandedDirectoryIds), [expandedDirectoryIds]);
+
   const flatTree = useMemo(() => {
     const visible: FileTreeNode[] = [];
     const appendNodes = (nodes: FileTreeNode[]) => {
       for (const node of nodes) {
         visible.push(node);
-        if (expandedDirectoryIds.includes(node.id)) {
+        if (expandedIdSet.has(node.id)) {
           appendNodes(treeChildren[node.id] ?? []);
         }
       }
     };
     appendNodes(rootNodes);
     return visible;
-  }, [expandedDirectoryIds, rootNodes, treeChildren]);
+  }, [expandedIdSet, rootNodes, treeChildren]);
 
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
   const parentDirectory = useMemo(() => {
@@ -284,22 +286,16 @@ export function useFileTree({
     [dataSources, partitions]
   );
 
-  const treeNodes = useMemo(
-    () =>
-      flatTree.map((node) => ({
-        ...node,
-        active: node.id === activeDirectoryId,
-        expanded: expandedDirectoryIds.includes(node.id),
-      })),
-    [activeDirectoryId, expandedDirectoryIds, flatTree]
-  );
+  // Keep node object references stable: selection/expansion flags are derived
+  // inside the memoized row components (FileTreePanel) instead of spreading
+  // every node into a fresh object on each state change.
   const filteredTreeNodes = useMemo(() => {
-    if (!filterQuery.trim()) return treeNodes;
+    if (!filterQuery.trim()) return flatTree;
     const query = filterQuery.toLowerCase();
-    return treeNodes.filter((node) =>
+    return flatTree.filter((node) =>
       node.name.toLowerCase().includes(query)
     );
-  }, [treeNodes, filterQuery]);
+  }, [flatTree, filterQuery]);
 
   const toggleDirectory = useCallback(
     (node: FileTreeNode) => {
@@ -315,11 +311,11 @@ export function useFileTree({
   );
   const handleNodeOpen = useCallback(
     (nodeId: string) => {
-      const node = treeNodes.find((n) => n.id === nodeId);
+      const node = flatTree.find((n) => n.id === nodeId);
       if (node?.hasChildren) toggleDirectory(node);
       else if (node) setSelectedFileId(node.id);
     },
-    [treeNodes, toggleDirectory, setSelectedFileId]
+    [flatTree, toggleDirectory, setSelectedFileId]
   );
   useFileTreeKeyboard({
     nodes: filteredTreeNodes,
@@ -370,7 +366,8 @@ export function useFileTree({
     filterQuery,
     setFilterQuery,
     filteredTreeNodes,
-    treeNodes,
+    treeNodes: flatTree,
+    expandedIdSet,
     treeContainerRef,
     treeWidth,
     isResizing,

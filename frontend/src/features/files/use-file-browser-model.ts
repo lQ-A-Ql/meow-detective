@@ -149,6 +149,8 @@ export function useFileBrowserModel() {
     isResizing: tree.isResizing,
     onResizeStart: tree.onResizeStart,
     filteredTreeNodes: tree.filteredTreeNodes,
+    activeDirectoryId: tree.activeDirectoryId,
+    expandedIdSet: tree.expandedIdSet,
     activeChildrenPage: tree.activeChildrenPage,
     activeTreeChildrenLoaded: tree.activeTreeChildrenLoaded,
     canLoadMoreTreeChildren: tree.canLoadMoreTreeChildren,

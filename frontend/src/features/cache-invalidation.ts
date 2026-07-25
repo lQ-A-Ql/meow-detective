@@ -88,6 +88,39 @@ function invalidateProjectionKeys(queryClient: QueryInvalidator, keys: Projectio
   });
 }
 
+/**
+ * High-frequency backend events (artifact-added, partial results, cache
+ * status) can fire dozens of times per second during import/extraction.
+ * Invalidating whole query families per event turns into an IPC/refetch
+ * storm, so those paths are coalesced: keys accumulate and flush once per
+ * interval with the union of all pending families.
+ */
+const EVENT_INVALIDATION_COALESCE_MS = 300;
+
+let scheduledKeys = new Set<ProjectionKey>();
+let scheduledClient: QueryInvalidator | undefined;
+let scheduledFlush: ReturnType<typeof setTimeout> | undefined;
+
+function flushScheduledInvalidations() {
+  if (scheduledFlush !== undefined) {
+    clearTimeout(scheduledFlush);
+  }
+  scheduledFlush = undefined;
+  const client = scheduledClient;
+  const keys = Array.from(scheduledKeys);
+  scheduledKeys = new Set();
+  scheduledClient = undefined;
+  if (client) {
+    invalidateProjectionKeys(client, keys);
+  }
+}
+
+function scheduleProjectionInvalidation(queryClient: QueryInvalidator, keys: ProjectionKey[]) {
+  keys.forEach((key) => scheduledKeys.add(key));
+  scheduledClient = queryClient;
+  scheduledFlush ??= setTimeout(flushScheduledInvalidations, EVENT_INVALIDATION_COALESCE_MS);
+}
+
 export function invalidateImportProjectionQueries(queryClient: QueryInvalidator) {
   invalidateProjectionKeys(queryClient, importProjectionKeys);
 }
@@ -101,7 +134,7 @@ export function invalidatePartialResultQueries(queryClient: QueryInvalidator, re
     return;
   }
 
-  invalidateProjectionKeys(queryClient, partialResultProjectionKeys[result.kind]);
+  scheduleProjectionInvalidation(queryClient, partialResultProjectionKeys[result.kind]);
 }
 
 export function invalidateCacheStatusQueries(queryClient: QueryInvalidator, status: Pick<IndexCacheStatus, 'cacheKey' | 'state'>) {
@@ -110,9 +143,9 @@ export function invalidateCacheStatusQueries(queryClient: QueryInvalidator, stat
   }
 
   if (status.cacheKey.toLowerCase().includes('timeline')) {
-    invalidateProjectionKeys(queryClient, ['timeline']);
+    scheduleProjectionInvalidation(queryClient, ['timeline']);
   } else if (status.cacheKey.toLowerCase().includes('search')) {
-    invalidateProjectionKeys(queryClient, ['search']);
+    scheduleProjectionInvalidation(queryClient, ['search']);
   }
 }
 
@@ -122,21 +155,25 @@ export function invalidateEventProjectionQueries(queryClient: QueryInvalidator, 
       invalidateImportProjectionQueries(queryClient);
       return;
     case 'timeline-updated':
-      invalidateProjectionKeys(queryClient, ['timeline']);
+      scheduleProjectionInvalidation(queryClient, ['timeline']);
       return;
     case 'artifact-added':
-      invalidateProjectionKeys(queryClient, ['artifacts', 'timeline']);
+      scheduleProjectionInvalidation(queryClient, ['artifacts', 'timeline']);
       return;
     case 'search-index-progress':
-      invalidateProjectionKeys(queryClient, ['search']);
+      scheduleProjectionInvalidation(queryClient, ['search']);
       return;
     case 'job-completed':
     case 'job-failed':
     case 'job-cancelled':
+      // Terminal events are one-shot: flush any coalesced work first so the
+      // final state is invalidated after all in-flight progress updates.
+      flushScheduledInvalidations();
       invalidatePostJobProjectionQueries(queryClient);
       return;
     case 'case-opened':
     case 'case-closed':
+      flushScheduledInvalidations();
       queryClient.invalidateQueries();
       return;
     default:

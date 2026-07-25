@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -186,7 +186,8 @@ function HexPreviewContent({
 }
 
 function DocumentSectionBody({ section }: { section: DocumentSection }) {
-  if (section.table) {
+  const table = useMemo(() => {
+    if (!section.table) return undefined;
     const columns: DenseColumn<{ key: string; cells: string[] }>[] = section.table.columns.map(
       (title, index) => ({
         key: `c${index}`,
@@ -196,14 +197,20 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
       }),
     );
     const rows = section.table.rows.map((cells, index) => ({ key: String(index), cells }));
+    return { columns, rows };
+  }, [section.table]);
+
+  if (table) {
     return (
-      <DenseDataTable
-        rows={rows}
-        columns={columns}
-        getRowKey={(row) => row.key}
-        emptyTitle="空表格"
-        emptyDescription="该段没有可展示的数据行。"
-      />
+      <div className="flex max-h-[min(60vh,560px)] min-h-0 flex-col overflow-hidden">
+        <DenseDataTable
+          rows={table.rows}
+          columns={table.columns}
+          getRowKey={(row) => row.key}
+          emptyTitle="空表格"
+          emptyDescription="该段没有可展示的数据行。"
+        />
+      </div>
     );
   }
   return (

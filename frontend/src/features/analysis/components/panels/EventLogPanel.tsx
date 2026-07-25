@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   EvtxApplicationEvent,
@@ -70,24 +70,35 @@ export function EventLogPanel({
     generatedAt: '',
   };
 
-  const logonEvents = info.securityEvents.filter((e: EvtxSecurityEvent) =>
-    ['logonSuccess', 'logonFailure', 'explicitCredentials'].includes(e.kind),
+  const logonEvents = useMemo(
+    () => info.securityEvents.filter((e: EvtxSecurityEvent) =>
+      ['logonSuccess', 'logonFailure', 'explicitCredentials'].includes(e.kind),
+    ),
+    [info.securityEvents],
   );
-  const processEvents = info.securityEvents.filter((e: EvtxSecurityEvent) => e.kind === 'processCreated');
-  const accountEvents = info.securityEvents.filter((e: EvtxSecurityEvent) =>
-    ['scheduledTaskCreated', 'scheduledTaskModified', 'accountCreated', 'groupMemberAdded'].includes(e.kind),
+  const processEvents = useMemo(
+    () => info.securityEvents.filter((e: EvtxSecurityEvent) => e.kind === 'processCreated'),
+    [info.securityEvents],
+  );
+  const accountEvents = useMemo(
+    () => info.securityEvents.filter((e: EvtxSecurityEvent) =>
+      ['scheduledTaskCreated', 'scheduledTaskModified', 'accountCreated', 'groupMemberAdded'].includes(e.kind),
+    ),
+    [info.securityEvents],
   );
 
-  const bootColumns: DenseColumn<EvtxBootEvent>[] = [
+  // Column titles are translated, so the arrays are memoized on `t` rather
+  // than rebuilt (and busting row memoization) on every render.
+  const bootColumns = useMemo<DenseColumn<EvtxBootEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
     { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[160px]', render: (row) => BOOT_EVENT_LABELS[row.kind] ?? row.kind },
     { key: 'provider', title: t('eventLog.columns.provider'), className: 'w-[120px]', render: (row) => row.provider ?? '-' },
     { key: 'recordId', title: t('eventLog.columns.recordId'), className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
     { key: 'sourcePath', title: t('eventLog.columns.sourcePath'), className: 'min-w-[200px]', render: (row) => row.sourcePath },
-  ];
+  ], [t]);
 
-  const logonColumns: DenseColumn<EvtxSecurityEvent>[] = [
+  const logonColumns = useMemo<DenseColumn<EvtxSecurityEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
     { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[130px]', render: (row) => row.kind },
@@ -96,17 +107,17 @@ export function EventLogPanel({
     { key: 'ipAddress', title: t('eventLog.columns.ipAddress'), className: 'w-[130px]', render: (row) => row.ipAddress ?? '-' },
     { key: 'workstation', title: t('eventLog.columns.workstation'), className: 'w-[120px]', render: (row) => row.workstation ?? '-' },
     { key: 'failureReason', title: t('eventLog.columns.failureReason'), className: 'min-w-[140px]', render: (row) => row.failureReason ?? '-' },
-  ];
+  ], [t]);
 
-  const processColumns: DenseColumn<EvtxSecurityEvent>[] = [
+  const processColumns = useMemo<DenseColumn<EvtxSecurityEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'processName', title: t('eventLog.columns.processName'), className: 'min-w-[200px]', render: (row) => row.processName ?? '-' },
     { key: 'parentProcessName', title: t('eventLog.columns.parentProcessName'), className: 'w-[180px]', render: (row) => row.parentProcessName ?? '-' },
     { key: 'subjectUser', title: t('eventLog.columns.subjectUser'), className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
     { key: 'recordId', title: t('eventLog.columns.recordId'), className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
-  ];
+  ], [t]);
 
-  const accountColumns: DenseColumn<EvtxSecurityEvent>[] = [
+  const accountColumns = useMemo<DenseColumn<EvtxSecurityEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
     { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[150px]', render: (row) => row.kind },
@@ -114,9 +125,9 @@ export function EventLogPanel({
     { key: 'subjectUser', title: t('eventLog.columns.subjectUser'), className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
     { key: 'taskName', title: t('eventLog.columns.taskName'), className: 'min-w-[180px]', render: (row) => row.taskName ?? '-' },
     { key: 'memberName', title: t('eventLog.columns.memberName'), className: 'w-[150px]', render: (row) => row.memberName ?? '-' },
-  ];
+  ], [t]);
 
-  const appColumns: DenseColumn<EvtxApplicationEvent>[] = [
+  const appColumns = useMemo<DenseColumn<EvtxApplicationEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
     { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[130px]', render: (row) => row.kind },
@@ -124,7 +135,7 @@ export function EventLogPanel({
     { key: 'faultModule', title: t('eventLog.columns.faultModule'), className: 'w-[150px]', render: (row) => row.faultModule ?? '-' },
     { key: 'productName', title: t('eventLog.columns.productName'), className: 'w-[160px]', render: (row) => row.productName ?? '-' },
     { key: 'manufacturer', title: t('eventLog.columns.manufacturer'), className: 'w-[140px]', render: (row) => row.manufacturer ?? '-' },
-  ];
+  ], [t]);
 
   const tabContent: Record<EventLogTabKey, React.ReactNode> = {
     boot: (
