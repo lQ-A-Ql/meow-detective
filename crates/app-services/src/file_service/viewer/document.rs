@@ -4,7 +4,7 @@
 
 use rusqlite::Connection;
 use std::io::Write;
-use transport::dto::{DocumentPreviewDto, DocumentSectionDto};
+use transport::dto::{DocumentPreviewDto, DocumentSectionDto, DocumentTableDto};
 
 use super::office_preview::{office_docx_lines, preview_office_part, preview_pptx, preview_xlsx};
 use super::{
@@ -96,6 +96,7 @@ fn preview_pdf(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> {
         sections.push(DocumentSectionDto {
             title: format!("Page {}", index + 1),
             lines: bounded_lines(&text),
+            table: None,
         });
     }
     let truncated = page_numbers.len() > MAX_PDF_PAGES;
@@ -162,21 +163,28 @@ fn sqlite_table_section(
     let rows = statement.query_map([MAX_SQLITE_ROWS as i64], |row| {
         let cells = (0..width)
             .map(|index| match row.get_ref(index) {
-                Ok(value) => render_sqlite_value(value),
+                Ok(value) => bounded_line(&render_sqlite_value(value)),
                 Err(_) => "?".to_string(),
             })
             .collect::<Vec<_>>();
-        Ok(cells.join(" | "))
+        Ok(cells)
     })?;
+    let mut grid = Vec::new();
     for row in rows {
-        lines.push(bounded_line(&row?));
-        if lines.len() > MAX_SQLITE_ROWS {
+        let cells = row?;
+        lines.push(bounded_line(&cells.join(" | ")));
+        grid.push(cells);
+        if grid.len() >= MAX_SQLITE_ROWS {
             break;
         }
     }
     Ok(DocumentSectionDto {
         title: format!("Table: {table}"),
         lines,
+        table: Some(DocumentTableDto {
+            columns,
+            rows: grid,
+        }),
     })
 }
 

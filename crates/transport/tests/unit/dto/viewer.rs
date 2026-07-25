@@ -166,6 +166,14 @@ fn test_document_preview_dto_serialization() {
                 "id | url | username".to_string(),
                 "1 | http://a | admin".to_string(),
             ],
+            table: Some(DocumentTableDto {
+                columns: vec!["id".to_string(), "url".to_string(), "username".to_string()],
+                rows: vec![vec![
+                    "1".to_string(),
+                    "http://a".to_string(),
+                    "admin".to_string(),
+                ]],
+            }),
         }],
         truncated: true,
         warnings: vec![],
@@ -174,8 +182,15 @@ fn test_document_preview_dto_serialization() {
     assert_eq!(json["kind"], "sqlite");
     assert_eq!(json["summary"], "2 tables");
     assert_eq!(json["sections"][0]["title"], "Table: logins");
+    assert_eq!(json["sections"][0]["table"]["columns"][0], "id");
+    assert_eq!(json["sections"][0]["table"]["rows"][0][2], "admin");
     assert_eq!(json["truncated"], true);
     assert!(json.get("warnings").is_none());
+
+    let round_trip: DocumentPreviewDto = serde_json::from_value(json).unwrap();
+    let table = round_trip.sections[0].table.as_ref().unwrap();
+    assert_eq!(table.columns.len(), 3);
+    assert_eq!(table.rows.len(), 1);
 
     let empty = DocumentPreviewDto {
         kind: "pdf".to_string(),
@@ -186,4 +201,12 @@ fn test_document_preview_dto_serialization() {
     };
     let json = serde_json::to_value(&empty).unwrap();
     assert_eq!(json["sections"].as_array().unwrap().len(), 0);
+
+    let line_only = DocumentSectionDto {
+        title: "Page 1".to_string(),
+        lines: vec!["hello".to_string()],
+        table: None,
+    };
+    let json = serde_json::to_value(&line_only).unwrap();
+    assert!(json.get("table").is_none());
 }

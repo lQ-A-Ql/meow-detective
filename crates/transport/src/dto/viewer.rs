@@ -68,6 +68,17 @@ pub struct TextPreviewDto {
     pub hex_dump: Option<String>,
 }
 
+/// Structured table payload for sheet/database-table sections, letting the
+/// frontend render real tables instead of joined text lines.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentTableDto {
+    /// Column headers (spreadsheet letters or database column names)
+    pub columns: Vec<String>,
+    /// Bounded cell-grid rows; each row aligns with `columns`
+    pub rows: Vec<Vec<String>>,
+}
+
 /// A titled text section inside a document preview (page, sheet, table, …).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +87,9 @@ pub struct DocumentSectionDto {
     pub title: String,
     /// Bounded text lines of the section
     pub lines: Vec<String>,
+    /// Structured cell grid for spreadsheet/database sections
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<DocumentTableDto>,
 }
 
 /// Structured preview for document-like files (PDF, Office Open XML, SQLite).

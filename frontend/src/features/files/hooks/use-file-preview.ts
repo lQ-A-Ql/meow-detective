@@ -12,6 +12,10 @@ const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg']);
 const DOCUMENT_EXTENSIONS = new Set([
   'pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3',
+  // Legacy OLE Office formats are routed to the document chain so the
+  // backend's typed "not document-like" error is surfaced instead of a
+  // silent placeholder.
+  'doc', 'xls', 'ppt',
 ]);
 
 function getPreviewKindFromExtension(ext?: string): FilePreviewKind | undefined {

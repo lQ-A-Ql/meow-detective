@@ -9,9 +9,11 @@ import { ImageViewer } from '@/components/viewers/ImageViewer';
 import { VideoViewer } from '@/components/viewers/VideoViewer';
 import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { ViewerError } from '@/components/viewers/ViewerError';
+import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import type {
   ApiErrorDto,
   DocumentPreviewResponse,
+  DocumentSection,
   FileEntryRow,
   FileHexViewerState,
   ImagePreviewResponse,
@@ -183,6 +185,34 @@ function HexPreviewContent({
   );
 }
 
+function DocumentSectionBody({ section }: { section: DocumentSection }) {
+  if (section.table) {
+    const columns: DenseColumn<{ key: string; cells: string[] }>[] = section.table.columns.map(
+      (title, index) => ({
+        key: `c${index}`,
+        title,
+        className: 'min-w-[120px]',
+        render: (row) => row.cells[index] ?? '',
+      }),
+    );
+    const rows = section.table.rows.map((cells, index) => ({ key: String(index), cells }));
+    return (
+      <DenseDataTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(row) => row.key}
+        emptyTitle="空表格"
+        emptyDescription="该段没有可展示的数据行。"
+      />
+    );
+  }
+  return (
+    <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-forensics-text-secondary">
+      {section.lines.join('\n')}
+    </pre>
+  );
+}
+
 function DocumentPreviewContent({
   documentPreview,
 }: {
@@ -214,9 +244,7 @@ function DocumentPreviewContent({
             <div className="mb-1 border-b border-forensics-border text-[11px] font-medium text-forensics-text">
               {section.title}
             </div>
-            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-forensics-text-secondary">
-              {section.lines.join('\n')}
-            </pre>
+            <DocumentSectionBody section={section} />
           </div>
         ))
       )}

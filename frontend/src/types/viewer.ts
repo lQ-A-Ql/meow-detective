@@ -93,9 +93,15 @@ export interface ImagePreviewResponse {
   size: number;
 }
 
+export interface DocumentTable {
+  columns: string[];
+  rows: string[][];
+}
+
 export interface DocumentSection {
   title: string;
   lines: string[];
+  table?: DocumentTable;
 }
 
 export interface DocumentPreviewResponse {

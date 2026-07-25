@@ -12,6 +12,7 @@ import {
   useTextPreview,
 } from '@/features/files/hooks';
 import type {
+  ApiErrorDto,
   ClassifiedFileRow,
   ClassificationSubcategory,
   FileClassificationBoard as FileClassificationBoardData,
@@ -47,7 +48,11 @@ function defaultTabFor(row: ClassifiedFileRow): PreviewViewerTab {
   if (row.magicType && ['JPEG', 'PNG', 'GIF', 'BMP', 'WEBP', 'ICO'].includes(row.magicType)) {
     return 'preview';
   }
-  if (['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3'].includes(ext)) {
+  if (
+    ['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3', 'doc', 'xls', 'ppt'].includes(
+      ext,
+    )
+  ) {
     return 'preview';
   }
   if (['mp4', 'webm', 'avi', 'mkv', 'mp3', 'wav', 'flac', 'aac', 'ogg'].includes(ext)) {
@@ -79,7 +84,11 @@ function previewKindFor(row: ClassifiedFileRow): FilePreviewKind | undefined {
   if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico'].includes(ext)) return 'image';
   if (['mp4', 'webm', 'avi', 'mkv'].includes(ext)) return 'video';
   if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(ext)) return 'audio';
-  if (['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3'].includes(ext)) {
+  if (
+    ['pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3', 'doc', 'xls', 'ppt'].includes(
+      ext,
+    )
+  ) {
     return 'document';
   }
   return undefined;
@@ -111,10 +120,30 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
     loadNextRange,
     loadPreviousRange,
   } = useFileViewer(selectedFile?.id, hexEnabled);
-  const { data: textPreview } = useTextPreview(selectedFile?.id, textEnabled);
-  const { data: imagePreview } = useImagePreview(selectedFile?.id, imageEnabled);
-  const { data: mediaUrl } = useMediaUrl(selectedFile?.id, mediaEnabled);
-  const { data: documentPreview } = useDocumentPreview(selectedFile?.id, documentEnabled);
+  const textQuery = useTextPreview(selectedFile?.id, textEnabled);
+  const imageQuery = useImagePreview(selectedFile?.id, imageEnabled);
+  const mediaQuery = useMediaUrl(selectedFile?.id, mediaEnabled);
+  const documentQuery = useDocumentPreview(selectedFile?.id, documentEnabled);
+  const textPreview = textQuery.data;
+  const imagePreview = imageQuery.data;
+  const mediaUrl = mediaQuery.data;
+  const documentPreview = documentQuery.data;
+  const activePreviewQuery =
+    viewerTab === 'text'
+      ? textQuery
+      : viewerTab === 'preview' && previewKind === 'image'
+        ? imageQuery
+        : viewerTab === 'preview' && (previewKind === 'video' || previewKind === 'audio')
+          ? mediaQuery
+          : viewerTab === 'preview' && previewKind === 'document'
+            ? documentQuery
+            : undefined;
+  const previewError = (activePreviewQuery?.error as ApiErrorDto | null) ?? null;
+  const onRetryPreview = activePreviewQuery
+    ? () => {
+        void activePreviewQuery.refetch();
+      }
+    : undefined;
 
   const columns: DenseColumn<ClassifiedFileRow>[] = [
     {
@@ -236,6 +265,8 @@ export function FileClassificationBoard({ board }: { board?: FileClassificationB
         mediaUrl={mediaUrl}
         documentPreview={documentPreview}
         selectedFile={selectedFile}
+        previewError={previewError}
+        onRetryPreview={onRetryPreview}
       />
     </div>
   );

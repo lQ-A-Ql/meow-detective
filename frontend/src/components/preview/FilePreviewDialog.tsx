@@ -28,7 +28,7 @@ export function FilePreviewDialog({
 }: FilePreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] max-w-5xl flex-col overflow-hidden">
+      <DialogContent className="flex h-[80vh] w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] flex-col overflow-hidden sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="truncate font-mono text-[13px]">
             {selectedFile?.name ?? '文件预览'}

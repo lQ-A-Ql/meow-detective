@@ -4,7 +4,7 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{Cursor, Read};
-use transport::dto::{DocumentPreviewDto, DocumentSectionDto};
+use transport::dto::{DocumentPreviewDto, DocumentSectionDto, DocumentTableDto};
 use zip::ZipArchive;
 
 use super::document::{bounded_line, DocumentKind, MAX_SECTION_LINES};
@@ -34,6 +34,7 @@ pub(crate) fn preview_office_part(
         sections: vec![DocumentSectionDto {
             title: "Content".to_string(),
             lines,
+            table: None,
         }],
         truncated,
         warnings: Vec::new(),
@@ -53,6 +54,7 @@ pub(crate) fn preview_pptx(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServi
             Ok(xml) => sections.push(DocumentSectionDto {
                 title: format!("Slide {index}"),
                 lines: office_pptx_lines(&xml),
+                table: None,
             }),
             Err(_) => {
                 missing += 1;
@@ -99,10 +101,22 @@ pub(crate) fn preview_xlsx(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServi
             .map(|target| format!("xl/{target}"))
             .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", index + 1));
         match read_zip_text(&mut archive, &path) {
-            Ok(xml) => sections.push(DocumentSectionDto {
-                title: format!("Sheet: {name}"),
-                lines: xlsx_sheet_lines(&xml, &shared),
-            }),
+            Ok(xml) => {
+                let rows = xlsx_sheet_rows(&xml, &shared);
+                let lines = rows
+                    .iter()
+                    .map(|cells| bounded_line(&cells.join(" | ")))
+                    .collect::<Vec<_>>();
+                let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+                sections.push(DocumentSectionDto {
+                    title: format!("Sheet: {name}"),
+                    lines,
+                    table: Some(DocumentTableDto {
+                        columns: spreadsheet_column_names(width),
+                        rows,
+                    }),
+                });
+            }
             Err(error) => warnings.push(format!("{path}: {error}")),
         }
     }
@@ -220,9 +234,11 @@ pub(crate) fn xlsx_shared_strings(xml: &str) -> Vec<String> {
     strings
 }
 
-pub(crate) fn xlsx_sheet_lines(xml: &str, shared: &[String]) -> Vec<String> {
+/// Bounded cell-grid rows for one worksheet: shared strings resolved, each
+/// cell text bounded, and fully empty rows dropped.
+pub(crate) fn xlsx_sheet_rows(xml: &str, shared: &[String]) -> Vec<Vec<String>> {
     let mut reader = Reader::from_str(xml);
-    let mut lines = Vec::new();
+    let mut rows = Vec::new();
     let mut cells = Vec::new();
     let mut cell_type = String::new();
     let mut cell_value = String::new();
@@ -257,17 +273,19 @@ pub(crate) fn xlsx_sheet_lines(xml: &str, shared: &[String]) -> Vec<String> {
                             .cloned()
                             .unwrap_or_default()
                     } else {
-                        bounded_line(&cell_value)
+                        std::mem::take(&mut cell_value)
                     };
-                    cells.push(rendered);
+                    cells.push(bounded_line(&rendered));
                     cell_value.clear();
                     cell_type.clear();
                 }
                 b"row" => {
                     if cells.iter().any(|cell| !cell.is_empty()) {
-                        lines.push(bounded_line(&cells.join(" | ")));
+                        rows.push(std::mem::take(&mut cells));
+                    } else {
+                        cells.clear();
                     }
-                    if lines.len() >= MAX_SECTION_LINES {
+                    if rows.len() >= MAX_SECTION_LINES {
                         break;
                     }
                 }
@@ -278,7 +296,26 @@ pub(crate) fn xlsx_sheet_lines(xml: &str, shared: &[String]) -> Vec<String> {
             _ => {}
         }
     }
-    lines
+    rows
+}
+
+/// Spreadsheet-style column letters (A..Z, AA..) for `width` columns.
+fn spreadsheet_column_names(width: usize) -> Vec<String> {
+    (0..width)
+        .map(|index| {
+            let mut remaining = index;
+            let mut name = String::new();
+            loop {
+                name.insert(0, (b'A' + (remaining % 26) as u8) as char);
+                remaining /= 26;
+                if remaining == 0 {
+                    break;
+                }
+                remaining -= 1;
+            }
+            name
+        })
+        .collect()
 }
 pub(crate) fn xml_text(text: &quick_xml::events::BytesText<'_>) -> Option<String> {
     let decoded = text.decode().ok()?;
