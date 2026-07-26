@@ -198,3 +198,20 @@ pub struct EvtxStructuredExtraction {
     pub application_events: Vec<EvtxApplicationEvent>,
     pub warnings: Vec<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EvtxStructuredEvent {
+    Boot(EvtxBootEvent),
+    Security(EvtxSecurityEvent),
+    Application(EvtxApplicationEvent),
+}
+
+impl EvtxStructuredExtraction {
+    pub(super) fn push(&mut self, event: EvtxStructuredEvent) {
+        match event {
+            EvtxStructuredEvent::Boot(event) => self.boot_events.push(event),
+            EvtxStructuredEvent::Security(event) => self.security_events.push(event),
+            EvtxStructuredEvent::Application(event) => self.application_events.push(event),
+        }
+    }
+}

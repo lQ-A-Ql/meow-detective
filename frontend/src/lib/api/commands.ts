@@ -59,6 +59,7 @@ export const COMMANDS = {
   artifacts: {
     GET_ARTIFACT_FAMILIES: 'get_artifact_families',
     GET_ARTIFACT_ROWS: 'get_artifact_rows',
+    GET_ARTIFACT_ROWS_REQUEST: 'get_artifact_rows_request',
     GET_ARTIFACT_BY_ID: 'get_artifact_by_id',
     GET_ARTIFACT_FAMILY_COUNTS: 'get_artifact_family_counts',
   },

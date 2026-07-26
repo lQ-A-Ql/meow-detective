@@ -44,7 +44,7 @@ fn record_to_file_entry(record: &MftRecord, data_source_id: &DataSourceId) -> Fi
             || visibility::inferred_hidden_name(&record.name)
             || visibility::inferred_system_name(&record.name),
         system: record.system || visibility::inferred_system_name(&record.name),
-        encrypted: false,
+        encrypted: record.encrypted,
         created_at: record.created_at,
         modified_at: record.modified_at,
         accessed_at: record.accessed_at,

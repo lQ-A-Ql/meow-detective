@@ -10,6 +10,7 @@ on:
       - 'Cargo.lock'
       - 'deny.toml'
       - 'scripts/**'
+      - 'testdata/**'
       - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [master]
@@ -43,6 +44,8 @@ jobs:
           ./scripts/check-rust-function-size.ps1
           ./scripts/check-rust-test-layout.ps1 -SelfTest
           ./scripts/check-rust-test-layout.ps1
+          ./scripts/check-private-real-sample-tests.ps1 -SelfTest
+          ./scripts/check-private-real-sample-tests.ps1
           ./scripts/check-stage0-boundary-guard.ps1
           ./scripts/check-stage2-platform-boundary.ps1
           ./scripts/check-stage3-command-boundary.ps1

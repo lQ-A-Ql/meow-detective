@@ -31,6 +31,16 @@ fn windows_policy_enables_registered_windows_extractors() {
 }
 
 #[test]
+fn windows_policy_skips_efs_encrypted_candidates() {
+    let policy =
+        PlatformExtractorPolicy::for_platform(DataSourcePlatform::Windows).expect("Windows policy");
+    let mut encrypted = prefetch_entry();
+    encrypted.encrypted = true;
+
+    assert!(!policy.should_extract(&encrypted));
+}
+
+#[test]
 fn linux_policy_does_not_expose_windows_extractors() {
     let policy =
         PlatformExtractorPolicy::for_platform(DataSourcePlatform::Linux).expect("Linux policy");

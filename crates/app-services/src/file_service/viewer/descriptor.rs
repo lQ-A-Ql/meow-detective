@@ -1,8 +1,10 @@
 //! Preview descriptor construction and caching.
 
-use crate::file_service::viewer::{PreviewCephFsDescriptor, PreviewDescriptor, PreviewReadContext};
+use crate::file_service::viewer::{
+    validate_readable_file_entry, PreviewCephFsDescriptor, PreviewDescriptor, PreviewReadContext,
+};
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
-use domain::{EntryType, FileEntry, FileEntryId};
+use domain::{FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
@@ -25,11 +27,7 @@ fn preview_descriptor_for_entry(
     case_id: &str,
     entry: &FileEntry,
 ) -> Result<PreviewDescriptor, FileServiceError> {
-    if entry.entry_type != EntryType::File {
-        return Err(FileServiceError::invalid_input(
-            "Cannot read a directory as a file",
-        ));
-    }
+    validate_readable_file_entry(conn, entry)?;
 
     let (source_kind, source_path) = repo
         .find_data_source_location(&entry.data_source_id)?
@@ -208,7 +206,8 @@ pub(crate) fn descriptor_is_fresh(
     let current_size = entry.size.unwrap_or(0);
     let current_modified = entry.modified_at.as_ref().map(|dt| dt.to_rfc3339());
 
-    if descriptor.entry_size != current_size
+    if validate_readable_file_entry(conn, &entry).is_err()
+        || descriptor.entry_size != current_size
         || descriptor.entry_modified_at != current_modified
         || descriptor.partition_index != current_partition_index
     {
@@ -255,5 +254,5 @@ fn cephfs_descriptor_is_fresh(
 }
 
 pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
-    format!("preview-descriptor:v5:{case_id}:{}", file_id.0)
+    format!("preview-descriptor:v6:{case_id}:{}", file_id.0)
 }

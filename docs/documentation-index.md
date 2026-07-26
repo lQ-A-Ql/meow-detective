@@ -2,11 +2,13 @@
 
 本文档是当前工程文档的权威入口，用于解决旧审计报告、阶段方案、开发记录和架构文档之间的重复、漂移与引用混乱问题。
 
-若多份文档对同一主题存在冲突，优先级如下：
-1. `AGENTS.md`
-2. 本文档
-3. 对应主题的当前权威文档
+若多份已纳入版本控制的文档对同一主题存在冲突，优先级如下：
+1. 本文档
+2. 对应主题的当前权威文档
+3. `README.md` 中的项目事实摘要
 4. 历史审计 / 历史方案 / 开发记录
+
+根目录除 `README.md` 外的 Markdown 均为本地个人开发文档，不属于仓库契约或事实源。
 
 ## 1. 当前权威文档
 
@@ -79,7 +81,7 @@
 
 ## 2. 当前事实快照
 
-以下事实基于当前仓库静态校准得出；若代码变化，必须同步更新本文档、`README.md` 与 `AGENTS.md`。
+以下事实基于当前仓库静态校准得出；若代码变化，必须同步更新本文档与 `README.md`。
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
@@ -87,7 +89,7 @@
 | Tauri commands | 105 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 28 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
-| SQLite migration scripts | 66 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0041 + source_001-source_024 + staging_001) |
+| SQLite migration scripts | 70 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0042 + source_001-source_027 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 90 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
@@ -102,9 +104,9 @@
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 88 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 103 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 66 | SQLite migration 脚本 (0001-0041 + source_001-source_024 + staging_001) |
+| `frontend/src/**/*.test.ts(x)` | 90 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 105 | Tauri command 定义数 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 70 | SQLite migration 脚本 (0001-0042 + source_001-source_027 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |
@@ -228,7 +230,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1 -RenderMerm
 
 当前脚本会检查：
 
-- `README.md` / `AGENTS.md` / 本文档中的事实数量是否过期
+- `README.md` / 本文档中的事实数量是否过期
 - 工程化文档入口是否缺失
 - Mermaid 图块数量是否漂移
 - 可选地将全部 Mermaid 图渲染为 SVG

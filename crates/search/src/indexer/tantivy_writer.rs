@@ -2,13 +2,18 @@ use crate::extractor::ExtractedText;
 use std::path::Path;
 use std::time::Instant;
 use tantivy::{
-    collector::{Count, TopDocs},
+    collector::{
+        sort_key::{SortBySimilarityScore, SortByString},
+        Count, TopDocs,
+    },
     doc,
     query::QueryParser,
-    schema::{Schema, Value, STORED, STRING, TEXT},
-    Index, IndexWriter, ReloadPolicy, TantivyDocument, Term,
+    schema::{Schema, Value, FAST, STORED, STRING, TEXT},
+    DocAddress, Index, IndexWriter, Order, ReloadPolicy, Score, TantivyDocument, Term,
 };
 use thiserror::Error;
+
+use super::index_identity::SearchIndexIdentity;
 
 #[derive(Debug, Error)]
 pub enum IndexError {
@@ -22,6 +27,8 @@ pub enum IndexError {
     NotOpen,
     #[error("Schema error: {0}")]
     Schema(String),
+    #[error("Search index identity error: {0}")]
+    Identity(String),
 }
 
 pub type Result<T> = std::result::Result<T, IndexError>;
@@ -42,14 +49,17 @@ pub struct ChunkedIndexStats {
 }
 
 pub struct SearchIndex {
-    index: Index,
-    schema: Schema,
+    pub(super) index: Index,
+    pub(super) schema: Schema,
+    pub(super) identity: SearchIndexIdentity,
 }
+
+pub(super) type StableTopDocs = Vec<((Score, Option<String>), DocAddress)>;
 
 impl SearchIndex {
     pub fn create(path: &Path) -> Result<Self> {
         let mut schema_builder = Schema::builder();
-        schema_builder.add_text_field("file_id", STRING | STORED);
+        schema_builder.add_text_field("file_id", STRING | STORED | FAST);
         schema_builder.add_text_field("path", TEXT | STORED);
         schema_builder.add_text_field("content", TEXT | STORED);
         schema_builder.add_text_field("name", TEXT | STORED);
@@ -58,15 +68,35 @@ impl SearchIndex {
         std::fs::create_dir_all(path)?;
         let directory = tantivy::directory::MmapDirectory::open(path)
             .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
-        let index = Index::open_or_create(directory, schema.clone())?;
+        let index_exists = Index::exists(&directory)
+            .map_err(|error| IndexError::Io(std::io::Error::other(error.to_string())))?;
+        let (index, identity) = if index_exists {
+            let index = Index::open(directory)?;
+            let identity = SearchIndexIdentity::load(path)?;
+            (index, identity)
+        } else {
+            let index = Index::open_or_create(directory, schema)?;
+            let identity = SearchIndexIdentity::create(path)?;
+            (index, identity)
+        };
+        let schema = index.schema();
 
-        Ok(Self { index, schema })
+        Ok(Self {
+            index,
+            schema,
+            identity,
+        })
     }
 
     pub fn open(path: &Path) -> Result<Self> {
         let index = Index::open_in_dir(path)?;
         let schema = index.schema();
-        Ok(Self { index, schema })
+        let identity = SearchIndexIdentity::load(path)?;
+        Ok(Self {
+            index,
+            schema,
+            identity,
+        })
     }
 
     pub fn index_documents(
@@ -166,10 +196,28 @@ impl SearchIndex {
             })
             .map_err(|e| IndexError::Query(e.to_string()))?;
 
-        let top_docs = TopDocs::with_limit(limit)
-            .and_offset(offset)
-            .order_by_score();
-        let (top_docs, total_count) = searcher.search(&query, &(top_docs, Count))?;
+        if limit == 0 {
+            let total_count = searcher.search(&query, &Count)?;
+            return Ok(SearchResult {
+                hits: Vec::new(),
+                total_count: total_count as u64,
+            });
+        }
+
+        if !self.supports_stable_paging() {
+            return Err(IndexError::Schema(
+                "search index does not contain the stable file_id sort field".to_string(),
+            ));
+        }
+        let collector = TopDocs::with_limit(limit).and_offset(offset).order_by((
+            (SortBySimilarityScore, Order::Desc),
+            (SortByString::for_field("file_id"), Order::Asc),
+        ));
+        let (docs, total_count): (StableTopDocs, usize) =
+            searcher.search(&query, &(collector, Count))?;
+        let top_docs = docs
+            .into_iter()
+            .map(|((score, _), address)| (score, address));
 
         let mut hits = Vec::new();
         for (score, doc_addr) in top_docs {
@@ -203,6 +251,58 @@ impl SearchIndex {
             hits,
             total_count: total_count as u64,
         })
+    }
+
+    pub fn supports_stable_paging(&self) -> bool {
+        self.validate_search_schema().is_ok()
+    }
+
+    pub fn validate_search_schema(&self) -> Result<()> {
+        self.validate_text_field("file_id", true, true, true)?;
+        self.validate_text_field("path", false, true, false)?;
+        self.validate_text_field("content", true, true, false)?;
+        Ok(())
+    }
+
+    pub fn snapshot_opstamp(&self) -> Result<u64> {
+        Ok(self.index.load_metas()?.opstamp)
+    }
+
+    pub fn generation(&self) -> &str {
+        self.identity.generation()
+    }
+
+    pub fn schema_version(&self) -> u32 {
+        self.identity.schema_version()
+    }
+
+    fn validate_text_field(
+        &self,
+        name: &str,
+        indexed: bool,
+        stored: bool,
+        fast: bool,
+    ) -> Result<()> {
+        let field = self
+            .schema
+            .get_field(name)
+            .map_err(|_| IndexError::Schema(format!("missing {name} field")))?;
+        let entry = self.schema.get_field_entry(field);
+        if !entry.field_type().is_str() {
+            return Err(IndexError::Schema(format!("{name} field must be a string")));
+        }
+        if indexed && !entry.is_indexed() {
+            return Err(IndexError::Schema(format!("{name} field must be indexed")));
+        }
+        if stored && !entry.is_stored() {
+            return Err(IndexError::Schema(format!("{name} field must be stored")));
+        }
+        if fast && !entry.is_fast() {
+            return Err(IndexError::Schema(format!(
+                "{name} field must be a fast field"
+            )));
+        }
+        Ok(())
     }
 
     pub fn search(&self, query_str: &str, limit: usize) -> Result<SearchResult> {

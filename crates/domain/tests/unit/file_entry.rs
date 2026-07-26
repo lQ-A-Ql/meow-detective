@@ -1,5 +1,32 @@
 use super::*;
 
+#[test]
+fn file_encryption_status_round_trips_database_values() {
+    assert_eq!(
+        FileEncryptionStatus::from_database_value(None).unwrap(),
+        FileEncryptionStatus::Unknown
+    );
+    assert_eq!(
+        FileEncryptionStatus::from_database_value(Some(0)).unwrap(),
+        FileEncryptionStatus::Clear
+    );
+    assert_eq!(
+        FileEncryptionStatus::from_database_value(Some(1)).unwrap(),
+        FileEncryptionStatus::Encrypted
+    );
+    assert!(FileEncryptionStatus::from_database_value(Some(2)).is_err());
+    assert_eq!(FileEncryptionStatus::Unknown.database_value(), None);
+    assert_eq!(FileEncryptionStatus::Clear.database_value(), Some(0));
+    assert_eq!(FileEncryptionStatus::Encrypted.database_value(), Some(1));
+}
+
+#[test]
+fn only_explicitly_clear_content_is_readable() {
+    assert!(FileEncryptionStatus::Clear.content_is_readable());
+    assert!(!FileEncryptionStatus::Unknown.content_is_readable());
+    assert!(!FileEncryptionStatus::Encrypted.content_is_readable());
+}
+
 fn make_file(name: &str) -> FileEntry {
     FileEntry {
         id: FileEntryId("test".to_string()),

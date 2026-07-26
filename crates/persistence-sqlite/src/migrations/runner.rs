@@ -1,5 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use rusqlite::Connection;
+use std::collections::HashSet;
 
 const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
@@ -139,6 +140,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0041_cephfs_assembly_binding",
         include_str!("scripts/0041_cephfs_assembly_binding.sql"),
     ),
+    (
+        "0042_file_entry_encrypted",
+        include_str!("scripts/0042_file_entry_encrypted.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
@@ -235,6 +240,18 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_024_ntfs_deleted_recovery",
         include_str!("scripts/source_024_ntfs_deleted_recovery.sql"),
     ),
+    (
+        "source_025_file_entry_encrypted",
+        include_str!("scripts/source_025_file_entry_encrypted.sql"),
+    ),
+    (
+        "source_026_timeline_keyset_indexes",
+        include_str!("scripts/source_026_timeline_keyset_indexes.sql"),
+    ),
+    (
+        "source_027_artifact_keyset_indexes",
+        include_str!("scripts/source_027_artifact_keyset_indexes.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -277,23 +294,12 @@ pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
 }
 
 fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
-    // Fast path: when the latest migration is already recorded, every earlier
-    // migration has been applied (they run strictly in order), so skip the
-    // bookkeeping write entirely. Hot read paths open source databases very
-    // frequently, and an unconditional CREATE TABLE write on every open turns
-    // concurrent readers into lock contention.
-    if let Some((latest_name, _)) = migrations.last() {
-        let latest_recorded: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM schema_migrations WHERE name = ?1",
-                [latest_name],
-                |row| row.get(0),
-            )
-            // A missing schema_migrations table simply means nothing was applied yet.
-            .unwrap_or(false);
-        if latest_recorded {
-            return Ok(0);
-        }
+    // Hot read paths open source databases frequently, so avoid a bookkeeping
+    // write when the complete registry is present. Checking only the latest
+    // row is insufficient because a damaged or manually edited database can
+    // contain the latest marker while an earlier migration is missing.
+    if all_migrations_recorded(conn, migrations) {
+        return Ok(0);
     }
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -362,6 +368,17 @@ fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u3
         }
     }
     Ok(count)
+}
+
+fn all_migrations_recorded(conn: &Connection, migrations: &[(&str, &str)]) -> bool {
+    let Ok(mut statement) = conn.prepare("SELECT name FROM schema_migrations") else {
+        return false;
+    };
+    let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0)) else {
+        return false;
+    };
+    let recorded = rows.filter_map(Result::ok).collect::<HashSet<_>>();
+    migrations.iter().all(|(name, _)| recorded.contains(*name))
 }
 
 fn add_missing_lvm_partition_identity_columns(conn: &Connection) -> DbResult<()> {

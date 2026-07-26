@@ -1,15 +1,17 @@
 use super::records::structured_event_from_json;
-use super::types::{EvtxBootExtraction, EvtxStructuredExtraction};
+use super::types::{EvtxBootExtraction, EvtxStructuredEvent, EvtxStructuredExtraction};
 use crate::evtx::capability::supports_evtx_boot_shutdown_path;
 use crate::evtx::error::EvtxBootError;
-use evtx::{err::EvtxError, EvtxParser};
+use evtx::{err::EvtxError, EvtxParser, ParserSettings};
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::io::{Cursor, Read, Seek};
 
 pub const MAX_EVTX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
 pub(super) const EVTX_FILE_HEADER_SIZE: u64 = 4096;
 pub(super) const EVTX_CHUNK_SIZE: u64 = 65536;
 const MAX_EVTX_WARNINGS: usize = 64;
+const MAX_EVTX_PARSER_THREADS: usize = 4;
 
 pub fn extract_boot_shutdown_events(
     bytes: &[u8],
@@ -39,29 +41,103 @@ pub fn extract_structured_events(
 ) -> Result<EvtxStructuredExtraction, EvtxBootError> {
     validate_input(bytes, source_path)?;
     let parser_bytes = bounded_clean_evtx_bytes(bytes);
-    let mut parser = EvtxParser::from_buffer(parser_bytes.to_vec()).map_err(|err| {
-        EvtxBootError::ParserInit {
-            path: source_path.to_string(),
-            detail: err.to_string(),
-        }
-    })?;
+    extract_structured_events_from_read_seek(Cursor::new(parser_bytes.to_vec()), source_path)
+}
 
-    let mut raw_warnings = Vec::new();
+/// Parse a complete EVTX stream without copying the whole evidence file into memory.
+pub fn extract_structured_events_from_read_seek<R>(
+    reader: R,
+    source_path: &str,
+) -> Result<EvtxStructuredExtraction, EvtxBootError>
+where
+    R: Read + Seek,
+{
     let mut extraction = EvtxStructuredExtraction::default();
+    let summary = visit_structured_events_from_read_seek(reader, source_path, |event| {
+        extraction.push(event);
+        Ok::<(), std::convert::Infallible>(())
+    })
+    .map_err(|error| match error {
+        EvtxVisitError::Parser(error) => error,
+        EvtxVisitError::Sink(error) => match error {},
+    })?;
+    extraction.warnings = summary.warnings;
+    Ok(extraction)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EvtxVisitSummary {
+    pub boot_count: u64,
+    pub security_count: u64,
+    pub application_count: u64,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum EvtxVisitError<E> {
+    Parser(EvtxBootError),
+    Sink(E),
+}
+
+pub fn visit_structured_events_from_read_seek<R, F, E>(
+    reader: R,
+    source_path: &str,
+    mut visitor: F,
+) -> Result<EvtxVisitSummary, EvtxVisitError<E>>
+where
+    R: Read + Seek,
+    F: FnMut(EvtxStructuredEvent) -> Result<(), E>,
+{
+    validate_path(source_path).map_err(EvtxVisitError::Parser)?;
+    let mut parser = EvtxParser::from_read_seek(reader).map_err(|error| {
+        EvtxVisitError::Parser(parser_initialization_error(source_path, &error))
+    })?;
+    parser = parser
+        .with_configuration(ParserSettings::default().num_threads(evtx_parser_thread_count()));
+
+    let mut warnings = EvtxWarningCollector::new(source_path);
+    let mut summary = EvtxVisitSummary::default();
     for record in parser.records_json_value() {
         match record {
-            Ok(record) => structured_event_from_json(
-                &record.data,
-                Some(record.event_record_id),
-                Some(record.timestamp.to_string()),
-                source_path,
-                &mut extraction,
-            ),
-            Err(err) => raw_warnings.push(format_evtx_warning(source_path, &err)),
+            Ok(record) => {
+                let event = structured_event_from_json(
+                    &record.data,
+                    Some(record.event_record_id),
+                    Some(record.timestamp.to_string()),
+                    source_path,
+                );
+                if let Some(event) = event {
+                    summary.record(&event);
+                    visitor(event).map_err(EvtxVisitError::Sink)?;
+                }
+            }
+            Err(error) => {
+                if let Some(error) = fatal_parser_error(source_path, &error) {
+                    return Err(EvtxVisitError::Parser(error));
+                }
+                warnings.push(format_evtx_warning(source_path, &error));
+            }
         }
     }
-    extraction.warnings = govern_evtx_warnings(source_path, raw_warnings);
-    Ok(extraction)
+    summary.warnings = warnings.finish();
+    Ok(summary)
+}
+
+impl EvtxVisitSummary {
+    fn record(&mut self, event: &EvtxStructuredEvent) {
+        match event {
+            EvtxStructuredEvent::Boot(_) => self.boot_count += 1,
+            EvtxStructuredEvent::Security(_) => self.security_count += 1,
+            EvtxStructuredEvent::Application(_) => self.application_count += 1,
+        }
+    }
+}
+
+fn evtx_parser_thread_count() -> usize {
+    std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1)
+        .clamp(1, MAX_EVTX_PARSER_THREADS)
 }
 
 pub fn extract_structured_events_from_json_records(
@@ -71,7 +147,9 @@ pub fn extract_structured_events_from_json_records(
     validate_path(source_path)?;
     let mut extraction = EvtxStructuredExtraction::default();
     for record in records {
-        structured_event_from_json(record, None, None, source_path, &mut extraction);
+        if let Some(event) = structured_event_from_json(record, None, None, source_path) {
+            extraction.push(event);
+        }
     }
     extraction.warnings = govern_evtx_warnings(source_path, Vec::new());
     Ok(extraction)
@@ -81,7 +159,7 @@ fn validate_input(bytes: &[u8], source_path: &str) -> Result<(), EvtxBootError> 
     validate_path(source_path)?;
     if bytes.len() > MAX_EVTX_ANALYSIS_BYTES {
         return Err(EvtxBootError::InputTooLarge {
-            path: source_path.to_string(),
+            path: sanitize_evtx_path(source_path),
             size: bytes.len(),
             max: MAX_EVTX_ANALYSIS_BYTES,
         });
@@ -94,7 +172,7 @@ fn validate_path(source_path: &str) -> Result<(), EvtxBootError> {
         Ok(())
     } else {
         Err(EvtxBootError::UnsupportedPath {
-            path: source_path.to_string(),
+            path: sanitize_evtx_path(source_path),
         })
     }
 }
@@ -171,26 +249,77 @@ pub(super) fn format_evtx_warning(source_path: &str, err: &EvtxError) -> String 
     }
 }
 
-fn govern_evtx_warnings(path: &str, raw: Vec<String>) -> Vec<String> {
-    let sanitized = sanitize_evtx_path(path);
-    let mut seen = BTreeSet::new();
-    let mut governed = Vec::with_capacity(raw.len().min(MAX_EVTX_WARNINGS));
+pub(super) fn govern_evtx_warnings(path: &str, raw: Vec<String>) -> Vec<String> {
+    let mut collector = EvtxWarningCollector::new(path);
     for message in raw {
-        let code = evtx_warning_code_for(&message);
-        let entry = format!("[{code}] {sanitized}: {message}");
-        if !seen.insert(entry.clone()) {
-            continue;
-        }
-        if governed.len() >= MAX_EVTX_WARNINGS {
-            let cap = format!("[EVTX-WARN-CAP] {sanitized}: additional EVTX warnings suppressed");
-            if seen.insert(cap.clone()) {
-                governed.push(cap);
-            }
-            break;
-        }
-        governed.push(entry);
+        collector.push(message);
     }
-    governed
+    collector.finish()
+}
+
+struct EvtxWarningCollector {
+    source_path: String,
+    sanitized_path: String,
+    seen: BTreeSet<String>,
+    warnings: Vec<String>,
+    capped: bool,
+}
+
+impl EvtxWarningCollector {
+    fn new(path: &str) -> Self {
+        Self {
+            source_path: path.to_string(),
+            sanitized_path: sanitize_evtx_path(path),
+            seen: BTreeSet::new(),
+            warnings: Vec::with_capacity(MAX_EVTX_WARNINGS),
+            capped: false,
+        }
+    }
+
+    fn push(&mut self, message: String) {
+        if self.capped {
+            return;
+        }
+        let message = message.replace(&self.source_path, &self.sanitized_path);
+        let code = evtx_warning_code_for(&message);
+        let entry = format!("[{code}] {}: {message}", self.sanitized_path);
+        if !self.seen.insert(entry.clone()) {
+            return;
+        }
+        if self.warnings.len() < MAX_EVTX_WARNINGS {
+            self.warnings.push(entry);
+            return;
+        }
+        self.warnings.pop();
+        self.warnings.push(format!(
+            "[EVTX-WARN-CAP] {}: additional EVTX warnings suppressed",
+            self.sanitized_path
+        ));
+        self.capped = true;
+    }
+
+    fn finish(self) -> Vec<String> {
+        self.warnings
+    }
+}
+
+fn fatal_parser_error(source_path: &str, error: &EvtxError) -> Option<EvtxBootError> {
+    let (operation, source) = error.source_io()?;
+    Some(EvtxBootError::SourceIo {
+        path: sanitize_evtx_path(source_path),
+        operation: operation.to_string(),
+        kind: source.kind(),
+    })
+}
+
+fn parser_initialization_error(source_path: &str, error: &EvtxError) -> EvtxBootError {
+    if let Some(error) = fatal_parser_error(source_path, error) {
+        return error;
+    }
+    EvtxBootError::ParserInit {
+        path: sanitize_evtx_path(source_path),
+        detail: error.to_string(),
+    }
 }
 
 fn evtx_warning_code_for(message: &str) -> &'static str {

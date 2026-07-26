@@ -229,7 +229,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check-rust-function-size.ps1 -R
 powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1 -SelfTest
 powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1
 
-# Documentation drift guard. This checks README/AGENTS/documentation-index
+# Private real-sample tests must be opt-in and cannot compile-include ignored testdata.
+powershell -ExecutionPolicy Bypass -File scripts\check-private-real-sample-tests.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-private-real-sample-tests.ps1
+
+# Documentation drift guard. This checks README/documentation-index
 # factual counts, required engineering-doc entries, and Mermaid block count.
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1
 

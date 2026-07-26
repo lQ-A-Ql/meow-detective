@@ -4155,6 +4155,7 @@ dependencies = [
  "tantivy",
  "tempfile",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -5603,9 +5604,11 @@ dependencies = [
 name = "transport"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tracing",
 ]
 

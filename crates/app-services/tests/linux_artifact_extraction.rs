@@ -14,6 +14,7 @@ fn candidate(path: &str) -> EvidenceCandidate {
         partition_index: None,
         path: path.to_string(),
         size: 1024,
+        encrypted: false,
         content_identity: format!("test:{path}"),
         evidence_kind: "test".to_string(),
         parser: "test".to_string(),
@@ -124,6 +125,7 @@ fn candidate_discovery_recognizes_linux_paths() {
             accessed_at TEXT,
             changed_at TEXT,
             hash_sha256 TEXT,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
             entry_type TEXT NOT NULL
         )",
         [],
@@ -140,7 +142,9 @@ fn candidate_discovery_recognizes_linux_paths() {
 
     for (index, path) in paths.iter().enumerate() {
         conn.execute(
-            "INSERT INTO file_entries (id, data_source_id, path, size, entry_type) VALUES (?1, ?2, ?3, ?4, 'file')",
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, encrypted, entry_type)
+             VALUES (?1, ?2, ?3, ?4, 0, 'file')",
             rusqlite::params![format!("file-{index}"), "ds-test", path, 1024i64],
         )
         .expect("insert");

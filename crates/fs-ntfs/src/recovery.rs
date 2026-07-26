@@ -32,6 +32,9 @@ pub struct NtfsDeletedFileRecord {
     pub parent_ref: u64,
     pub name: String,
     pub is_dir: bool,
+    /// File-level NTFS EFS state derived from $STANDARD_INFORMATION,
+    /// $FILE_NAME, or the unnamed $DATA attribute flags.
+    pub encrypted: bool,
     pub size: u64,
     pub record_source_offset: u64,
     pub record_size: u32,
@@ -238,6 +241,7 @@ fn deleted_record(
         parent_ref: metadata.parent_ref,
         name: metadata.name,
         is_dir: metadata.is_dir,
+        encrypted: metadata.encrypted,
         size: metadata.size,
         record_source_offset,
         record_size,
@@ -362,3 +366,7 @@ fn map_extent(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/recovery.rs"]
+mod tests;

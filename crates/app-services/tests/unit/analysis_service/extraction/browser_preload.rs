@@ -7,6 +7,7 @@ fn candidate(path: &str) -> EvidenceCandidate {
         partition_index: Some(2),
         path: path.to_string(),
         size: 4096,
+        encrypted: false,
         content_identity: format!("identity:{path}"),
         evidence_kind: "browser".to_string(),
         parser: "browser.history".to_string(),
@@ -22,6 +23,15 @@ fn dpapi_preload_is_limited_to_chromium_secret_stores() {
 
     assert!(browser_roots(&[history]).is_empty());
     assert_eq!(browser_roots(&[cookies]).len(), 1);
+}
+
+#[test]
+fn encrypted_chromium_secret_store_does_not_trigger_preload_reads() {
+    let mut cookies =
+        candidate("Users/alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies");
+    cookies.encrypted = true;
+
+    assert!(browser_roots(&[cookies]).is_empty());
 }
 
 #[test]
@@ -72,7 +82,8 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
             path TEXT,
             entry_type TEXT,
             size INTEGER,
-            partition_index INTEGER
+            partition_index INTEGER,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
         );",
     )
     .expect("create file_entries");
@@ -90,7 +101,7 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
     ];
     for (index, path) in ntfs_paths.iter().enumerate() {
         conn.execute(
-            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 2)",
+            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 2, 0)",
             rusqlite::params![format!("file:{index}"), format!("[P2]/{path}")],
         )
         .expect("insert file entry");
@@ -170,7 +181,8 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
             path TEXT,
             entry_type TEXT,
             size INTEGER,
-            partition_index INTEGER
+            partition_index INTEGER,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
         );",
     )
     .expect("create file_entries");
@@ -184,7 +196,7 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
     .enumerate()
     {
         conn.execute(
-            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 3)",
+            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 3, 0)",
             rusqlite::params![format!("file:{index}"), path],
         )
         .expect("insert file entry");
@@ -206,4 +218,63 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
         locate_by_suffix(&conn, "source-1", "/windows/system32/config/software").is_none(),
         "segment-boundary mismatches must stay rejected"
     );
+}
+
+#[test]
+fn elevation_service_selection_is_bound_to_the_chromium_family() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+    conn.execute_batch(
+        "CREATE TABLE file_entries(
+            id TEXT PRIMARY KEY,
+            data_source_id TEXT,
+            path TEXT,
+            entry_type TEXT,
+            size INTEGER,
+            partition_index INTEGER,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+        );",
+    )
+    .expect("create file_entries");
+    for (id, path) in [
+        (
+            "edge",
+            "Program Files/Microsoft/Edge/Application/120/elevation_service.exe",
+        ),
+        (
+            "chrome",
+            "Program Files/Google/Chrome/Application/147/elevation_service.exe",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 16, 2, 0)",
+            rusqlite::params![id, path],
+        )
+        .expect("insert file entry");
+    }
+    let cancel = AtomicBool::new(false);
+    let mut reader = |candidate: &EvidenceCandidate, _limit: usize| {
+        Ok(CandidateSource::Bytes(
+            candidate.file_id.0.as_bytes().to_vec(),
+        ))
+    };
+
+    let chrome = read_elevation_service(
+        &conn,
+        "source-1",
+        ChromiumFamily::Chrome,
+        &cancel,
+        &mut reader,
+    )
+    .expect("Chrome elevation service");
+    let edge = read_elevation_service(
+        &conn,
+        "source-1",
+        ChromiumFamily::Edge,
+        &cancel,
+        &mut reader,
+    )
+    .expect("Edge elevation service");
+
+    assert_eq!(chrome, b"chrome");
+    assert_eq!(edge, b"edge");
 }

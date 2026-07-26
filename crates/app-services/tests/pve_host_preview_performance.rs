@@ -20,6 +20,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
+const ORACLE_ENV: &str = "FORENSICS_PVE_HOST_PREVIEW_ORACLE";
+const DEFAULT_ORACLE_RELATIVE_PATH: &str =
+    "../../testdata/real-samples/pve-host-ext4-preview-oracle.json";
 const PREFERRED_MEMBER_NAME: &str = "server01-disk01.e01";
 const RANGE_64_KIB: usize = 64 * 1024;
 const RANGE_1_MIB: usize = 1024 * 1024;
@@ -30,9 +33,6 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 const MAX_EXT4_JOURNAL_BYTES: usize = 128 * 1024 * 1024;
 const MAX_EXT4_RECOVERY_SECONDS: u64 = 180;
 const FINGERPRINT_SAMPLE_BYTES: usize = 64 * 1024;
-const FIXED_ORACLE_JSON: &str =
-    include_str!("../../../testdata/real-samples/pve-host-ext4-preview-oracle.json");
-
 #[derive(Debug, Clone)]
 struct TargetFile {
     logical_path: String,
@@ -277,8 +277,9 @@ fn pve_host_ext4_deleted_recovery_is_bounded_and_proven() {
 }
 
 fn validate_fixed_oracle(report: &HostPreviewReport) {
+    let oracle_json = required_oracle_json();
     let expected: FixedOracle =
-        serde_json::from_str(FIXED_ORACLE_JSON).expect("parse PVE host EXT4 preview oracle");
+        serde_json::from_str(&oracle_json).expect("parse PVE host EXT4 preview oracle");
     assert_eq!(expected.schema_version, report.schema_version);
     assert_eq!(expected.member_fingerprint, report.member_fingerprint);
     assert_eq!(expected.filesystem, report.filesystem);
@@ -304,6 +305,20 @@ fn validate_fixed_oracle(report: &HostPreviewReport) {
             Some(expected_metric.digest_sha256.as_str())
         );
     }
+}
+
+fn required_oracle_json() -> String {
+    let path = std::env::var_os(ORACLE_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_ORACLE_RELATIVE_PATH)
+        });
+    std::fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "{ORACLE_ENV} must point to the PVE host preview oracle, or place it at {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn required_cluster_root() -> PathBuf {

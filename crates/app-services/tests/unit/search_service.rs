@@ -1,6 +1,12 @@
 use super::*;
-use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use domain::{
+    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
+use persistence_sqlite::repositories::{
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
+};
 use search::ExtractedText;
 use std::io::Cursor;
 use tempfile::TempDir;
@@ -20,6 +26,10 @@ fn setup_file_db() -> (rusqlite::Connection, Vec<FileEntryId>) {
     .unwrap();
     conn.execute_batch(include_str!(
         "../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
     ))
     .unwrap();
     conn.execute(
@@ -93,6 +103,28 @@ fn setup_case_db_with_source(tmp: &TempDir) -> rusqlite::Connection {
     conn.execute_batch("UPDATE data_sources SET import_state='ready',platform='linux'")
         .unwrap();
     conn
+}
+
+fn register_ready_search_source(
+    case_conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source_id: &str,
+) -> std::path::PathBuf {
+    let source = DataSource {
+        id: DataSourceId(source_id.to_string()),
+        name: source_id.to_string(),
+        kind: DataSourceKind::LogicalDirectory,
+        source_path: case_root.join(format!("{source_id}.fixture")),
+        imported_at: chrono::Utc::now(),
+        provenance: DataSourceProvenance::unknown(),
+    };
+    let mut storage = DataSourceStorage::source_db(source_id, Some("linux"), None);
+    storage.import_state = "ready".to_string();
+    let index_rel_path = storage.index_rel_path.clone().unwrap();
+    DataSourceRepo::new(case_conn)
+        .insert_with_storage(&domain::CaseId("case-1".to_string()), &source, &storage)
+        .unwrap();
+    case_root.join(index_rel_path)
 }
 
 fn metric_value(report: &PerformanceReportDto, key: &str) -> Option<f64> {
@@ -189,6 +221,313 @@ fn search_files_for_case_reads_source_indexes_and_wraps_file_ids() {
     .unwrap();
 
     assert_eq!(page.total, 1);
+    assert_eq!(page.available, 1);
+    assert!(!page.truncated);
     assert_eq!(page.items[0].file_id, "ds:ds-1:file-1");
     assert_eq!(page.items[0].path, "/evidence/file-1.txt");
+}
+
+#[test]
+fn case_search_deep_page_refills_stable_source_indexes_in_bounded_batches() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case_db_with_source(&tmp);
+    let first_index_dir = tmp.path().join("sources/ds-1/index");
+    let second_index_dir = register_ready_search_source(&case_conn, tmp.path(), "ds-2");
+    let texts = (0..300)
+        .map(|index| ExtractedText {
+            file_id: format!("file-{index:03}"),
+            content: "shared deep pagination token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 28,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| {
+            (
+                text.file_id.clone(),
+                format!("/evidence/{}.txt", text.file_id),
+            )
+        })
+        .collect::<Vec<_>>();
+    SearchIndex::create(&first_index_dir)
+        .unwrap()
+        .index_documents(&texts, &paths)
+        .unwrap();
+    SearchIndex::create(&second_index_dir)
+        .unwrap()
+        .index_documents(&texts, &paths)
+        .unwrap();
+
+    let page = search_files_for_case(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "pagination",
+        520,
+        40,
+    )
+    .unwrap();
+
+    assert_eq!(page.total, 600);
+    assert_eq!(page.available, 600);
+    assert!(!page.truncated);
+    assert_eq!(page.items.len(), 40);
+    assert_eq!(page.items.first().unwrap().file_id, "ds:ds-2:file-220");
+    assert_eq!(page.items.last().unwrap().file_id, "ds:ds-2:file-259");
+}
+
+#[test]
+fn case_search_window_caps_untrusted_offsets_without_overflow() {
+    assert_eq!(case_search::bounded_scan_end(0, 50), 50);
+    assert_eq!(
+        case_search::bounded_scan_end(case_search::MAX_CASE_SEARCH_WINDOW - 10, u32::MAX,),
+        case_search::MAX_CASE_SEARCH_WINDOW as usize
+    );
+    assert_eq!(
+        case_search::bounded_scan_end(case_search::MAX_CASE_SEARCH_WINDOW, 50),
+        0
+    );
+    assert_eq!(case_search::bounded_scan_end(u64::MAX, u32::MAX), 0);
+}
+
+#[test]
+fn case_search_cursor_reads_each_ranked_hit_once_across_sources() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case_db_with_source(&tmp);
+    let first_index_dir = tmp.path().join("sources/ds-1/index");
+    let second_index_dir = register_ready_search_source(&case_conn, tmp.path(), "ds-2");
+    let texts = (0..73)
+        .rev()
+        .map(|index| ExtractedText {
+            file_id: format!("file-{index:03}"),
+            content: "shared cursor pagination token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 30,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| {
+            (
+                text.file_id.clone(),
+                format!("/evidence/{}.txt", text.file_id),
+            )
+        })
+        .collect::<Vec<_>>();
+    for index_dir in [&first_index_dir, &second_index_dir] {
+        SearchIndex::create(index_dir)
+            .unwrap()
+            .index_documents(&texts, &paths)
+            .unwrap();
+    }
+
+    let mut cursor = None;
+    let mut file_ids = Vec::new();
+    loop {
+        let page = search_files_for_case_cursor(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "pagination",
+            cursor.as_deref(),
+            17,
+        )
+        .unwrap();
+        assert_eq!(page.total, 146);
+        file_ids.extend(page.items.into_iter().map(|item| item.file_id));
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+
+    assert_eq!(file_ids.len(), 146);
+    assert_eq!(
+        file_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        file_ids.len()
+    );
+    assert_eq!(
+        file_ids.first().map(String::as_str),
+        Some("ds:ds-1:file-000")
+    );
+    assert_eq!(
+        file_ids.last().map(String::as_str),
+        Some("ds:ds-2:file-072")
+    );
+}
+
+#[test]
+fn case_search_cursor_rejects_an_index_commit_between_pages() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case_db_with_source(&tmp);
+    let index_dir = tmp.path().join("sources/ds-1/index");
+    let index = SearchIndex::create(&index_dir).unwrap();
+    let texts = ["file-1", "file-2"]
+        .into_iter()
+        .map(|file_id| ExtractedText {
+            file_id: file_id.to_string(),
+            content: "stable cursor token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 19,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| (text.file_id.clone(), format!("/{}.txt", text.file_id)))
+        .collect::<Vec<_>>();
+    index.index_documents(&texts, &paths).unwrap();
+    let first = search_files_for_case_cursor(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "cursor",
+        None,
+        1,
+    )
+    .unwrap();
+    let cursor = first.next_cursor.unwrap();
+    index
+        .index_documents(
+            &[ExtractedText {
+                file_id: "file-3".to_string(),
+                content: "stable cursor token".to_string(),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 19,
+            }],
+            &[("file-3".to_string(), "/file-3.txt".to_string())],
+        )
+        .unwrap();
+
+    let error = search_files_for_case_cursor(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "cursor",
+        Some(&cursor),
+        1,
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, SearchError::InvalidInput(_)));
+}
+
+#[test]
+fn case_search_cursor_rejects_an_equivalent_rebuilt_index_generation() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case_db_with_source(&tmp);
+    let index_dir = tmp.path().join("sources/ds-1/index");
+    let texts = ["file-1", "file-2"]
+        .into_iter()
+        .map(|file_id| ExtractedText {
+            file_id: file_id.to_string(),
+            content: "equivalent rebuilt cursor token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 31,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| (text.file_id.clone(), format!("/{}.txt", text.file_id)))
+        .collect::<Vec<_>>();
+    let first_index = SearchIndex::create(&index_dir).unwrap();
+    first_index.index_documents(&texts, &paths).unwrap();
+    let first_generation = first_index.generation().to_string();
+    let first_opstamp = first_index.snapshot_opstamp().unwrap();
+    drop(first_index);
+
+    let first_page = search_files_for_case_cursor(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "rebuilt",
+        None,
+        1,
+    )
+    .unwrap();
+    let cursor = first_page.next_cursor.unwrap();
+
+    std::fs::remove_dir_all(&index_dir).unwrap();
+    let rebuilt = SearchIndex::create(&index_dir).unwrap();
+    rebuilt.index_documents(&texts, &paths).unwrap();
+    assert_ne!(rebuilt.generation(), first_generation);
+    assert_eq!(rebuilt.snapshot_opstamp().unwrap(), first_opstamp);
+    drop(rebuilt);
+
+    let error = search_files_for_case_cursor(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "rebuilt",
+        Some(&cursor),
+        1,
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, SearchError::InvalidInput(_)));
+    assert!(error.to_string().contains("generation changed"));
+}
+
+#[test]
+fn case_search_cursor_rejects_tampered_and_oversized_tokens() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case_db_with_source(&tmp);
+    let index_dir = tmp.path().join("sources/ds-1/index");
+    let index = SearchIndex::create(&index_dir).unwrap();
+    let texts = ["file-1", "file-2"]
+        .into_iter()
+        .map(|file_id| ExtractedText {
+            file_id: file_id.to_string(),
+            content: "tamper cursor token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 19,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| (text.file_id.clone(), format!("/{}.txt", text.file_id)))
+        .collect::<Vec<_>>();
+    index.index_documents(&texts, &paths).unwrap();
+    let first = search_files_for_case_cursor(
+        &case_conn,
+        tmp.path(),
+        &domain::CaseId("case-1".to_string()),
+        "tamper",
+        None,
+        1,
+    )
+    .unwrap();
+    let mut tampered = first.next_cursor.unwrap().into_bytes();
+    let payload_index = tampered.iter().position(|byte| *byte == b'.').unwrap() + 1;
+    tampered[payload_index] = if tampered[payload_index] == b'A' {
+        b'B'
+    } else {
+        b'A'
+    };
+    let tampered = String::from_utf8(tampered).unwrap();
+
+    for cursor in [
+        tampered,
+        "x".repeat(transport::paging::MAX_OPAQUE_CURSOR_LENGTH + 1),
+    ] {
+        let error = search_files_for_case_cursor(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "tamper",
+            Some(&cursor),
+            1,
+        )
+        .unwrap_err();
+        assert!(matches!(error, SearchError::InvalidInput(_)));
+    }
 }

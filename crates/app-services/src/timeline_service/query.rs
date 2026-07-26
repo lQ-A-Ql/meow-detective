@@ -15,6 +15,7 @@ pub struct TimelineQuery<'a> {
     pub time_start: Option<&'a str>,
     pub time_end: Option<&'a str>,
     pub event_type: Option<&'a str>,
+    pub cursor: Option<&'a str>,
 }
 
 impl TimelineQuery<'_> {
@@ -25,6 +26,7 @@ impl TimelineQuery<'_> {
             time_start: None,
             time_end: None,
             event_type: None,
+            cursor: None,
         }
     }
 }
@@ -53,7 +55,11 @@ pub fn query_timeline_filtered(
         .into_iter()
         .map(timeline_event_to_dto)
         .collect();
-    Ok(PageResponse { total, items })
+    Ok(PageResponse {
+        total,
+        items,
+        next_cursor: None,
+    })
 }
 
 pub fn get_timeline_event_by_id(

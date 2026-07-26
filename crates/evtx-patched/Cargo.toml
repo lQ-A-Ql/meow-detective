@@ -26,6 +26,10 @@ name = "evtx"
 path = "src/lib.rs"
 doctest = false
 
+[[test]]
+name = "serialized_records"
+path = "tests/serialized_records.rs"
+
 [dependencies]
 ahash = "0.8"
 bitflags = "2"

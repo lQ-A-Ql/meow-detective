@@ -1,12 +1,13 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getArtifactById: vi.fn(),
   getArtifactFamilies: vi.fn(),
   getArtifactRows: vi.fn(),
+  getArtifactRowsPage: vi.fn(),
   getArtifactFamilyCounts: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock('@/lib/api/artifacts', () => ({
   getArtifactById: mocks.getArtifactById,
   getArtifactFamilies: mocks.getArtifactFamilies,
   getArtifactRows: mocks.getArtifactRows,
+  getArtifactRowsPage: mocks.getArtifactRowsPage,
   getArtifactFamilyCounts: mocks.getArtifactFamilyCounts,
 }));
 
@@ -22,6 +24,7 @@ import {
   useArtifactFamilies,
   useArtifactFamilyCounts,
   useArtifactRows,
+  useInfiniteArtifactRows,
 } from './hooks';
 
 function createWrapper() {
@@ -42,6 +45,10 @@ describe('artifacts hooks', () => {
     mocks.getArtifactRows.mockResolvedValue([
       { id: 'a1', family: 'Registry', source: 'SYSTEM', summary: 'Test artifact' },
     ]);
+    mocks.getArtifactRowsPage.mockResolvedValue({
+      total: 1,
+      items: [{ id: 'a1', family: 'Registry', source: 'SYSTEM', summary: 'Test artifact' }],
+    });
     mocks.getArtifactFamilyCounts.mockResolvedValue([
       { family: 'Registry', count: 10 },
     ]);
@@ -81,6 +88,53 @@ describe('artifacts hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getArtifactFamilyCounts).toHaveBeenCalledTimes(1);
     expect(result.current.data).toEqual([{ family: 'Registry', count: 10 }]);
+  });
+
+  it('loads artifact pages using the backend opaque cursor', async () => {
+    mocks.getArtifactRowsPage
+      .mockResolvedValueOnce({
+        total: 3,
+        items: [{ id: 'a1' }, { id: 'a2' }],
+        nextCursor: 'artifact-cursor-1',
+      })
+      .mockResolvedValueOnce({
+        total: 3,
+        items: [{ id: 'a3' }],
+      });
+
+    const { result } = renderHook(() => useInfiniteArtifactRows('Registry', 2), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.getArtifactRowsPage).toHaveBeenNthCalledWith(1, 'Registry', undefined, 2);
+
+    let nextResult: Awaited<ReturnType<typeof result.current.fetchNextPage>> | undefined;
+    await act(async () => {
+      nextResult = await result.current.fetchNextPage();
+    });
+
+    expect(mocks.getArtifactRowsPage).toHaveBeenNthCalledWith(
+      2,
+      'Registry',
+      'artifact-cursor-1',
+      2,
+    );
+    expect(nextResult?.data?.pages.flatMap((page) => page.items)).toHaveLength(3);
+    expect(nextResult?.hasNextPage).toBe(false);
+  });
+
+  it('stops artifact pagination when the backend omits nextCursor', async () => {
+    mocks.getArtifactRowsPage.mockResolvedValueOnce({
+      total: 3,
+      items: [{ id: 'a1' }, { id: 'a2' }],
+    });
+    const { result } = renderHook(() => useInfiniteArtifactRows('Registry', 2), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(mocks.getArtifactRowsPage).toHaveBeenCalledTimes(1);
   });
 
   it('fetches artifact by id when id is provided', async () => {

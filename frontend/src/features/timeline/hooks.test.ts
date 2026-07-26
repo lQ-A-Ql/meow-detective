@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -39,7 +39,11 @@ vi.mock('@/features/cache-invalidation', async (importOriginal) => {
   };
 });
 
-import { useTimelineEvents, useTimelineEventById } from './hooks';
+import {
+  useInfiniteTimelineEvents,
+  useTimelineEvents,
+  useTimelineEventById,
+} from './hooks';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -98,6 +102,60 @@ describe('timeline hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect((result.current.error as Error).message).toBe('timeout');
+    });
+  });
+
+  describe('useInfiniteTimelineEvents', () => {
+    it('uses the opaque cursor as the next page parameter', async () => {
+      mocks.getTimelineEvents
+        .mockResolvedValueOnce({
+          total: 3,
+          items: [{ id: 'evt-1' }, { id: 'evt-2' }],
+          nextCursor: 'timeline-cursor-1',
+        })
+        .mockResolvedValueOnce({
+          total: 3,
+          items: [{ id: 'evt-3' }],
+        });
+
+      const request = { eventType: 'FileCreate' };
+      const { result } = renderHook(
+        () => useInfiniteTimelineEvents(request, 2),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mocks.getTimelineEvents).toHaveBeenNthCalledWith(1, {
+        eventType: 'FileCreate',
+        limit: 2,
+        cursor: undefined,
+      });
+
+      let nextResult: Awaited<ReturnType<typeof result.current.fetchNextPage>> | undefined;
+      await act(async () => {
+        nextResult = await result.current.fetchNextPage();
+      });
+
+      expect(mocks.getTimelineEvents).toHaveBeenNthCalledWith(2, {
+        eventType: 'FileCreate',
+        limit: 2,
+        cursor: 'timeline-cursor-1',
+      });
+      expect(nextResult?.data?.pages.flatMap((page) => page.items)).toHaveLength(3);
+      expect(nextResult?.hasNextPage).toBe(false);
+    });
+
+    it('stops timeline pagination when the backend omits nextCursor', async () => {
+      mocks.getTimelineEvents.mockResolvedValueOnce({
+        total: 3,
+        items: [{ id: 'evt-1' }, { id: 'evt-2' }],
+      });
+      const { result } = renderHook(() => useInfiniteTimelineEvents(undefined, 2), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.hasNextPage).toBe(false);
+      expect(mocks.getTimelineEvents).toHaveBeenCalledTimes(1);
     });
   });
 

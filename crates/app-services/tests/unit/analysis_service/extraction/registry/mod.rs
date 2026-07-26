@@ -13,6 +13,7 @@ fn candidate(path: &str) -> EvidenceCandidate {
         partition_index: None,
         path: path.to_string(),
         size: 1024,
+        encrypted: false,
         content_identity: format!("test:{path}"),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry".to_string(),

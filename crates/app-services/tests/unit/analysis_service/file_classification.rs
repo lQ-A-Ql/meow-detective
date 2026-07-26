@@ -145,3 +145,146 @@ fn metadata_fallback_marks_non_magic_rows() {
         ("documents", "日志文档", true)
     );
 }
+
+#[test]
+fn classification_board_surfaces_header_read_failures() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
+    conn.execute_batch(
+        "CREATE TABLE file_entries (
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            data_source_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            name TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            size INTEGER,
+            ext TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
+            modified_at TEXT,
+            accessed_at TEXT,
+            changed_at TEXT,
+            hash_sha256 TEXT,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+        );
+        INSERT INTO file_entries
+            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
+        VALUES
+            ('file-1', 'ds-1', '[P2]/evidence.exe', 'evidence.exe', 'file', 100, 'exe', 0);",
+    )
+    .expect("seed file_entries");
+
+    let board = build_file_classification_board(&conn, 1, |_file_id| {
+        Err::<Vec<u8>, _>("evidence read unavailable")
+    })
+    .expect("classification board");
+
+    assert_eq!(board.magic_classified_count, 0);
+    assert_eq!(board.metadata_classified_count, 1);
+    assert!(board.warnings.iter().any(|warning| {
+        warning.contains("[P2]/evidence.exe") && warning.contains("evidence read unavailable")
+    }));
+}
+
+#[test]
+fn encrypted_files_are_classified_without_reading_content_or_leaking_paths() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
+    conn.execute_batch(
+        "CREATE TABLE file_entries (
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            data_source_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            name TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            size INTEGER,
+            ext TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
+            modified_at TEXT,
+            accessed_at TEXT,
+            changed_at TEXT,
+            hash_sha256 TEXT,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+        );
+        INSERT INTO file_entries
+            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
+        VALUES
+            ('efs-file', 'ds-rbd', '[P2]/private/secret.txt', 'secret.txt',
+             'file', 100, 'txt', 1);",
+    )
+    .expect("seed encrypted file entry");
+    let mut read_calls = 0usize;
+
+    let board = build_file_classification_board(&conn, 1, |_file_id| {
+        read_calls += 1;
+        Ok::<Vec<u8>, &str>(b"ciphertext".to_vec())
+    })
+    .expect("classify encrypted metadata");
+
+    assert_eq!(read_calls, 0, "encrypted content must not reach the reader");
+    assert_eq!(board.magic_classified_count, 0);
+    assert_eq!(board.metadata_classified_count, 1);
+    let warning = board
+        .warnings
+        .iter()
+        .find(|warning| warning.contains("EFS-encrypted"))
+        .expect("explicit encrypted-content warning");
+    assert!(warning.contains("metadata only"));
+    assert!(warning.contains("was not read"));
+    assert!(!warning.contains("secret.txt"));
+    assert!(!warning.contains("[P2]"));
+}
+
+#[test]
+fn unknown_encryption_status_is_not_reported_as_efs() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
+    conn.execute_batch(
+        "CREATE TABLE file_entries (
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            data_source_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            name TEXT NOT NULL,
+            entry_type TEXT NOT NULL,
+            size INTEGER,
+            ext TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
+            modified_at TEXT,
+            accessed_at TEXT,
+            changed_at TEXT,
+            hash_sha256 TEXT,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+        );
+        INSERT INTO file_entries
+            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
+        VALUES
+            ('unknown-file', 'ds-unknown', '[P2]/private/unknown.txt', 'unknown.txt',
+             'file', 100, 'txt', NULL);",
+    )
+    .expect("seed unknown-encryption file entry");
+    let mut read_calls = 0usize;
+
+    let board = build_file_classification_board(&conn, 1, |_file_id| {
+        read_calls += 1;
+        Ok::<Vec<u8>, &str>(b"plaintext".to_vec())
+    })
+    .expect("classify unknown-encryption metadata");
+
+    assert_eq!(read_calls, 0, "unknown content must not reach the reader");
+    assert!(board
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unknown encryption status")));
+    assert!(board
+        .warnings
+        .iter()
+        .all(|warning| !warning.contains("EFS-encrypted")));
+}

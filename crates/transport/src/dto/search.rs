@@ -27,6 +27,14 @@ pub struct SearchHitDto {
 #[serde(rename_all = "camelCase")]
 pub struct SearchResultPageDto {
     pub total: u64,
+    pub available: u64,
+    pub truncated: bool,
     pub took_ms: u64,
     pub items: Vec<SearchHitDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/dto/search.rs"]
+mod tests;

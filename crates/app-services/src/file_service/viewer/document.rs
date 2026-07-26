@@ -2,8 +2,8 @@
 //! (docx/xlsx/pptx), and SQLite databases. Output is a bounded text
 //! extraction, never a layout render or inlined binary payload.
 
-use rusqlite::Connection;
-use std::io::Write;
+use rusqlite::{serialize::OwnedData, Connection, DatabaseName};
+use std::ptr::NonNull;
 use transport::dto::{DocumentPreviewDto, DocumentSectionDto, DocumentTableDto};
 
 use super::office_preview::{office_docx_lines, preview_office_part, preview_pptx, preview_xlsx};
@@ -15,7 +15,7 @@ use crate::file_service::FileServiceError;
 const MAX_DOCUMENT_PREVIEW_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_PDF_PAGES: usize = 10;
 pub(crate) const MAX_SECTION_LINES: usize = 200;
-const MAX_LINE_CHARS: usize = 300;
+pub(crate) const MAX_LINE_CHARS: usize = 300;
 const MAX_SQLITE_TABLES: usize = 20;
 const MAX_SQLITE_ROWS: usize = 50;
 
@@ -110,11 +110,7 @@ fn preview_pdf(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> {
 }
 
 fn preview_sqlite(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> {
-    let mut tmp = tempfile::NamedTempFile::new().map_err(FileServiceError::from)?;
-    tmp.write_all(bytes).map_err(FileServiceError::from)?;
-    tmp.flush().map_err(FileServiceError::from)?;
-    let conn = Connection::open_with_flags(tmp.path(), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| FileServiceError::invalid_input(format!("SQLite open failed: {error}")))?;
+    let conn = open_sqlite_in_memory(bytes)?;
     let mut statement = conn
         .prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
@@ -128,14 +124,22 @@ fn preview_sqlite(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> 
         .map_err(sqlite_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sqlite_error)?;
-    let truncated = tables.len() > MAX_SQLITE_TABLES;
+    let mut truncated = tables.len() > MAX_SQLITE_TABLES;
     let tables = &tables[..tables.len().min(MAX_SQLITE_TABLES)];
 
     let mut sections = Vec::new();
     let mut warnings = Vec::new();
     for table in tables {
         match sqlite_table_section(&conn, table) {
-            Ok(section) => sections.push(section),
+            Ok((section, rows_truncated)) => {
+                truncated |= rows_truncated;
+                if rows_truncated {
+                    warnings.push(format!(
+                        "table {table}: row preview limited to {MAX_SQLITE_ROWS} rows"
+                    ));
+                }
+                sections.push(section);
+            }
             Err(error) => warnings.push(format!("table {table}: {error}")),
         }
     }
@@ -148,10 +152,38 @@ fn preview_sqlite(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> 
     })
 }
 
+fn open_sqlite_in_memory(bytes: &[u8]) -> Result<Connection, FileServiceError> {
+    const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
+    if bytes.len() < 100 || !bytes.starts_with(SQLITE_HEADER) {
+        return Err(FileServiceError::invalid_input("SQLite header is invalid"));
+    }
+    let allocation_size = u64::try_from(bytes.len())
+        .map_err(|_| FileServiceError::invalid_input("SQLite preview is too large"))?;
+    // SAFETY: sqlite3_malloc64 returns SQLite-owned storage suitable for
+    // OwnedData. The checked non-null allocation is initialized with exactly
+    // bytes.len() bytes before ownership is transferred to rusqlite.
+    let allocation = unsafe { rusqlite::ffi::sqlite3_malloc64(allocation_size) }.cast::<u8>();
+    let allocation = NonNull::new(allocation)
+        .ok_or_else(|| FileServiceError::invalid_input("SQLite memory allocation failed"))?;
+    // SAFETY: source and destination are valid for bytes.len() bytes and do
+    // not overlap; the destination was allocated immediately above.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), allocation.as_ptr(), bytes.len());
+    }
+    // SAFETY: allocation came from sqlite3_malloc64 and ownership is moved
+    // exactly once into OwnedData.
+    let data = unsafe { OwnedData::from_raw_nonnull(allocation, bytes.len()) };
+    let mut connection = Connection::open_in_memory().map_err(sqlite_error)?;
+    connection
+        .deserialize(DatabaseName::Main, data, true)
+        .map_err(sqlite_error)?;
+    Ok(connection)
+}
+
 fn sqlite_table_section(
     conn: &Connection,
     table: &str,
-) -> Result<DocumentSectionDto, rusqlite::Error> {
+) -> Result<(DocumentSectionDto, bool), rusqlite::Error> {
     let quoted = format!("\"{}\"", table.replace('"', "\"\""));
     let columns = conn
         .prepare(&format!("PRAGMA table_info({quoted})"))?
@@ -160,7 +192,7 @@ fn sqlite_table_section(
     let mut lines = vec![columns.join(" | ")];
     let mut statement = conn.prepare(&format!("SELECT * FROM {quoted} LIMIT ?1"))?;
     let width = columns.len();
-    let rows = statement.query_map([MAX_SQLITE_ROWS as i64], |row| {
+    let rows = statement.query_map([(MAX_SQLITE_ROWS + 1) as i64], |row| {
         let cells = (0..width)
             .map(|index| match row.get_ref(index) {
                 Ok(value) => bounded_line(&render_sqlite_value(value)),
@@ -174,18 +206,21 @@ fn sqlite_table_section(
         let cells = row?;
         lines.push(bounded_line(&cells.join(" | ")));
         grid.push(cells);
-        if grid.len() >= MAX_SQLITE_ROWS {
-            break;
-        }
     }
-    Ok(DocumentSectionDto {
-        title: format!("Table: {table}"),
-        lines,
-        table: Some(DocumentTableDto {
-            columns,
-            rows: grid,
-        }),
-    })
+    let truncated = grid.len() > MAX_SQLITE_ROWS;
+    grid.truncate(MAX_SQLITE_ROWS);
+    lines.truncate(MAX_SQLITE_ROWS + 1);
+    Ok((
+        DocumentSectionDto {
+            title: format!("Table: {table}"),
+            lines,
+            table: Some(DocumentTableDto {
+                columns,
+                rows: grid,
+            }),
+        },
+        truncated,
+    ))
 }
 
 fn sqlite_error(error: rusqlite::Error) -> FileServiceError {
@@ -212,7 +247,13 @@ pub(crate) fn bounded_lines(text: &str) -> Vec<String> {
 }
 
 pub(crate) fn bounded_line(line: &str) -> String {
-    line.trim().chars().take(MAX_LINE_CHARS).collect()
+    bounded_line_with_status(line).0
+}
+
+pub(crate) fn bounded_line_with_status(line: &str) -> (String, bool) {
+    let mut characters = line.trim().chars();
+    let bounded = characters.by_ref().take(MAX_LINE_CHARS).collect();
+    (bounded, characters.next().is_some())
 }
 
 #[cfg(test)]

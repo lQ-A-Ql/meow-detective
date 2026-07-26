@@ -1,0 +1,131 @@
+{
+  "securityDefaults": {
+    "exportOverwriteDefault": false,
+    "exportPathGuardEnabled": true,
+    "stdioCommandWhitelistEnforced": true,
+    "sseHttpsOnly": true,
+    "embeddedCredentialsBlocked": true,
+    "mediaHandleScoped": true,
+    "errorRedactionEnabled": true,
+    "notes": [
+      "SSE 仅允许 http/https，禁止 embedded credentials。",
+      "stdio command 必须是命令名而不是路径，并拒绝 NUL 字节。",
+      "导出默认不覆盖；覆盖必须显式确认。"
+    ]
+  },
+  "dependencySecurity": {
+    "category": "dependency-security",
+    "description": "Severity grading and response policy for Rust crate dependency advisories sourced from the RustSec Advisory Database and checked via cargo-deny.",
+    "severityLevels": [
+      {
+        "level": "critical",
+        "cvssRange": "9.0-10.0",
+        "label": "Critical",
+        "examples": [
+          "remote unauthenticated code execution",
+          "sandbox escape",
+          "cryptographic breaks exposing case data or host filesystem"
+        ],
+        "responseSla": "24 hours",
+        "action": "Immediate patch or mitigation merge. If upstream fix is unavailable, ship config-level block with exception and escalate."
+      },
+      {
+        "level": "high",
+        "cvssRange": "7.0-8.9",
+        "label": "High",
+        "examples": [
+          "local privilege escalation",
+          "authenticated remote code execution",
+          "information disclosure of protected evidence",
+          "DoS that corrupts case database"
+        ],
+        "responseSla": "7 days",
+        "action": "Evaluate upgrade path; document exception in deny.toml with expiry no later than 30 days if blocked on upstream."
+      },
+      {
+        "level": "medium",
+        "cvssRange": "4.0-6.9",
+        "label": "Medium",
+        "examples": [
+          "parsing panics in evidence readers",
+          "uncontrolled resource consumption",
+          "timing side-channels in search index"
+        ],
+        "responseSla": "30 days",
+        "action": "Plan upgrade in next dependency refresh cycle. Document exception if fix still pending at day 30."
+      },
+      {
+        "level": "low",
+        "cvssRange": "0.1-3.9",
+        "label": "Low",
+        "examples": [
+          "information disclosure of non-sensitive metadata",
+          "best-practice violations without a practical attack vector"
+        ],
+        "responseSla": "90 days",
+        "action": "Address during routine maintenance. Exception may be renewed once without escalation."
+      }
+    ],
+    "exceptionPolicy": {
+      "template": "owner: <name|team>; expires: <YYYY-MM-DD>; <technical justification>",
+      "approvalRequired": {
+        "critical": "pull request with at least one other maintainer review",
+        "high": "pull request with at least one other maintainer review",
+        "medium": "self-approved; must follow template",
+        "low": "self-approved; must follow template"
+      },
+      "expiryEnforcement": "check-deny-exceptions.ps1 fails CI when any exception date has passed"
+    },
+    "reviewCadence": {
+      "automatedCheck": "every CI run via check-dependency-security.ps1",
+      "exceptionExpiryCheck": "every CI run via check-deny-exceptions.ps1",
+      "fullDependencyAudit": "monthly by project maintainer rotation",
+      "severityReassessment": "monthly by project maintainer"
+    },
+    "tools": [
+      "cargo-deny",
+      "deny.toml",
+      "scripts/check-dependency-security.ps1",
+      "scripts/check-deny-exceptions.ps1"
+    ],
+    "notes": [
+      "Severity may be raised (never lowered) if the advisory matches a critical data flow in this application.",
+      "Advisory database URL: https://github.com/rustsec/advisory-db",
+      "All exceptions must include owner, expires date, and technical justification."
+    ]
+  },
+  "errorTaxonomyEntries": [
+    {
+      "category": "validation",
+      "severity": "medium",
+      "recoverable": true,
+      "examples": ["NO_ACTIVE_CASE", "INVALID_INPUT"],
+      "redactionRule": "return user-actionable message without leaking internals",
+      "notes": ["前端可直接引导用户修正输入"]
+    },
+    {
+      "category": "parser",
+      "severity": "high",
+      "recoverable": true,
+      "examples": ["registry parse failed", "prefetch decode failed"],
+      "redactionRule": "hide raw bytes, stack traces, and host absolute paths",
+      "notes": ["需要保留 parser family 以便 investigator 判断边界"]
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "recoverable": false,
+      "examples": ["MCP policy block", "export path traversal denied"],
+      "redactionRule": "never expose credentials, tokens, or raw absolute paths",
+      "notes": ["安全拒绝必须保留审计记录"]
+    },
+    {
+      "category": "external",
+      "severity": "medium",
+      "recoverable": true,
+      "examples": ["SSE connection failed", "stdio tool exited unexpectedly"],
+      "redactionRule": "summarize stderr/network cause without passing raw payload through",
+      "notes": ["MCP 外部错误需要和 security block 区分"]
+    }
+  ]
+}

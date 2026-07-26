@@ -218,6 +218,7 @@ fn fake_mft_record(record_number: u64, parent_ref: u64, name: &str, is_dir: bool
         changed_at: None,
         hidden: false,
         system: false,
+        encrypted: false,
         deleted: false,
         is_valid: true,
     }
@@ -246,6 +247,7 @@ fn fake_ntfs_index_entry(
         mft_ref,
         hidden: false,
         system: false,
+        encrypted: false,
     }
 }
 
@@ -275,10 +277,12 @@ fn ntfs_mft_fast_path_writes_partition_prefixed_ids() {
         "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
     ))
     .unwrap();
+    let mut encrypted_record = fake_mft_record(43, 42, "notepad.exe", false);
+    encrypted_record.encrypted = true;
     let records = vec![
         fake_mft_record(5, 5, ".", true),
         fake_mft_record(42, 5, "Windows", true),
-        fake_mft_record(43, 42, "notepad.exe", false),
+        encrypted_record,
     ];
     stage_mft_records_for_test(&conn, &records, "ds-1", 3);
 
@@ -306,6 +310,14 @@ fn ntfs_mft_fast_path_writes_partition_prefixed_ids() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert_eq!(partition_indexes, vec![3, 3, 3]);
+    let encrypted: bool = conn
+        .query_row(
+            "SELECT encrypted <> 0 FROM file_entries WHERE id = 'mft:3:43'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(encrypted);
 }
 
 #[test]

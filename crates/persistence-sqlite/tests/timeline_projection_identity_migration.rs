@@ -40,7 +40,7 @@ fn fresh_source_schema_contains_timeline_projection_identity() {
         runner::current_version(&connection)
             .expect("read source version")
             .as_deref(),
-        Some("source_024_ntfs_deleted_recovery")
+        Some("source_027_artifact_keyset_indexes")
     );
 }
 
@@ -62,6 +62,23 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
              );
              CREATE TABLE data_sources (
                  id TEXT PRIMARY KEY NOT NULL
+             );
+             CREATE TABLE file_entries (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 parent_id TEXT,
+                 data_source_id TEXT NOT NULL,
+                 name TEXT NOT NULL,
+                 partition_index INTEGER
+             );
+             CREATE TABLE timeline_events (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 event_type TEXT NOT NULL,
+                 ts TEXT NOT NULL
+             );
+             CREATE TABLE artifacts (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 artifact_type TEXT NOT NULL DEFAULT '',
+                 created_at TEXT NOT NULL DEFAULT ''
              );
              CREATE TABLE ceph_bluestore_semantic_scans (
                  inventory_id TEXT PRIMARY KEY NOT NULL
@@ -88,7 +105,7 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
 
     assert_eq!(
         runner::run_source_all(&connection).expect("upgrade source database"),
-        8
+        11
     );
     let row: (String, i64, String) = connection
         .query_row(

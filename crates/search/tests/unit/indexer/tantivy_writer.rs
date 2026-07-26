@@ -102,6 +102,158 @@ fn search_no_results() {
 }
 
 #[test]
+fn count_only_search_does_not_construct_a_zero_limit_top_docs_collector() {
+    let dir = tempdir().unwrap();
+    let index = SearchIndex::create(&dir.path().join("count-only")).unwrap();
+    index
+        .index_documents(&sample_extracted_texts(), &sample_paths())
+        .unwrap();
+
+    let result = index.search_page("file", 0, 0).unwrap();
+
+    assert_eq!(result.total_count, 1);
+    assert!(result.hits.is_empty());
+}
+
+#[test]
+fn equal_score_pages_use_file_id_as_the_stable_tie_breaker() {
+    let dir = tempdir().unwrap();
+    let index = SearchIndex::create(&dir.path().join("stable-pages")).unwrap();
+    let texts = ["d", "b", "a", "c"]
+        .into_iter()
+        .map(|file_id| ExtractedText {
+            file_id: file_id.to_string(),
+            content: "shared stable token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 19,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| (text.file_id.clone(), format!("/{}.txt", text.file_id)))
+        .collect::<Vec<_>>();
+    index.index_documents(&texts, &paths).unwrap();
+
+    assert!(index.supports_stable_paging());
+    let first = index.search_page("stable", 0, 2).unwrap();
+    let second = index.search_page("stable", 2, 2).unwrap();
+    let ids = first
+        .hits
+        .into_iter()
+        .chain(second.hits)
+        .map(|hit| hit.file_id)
+        .collect::<Vec<_>>();
+
+    assert_eq!(ids, vec!["a", "b", "c", "d"]);
+}
+
+#[test]
+fn legacy_schema_is_detected_and_rejected_for_paged_search() {
+    let dir = tempdir().unwrap();
+    let index_path = dir.path().join("legacy-schema");
+    std::fs::create_dir_all(&index_path).unwrap();
+    let mut schema = tantivy::schema::Schema::builder();
+    schema.add_text_field("file_id", tantivy::schema::STRING | tantivy::schema::STORED);
+    schema.add_text_field("path", tantivy::schema::TEXT | tantivy::schema::STORED);
+    schema.add_text_field("content", tantivy::schema::TEXT | tantivy::schema::STORED);
+    schema.add_text_field("name", tantivy::schema::TEXT | tantivy::schema::STORED);
+    drop(tantivy::Index::create_in_dir(&index_path, schema.build()).unwrap());
+    SearchIndexIdentity::create(&index_path).unwrap();
+
+    let index = SearchIndex::open(&index_path).unwrap();
+
+    assert!(!index.supports_stable_paging());
+    assert!(matches!(
+        index.search_page("anything", 0, 10),
+        Err(IndexError::Schema(_))
+    ));
+    assert!(matches!(
+        index.query_session("anything"),
+        Err(IndexError::Schema(_))
+    ));
+}
+
+#[test]
+fn malformed_search_field_contracts_are_rejected() {
+    use tantivy::schema::{INDEXED, STORED};
+
+    let cases = [
+        ("file-id-wrong-type", 0u8),
+        ("file-id-not-stored", 1),
+        ("file-id-not-indexed", 2),
+        ("path-not-stored", 3),
+        ("path-wrong-type", 4),
+        ("content-not-indexed", 5),
+        ("content-not-stored", 6),
+        ("content-wrong-type", 7),
+    ];
+
+    for (name, defect) in cases {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join(name);
+        std::fs::create_dir_all(&index_path).unwrap();
+        let mut schema = tantivy::schema::Schema::builder();
+        if defect == 0 {
+            schema.add_u64_field("file_id", INDEXED | STORED | tantivy::schema::FAST);
+        } else {
+            let mut options = tantivy::schema::STRING | tantivy::schema::FAST;
+            if defect != 1 {
+                options = options | STORED;
+            }
+            if defect == 2 {
+                options = tantivy::schema::TextOptions::default() | STORED | tantivy::schema::FAST;
+            }
+            schema.add_text_field("file_id", options);
+        }
+        if defect == 4 {
+            schema.add_u64_field("path", STORED);
+        } else if defect == 3 {
+            schema.add_text_field("path", tantivy::schema::TEXT);
+        } else {
+            schema.add_text_field("path", tantivy::schema::TEXT | STORED);
+        }
+        if defect == 7 {
+            schema.add_u64_field("content", INDEXED | STORED);
+        } else if defect == 5 {
+            schema.add_text_field("content", STORED);
+        } else if defect == 6 {
+            schema.add_text_field("content", tantivy::schema::TEXT);
+        } else {
+            schema.add_text_field("content", tantivy::schema::TEXT | STORED);
+        }
+        schema.add_text_field("name", tantivy::schema::TEXT | STORED);
+        drop(tantivy::Index::create_in_dir(&index_path, schema.build()).unwrap());
+        SearchIndexIdentity::create(&index_path).unwrap();
+
+        let index = SearchIndex::open(&index_path).unwrap();
+        assert!(!index.supports_stable_paging(), "schema defect: {name}");
+        assert!(matches!(
+            index.validate_search_schema(),
+            Err(IndexError::Schema(_))
+        ));
+    }
+}
+
+#[test]
+fn index_without_generation_identity_is_rejected() {
+    let dir = tempdir().unwrap();
+    let index_path = dir.path().join("missing-generation");
+    std::fs::create_dir_all(&index_path).unwrap();
+    let mut schema = tantivy::schema::Schema::builder();
+    schema.add_text_field(
+        "file_id",
+        tantivy::schema::STRING | tantivy::schema::STORED | tantivy::schema::FAST,
+    );
+    schema.add_text_field("path", tantivy::schema::TEXT | tantivy::schema::STORED);
+    schema.add_text_field("content", tantivy::schema::TEXT | tantivy::schema::STORED);
+    schema.add_text_field("name", tantivy::schema::TEXT | tantivy::schema::STORED);
+    drop(tantivy::Index::create_in_dir(&index_path, schema.build()).unwrap());
+
+    assert!(SearchIndex::open(&index_path).is_err());
+}
+
+#[test]
 fn index_documents_skips_non_extractable() {
     let dir = tempdir().unwrap();
     let index_path = dir.path().join("test_index");

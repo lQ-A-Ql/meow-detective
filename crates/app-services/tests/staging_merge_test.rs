@@ -69,6 +69,46 @@ fn staging_merge_combines_two_partitions_and_reports_progress() {
         .unwrap();
     assert_eq!(missing_partition_index, 0);
     assert_eq!(unexpected_partition_index, 0);
+    let unknown_encryption_rows: i64 = main
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE entry_type = 'file' COLLATE NOCASE AND encrypted IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(unknown_encryption_rows, 5);
+}
+
+#[test]
+fn staging_merge_preserves_encrypted_file_flag() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let main = persistence_sqlite::connection::open_in_memory().unwrap();
+    create_main_file_entries_table(&main);
+    let ds_id = "ds-encrypted";
+    let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+    staging
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type, encrypted)
+             VALUES ('efs-file', ?1, '/secret.txt', 'secret.txt', 'file', 1)",
+            [ds_id],
+        )
+        .unwrap();
+    drop(staging);
+    let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
+    manifest.partitions.push(done_partition(0, "NTFS", 1));
+
+    merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap();
+
+    let encrypted: bool = main
+        .query_row(
+            "SELECT encrypted <> 0 FROM file_entries WHERE id = 'efs-file'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(encrypted);
 }
 
 #[test]

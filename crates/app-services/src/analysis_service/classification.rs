@@ -151,7 +151,7 @@ pub fn classify_files_by_metadata(
     let category_stats = metadata_category_stats(conn)?;
     let mut stmt = conn.prepare(
         "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE
              ORDER BY size DESC, path ASC

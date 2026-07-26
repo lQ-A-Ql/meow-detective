@@ -19,7 +19,9 @@ pub use datasource::{
     DataSourcePlatformParseError, DataSourceProvenance, DataSourceProvenanceStatus,
 };
 pub use error::{ForensicsError, ForensicsResult};
-pub use file_entry::{EntryType, FileEntry, FileEntryId};
+pub use file_entry::{
+    EntryType, FileEncryptionStatus, FileEntry, FileEntryId, InvalidEncryptionStatus,
+};
 pub use graph::{EdgeType, GraphEdge, GraphNode, NodeType};
 pub use job::{Job, JobId, JobScope, JobStatus};
 pub use notebook::{EntryStatus, EntryType as NotebookEntryType, EvidenceCitation, NotebookEntry};

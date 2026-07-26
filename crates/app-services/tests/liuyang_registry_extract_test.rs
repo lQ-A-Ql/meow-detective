@@ -9,10 +9,11 @@ use std::path::Path;
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
-    std::env::var("FORENSICS_LIUYANG_E01_FIXTURE")
-        .ok()
+    std::env::var_os("FORENSICS_LIUYANG_E01_FIXTURE")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("E:/pangushi/刘洋/liuyang_pc.E01"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_LIUYANG_E01_FIXTURE to run ignored registry tests")
+        })
 }
 
 fn open_ntfs(path: &Path) -> (fs_ntfs::NtfsReader, u64) {
@@ -51,6 +52,7 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
         partition_index: None,
         path: path.to_string(),
         size: 0,
+        encrypted: false,
         content_identity: format!("test:{file_id}"),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.hive".to_string(),
@@ -59,7 +61,7 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
 }
 
 // Local run:
-//   $env:FORENSICS_LIUYANG_E01_FIXTURE='E:/pangushi/刘洋/liuyang_pc.E01'
+//   $env:FORENSICS_LIUYANG_E01_FIXTURE='<path-to-private-liuyang-sample.E01>'
 //   cargo test -p app-services --test liuyang_registry_extract_test -- --ignored --nocapture
 #[test]
 #[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real E01 sample"]
@@ -210,50 +212,57 @@ fn liuyang_registry_extractors_surface_families() {
                 "Liu Yang SYSTEM hive should join TCP/IP configuration with physical adapter identity"
             );
 
-            // Persist full extraction results to output/liuyang_registry_extract.
-            let out_dir = std::path::PathBuf::from("output/liuyang_registry_extract");
-            std::fs::create_dir_all(&out_dir)?;
-            std::fs::write(
-                out_dir.join("summary.json"),
-                serde_json::to_string_pretty(&summary)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
-            )?;
-            std::fs::write(
-                out_dir.join("artifacts_all.json"),
-                serde_json::to_string_pretty(&all_artifacts)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
-            )?;
-
-            let mut by_family: std::collections::BTreeMap<String, Vec<&domain::Artifact>> =
-                std::collections::BTreeMap::new();
-            for a in &all_artifacts {
-                by_family.entry(a.family.clone()).or_default().push(a);
-            }
-            let mut family_counts = Vec::new();
-            for (family, items) in &by_family {
-                family_counts.push((family.clone(), items.len()));
-                let safe = family
-                    .chars()
-                    .map(|c| {
-                        if c.is_alphanumeric() || c == '-' || c == '_' {
-                            c
-                        } else {
-                            '_'
-                        }
-                    })
-                    .collect::<String>();
+            if let Some(out_dir) = std::env::var_os("FORENSICS_PRIVATE_TEST_OUTPUT_DIR")
+                .map(std::path::PathBuf::from)
+            {
+                std::fs::create_dir_all(&out_dir)?;
                 std::fs::write(
-                    out_dir.join(format!("family_{safe}.json")),
-                    serde_json::to_string_pretty(&items)
-                        .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
+                    out_dir.join("summary.json"),
+                    serde_json::to_string_pretty(&summary)
+                        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?,
                 )?;
+                std::fs::write(
+                    out_dir.join("artifacts_all.json"),
+                    serde_json::to_string_pretty(&all_artifacts)
+                        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?,
+                )?;
+
+                let mut by_family: std::collections::BTreeMap<String, Vec<&domain::Artifact>> =
+                    std::collections::BTreeMap::new();
+                for artifact in &all_artifacts {
+                    by_family
+                        .entry(artifact.family.clone())
+                        .or_default()
+                        .push(artifact);
+                }
+                let mut family_counts = Vec::new();
+                for (family, items) in &by_family {
+                    family_counts.push((family.clone(), items.len()));
+                    let safe = family
+                        .chars()
+                        .map(|character| {
+                            if character.is_alphanumeric() || character == '-' || character == '_' {
+                                character
+                            } else {
+                                '_'
+                            }
+                        })
+                        .collect::<String>();
+                    std::fs::write(
+                        out_dir.join(format!("family_{safe}.json")),
+                        serde_json::to_string_pretty(&items)
+                            .map_err(|error| {
+                                persistence_sqlite::DbError::System(error.to_string())
+                            })?,
+                    )?;
+                }
+                std::fs::write(
+                    out_dir.join("family_counts.json"),
+                    serde_json::to_string_pretty(&family_counts)
+                        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?,
+                )?;
+                eprintln!("Wrote private extraction results to {}", out_dir.display());
             }
-            std::fs::write(
-                out_dir.join("family_counts.json"),
-                serde_json::to_string_pretty(&family_counts)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
-            )?;
-            eprintln!("Wrote full extraction results to {}", out_dir.display());
 
             Ok(()) as Result<(), persistence_sqlite::DbError>
         })

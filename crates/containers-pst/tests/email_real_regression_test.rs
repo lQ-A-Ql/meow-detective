@@ -6,7 +6,7 @@
 //! `.eml`, `.mbox`, `.pst`, or `.ost` samples, then run:
 //!
 //! ```powershell
-//! $env:FORENSICS_EMAIL_FIXTURE_DIR = "C:\\path\\to\\email-samples"
+//! $env:FORENSICS_EMAIL_FIXTURE_DIR = "<path-to-private-email-samples>"
 //! cargo test -p containers-pst --test email_real_regression_test -- --ignored --nocapture
 //! ```
 

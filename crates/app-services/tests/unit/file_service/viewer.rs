@@ -745,8 +745,8 @@ fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
 
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+         VALUES ('file-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
         params![ds_id.0, bytes.len() as i64],
     )
     .unwrap();
@@ -768,6 +768,122 @@ fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
 
     assert_eq!(response.raw_bytes.unwrap(), bytes[17..29].to_vec());
     assert!(response.lines.is_empty());
+}
+
+#[test]
+fn efs_encrypted_entry_is_rejected_by_all_read_entry_points() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let evidence_dir = dir.path().join("evidence");
+    std::fs::create_dir_all(&evidence_dir).unwrap();
+    std::fs::write(evidence_dir.join("encrypted.bin"), b"ciphertext").unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
+    let ds_id = DataSourceId("ds-efs-read".to_string());
+    DataSourceRepo::new(&conn)
+        .upsert_source_local_metadata(
+            &CaseId("case-efs-read".to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "EFS evidence".to_string(),
+                kind: DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir,
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext,
+          deleted, hidden, system, encrypted)
+         VALUES ('file-efs', NULL, ?1, 'encrypted.bin', 'encrypted.bin', 'file',
+                 10, 'bin', 0, 0, 0, 1)",
+        params![ds_id.0],
+    )
+    .unwrap();
+    let file_id = FileEntryId("file-efs".to_string());
+
+    for result in [
+        open_file_handle_real(&conn, &file_id.0).map(|_| ()),
+        read_file_bytes_for_case(&conn, &file_id, 0, 4).map(|_| ()),
+        open_file_content_by_id(&conn, &file_id).map(|_| ()),
+    ] {
+        assert!(matches!(result, Err(FileServiceError::Unsupported(_))));
+    }
+
+    fn cache_miss(_: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    fn discard_cache_write(_: &str, _: &serde_json::Value) {}
+
+    let case_context_error = open_file_handle_real(
+        (&conn, "case-efs-read", cache_miss, discard_cache_write),
+        &file_id.0,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        case_context_error,
+        FileServiceError::Unsupported(_)
+    ));
+}
+
+#[test]
+fn unknown_encryption_entry_is_rejected_with_reenumeration_guidance() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let evidence_dir = dir.path().join("evidence");
+    std::fs::create_dir_all(&evidence_dir).unwrap();
+    std::fs::write(evidence_dir.join("unknown.pdf"), b"%PDF-1.7").unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
+    let ds_id = DataSourceId("ds-unknown-read".to_string());
+    DataSourceRepo::new(&conn)
+        .upsert_source_local_metadata(
+            &CaseId("case-unknown-read".to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "Unclassified evidence".to_string(),
+                kind: DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir,
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext,
+          deleted, hidden, system)
+         VALUES ('file-unknown', NULL, ?1, 'unknown.pdf', 'unknown.pdf', 'file',
+                 8, 'pdf', 0, 0, 0)",
+        params![ds_id.0],
+    )
+    .unwrap();
+    let file_id = FileEntryId("file-unknown".to_string());
+
+    let errors = [
+        open_file_handle_real(&conn, &file_id.0)
+            .map(|_| ())
+            .unwrap_err(),
+        read_file_bytes_for_case(&conn, &file_id, 0, 4)
+            .map(|_| ())
+            .unwrap_err(),
+        open_file_content_by_id(&conn, &file_id)
+            .map(|_| ())
+            .unwrap_err(),
+        media_preview_plan_for_file(&conn, &file_id.0)
+            .map(|_| ())
+            .unwrap_err(),
+        document_preview_for_file(&conn, &file_id.0)
+            .map(|_| ())
+            .unwrap_err(),
+        get_file_path_for_entry(&conn, &file_id.0)
+            .map(|_| ())
+            .unwrap_err(),
+    ];
+    for error in errors {
+        assert!(matches!(error, FileServiceError::Unsupported(_)));
+        assert!(error.to_string().contains("status is unknown"));
+        assert!(error.to_string().contains("re-enumerated"));
+    }
 }
 
 #[test]
@@ -797,8 +913,8 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
 
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-cache-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+         VALUES ('file-cache-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
         params![ds_id.0, bytes.len() as i64],
     )
     .unwrap();
@@ -842,6 +958,14 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
     let third = read_with_cache(29, 7).unwrap();
     assert_eq!(third, bytes[29..36].to_vec());
     assert_eq!(set_calls.get(), 2);
+
+    conn.execute(
+        "UPDATE file_entries SET encrypted = 1 WHERE id = ?1",
+        params![file_id.0],
+    )
+    .unwrap();
+    let error = read_with_cache(0, 8).unwrap_err();
+    assert!(matches!(error, FileServiceError::Unsupported(_)));
 }
 
 fn setup_e01_preview_routing_case(
@@ -876,8 +1000,8 @@ fn setup_e01_preview_routing_case(
     .unwrap();
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, partition_index)
-         VALUES (?1, 'wrong-root', ?2, '[P4]/target.bin', 'target.bin', 'file', 16, 'bin', 0, 0, 0, ?3)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted, partition_index)
+         VALUES (?1, 'wrong-root', ?2, '[P4]/target.bin', 'target.bin', 'file', 16, 'bin', 0, 0, 0, 0, ?3)",
         params![file_id, data_source_id.0, partition_index],
     )
     .unwrap();
@@ -970,8 +1094,8 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
 
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-header-cache', NULL, ?1, 'large.bin', 'large.bin', 'file', ?2, 'bin', 0, 0, 0)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+         VALUES ('file-header-cache', NULL, ?1, 'large.bin', 'large.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
         params![ds_id.0, bytes.len() as i64],
     )
     .unwrap();
@@ -1521,8 +1645,8 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
 
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-raw-exfat-large', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+         VALUES ('file-raw-exfat-large', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0, 0)",
         params![ds_id.0, 1536i64],
     )
     .unwrap();
@@ -1549,6 +1673,31 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
 
     assert_eq!(response.raw_bytes.unwrap(), vec![b'B'; 9]);
     assert!(response.lines.is_empty());
+
+    conn.execute(
+        "UPDATE file_entries SET encrypted = 1 WHERE id = 'file-raw-exfat-large'",
+        [],
+    )
+    .unwrap();
+    let error = read_file_bytes_for_case(
+        &conn,
+        &FileEntryId("file-raw-exfat-large".to_string()),
+        512 + 7,
+        9,
+    )
+    .unwrap_err();
+    assert!(matches!(error, FileServiceError::Unsupported(_)));
+
+    let error = read_file_range_for_case(
+        &conn,
+        &ViewerRangeRequestDto {
+            handle_id: "file:file-raw-exfat-large".to_string(),
+            offset: 512 + 7,
+            length: 9,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(error, FileServiceError::Unsupported(_)));
 }
 
 #[test]
@@ -1576,8 +1725,8 @@ fn raw_exfat_text_header_reads_via_bytes_only_fast_path() {
 
     conn.execute(
         "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-raw-exfat-header', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0)",
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+         VALUES ('file-raw-exfat-header', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0, 0)",
         params![ds_id.0, 1536i64],
     )
     .unwrap();

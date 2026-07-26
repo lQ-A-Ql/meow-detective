@@ -1,0 +1,12 @@
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+From: remote@example.com
+To: local@example.com
+Subject: X-Headers 8
+Date: Fri, 01 Mar 2024 17:00:00 GMT
+Message-ID: <meow-detective-x-headers-008@example.com>
+X-Mailer: CustomMailer/2.0
+X-Originating-IP: 192.168.1.8
+
+TWVzc2FnZSB3aXRoIFgtSGVhZGVycyA4Lgo=

@@ -1,10 +1,11 @@
 use transport::commands::{
     AppSettingsDto, ClassifyFilesRequest, ExportDeletedRecoveryRequest, ExportScopeDto,
     ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto, GetArtifactByIdRequest,
-    GetEvtxEventSummaryRequest, GetFileChildrenRequest, GetFileJumpContextRequest,
-    GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest, GetTimelineRequest,
-    ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
+    GetArtifactRowsRequest, GetEvtxEventSummaryRequest, GetFileChildrenRequest,
+    GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest,
+    GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
     ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest, RunDeletedRecoveryRequest,
+    SearchFilesRequest,
 };
 use transport::dto::EvtxEventViewDto;
 
@@ -309,6 +310,80 @@ fn artifact_by_id_request_requires_id() {
     }
     .validate()
     .is_err());
+}
+
+#[test]
+fn artifact_rows_request_deserializes_camel_case_and_clamps_limit() {
+    let mut request: GetArtifactRowsRequest =
+        serde_json::from_str(r#"{"family":"  Registry  ","offset":25,"limit":999999}"#).unwrap();
+
+    request.validate().unwrap();
+
+    assert_eq!(request.family.as_deref(), Some("Registry"));
+    assert_eq!(request.offset, 25);
+    assert_eq!(request.limit, 500);
+}
+
+#[test]
+fn artifact_rows_request_defaults_empty_family_and_page_limit() {
+    let mut request: GetArtifactRowsRequest = serde_json::from_str(r#"{"family":"   "}"#).unwrap();
+
+    request.validate().unwrap();
+
+    assert!(request.family.is_none());
+    assert_eq!(request.offset, 0);
+    assert_eq!(request.limit, 100);
+}
+
+#[test]
+fn timeline_cursor_rejects_offset_and_oversized_values() {
+    let mut with_offset = GetTimelineRequest {
+        offset: 1,
+        cursor: Some("v1.payload.digest".to_string()),
+        ..Default::default()
+    };
+    assert!(with_offset.validate().is_err());
+
+    let mut oversized = GetTimelineRequest {
+        cursor: Some("x".repeat(transport::paging::MAX_OPAQUE_CURSOR_LENGTH + 1)),
+        ..Default::default()
+    };
+    assert!(oversized.validate().is_err());
+}
+
+#[test]
+fn artifact_cursor_rejects_offset_and_oversized_values() {
+    let mut with_offset = GetArtifactRowsRequest {
+        offset: 1,
+        cursor: Some("v1.payload.digest".to_string()),
+        ..Default::default()
+    };
+    assert!(with_offset.validate().is_err());
+
+    let mut oversized = GetArtifactRowsRequest {
+        cursor: Some("x".repeat(transport::paging::MAX_OPAQUE_CURSOR_LENGTH + 1)),
+        ..Default::default()
+    };
+    assert!(oversized.validate().is_err());
+}
+
+#[test]
+fn search_cursor_rejects_offset_and_oversized_values() {
+    let mut with_offset = SearchFilesRequest {
+        query: "evidence".to_string(),
+        offset: 1,
+        limit: 50,
+        cursor: Some("v1.payload.digest".to_string()),
+    };
+    assert!(with_offset.validate().is_err());
+
+    let mut oversized = SearchFilesRequest {
+        query: "evidence".to_string(),
+        offset: 0,
+        limit: 50,
+        cursor: Some("x".repeat(transport::paging::MAX_OPAQUE_CURSOR_LENGTH + 1)),
+    };
+    assert!(oversized.validate().is_err());
 }
 
 #[test]

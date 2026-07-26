@@ -38,10 +38,27 @@ Thumbs.db
 
 # Private regression fixtures (real disk images, not for CI)
 /testdata/fixtures/private-real-regression/
-/testdata/
+/testdata/private/
+/testdata/real-samples/
+# Artifact drop zones may contain copied workstation evidence. Keep only their
+# reviewed metadata contracts in Git; public binary fixtures belong under the
+# explicitly governed public-small/public-medium trees.
+/testdata/artifacts/**/*
+!/testdata/artifacts/**/
+!/testdata/artifacts/**/README.md
+!/testdata/artifacts/**/expected.json
+!/testdata/artifacts/**/.gitkeep
+# These public-medium directories currently contain specifications only. A
+# reviewed fixture must be explicitly unignored together with its provenance.
+/testdata/fixtures/public-medium/browser/**/*
+!/testdata/fixtures/public-medium/browser/README.md
+/testdata/fixtures/public-medium/linux/**/*
+!/testdata/fixtures/public-medium/linux/README.md
+/crates/app-services/output/
 /output/
 /development-reports/
 AGENTS.md
 *.log
 /*.md
+!/README.md
 *.bat

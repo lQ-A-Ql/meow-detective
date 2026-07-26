@@ -490,3 +490,34 @@ fn open_file_content_rejects_traversal_paths_from_database() {
         })
         .unwrap();
 }
+
+#[test]
+fn encrypted_file_export_fails_before_creating_destination() {
+    let tmp = TempDir::new().unwrap();
+    let active = import_fixture_directory(&tmp);
+    let destination = tmp.path().join("exported.bin");
+
+    active
+        .with_conn(|conn| {
+            let file_id: String = conn.query_row(
+                "SELECT id FROM file_entries WHERE name = 'root.txt' LIMIT 1",
+                [],
+                |row| row.get(0),
+            )?;
+            conn.execute(
+                "UPDATE file_entries SET encrypted = 1 WHERE id = ?1",
+                [&file_id],
+            )?;
+
+            let error =
+                file_service::extract_file_to_destination(conn, &file_id, &destination, false)
+                    .unwrap_err();
+            assert!(matches!(
+                error,
+                file_service::FileServiceError::Unsupported(_)
+            ));
+            assert!(!destination.exists());
+            Ok(())
+        })
+        .unwrap();
+}

@@ -23,6 +23,7 @@ const SEARCH_CANDIDATE_PAGE_SIZE: u64 = 256;
 const SEARCH_ELIGIBLE_PREDICATE: &str = r#"
     data_source_id = ?1
     AND LOWER(entry_type) = 'file'
+    AND encrypted = 0
     AND size IS NOT NULL
     AND size <= ?2
     AND (
@@ -301,12 +302,12 @@ fn fetch_search_candidate_page(
 pub(super) fn search_candidate_page_sql() -> String {
     format!(
         "WITH eligible AS (
-            SELECT id, data_source_id, path, name, size, ext, deleted, hidden, system,
+            SELECT id, data_source_id, path, name, size, ext, deleted, hidden, system, encrypted,
                    {SEARCH_PRIORITY_EXPRESSION} AS priority_rank
             FROM file_entries
             WHERE {SEARCH_ELIGIBLE_PREDICATE}
         )
-        SELECT id, data_source_id, path, name, size, ext, deleted, hidden, system, priority_rank
+        SELECT id, data_source_id, path, name, size, ext, deleted, hidden, system, encrypted, priority_rank
         FROM eligible
         WHERE priority_rank > ?4
            OR (
@@ -332,14 +333,14 @@ fn row_to_search_candidate(row: &rusqlite::Row<'_>) -> rusqlite::Result<SearchCa
             deleted: row.get::<_, i32>(6)? != 0,
             hidden: row.get::<_, i32>(7)? != 0,
             system: row.get::<_, i32>(8)? != 0,
-            encrypted: false,
+            encrypted: row.get::<_, i32>(9)? != 0,
             created_at: None,
             modified_at: None,
             accessed_at: None,
             changed_at: None,
             hash_sha256: None,
         },
-        priority_rank: row.get(9)?,
+        priority_rank: row.get(10)?,
     })
 }
 

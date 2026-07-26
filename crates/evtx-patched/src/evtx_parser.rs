@@ -1,4 +1,4 @@
-use crate::err::{ChunkError, EvtxError, InputError, Result};
+use crate::err::{ChunkError, EvtxError, EvtxSourceIoOperation, InputError, Result};
 
 use crate::evtx_chunk::EvtxChunkData;
 use crate::evtx_file_header::EvtxFileHeader;
@@ -301,7 +301,11 @@ impl<T: ReadSeek> EvtxParser<T> {
         // We need to calculate the chunk count instead of using the header value
         // this allows us to continue parsing events past the 4294901760 bytes of
         // chunk data
-        let stream_size = ReadSeek::stream_len(&mut read_seek)?;
+        let stream_size =
+            ReadSeek::stream_len(&mut read_seek).map_err(|source| EvtxError::SourceIo {
+                operation: EvtxSourceIoOperation::QueryStreamLength,
+                source,
+            })?;
         let chunk_data_size: u64 =
             match stream_size.checked_sub(evtx_header.header_block_size.into()) {
                 Some(c) => c,
@@ -339,7 +343,7 @@ impl<T: ReadSeek> EvtxParser<T> {
         chunk_number: u64,
         validate_checksum: bool,
     ) -> Result<Option<EvtxChunkData>> {
-        let mut chunk_data = Vec::with_capacity(EVTX_CHUNK_SIZE);
+        let mut chunk_data = vec![0; EVTX_CHUNK_SIZE];
         let chunk_offset = EVTX_FILE_HEADER_SIZE + chunk_number as usize * EVTX_CHUNK_SIZE;
 
         trace!(
@@ -353,13 +357,30 @@ impl<T: ReadSeek> EvtxParser<T> {
                 source: Box::new(ChunkError::FailedToSeekToChunk(e)),
             })?;
 
-        let amount_read = data
-            .take(EVTX_CHUNK_SIZE as u64)
-            .read_to_end(&mut chunk_data)
-            .map_err(|_| EvtxError::incomplete_chunk(chunk_number))?;
+        let mut amount_read = 0;
+        while amount_read < EVTX_CHUNK_SIZE {
+            match data.read(&mut chunk_data[amount_read..]) {
+                Ok(0) => break,
+                Ok(read) => amount_read += read,
+                Err(error) => {
+                    return Err(EvtxError::FailedToParseChunk {
+                        chunk_id: chunk_number,
+                        source: Box::new(ChunkError::FailedToReadChunk(error)),
+                    });
+                }
+            }
+        }
 
         if amount_read != EVTX_CHUNK_SIZE {
-            return Err(EvtxError::incomplete_chunk(chunk_number));
+            return Err(EvtxError::FailedToParseChunk {
+                chunk_id: chunk_number,
+                source: Box::new(ChunkError::FailedToReadChunk(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    format!(
+                        "EVTX chunk {chunk_number} ended after {amount_read} of {EVTX_CHUNK_SIZE} bytes"
+                    ),
+                ))),
+            });
         }
 
         // There might be empty chunks in the middle of a dirty file.
@@ -382,25 +403,16 @@ impl<T: ReadSeek> EvtxParser<T> {
         &mut self,
         mut chunk_number: u64,
     ) -> Option<(Result<EvtxChunkData>, u64)> {
-        loop {
+        while chunk_number < self.calculated_chunk_count {
             match EvtxParser::allocate_chunk(
                 &mut self.data,
                 chunk_number,
                 self.config.validate_checksums,
             ) {
-                Err(err) => {
-                    // We try to read past the `chunk_count` to allow for dirty files.
-                    // But if we failed, it means we really are at the end of the file.
-                    if chunk_number >= self.calculated_chunk_count {
-                        return None;
-                    } else {
-                        return Some((Err(err), chunk_number));
-                    }
-                }
+                Err(err) => return Some((Err(err), chunk_number)),
                 Ok(None) => {
-                    // We try to read past the `chunk_count` to allow for dirty files.
-                    // But if we get an empty chunk, we need to keep looking.
-                    // Increment and try again.
+                    // Empty chunks can occur inside a dirty file. Continue only across
+                    // complete chunks established from the evidence stream length.
                     chunk_number = chunk_number.checked_add(1)?
                 }
                 Ok(Some(chunk)) => {
@@ -408,6 +420,7 @@ impl<T: ReadSeek> EvtxParser<T> {
                 }
             };
         }
+        None
     }
 
     /// Return an iterator over all the chunks.
@@ -417,6 +430,7 @@ impl<T: ReadSeek> EvtxParser<T> {
         IterChunks {
             parser: self,
             current_chunk_number: 0,
+            source_io_failed: false,
         }
     }
 
@@ -427,6 +441,7 @@ impl<T: ReadSeek> EvtxParser<T> {
         IntoIterChunks {
             parser: self,
             current_chunk_number: 0,
+            source_io_failed: false,
         }
     }
     /// Return an iterator over all the records.
@@ -445,7 +460,20 @@ impl<T: ReadSeek> EvtxParser<T> {
         let chunk_settings = Arc::clone(&self.config);
 
         // `self` is mutably borrowed from here on.
-        let mut chunks = self.chunks();
+        let mut current_chunk_number = 0_u64;
+        let mut source_io_failed = false;
+        let mut chunks = std::iter::from_fn(move || {
+            if source_io_failed {
+                return None;
+            }
+            let (chunk, chunk_number) = self.find_next_chunk(current_chunk_number)?;
+            current_chunk_number = chunk_number.checked_add(1)?;
+            source_io_failed = chunk
+                .as_ref()
+                .err()
+                .is_some_and(|error| error.source_io().is_some());
+            Some((chunk_number, chunk))
+        });
         let mut arena_pool: Vec<Bump> = (0..num_threads)
             .map(|_| Bump::with_capacity(EVTX_CHUNK_SIZE))
             .collect();
@@ -455,9 +483,9 @@ impl<T: ReadSeek> EvtxParser<T> {
             let mut chunk_of_chunks = Vec::with_capacity(num_threads);
 
             for _ in 0..num_threads {
-                if let Some(chunk) = chunks.next() {
+                if let Some((chunk_number, chunk)) = chunks.next() {
                     let arena = arena_pool.pop().unwrap_or_default();
-                    chunk_of_chunks.push((chunk, arena));
+                    chunk_of_chunks.push((chunk_number, chunk, arena));
                 };
             }
 
@@ -473,8 +501,7 @@ impl<T: ReadSeek> EvtxParser<T> {
 
                 // Serialize the records in each chunk.
                 let iterators: Vec<ChunkBatch<U>> = chunk_iter
-                    .enumerate()
-                    .map(|(i, (chunk_res, arena))| match chunk_res {
+                    .map(|(chunk_number, chunk_res, arena)| match chunk_res {
                         Err(err) => ChunkBatch {
                             results: vec![Err(err)],
                             arena,
@@ -486,7 +513,7 @@ impl<T: ReadSeek> EvtxParser<T> {
                             match chunk_records_res {
                                 Err(err) => ChunkBatch {
                                     results: vec![Err(EvtxError::FailedToParseChunk {
-                                        chunk_id: i as u64,
+                                        chunk_id: chunk_number,
                                         source: Box::new(err),
                                     })],
                                     arena: Bump::new(),
@@ -544,15 +571,23 @@ impl<T: ReadSeek> EvtxParser<T> {
 pub struct IterChunks<'c, T: ReadSeek> {
     parser: &'c mut EvtxParser<T>,
     current_chunk_number: u64,
+    source_io_failed: bool,
 }
 
 impl<T: ReadSeek> Iterator for IterChunks<'_, T> {
     type Item = Result<EvtxChunkData>;
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.source_io_failed {
+            return None;
+        }
         match self.parser.find_next_chunk(self.current_chunk_number) {
             None => None,
             Some((chunk, chunk_number)) => {
                 self.current_chunk_number = chunk_number.checked_add(1)?;
+                self.source_io_failed = chunk
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.source_io().is_some());
 
                 Some(chunk)
             }
@@ -563,16 +598,24 @@ impl<T: ReadSeek> Iterator for IterChunks<'_, T> {
 pub struct IntoIterChunks<T: ReadSeek> {
     parser: EvtxParser<T>,
     current_chunk_number: u64,
+    source_io_failed: bool,
 }
 
 impl<T: ReadSeek> Iterator for IntoIterChunks<T> {
     type Item = Result<EvtxChunkData>;
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.source_io_failed {
+            return None;
+        }
         info!("Chunk {}", self.current_chunk_number);
         match self.parser.find_next_chunk(self.current_chunk_number) {
             None => None,
             Some((chunk, chunk_number)) => {
                 self.current_chunk_number = chunk_number.checked_add(1)?;
+                self.source_io_failed = chunk
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.source_io().is_some());
 
                 Some(chunk)
             }

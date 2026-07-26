@@ -1,0 +1,172 @@
+[
+  {
+    "file": "../logical/Windows/System32/config/SYSTEM",
+    "description": "Tiny synthetic SYSTEM hive used by public-small logical fixture.",
+    "expected": {
+      "baseline": "testing::fixtures::registry::synthetic_system_hive; canonical lookup extraction via extract_registry_candidate",
+      "assertions": {
+        "warningsCount": 0,
+        "artifactCount": 3,
+        "artifactCountByFamily": {
+          "RegistryValue": 2,
+          "RegistryHive": 1
+        },
+        "timelineEventCount": 0,
+        "hasArtifactWithAttrs": {
+          "family": "RegistryValue",
+          "field": "computerName",
+          "data": "BETA-LAB",
+          "valueName": "ComputerName",
+          "parser": "registry.system"
+        }
+      },
+      "guaranteedFields": [
+        {
+          "name": "RegistryValue.computerName",
+          "description": "SYSTEM\\ControlSet001\\Control\\ComputerName\\ComputerName value extracted as a RegistryValue artifact"
+        },
+        {
+          "name": "RegistryValue.timezone",
+          "description": "SYSTEM\\ControlSet001\\Control\\TimeZoneInformation\\TimeZoneKeyName value extracted as a RegistryValue artifact"
+        },
+        {
+          "name": "RegistryHive",
+          "description": "A lightweight hive meta artifact is emitted for every recognized registry hive carrying txlog/deleted-cell statistics"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "services",
+          "description": "Services/drivers extraction when ControlSetXXX\\Services is present"
+        },
+        {
+          "name": "networkAdapters",
+          "description": "Network adapter extraction when Services\\Tcpip\\Parameters\\Interfaces is present"
+        },
+        {
+          "name": "usbDevices",
+          "description": "USBSTOR/USB device history when Enum\\USBSTOR is present"
+        },
+        {
+          "name": "mountedDevices",
+          "description": "MountedDevices mapping when present"
+        },
+        {
+          "name": "shutdownTime",
+          "description": "ShutdownTime value when ControlSetXXX\\Control\\Windows\\ShutdownTime is present"
+        },
+        {
+          "name": "shimCache",
+          "description": "AppCompatCache entries when ControlSetXXX\\Control\\Session Manager\\AppCompatCache is present"
+        },
+        {
+          "name": "lsaPackages",
+          "description": "LSA package lists when ControlSetXXX\\Control\\Lsa is present"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "full_key_enumeration",
+          "description": "Complete traversal of arbitrary keys/values beyond analysis-targeted paths"
+        },
+        {
+          "name": "transaction_log_replay",
+          "description": "LOG1/LOG2 replay depends on companion log files being present in the same data source"
+        },
+        {
+          "name": "deleted_cell_recovery",
+          "description": "Recovery of deleted keys/values is best-effort and sample-dependent"
+        }
+      ]
+    }
+  },
+  {
+    "file": "../logical/Windows/System32/config/SOFTWARE",
+    "description": "Tiny synthetic SOFTWARE hive used by public-small logical fixture.",
+    "expected": {
+      "baseline": "testing::fixtures::registry::synthetic_software_hive; canonical lookup extraction via extract_registry_candidate",
+      "assertions": {
+        "warningsCount": 0,
+        "artifactCount": 7,
+        "artifactCountByFamily": {
+          "RegistryValue": 6,
+          "RegistryHive": 1
+        },
+        "timelineEventCount": 0,
+        "hasArtifactWithAttrs": {
+          "family": "RegistryValue",
+          "field": "productName",
+          "data": "Forensics Fixture OS",
+          "valueName": "ProductName",
+          "parser": "registry.software"
+        }
+      },
+      "guaranteedFields": [
+        {
+          "name": "RegistryValue.productName",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProductName value"
+        },
+        {
+          "name": "RegistryValue.currentBuild",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentBuild value"
+        },
+        {
+          "name": "RegistryValue.displayVersion",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\DisplayVersion value (falls back to ReleaseId)"
+        },
+        {
+          "name": "RegistryValue.installDate",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\InstallDate value converted to RFC 3339"
+        },
+        {
+          "name": "RegistryValue.registeredOwner",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\RegisteredOwner value"
+        },
+        {
+          "name": "RegistryValue.productId",
+          "description": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProductId value"
+        },
+        {
+          "name": "RegistryHive",
+          "description": "Hive meta artifact for every recognized SOFTWARE hive"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "installedSoftware",
+          "description": "Uninstall key enumeration when present"
+        },
+        {
+          "name": "machineRunKeys",
+          "description": "HKLM Run/RunOnce/RunOnceEx values when present"
+        },
+        {
+          "name": "winlogonConfig",
+          "description": "Winlogon Shell/Userinit/Notify/AutoAdminLogon when present"
+        },
+        {
+          "name": "lsaPackages",
+          "description": "SYSTEM LSA packages are extracted from SYSTEM, not SOFTWARE"
+        },
+        {
+          "name": "networkProfiles",
+          "description": "NetworkList Profiles/Signatures when present"
+        },
+        {
+          "name": "appcompatLayers",
+          "description": "AppCompatFlags Layers when present"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "currentVersion",
+          "description": "Legacy CurrentVersion value is optional; modern hives use CurrentBuild/DisplayVersion"
+        },
+        {
+          "name": "registeredOrganization",
+          "description": "RegisteredOrganization is treated as optional and ignored when empty"
+        }
+      ]
+    }
+  }
+]

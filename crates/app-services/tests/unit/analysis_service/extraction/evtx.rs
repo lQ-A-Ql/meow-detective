@@ -8,6 +8,7 @@ fn candidate() -> EvidenceCandidate {
         partition_index: None,
         path: "Windows/System32/winevt/Logs/System.evtx".to_string(),
         size: 4096,
+        encrypted: false,
         content_identity: "test:system-evtx".to_string(),
         evidence_kind: "evtx_log".to_string(),
         parser: "evtx.structured".to_string(),

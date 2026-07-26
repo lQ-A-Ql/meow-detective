@@ -1,11 +1,11 @@
 use crate::connection::DbResult;
 use crate::sql_builder::placeholders;
 use crate::util::parse_opt_datetime;
-use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use domain::{DataSourceId, EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
-const FILE_ENTRY_COLUMNS: &str = "id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256";
+const FILE_ENTRY_COLUMNS: &str = "id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted";
 
 pub struct FileRepo<'a> {
     conn: &'a Connection,
@@ -46,8 +46,8 @@ impl<'a> FileRepo<'a> {
             // partitions from the same E01 or logical image), only the first
             // inserted row for a given id wins and later overlaps are silently
             // skipped instead of rolling back the entire batch transaction.
-            "INSERT OR IGNORE INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT OR IGNORE INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         )?;
         for entry in entries {
             stmt.execute(params![
@@ -70,6 +70,7 @@ impl<'a> FileRepo<'a> {
                 entry.accessed_at.map(|dt| dt.to_rfc3339()),
                 entry.changed_at.map(|dt| dt.to_rfc3339()),
                 entry.hash_sha256,
+                entry.encrypted as i32,
             ])?;
         }
         Ok(())
@@ -475,6 +476,22 @@ impl<'a> FileRepo<'a> {
         }
     }
 
+    pub fn find_encryption_status(
+        &self,
+        id: &FileEntryId,
+    ) -> DbResult<Option<FileEncryptionStatus>> {
+        let result = self.conn.query_row(
+            "SELECT encrypted FROM file_entries WHERE id = ?1",
+            params![id.0],
+            |row| file_encryption_status_from_row(row, 0),
+        );
+        match result {
+            Ok(status) => Ok(Some(status)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     pub fn find_partition_index_by_id(&self, id: &FileEntryId) -> DbResult<Option<usize>> {
         let result = self.conn.query_row(
             "SELECT partition_index FROM file_entries WHERE id = ?1",
@@ -572,6 +589,7 @@ fn escape_like_literal(value: &str) -> String {
 
 fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
     let entry_type_str: String = row.get(5)?;
+    let encryption_status = file_encryption_status_from_row(row, 16)?;
     Ok(FileEntry {
         id: FileEntryId(row.get::<_, String>(0)?),
         parent_id: row.get::<_, Option<String>>(1)?.map(FileEntryId),
@@ -588,7 +606,7 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
         deleted: row.get::<_, i32>(8)? != 0,
         hidden: row.get::<_, i32>(9)? != 0,
         system: row.get::<_, i32>(10)? != 0,
-        encrypted: false,
+        encrypted: encryption_status.blocks_content(),
         created_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| parse_opt_datetime(&s)),
@@ -602,6 +620,20 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
             .get::<_, Option<String>>(14)?
             .and_then(|s| parse_opt_datetime(&s)),
         hash_sha256: row.get(15)?,
+    })
+}
+
+pub fn file_encryption_status_from_row(
+    row: &rusqlite::Row<'_>,
+    column_index: usize,
+) -> rusqlite::Result<FileEncryptionStatus> {
+    let value = row.get::<_, Option<i64>>(column_index)?;
+    FileEncryptionStatus::from_database_value(value).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            column_index,
+            rusqlite::types::Type::Integer,
+            Box::new(error),
+        )
     })
 }
 
@@ -633,6 +665,7 @@ impl FileRepo<'_> {
         deleted: bool,
         hidden: bool,
         system: bool,
+        encrypted: bool,
         created_at: Option<&str>,
         modified_at: Option<&str>,
         accessed_at: Option<&str>,
@@ -643,9 +676,9 @@ impl FileRepo<'_> {
         let changed = conn.execute(
             "INSERT OR IGNORE INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type,
-              size, ext, deleted, hidden, system, created_at, modified_at,
+              size, ext, deleted, hidden, system, encrypted, created_at, modified_at,
               accessed_at, changed_at, hash_sha256, partition_index)
-             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 id,
                 parent_id,
@@ -657,6 +690,7 @@ impl FileRepo<'_> {
                 deleted as i32,
                 hidden as i32,
                 system as i32,
+                encrypted as i32,
                 created_at,
                 modified_at,
                 accessed_at,

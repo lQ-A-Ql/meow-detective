@@ -3,14 +3,12 @@
 //! Linux E01 sample.
 //!
 //! These tests are ignored by default because they require the environment
-//! variable `FORENSICS_LINUX_E01_FIXTURE` pointing to a Linux E01 file, e.g.:
-//!   D:\獬豸杯\检材3.E01
-//! PVE cluster coverage uses `FORENSICS_PVE_CLUSTER_ROOT`, e.g.:
-//!   E:\pangushi\服务器
+//! variable `FORENSICS_LINUX_E01_FIXTURE` pointing to a private Linux E01 file.
+//! PVE cluster coverage uses `FORENSICS_PVE_CLUSTER_ROOT`.
 //!
 //! Run with:
-//!   $env:FORENSICS_LINUX_E01_FIXTURE='D:\獬豸杯\检材3.E01'
-//!   $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
+//!   $env:FORENSICS_LINUX_E01_FIXTURE='<path-to-private-linux-sample.E01>'
+//!   $env:FORENSICS_PVE_CLUSTER_ROOT='<path-to-private-pve-cluster>'
 //!   cargo test -p app-services --test linux_e01_integration -- --ignored
 
 use app_services::{
@@ -92,18 +90,17 @@ struct LinuxPathEntry {
 }
 
 fn fixture_path() -> PathBuf {
-    std::env::var("FORENSICS_LINUX_E01_FIXTURE")
+    std::env::var_os("FORENSICS_LINUX_E01_FIXTURE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            // Default fallback — only works in the test author's environment.
-            PathBuf::from(r"D:\獬豸杯\检材3.E01")
-        })
+        .unwrap_or_else(|| panic!("set FORENSICS_LINUX_E01_FIXTURE to run ignored Linux E01 tests"))
 }
 
 fn pve_cluster_root() -> PathBuf {
-    std::env::var("FORENSICS_PVE_CLUSTER_ROOT")
+    std::env::var_os("FORENSICS_PVE_CLUSTER_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(r"E:\pangushi\服务器"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_PVE_CLUSTER_ROOT to run ignored PVE cluster tests")
+        })
 }
 
 fn build_synthetic_lvm_pv(

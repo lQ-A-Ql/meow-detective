@@ -5,6 +5,7 @@ import { TimelineEvent } from '@/types/models';
 export interface PagedResponse<T> {
   total: number;
   items: T[];
+  nextCursor?: string;
 }
 
 export interface TimelineRequest {
@@ -13,6 +14,7 @@ export interface TimelineRequest {
   timeStart?: string;
   timeEnd?: string;
   eventType?: string;
+  cursor?: string;
 }
 
 export async function getTimelineEvents(
@@ -24,6 +26,7 @@ export async function getTimelineEvents(
       timeStart: request.timeStart,
       timeEnd: request.timeEnd,
       eventType: request.eventType,
+      cursor: request.cursor,
     } } : undefined);
 }
 

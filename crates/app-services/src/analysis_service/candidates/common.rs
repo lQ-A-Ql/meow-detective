@@ -1,8 +1,8 @@
 use super::{evidence_category_defs, UNSUPPORTED_MACOS_CATEGORY};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
-use domain::{EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use domain::{EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::file_repo::{file_encryption_status_from_row, FileRepo};
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -73,6 +73,7 @@ pub struct EvidenceCandidate {
     pub partition_index: Option<usize>,
     pub path: String,
     pub size: u64,
+    pub encrypted: bool,
     pub content_identity: String,
     pub evidence_kind: String,
     pub parser: String,
@@ -103,7 +104,7 @@ pub(crate) fn find_candidate_by_path_suffix(
     Ok(conn
         .query_row(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE
                AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
@@ -117,6 +118,7 @@ pub(crate) fn find_candidate_by_path_suffix(
 
 pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
     let entry_type_str: String = row.get(5)?;
+    let encryption_status = file_encryption_status_from_row(row, 16)?;
     Ok(FileEntry {
         id: FileEntryId(row.get::<_, String>(0)?),
         parent_id: row.get::<_, Option<String>>(1)?.map(FileEntryId),
@@ -133,7 +135,7 @@ pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::R
         deleted: row.get::<_, i32>(8)? != 0,
         hidden: row.get::<_, i32>(9)? != 0,
         system: row.get::<_, i32>(10)? != 0,
-        encrypted: false,
+        encrypted: encryption_status.blocks_content(),
         created_at: parse_timestamp(row.get(11)?),
         modified_at: parse_timestamp(row.get(12)?),
         accessed_at: parse_timestamp(row.get(13)?),
@@ -172,7 +174,7 @@ fn discover_evidence_candidates_with_definitions(
     };
     let sql = format!(
         "SELECT id, data_source_id, path, COALESCE(size, 0), {partition_column},
-                created_at, modified_at, accessed_at, changed_at, hash_sha256
+                created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
          FROM file_entries
          WHERE entry_type = 'file' COLLATE NOCASE"
     );
@@ -186,12 +188,15 @@ fn discover_evidence_candidates_with_definitions(
         let path: String = row.get(2)?;
         let size: u64 = row.get(3)?;
         let partition_index = parse_partition_index(row, &file_id)?;
+        let encryption_status = file_encryption_status_from_row(row, 10)?;
+        let encrypted = encryption_status.blocks_content();
         let content_identity = candidate_content_identity(
             &file_id,
             &data_source_id,
             partition_index,
             &path,
             size,
+            encryption_status,
             [
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
@@ -209,6 +214,7 @@ fn discover_evidence_candidates_with_definitions(
                 partition_index,
                 path: &path,
                 size,
+                encrypted,
                 content_identity: &content_identity,
             },
             cancel_token,
@@ -256,6 +262,7 @@ struct CandidateRow<'a> {
     partition_index: Option<usize>,
     path: &'a str,
     size: u64,
+    encrypted: bool,
     content_identity: &'a str,
 }
 
@@ -286,6 +293,7 @@ fn add_matching_candidates(
                 partition_index: row.partition_index,
                 path: row.path.to_string(),
                 size: row.size,
+                encrypted: row.encrypted,
                 content_identity: row.content_identity.to_string(),
                 evidence_kind,
                 parser,
@@ -301,6 +309,7 @@ fn candidate_content_identity(
     partition_index: Option<usize>,
     path: &str,
     size: u64,
+    encryption_status: FileEncryptionStatus,
     metadata: [Option<String>; 5],
 ) -> String {
     let mut hasher = Sha256::new();
@@ -315,6 +324,11 @@ fn candidate_content_identity(
             hasher.update((partition_index as u64).to_le_bytes());
         }
         None => hasher.update([0]),
+    }
+    match encryption_status {
+        FileEncryptionStatus::Unknown => hasher.update(b"analysis-candidate-encryption-unknown"),
+        FileEncryptionStatus::Clear => hasher.update(b"analysis-candidate-content-clear"),
+        FileEncryptionStatus::Encrypted => hasher.update(b"analysis-candidate-efs-encrypted"),
     }
     for value in metadata {
         match value {

@@ -6,6 +6,9 @@ $decisionPath = Join-Path $repoRoot "docs/evtx-dependency-decision.md"
 $cargoPath = Join-Path $repoRoot "Cargo.toml"
 $lockPath = Join-Path $repoRoot "Cargo.lock"
 $patchedManifestPath = Join-Path $repoRoot "crates/evtx-patched/Cargo.toml"
+$patchedErrorPath = Join-Path $repoRoot "crates/evtx-patched/src/err.rs"
+$patchedParserPath = Join-Path $repoRoot "crates/evtx-patched/src/evtx_parser.rs"
+$patchedRegressionPath = Join-Path $repoRoot "crates/evtx-patched/tests/serialized_records.rs"
 
 if (-not (Test-Path -LiteralPath $denyPath)) {
   throw "deny.toml not found"
@@ -22,18 +25,29 @@ if (-not (Test-Path -LiteralPath $lockPath)) {
 if (-not (Test-Path -LiteralPath $patchedManifestPath)) {
   throw "patched EVTX manifest is missing"
 }
+foreach ($requiredPath in @($patchedErrorPath, $patchedParserPath, $patchedRegressionPath)) {
+  if (-not (Test-Path -LiteralPath $requiredPath)) {
+    throw "patched EVTX cancellation/chunk-identity source is missing: $requiredPath"
+  }
+}
 
 $deny = Get-Content -LiteralPath $denyPath -Raw -Encoding UTF8
 $decision = Get-Content -LiteralPath $decisionPath -Raw -Encoding UTF8
 $cargo = Get-Content -LiteralPath $cargoPath -Raw -Encoding UTF8
 $lock = Get-Content -LiteralPath $lockPath -Raw -Encoding UTF8
 $patchedManifest = Get-Content -LiteralPath $patchedManifestPath -Raw -Encoding UTF8
+$patchedError = Get-Content -LiteralPath $patchedErrorPath -Raw -Encoding UTF8
+$patchedParser = Get-Content -LiteralPath $patchedParserPath -Raw -Encoding UTF8
+$patchedRegression = Get-Content -LiteralPath $patchedRegressionPath -Raw -Encoding UTF8
 
 if ($deny -match 'RUSTSEC-2021-0153') {
   throw "RUSTSEC-2021-0153 should not be ignored after the local EVTX patch"
 }
 if ($cargo -notmatch 'evtx\s*=\s*\{\s*path\s*=\s*"crates/evtx-patched"') {
   throw "workspace evtx dependency must point at crates/evtx-patched"
+}
+if ($cargo -notmatch 'evtx\s*=.*features\s*=\s*\[\s*"multithreading"\s*\]') {
+  throw "workspace evtx dependency must enable bounded chunk-parsing parallelism"
 }
 # encoding_rs may be pinned inline (legacy) or centralized via
 # `encoding_rs.workspace = true` per the workspace-dependency convention
@@ -53,10 +67,26 @@ if ($patchedManifest -match '\[dependencies\.encoding\]' -or $patchedManifest -m
 if ($lock -match 'name = "encoding"') {
   throw "Cargo.lock still contains the unmaintained encoding crate"
 }
+if ($patchedError -notmatch 'FailedToReadChunk\(io::Error\)') {
+  throw "patched EVTX errors must preserve chunk read failures"
+}
+if ($patchedParser -notmatch 'ChunkError::FailedToReadChunk\(error\)') {
+  throw "patched EVTX parser must propagate the original chunk read error"
+}
+if ($patchedParser -match 'read_to_end\s*\(\s*&mut\s+chunk_data') {
+  throw "patched EVTX chunk loading must not reintroduce read_to_end Interrupted retries"
+}
+if ($patchedRegression -notmatch 'multibatch_parse_error_uses_absolute_chunk_identity') {
+  throw "patched EVTX fork must retain the absolute chunk identity regression"
+}
 
 foreach ($needle in @(
   'crates/evtx-patched',
   'encoding_rs',
+  'multithreading',
+  'FailedToReadChunk',
+  'Interrupted',
+  '256 records',
   'RUSTSEC-2021-0153',
   'Resolved Decision'
 )) {
@@ -65,4 +95,4 @@ foreach ($needle in @(
   }
 }
 
-Write-Host "EVTX dependency decision guard passed: local patched fork uses encoding_rs and encoding is absent"
+Write-Host "EVTX dependency decision guard passed: dependency, cancellation, and chunk identity patches are locked"

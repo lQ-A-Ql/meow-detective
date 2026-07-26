@@ -7,7 +7,7 @@ use persistence_sqlite::repositories::{
 };
 use rusqlite::Connection;
 
-use super::state::output_digest_for_outputs;
+use super::output_digest::OutputDigestAccumulator;
 use crate::analysis_service::{
     capability::{find_capability, AnalysisCapability},
     error::AnalysisServiceError,
@@ -64,16 +64,43 @@ fn validate_checkpoint_batch(
         .iter()
         .map(|scan| scan.source_object_id.as_str())
         .collect::<Vec<_>>();
-    let artifacts = group_artifacts_by_source(
-        ArtifactRepo::new(conn)
-            .list_analysis_outputs_for_sources(&source_ids, capability.producer_prefix())?,
-    );
-    let timeline_events = group_events_by_source(
-        TimelineRepo::new(conn)
-            .list_analysis_outputs_for_sources(&source_ids, capability.producer_prefix())?,
-    );
+    let mut output_states = scans
+        .iter()
+        .map(|scan| {
+            (
+                scan.source_object_id.clone(),
+                CheckpointOutputState::new(&scan.extractor_version),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    ArtifactRepo::new(conn).visit_analysis_outputs_for_sources(
+        &source_ids,
+        capability.producer_prefix(),
+        |artifact| {
+            let Some(source_object_id) = artifact.source_object_id.as_ref() else {
+                return Ok(());
+            };
+            if let Some(state) = output_states.get_mut(&source_object_id.0) {
+                state.record_artifact(&artifact, capability);
+            }
+            Ok(())
+        },
+    )?;
+    TimelineRepo::new(conn).visit_analysis_outputs_for_sources(
+        &source_ids,
+        capability.producer_prefix(),
+        |event| {
+            if let Some(state) = output_states.get_mut(&event.source_object_id) {
+                state.record_timeline_event(&event, capability);
+            }
+            Ok(())
+        },
+    )?;
     for scan in scans {
-        if complete_scan_outputs_match(scan, capability, &artifacts, &timeline_events) {
+        let output_state = output_states
+            .remove(&scan.source_object_id)
+            .unwrap_or_else(|| CheckpointOutputState::new(&scan.extractor_version));
+        if output_state.matches(scan) {
             valid.insert(
                 (
                     scan.source_object_id.clone(),
@@ -98,65 +125,58 @@ fn log_invalid_checkpoint(scan: &CompleteAnalysisCandidateScan) {
     );
 }
 
-fn group_artifacts_by_source(
-    artifacts: Vec<domain::Artifact>,
-) -> HashMap<String, Vec<domain::Artifact>> {
-    let mut grouped = HashMap::new();
-    for artifact in artifacts {
-        let Some(source_object_id) = artifact.source_object_id.as_ref() else {
-            continue;
-        };
-        grouped
-            .entry(source_object_id.0.clone())
-            .or_insert_with(Vec::new)
-            .push(artifact);
-    }
-    grouped
+struct CheckpointOutputState {
+    expected_version: String,
+    artifact_count: u64,
+    timeline_event_count: u64,
+    artifact_versions_match: bool,
+    timeline_versions_match: bool,
+    digest: OutputDigestAccumulator,
 }
 
-fn group_events_by_source(
-    events: Vec<domain::TimelineEvent>,
-) -> HashMap<String, Vec<domain::TimelineEvent>> {
-    let mut grouped = HashMap::new();
-    for event in events {
-        grouped
-            .entry(event.source_object_id.clone())
-            .or_insert_with(Vec::new)
-            .push(event);
+impl CheckpointOutputState {
+    fn new(expected_version: &str) -> Self {
+        Self {
+            expected_version: expected_version.to_owned(),
+            artifact_count: 0,
+            timeline_event_count: 0,
+            artifact_versions_match: true,
+            timeline_versions_match: true,
+            digest: OutputDigestAccumulator::default(),
+        }
     }
-    grouped
-}
 
-fn complete_scan_outputs_match(
-    scan: &CompleteAnalysisCandidateScan,
-    capability: AnalysisCapability,
-    artifacts_by_source: &HashMap<String, Vec<domain::Artifact>>,
-    events_by_source: &HashMap<String, Vec<domain::TimelineEvent>>,
-) -> bool {
-    let artifacts = artifacts_by_source
-        .get(&scan.source_object_id)
-        .into_iter()
-        .flatten()
-        .filter(|artifact| artifact_matches(artifact, capability))
-        .collect::<Vec<_>>();
-    let events = events_by_source
-        .get(&scan.source_object_id)
-        .into_iter()
-        .flatten()
-        .filter(|event| event_matches(event, capability))
-        .collect::<Vec<_>>();
-    if artifacts.len() as u64 != scan.artifact_count
-        || events.len() as u64 != scan.timeline_event_count
-        || artifacts.iter().any(|artifact| {
-            artifact.extractor_version.as_deref() != Some(scan.extractor_version.as_str())
-        })
-        || events
-            .iter()
-            .any(|event| event.parser_version.as_deref() != Some(scan.extractor_version.as_str()))
-    {
-        return false;
+    fn record_artifact(&mut self, artifact: &domain::Artifact, capability: AnalysisCapability) {
+        if !artifact_matches(artifact, capability) {
+            return;
+        }
+        self.artifact_count = self.artifact_count.saturating_add(1);
+        self.artifact_versions_match &=
+            artifact.extractor_version.as_deref() == Some(self.expected_version.as_str());
+        self.digest.record_artifact(artifact);
     }
-    output_digest_for_outputs(artifacts, events) == scan.output_digest
+
+    fn record_timeline_event(
+        &mut self,
+        event: &domain::TimelineEvent,
+        capability: AnalysisCapability,
+    ) {
+        if !event_matches(event, capability) {
+            return;
+        }
+        self.timeline_event_count = self.timeline_event_count.saturating_add(1);
+        self.timeline_versions_match &=
+            event.parser_version.as_deref() == Some(self.expected_version.as_str());
+        self.digest.record_timeline_event(event);
+    }
+
+    fn matches(self, scan: &CompleteAnalysisCandidateScan) -> bool {
+        self.artifact_count == scan.artifact_count
+            && self.timeline_event_count == scan.timeline_event_count
+            && self.artifact_versions_match
+            && self.timeline_versions_match
+            && self.digest.finish() == scan.output_digest
+    }
 }
 
 fn artifact_matches(artifact: &domain::Artifact, capability: AnalysisCapability) -> bool {

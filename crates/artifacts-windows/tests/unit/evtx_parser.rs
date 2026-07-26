@@ -1,5 +1,6 @@
 use super::reader::{
-    bounded_clean_evtx_bytes, format_evtx_warning, EVTX_CHUNK_SIZE, EVTX_FILE_HEADER_SIZE,
+    bounded_clean_evtx_bytes, format_evtx_warning, govern_evtx_warnings, EVTX_CHUNK_SIZE,
+    EVTX_FILE_HEADER_SIZE,
 };
 use super::records::event_data_map;
 use super::*;
@@ -228,6 +229,345 @@ fn oversized_evtx_returns_error() {
         extract_boot_shutdown_events(&bytes, SYSTEM_PATH),
         Err(EvtxBootError::InputTooLarge { .. })
     ));
+}
+
+#[test]
+fn oversized_evtx_stream_is_parsed_without_buffer_limit() {
+    let mut bytes =
+        std::fs::read(testing::fixtures::tiny_system_evtx()).expect("read System.evtx fixture");
+    bytes.resize(
+        EVTX_FILE_HEADER_SIZE as usize + EVTX_CHUNK_SIZE as usize * 257,
+        0,
+    );
+
+    let extraction =
+        extract_structured_events_from_read_seek(std::io::Cursor::new(bytes), SYSTEM_PATH)
+            .expect("seekable EVTX streams are not constrained by the buffered-input limit");
+
+    assert!(!extraction.boot_events.is_empty());
+}
+
+#[test]
+fn interrupted_chunk_read_remains_a_retryable_source_io_failure() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let reader = InterruptAfter::new(bytes, EVTX_FILE_HEADER_SIZE);
+
+    let error = extract_structured_events_from_read_seek(reader, SYSTEM_PATH)
+        .expect_err("interrupted evidence reads must cancel EVTX parsing");
+
+    assert!(matches!(
+        error,
+        EvtxBootError::SourceIo {
+            kind: std::io::ErrorKind::Interrupted,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn initialization_io_failure_is_fatal_and_redacts_the_evidence_path() {
+    let private_path = r"C:\private\case\Windows\System32\winevt\Logs\System.evtx";
+    let reader = InterruptAfter::with_kind(
+        vec![0_u8; EVTX_FILE_HEADER_SIZE as usize],
+        0,
+        std::io::ErrorKind::PermissionDenied,
+    );
+
+    let error = extract_structured_events_from_read_seek(reader, private_path)
+        .expect_err("initialization I/O failure must abort parsing");
+
+    assert!(matches!(
+        error,
+        EvtxBootError::SourceIo {
+            ref path,
+            kind: std::io::ErrorKind::PermissionDenied,
+            ..
+        } if path == "System.evtx"
+    ));
+    assert!(!error.to_string().contains(r"C:\private"));
+}
+
+#[test]
+fn initialization_unexpected_eof_error_remains_fatal_source_io() {
+    let reader = InterruptAfter::with_kind(
+        vec![0_u8; EVTX_FILE_HEADER_SIZE as usize],
+        0,
+        std::io::ErrorKind::UnexpectedEof,
+    );
+
+    let error = extract_structured_events_from_read_seek(reader, SYSTEM_PATH)
+        .expect_err("an underlying header read failure must retain source I/O identity");
+
+    assert!(matches!(
+        error,
+        EvtxBootError::SourceIo {
+            kind: std::io::ErrorKind::UnexpectedEof,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("reading the file header"));
+}
+
+#[test]
+fn chunk_read_io_failure_is_fatal_after_prior_records() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let fail_at = EVTX_FILE_HEADER_SIZE + EVTX_CHUNK_SIZE * 14;
+    let reader = SourceFaultReader::read_error(bytes, fail_at, std::io::ErrorKind::Other);
+    let mut visited = 0_u64;
+
+    let result = visit_structured_events_from_read_seek(reader, SYSTEM_PATH, |_event| {
+        visited += 1;
+        Ok::<(), std::convert::Infallible>(())
+    });
+
+    assert!(
+        visited > 0,
+        "fixture should yield records before the injected failure"
+    );
+    assert!(matches!(
+        result,
+        Err(EvtxVisitError::Parser(EvtxBootError::SourceIo {
+            kind: std::io::ErrorKind::Other,
+            ..
+        }))
+    ));
+}
+
+#[test]
+fn chunk_seek_io_failure_is_fatal() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let fail_at = EVTX_FILE_HEADER_SIZE + EVTX_CHUNK_SIZE * 4;
+    let reader = SourceFaultReader::seek_error(bytes, fail_at, std::io::ErrorKind::Other);
+
+    let error = extract_structured_events_from_read_seek(reader, SYSTEM_PATH)
+        .expect_err("evidence seek failures must not become salvage warnings");
+
+    assert!(matches!(
+        error,
+        EvtxBootError::SourceIo {
+            kind: std::io::ErrorKind::Other,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("seeking to a chunk"));
+}
+
+#[test]
+fn short_chunk_read_is_fatal_unexpected_eof() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let fail_at = EVTX_FILE_HEADER_SIZE + EVTX_CHUNK_SIZE * 4;
+    let reader = SourceFaultReader::short_read(bytes, fail_at);
+
+    let error = extract_structured_events_from_read_seek(reader, SYSTEM_PATH)
+        .expect_err("short evidence reads must be fatal");
+
+    assert!(matches!(
+        error,
+        EvtxBootError::SourceIo {
+            kind: std::io::ErrorKind::UnexpectedEof,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn malformed_chunk_is_bounded_salvage_warning() {
+    let mut bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let chunk_offset = (EVTX_FILE_HEADER_SIZE + EVTX_CHUNK_SIZE * 4) as usize;
+    bytes[chunk_offset..chunk_offset + 8].copy_from_slice(b"BadChnk!");
+
+    let extraction =
+        extract_structured_events_from_read_seek(std::io::Cursor::new(bytes), SYSTEM_PATH)
+            .expect("deterministic malformed chunks should permit bounded salvage");
+
+    assert!(!extraction.boot_events.is_empty());
+    assert!(extraction
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("EVTX-CHUNK")));
+}
+
+#[test]
+fn evtx_warning_governor_bounds_and_sanitizes_diagnostics_during_parsing() {
+    let path = r"C:\private\case\Windows\System32\winevt\Logs\System.evtx";
+    let raw = (0..100)
+        .map(|index| format!("{path} record parse warning {index}"))
+        .collect();
+
+    let warnings = govern_evtx_warnings(path, raw);
+
+    assert_eq!(warnings.len(), 64);
+    assert!(warnings.last().unwrap().contains("EVTX-WARN-CAP"));
+    assert!(warnings
+        .iter()
+        .all(|warning| !warning.contains("C:\\private")));
+}
+
+#[test]
+fn streaming_visitor_matches_structured_extraction_counts() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+    let expected =
+        extract_structured_events_from_read_seek(std::io::Cursor::new(bytes.clone()), SYSTEM_PATH)
+            .unwrap();
+    let mut visited = 0u64;
+
+    let summary = visit_structured_events_from_read_seek(
+        std::io::Cursor::new(bytes),
+        SYSTEM_PATH,
+        |_event| {
+            visited += 1;
+            Ok::<(), std::convert::Infallible>(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(summary.boot_count, expected.boot_events.len() as u64);
+    assert_eq!(
+        summary.security_count,
+        expected.security_events.len() as u64
+    );
+    assert_eq!(
+        summary.application_count,
+        expected.application_events.len() as u64
+    );
+    assert_eq!(
+        visited,
+        summary.boot_count + summary.security_count + summary.application_count
+    );
+}
+
+#[test]
+fn streaming_visitor_propagates_sink_failure_without_parsing_the_tail() {
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx())
+        .expect("read tiny System.evtx fixture");
+
+    let result = visit_structured_events_from_read_seek(
+        std::io::Cursor::new(bytes),
+        SYSTEM_PATH,
+        |_event| Err::<(), _>("sink stopped"),
+    );
+
+    assert!(matches!(result, Err(EvtxVisitError::Sink("sink stopped"))));
+}
+
+struct InterruptAfter {
+    inner: std::io::Cursor<Vec<u8>>,
+    fail_at: u64,
+    kind: std::io::ErrorKind,
+}
+
+impl InterruptAfter {
+    fn new(bytes: Vec<u8>, fail_at: u64) -> Self {
+        Self::with_kind(bytes, fail_at, std::io::ErrorKind::Interrupted)
+    }
+
+    fn with_kind(bytes: Vec<u8>, fail_at: u64, kind: std::io::ErrorKind) -> Self {
+        Self {
+            inner: std::io::Cursor::new(bytes),
+            fail_at,
+            kind,
+        }
+    }
+}
+
+impl std::io::Read for InterruptAfter {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.inner.position() >= self.fail_at {
+            return Err(std::io::Error::new(
+                self.kind,
+                "injected evidence read failure",
+            ));
+        }
+        let remaining = usize::try_from(self.fail_at - self.inner.position()).unwrap_or(usize::MAX);
+        let read_length = buffer.len().min(remaining);
+        std::io::Read::read(&mut self.inner, &mut buffer[..read_length])
+    }
+}
+
+impl std::io::Seek for InterruptAfter {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        std::io::Seek::seek(&mut self.inner, position)
+    }
+}
+
+enum SourceFaultMode {
+    ReadError,
+    SeekError,
+    ShortRead,
+}
+
+struct SourceFaultReader {
+    inner: std::io::Cursor<Vec<u8>>,
+    fail_at: u64,
+    kind: std::io::ErrorKind,
+    mode: SourceFaultMode,
+}
+
+impl SourceFaultReader {
+    fn read_error(bytes: Vec<u8>, fail_at: u64, kind: std::io::ErrorKind) -> Self {
+        Self::new(bytes, fail_at, kind, SourceFaultMode::ReadError)
+    }
+
+    fn seek_error(bytes: Vec<u8>, fail_at: u64, kind: std::io::ErrorKind) -> Self {
+        Self::new(bytes, fail_at, kind, SourceFaultMode::SeekError)
+    }
+
+    fn short_read(bytes: Vec<u8>, fail_at: u64) -> Self {
+        Self::new(
+            bytes,
+            fail_at,
+            std::io::ErrorKind::UnexpectedEof,
+            SourceFaultMode::ShortRead,
+        )
+    }
+
+    fn new(bytes: Vec<u8>, fail_at: u64, kind: std::io::ErrorKind, mode: SourceFaultMode) -> Self {
+        Self {
+            inner: std::io::Cursor::new(bytes),
+            fail_at,
+            kind,
+            mode,
+        }
+    }
+}
+
+impl std::io::Read for SourceFaultReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.inner.position() >= self.fail_at {
+            return match self.mode {
+                SourceFaultMode::ReadError => Err(std::io::Error::new(
+                    self.kind,
+                    "injected evidence read failure",
+                )),
+                SourceFaultMode::ShortRead => Ok(0),
+                SourceFaultMode::SeekError => std::io::Read::read(&mut self.inner, buffer),
+            };
+        }
+        let allowed = usize::try_from(self.fail_at - self.inner.position())
+            .unwrap_or(usize::MAX)
+            .min(buffer.len());
+        std::io::Read::read(&mut self.inner, &mut buffer[..allowed])
+    }
+}
+
+impl std::io::Seek for SourceFaultReader {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        if matches!(self.mode, SourceFaultMode::SeekError)
+            && matches!(position, std::io::SeekFrom::Start(offset) if offset >= self.fail_at)
+        {
+            return Err(std::io::Error::new(
+                self.kind,
+                "injected evidence seek failure",
+            ));
+        }
+        std::io::Seek::seek(&mut self.inner, position)
+    }
 }
 
 #[test]

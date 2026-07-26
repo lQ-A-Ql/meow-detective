@@ -169,6 +169,13 @@ impl StagingRepo {
                 )?;
             }
         }
+        if !table_has_column(conn, "file_entries", "encrypted")? {
+            conn.execute_batch(
+                "ALTER TABLE file_entries
+                 ADD COLUMN encrypted INTEGER
+                 CHECK (encrypted IS NULL OR encrypted IN (0, 1));",
+            )?;
+        }
         if !table_has_column(conn, "file_entries", "partition_index")? {
             conn.execute(
                 "ALTER TABLE file_entries ADD COLUMN partition_index INTEGER",
@@ -345,8 +352,8 @@ impl StagingRepo {
                     let id = uuid::Uuid::new_v4().to_string();
                     main_conn.execute(
                         "INSERT INTO main.file_entries
-                         (id, parent_id, data_source_id, path, name, entry_type, partition_index)
-                         VALUES (?1, NULL, ?2, ?3, ?4, 'directory', ?5)",
+                         (id, parent_id, data_source_id, path, name, entry_type, encrypted, partition_index)
+                         VALUES (?1, NULL, ?2, ?3, ?4, 'directory', 0, ?5)",
                         params![
                             id,
                             data_source_id,
@@ -368,7 +375,7 @@ impl StagingRepo {
             let inserted = main_conn.execute(
                 "INSERT INTO main.file_entries
                     (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+                      size, ext, deleted, hidden, system, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
                       partition_index)
                      SELECT
                         id,
@@ -387,7 +394,7 @@ impl StagingRepo {
                           ELSE parent_id
                         END,
                         data_source_id, path, name, LOWER(entry_type),
-                        size, ext, deleted, hidden, system,
+                        size, ext, deleted, hidden, system, encrypted,
                         created_at, modified_at, accessed_at, changed_at, hash_sha256,
                         ?2
                      FROM staging.file_entries

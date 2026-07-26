@@ -13,6 +13,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 domain.workspace = true
 tantivy = { workspace = true }
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

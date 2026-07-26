@@ -84,12 +84,12 @@ artifacts-linux = { path = "crates/artifacts-linux" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
-evtx = { path = "crates/evtx-patched", default-features = false }
+evtx = { path = "crates/evtx-patched", default-features = false, features = ["multithreading"] }
 flate2 = "1"
 containers-pst = { path = "crates/containers-pst" }
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled", "serialize"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 tempfile = "3"

@@ -2,6 +2,10 @@ use crate::DataSourceId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+mod encryption;
+
+pub use encryption::{FileEncryptionStatus, InvalidEncryptionStatus};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct FileEntryId(pub String);
 
@@ -24,8 +28,8 @@ pub struct FileEntry {
     pub deleted: bool,
     pub hidden: bool,
     pub system: bool,
-    /// True when the file is encrypted via NTFS Encrypting File System (EFS).
-    /// Encrypted files cannot be read without the decryption key.
+    /// Conservative legacy projection of the persisted encryption status.
+    /// `true` means encrypted or not yet classified; only `false` is readable.
     #[serde(default)]
     pub encrypted: bool,
     pub created_at: Option<DateTime<Utc>>,

@@ -1,8 +1,6 @@
-use super::artifact_query::already_has_v1_artifacts;
 use super::browser::extract_browser_candidate;
 use super::browser_preload::BrowserPreloadContext;
 use super::email::extract_email_candidate;
-use super::evtx::extract_evtx_candidate;
 use super::linux::{
     extract_linux_candidate, linux_candidate_read_limit, linux_candidate_support,
     unsupported_linux_candidate_outcome,
@@ -10,13 +8,18 @@ use super::linux::{
 use super::linux_sections::{linux_artifact_section, LinuxArtifactSection, LinuxCandidateSupport};
 use super::progress::{CandidateProgressResult, ExtractionProgressReporter};
 pub(super) use super::reader::read_candidate_bytes_with_progress;
-pub(super) use super::reader::{CandidateExtractionError, CandidateSource};
+pub(super) use super::reader::{
+    encrypted_candidate_warning, CandidateExtractionError, CandidateSource,
+};
 use super::registry::extract_registry_candidate;
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::{
     run_bounded_ordered, ExtractionSchedulingPolicy, PreparedWork, SchedulerSnapshot,
 };
-use super::state::{AnalysisCheckpointKey, CleanScanKeys, DiagnosticScanKeys, ExtractionState};
+use super::state::{
+    AnalysisCheckpointKey, CleanScanKeys, DiagnosticScanKeys, ExtractionState,
+    PersistedExtractionOutcome,
+};
 use super::ExtractionOutcome;
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
@@ -31,6 +34,9 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
+
+mod checkpoint;
+mod source_preparation;
 
 pub(super) struct ExistingCheckpoints<'a> {
     pub(super) clean: &'a CleanScanKeys,
@@ -54,6 +60,7 @@ impl ExistingCheckpoints<'_> {
 
 pub(super) struct CandidateProcessingContext<'a> {
     conn: &'a Connection,
+    case_id: &'a str,
     selected: &'a [AnalysisCapability],
     checkpoints: &'a ExistingCheckpoints<'a>,
     preload: &'a RegistryPreloadContext,
@@ -64,6 +71,7 @@ pub(super) struct CandidateProcessingContext<'a> {
 impl<'a> CandidateProcessingContext<'a> {
     pub(super) fn new(
         conn: &'a Connection,
+        case_id: &'a str,
         selected: &'a [AnalysisCapability],
         checkpoints: &'a ExistingCheckpoints<'a>,
         preload: &'a RegistryPreloadContext,
@@ -72,6 +80,7 @@ impl<'a> CandidateProcessingContext<'a> {
     ) -> Self {
         Self {
             conn,
+            case_id,
             selected,
             checkpoints,
             preload,
@@ -182,6 +191,8 @@ struct CandidateCompletion {
 
 enum CandidateCompletionKind {
     Outcome(ExtractionOutcome),
+    Persisted(PersistedExtractionOutcome),
+    Deferred(String),
     Warning(String),
     ReplayDiagnostic(Vec<String>),
     ReplayClean,
@@ -192,6 +203,7 @@ enum CandidateCompletionKind {
 
 fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
     if item.capability.read_policy == CandidateReadPolicy::RegistryPreload
+        || item.candidate.encrypted
         || is_unsupported_linux_candidate(&item.candidate)
     {
         return 0;
@@ -214,7 +226,18 @@ where
     } = item;
     coordinator.progress.start_candidate(capability, &candidate);
 
-    if let Some(kind) = checkpoint_completion(coordinator.context, &candidate, capability)? {
+    if let Some(warning) = encrypted_candidate_warning(&candidate) {
+        return Ok(PreparedWork::Ready(CandidateCompletion {
+            kind: CandidateCompletionKind::Outcome(ExtractionOutcome {
+                warnings: vec![warning],
+                ..ExtractionOutcome::default()
+            }),
+            candidate,
+            capability,
+        }));
+    }
+
+    if let Some(kind) = checkpoint::completion(coordinator.context, &candidate, capability)? {
         return Ok(PreparedWork::Ready(CandidateCompletion {
             candidate,
             capability,
@@ -239,63 +262,7 @@ where
         });
     }
 
-    let read_limit = candidate_read_limit(&candidate, capability);
-    let bytes = match read_candidate_bytes_with_progress(
-        &candidate,
-        read_limit,
-        coordinator.context.cancel_token,
-        coordinator.file_reader,
-        |bytes_read| {
-            coordinator
-                .progress
-                .report_read_progress(capability, &candidate, bytes_read, read_limit);
-        },
-    ) {
-        Ok(bytes) => bytes,
-        Err(CandidateExtractionError::Warning(warning)) => {
-            return Ok(PreparedWork::Ready(CandidateCompletion {
-                candidate,
-                capability,
-                kind: CandidateCompletionKind::Warning(warning),
-            }));
-        }
-        Err(CandidateExtractionError::Cancelled) => {
-            return Err(AnalysisServiceError::Cancelled);
-        }
-    };
-    let weight_bytes = bytes.len();
-    Ok(PreparedWork::Parallel {
-        input: PreparedCandidate {
-            candidate,
-            capability,
-            input: PreparedCandidateInput::Bytes(bytes),
-        },
-        weight_bytes,
-    })
-}
-
-fn checkpoint_completion(
-    context: &CandidateProcessingContext<'_>,
-    candidate: &EvidenceCandidate,
-    capability: AnalysisCapability,
-) -> Result<Option<CandidateCompletionKind>, AnalysisServiceError> {
-    let key = checkpoint_key(candidate, capability);
-    if let Some(warnings) = context.checkpoints.diagnostic.get(&key) {
-        return Ok(Some(CandidateCompletionKind::ReplayDiagnostic(
-            warnings.clone(),
-        )));
-    }
-    if context.checkpoints.clean.contains(&key) {
-        return Ok(Some(CandidateCompletionKind::ReplayClean));
-    }
-    if let Some(scan) = context.checkpoints.complete.get(&key) {
-        return Ok(Some(CandidateCompletionKind::ReplayComplete(scan.clone())));
-    }
-    if !context.checkpoints.storage_available && already_has_v1_artifacts(context.conn, candidate)?
-    {
-        return Ok(Some(CandidateCompletionKind::ExistingV1));
-    }
-    Ok(None)
+    source_preparation::prepare_source(coordinator, candidate, capability)
 }
 
 fn parse_candidate(
@@ -354,7 +321,6 @@ fn extract_bytes(
     match candidate.category.as_str() {
         "BrowserHistory" => extract_browser_candidate(candidate, bytes, browser_preload),
         "Email" => extract_email_candidate(candidate, bytes),
-        "EventLogs" => extract_evtx_candidate(candidate, bytes),
         LINUX_UMBRELLA_KEY => extract_linux_candidate(candidate, bytes),
         _ => ExtractionOutcome::default(),
     }
@@ -379,6 +345,27 @@ where
                 .state
                 .record_outcome(capability, &candidate, outcome);
             result
+        }
+        CandidateCompletionKind::Persisted(outcome) => {
+            let result = CandidateProgressResult {
+                artifact_count: outcome.artifact_count,
+                timeline_event_count: outcome.timeline_event_count,
+                warning: !outcome.warnings.is_empty(),
+                ..CandidateProgressResult::default()
+            };
+            coordinator
+                .state
+                .record_persisted_outcome(capability, outcome);
+            result
+        }
+        CandidateCompletionKind::Deferred(warning) => {
+            coordinator
+                .state
+                .record_retryable_failure(capability, warning);
+            CandidateProgressResult {
+                warning: true,
+                ..CandidateProgressResult::default()
+            }
         }
         CandidateCompletionKind::Warning(warning) => {
             coordinator.state.record_warning(capability, warning);

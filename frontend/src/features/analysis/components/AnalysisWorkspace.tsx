@@ -441,6 +441,7 @@ export function AnalysisWorkspace() {
             emailSummary={emailSummary}
             eventLogSummary={eventLogSummary}
             eventLogView={eventLogView}
+            eventLogLoadContextKey={selectedSourceContextKey ?? ''}
             onEventLogViewChange={setEventLogView}
             classificationBoard={classificationBoard}
             evidencePending={evidenceScan.isPending}

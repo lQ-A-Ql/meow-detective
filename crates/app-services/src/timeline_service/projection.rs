@@ -1,5 +1,8 @@
 use domain::FileEntry;
-use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
+use persistence_sqlite::repositories::{
+    source_meta_repo::{SourceMetaRepo, TIMELINE_CURSOR_REVISION_KEY},
+    timeline_repo::TimelineRepo,
+};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
@@ -214,6 +217,7 @@ fn replace_macb_timeline_sql(
     clear_previous_macb_projection(&transaction)?;
     let inserted = project_macb_timeline_sql(&transaction, cancel_token)?;
     ensure_not_cancelled(cancel_token)?;
+    SourceMetaRepo::new(&transaction).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
     transaction.commit().map_err(|error| {
         TimelineServiceError::Other(format!("commit MACB timeline replacement: {error}"))
     })?;

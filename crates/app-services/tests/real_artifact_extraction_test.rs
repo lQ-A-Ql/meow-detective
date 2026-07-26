@@ -9,14 +9,13 @@ use std::time::Instant;
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
-    std::env::var("FORENSICS_REAL_ARTIFACT_E01")
-        .ok()
+    std::env::var_os("FORENSICS_REAL_ARTIFACT_E01")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("E:/pangushi/刘洋/liuyang_pc.E01"))
+        .unwrap_or_else(|| panic!("set FORENSICS_REAL_ARTIFACT_E01 to run ignored artifact tests"))
 }
 
 // Local run:
-//   $env:FORENSICS_REAL_ARTIFACT_E01='E:/pangushi/刘洋/liuyang_pc.E01'
+//   $env:FORENSICS_REAL_ARTIFACT_E01='<path-to-private-windows-sample.E01>'
 //   cargo test -p app-services --test real_artifact_extraction_test -- --ignored --nocapture
 #[test]
 #[ignore = "requires FORENSICS_REAL_ARTIFACT_E01 real E01 sample"]

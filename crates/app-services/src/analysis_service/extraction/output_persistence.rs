@@ -61,7 +61,9 @@ pub(super) fn persist_outputs(
     Ok(())
 }
 
-fn resolve_output_data_source_id(conn: &Connection) -> Result<String, AnalysisServiceError> {
+pub(super) fn resolve_output_data_source_id(
+    conn: &Connection,
+) -> Result<String, AnalysisServiceError> {
     let mut statement = conn.prepare("SELECT id FROM data_sources ORDER BY id LIMIT 2")?;
     let source_ids = statement
         .query_map([], |row| row.get::<_, String>(0))?
@@ -77,7 +79,7 @@ fn resolve_output_data_source_id(conn: &Connection) -> Result<String, AnalysisSe
     }
 }
 
-fn validate_artifact_source_attribution(
+pub(super) fn validate_artifact_source_attribution(
     artifacts: &[domain::Artifact],
     data_source_id: &str,
 ) -> Result<(), AnalysisServiceError> {

@@ -1,8 +1,8 @@
 //! E01 file preview debug tests — opens random files and reads hex/magic.
 //!
 //! Run:
-//!   $env:FORENSICS_JC2_E01='D:\獬豸杯\检材2.E01'
-//!   $env:FORENSICS_LIUYANG_E01='E:\pangushi\刘洋\liuyang_pc.E01'
+//!   $env:FORENSICS_JC2_E01_FIXTURE='<path-to-private-windows-sample.E01>'
+//!   $env:FORENSICS_LIUYANG_E01_FIXTURE='<path-to-private-liuyang-sample.E01>'
 //!   cargo test -p app-services --test e01_preview_debug_test -- --ignored --nocapture
 
 use app_services::{case_service, datasource_service, file_service};
@@ -15,15 +15,19 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn jc2_path() -> PathBuf {
-    std::env::var("FORENSICS_JC2_E01")
+    std::env::var_os("FORENSICS_JC2_E01_FIXTURE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("D:\\獬豸杯\\检材2.E01"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_JC2_E01_FIXTURE to run ignored preview debug tests")
+        })
 }
 
 fn liuyang_path() -> PathBuf {
-    std::env::var("FORENSICS_LIUYANG_E01")
+    std::env::var_os("FORENSICS_LIUYANG_E01_FIXTURE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("E:\\pangushi\\刘洋\\liuyang_pc.E01"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_LIUYANG_E01_FIXTURE to run ignored preview debug tests")
+        })
 }
 
 /// Full setup: attach → probe → store partitions → MFT enumerate → merge
@@ -229,7 +233,7 @@ fn assert_file_magic(
 // ─── JC2 测试 ───
 
 #[test]
-#[ignore = "requires FORENSICS_JC2_E01"]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_preview_png_magic() {
     let (_tmp, active, ds_id) = setup(&jc2_path());
     // PNG magic: 89 50 4E 47 0D 0A 1A 0A
@@ -244,7 +248,7 @@ fn jc2_preview_png_magic() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_JC2_E01"]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_preview_boot_sector() {
     // Read the NTFS boot sector via NTFS reader directly
     let e01 = jc2_path();
@@ -267,7 +271,7 @@ fn jc2_preview_boot_sector() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_JC2_E01"]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_list_root_and_read_any_text_file() {
     let e01 = jc2_path();
     let mut reader = E01Reader::open(&e01).unwrap();
@@ -306,7 +310,7 @@ fn jc2_list_root_and_read_any_text_file() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_full_scan_read_first_8_bytes() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     let mut total = 0u64;
@@ -365,7 +369,7 @@ fn liuyang_full_scan_read_first_8_bytes() {
 // ─── Liuyang 测试 ───
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_png_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(
@@ -378,35 +382,35 @@ fn liuyang_preview_png_magic() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_pdf_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(&active, &ds_id, ".pdf", b"%PDF", "Liuyang PDF");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_zip_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(&active, &ds_id, ".zip", b"PK\x03\x04", "Liuyang ZIP");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_exe_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(&active, &ds_id, ".exe", b"MZ", "Liuyang EXE");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_jpg_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(&active, &ds_id, ".jpg", &[0xFF, 0xD8, 0xFF], "Liuyang JPG");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_jpeg_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     assert_file_magic(
@@ -419,7 +423,7 @@ fn liuyang_preview_jpeg_magic() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_direct_ntfs_read_screenshots_png() {
     // Bypass the full import pipeline — open NTFS reader directly and read a screenshot PNG
     let e01 = liuyang_path();
@@ -515,7 +519,7 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_walk_to_screenshots_via_resolve_path() {
     // Direct resolve_file_path test — bypasses list_children, uses resolve_file_path
     let e01 = liuyang_path();

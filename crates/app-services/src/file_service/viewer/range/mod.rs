@@ -7,3 +7,4 @@ pub(crate) use header::read_file_header_with_context;
 pub use header::{read_file_header_by_id, FileHeaderReadCache};
 
 pub(crate) use api::file_id_from_handle;
+pub(crate) use content::open_range_content_for_descriptor_with_context;

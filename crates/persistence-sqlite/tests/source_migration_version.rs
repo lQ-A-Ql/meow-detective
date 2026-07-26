@@ -38,6 +38,18 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_024_ntfs_deleted_recovery",
         "source_022_file_partition_index_repair"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_025_file_entry_encrypted",
+        "source_024_ntfs_deleted_recovery"
+    ));
+    assert!(runner::source_version_is_at_least(
+        "source_026_timeline_keyset_indexes",
+        "source_025_file_entry_encrypted"
+    ));
+    assert!(runner::source_version_is_at_least(
+        "source_027_artifact_keyset_indexes",
+        "source_026_timeline_keyset_indexes"
+    ));
 }
 
 #[test]
@@ -57,7 +69,7 @@ fn source_version_order_rejects_older_and_unknown_versions() {
 }
 
 #[test]
-fn source_024_upgrade_preserves_old_recovery_rows_and_adds_ntfs_sequence() {
+fn source_024_through_027_upgrade_preserves_rows_and_adds_query_indexes() {
     let connection = persistence_sqlite::open_in_memory().unwrap();
     connection
         .execute_batch(
@@ -113,6 +125,14 @@ fn source_024_upgrade_preserves_old_recovery_rows_and_adds_ntfs_sequence() {
         .unwrap();
     connection
         .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, name, entry_type)
+             VALUES ('legacy-file', 'source-migration', 'legacy.bin', 'legacy.bin', 'file')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
             "INSERT INTO filesystem_recovery_scans (
                 id, data_source_id, partition_index, filesystem_type,
                 parser_version, log_kind, snapshot_identity_sha256,
@@ -138,7 +158,26 @@ fn source_024_upgrade_preserves_old_recovery_rows_and_adds_ntfs_sequence() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 1);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 4);
+
+    let encrypted_column: (String, i64, Option<String>) = connection
+        .query_row(
+            "SELECT type, \"notnull\", dflt_value
+             FROM pragma_table_info('file_entries')
+             WHERE name = 'encrypted'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("source_025 must add the encrypted column");
+    assert_eq!(encrypted_column, ("INTEGER".to_string(), 0, None));
+    let legacy_encryption_status: Option<i64> = connection
+        .query_row(
+            "SELECT encrypted FROM file_entries WHERE id = 'legacy-file'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(legacy_encryption_status, None);
 
     let old_sequence: Option<u16> = connection
         .query_row(
@@ -183,4 +222,20 @@ fn source_024_upgrade_preserves_old_recovery_rows_and_adds_ntfs_sequence() {
         )
         .unwrap();
     assert_eq!(sequence, 17);
+
+    let keyset_index_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index'
+               AND name IN (
+                   'idx_source_timeline_ts_id',
+                   'idx_source_timeline_type_ts_id',
+                   'idx_source_artifacts_created_id',
+                   'idx_source_artifacts_type_created_id'
+               )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(keyset_index_count, 4);
 }

@@ -25,23 +25,44 @@ static TEST_HOOK_LOCK: Mutex<()> = Mutex::new(());
 
 mod search_phase;
 
-fn setup_case_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
-    let db_path = tmp.path().join("app.db");
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
-    runner::run_all(&conn).unwrap();
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
+fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
+    let case_db_path = tmp.path().join("app.db");
+    let case_conn = persistence_sqlite::open_or_create(&case_db_path).unwrap();
+    runner::run_all(&case_conn).unwrap();
+    case_conn
+        .execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
              VALUES ('case-1', 'case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+            [],
+        )
+        .unwrap();
+    let evidence_path = tmp.path().join("evidence");
+    case_conn
+        .execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
              VALUES ('ds-1', 'case-1', 'logical', 'logical_directory', ?1, '2026-01-01T00:00:00Z')",
-        params![tmp.path().join("evidence").display().to_string()],
-    )
-    .unwrap();
-    (db_path, DataSourceId("ds-1".to_string()))
+            params![evidence_path.display().to_string()],
+        )
+        .unwrap();
+    drop(case_conn);
+
+    let data_source_id = DataSourceId("ds-1".to_string());
+    let source_db_path = tmp.path().join("sources").join("ds-1").join("source.db");
+    let source_conn = persistence_sqlite::open_or_create_source(&source_db_path).unwrap();
+    DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(
+            &CaseId("case-1".to_string()),
+            &DataSource {
+                id: data_source_id.clone(),
+                name: "logical".to_string(),
+                kind: DataSourceKind::LogicalDirectory,
+                source_path: evidence_path,
+                imported_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    (source_db_path, data_source_id)
 }
 fn insert_file_with_type(
     conn: &Connection,
@@ -52,8 +73,8 @@ fn insert_file_with_type(
 ) {
     conn.execute(
         "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, modified_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 12, 'txt', 0, ?6)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, modified_at, encrypted)
+             VALUES (?1, ?2, ?3, ?4, ?5, 12, 'txt', 0, ?6, 0)",
         params![
             id,
             ds.0,
@@ -311,14 +332,14 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
 fn post_import_worker_staging_success_preserves_summary_and_counts() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "f-a", &ds_id, "a.txt");
     insert_file(&conn, "f-b", &ds_id, "b.txt");
     drop(conn);
     let options = post_import_options(
         &tmp,
-        db_path,
+        db_path.clone(),
         ds_id.clone(),
         ImportAnalysisMode::MetadataOnly,
     );
@@ -357,8 +378,8 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
         .any(|(_, detail)| detail.contains("Analysis workers complete")
             && detail.contains("workerBudget=1")
             && detail.contains("pendingTasks=0")));
-    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
-    let timeline_count: i64 = main_conn
+    let source_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
+    let timeline_count: i64 = source_conn
         .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
         .unwrap();
     assert_eq!(timeline_count, 2);
@@ -368,8 +389,8 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
 fn post_import_cancel_failure_preserves_partial_counts() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "f-a", &ds_id, "a.txt");
     drop(conn);
     let cancel = Arc::new(AtomicBool::new(true));
@@ -393,7 +414,7 @@ fn post_import_cancel_failure_preserves_partial_counts() {
 #[test]
 fn done_merged_analysis_worker_dbs_are_left_untouched() {
     let tmp = TempDir::new().unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
+    let (db_path, ds_id) = setup_source_db(&tmp);
     let options = analysis_options(
         &tmp,
         db_path,
@@ -428,7 +449,7 @@ fn done_merged_analysis_worker_dbs_are_left_untouched() {
 #[test]
 fn stale_unmerged_worker_layout_is_reinitialized_when_worker_count_changes() {
     let tmp = TempDir::new().unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
+    let (db_path, ds_id) = setup_source_db(&tmp);
     let options = analysis_options(
         &tmp,
         db_path,
@@ -471,7 +492,7 @@ fn stale_unmerged_worker_layout_is_reinitialized_when_worker_count_changes() {
 #[test]
 fn done_unmerged_matching_layout_resumes_with_merge_only() {
     let tmp = TempDir::new().unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
+    let (db_path, ds_id) = setup_source_db(&tmp);
     let options = analysis_options(
         &tmp,
         db_path,
@@ -521,7 +542,7 @@ fn analysis_worker_staging_open_creates_expected_tables() {
 #[test]
 fn post_import_runtime_skips_non_rbd_sources() {
     let tmp = TempDir::new().unwrap();
-    let (db_path, data_source_id) = setup_case_db(&tmp);
+    let (db_path, data_source_id) = setup_source_db(&tmp);
     let options = post_import_options(
         &tmp,
         db_path,
@@ -538,8 +559,8 @@ fn post_import_runtime_skips_non_rbd_sources() {
 #[test]
 fn post_import_rbd_runtime_fails_closed_without_lineage() {
     let tmp = TempDir::new().unwrap();
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
         "UPDATE data_sources SET kind = 'ceph_rbd' WHERE id = ?1",
         [&data_source_id.0],
@@ -566,8 +587,8 @@ fn analysis_pool_respects_worker_limit_and_writes_temp_db() {
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
     std::fs::write(tmp.path().join("evidence").join("a.txt"), "marker").unwrap();
     std::fs::write(tmp.path().join("evidence").join("b.txt"), "marker").unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "f-a", &ds_id, "a.txt");
     insert_file(&conn, "f-b", &ds_id, "b.txt");
     drop(conn);
@@ -601,8 +622,8 @@ fn analysis_worker_writes_only_own_temp_db() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
     std::fs::write(tmp.path().join("evidence").join("a.txt"), "alpha").unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "f-a", &ds_id, "a.txt");
     drop(conn);
 
@@ -626,14 +647,14 @@ fn analysis_tasks_include_title_case_file_entry_type() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
     std::fs::write(tmp.path().join("evidence").join("a.txt"), "alpha").unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file_with_type(&conn, "f-a", &ds_id, "a.txt", "File");
     drop(conn);
 
     assert_eq!(count_analysis_file_tasks(&db_path, &ds_id).unwrap(), 1);
     let page = fetch_analysis_file_page(
-        &persistence_sqlite::open_or_create(&db_path).unwrap(),
+        &persistence_sqlite::open_existing_source(&db_path).unwrap(),
         &ds_id,
         0,
         10,
@@ -713,8 +734,8 @@ fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
     let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
             "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('file-raw-exfat-index', NULL, ?1, 'LARGE.TXT', 'LARGE.TXT', 'file', 1536, 'txt', 0, 0, 0)",
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('file-raw-exfat-index', NULL, ?1, 'LARGE.TXT', 'LARGE.TXT', 'file', 1536, 'txt', 0, 0, 0, 0)",
             params![ds_id.0],
         )
         .unwrap();
@@ -759,13 +780,13 @@ fn analysis_worker_uses_bounded_content_reads_for_each_consumer() {
     let file_name = "APP.EXE-12345678.pf";
     std::fs::write(prefetch_dir.join(file_name), b"fake prefetch text").unwrap();
 
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
             "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
              VALUES ('file-cache-pf', NULL, ?1, 'Windows/Prefetch/APP.EXE-12345678.pf',
-                     'APP.EXE-12345678.pf', 'file', 17, 'txt', 0, 0, 0)",
+                     'APP.EXE-12345678.pf', 'file', 17, 'txt', 0, 0, 0, 0)",
             params![ds_id.0],
         )
         .unwrap();
@@ -808,8 +829,8 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
     let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     conn.execute(
             "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES (?1, NULL, ?2, '$Recycle.Bin/$IABCDEF', '$IABCDEF', 'file', ?3, NULL, 0, 0, 0)",
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES (?1, NULL, ?2, '$Recycle.Bin/$IABCDEF', '$IABCDEF', 'file', ?3, NULL, 0, 0, 0, 0)",
             params![
                 image_file_name,
                 ds_id.0,
@@ -893,8 +914,8 @@ fn analysis_artifact_extraction_skips_large_candidates() {
 fn disabled_import_content_reads_keep_analysis_bounded() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "missing-text", &ds_id, "missing.txt");
     insert_file(
         &conn,
@@ -927,8 +948,8 @@ fn disabled_import_content_reads_keep_analysis_bounded() {
 fn analysis_warning_partial_semantics_are_preserved_after_startup_guard() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "missing-text", &ds_id, "missing.txt");
     drop(conn);
 
@@ -960,8 +981,8 @@ fn analysis_warning_partial_semantics_are_preserved_after_startup_guard() {
 fn cancelled_analysis_keeps_cancel_error_and_unmerged_worker_status() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
-    let (db_path, ds_id) = setup_case_db(&tmp);
-    let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     insert_file(&conn, "f-a", &ds_id, "a.txt");
     drop(conn);
 

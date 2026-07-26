@@ -1,11 +1,11 @@
 //! File handle opening and host-path resolution for logical directories.
 
 use crate::file_service::viewer::{
-    descriptor_file_entry, descriptor_for_file_with_cache, safe_relative_path, PreviewReadContext,
-    FILE_HANDLE_PREFIX,
+    descriptor_file_entry, descriptor_for_file_with_cache, safe_relative_path,
+    validate_readable_file_entry, PreviewReadContext, FILE_HANDLE_PREFIX,
 };
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
-use domain::{EntryType, FileEntryId};
+use domain::FileEntryId;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -41,11 +41,7 @@ pub(crate) fn open_file_handle_uncached(
         .find_by_id(&FileEntryId(file_id.to_string()))?
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
-    if entry.entry_type != EntryType::File {
-        return Err(FileServiceError::invalid_input(
-            "Cannot open a directory as a file",
-        ));
-    }
+    validate_readable_file_entry(conn, &entry)?;
 
     Ok(ViewerHandleDto {
         handle_id: format!("{FILE_HANDLE_PREFIX}{}", entry.id.0),
@@ -78,6 +74,7 @@ where
     let entry = repo
         .find_by_id(&FileEntryId(file_id.to_string()))?
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+    validate_readable_file_entry(context.conn(), &entry)?;
 
     let (kind, source_path) = repo
         .find_data_source_location(&entry.data_source_id)?

@@ -63,6 +63,14 @@ fn make_artifact(id: &str, family: &str) -> Artifact {
     }
 }
 
+fn make_artifact_at(id: &str, family: &str, created_at: &str) -> Artifact {
+    let mut artifact = make_artifact(id, family);
+    artifact.created_at = chrono::DateTime::parse_from_rfc3339(created_at)
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    artifact
+}
+
 #[test]
 fn insert_batch_then_count_returns_correct_number() {
     let conn = setup_db();
@@ -127,6 +135,96 @@ fn list_by_family_filters_correctly() {
 
     let all = repo.list_by_family(None).unwrap();
     assert_eq!(all.len(), 3);
+}
+
+#[test]
+fn list_by_family_keyset_is_stable_and_count_matches_filter() {
+    let conn = setup_db();
+    let repo = ArtifactRepo::new(&conn);
+    let artifacts = vec![
+        make_artifact_at("a-latest-b", "evtx", "2026-06-03T00:00:00Z"),
+        make_artifact_at("other", "prefetch", "2026-06-04T00:00:00Z"),
+        make_artifact_at("a-old", "evtx", "2026-06-01T00:00:00Z"),
+        make_artifact_at("a-latest-a", "evtx", "2026-06-03T00:00:00Z"),
+        make_artifact_at("a-middle", "evtx", "2026-06-02T00:00:00Z"),
+    ];
+    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
+
+    let first_page = repo.list_by_family_after(Some("evtx"), None, 2).unwrap();
+    let second_page = repo
+        .list_by_family_after(Some("evtx"), Some(&first_page.last().unwrap().sort_key), 2)
+        .unwrap();
+
+    assert_eq!(repo.count_for_family(Some("evtx")).unwrap(), 4);
+    assert_eq!(repo.count_for_family(None).unwrap(), 5);
+    assert_eq!(
+        first_page
+            .iter()
+            .map(|row| row.artifact.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a-latest-a", "a-latest-b"]
+    );
+    assert_eq!(
+        second_page
+            .iter()
+            .map(|row| row.artifact.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a-middle", "a-old"]
+    );
+}
+
+#[test]
+fn snapshot_keyset_excludes_later_inserts_and_survives_consumed_prefix_deletion() {
+    let conn = setup_db();
+    let repo = ArtifactRepo::new(&conn);
+    repo.insert_batch(
+        &[
+            make_artifact_at("latest", "evtx", "2026-06-03T00:00:00Z"),
+            make_artifact_at("middle", "evtx", "2026-06-02T00:00:00Z"),
+            make_artifact_at("oldest", "evtx", "2026-06-01T00:00:00Z"),
+        ],
+        "case-1",
+        "ds-1",
+    )
+    .unwrap();
+    let high_water = repo.snapshot_high_water().unwrap();
+    assert_eq!(
+        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
+            .unwrap(),
+        3
+    );
+    let first = repo
+        .list_by_family_after_at_snapshot(Some("evtx"), None, high_water, 1)
+        .unwrap();
+
+    repo.insert_batch(
+        &[make_artifact_at(
+            "inserted-after-snapshot",
+            "evtx",
+            "2026-06-04T00:00:00Z",
+        )],
+        "case-1",
+        "ds-1",
+    )
+    .unwrap();
+    assert_eq!(
+        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
+            .unwrap(),
+        3
+    );
+    conn.execute("DELETE FROM artifacts WHERE id = 'latest'", [])
+        .unwrap();
+
+    let remaining = repo
+        .list_by_family_after_at_snapshot(Some("evtx"), Some(&first[0].sort_key), high_water, 10)
+        .unwrap();
+    assert_eq!(
+        remaining
+            .iter()
+            .map(|row| row.artifact.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["middle", "oldest"]
+    );
 }
 
 #[test]

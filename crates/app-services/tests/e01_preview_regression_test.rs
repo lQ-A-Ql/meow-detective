@@ -3,8 +3,8 @@
 //! Tests the full pipeline: probe → store partitions → MFT enumerate → preview files.
 //!
 //! Run:
-//!   $env:FORENSICS_JC2_E01='D:\獬豸杯\检材2.E01'
-//!   $env:FORENSICS_LIUYANG_E01='E:\pangushi\刘洋\liuyang_pc.E01'
+//!   $env:FORENSICS_JC2_E01_FIXTURE='<path-to-private-windows-sample.E01>'
+//!   $env:FORENSICS_LIUYANG_E01_FIXTURE='<path-to-private-liuyang-sample.E01>'
 //!   cargo test -p app-services --test e01_preview_regression_test -- --ignored --nocapture
 
 use app_services::{case_service, datasource_service, file_service};
@@ -22,15 +22,19 @@ use tempfile::TempDir;
 use transport::dto::ViewerRangeRequestDto;
 
 fn jc2_path() -> PathBuf {
-    std::env::var("FORENSICS_JC2_E01")
+    std::env::var_os("FORENSICS_JC2_E01_FIXTURE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("D:\\獬豸杯\\检材2.E01"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_JC2_E01_FIXTURE to run ignored preview regression tests")
+        })
 }
 
 fn liuyang_path() -> PathBuf {
-    std::env::var("FORENSICS_LIUYANG_E01")
+    std::env::var_os("FORENSICS_LIUYANG_E01_FIXTURE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("E:\\pangushi\\刘洋\\liuyang_pc.E01"))
+        .unwrap_or_else(|| {
+            panic!("set FORENSICS_LIUYANG_E01_FIXTURE to run ignored preview regression tests")
+        })
 }
 
 /// Full setup: probe E01 → store partitions → MFT enumerate → preview.
@@ -428,7 +432,7 @@ fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveC
 // ─── 检材2.E01 ───
 
 #[test]
-#[ignore = "requires FORENSICS_JC2_E01"]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_preview_returns_file_content() {
     let (_tmp, active, ds_id) = setup(&jc2_path());
     preview_and_assert(&active, &ds_id, "JC2");
@@ -437,35 +441,35 @@ fn jc2_preview_returns_file_content() {
 // ─── liuyang_pc.E01 ───
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_returns_file_content() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_and_assert(&active, &ds_id, "Liuyang");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_preview_chinese_path() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_chinese_path(&active, &ds_id, "Liuyang");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_large_7z_hex_head_range_is_bounded_and_bytes_only() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_large_7z_head_range(&active, &ds_id, "Liuyang 7z");
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_attribute_list_7z_inode_128026_reads_head_and_middle() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_liuyang_attribute_list_7z(&active, &ds_id);
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_direct_ntfs_inode_128026_reads_head_and_middle() {
     let path = liuyang_path();
     let mut probe_reader = E01Reader::open(&path).expect("open Liuyang E01 for probe");
@@ -509,7 +513,7 @@ fn liuyang_direct_ntfs_inode_128026_reads_head_and_middle() {
 }
 
 #[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01"]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
 fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
     let path = liuyang_path();
     let mut probe_reader = E01Reader::open(&path).expect("open Liuyang E01 for probe");

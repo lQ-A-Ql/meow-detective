@@ -7,7 +7,9 @@ mod registry;
 mod source_routing;
 
 pub use aggregation::{
-    get_artifact_families_for_case, get_artifact_family_counts_for_case, get_artifact_rows_for_case,
+    get_artifact_families_for_case, get_artifact_family_counts_for_case,
+    get_artifact_rows_for_case, get_artifact_rows_page_for_case,
+    get_artifact_rows_page_with_cursor_for_case,
 };
 pub use error::ArtifactServiceError;
 pub use extraction::{

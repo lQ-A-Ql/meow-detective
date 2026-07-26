@@ -1,0 +1,148 @@
+[
+  {
+    "file": "sample.lnk",
+    "expected": {
+      "baseline": "project synthetic LNK fixture; link_target_id_list and link_info path extraction validated against known target paths; timestamps cross-checked with Eric Zimmerman LECmd output",
+      "assertions": {
+        "fileSizeGt": 0,
+        "targetPathNonEmptyWhenLinkInfoPresent": true,
+        "targetPathNonEmptyWhenIdListPresent": true,
+        "targetPathFallbackToIdListWhenNoLinkInfo": true,
+        "creationTimeInReasonableRange": true,
+        "accessTimeInReasonableRange": true,
+        "writeTimeInReasonableRange": true,
+        "headerSizeAtLeast0x4C": true,
+        "clsidPresent": true,
+        "flagsWordValid": true
+      },
+      "guaranteedFields": [
+        {
+          "name": "file_size",
+          "type": "u32",
+          "guarantee": "guaranteed",
+          "description": "target file size from LNK header, always present in valid LNK files"
+        },
+        {
+          "name": "target_path",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "resolved from link_info local_base_path or shell item id_list fallback"
+        },
+        {
+          "name": "creation_time",
+          "type": "RFC 3339 string",
+          "guarantee": "guaranteed",
+          "description": "FILETIME from LNK header, converted to UTC RFC 3339; null when FILETIME is zero or out of reasonable range"
+        },
+        {
+          "name": "access_time",
+          "type": "RFC 3339 string",
+          "guarantee": "guaranteed",
+          "description": "FILETIME from LNK header, converted to UTC RFC 3339; null when FILETIME is zero or out of reasonable range"
+        },
+        {
+          "name": "write_time",
+          "type": "RFC 3339 string",
+          "guarantee": "guaranteed",
+          "description": "FILETIME from LNK header, converted to UTC RFC 3339; null when FILETIME is zero or out of reasonable range"
+        },
+        {
+          "name": "artifact_type",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "always \"LNK\" for LNK artifacts"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "shell_item_path",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "path reconstructed from shell item id_list; may differ from link_info local_base_path"
+        },
+        {
+          "name": "volume_serial_number",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "volume serial number from link_info volume block; present only when link_info with volume block exists"
+        },
+        {
+          "name": "icon_index",
+          "type": "i32",
+          "guarantee": "bestEffort",
+          "description": "icon index from LNK header; presence varies"
+        },
+        {
+          "name": "show_command",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "show window command; default SW_NORMAL, may vary"
+        },
+        {
+          "name": "hotkey",
+          "type": "u16",
+          "guarantee": "bestEffort",
+          "description": "LNK hotkey; zero when not set"
+        },
+        {
+          "name": "file_attributes",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "target file attributes flags; coverage varies by LNK variant"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "arguments",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "command-line arguments; present only when HAS_ARGUMENTS flag is set"
+        },
+        {
+          "name": "working_directory",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "working directory; present only when HAS_WORKING_DIR flag is set"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "LNK description string; present only when HAS_NAME flag is set"
+        },
+        {
+          "name": "relative_path",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "relative path; present only when HAS_RELATIVE_PATH flag is set"
+        },
+        {
+          "name": "network_share_path",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "UNC network share path; present only when link_info contains CommonNetworkRelativeLink"
+        },
+        {
+          "name": "tracker_data",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "distributed link tracker data; present only when HAS_DARWIN_ID flag is set"
+        },
+        {
+          "name": "complex_shell_structures",
+          "type": "array",
+          "guarantee": "notGuaranteed",
+          "description": "decompressed/custom shell item types; known limitation documented in parser-support-matrix.md"
+        }
+      ],
+      "fieldNamingConvention": "camelCase for top-level DTO; snake_case for attrs map keys within artifacts",
+      "timezoneNormalizationRule": "all FILETIME values converted to UTC via Windows epoch offset (1601-01-01); serialized as RFC 3339; timestamps outside year range 2001-2099 are excluded as unreasonable",
+      "emptyValueStrategy": {
+        "null": "absent or invalid FILETIME value (zero, max, or out of range)",
+        "emptyString": "path not present (neither link_info nor idlist yielded a path)",
+        "zero": "valid zero value for counts (e.g. file_size)"
+      },
+      "sortOrderRule": "artifacts sorted by artifact_type family then by creation_time descending; timeline events sorted by timestamp ascending"
+    }
+  }
+]

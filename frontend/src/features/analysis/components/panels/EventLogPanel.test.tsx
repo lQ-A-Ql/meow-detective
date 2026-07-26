@@ -84,4 +84,42 @@ describe('EventLogPanel', () => {
     expect(activeContent?.className).toContain('overflow-hidden');
     expect(activeContent?.querySelector('.overflow-y-auto')).not.toBeNull();
   });
+
+  it('routes a failed continuation through query recovery instead of the stale cursor', () => {
+    const onLoadMore = vi.fn();
+    const onRetryLoadMore = vi.fn();
+    const { container, rerender } = render(createElement(EventLogPanel, {
+      hasMore: true,
+      onLoadMore,
+    }));
+    const activeContent = container.querySelector(
+      '[data-slot="tabs-content"][data-state="active"]',
+    );
+    const scrollContainer = activeContent?.querySelector('.overflow-y-auto');
+    expect(scrollContainer).toBeInstanceOf(HTMLDivElement);
+    Object.defineProperties(scrollContainer as HTMLDivElement, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 3_100 },
+    });
+
+    fireEvent.scroll(scrollContainer as HTMLDivElement, {
+      target: { scrollTop: 2_500 },
+    });
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+
+    rerender(createElement(EventLogPanel, {
+      hasMore: true,
+      loadMoreFailed: true,
+      onLoadMore,
+      onRetryLoadMore,
+    }));
+    fireEvent.scroll(scrollContainer as HTMLDivElement, {
+      target: { scrollTop: 2_500 },
+    });
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onRetryLoadMore).toHaveBeenCalledTimes(1);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
 });

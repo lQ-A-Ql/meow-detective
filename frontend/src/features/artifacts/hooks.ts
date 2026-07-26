@@ -1,5 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
-import { getArtifactById, getArtifactFamilies, getArtifactRows, getArtifactFamilyCounts } from '@/lib/api/artifacts';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  getArtifactById,
+  getArtifactFamilies,
+  getArtifactRows,
+  getArtifactRowsPage,
+  getArtifactFamilyCounts,
+} from '@/lib/api/artifacts';
 
 export function useArtifactFamilies() {
   return useQuery({ queryKey: ['artifacts', 'families'], queryFn: getArtifactFamilies });
@@ -14,6 +20,15 @@ export function useArtifactRows(family: string) {
 
 export function useArtifactFamilyCounts() {
   return useQuery({ queryKey: ['artifacts', 'counts'], queryFn: getArtifactFamilyCounts });
+}
+
+export function useInfiniteArtifactRows(family: string, pageSize = 200) {
+  return useInfiniteQuery({
+    queryKey: ['artifacts', 'rows', 'infinite', family, pageSize],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getArtifactRowsPage(family, pageParam, pageSize),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  });
 }
 
 export function useArtifactById(artifactId?: string) {

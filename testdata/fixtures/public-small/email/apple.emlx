@@ -1,0 +1,12 @@
+1234
+From: apple-user@example.com
+To: apple-friend@example.com
+Subject: EMLX with size line
+Date: Thu, 18 Jan 2024 16:20:00 +0000
+Message-ID: <emlx-001@example.com>
+X-Mailer: Apple Mail (2.3654)
+X-Originating-IP: [198.51.100.7]
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+
+This message is stored in Apple Mail EMLX format. The first line is a byte-count header.

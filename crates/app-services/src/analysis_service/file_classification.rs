@@ -20,6 +20,7 @@ use transport::dto::{
 /// Header bytes read per file for magic classification.
 pub(crate) const MAGIC_HEADER_BYTES: usize = 16;
 const MAX_FILES_PER_SUBCATEGORY: usize = 30;
+const MAX_HEADER_READ_WARNING_DETAILS: usize = 50;
 
 /// Magic-family groups in display order: `(category, display name)`.
 const GROUPS: &[(&str, &str)] = &[
@@ -60,10 +61,11 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
             |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
         )
         .map_err(AnalysisServiceError::from)?;
+    let (encrypted_files, unknown_encryption_files) = encryption_counts(conn)?;
 
     let mut statement = conn.prepare(
         "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
          FROM file_entries
          WHERE entry_type = 'file' COLLATE NOCASE
          ORDER BY COALESCE(size, 0) DESC, path ASC",
@@ -74,12 +76,26 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
     let mut magic_classified = 0u64;
     let mut metadata_classified = 0u64;
     let mut seen = 0u64;
+    let mut header_read_failures = 0usize;
+    let mut warnings = Vec::new();
 
     for row in rows {
         let entry = row?;
         seen += 1;
-        let header = if seen <= u64::from(magic_read_limit) {
-            read_header_fn(&entry.id).ok()
+        let header = if seen <= u64::from(magic_read_limit) && !entry.encrypted {
+            match read_header_fn(&entry.id) {
+                Ok(header) => Some(header),
+                Err(error) => {
+                    header_read_failures += 1;
+                    if warnings.len() < MAX_HEADER_READ_WARNING_DETAILS {
+                        warnings.push(format!(
+                            "{}: header read failed; classified from metadata only: {error}",
+                            entry.path
+                        ));
+                    }
+                    None
+                }
+            }
         } else {
             None
         };
@@ -100,6 +116,22 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
     } else {
         AnalysisParseStatusDto::NotFound
     };
+    if header_read_failures > warnings.len() {
+        warnings.push(format!(
+            "{} additional header read failure(s) were summarized without per-file detail",
+            header_read_failures - warnings.len()
+        ));
+    }
+    if encrypted_files > 0 {
+        warnings.push(format!(
+            "{encrypted_files} NTFS EFS-encrypted file(s) were classified from metadata only; encrypted content is unsupported without a decryption key and was not read"
+        ));
+    }
+    if unknown_encryption_files > 0 {
+        warnings.push(format!(
+            "{unknown_encryption_files} file(s) have unknown encryption status; content was classified from metadata only and was not read; re-enumerate the data source before content access"
+        ));
+    }
     Ok(FileClassificationBoardDto {
         status,
         generated_at: chrono::Utc::now().to_rfc3339(),
@@ -108,8 +140,21 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
         magic_classified_count: magic_classified,
         metadata_classified_count: metadata_classified,
         groups: assemble_groups(&buckets),
-        warnings: Vec::new(),
+        warnings,
     })
+}
+
+fn encryption_counts(conn: &Connection) -> Result<(u64, u64), AnalysisServiceError> {
+    conn.query_row(
+        "SELECT
+             COALESCE(SUM(CASE WHEN encrypted = 1 THEN 1 ELSE 0 END), 0),
+             COALESCE(SUM(CASE WHEN encrypted IS NULL THEN 1 ELSE 0 END), 0)
+         FROM file_entries
+         WHERE entry_type = 'file' COLLATE NOCASE",
+        [],
+        |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
+    )
+    .map_err(AnalysisServiceError::from)
 }
 
 fn assemble_groups(

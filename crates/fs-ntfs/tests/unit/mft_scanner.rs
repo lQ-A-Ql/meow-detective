@@ -186,6 +186,57 @@ fn remove_data_attrs(rec: &mut [u8]) {
     }
 }
 
+fn set_resident_attribute_u32(
+    rec: &mut [u8],
+    attribute_type: u32,
+    field_offset: usize,
+    value: u32,
+) {
+    let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+    while pos + 8 < rec.len() {
+        let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+        if typ == 0xFFFF_FFFF || typ == 0 {
+            break;
+        }
+        let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+        if len == 0 || pos + len > rec.len() {
+            break;
+        }
+        if typ == attribute_type {
+            assert_eq!(rec[pos + 8], 0, "test attribute must be resident");
+            let content_offset = u16::from_le_bytes([rec[pos + 0x14], rec[pos + 0x15]]) as usize;
+            let value_offset = pos + content_offset + field_offset;
+            assert!(value_offset + 4 <= pos + len);
+            rec[value_offset..value_offset + 4].copy_from_slice(&value.to_le_bytes());
+            return;
+        }
+        pos += len;
+    }
+    panic!("attribute type {attribute_type:#x} not found");
+}
+
+fn set_unnamed_attribute_header_flags(rec: &mut [u8], attribute_type: u32, flags: u16) {
+    let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+    while pos + 8 < rec.len() {
+        let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+        if typ == 0xFFFF_FFFF || typ == 0 {
+            break;
+        }
+        let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+        if len == 0 || pos + len > rec.len() {
+            break;
+        }
+        if typ == attribute_type && rec.get(pos + 9) == Some(&0) {
+            let flags_offset = pos + ATTRIBUTE_HEADER_FLAGS_OFFSET;
+            assert!(flags_offset + 2 <= pos + len);
+            rec[flags_offset..flags_offset + 2].copy_from_slice(&flags.to_le_bytes());
+            return;
+        }
+        pos += len;
+    }
+    panic!("unnamed attribute type {attribute_type:#x} not found");
+}
+
 #[test]
 fn parse_valid_file_record() {
     let mut parser = MftRecordParser::new(1024, 512);
@@ -284,6 +335,50 @@ fn parse_inactive_hidden_system_record() {
     assert!(result.deleted);
     assert!(result.hidden);
     assert!(result.system);
+}
+
+#[test]
+fn standard_information_encrypted_flag_marks_record_encrypted() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let mut rec = make_test_record(502, "secret.txt", 5, false);
+    set_resident_attribute_u32(
+        &mut rec,
+        0x10,
+        STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET,
+        FILE_ATTRIBUTE_ENCRYPTED,
+    );
+
+    let result = parser.parse(&rec, 502).unwrap();
+    assert!(result.encrypted);
+}
+
+#[test]
+fn file_name_encrypted_flag_marks_record_encrypted() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let mut rec = make_test_record(503, "secret.txt", 5, false);
+    set_resident_attribute_u32(&mut rec, 0x30, 0x38, FILE_ATTRIBUTE_ENCRYPTED);
+
+    let result = parser.parse(&rec, 503).unwrap();
+    assert!(result.encrypted);
+}
+
+#[test]
+fn unnamed_data_attribute_header_encrypted_flag_marks_record_encrypted() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let mut rec = make_test_record(504, "data-encrypted.txt", 5, false);
+    set_unnamed_attribute_header_flags(&mut rec, 0x80, ATTRIBUTE_FLAG_ENCRYPTED);
+
+    let result = parser.parse(&rec, 504).unwrap();
+    assert!(result.encrypted);
+}
+
+#[test]
+fn record_without_encrypted_flags_is_not_encrypted() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let rec = make_test_record(505, "plain.txt", 5, false);
+
+    let result = parser.parse(&rec, 505).unwrap();
+    assert!(!result.encrypted);
 }
 
 #[test]

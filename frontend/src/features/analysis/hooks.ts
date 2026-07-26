@@ -243,6 +243,10 @@ export function useEvtxEventSummary(
     }),
     initialPageParam: request.offset ?? 0,
     getNextPageParam: (lastPage, pages) => {
+      const lastPageItemCount = lastPage.bootEvents.length
+        + lastPage.securityEvents.length
+        + lastPage.applicationEvents.length;
+      if (lastPageItemCount === 0) return undefined;
       const loaded = pages.reduce(
         (total, page) => total
           + page.bootEvents.length

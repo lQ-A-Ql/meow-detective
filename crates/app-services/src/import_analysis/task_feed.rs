@@ -5,6 +5,7 @@ use super::priority_queue::{PriorityTaskQueue, TaskPriority};
 use super::worker_runtime::{FileTask, SharedAnalysisState};
 use crossbeam_channel::Sender;
 use domain::{DataSourceId, EntryType, FileEntryId};
+use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::{params, Connection};
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -40,7 +41,7 @@ pub(super) fn fetch_analysis_file_page(
     let mut stmt = conn
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type,
-                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
              FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
              ORDER BY path ASC, id ASC
@@ -118,6 +119,7 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
 
 fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
     let entry_type_str: String = row.get(5)?;
+    let encryption_status = file_encryption_status_from_row(row, 16)?;
     Ok(FileTask {
         id: FileEntryId(row.get::<_, String>(0)?),
         data_source_id: DataSourceId(row.get::<_, String>(2)?),
@@ -133,7 +135,7 @@ fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
         deleted: row.get::<_, i32>(8)? != 0,
         hidden: row.get::<_, i32>(9)? != 0,
         system: row.get::<_, i32>(10)? != 0,
-        encrypted: false,
+        encrypted: encryption_status.blocks_content(),
         created_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())

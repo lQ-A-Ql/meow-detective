@@ -1,12 +1,12 @@
 import { Filter, ChevronRight, Save, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
-import { useSearchResults } from '@/features/search/hooks';
+import { useInfiniteSearchResults } from '@/features/search/hooks';
 import {
   readSavedSearchQueries,
   removeSavedSearchQuery,
@@ -40,15 +40,24 @@ export function Search() {
   const [savedOpen, setSavedOpen] = useState(false);
   const [savedName, setSavedName] = useState('');
   const [savedQueries, setSavedQueries] = useState(() => readSavedSearchQueries());
-  const { data } = useSearchResults(activeQuery);
+  const searchQuery = useInfiniteSearchResults(activeQuery);
+  const searchHits = useMemo(
+    () => searchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [searchQuery.data],
+  );
+  const totalHits = searchQuery.data?.pages[0]?.total ?? 0;
+  const searchTookMs = searchQuery.data?.pages.reduce(
+    (total, page) => total + page.tookMs,
+    0,
+  ) ?? 0;
   const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
   const openSearchHitInFiles = useOpenSearchHitInFiles();
   const handleHitRowClick = useCallback(
     (row: SearchHit) => setSelectedSearchHitId(row.fileId),
     [setSelectedSearchHitId],
   );
-  const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
-  const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
+  const selectedHit = searchHits.find((item) => item.fileId === selectedSearchHitId) ?? searchHits[0];
+  const highScoreHits = searchHits.filter((item) => item.score >= 0.8).length;
 
   useEffect(() => {
     const nextQuery = urlQuery?.trim() || defaultQuery;
@@ -77,7 +86,7 @@ export function Search() {
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface min-w-0">
-      <PageSubbar title="搜索控制台" meta={`共 ${data?.total ?? 0} 项命中 / 高置信 ${highScoreHits} 项`}>
+      <PageSubbar title="搜索控制台" meta={`已载入 ${searchHits.length}/${totalHits} 项命中 / 高置信 ${highScoreHits} 项`}>
         <div className="shrink-0 p-3 flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center bg-forensics-surface border border-forensics-border-strong px-3 py-1.5 flex-1 focus-within:border-forensics-text transition-colors">
@@ -185,7 +194,7 @@ export function Search() {
             <div className="flex items-center gap-1.5 cursor-pointer hover:text-forensics-text">
               <span className="text-forensics-text">过滤:</span> 文档 / 表格 / 大文件
             </div>
-            <div className="ml-auto text-forensics-muted">找到 {data?.total ?? 0} 个结果 ({data?.tookMs ?? 0}ms)</div>
+            <div className="ml-auto text-forensics-muted">找到 {totalHits} 个结果 ({searchTookMs}ms)</div>
           </div>
         </div>
       </PageSubbar>
@@ -200,13 +209,22 @@ export function Search() {
 
           <div className="flex-[2] flex flex-col border-b border-forensics-border min-h-0">
             <DenseDataTable<SearchHit>
-              rows={data?.items ?? []}
+              rows={searchHits}
               getRowKey={(row) => row.fileId}
               selectedRowKey={selectedHit?.fileId}
               onRowClick={handleHitRowClick}
               emptyTitle="无搜索命中"
               emptyDescription="请调整检索语句、范围或过滤条件。"
               columns={SEARCH_HIT_COLUMNS}
+              loadContextKey={activeQuery}
+              loadStateKey={searchQuery.dataUpdatedAt}
+              onReachEnd={() => { void searchQuery.fetchNextPage(); }}
+              onRetryLoadMore={() => searchQuery.refetch()}
+              hasMore={searchQuery.hasNextPage}
+              loadingMore={searchQuery.isFetchingNextPage}
+              loadMoreFailed={searchQuery.isFetchNextPageError}
+              initialLoadFailed={searchQuery.isError && searchHits.length === 0}
+              onRetryInitialLoad={() => { void searchQuery.refetch(); }}
             />
           </div>
 

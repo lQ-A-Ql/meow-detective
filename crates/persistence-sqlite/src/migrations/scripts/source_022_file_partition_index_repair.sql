@@ -52,4 +52,3 @@ WHERE target.partition_index IS NULL
 
 CREATE INDEX IF NOT EXISTS idx_source_file_entries_partition
 ON file_entries(data_source_id, partition_index);
-

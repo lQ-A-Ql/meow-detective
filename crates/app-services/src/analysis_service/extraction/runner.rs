@@ -1,13 +1,14 @@
-use super::browser_preload::prepare_browser_preload;
+use super::browser_preload::{prepare_browser_preload, BrowserPreloadContext};
 use super::candidate_order::order_candidates_for_extraction;
 use super::candidate_processing::{
-    capability_for_candidate, discovery_categories, process_candidates, CandidateProcessingContext,
-    CandidateSource, ExistingCheckpoints,
+    capability_for_candidate, discovery_categories, encrypted_candidate_warning,
+    process_candidates, CandidateProcessingContext, CandidateSource, ExistingCheckpoints,
 };
 use super::checkpoint_validation::existing_complete_scan_keys;
 use super::output_persistence::flush_pending_outputs;
 use super::preparation::prepare_registry_preload;
 use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
+use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::acquire_extraction_slot;
 use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
@@ -99,14 +100,14 @@ pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
     .map(|execution| execution.dto)
 }
 
-pub(crate) fn run_analysis_extraction_with_bytes_and_cancel_and_progress<E: std::fmt::Display>(
+pub(crate) fn run_analysis_extraction_with_source_and_progress<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
-    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<Vec<u8>, E>,
+    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, E>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     run_analysis_extraction_with_source(
         conn,
@@ -116,9 +117,7 @@ pub(crate) fn run_analysis_extraction_with_bytes_and_cancel_and_progress<E: std:
         cancel_token,
         progress,
         |candidate, read_limit| {
-            file_reader(candidate, read_limit)
-                .map(CandidateSource::Bytes)
-                .map_err(|error| error.to_string())
+            file_reader(candidate, read_limit).map_err(|error| error.to_string())
         },
     )
 }
@@ -156,39 +155,31 @@ fn run_analysis_extraction_with_source(
         complete: &existing_complete_scans,
         storage_available: checkpoint_storage_available,
     };
+    let mut guarded_file_reader = |candidate: &EvidenceCandidate, read_limit: usize| {
+        if let Some(warning) = encrypted_candidate_warning(candidate) {
+            return Err(warning);
+        }
+        file_reader(candidate, read_limit)
+    };
     let preload = prepare_registry_preload(
         conn,
         &candidates,
         &selected,
         &checkpoints,
         cancel_token,
-        &mut file_reader,
+        &mut guarded_file_reader,
     )?;
     let browser_preload =
-        prepare_browser_preload(conn, &candidates, cancel_token, &mut file_reader)?;
+        prepare_browser_preload(conn, &candidates, cancel_token, &mut guarded_file_reader)?;
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_extraction();
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
     let mut state = ExtractionState::new(&selected);
-    if let Some(registry) = selected
-        .iter()
-        .find(|capability| capability.read_policy == CandidateReadPolicy::RegistryPreload)
-    {
-        for warning in preload.warnings.iter().cloned() {
-            state.record_warning(*registry, warning);
-        }
-    }
-    if let Some(browser) = selected
-        .iter()
-        .find(|capability| capability.key == "BrowserHistory")
-    {
-        for warning in browser_preload.warnings.iter().cloned() {
-            state.record_warning(*browser, warning);
-        }
-    }
+    record_preload_warnings(&selected, &preload, &browser_preload, &mut state);
     let processing_started = Instant::now();
     let processing_context = CandidateProcessingContext::new(
         conn,
+        case_id,
         &selected,
         &checkpoints,
         &preload,
@@ -198,7 +189,7 @@ fn run_analysis_extraction_with_source(
     process_candidates(
         &processing_context,
         candidates,
-        &mut file_reader,
+        &mut guarded_file_reader,
         &mut state,
         &mut progress_reporter,
     )?;
@@ -208,7 +199,11 @@ fn run_analysis_extraction_with_source(
     let persistence_elapsed_ms = flush_pending_outputs(conn, case_id, &mut state)?;
     let retryable_failure_count = state.retryable_failure_count;
     let dto = state.into_dto(conn, Utc::now().to_rfc3339())?;
-    progress_reporter.complete();
+    if retryable_failure_count == 0 {
+        progress_reporter.complete();
+    } else {
+        progress_reporter.fail(retryable_failure_count);
+    }
     Ok(AnalysisExtractionExecution {
         dto,
         retryable_failure_count,
@@ -220,6 +215,30 @@ fn run_analysis_extraction_with_source(
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
         rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
     })
+}
+
+fn record_preload_warnings(
+    selected: &[AnalysisCapability],
+    registry_preload: &RegistryPreloadContext,
+    browser_preload: &BrowserPreloadContext,
+    state: &mut ExtractionState,
+) {
+    if let Some(registry) = selected
+        .iter()
+        .find(|capability| capability.read_policy == CandidateReadPolicy::RegistryPreload)
+    {
+        for warning in registry_preload.warnings.iter().cloned() {
+            state.record_warning(*registry, warning);
+        }
+    }
+    if let Some(browser) = selected
+        .iter()
+        .find(|capability| capability.key == "BrowserHistory")
+    {
+        for warning in browser_preload.warnings.iter().cloned() {
+            state.record_warning(*browser, warning);
+        }
+    }
 }
 
 fn register_candidates(

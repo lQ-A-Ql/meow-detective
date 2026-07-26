@@ -1,6 +1,6 @@
 use super::types::{
     EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
-    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredExtraction,
+    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredEvent,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -11,15 +11,10 @@ pub(super) fn structured_event_from_json(
     fallback_record_id: Option<u64>,
     fallback_timestamp: Option<String>,
     source_path: &str,
-    extraction: &mut EvtxStructuredExtraction,
-) {
+) -> Option<EvtxStructuredEvent> {
     let wrapper = record.get("Event").unwrap_or(record);
-    let Some(system) = wrapper.get("System") else {
-        return;
-    };
-    let Some(event_id) = system.get("EventID").and_then(parse_event_id) else {
-        return;
-    };
+    let system = wrapper.get("System")?;
+    let event_id = system.get("EventID").and_then(parse_event_id)?;
     let provider = provider_name(system);
     let channel = event_channel(system);
     let timestamp = event_timestamp(system)
@@ -30,7 +25,7 @@ pub(super) fn structured_event_from_json(
     match classify_event(event_id, provider.as_deref(), channel.as_deref()) {
         EventClass::Boot(kind) => {
             let note = kind.note().to_string();
-            extraction.boot_events.push(EvtxBootEvent {
+            Some(EvtxStructuredEvent::Boot(EvtxBootEvent {
                 timestamp,
                 event_id,
                 record_id,
@@ -39,31 +34,31 @@ pub(super) fn structured_event_from_json(
                 source_path: source_path.to_string(),
                 note,
                 details: event_data_map(wrapper),
-            });
+            }))
         }
-        EventClass::Security(kind) => extraction.security_events.push(security_event_from_json(
-            wrapper,
-            kind,
-            timestamp,
-            event_id,
-            record_id,
-            provider,
-            source_path,
+        EventClass::Security(kind) => {
+            Some(EvtxStructuredEvent::Security(security_event_from_json(
+                wrapper,
+                kind,
+                timestamp,
+                event_id,
+                record_id,
+                provider,
+                source_path,
+            )))
+        }
+        EventClass::Application(kind) => Some(EvtxStructuredEvent::Application(
+            application_event_from_json(
+                wrapper,
+                kind,
+                timestamp,
+                event_id,
+                record_id,
+                provider,
+                source_path,
+            ),
         )),
-        EventClass::Application(kind) => {
-            extraction
-                .application_events
-                .push(application_event_from_json(
-                    wrapper,
-                    kind,
-                    timestamp,
-                    event_id,
-                    record_id,
-                    provider,
-                    source_path,
-                ));
-        }
-        EventClass::Ignore => {}
+        EventClass::Ignore => None,
     }
 }
 

@@ -3,27 +3,20 @@ use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use std::path::PathBuf;
 
-fn sample_path() -> Option<PathBuf> {
+fn sample_path() -> PathBuf {
     testing::fixtures::local_e01_fixture()
+        .expect("set FORENSICS_E01_FIXTURE to run ignored FAT/ExFAT probe tests")
 }
 
 /// FAT/ExFAT probe smoke test using `FORENSICS_E01_FIXTURE`.
 ///
 /// Local run:
-///   $env:FORENSICS_E01_FIXTURE='E:/pangushi/刘洋/liuyang_pc.E01'
+///   $env:FORENSICS_E01_FIXTURE='<path-to-private-sample.E01>'
 ///   cargo test -p app-services --test fat_exfat_probe_test -- --ignored --nocapture
 #[test]
 #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn fat_exfat_candidates_are_probed_and_openable() {
-    let path = match sample_path() {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "SKIP: FORENSICS_E01_FIXTURE not set; gracefully skipping FAT/ExFAT probe test"
-            );
-            return;
-        }
-    };
+    let path = sample_path();
 
     let mut reader = match E01Reader::open(&path) {
         Ok(r) => r,
@@ -142,13 +135,7 @@ fn fat_exfat_candidates_are_probed_and_openable() {
 #[test]
 #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn fat_exfat_probe_metadata_is_consistent() {
-    let path = match sample_path() {
-        Some(p) => p,
-        None => {
-            eprintln!("SKIP: FORENSICS_E01_FIXTURE not set");
-            return;
-        }
-    };
+    let path = sample_path();
 
     let mut reader = match E01Reader::open(&path) {
         Ok(r) => r,

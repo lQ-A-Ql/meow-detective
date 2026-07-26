@@ -2,6 +2,11 @@ use chrono::{DateTime, TimeZone, Utc};
 use evidence_core::filesystem::invalid_fs_data;
 use std::io;
 
+const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
+const ATTRIBUTE_FLAG_ENCRYPTED: u16 = 0x4000;
+const ATTRIBUTE_HEADER_FLAGS_OFFSET: usize = 0x0C;
+const STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET: usize = 0x20;
+
 /// Parsed MFT FILE record metadata.
 #[derive(Debug, Clone)]
 pub struct MftRecord {
@@ -17,6 +22,7 @@ pub struct MftRecord {
     pub changed_at: Option<DateTime<Utc>>,
     pub hidden: bool,
     pub system: bool,
+    pub encrypted: bool,
     pub deleted: bool,
     pub is_valid: bool,
 }
@@ -45,8 +51,6 @@ impl MftRecordParser {
             return None;
         }
 
-        // Stack-allocated buffer for the common 1024-byte record size,
-        // avoiding per-record heap allocation entirely.
         if record.len() == 1024 {
             let mut rec = [0u8; 1024];
             rec.copy_from_slice(record);
@@ -56,7 +60,6 @@ impl MftRecordParser {
             return parse_mft_record(&rec, record_number);
         }
 
-        // Fallback: reuse the pre-allocated heap buffer for non-standard sizes.
         self.buf.clear();
         self.buf.extend_from_slice(record);
         if apply_record_fixup(&mut self.buf, self.bytes_per_sector as usize).is_err() {
@@ -94,6 +97,8 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
     let mut fn_changed: Option<DateTime<Utc>> = None;
     let mut fn_real_size: Option<u64> = None;
     let mut fn_flags: Option<u32> = None;
+    let mut si_flags: Option<u32> = None;
+    let mut unnamed_data_encrypted = false;
     let mut selected_name_rank: Option<u8> = None;
 
     let mut pos = attr_off;
@@ -116,6 +121,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                         changed_at = ntfs_to_datetime(read_ntfs_time(content, 0x10));
                         accessed_at = ntfs_to_datetime(read_ntfs_time(content, 0x18));
                     }
+                    si_flags = read_u32_at(content, STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET);
                 }
             }
             0x30 => {
@@ -131,10 +137,6 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                                 .collect();
                             let parsed_name = String::from_utf16_lossy(&chars);
 
-                            // Keep name, parent ref, and timestamps from the same
-                            // $FILE_NAME attribute. Real NTFS records often contain
-                            // both DOS 8.3 and Win32 names; mixing name from one
-                            // attribute with parent_ref from another corrupts paths.
                             let rank = file_name_namespace_rank(name_ns);
                             if selected_name_rank.is_none_or(|current| rank > current) {
                                 name = parsed_name;
@@ -166,6 +168,8 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                     pos += len;
                     continue;
                 }
+                unnamed_data_encrypted |= attribute_header_flags(rec, pos, len)
+                    .is_some_and(|flags| flags & ATTRIBUTE_FLAG_ENCRYPTED != 0);
                 let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
                 if is_nonresident {
                     if pos + 0x38 <= rec.len() {
@@ -189,11 +193,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
     let final_accessed = accessed_at.or(fn_accessed);
     let final_changed = changed_at.or(fn_changed);
 
-    let is_valid = if deleted {
-        !name.is_empty()
-    } else {
-        !name.is_empty() || record_number < 24
-    };
+    let is_valid = record_name_is_valid(deleted, &name, record_number);
     if !is_valid {
         return None;
     }
@@ -217,9 +217,33 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         changed_at: final_changed,
         hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
         system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
+        encrypted: si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
+            || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
+            || unnamed_data_encrypted,
         deleted,
         is_valid,
     })
+}
+
+fn record_name_is_valid(deleted: bool, name: &str, record_number: u64) -> bool {
+    !name.is_empty() || (!deleted && record_number < 24)
+}
+
+fn read_u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
+    let end = offset.checked_add(4)?;
+    Some(u32::from_le_bytes(bytes.get(offset..end)?.try_into().ok()?))
+}
+
+fn attribute_header_flags(record: &[u8], attr_pos: usize, attr_len: usize) -> Option<u16> {
+    let attr_end = attr_pos.checked_add(attr_len)?;
+    let flags_start = attr_pos.checked_add(ATTRIBUTE_HEADER_FLAGS_OFFSET)?;
+    let flags_end = flags_start.checked_add(2)?;
+    if flags_end > attr_end {
+        return None;
+    }
+    Some(u16::from_le_bytes(
+        record.get(flags_start..flags_end)?.try_into().ok()?,
+    ))
 }
 
 fn file_name_namespace_rank(namespace: u8) -> u8 {

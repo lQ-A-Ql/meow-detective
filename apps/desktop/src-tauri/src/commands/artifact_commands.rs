@@ -2,11 +2,14 @@ use tauri::State;
 use transport::{
     commands::{GetArtifactByIdRequest, GetArtifactRowsRequest},
     dto::{ArtifactRowDto, FamilyCountDto},
+    paging::PageResponse,
     CommandError,
 };
 
 use super::command_support::{get_case_connection, require_active_case, snapshot_active_case};
 use crate::state::AppState;
+
+const LEGACY_ARTIFACT_ROWS_LIMIT: u32 = 1_000;
 
 /// Get list of artifact families in the current case.
 #[tauri::command]
@@ -37,15 +40,6 @@ pub async fn get_artifact_rows(
     state: State<'_, AppState>,
     family: Option<String>,
 ) -> Result<Vec<ArtifactRowDto>, CommandError> {
-    get_artifact_rows_request(state, GetArtifactRowsRequest { family }).await
-}
-
-/// Get artifact rows with explicit request parameters.
-#[tauri::command]
-pub async fn get_artifact_rows_request(
-    state: State<'_, AppState>,
-    request: GetArtifactRowsRequest,
-) -> Result<Vec<ArtifactRowDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         if snapshot_active_case(&app_state)?.is_none() {
@@ -53,11 +47,47 @@ pub async fn get_artifact_rows_request(
         }
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::artifact_service::get_artifact_rows_for_case(
+        app_services::artifact_service::get_artifact_rows_page_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+            family.as_deref(),
+            0,
+            LEGACY_ARTIFACT_ROWS_LIMIT,
+        )
+        .map(|page| page.items)
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get artifact rows with explicit request parameters.
+#[tauri::command]
+pub async fn get_artifact_rows_request(
+    state: State<'_, AppState>,
+    mut request: GetArtifactRowsRequest,
+) -> Result<PageResponse<ArtifactRowDto>, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(PageResponse {
+                total: 0,
+                items: vec![],
+                next_cursor: None,
+            });
+        }
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::artifact_service::get_artifact_rows_page_with_cursor_for_case(
             &conn,
             &active.case_root,
             &active.meta.id,
             request.family.as_deref(),
+            request.offset,
+            request.limit,
+            request.cursor.as_deref(),
         )
         .map_err(CommandError::from_typed_service_error)
     })

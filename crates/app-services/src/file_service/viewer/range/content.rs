@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use domain::{EntryType, FileEntry};
+use domain::FileEntry;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
@@ -8,7 +8,7 @@ use crate::file_service::{
     viewer::{
         descriptor_file_entry, open_descriptor_image_file, open_descriptor_image_file_with_context,
         open_e01_file, open_e01_reader_cached, open_raw_file, resolve_partition_index_for_entry,
-        PreviewDescriptor, PreviewReadContext, RangeContentReader,
+        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -109,7 +109,7 @@ pub(crate) fn open_file_content_for_entry(
     repo: &FileRepo<'_>,
     entry: &FileEntry,
 ) -> Result<Box<dyn Read>, FileServiceError> {
-    validate_file_entry(entry)?;
+    validate_readable_file_entry(conn, entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => open_logical_file(&source_path, entry),
@@ -130,7 +130,7 @@ pub(crate) fn open_range_content_for_entry(
     repo: &FileRepo<'_>,
     entry: &FileEntry,
 ) -> Result<RangeContentReader, FileServiceError> {
-    validate_file_entry(entry)?;
+    validate_readable_file_entry(conn, entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => {
@@ -155,15 +155,6 @@ fn source_location(
 ) -> Result<(String, String), FileServiceError> {
     repo.find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))
-}
-
-fn validate_file_entry(entry: &FileEntry) -> Result<(), FileServiceError> {
-    if entry.entry_type != EntryType::File {
-        return Err(FileServiceError::invalid_input(
-            "Cannot read a directory as a file",
-        ));
-    }
-    Ok(())
 }
 
 fn open_logical_file(

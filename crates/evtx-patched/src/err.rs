@@ -8,6 +8,7 @@ use log::error;
 
 use crate::evtx_record::RecordId;
 use std::error::Error as StdError;
+use std::fmt;
 use std::io;
 use std::path::Path;
 use winstructs::guid::Guid;
@@ -17,6 +18,27 @@ pub type Result<T> = std::result::Result<T, EvtxError>;
 pub type SerializationResult<T> = std::result::Result<T, crate::err::SerializationError>;
 pub(crate) type DeserializationResult<T> = std::result::Result<T, crate::err::DeserializationError>;
 pub(crate) type EvtxChunkResult<T> = std::result::Result<T, crate::err::ChunkError>;
+
+/// Evidence-source operation that failed before bytes could be parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvtxSourceIoOperation {
+    ReadFileHeader,
+    QueryStreamLength,
+    SeekToChunk,
+    ReadChunk,
+}
+
+impl fmt::Display for EvtxSourceIoOperation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::ReadFileHeader => "reading the file header",
+            Self::QueryStreamLength => "querying the stream length",
+            Self::SeekToChunk => "seeking to a chunk",
+            Self::ReadChunk => "reading a chunk",
+        };
+        formatter.write_str(label)
+    }
+}
 
 /// How many bytes of context we capture on error by default.
 const DEFAULT_LOOKBEHIND_LEN: i32 = 100;
@@ -234,6 +256,9 @@ pub enum ChunkError {
     #[error("Failed to seek to start of chunk.")]
     FailedToSeekToChunk(io::Error),
 
+    #[error("Failed to read chunk data.")]
+    FailedToReadChunk(io::Error),
+
     #[error("Failed to parse chunk header")]
     FailedToParseChunkHeader(#[from] DeserializationError),
 
@@ -270,6 +295,13 @@ pub enum EvtxError {
         source: Box<EvtxError>,
     },
 
+    #[error("EVTX source I/O failed while {operation}")]
+    SourceIo {
+        operation: EvtxSourceIoOperation,
+        #[source]
+        source: io::Error,
+    },
+
     #[error("Calculation Error, reason: {}", .0)]
     CalculationError(String),
 
@@ -299,6 +331,24 @@ impl EvtxError {
         EvtxError::FailedToParseChunk {
             chunk_id,
             source: Box::new(ChunkError::IncompleteChunk),
+        }
+    }
+
+    /// Return the underlying evidence-source I/O failure, if this error has one.
+    pub fn source_io(&self) -> Option<(EvtxSourceIoOperation, &io::Error)> {
+        match self {
+            Self::SourceIo { operation, source } => Some((*operation, source)),
+            Self::FailedToParseChunk { source, .. } => match source.as_ref() {
+                ChunkError::FailedToSeekToChunk(error) => {
+                    Some((EvtxSourceIoOperation::SeekToChunk, error))
+                }
+                ChunkError::FailedToReadChunk(error) => {
+                    Some((EvtxSourceIoOperation::ReadChunk, error))
+                }
+                _ => None,
+            },
+            Self::FailedToParseRecord { source, .. } => source.source_io(),
+            _ => None,
         }
     }
 }

@@ -1,4 +1,5 @@
 use super::artifact_query::count_analysis_artifacts;
+use super::output_digest::output_digest_for_outputs;
 use super::ExtractionOutcome;
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
@@ -10,7 +11,6 @@ use persistence_sqlite::repositories::analysis_scan_repo::{
 };
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use rusqlite::Connection;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use transport::dto::{
     AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisParseStatusDto,
@@ -19,6 +19,12 @@ use transport::dto::{
 pub(super) type AnalysisCheckpointKey = (String, String, u64, String);
 pub(super) type CleanScanKeys = HashSet<AnalysisCheckpointKey>;
 pub(super) type DiagnosticScanKeys = HashMap<AnalysisCheckpointKey, Vec<String>>;
+
+pub(super) struct PersistedExtractionOutcome {
+    pub(super) artifact_count: u64,
+    pub(super) timeline_event_count: u64,
+    pub(super) warnings: Vec<String>,
+}
 
 #[derive(Debug, Clone)]
 struct SectionProgress {
@@ -185,6 +191,26 @@ impl ExtractionState {
         );
     }
 
+    pub(super) fn record_persisted_outcome(
+        &mut self,
+        capability: AnalysisCapability,
+        outcome: PersistedExtractionOutcome,
+    ) {
+        self.scanned_count = self.scanned_count.saturating_add(1);
+        self.timeline_event_count = self
+            .timeline_event_count
+            .saturating_add(outcome.timeline_event_count);
+        self.sections
+            .entry(capability.key.to_string())
+            .or_insert_with(|| SectionProgress::new(capability))
+            .record_checkpoint(
+                outcome.artifact_count,
+                outcome.timeline_event_count,
+                &outcome.warnings,
+            );
+        self.warnings.extend(outcome.warnings);
+    }
+
     pub(super) fn replay_clean(&mut self, capability: AnalysisCapability) {
         self.checkpoint_hit_count += 1;
         self.record_observation(capability, ExtractionOutcome::default());
@@ -212,6 +238,14 @@ impl ExtractionState {
     }
 
     pub(super) fn record_warning(&mut self, capability: AnalysisCapability, warning: String) {
+        self.record_retryable_failure(capability, warning);
+    }
+
+    pub(super) fn record_retryable_failure(
+        &mut self,
+        capability: AnalysisCapability,
+        warning: String,
+    ) {
         self.retryable_failure_count += 1;
         self.sections
             .entry(capability.key.to_string())
@@ -322,121 +356,6 @@ fn scan_has_no_outputs(
 
 fn output_digest(outcome: &ExtractionOutcome) -> String {
     output_digest_for_outputs(&outcome.artifacts, &outcome.timeline_events)
-}
-
-pub(super) fn output_digest_for_outputs<'a>(
-    artifacts: impl IntoIterator<Item = &'a domain::Artifact>,
-    timeline_events: impl IntoIterator<Item = &'a domain::TimelineEvent>,
-) -> String {
-    let mut artifact_records = artifacts
-        .into_iter()
-        .map(artifact_digest_record)
-        .collect::<Vec<_>>();
-    artifact_records.sort_unstable();
-    let mut event_records = timeline_events
-        .into_iter()
-        .map(timeline_digest_record)
-        .collect::<Vec<_>>();
-    event_records.sort_unstable();
-
-    let mut hasher = Sha256::new();
-    update_digest_field(&mut hasher, b"analysis-output-v2");
-    hasher.update((artifact_records.len() as u64).to_le_bytes());
-    for record in artifact_records {
-        update_digest_field(&mut hasher, &record);
-    }
-    hasher.update((event_records.len() as u64).to_le_bytes());
-    for record in event_records {
-        update_digest_field(&mut hasher, &record);
-    }
-    hex::encode(hasher.finalize())
-}
-
-fn artifact_digest_record(artifact: &domain::Artifact) -> Vec<u8> {
-    let mut record = Vec::new();
-    append_record_field(&mut record, artifact.family.as_bytes());
-    append_optional_record_field(
-        &mut record,
-        artifact.source_object_id.as_ref().map(|id| id.0.as_bytes()),
-    );
-    append_optional_record_field(
-        &mut record,
-        artifact.extractor_id.as_deref().map(str::as_bytes),
-    );
-    append_optional_record_field(
-        &mut record,
-        artifact.extractor_version.as_deref().map(str::as_bytes),
-    );
-    append_optional_f32(&mut record, artifact.confidence);
-    append_optional_record_field(
-        &mut record,
-        artifact.source_attribution.as_deref().map(str::as_bytes),
-    );
-    append_record_field(&mut record, artifact.title.as_bytes());
-    append_record_field(&mut record, artifact.summary.as_bytes());
-    append_record_field(
-        &mut record,
-        serde_json::to_string(&artifact.attrs)
-            .unwrap_or_else(|_| "{}".to_string())
-            .as_bytes(),
-    );
-    record
-}
-
-fn timeline_digest_record(event: &domain::TimelineEvent) -> Vec<u8> {
-    let mut record = Vec::new();
-    append_record_field(&mut record, event.source_object_id.as_bytes());
-    append_record_field(&mut record, event.event_type.as_bytes());
-    append_record_field(&mut record, event.timestamp.to_rfc3339().as_bytes());
-    append_record_field(&mut record, event.title.as_bytes());
-    append_record_field(&mut record, event.description.as_bytes());
-    append_optional_record_field(&mut record, event.parser_id.as_deref().map(str::as_bytes));
-    append_optional_record_field(
-        &mut record,
-        event.parser_version.as_deref().map(str::as_bytes),
-    );
-    append_optional_f32(&mut record, event.confidence);
-    append_optional_record_field(
-        &mut record,
-        event.source_attribution.as_deref().map(str::as_bytes),
-    );
-    append_record_field(
-        &mut record,
-        serde_json::to_string(&event.attrs)
-            .unwrap_or_else(|_| "{}".to_string())
-            .as_bytes(),
-    );
-    record
-}
-
-fn append_optional_record_field(record: &mut Vec<u8>, value: Option<&[u8]>) {
-    match value {
-        Some(value) => {
-            record.push(1);
-            append_record_field(record, value);
-        }
-        None => record.push(0),
-    }
-}
-
-fn append_optional_f32(record: &mut Vec<u8>, value: Option<f32>) {
-    match value {
-        Some(value) => {
-            record.push(1);
-            record.extend_from_slice(&value.to_bits().to_le_bytes());
-        }
-        None => record.push(0),
-    }
-}
-
-fn append_record_field(record: &mut Vec<u8>, value: &[u8]) {
-    record.extend_from_slice(&(value.len() as u64).to_le_bytes());
-    record.extend_from_slice(value);
-}
-
-fn update_digest_field(hasher: &mut Sha256, value: &[u8]) {
-    hasher.update((value.len() as u64).to_le_bytes());
-    hasher.update(value);
 }
 
 fn extraction_status(scanned_count: u64, warnings: &[String]) -> AnalysisParseStatusDto {

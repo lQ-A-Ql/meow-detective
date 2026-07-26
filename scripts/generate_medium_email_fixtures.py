@@ -10,6 +10,7 @@ All data is synthetic; no personal information is used.
 """
 
 import json
+import hashlib
 import random
 from datetime import datetime, timedelta, timezone
 from email import message_from_bytes
@@ -20,7 +21,7 @@ from email.mime.image import MIMEImage
 from email.mime.message import MIMEMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import format_datetime, make_msgid
+from email.utils import format_datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,13 +36,21 @@ def rfc2822_date(dt: datetime) -> str:
     return format_datetime(dt, usegmt=True)
 
 
+def deterministic_message_id(label: str, index: int, domain: str = "example.com") -> str:
+    return f"<meow-detective-{label}-{index:03d}@{domain}>"
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
 def build_plain_eml(index: int, dt: datetime) -> bytes:
     msg = MIMEText(f"This is plain text message number {index}.\nNo attachments.\n", "plain", "utf-8")
     msg["From"] = "alice@example.com"
     msg["To"] = "bob@example.com"
     msg["Subject"] = f"Plain text message {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("plain", index)
     msg["X-Mailer"] = "Python unittest generator"
     return msg.as_bytes()
 
@@ -53,7 +62,7 @@ def build_html_eml(index: int, dt: datetime) -> bytes:
     msg["Cc"] = "Dave <dave@example.com>"
     msg["Subject"] = f"HTML message {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("html", index)
     msg.attach(MIMEText(f"Plain fallback for message {index}.", "plain", "utf-8"))
     msg.attach(MIMEText(
         f"<html><body><p>HTML body for message <b>{index}</b>.</p></body></html>",
@@ -68,7 +77,7 @@ def build_attachment_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "recipient@example.com"
     msg["Subject"] = f"Document attached {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("attachment", index)
     msg.attach(MIMEText(f"Please see the attached document for message {index}.", "plain", "utf-8"))
     payload = f"Attachment payload {index}".encode()
     att = MIMEApplication(payload, "octet-stream")
@@ -83,7 +92,7 @@ def build_multipart_related_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "subscriber@example.com"
     msg["Subject"] = f"Newsletter {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("related", index)
     msg.attach(MIMEText(f"Newsletter plain text {index}.", "plain", "utf-8"))
     msg.attach(MIMEText(
         f'<html><body><img src="cid:image{index}"><p>Newsletter HTML {index}</p></body></html>',
@@ -103,7 +112,7 @@ def build_encoded_headers_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = formataddr(("韩梅梅", "hanmeimei@example.com"))
     msg["Subject"] = Header(f"中文主题 {index}", "utf-8")
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("encoded", index)
     return msg.as_bytes()
 
 
@@ -113,7 +122,7 @@ def build_japanese_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "tanaka@example.jp"
     msg["Subject"] = Header(f"日本語の件名 {index}", "utf-8")
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.jp")
+    msg["Message-ID"] = deterministic_message_id("japanese", index, "example.jp")
     return msg.as_bytes()
 
 
@@ -123,7 +132,7 @@ def build_thread_eml(index: int, dt: datetime, parent_id: str | None) -> bytes:
     msg["To"] = "thread@example.com"
     msg["Subject"] = "Re: project plan"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("thread", index)
     if parent_id:
         msg["In-Reply-To"] = parent_id
         msg["References"] = parent_id
@@ -137,7 +146,7 @@ def build_x_headers_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "local@example.com"
     msg["Subject"] = f"X-Headers {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("x-headers", index)
     msg["X-Mailer"] = "CustomMailer/2.0"
     msg["X-Originating-IP"] = f"192.168.1.{index % 256}"
     return msg.as_bytes()
@@ -152,7 +161,7 @@ def build_qp_body_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "dest@example.com"
     msg["Subject"] = f"Quoted-printable {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("quoted-printable", index)
     del msg["Content-Transfer-Encoding"]
     msg["Content-Transfer-Encoding"] = "quoted-printable"
     return msg.as_bytes()
@@ -163,7 +172,7 @@ def build_no_subject_eml(index: int, dt: datetime) -> bytes:
     msg["From"] = "nosubject@example.com"
     msg["To"] = "recipient@example.com"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("no-subject", index)
     return msg.as_bytes()
 
 
@@ -173,7 +182,7 @@ def build_long_subject_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "recipient@example.com"
     msg["Subject"] = f"Very long subject line repeated for message {index}: " + "word " * 20
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("long-subject", index)
     return msg.as_bytes()
 
 
@@ -183,14 +192,14 @@ def build_nested_rfc822_eml(index: int, dt: datetime) -> bytes:
     msg["To"] = "archive@example.com"
     msg["Subject"] = f"Forwarded message {index}"
     msg["Date"] = rfc2822_date(dt)
-    msg["Message-ID"] = make_msgid(domain="example.com")
+    msg["Message-ID"] = deterministic_message_id("nested", index)
     msg.attach(MIMEText(f"See attached forwarded message {index}.\n", "plain", "utf-8"))
     inner = MIMEText(f"Original body {index}.\n", "plain", "utf-8")
     inner["From"] = "original@example.com"
     inner["To"] = "final@example.com"
     inner["Subject"] = f"Original message {index}"
     inner["Date"] = rfc2822_date(dt - timedelta(hours=1))
-    inner["Message-ID"] = make_msgid(domain="example.com")
+    inner["Message-ID"] = deterministic_message_id("nested-inner", index)
     msg.attach(MIMEMessage(inner))
     return msg.as_bytes()
 
@@ -233,6 +242,7 @@ def extract_summary(data: bytes) -> dict:
 def generate_eml_fixtures():
     EML_DIR.mkdir(parents=True, exist_ok=True)
     expected = []
+    manifest = []
     base_dt = datetime(2024, 3, 1, 9, 0, 0, tzinfo=timezone.utc)
 
     for idx, (name, builder) in enumerate(EML_BUILDERS):
@@ -241,12 +251,17 @@ def generate_eml_fixtures():
         filename = f"{name}.eml"
         path = EML_DIR / filename
         path.write_bytes(data)
+        manifest.append((filename, len(data), sha256_hex(data)))
         expected.append({
             "file": filename,
             "type": "eml",
             "expected": extract_summary(data),
         })
 
+    manifest_rows = "\n".join(
+        f"| `{filename}` | {size} | `{digest}` |"
+        for filename, size, digest in manifest
+    )
     readme = EML_DIR / "README.md"
     readme.write_text(
         "# public-medium EML fixtures\n\n"
@@ -268,7 +283,14 @@ def generate_eml_fixtures():
         "| long_subject.eml | Long folded Subject header |\n"
         "| nested_rfc822.eml | message/rfc822 forward attachment |\n\n"
         "## Visibility\n\npublic-medium\n\n"
-        "## Source\n\nSynthetic samples. No personal data.\n\n"
+        "## Provenance\n\n"
+        "- Generator: `scripts/generate_medium_email_fixtures.py`\n"
+        "- Reproducibility: fixed timestamps, random seed, and Message-ID values\n"
+        "- License: repository MIT license\n"
+        "- Sensitivity review: synthetic identities and reserved example domains only; no personal data, credentials, or tokens\n\n"
+        "| File | Bytes | SHA-256 |\n"
+        "|------|------:|---------|\n"
+        f"{manifest_rows}\n\n"
         "## Expected JSON\n\n`expected.json` in this directory.\n",
         encoding="utf-8",
     )
@@ -309,7 +331,7 @@ def generate_mbox_fixture():
         sender_email, sender_name = senders[i % len(senders)]
         subject = subjects[i % len(subjects)]
         dt = base_dt + timedelta(minutes=i * 13)
-        msg_id = make_msgid(domain="example.com")
+        msg_id = deterministic_message_id("mbox", i + 1)
         body = f"Body of message {i+1} from {sender_name}.\n"
         if i % 7 == 0:
             body = body.replace(".", ".\n>From escaped line should be unescaped.", 1)
@@ -325,6 +347,7 @@ def generate_mbox_fixture():
         lines.append("\n")
 
     path.write_text("".join(lines), encoding="utf-8")
+    data = path.read_bytes()
 
     readme = MBOX_DIR / "README.md"
     readme.write_text(
@@ -335,7 +358,13 @@ def generate_mbox_fixture():
         "|------|------|---------|\n"
         f"| `{filename}` | mboxrd-style | 55 mixed messages, 5 rotating senders, mboxrd `>From ` escaping |\n\n"
         "## Visibility\n\npublic-medium\n\n"
-        "## Source\n\nSynthetic. No personal data.\n\n"
+        "## Provenance\n\n"
+        "- Generator: `scripts/generate_medium_email_fixtures.py`\n"
+        "- Reproducibility: fixed timestamps and Message-ID values\n"
+        "- License: repository MIT license\n"
+        "- Sensitivity review: synthetic identities and reserved example domains only; no personal data, credentials, or tokens\n"
+        f"- Bytes: `{len(data)}`\n"
+        f"- SHA-256: `{sha256_hex(data)}`\n\n"
         "## Expected JSON\n\n`expected.json` in this directory.\n",
         encoding="utf-8",
     )

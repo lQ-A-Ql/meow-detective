@@ -65,6 +65,36 @@ fn idempotent_rerun() {
 }
 
 #[test]
+fn latest_marker_does_not_hide_missing_earlier_migrations() {
+    let conn = open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE schema_migrations (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO schema_migrations (name) VALUES (?1)",
+        [runner::latest_version()],
+    )
+    .unwrap();
+
+    let applied = runner::run_all(&conn).unwrap();
+
+    assert_eq!(applied as usize, runner::migration_count() - 1);
+    let cases_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'cases'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(cases_exists);
+}
+
+#[test]
 fn version_query() {
     let conn = open_in_memory().unwrap();
     let version = runner::current_version(&conn).unwrap();

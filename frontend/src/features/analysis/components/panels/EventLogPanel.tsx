@@ -33,14 +33,22 @@ export function EventLogPanel({
   onActiveViewChange,
   hasMore = false,
   loadingMore = false,
+  loadMoreFailed = false,
   onLoadMore,
+  onRetryLoadMore,
+  loadContextKey,
+  loadStateKey,
 }: {
   summary?: EvtxEventSummary;
   activeView?: EvtxEventView;
   onActiveViewChange?: (view: EvtxEventView) => void;
   hasMore?: boolean;
   loadingMore?: boolean;
+  loadMoreFailed?: boolean;
   onLoadMore?: () => void;
+  onRetryLoadMore?: () => unknown;
+  loadContextKey?: string;
+  loadStateKey?: string | number;
 }) {
   const { t } = useTranslation();
   const [localActiveTab, setLocalActiveTab] = useState<EventLogTabKey>('boot');
@@ -69,6 +77,11 @@ export function EventLogPanel({
     warnings: ['Event log summary unavailable.'],
     generatedAt: '',
   };
+  const tableLoadContextKey = JSON.stringify([
+    loadContextKey ?? null,
+    activeTab,
+    info.generatedAt,
+  ]);
 
   const logonEvents = useMemo(
     () => info.securityEvents.filter((e: EvtxSecurityEvent) =>
@@ -143,12 +156,16 @@ export function EventLogPanel({
         <DenseDataTable
           rows={info.bootEvents}
           columns={bootColumns}
-          getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
+          getRowKey={(row) => `${row.sourcePath}-${row.eventId}-${row.recordId ?? row.timestamp}`}
           emptyTitle={t('eventLog.empty.boot.title')}
           emptyDescription={t('eventLog.empty.boot.description')}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
           onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
         />
       </DenseTableFrame>
     ),
@@ -157,12 +174,16 @@ export function EventLogPanel({
         <DenseDataTable
           rows={logonEvents}
           columns={logonColumns}
-          getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
+          getRowKey={(row) => `${row.sourcePath}-${row.eventId}-${row.recordId ?? row.timestamp}`}
           emptyTitle={t('eventLog.empty.logon.title')}
           emptyDescription={t('eventLog.empty.logon.description')}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
           onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
         />
       </DenseTableFrame>
     ),
@@ -171,12 +192,16 @@ export function EventLogPanel({
         <DenseDataTable
           rows={processEvents}
           columns={processColumns}
-          getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
+          getRowKey={(row) => `${row.sourcePath}-${row.eventId}-${row.recordId ?? row.timestamp}`}
           emptyTitle={t('eventLog.empty.process.title')}
           emptyDescription={t('eventLog.empty.process.description')}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
           onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
         />
       </DenseTableFrame>
     ),
@@ -185,12 +210,16 @@ export function EventLogPanel({
         <DenseDataTable
           rows={accountEvents}
           columns={accountColumns}
-          getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
+          getRowKey={(row) => `${row.sourcePath}-${row.eventId}-${row.recordId ?? row.timestamp}`}
           emptyTitle={t('eventLog.empty.account.title')}
           emptyDescription={t('eventLog.empty.account.description')}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
           onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
         />
       </DenseTableFrame>
     ),
@@ -199,12 +228,16 @@ export function EventLogPanel({
         <DenseDataTable
           rows={info.applicationEvents}
           columns={appColumns}
-          getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
+          getRowKey={(row) => `${row.sourcePath}-${row.eventId}-${row.recordId ?? row.timestamp}`}
           emptyTitle={t('eventLog.empty.application.title')}
           emptyDescription={t('eventLog.empty.application.description')}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
           onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
         />
       </DenseTableFrame>
     ),

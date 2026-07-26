@@ -20,14 +20,14 @@ use sha2::{Digest, Sha256};
 use transport::dto::MediaRangeRequestDto;
 
 const CASE_ROOT_ENV: &str = "FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT";
+const ORACLE_ENV: &str = "FORENSICS_PVE_RBD_PREVIEW_ORACLE";
+const DEFAULT_ORACLE_RELATIVE_PATH: &str =
+    "../../testdata/real-samples/pve-rbd-preview-oracle.json";
 const MAX_RUNTIME_CACHE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_RSS_DELTA_MB: i64 = 640;
 const RANGE_64_KIB: u32 = 64 * 1024;
 const RANGE_1_MIB: u32 = 1024 * 1024;
 const LIFECYCLE_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
-const FIXED_ORACLE_JSON: &str =
-    include_str!("../../../testdata/real-samples/pve-rbd-preview-oracle.json");
-
 const ROOT_DIRECT: &str = "Partition 0 (XFS) - Partition 0";
 const ROOT_HOME: &str = "Partition 1 (XFS) - centos/home";
 const ROOT_SYSTEM: &str = "Partition 2 (XFS) - centos/root";
@@ -847,8 +847,9 @@ fn lifecycle_checkpoint(phase: &'static str, stats: PreviewRuntimeStats) -> Life
 }
 
 fn validate_fixed_oracle(report: &PreviewPerformanceReport) {
+    let oracle_json = required_oracle_json();
     let expected: FixedOracleManifest =
-        serde_json::from_str(FIXED_ORACLE_JSON).expect("parse fixed preview byte oracle");
+        serde_json::from_str(&oracle_json).expect("parse fixed preview byte oracle");
     assert_eq!(expected.schema_version, 1, "fixed oracle schema version");
     for file in expected.files {
         assert!(
@@ -882,6 +883,20 @@ fn validate_fixed_oracle(report: &PreviewPerformanceReport) {
             range.scenario
         );
     }
+}
+
+fn required_oracle_json() -> String {
+    let path = std::env::var_os(ORACLE_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_ORACLE_RELATIVE_PATH)
+        });
+    std::fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "{ORACLE_ENV} must point to the PVE RBD preview oracle, or place it at {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn required_case_root() -> PathBuf {

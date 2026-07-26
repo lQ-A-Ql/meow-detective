@@ -12,6 +12,9 @@ export interface SearchHit {
 
 export interface SearchResultPage {
   total: number;
+  available: number;
+  truncated: boolean;
   tookMs: number;
   items: SearchHit[];
+  nextCursor?: string;
 }

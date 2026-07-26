@@ -1,6 +1,6 @@
 use super::*;
 use crate::{open_in_memory, open_or_create, runner};
-use domain::{DataSourceKind, EntryType};
+use domain::{DataSourceKind, EntryType, FileEncryptionStatus};
 use tempfile::TempDir;
 
 fn insert_data_source(conn: &Connection, id: &DataSourceId) {
@@ -61,6 +61,62 @@ fn find_by_path_prefix_escapes_like_wildcards() {
     let underscore = repo.find_by_path_prefix(&ds_id, "root/test_file").unwrap();
     assert_eq!(underscore.len(), 1);
     assert_eq!(underscore[0].id.0, "underscore-literal");
+}
+
+#[test]
+fn encrypted_flag_round_trips_through_file_repository() {
+    let conn = open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-encrypted".to_string());
+    let mut encrypted = entry("efs-file", &ds_id, "Users/alice/secret.txt");
+    encrypted.encrypted = true;
+
+    let repo = FileRepo::new(&conn);
+    repo.insert_batch(&[encrypted]).unwrap();
+
+    let stored = repo
+        .find_by_id(&FileEntryId("efs-file".to_string()))
+        .unwrap()
+        .expect("encrypted file entry");
+    assert!(stored.encrypted);
+    assert_eq!(
+        repo.find_encryption_status(&FileEntryId("efs-file".to_string()))
+            .unwrap(),
+        Some(FileEncryptionStatus::Encrypted)
+    );
+
+    repo.insert_batch(&[entry("clear-file", &ds_id, "Users/alice/plain.txt")])
+        .unwrap();
+    assert_eq!(
+        repo.find_encryption_status(&FileEntryId("clear-file".to_string()))
+            .unwrap(),
+        Some(FileEncryptionStatus::Clear)
+    );
+}
+
+#[test]
+fn unknown_encryption_status_is_not_projected_as_clear() {
+    let conn = open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, data_source_id, path, name, entry_type)
+         VALUES ('legacy-file', 'legacy-source', 'old.bin', 'old.bin', 'file')",
+        [],
+    )
+    .unwrap();
+    let repo = FileRepo::new(&conn);
+
+    assert_eq!(
+        repo.find_encryption_status(&FileEntryId("legacy-file".to_string()))
+            .unwrap(),
+        Some(FileEncryptionStatus::Unknown)
+    );
+    let entry = repo
+        .find_by_id(&FileEntryId("legacy-file".to_string()))
+        .unwrap()
+        .unwrap();
+    assert!(entry.encrypted, "legacy bool projection must fail closed");
 }
 
 #[test]

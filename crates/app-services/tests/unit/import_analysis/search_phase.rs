@@ -5,7 +5,7 @@ use domain::DataSourcePlatform;
 use rusqlite::params;
 use tempfile::TempDir;
 
-use super::setup_case_db;
+use super::setup_source_db;
 use crate::import_analysis::{
     run_search_index_phase, search_phase::search_candidate_page_sql, SearchIndexPhaseOptions,
 };
@@ -54,15 +54,16 @@ fn dedicated_search_phase_indexes_linux_passwd_content_with_truthful_stats() {
     std::fs::write(etc.join("passwd"), passwd).expect("write passwd fixture");
     std::fs::write(etc.join("empty.txt"), []).expect("write empty fixture");
 
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
              VALUES
-             ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0),
-             ('empty', ?1, 'etc/empty.txt', 'empty.txt', 'file', 0, 'txt', 0, 0, 0)",
+             ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0, 0),
+             ('empty', ?1, 'etc/empty.txt', 'empty.txt', 'file', 0, 'txt', 0, 0, 0, 0)",
             params![data_source_id.0, passwd.len() as u64],
         )
         .expect("insert search candidates");
@@ -113,18 +114,19 @@ fn sql_eligibility_matches_extension_and_linux_basename_policy() {
     std::fs::write(etc.join("spaced-passwd"), "spaced basename marker")
         .expect("write linux basename fixture");
 
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
              VALUES
-             ('upper', ?1, 'etc/UPPER.TXT', 'UPPER.TXT', 'file', 22, NULL, 0, 0, 0),
-             ('spaced-passwd', ?1, 'etc/spaced-passwd', ' passwd ', 'file', 22, '', 0, 0, 0),
-             ('ext-override', ?1, 'etc/missing-override', 'looks.txt', 'file', 10, 'bin', 0, 0, 0),
-             ('too-large', ?1, 'etc/missing-large.txt', 'missing-large.txt', 'file', ?2, 'txt', 0, 0, 0),
-             ('unknown-size', ?1, 'etc/missing-size.txt', 'missing-size.txt', 'file', NULL, 'txt', 0, 0, 0)",
+             ('upper', ?1, 'etc/UPPER.TXT', 'UPPER.TXT', 'file', 22, NULL, 0, 0, 0, 0),
+             ('spaced-passwd', ?1, 'etc/spaced-passwd', ' passwd ', 'file', 22, '', 0, 0, 0, 0),
+             ('ext-override', ?1, 'etc/missing-override', 'looks.txt', 'file', 10, 'bin', 0, 0, 0, 0),
+             ('too-large', ?1, 'etc/missing-large.txt', 'missing-large.txt', 'file', ?2, 'txt', 0, 0, 0, 0),
+             ('unknown-size', ?1, 'etc/missing-size.txt', 'missing-size.txt', 'file', NULL, 'txt', 0, 0, 0, 0)",
             params![
                 data_source_id.0,
                 infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 1
@@ -153,13 +155,14 @@ fn sql_eligibility_matches_extension_and_linux_basename_policy() {
 #[test]
 fn windows_sql_eligibility_excludes_extensionless_linux_basename() {
     let tmp = TempDir::new().expect("create Windows eligibility fixture");
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', 12, NULL, 0, 0, 0)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', 12, NULL, 0, 0, 0, 0)",
             [&data_source_id.0],
         )
         .expect("insert Linux-only candidate");
@@ -192,13 +195,14 @@ fn failed_search_generation_preserves_the_previous_complete_index() {
         b"root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n";
     std::fs::write(etc.join("passwd"), passwd).expect("write passwd fixture");
 
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0, 0)",
             params![data_source_id.0, passwd.len() as u64],
         )
         .expect("insert initial search candidate");
@@ -216,12 +220,13 @@ fn failed_search_generation_preserves_the_previous_complete_index() {
     };
     run_search_index_phase(options.clone()).expect("build initial complete index");
 
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("reopen source database");
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("reopen source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('missing', ?1, 'etc/missing.txt', 'missing.txt', 'file', 12, 'txt', 0, 0, 0)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('missing', ?1, 'etc/missing.txt', 'missing.txt', 'file', 12, 'txt', 0, 0, 0, 0)",
             [&data_source_id.0],
         )
         .expect("insert unreadable search candidate");
@@ -250,13 +255,14 @@ fn interrupted_search_publish_restores_previous_generation_before_retry() {
     let passwd = b"root:x:0:0:root:/root:/bin/bash\n";
     std::fs::write(etc.join("passwd"), passwd).expect("write passwd fixture");
 
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0, 0)",
             params![data_source_id.0, passwd.len() as u64],
         )
         .expect("insert search candidate");
@@ -307,13 +313,14 @@ fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
     let passwd = b"priority-marker:x:1:1::/nonexistent:/usr/sbin/nologin\n";
     std::fs::write(etc.join("passwd"), passwd).expect("write passwd fixture");
 
-    let (db_path, data_source_id) = setup_case_db(&tmp);
-    let connection = persistence_sqlite::open_or_create(&db_path).expect("open source database");
+    let (db_path, data_source_id) = setup_source_db(&tmp);
+    let connection =
+        persistence_sqlite::open_existing_source(&db_path).expect("open source database");
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0)",
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+             VALUES ('passwd', ?1, 'etc/passwd', 'passwd', 'file', ?2, NULL, 0, 0, 0, 0)",
             params![data_source_id.0, passwd.len() as u64],
         )
         .expect("insert passwd candidate");
@@ -325,8 +332,8 @@ fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
         connection
             .execute(
                 "INSERT INTO file_entries
-                 (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-                 VALUES (?1, ?2, ?3, ?4, 'file', ?5, 'txt', 0, 0, 0)",
+                 (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
+                 VALUES (?1, ?2, ?3, ?4, 'file', ?5, 'txt', 0, 0, 0, 0)",
                 params![
                     format!("generic-{index:03}"),
                     data_source_id.0,
@@ -340,10 +347,10 @@ fn extensionless_linux_forensic_files_consume_budget_before_generic_text() {
     connection
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
              VALUES
-             ('missing-after-limit', ?1, 'zzz/missing-after-limit.txt',
-              'missing-after-limit.txt', 'file', 24, 'txt', 0, 0, 0)",
+              ('missing-after-limit', ?1, 'zzz/missing-after-limit.txt',
+               'missing-after-limit.txt', 'file', 24, 'txt', 0, 0, 0, 0)",
             [&data_source_id.0],
         )
         .expect("insert unreadable candidate beyond index limit");

@@ -17,6 +17,7 @@ pub struct NtfsDirectoryEntry {
     pub mft_ref: u64,
     pub hidden: bool,
     pub system: bool,
+    pub encrypted: bool,
 }
 
 /// Parse INDX entries from $INDEX_ROOT buffer. Returns DirEntry with

@@ -247,6 +247,106 @@ fn identical_timestamp_pagination_is_stable() {
 }
 
 #[test]
+fn keyset_pagination_preserves_timestamp_and_id_order_without_duplicates() {
+    let conn = setup_db();
+    let repo = TimelineRepo::new(&conn);
+    let events = vec![
+        make_event("same-04", "file_modify", "2025-01-03T00:00:00Z"),
+        make_event("same-02", "file_modify", "2025-01-03T00:00:00Z"),
+        make_event("same-03", "file_modify", "2025-01-03T00:00:00Z"),
+        make_event("older-02", "file_modify", "2025-01-02T00:00:00Z"),
+        make_event("older-01", "file_modify", "2025-01-02T00:00:00Z"),
+    ];
+    repo.insert_batch(&events).unwrap();
+
+    let first = repo
+        .query_filtered_after(None, 2, None, None, Some("file_modify"))
+        .unwrap();
+    let second = repo
+        .query_filtered_after(
+            Some(&first.last().unwrap().sort_key),
+            2,
+            None,
+            None,
+            Some("file_modify"),
+        )
+        .unwrap();
+    let third = repo
+        .query_filtered_after(
+            Some(&second.last().unwrap().sort_key),
+            2,
+            None,
+            None,
+            Some("file_modify"),
+        )
+        .unwrap();
+    let actual = first
+        .into_iter()
+        .chain(second)
+        .chain(third)
+        .map(|row| row.event.id.0)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        actual,
+        vec!["same-02", "same-03", "same-04", "older-01", "older-02"]
+    );
+}
+
+#[test]
+fn snapshot_keyset_excludes_later_inserts_and_survives_consumed_prefix_deletion() {
+    let conn = setup_db();
+    let repo = TimelineRepo::new(&conn);
+    repo.insert_batch(&[
+        make_event("latest", "file_modify", "2025-01-03T00:00:00Z"),
+        make_event("middle", "file_modify", "2025-01-02T00:00:00Z"),
+        make_event("oldest", "file_modify", "2025-01-01T00:00:00Z"),
+    ])
+    .unwrap();
+    let high_water = repo.snapshot_high_water().unwrap();
+    assert_eq!(
+        repo.count_filtered_at_snapshot(high_water, None, None, Some("file_modify"))
+            .unwrap(),
+        3
+    );
+    let first = repo
+        .query_filtered_after_at_snapshot(None, high_water, 1, None, None, Some("file_modify"))
+        .unwrap();
+
+    repo.insert_batch(&[make_event(
+        "inserted-after-snapshot",
+        "file_modify",
+        "2025-01-04T00:00:00Z",
+    )])
+    .unwrap();
+    assert_eq!(
+        repo.count_filtered_at_snapshot(high_water, None, None, Some("file_modify"))
+            .unwrap(),
+        3
+    );
+    conn.execute("DELETE FROM timeline_events WHERE id = 'latest'", [])
+        .unwrap();
+
+    let remaining = repo
+        .query_filtered_after_at_snapshot(
+            Some(&first[0].sort_key),
+            high_water,
+            10,
+            None,
+            None,
+            Some("file_modify"),
+        )
+        .unwrap();
+    assert_eq!(
+        remaining
+            .iter()
+            .map(|row| row.event.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["middle", "oldest"]
+    );
+}
+
+#[test]
 fn missing_timestamp_rows_sort_last_and_load_as_default_timestamp() {
     let conn = setup_nullable_ts_db();
     conn.execute_batch(
@@ -267,6 +367,46 @@ fn missing_timestamp_rows_sort_last_and_load_as_default_timestamp() {
     assert_eq!(
         results[1].timestamp,
         chrono::DateTime::<chrono::Utc>::default()
+    );
+}
+
+#[test]
+fn keyset_pagination_reaches_all_missing_timestamp_rows() {
+    let conn = setup_nullable_ts_db();
+    conn.execute_batch(
+        "INSERT INTO timeline_events (id, source_object_id, event_type, ts, title, description, attrs)
+         VALUES
+            ('dated-02', 'src-1', 'file_modify', '2025-01-02T00:00:00Z', 'Dated 2', '', '{}'),
+            ('dated-01', 'src-1', 'file_modify', '2025-01-01T00:00:00Z', 'Dated 1', '', '{}'),
+            ('missing-02', 'src-1', 'file_modify', NULL, 'Missing 2', '', '{}'),
+            ('missing-01', 'src-1', 'file_modify', NULL, 'Missing 1', '', '{}'),
+            ('missing-03', 'src-1', 'file_modify', NULL, 'Missing 3', '', '{}');",
+    )
+    .unwrap();
+    let repo = TimelineRepo::new(&conn);
+
+    let mut after = None;
+    let mut actual = Vec::new();
+    loop {
+        let page = repo
+            .query_filtered_after(after.as_ref(), 2, None, None, Some("file_modify"))
+            .unwrap();
+        if page.is_empty() {
+            break;
+        }
+        after = page.last().map(|row| row.sort_key.clone());
+        actual.extend(page.into_iter().map(|row| row.event.id.0));
+    }
+
+    assert_eq!(
+        actual,
+        vec![
+            "dated-02",
+            "dated-01",
+            "missing-01",
+            "missing-02",
+            "missing-03",
+        ]
     );
 }
 

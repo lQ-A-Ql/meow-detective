@@ -173,6 +173,10 @@ fn enumerate_filesystem_cancel_rolls_back_transaction() {
             "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
         ))
         .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
+    ))
+    .unwrap();
     let cancel = AtomicBool::new(false);
     let ds_id = DataSourceId("ds-cancel-enum".to_string());
     let fs = CancelAfterRootFs;
@@ -206,6 +210,10 @@ fn enumerate_filesystem_persists_root_and_child_changed_at() {
         "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
     ))
     .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
+    ))
+    .unwrap();
     let root_changed_at = chrono::DateTime::from_timestamp(1_700_000_000, 123).unwrap();
     let child_changed_at = chrono::DateTime::from_timestamp(1_800_000_000, 456).unwrap();
     let fs = TimestampedFs {
@@ -234,6 +242,10 @@ fn enumerate_filesystem_preserves_typed_completeness_diagnostics() {
     .unwrap();
     conn.execute_batch(include_str!(
         "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
     ))
     .unwrap();
     let stats = enumerate_filesystem(
@@ -307,6 +319,7 @@ fn mft_root_record_becomes_tree_root() {
             changed_at: None,
             hidden: false,
             system: false,
+            encrypted: false,
             deleted: false,
             is_valid: true,
         },
@@ -323,6 +336,7 @@ fn mft_root_record_becomes_tree_root() {
             changed_at: None,
             hidden: false,
             system: false,
+            encrypted: true,
             deleted: false,
             is_valid: true,
         },
@@ -345,6 +359,7 @@ fn mft_root_record_becomes_tree_root() {
         child.parent_id.as_ref().map(|id| id.0.as_str()),
         Some("mft:5")
     );
+    assert!(child.encrypted);
 }
 
 #[test]
@@ -374,6 +389,10 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
             "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
         ))
         .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
+    ))
+    .unwrap();
     let ds_id = DataSourceId("ds-deleted-orphan".to_string());
     let mut entries = records_to_file_entries(
         &[
@@ -390,6 +409,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
                 changed_at: None,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 deleted: false,
                 is_valid: true,
             },
@@ -406,6 +426,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
                 changed_at: None,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 deleted: true,
                 is_valid: true,
             },

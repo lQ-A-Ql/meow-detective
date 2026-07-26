@@ -6,6 +6,7 @@ import {
   getArtifactFamilies,
   getArtifactFamilyCounts,
   getArtifactRows,
+  getArtifactRowsPage,
 } from './artifacts';
 
 vi.mock('./client', () => ({
@@ -42,6 +43,21 @@ describe('artifacts API', () => {
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.artifacts.GET_ARTIFACT_ROWS, {
       family: undefined,
     });
+  });
+
+  it('getArtifactRowsPage forwards the opaque cursor without an offset', async () => {
+    requestMock.mockResolvedValueOnce({ total: 1, items: [] } as never);
+    await getArtifactRowsPage('browser', 'artifact-cursor-1', 200);
+    expect(requestMock).toHaveBeenCalledWith(
+      COMMANDS.artifacts.GET_ARTIFACT_ROWS_REQUEST,
+      {
+        request: {
+          family: 'browser',
+          limit: 200,
+          cursor: 'artifact-cursor-1',
+        },
+      },
+    );
   });
 
   it('getArtifactById sends artifactId in request payload', async () => {

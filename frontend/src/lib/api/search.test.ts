@@ -33,6 +33,19 @@ describe('search API', () => {
     });
   });
 
+  it('searchFiles sends an opaque continuation cursor without changing the offset', async () => {
+    requestMock.mockResolvedValueOnce({ items: [], total: 100 } as never);
+    await searchFiles('malware', 0, 25, 'v1.payload.digest');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.search.SEARCH_FILES_REQUEST, {
+      request: {
+        query: 'malware',
+        offset: 0,
+        limit: 25,
+        cursor: 'v1.payload.digest',
+      },
+    });
+  });
+
   it('searchFiles sends empty string query', async () => {
     requestMock.mockResolvedValueOnce({ items: [], total: 0 } as never);
     await searchFiles('');

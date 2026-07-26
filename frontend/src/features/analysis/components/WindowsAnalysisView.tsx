@@ -35,7 +35,10 @@ interface QueryState<T> {
 interface InfiniteQueryState<T> extends QueryState<T> {
   hasNextPage?: boolean;
   isFetchingNextPage: boolean;
+  isFetchNextPageError: boolean;
+  dataUpdatedAt: number;
   fetchNextPage: () => Promise<unknown>;
+  refetch: () => Promise<unknown>;
 }
 
 export interface WindowsAnalysisViewProps {
@@ -52,6 +55,7 @@ export interface WindowsAnalysisViewProps {
   emailSummary: QueryState<EmailExtractionSummary>;
   eventLogSummary: InfiniteQueryState<EvtxEventSummary>;
   eventLogView: EvtxEventView;
+  eventLogLoadContextKey: string;
   onEventLogViewChange: (view: EvtxEventView) => void;
   classificationBoard: QueryState<FileClassificationBoardData>;
   evidencePending: boolean;
@@ -75,6 +79,7 @@ export function WindowsAnalysisView({
   emailSummary,
   eventLogSummary,
   eventLogView,
+  eventLogLoadContextKey,
   onEventLogViewChange,
   classificationBoard,
   evidencePending,
@@ -154,10 +159,16 @@ export function WindowsAnalysisView({
                   summary={eventLogSummary.data}
                   activeView={eventLogView}
                   onActiveViewChange={onEventLogViewChange}
+                  loadContextKey={eventLogLoadContextKey}
+                  loadStateKey={eventLogSummary.dataUpdatedAt}
                   hasMore={Boolean(eventLogSummary.hasNextPage)}
                   loadingMore={eventLogSummary.isFetchingNextPage}
+                  loadMoreFailed={eventLogSummary.isFetchNextPageError}
                   onLoadMore={() => {
                     void eventLogSummary.fetchNextPage();
+                  }}
+                  onRetryLoadMore={() => {
+                    return eventLogSummary.refetch();
                   }}
                 />
               )}

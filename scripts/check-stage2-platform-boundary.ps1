@@ -260,11 +260,11 @@ $sourceDbPath = Join-Path $repoRoot 'crates/app-services/src/source_db.rs'
 if (Test-Path -LiteralPath $sourceDbPath -PathType Leaf) {
   $sourceDb = Read-StrictUtf8 $sourceDbPath
   foreach ($required in @(
-    'pub fn open_ready_source_connections(',
-    'open_ready_source_by_id(case_conn, case_root, case_id, &source.id)'
+    'open_ready_source_by_id, open_ready_source_connections,',
+    'open_ready_source_connections_read_only, open_ready_source_read_only_by_id'
   )) {
     if (-not $sourceDb.Contains($required)) {
-      $errors.Add("source database aggregation is not ready-state isolated: $required")
+      $errors.Add("source database facade does not expose the ready-state-isolated route: $required")
     }
   }
 }
@@ -274,6 +274,10 @@ if (Test-Path -LiteralPath $readySourcePath -PathType Leaf) {
   $readySource = Read-StrictUtf8 $readySourcePath
   foreach ($required in @(
     'pub fn open_ready_source_by_id(',
+    'pub fn open_ready_source_connections(',
+    'pub fn open_ready_source_connections_read_only(',
+    'open_ready_source_connections_with(case_conn, case_root, case_id, open_ready_source_by_id)',
+    'let sources = super::ready_data_sources(case_conn, case_id)?;',
     '.find_by_case(case_id)?',
     'eq_ignore_ascii_case("ready")',
     'DataSourcePlatform::parse_explicit(&storage.platform)'
@@ -301,6 +305,7 @@ foreach ($relativePath in @(
   if (Test-Path -LiteralPath $absolutePath -PathType Leaf) {
     $content = Read-StrictUtf8 $absolutePath
     if (-not $content.Contains('open_ready_source_connections(') -and
+        -not $content.Contains('open_ready_source_connections_read_only(') -and
         -not $content.Contains('ready_data_sources(')) {
       $errors.Add("case-wide aggregation bypasses the shared ready-source router: $relativePath")
     }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::validation::{DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT};
+use crate::paging::validate_opaque_cursor;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +16,8 @@ pub struct GetTimelineRequest {
     pub time_end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
 }
 
 impl GetTimelineRequest {
@@ -26,6 +29,12 @@ impl GetTimelineRequest {
         if let (Some(start), Some(end)) = (&self.time_start, &self.time_end) {
             if start > end {
                 return Err("timeStart must be before or equal to timeEnd".to_string());
+            }
+        }
+        if let Some(cursor) = self.cursor.as_deref() {
+            validate_opaque_cursor(cursor).map_err(|error| error.to_string())?;
+            if self.offset != 0 {
+                return Err("offset must be zero when cursor is provided".to_string());
             }
         }
         Ok(())

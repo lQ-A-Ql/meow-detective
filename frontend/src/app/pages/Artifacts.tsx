@@ -11,7 +11,7 @@ import {
   useArtifactById,
   useArtifactFamilies,
   useArtifactFamilyCounts,
-  useArtifactRows,
+  useInfiniteArtifactRows,
 } from '@/features/artifacts/hooks';
 import { ArtifactField } from '@/features/artifacts/components/ArtifactField';
 import { useArtifactsSelectionModel } from '@/features/artifacts/use-artifacts-page-model';
@@ -29,7 +29,12 @@ export function Artifacts() {
 
   const { data: families } = useArtifactFamilies();
   const { data: familyCounts } = useArtifactFamilyCounts();
-  const { data: rows } = useArtifactRows(selectedArtifactFamily);
+  const artifactRowsQuery = useInfiniteArtifactRows(selectedArtifactFamily);
+  const rows = useMemo(
+    () => artifactRowsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [artifactRowsQuery.data],
+  );
+  const totalRows = artifactRowsQuery.data?.pages[0]?.total ?? 0;
   const selectedArtifactQuery = useArtifactById(selectedArtifactId);
 
   useEffect(() => {
@@ -47,12 +52,12 @@ export function Artifacts() {
 
   const tableRows = useMemo(() => {
     if (!selectedArtifactQuery.data) {
-      return rows ?? [];
+      return rows;
     }
-    if ((rows ?? []).some((row) => row.id === selectedArtifactQuery.data?.id)) {
-      return rows ?? [];
+    if (rows.some((row) => row.id === selectedArtifactQuery.data?.id)) {
+      return rows;
     }
-    return [selectedArtifactQuery.data, ...(rows ?? [])];
+    return [selectedArtifactQuery.data, ...rows];
   }, [rows, selectedArtifactQuery.data]);
 
   const selectedArtifact =
@@ -96,7 +101,7 @@ export function Artifacts() {
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
       <PageSubbar
         title="痕迹家族控制"
-        meta={`Family ${selectedArtifactFamily} / 记录 ${tableRows.length} 条 / 来源范围：Windows 用户活动 / 壳对象`}
+        meta={`Family ${selectedArtifactFamily} / 记录 ${tableRows.length}/${totalRows} 条 / 来源范围：Windows 用户活动 / 壳对象`}
       >
         <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto px-2">
           {families?.map((family) => {
@@ -130,6 +135,15 @@ export function Artifacts() {
             emptyTitle="当前痕迹家族无记录"
             emptyDescription="请切换 family 或等待解析任务完成。"
             columns={tableColumns}
+            loadContextKey={selectedArtifactFamily}
+            loadStateKey={artifactRowsQuery.dataUpdatedAt}
+            onReachEnd={() => { void artifactRowsQuery.fetchNextPage(); }}
+            onRetryLoadMore={() => artifactRowsQuery.refetch()}
+            hasMore={artifactRowsQuery.hasNextPage}
+            loadingMore={artifactRowsQuery.isFetchingNextPage}
+            loadMoreFailed={artifactRowsQuery.isFetchNextPageError}
+            initialLoadFailed={artifactRowsQuery.isError && rows.length === 0}
+            onRetryInitialLoad={() => { void artifactRowsQuery.refetch(); }}
           />
         </div>
 

@@ -1,0 +1,298 @@
+{
+  "description": "Expected output for public-small synthetic email fixtures parsed by the EML/EMLX/MBOX/PST/OST extractors.",
+  "samples": [
+    {
+      "file": "plain.eml",
+      "type": "eml",
+      "expected": {
+        "from": "alice@example.com",
+        "to": ["bob@example.com"],
+        "cc": [],
+        "bcc": [],
+        "replyTo": null,
+        "returnPath": null,
+        "subject": "Hello from the lab",
+        "messageId": "<plain-001@example.com>",
+        "inReplyTo": null,
+        "references": [],
+        "attachments": [],
+        "attachmentCount": 0,
+        "bodyPreviewContains": "plain-text test message",
+        "bodyPlainContains": "plain-text test message",
+        "bodyHtml": null,
+        "xMailer": null,
+        "xOriginatingIp": null,
+        "messageClass": null,
+        "isDeleted": null,
+        "sentAt": "2024-01-15T09:30:00+00:00"
+      }
+    },
+    {
+      "file": "multipart.eml",
+      "type": "eml",
+      "expected": {
+        "from": "investigator@forensics.local",
+        "to": ["analyst@forensics.local"],
+        "cc": ["cc-recipient@forensics.local"],
+        "bcc": ["bcc-recipient@forensics.local"],
+        "replyTo": "noreply@forensics.local",
+        "returnPath": "<bounces@forensics.local>",
+        "subject": "Multipart email with attachment",
+        "messageId": "<multipart-001@forensics.local>",
+        "inReplyTo": "<thread-parent@forensics.local>",
+        "references": ["thread-parent@forensics.local", "thread-prev@forensics.local"],
+        "attachments": ["payload.bin"],
+        "attachmentCount": 1,
+        "attachmentDetails": [
+          {
+            "fileName": "payload.bin",
+            "mimeType": "application/octet-stream",
+            "size": 21,
+            "contentId": null
+          }
+        ],
+        "bodyPreviewContains": "plain text body",
+        "bodyPlainContains": "plain text body",
+        "bodyHtmlContains": "<b>HTML</b>",
+        "xMailer": "ForensicsWorkbench-Test/1.0",
+        "xOriginatingIp": "203.0.113.42",
+        "messageClass": null,
+        "isDeleted": null,
+        "sentAt": "2024-01-16T14:45:00+00:00"
+      }
+    },
+    {
+      "file": "encoded.eml",
+      "type": "eml",
+      "expected": {
+        "fromContains": "encoded-sender@example.com",
+        "to": ["recipient@example.com"],
+        "cc": [],
+        "bcc": [],
+        "replyTo": null,
+        "returnPath": null,
+        "subjectContains": "Тестовое",
+        "messageId": "<encoded-001@example.com>",
+        "inReplyTo": null,
+        "references": [],
+        "attachments": [],
+        "attachmentCount": 0,
+        "bodyPlainContains": "Здравствуй мир",
+        "bodyHtml": null,
+        "xMailer": null,
+        "xOriginatingIp": null,
+        "messageClass": null,
+        "isDeleted": null,
+        "sentAt": "2024-01-17T11:00:00+00:00"
+      }
+    },
+    {
+      "file": "apple.emlx",
+      "type": "emlx",
+      "expected": {
+        "from": "apple-user@example.com",
+        "to": ["apple-friend@example.com"],
+        "cc": [],
+        "bcc": [],
+        "replyTo": null,
+        "returnPath": null,
+        "subject": "EMLX with size line",
+        "messageId": "<emlx-001@example.com>",
+        "inReplyTo": null,
+        "references": [],
+        "attachments": [],
+        "attachmentCount": 0,
+        "bodyPlainContains": "Apple Mail EMLX format",
+        "bodyHtml": null,
+        "xMailer": "Apple Mail (2.3654)",
+        "xOriginatingIp": "198.51.100.7",
+        "messageClass": null,
+        "isDeleted": null,
+        "sentAt": "2024-01-18T16:20:00+00:00"
+      }
+    },
+    {
+      "file": "simple.mbox",
+      "type": "mbox",
+      "expected": {
+        "messagesCount": 2,
+        "containerPath": "simple.mbox",
+        "messages": [
+          {
+            "fromContains": "alice@example.com",
+            "to": ["bob@example.com"],
+            "cc": [],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "First mbox message",
+            "messageId": "<mbox-simple-001@example.com>",
+            "inReplyTo": null,
+            "references": [],
+            "attachments": [],
+            "attachmentCount": 0,
+            "bodyPlainContains": "first plain text message",
+            "bodyHtml": null,
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": null,
+            "isDeleted": null,
+            "sentAt": "2024-01-15T09:30:00+00:00"
+          },
+          {
+            "fromContains": "bob@example.com",
+            "to": ["alice@example.com"],
+            "cc": [],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "Re: First mbox message",
+            "messageId": "<mbox-simple-002@example.com>",
+            "inReplyTo": "<mbox-simple-001@example.com>",
+            "references": [],
+            "attachments": [],
+            "attachmentCount": 0,
+            "bodyPlainContains": "second plain text message",
+            "bodyHtml": null,
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": null,
+            "isDeleted": null,
+            "sentAt": "2024-01-15T10:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "file": "multipart.mbox",
+      "type": "mbox",
+      "expected": {
+        "messagesCount": 1,
+        "containerPath": "multipart.mbox",
+        "messages": [
+          {
+            "fromContains": "investigator@forensics.local",
+            "to": ["analyst@forensics.local"],
+            "cc": ["cc-recipient@forensics.local"],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "Multipart mbox message with attachment",
+            "messageId": "<mbox-multipart-001@forensics.local>",
+            "inReplyTo": null,
+            "references": [],
+            "attachments": ["mbox-payload.bin"],
+            "attachmentCount": 1,
+            "attachmentDetails": [
+              {
+                "fileName": "mbox-payload.bin",
+                "mimeType": "application/octet-stream",
+                "size": 26,
+                "contentId": null
+              }
+            ],
+            "bodyPlainContains": "plain text part",
+            "bodyHtmlContains": "<b>HTML</b>",
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": null,
+            "isDeleted": null,
+            "sentAt": "2024-01-16T14:45:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "file": "mboxrd_escaped.mbox",
+      "type": "mbox",
+      "expected": {
+        "messagesCount": 1,
+        "containerPath": "mboxrd_escaped.mbox",
+        "messages": [
+          {
+            "fromContains": "sender@example.com",
+            "to": ["recipient@example.com"],
+            "cc": [],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "mboxrd escaped From line",
+            "messageId": "<mboxrd-escaped-001@example.com>",
+            "inReplyTo": null,
+            "references": [],
+            "attachments": [],
+            "attachmentCount": 0,
+            "bodyPlainContains": "From the beginning",
+            "bodyPlainNotContains": ">From",
+            "bodyHtml": null,
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": null,
+            "isDeleted": null,
+            "sentAt": "2024-01-17T11:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "file": "synthetic.pst",
+      "type": "pst",
+      "expected": {
+        "messagesCount": 1,
+        "containerPathContains": "synthetic.pst",
+        "messages": [
+          {
+            "fromContains": "sender@test.com",
+            "to": [],
+            "cc": [],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "Test Subject",
+            "messageId": "",
+            "inReplyTo": null,
+            "references": [],
+            "attachments": [],
+            "attachmentCount": 0,
+            "bodyPlainContains": "Test body content.",
+            "bodyHtml": null,
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": "IPM.Note",
+            "isDeleted": false
+          }
+        ]
+      }
+    },
+    {
+      "file": "synthetic.ost",
+      "type": "ost",
+      "expected": {
+        "messagesCount": 1,
+        "containerPathContains": "synthetic.ost",
+        "messages": [
+          {
+            "fromContains": "sender@test.com",
+            "to": [],
+            "cc": [],
+            "bcc": [],
+            "replyTo": null,
+            "returnPath": null,
+            "subject": "Test Subject",
+            "messageId": "",
+            "inReplyTo": null,
+            "references": [],
+            "attachments": [],
+            "attachmentCount": 0,
+            "bodyPlainContains": "Test body content.",
+            "bodyHtml": null,
+            "xMailer": null,
+            "xOriginatingIp": null,
+            "messageClass": "IPM.Note",
+            "isDeleted": false
+          }
+        ]
+      }
+    }
+  ]
+}

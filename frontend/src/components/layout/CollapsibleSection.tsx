@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 export interface CollapsibleSectionProps {
   /** Header content rendered next to the collapse chevron. */
@@ -31,9 +32,11 @@ export function CollapsibleSection({
     <CollapsiblePrimitive.Root open={open} onOpenChange={setOpen} className={className}>
       <div className="flex items-center justify-between gap-3">
         <CollapsiblePrimitive.Trigger asChild>
-          <button
+          <Button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            variant="forensicsGhost"
+            size="inline"
+            className="min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left"
             aria-expanded={open}
           >
             {open ? (
@@ -42,7 +45,7 @@ export function CollapsibleSection({
               <ChevronRight size={14} className="shrink-0 text-forensics-muted" />
             )}
             {title}
-          </button>
+          </Button>
         </CollapsiblePrimitive.Trigger>
         {headerExtra}
       </div>

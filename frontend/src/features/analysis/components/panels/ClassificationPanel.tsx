@@ -1,20 +1,12 @@
 import { Download, FileText, RefreshCw, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
-import type {
-  AnalysisClassifiedFile,
-  AnalysisFileClassification,
-  EvidenceClassificationSummary,
-} from '@/types/models';
+import type { EvidenceClassificationSummary } from '@/types/models';
 import {
   CATEGORY_COLORS,
   CATEGORY_ICONS,
   EmptyLine,
-  formatProvenanceSummary,
   formatSize,
   Metric,
-  ProvenancePanel,
-  DenseTableFrame,
   StatusPill,
   statusLabel,
   SummaryStrip,

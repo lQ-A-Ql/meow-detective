@@ -19,6 +19,7 @@ pub async fn search_files(
             query,
             offset: 0,
             limit: infrastructure::constants::SEARCH_PAGE_SIZE as u32,
+            cursor: None,
         },
     )
     .await
@@ -55,33 +56,36 @@ pub async fn search_files_request(
                     Some(active.meta.id.0.clone()),
                 ),
                 None => {
-                    return Ok(SearchResultPageDto {
-                        total: 0,
-                        took_ms: 0,
-                        items: vec![],
-                    })
+                    return Ok(empty_search_result_page());
                 }
             }
         };
         // Guard is now dropped — search with released lock
         let start = std::time::Instant::now();
         let Some(case_id_string) = case_id.clone() else {
-            return Ok(SearchResultPageDto {
-                total: 0,
-                took_ms: 0,
-                items: vec![],
-            });
+            return Ok(empty_search_result_page());
         };
         let conn = app_services::connection::open_case_db(&case_root.join("app.db"))
             .map_err(CommandError::from_typed_service_error)?;
-        let result = app_services::search_service::search_files_for_case_instrumented(
-            &conn,
-            &case_root,
-            &domain::CaseId(case_id_string.clone()),
-            &request.query,
-            request.offset,
-            request.limit,
-        )
+        let result = if request.cursor.is_some() || request.offset == 0 {
+            app_services::search_service::search_files_for_case_cursor_instrumented(
+                &conn,
+                &case_root,
+                &domain::CaseId(case_id_string.clone()),
+                &request.query,
+                request.cursor.as_deref(),
+                request.limit,
+            )
+        } else {
+            app_services::search_service::search_files_for_case_instrumented(
+                &conn,
+                &case_root,
+                &domain::CaseId(case_id_string.clone()),
+                &request.query,
+                request.offset,
+                request.limit,
+            )
+        }
         .map_err(CommandError::from_typed_service_error)?;
         let elapsed_ms = start.elapsed().as_millis() as u32;
         event_bridge::emit_performance_report_ready(&app, &result.performance_report);
@@ -93,6 +97,7 @@ pub async fn search_files_request(
                     "query": &query_for_step,
                     "offset": request.offset,
                     "limit": request.limit,
+                    "cursorContinuation": request.cursor.is_some(),
                     "totalHits": result.page.total,
                 })
                 .to_string();
@@ -112,4 +117,15 @@ pub async fn search_files_request(
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+fn empty_search_result_page() -> SearchResultPageDto {
+    SearchResultPageDto {
+        total: 0,
+        available: 0,
+        truncated: false,
+        took_ms: 0,
+        items: vec![],
+        next_cursor: None,
+    }
 }

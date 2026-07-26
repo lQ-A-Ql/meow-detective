@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const FIXTURE_ENV: &str = "FORENSICS_LINUX_E01_FIXTURE";
+const ORACLE_ENV: &str = "FORENSICS_LINUX_PREVIEW_ORACLE";
+const DEFAULT_ORACLE_RELATIVE_PATH: &str =
+    "../../testdata/real-samples/native-linux-xfs-preview-oracle.json";
 const LVM_POOL_OFFSET: u64 = 1_074_790_400;
 const EXPECTED_VG_NAME: &str = "cl";
 const EXPECTED_LV_NAME: &str = "root";
@@ -20,9 +23,6 @@ const RANGE_1_MIB: usize = 1024 * 1024;
 const REQUIRED_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const WARM_REPEAT_COUNT: usize = 12;
 const MAX_SCANNED_DIRECTORIES: usize = 20_000;
-const FIXED_ORACLE_JSON: &str =
-    include_str!("../../../testdata/real-samples/native-linux-xfs-preview-oracle.json");
-
 #[derive(Debug)]
 struct TargetFile {
     logical_path: String,
@@ -240,8 +240,9 @@ fn native_linux_xfs_preview_performance() {
 }
 
 fn validate_fixed_oracle(report: &NativeXfsPreviewReport) {
+    let oracle_json = required_oracle_json();
     let expected: FixedOracle =
-        serde_json::from_str(FIXED_ORACLE_JSON).expect("parse native XFS preview oracle");
+        serde_json::from_str(&oracle_json).expect("parse native XFS preview oracle");
     assert_eq!(expected.schema_version, report.schema_version);
     assert_eq!(
         expected.fixture_fingerprint.algorithm,
@@ -276,6 +277,20 @@ fn validate_fixed_oracle(report: &NativeXfsPreviewReport) {
         assert_eq!(actual.actual_bytes, expected_range.actual_bytes);
         assert_eq!(actual.sha256, expected_range.sha256);
     }
+}
+
+fn required_oracle_json() -> String {
+    let path = std::env::var_os(ORACLE_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_ORACLE_RELATIVE_PATH)
+        });
+    std::fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "{ORACLE_ENV} must point to the native Linux preview oracle, or place it at {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn required_fixture_path() -> PathBuf {

@@ -1,0 +1,35 @@
+Content-Type: multipart/related;
+ boundary="===============8535227093834884838=="
+MIME-Version: 1.0
+From: newsletter@example.com
+To: subscriber@example.com
+Subject: Newsletter 3
+Date: Fri, 01 Mar 2024 12:00:00 GMT
+Message-ID: <meow-detective-related-003@example.com>
+
+--===============8535227093834884838==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+TmV3c2xldHRlciBwbGFpbiB0ZXh0IDMu
+
+--===============8535227093834884838==
+Content-Type: text/html; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHk+PGltZyBzcmM9ImNpZDppbWFnZTMiPjxwPk5ld3NsZXR0ZXIgSFRNTCAzPC9w
+PjwvYm9keT48L2h0bWw+
+
+--===============8535227093834884838==
+Content-Type: image/png
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-ID: <image3>
+Content-Disposition: inline; filename="inline3.png"
+
+jH1yRzQs2BAPL293DWXWcOWOA1HYro5Pbqw0L8Ixt7CHFus/wSiWuWIjF3SUKHczwo7oulO9tWuI
+JFd9U+zCig==
+
+--===============8535227093834884838==--

@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SearchResultPage } from '@/types/models';
 import { Search } from './Search';
 
 const mocks = vi.hoisted(() => ({
-  searchResults: vi.fn(),
+  infiniteSearchResults: vi.fn(),
   selectionState: {
     selectedSearchHitId: undefined as string | undefined,
     setSelectedSearchHitId: vi.fn(),
@@ -15,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/search/hooks', () => ({
-  useSearchResults: mocks.searchResults,
+  useInfiniteSearchResults: mocks.infiniteSearchResults,
 }));
 
 vi.mock('@/stores/selection-store', () => ({
@@ -45,6 +46,16 @@ function queryState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function infiniteQueryState(page: typeof emptySearchResult) {
+  return queryState({
+    data: { pages: [page], pageParams: [0] },
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+  });
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -58,22 +69,30 @@ function renderPage() {
   );
 }
 
-const emptySearchResult = { total: 0, tookMs: 0, items: [] };
-const populatedSearchResult = {
+const emptySearchResult: SearchResultPage = {
+  total: 0,
+  available: 0,
+  truncated: false,
+  tookMs: 0,
+  items: [],
+};
+const populatedSearchResult: SearchResultPage = {
   total: 2,
+  available: 2,
+  truncated: false,
   tookMs: 15,
   items: [
     {
       fileId: 'file-1',
       path: '/evidence/docs/report.doc',
       score: 0.92,
-      snippets: [{ text: 'Found sensitive data in report' }],
+      snippets: [{ text: 'Found sensitive data in report', highlights: [] }],
     },
     {
       fileId: 'file-2',
       path: '/evidence/docs/budget.xls',
       score: 0.85,
-      snippets: [{ text: 'Financial records for Q4' }],
+      snippets: [{ text: 'Financial records for Q4', highlights: [] }],
     },
   ],
 };
@@ -90,17 +109,17 @@ describe('Search page', () => {
   });
 
   it('renders empty state when no search results', () => {
-    mocks.searchResults.mockReturnValue(queryState({ data: emptySearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(emptySearchResult));
 
     renderPage();
 
     expect(screen.getByText('无搜索命中')).toBeDefined();
     expect(screen.getByText('请调整检索语句、范围或过滤条件。')).toBeDefined();
-    expect(screen.getByText(/共 0 项命中/)).toBeDefined();
+    expect(screen.getByText(/已载入 0\/0 项命中/)).toBeDefined();
   });
 
   it('shows query input with default query', () => {
-    mocks.searchResults.mockReturnValue(queryState({ data: emptySearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(emptySearchResult));
 
     renderPage();
 
@@ -109,7 +128,7 @@ describe('Search page', () => {
   });
 
   it('renders search results table when data is available', () => {
-    mocks.searchResults.mockReturnValue(queryState({ data: populatedSearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(populatedSearchResult));
 
     renderPage();
 
@@ -119,23 +138,23 @@ describe('Search page', () => {
     expect(screen.getAllByText('0.85').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Found sensitive data in report').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Financial records for Q4').length).toBeGreaterThan(0);
-    expect(screen.getByText(/共 2 项命中/)).toBeDefined();
+    expect(screen.getByText(/已载入 2\/2 项命中/)).toBeDefined();
     expect(screen.getByText(/高置信 2 项/)).toBeDefined();
   });
 
   it('uses q from initial URL as active query', () => {
     mocks.searchParams = new URLSearchParams('q=abc');
-    mocks.searchResults.mockReturnValue(queryState({ data: emptySearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(emptySearchResult));
 
     renderPage();
 
     expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('abc');
-    expect(mocks.searchResults).toHaveBeenLastCalledWith('abc');
+    expect(mocks.infiniteSearchResults).toHaveBeenLastCalledWith('abc');
   });
 
   it('syncs active query when URL q changes on same page', async () => {
     mocks.searchParams = new URLSearchParams('q=abc');
-    mocks.searchResults.mockReturnValue(queryState({ data: emptySearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(emptySearchResult));
     const view = renderPage();
 
     mocks.searchParams = new URLSearchParams('q=def');
@@ -150,12 +169,12 @@ describe('Search page', () => {
     await waitFor(() =>
       expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('def'),
     );
-    expect(mocks.searchResults).toHaveBeenLastCalledWith('def');
+    expect(mocks.infiniteSearchResults).toHaveBeenLastCalledWith('def');
   });
 
   it('falls back to default query when URL q is empty', async () => {
     mocks.searchParams = new URLSearchParams('q=abc');
-    mocks.searchResults.mockReturnValue(queryState({ data: emptySearchResult }));
+    mocks.infiniteSearchResults.mockReturnValue(infiniteQueryState(emptySearchResult));
     const view = renderPage();
 
     mocks.searchParams = new URLSearchParams('q=');
@@ -172,6 +191,6 @@ describe('Search page', () => {
         'content:password AND path:doc',
       ),
     );
-    expect(mocks.searchResults).toHaveBeenLastCalledWith('content:password AND path:doc');
+    expect(mocks.infiniteSearchResults).toHaveBeenLastCalledWith('content:password AND path:doc');
   });
 });

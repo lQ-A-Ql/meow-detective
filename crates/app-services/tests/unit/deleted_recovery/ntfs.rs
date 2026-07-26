@@ -1,7 +1,9 @@
 use persistence_sqlite::repositories::deleted_recovery_repo::RecoveryRangeRecord;
 use sha2::{Digest, Sha256};
 
-use super::*;
+use super::content::{
+    bounded_range_chunks, classify_file_level_efs, content_claim, MAX_RECOVERY_RANGE_BYTES,
+};
 
 fn content_range(ordinal: u32, logical_offset: u64, length: u64) -> RecoveryRangeRecord {
     RecoveryRangeRecord {
@@ -61,4 +63,47 @@ fn complete_empty_file_has_a_stable_empty_content_digest() {
     assert_eq!(allocation_state, "free");
     assert_eq!(completeness, "complete");
     assert_eq!(digest, Some(hex::encode(Sha256::digest([]))));
+}
+
+#[test]
+fn large_ntfs_runs_are_split_into_independently_verifiable_ranges() {
+    let total = MAX_RECOVERY_RANGE_BYTES * 2 + 17;
+    let chunks = bounded_range_chunks(total);
+
+    assert_eq!(
+        chunks,
+        vec![
+            (0, MAX_RECOVERY_RANGE_BYTES),
+            (MAX_RECOVERY_RANGE_BYTES, MAX_RECOVERY_RANGE_BYTES),
+            (MAX_RECOVERY_RANGE_BYTES * 2, 17),
+        ]
+    );
+    assert!(chunks
+        .iter()
+        .all(|(_, length)| *length <= MAX_RECOVERY_RANGE_BYTES));
+    assert_eq!(chunks.iter().map(|(_, length)| length).sum::<u64>(), total);
+}
+
+#[test]
+fn file_level_efs_deleted_candidate_is_never_content_recoverable() {
+    let candidate = fs_ntfs::NtfsDeletedFileRecord {
+        record_number: 42,
+        sequence_number: 7,
+        parent_ref: 5,
+        name: "secret.txt".to_string(),
+        is_dir: false,
+        encrypted: true,
+        size: 0,
+        record_source_offset: 4096,
+        record_size: 1024,
+        has_attribute_list: false,
+        extents: Vec::new(),
+    };
+
+    let mut warnings = Vec::new();
+    assert_eq!(
+        classify_file_level_efs(&candidate, &mut warnings),
+        Some(("unverified", "metadata_only", None))
+    );
+    assert_eq!(warnings.len(), 1);
 }

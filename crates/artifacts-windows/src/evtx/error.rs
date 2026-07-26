@@ -5,6 +5,18 @@ use thiserror::Error;
 /// Errors that can occur while extracting candidates from EVTX files.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EvtxBootError {
+    /// The evidence reader was interrupted by the extraction cancellation token.
+    #[error("EVTX extraction cancelled")]
+    Cancelled,
+
+    /// The backing evidence stream failed before the requested bytes were available.
+    #[error("{path} EVTX source I/O failed while {operation} ({kind:?})")]
+    SourceIo {
+        path: String,
+        operation: String,
+        kind: std::io::ErrorKind,
+    },
+
     /// The source path is not within the bounded EVTX surface this parser supports.
     #[error("{path} is outside bounded EVTX parser scope")]
     UnsupportedPath { path: String },

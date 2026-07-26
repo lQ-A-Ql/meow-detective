@@ -10,9 +10,10 @@ use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::ExtractionOutcome;
+use artifacts_windows::evtx::EvtxBootError;
 use artifacts_windows::{
     EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
-    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredExtraction,
+    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredEvent, EvtxStructuredExtraction,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -20,19 +21,23 @@ use std::collections::BTreeMap;
 
 const EVTX_EXTRACTOR_ID: &str = "evtx.structured";
 
-pub fn extract_evtx_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
+pub fn extract_evtx_candidate(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+) -> Result<ExtractionOutcome, EvtxBootError> {
+    let extraction = artifacts_windows::extract_structured_events(bytes, &candidate.path)?;
+    Ok(project_evtx_extraction(candidate, extraction))
+}
+
+fn project_evtx_extraction(
+    candidate: &EvidenceCandidate,
+    extraction: EvtxStructuredExtraction,
+) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
-
-    match artifacts_windows::extract_structured_events(bytes, &candidate.path) {
-        Ok(extraction) => {
-            outcome.warnings.extend(extraction.warnings.iter().cloned());
-            extract_boot_events(candidate, &extraction, &mut outcome);
-            extract_security_events(candidate, &extraction, &mut outcome);
-            extract_application_events(candidate, &extraction, &mut outcome);
-        }
-        Err(err) => outcome.warnings.push(err.to_string()),
-    }
-
+    outcome.warnings.extend(extraction.warnings.iter().cloned());
+    extract_boot_events(candidate, &extraction, &mut outcome);
+    extract_security_events(candidate, &extraction, &mut outcome);
+    extract_application_events(candidate, &extraction, &mut outcome);
     outcome
 }
 
@@ -42,40 +47,62 @@ fn extract_boot_events(
     outcome: &mut ExtractionOutcome,
 ) {
     for event in &extraction.boot_events {
-        let attrs = boot_event_attrs(candidate, event);
-        let title = format!("EVTX {} event {}", event.kind.as_str(), event.event_id);
-        let artifact = make_artifact(
-            "EvtxBootShutdown",
-            title.clone(),
-            event.note.clone(),
-            candidate,
-            EVTX_EXTRACTOR_ID,
-            attrs.clone(),
-        );
-        outcome.artifacts.push(artifact);
+        project_boot_event(candidate, event, outcome);
+    }
+}
 
-        if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
-            let event_type = match event.kind {
-                EvtxBootEventKind::OperatingSystemStarted | EvtxBootEventKind::EventLogStarted => {
-                    "Boot"
-                }
-                EvtxBootEventKind::OperatingSystemShutdown
-                | EvtxBootEventKind::EventLogStopped
-                | EvtxBootEventKind::PlannedShutdown
-                | EvtxBootEventKind::UnexpectedShutdown => "Shutdown",
-                _ => event.kind.as_str(),
-            };
-            let timeline_event = make_timeline_event(
-                &candidate.file_id,
-                event_type,
-                timestamp,
-                title,
-                event.note.clone(),
-                attrs,
-                EVTX_EXTRACTOR_ID,
-            );
-            outcome.timeline_events.push(timeline_event);
+pub(super) fn project_evtx_event(
+    candidate: &EvidenceCandidate,
+    event: &EvtxStructuredEvent,
+    outcome: &mut ExtractionOutcome,
+) {
+    match event {
+        EvtxStructuredEvent::Boot(event) => project_boot_event(candidate, event, outcome),
+        EvtxStructuredEvent::Security(event) => project_security_event(candidate, event, outcome),
+        EvtxStructuredEvent::Application(event) => {
+            project_application_event(candidate, event, outcome)
         }
+    }
+}
+
+fn project_boot_event(
+    candidate: &EvidenceCandidate,
+    event: &EvtxBootEvent,
+    outcome: &mut ExtractionOutcome,
+) {
+    let attrs = boot_event_attrs(candidate, event);
+    let title = format!("EVTX {} event {}", event.kind.as_str(), event.event_id);
+    let artifact = make_artifact(
+        "EvtxBootShutdown",
+        title.clone(),
+        event.note.clone(),
+        candidate,
+        EVTX_EXTRACTOR_ID,
+        attrs.clone(),
+    );
+    outcome.artifacts.push(artifact);
+
+    if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
+        let event_type = match event.kind {
+            EvtxBootEventKind::OperatingSystemStarted | EvtxBootEventKind::EventLogStarted => {
+                "Boot"
+            }
+            EvtxBootEventKind::OperatingSystemShutdown
+            | EvtxBootEventKind::EventLogStopped
+            | EvtxBootEventKind::PlannedShutdown
+            | EvtxBootEventKind::UnexpectedShutdown => "Shutdown",
+            _ => event.kind.as_str(),
+        };
+        let timeline_event = make_timeline_event(
+            &candidate.file_id,
+            event_type,
+            timestamp,
+            title,
+            event.note.clone(),
+            attrs,
+            EVTX_EXTRACTOR_ID,
+        );
+        outcome.timeline_events.push(timeline_event);
     }
 }
 
@@ -85,35 +112,43 @@ fn extract_security_events(
     outcome: &mut ExtractionOutcome,
 ) {
     for event in &extraction.security_events {
-        let attrs = security_event_attrs(candidate, event);
-        let title = format!(
-            "Security {} ({})",
-            event.kind.as_str(),
-            event.target_user.as_deref().unwrap_or("-")
-        );
-        let note = security_event_note(event);
-        let artifact = make_artifact(
-            "EvtxSecurityEvent",
-            title.clone(),
-            note.clone(),
-            candidate,
-            EVTX_EXTRACTOR_ID,
-            attrs.clone(),
-        );
-        outcome.artifacts.push(artifact);
+        project_security_event(candidate, event, outcome);
+    }
+}
 
-        if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
-            let timeline_event = make_timeline_event(
-                &candidate.file_id,
-                "Security",
-                timestamp,
-                title,
-                note,
-                attrs,
-                EVTX_EXTRACTOR_ID,
-            );
-            outcome.timeline_events.push(timeline_event);
-        }
+fn project_security_event(
+    candidate: &EvidenceCandidate,
+    event: &EvtxSecurityEvent,
+    outcome: &mut ExtractionOutcome,
+) {
+    let attrs = security_event_attrs(candidate, event);
+    let title = format!(
+        "Security {} ({})",
+        event.kind.as_str(),
+        event.target_user.as_deref().unwrap_or("-")
+    );
+    let note = security_event_note(event);
+    let artifact = make_artifact(
+        "EvtxSecurityEvent",
+        title.clone(),
+        note.clone(),
+        candidate,
+        EVTX_EXTRACTOR_ID,
+        attrs.clone(),
+    );
+    outcome.artifacts.push(artifact);
+
+    if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
+        let timeline_event = make_timeline_event(
+            &candidate.file_id,
+            "Security",
+            timestamp,
+            title,
+            note,
+            attrs,
+            EVTX_EXTRACTOR_ID,
+        );
+        outcome.timeline_events.push(timeline_event);
     }
 }
 
@@ -123,41 +158,49 @@ fn extract_application_events(
     outcome: &mut ExtractionOutcome,
 ) {
     for event in &extraction.application_events {
-        let attrs = application_event_attrs(candidate, event);
-        let title = format!(
-            "Application {} ({})",
-            event.kind.as_str(),
-            event.application.as_deref().unwrap_or("-")
-        );
-        let note = application_event_note(event);
-        let artifact = make_artifact(
-            "EvtxApplicationEvent",
-            title.clone(),
-            note.clone(),
-            candidate,
-            EVTX_EXTRACTOR_ID,
-            attrs.clone(),
-        );
-        outcome.artifacts.push(artifact);
+        project_application_event(candidate, event, outcome);
+    }
+}
 
-        if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
-            let event_type = match event.kind {
-                EvtxApplicationEventKind::ApplicationCrash => "ApplicationCrash",
-                EvtxApplicationEventKind::ApplicationHang => "ApplicationHang",
-                EvtxApplicationEventKind::WindowsErrorReporting => "WindowsErrorReporting",
-                EvtxApplicationEventKind::SoftwareInstallation => "SoftwareInstallation",
-            };
-            let timeline_event = make_timeline_event(
-                &candidate.file_id,
-                event_type,
-                timestamp,
-                title,
-                note,
-                attrs,
-                EVTX_EXTRACTOR_ID,
-            );
-            outcome.timeline_events.push(timeline_event);
-        }
+fn project_application_event(
+    candidate: &EvidenceCandidate,
+    event: &EvtxApplicationEvent,
+    outcome: &mut ExtractionOutcome,
+) {
+    let attrs = application_event_attrs(candidate, event);
+    let title = format!(
+        "Application {} ({})",
+        event.kind.as_str(),
+        event.application.as_deref().unwrap_or("-")
+    );
+    let note = application_event_note(event);
+    let artifact = make_artifact(
+        "EvtxApplicationEvent",
+        title.clone(),
+        note.clone(),
+        candidate,
+        EVTX_EXTRACTOR_ID,
+        attrs.clone(),
+    );
+    outcome.artifacts.push(artifact);
+
+    if let Ok(timestamp) = parse_event_timestamp(&event.timestamp) {
+        let event_type = match event.kind {
+            EvtxApplicationEventKind::ApplicationCrash => "ApplicationCrash",
+            EvtxApplicationEventKind::ApplicationHang => "ApplicationHang",
+            EvtxApplicationEventKind::WindowsErrorReporting => "WindowsErrorReporting",
+            EvtxApplicationEventKind::SoftwareInstallation => "SoftwareInstallation",
+        };
+        let timeline_event = make_timeline_event(
+            &candidate.file_id,
+            event_type,
+            timestamp,
+            title,
+            note,
+            attrs,
+            EVTX_EXTRACTOR_ID,
+        );
+        outcome.timeline_events.push(timeline_event);
     }
 }
 

@@ -122,6 +122,12 @@ pub fn search_files_real(
     limit: u32,
 ) -> Result<SearchResultPageDto, SearchError> {
     let index = SearchIndex::open(index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
+    if !index.supports_stable_paging() {
+        return Err(SearchError::Unsupported(
+            "Search index schema does not support deterministic pagination; rebuild the data source search index"
+                .to_string(),
+        ));
+    }
     let start = std::time::Instant::now();
     let SearchResult { hits, total_count } = index
         .search_page(query, offset as usize, limit as usize)
@@ -164,8 +170,11 @@ pub fn search_files_real(
 
     Ok(SearchResultPageDto {
         total: total_count,
+        available: total_count,
+        truncated: false,
         took_ms,
         items,
+        next_cursor: None,
     })
 }
 
@@ -199,6 +208,17 @@ pub fn search_files_for_case(
     case_search::search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
 }
 
+pub fn search_files_for_case_cursor(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    query: &str,
+    cursor: Option<&str>,
+    limit: u32,
+) -> Result<SearchResultPageDto, SearchError> {
+    case_search::search_files_for_case_cursor(case_conn, case_root, case_id, query, cursor, limit)
+}
+
 pub fn search_files_for_case_instrumented(
     case_conn: &Connection,
     case_root: &Path,
@@ -209,6 +229,29 @@ pub fn search_files_for_case_instrumented(
 ) -> Result<InstrumentedSearchResult, SearchError> {
     let (page, sample) = measure_rows(0, || {
         search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
+    });
+    let page = page?;
+    let sample = PerfSample {
+        elapsed_ms: page.took_ms.max(sample.elapsed_ms),
+        rows: page.items.len() as u64,
+    };
+    let performance_report = search_query_report(sample, page.total);
+    Ok(InstrumentedSearchResult {
+        page,
+        performance_report,
+    })
+}
+
+pub fn search_files_for_case_cursor_instrumented(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    query: &str,
+    cursor: Option<&str>,
+    limit: u32,
+) -> Result<InstrumentedSearchResult, SearchError> {
+    let (page, sample) = measure_rows(0, || {
+        search_files_for_case_cursor(case_conn, case_root, case_id, query, cursor, limit)
     });
     let page = page?;
     let sample = PerfSample {

@@ -17,7 +17,12 @@ pub(super) fn prepare_registry_preload(
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<RegistryPreloadContext, crate::analysis_service::error::AnalysisServiceError> {
-    let candidates_by_id = candidates
+    let readable_candidates = candidates
+        .iter()
+        .filter(|candidate| !candidate.encrypted)
+        .cloned()
+        .collect::<Vec<_>>();
+    let candidates_by_id = readable_candidates
         .iter()
         .map(|candidate| (candidate.file_id.0.as_str(), candidate))
         .collect::<HashMap<_, _>>();
@@ -26,13 +31,14 @@ pub(super) fn prepare_registry_preload(
             .get(file_id.0.as_str())
             .ok_or_else(|| format!("analysis candidate '{}' was not discovered", file_id.0))?;
         file_reader(candidate, read_limit).map(|source| match source {
+            CandidateSource::Seekable(reader) => reader as Box<dyn Read>,
             CandidateSource::Reader(reader) => reader,
             CandidateSource::Bytes(bytes) => Box::new(Cursor::new(bytes)) as Box<dyn Read>,
         })
     };
     preload_registry_context(
         conn,
-        candidates,
+        &readable_candidates,
         cancel_token,
         &mut registry_reader,
         |candidate| {

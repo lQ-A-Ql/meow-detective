@@ -221,4 +221,275 @@ describe('DenseDataTable', () => {
     clientHeight.mockRestore();
     scrollHeight.mockRestore();
   });
+
+  it('restarts automatic continuation when the load context changes at the same row count', () => {
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(600);
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(310);
+    const onReachEnd = vi.fn();
+    const firstRows = Array.from({ length: 10 }, (_, index) => ({
+      id: `first-${index}`,
+      name: `First ${index}`,
+    }));
+    const secondRows = Array.from({ length: 10 }, (_, index) => ({
+      id: `second-${index}`,
+      name: `Second ${index}`,
+    }));
+    const { rerender } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={firstRows}
+        getRowKey={(row) => row.id}
+        loadContextKey="query:first"
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={secondRows}
+        getRowKey={(row) => row.id}
+        loadContextKey="query:first"
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={secondRows}
+        getRowKey={(row) => row.id}
+        loadContextKey="query:second"
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    expect(onReachEnd).toHaveBeenCalledTimes(2);
+
+    clientHeight.mockRestore();
+    scrollHeight.mockRestore();
+  });
+
+  it('returns the virtual viewport to the first row when the load context changes', () => {
+    const firstRows = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `first-${index}`,
+      name: `First ${index}`,
+    }));
+    const secondRows = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `second-${index}`,
+      name: `Second ${index}`,
+    }));
+    const { container, rerender } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={firstRows}
+        getRowKey={(row) => row.id}
+        loadContextKey="query:first"
+      />,
+    );
+    const scrollContainer = container.firstElementChild as HTMLDivElement;
+
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 310_000 } });
+    expect(container.textContent).toContain('First 9999');
+
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={secondRows}
+        getRowKey={(row) => row.id}
+        loadContextKey="query:second"
+      />,
+    );
+
+    expect(scrollContainer.scrollTop).toBe(0);
+    expect(container.textContent).toContain('Second 0');
+    expect(container.textContent).not.toContain('Second 9999');
+  });
+
+  it('uses query recovery instead of replaying a stale continuation after failure', () => {
+    vi.useFakeTimers();
+    const onReachEnd = vi.fn();
+    const onRetryLoadMore = vi.fn();
+    const rows = Array.from({ length: 100 }, (_, index) => ({
+      id: `row-${index}`,
+      name: `Row ${index}`,
+    }));
+    const { container, rerender } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(row) => row.id}
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    Object.defineProperties(scrollContainer, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 3_100 },
+    });
+
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(row) => row.id}
+        hasMore
+        loadMoreFailed
+        onReachEnd={onReachEnd}
+        onRetryLoadMore={onRetryLoadMore}
+      />,
+    );
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+    expect(onRetryLoadMore).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(500);
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+    expect(onRetryLoadMore).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('deduplicates an explicit retry against the scheduled automatic retry', () => {
+    vi.useFakeTimers();
+    const onReachEnd = vi.fn();
+    const onRetryLoadMore = vi.fn();
+
+    render(
+      <DenseDataTable
+        columns={columns}
+        rows={[{ id: 'row-1', name: 'Row 1' }]}
+        getRowKey={(row) => row.id}
+        hasMore
+        loadMoreFailed
+        onReachEnd={onReachEnd}
+        onRetryLoadMore={onRetryLoadMore}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onRetryLoadMore).toHaveBeenCalledTimes(1);
+    expect(onReachEnd).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(500);
+    expect(onRetryLoadMore).toHaveBeenCalledTimes(1);
+    expect(onReachEnd).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('retries a failed short page once and keeps an explicit retry control', async () => {
+    vi.useFakeTimers();
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(600);
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(310);
+    const onReachEnd = vi.fn();
+
+    render(
+      <DenseDataTable
+        columns={columns}
+        rows={[{ id: 'row-1', name: 'Row 1' }]}
+        getRowKey={(row) => row.id}
+        hasMore
+        loadMoreFailed
+        onReachEnd={onReachEnd}
+      />,
+    );
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(2_000);
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onReachEnd).toHaveBeenCalledTimes(2);
+
+    clientHeight.mockRestore();
+    scrollHeight.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('unlocks continuation when loading completes without changing row count', () => {
+    const onReachEnd = vi.fn();
+    const rows = Array.from({ length: 100 }, (_, index) => ({
+      id: `row-${index}`,
+      name: `Row ${index}`,
+    }));
+    const { container, rerender } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(row) => row.id}
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    Object.defineProperties(scrollContainer, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 3_100 },
+    });
+
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(row) => row.id}
+        hasMore
+        loadingMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+    rerender(
+      <DenseDataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(row) => row.id}
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+    expect(onReachEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders an initial load error instead of the normal empty state', () => {
+    const onRetryInitialLoad = vi.fn();
+
+    render(
+      <DenseDataTable
+        columns={columns}
+        rows={[]}
+        getRowKey={(row) => row.id}
+        emptyTitle="No matching records"
+        initialLoadFailed
+        initialLoadErrorText="Unable to load evidence records."
+        onRetryInitialLoad={onRetryInitialLoad}
+      />,
+    );
+
+    expect(screen.getByText('Unable to load evidence records.')).toBeDefined();
+    expect(screen.queryByText('No matching records')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onRetryInitialLoad).toHaveBeenCalledTimes(1);
+  });
 });

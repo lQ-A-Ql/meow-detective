@@ -7,11 +7,13 @@ use rusqlite::Connection;
 
 use super::source::open_ready_analysis_source;
 use crate::analysis_service::extraction::{
-    run_analysis_extraction_with_bytes_and_cancel_and_progress, AnalysisExtractionExecution,
-    ExtractionProgressUpdate,
+    encrypted_candidate_warning, run_analysis_extraction_with_source_and_progress,
+    AnalysisExtractionExecution, CandidateSource, ExtractionProgressUpdate,
 };
 use crate::analysis_service::AnalysisServiceError;
-use crate::file_service::{FileServiceError, SourceReadContext};
+use crate::file_service::{
+    FileServiceError, RangeContentReader, SourceReadContext, SourceReadFileHint,
+};
 use transport::dto::{AnalysisExtractionProgressDto, AnalysisExtractionRunDto};
 
 pub fn run_source_analysis_extraction(
@@ -133,23 +135,37 @@ fn run_source_analysis_extraction_execution_with_progress(
     );
     let mut source_read_count = 0u64;
     let mut source_read_elapsed = Duration::ZERO;
-    let mut extraction = run_analysis_extraction_with_bytes_and_cancel_and_progress(
+    let mut extraction = run_analysis_extraction_with_source_and_progress(
         &source.connection,
         &case_id.0,
         source.platform,
         categories,
         cancel_token.as_ref(),
         progress,
-        |candidate, read_limit| -> Result<Vec<u8>, FileServiceError> {
+        |candidate, read_limit| -> Result<CandidateSource, FileServiceError> {
+            if let Some(warning) = encrypted_candidate_warning(candidate) {
+                return Err(FileServiceError::Unsupported(warning));
+            }
             let started = Instant::now();
-            let result = source_reader.read_file_header_with_metadata(
-                &candidate.file_id,
-                &DataSourceId(candidate.data_source_id.clone()),
-                candidate.partition_index,
-                &candidate.path,
-                candidate.size,
-                read_limit,
-            );
+            let result = if candidate.category == "EventLogs" {
+                source_reader
+                    .open_file_range_by_id(&candidate.file_id)
+                    .map(candidate_source_from_range_reader)
+            } else {
+                source_reader
+                    .read_file_header_with_metadata(
+                        SourceReadFileHint::new(
+                            candidate.file_id.clone(),
+                            DataSourceId(candidate.data_source_id.clone()),
+                            candidate.partition_index,
+                            candidate.path.clone(),
+                            candidate.size,
+                            candidate.encrypted,
+                        ),
+                        read_limit,
+                    )
+                    .map(CandidateSource::Bytes)
+            };
             source_read_count = source_read_count.saturating_add(1);
             source_read_elapsed = source_read_elapsed.saturating_add(started.elapsed());
             result
@@ -172,4 +188,11 @@ fn run_source_analysis_extraction_execution_with_progress(
         }
     }
     extraction
+}
+
+fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSource {
+    match reader {
+        RangeContentReader::Seekable(reader) => CandidateSource::Seekable(reader),
+        RangeContentReader::Streaming(reader) => CandidateSource::Reader(reader),
+    }
 }

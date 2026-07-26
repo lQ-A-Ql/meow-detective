@@ -7,8 +7,10 @@ use super::candidate_processing::CandidateSource;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use artifacts_windows::dpapi::{
     derive_user_prekeys, derive_user_prekeys_from_password_sha1, parse_cng_system_key_file,
+    ChromiumFamily,
 };
 use artifacts_windows::{decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecrets, TbalSecret};
+use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::{params, Connection};
 use std::sync::atomic::AtomicBool;
 
@@ -142,20 +144,18 @@ pub(super) fn read_cng_chromekey_file(
 pub(super) fn read_elevation_service(
     conn: &Connection,
     data_source_id: &str,
+    family: ChromiumFamily,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Option<Vec<u8>> {
-    let locator = locate_files_by_like(
-        conn,
-        data_source_id,
-        "%/application/%/elevation_service.exe",
-    )
-    .into_iter()
-    .find(|locator| {
-        let path = normalize_evidence_path(&locator.path);
-        path.contains("/google/chrome/application/")
-            || path.contains("/microsoft/edge/application/")
-    })?;
+    let path_marker = match family {
+        ChromiumFamily::Chrome => "/google/chrome/application/",
+        ChromiumFamily::Edge => "/microsoft/edge/application/",
+        ChromiumFamily::Chromium => return None,
+    };
+    let locator = locate_files_by_like(conn, data_source_id, "%/elevation_service.exe")
+        .into_iter()
+        .find(|locator| normalize_evidence_path(&locator.path).contains(path_marker))?;
     read_locator(&locator, cancel_token, file_reader).ok()
 }
 
@@ -165,7 +165,7 @@ fn locate_files_by_like(
     like_pattern: &str,
 ) -> Vec<EvidenceCandidate> {
     let Ok(mut statement) = conn.prepare(
-        "SELECT id, path, COALESCE(size, 0), partition_index
+        "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
          FROM file_entries
          WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE
            AND REPLACE(LOWER(path), '\\', '/') LIKE ?2
@@ -181,7 +181,8 @@ fn locate_files_by_like(
         let partition_index = row
             .get::<_, Option<i64>>(3)?
             .and_then(|value| usize::try_from(value).ok());
-        Ok((id, path, size, partition_index))
+        let encrypted = file_encryption_status_from_row(row, 4)?.blocks_content();
+        Ok((id, path, size, partition_index, encrypted))
     }) else {
         return Vec::new();
     };

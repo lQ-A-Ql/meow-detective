@@ -12,12 +12,14 @@ use artifacts_windows::dpapi::{
 };
 use artifacts_windows::{extract_boot_key, extract_sam_fields};
 use domain::FileEntryId;
+use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use uuid::Uuid;
 
 const BROWSER_CONTEXT_READ_LIMIT: usize = 32 * 1024 * 1024;
+type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
 
 /// Per-analysis browser key context built from evidence hives and Protect files.
 pub(super) struct BrowserPreloadContext {
@@ -129,11 +131,29 @@ fn prepare_source_context(
         ));
     }
 
+    install_profile_decryptors(
+        conn,
+        data_source_id,
+        roots,
+        &master_keys,
+        cancel_token,
+        file_reader,
+        context,
+    )
+}
+
+fn install_profile_decryptors(
+    conn: &Connection,
+    data_source_id: &str,
+    roots: Vec<String>,
+    master_keys: &[DecryptedMasterKey],
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    context: &mut BrowserPreloadContext,
+) -> Result<(), AnalysisServiceError> {
     // CNG and elevation-service bytes are only needed for Google Chrome's
     // PostProcessData schemes; read them lazily on the first Chrome root.
-    type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
     let mut chrome_materials: Option<ChromeMaterials> = None;
-
     for root in roots {
         ensure_not_cancelled(cancel_token)?;
         let local_state_path = format!("{root}/local state");
@@ -157,7 +177,13 @@ fn prepare_source_context(
             let materials = chrome_materials.get_or_insert_with(|| {
                 (
                     read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader),
-                    read_elevation_service(conn, data_source_id, cancel_token, file_reader),
+                    read_elevation_service(
+                        conn,
+                        data_source_id,
+                        ChromiumFamily::Chrome,
+                        cancel_token,
+                        file_reader,
+                    ),
                 )
             });
             (materials.0.as_deref(), materials.1.as_deref())
@@ -167,7 +193,7 @@ fn prepare_source_context(
         let decryptor = build_profile_decryptor(
             &root,
             &local_state_bytes,
-            &master_keys,
+            master_keys,
             family,
             cng_key_file,
             elevation_exe,
@@ -277,6 +303,9 @@ fn browser_roots(candidates: &[EvidenceCandidate]) -> HashMap<(String, String), 
     candidates
         .iter()
         .filter_map(|candidate| {
+            if candidate.encrypted {
+                return None;
+            }
             let normalized = normalize_evidence_path(&candidate.path);
             if !is_chromium_secret_store_path(&normalized) {
                 return None;
@@ -312,7 +341,7 @@ pub(super) fn locate_by_suffix(
     let pattern = format!("%{}", suffix.trim_start_matches('/').to_ascii_lowercase());
     let mut statement = conn
         .prepare(
-            "SELECT id, path, COALESCE(size, 0), partition_index
+            "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
              FROM file_entries
              WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE
                AND REPLACE(LOWER(path), '\\', '/') LIKE ?2
@@ -327,11 +356,12 @@ pub(super) fn locate_by_suffix(
             let partition_index = row
                 .get::<_, Option<i64>>(3)?
                 .and_then(|value| usize::try_from(value).ok());
-            Ok((id, path, size, partition_index))
+            let encrypted = file_encryption_status_from_row(row, 4)?.blocks_content();
+            Ok((id, path, size, partition_index, encrypted))
         })
         .ok()?;
     for row in rows.flatten() {
-        let (_, path, _, _) = &row;
+        let (_, path, _, _, _) = &row;
         if normalize_evidence_path(path).ends_with(suffix) {
             return Some(locator_from_row(data_source_id, row, "BrowserPreload"));
         }
@@ -341,7 +371,7 @@ pub(super) fn locate_by_suffix(
 
 fn locate_master_key_files(conn: &Connection, data_source_id: &str) -> Vec<EvidenceCandidate> {
     let Ok(mut statement) = conn.prepare(
-        "SELECT id, path, COALESCE(size, 0), partition_index
+        "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
          FROM file_entries
          WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE
            AND REPLACE(LOWER(path), '\\', '/') LIKE '%/microsoft/protect/%'
@@ -356,12 +386,13 @@ fn locate_master_key_files(conn: &Connection, data_source_id: &str) -> Vec<Evide
         let partition_index = row
             .get::<_, Option<i64>>(3)?
             .and_then(|value| usize::try_from(value).ok());
-        Ok((id, path, size, partition_index))
+        let encrypted = file_encryption_status_from_row(row, 4)?.blocks_content();
+        Ok((id, path, size, partition_index, encrypted))
     }) else {
         return Vec::new();
     };
     rows.flatten()
-        .filter(|(_, path, _, _)| is_master_key_path(path))
+        .filter(|(_, path, _, _, _)| is_master_key_path(path))
         .map(|row| locator_from_row(data_source_id, row, "BrowserPreload"))
         .collect()
 }
@@ -386,17 +417,18 @@ fn is_master_key_path(path: &str) -> bool {
 
 pub(super) fn locator_from_row(
     data_source_id: &str,
-    row: (String, String, u64, Option<usize>),
+    row: (String, String, u64, Option<usize>, bool),
     category: &str,
 ) -> EvidenceCandidate {
-    let (id, path, size, partition_index) = row;
+    let (id, path, size, partition_index, encrypted) = row;
     EvidenceCandidate {
         file_id: FileEntryId(id),
         data_source_id: data_source_id.to_string(),
         partition_index,
         path,
         size,
-        content_identity: format!("browser-preload:{data_source_id}:{size}"),
+        encrypted,
+        content_identity: format!("browser-preload:{data_source_id}:{size}:{encrypted}"),
         evidence_kind: "browser_preload".to_string(),
         parser: "browser.dpapi".to_string(),
         category: category.to_string(),

@@ -1,3 +1,7 @@
+//! Opt-in end-to-end regression for a private Windows E01 fixture.
+//! Run with `FORENSICS_JC2_E01_FIXTURE` and `cargo test -p app-services --test
+//! jc2_pipeline -- --ignored --nocapture`.
+
 use app_services::{
     analysis_service::{extract_registry_candidate, EvidenceCandidate},
     artifact_service, case_service, correlation, datasource_service, file_service, import_analysis,
@@ -6,16 +10,20 @@ use app_services::{
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
-/// Full V2/V3 pipeline for 检材2.E01 (MBR, 3 NTFS partitions)
-/// Run: cargo test -p app-services --test jc2_pipeline -- --nocapture
 use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
 
-const SAMPLE_PATH: &str = "D:/獬豸杯/检材2.E01";
+const SAMPLE_ENV: &str = "FORENSICS_JC2_E01_FIXTURE";
+
+fn sample_path() -> PathBuf {
+    std::env::var_os(SAMPLE_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("set {SAMPLE_ENV} to run ignored real E01 pipeline tests"))
+}
 // MBR: partition_index=None → after fix: 0=offset-1MB, 1=offset-580MB(system), 2=offset-50.6GB
 const MAIN_NTFS_OFFSET: u64 = 608_174_080;
 
@@ -68,8 +76,10 @@ fn read_mft_params(path: &Path, vol_offset: u64) -> (u64, u64, u32, u16, u64) {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_full_pipeline() {
-    let path = Path::new(SAMPLE_PATH);
+    let sample = sample_path();
+    let path = sample.as_path();
     let start = Instant::now();
 
     // Probe
@@ -184,6 +194,7 @@ fn jc2_full_pipeline() {
                         partition_index: None,
                         path: hive_path.to_string(),
                         size: buf.len() as u64,
+                        encrypted: false,
                         content_identity: format!("test:{name}"),
                         evidence_kind: "registry_hive".to_string(),
                         parser: "registry.hive".to_string(),
@@ -418,8 +429,10 @@ fn read_mft_params_for_partition(path: &Path, vol_offset: u64) -> (u64, u64, u32
 // ── jc2_visibility_and_partitions ────────────────────────────────────────────
 
 #[test]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_visibility_and_partitions() {
-    let path = Path::new(SAMPLE_PATH);
+    let sample = sample_path();
+    let path = sample.as_path();
     let start = Instant::now();
 
     // ── Probe ──────────────────────────────────────────────────────────────
@@ -611,8 +624,10 @@ fn jc2_visibility_and_partitions() {
 // ── jc2_artifact_extraction ─────────────────────────────────────────────────
 
 #[test]
+#[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]
 fn jc2_artifact_extraction() {
-    let path = Path::new(SAMPLE_PATH);
+    let sample = sample_path();
+    let path = sample.as_path();
     let start = Instant::now();
 
     // ── Probe and find system partition (index 1 = main system drive) ──────
@@ -741,6 +756,7 @@ fn jc2_artifact_extraction() {
                         partition_index: None,
                         path: hive_path.to_string(),
                         size: buf.len() as u64,
+                        encrypted: false,
                         content_identity: format!("test:{name}"),
                         evidence_kind: "registry_hive".to_string(),
                         parser: "registry.hive".to_string(),

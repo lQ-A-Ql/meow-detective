@@ -1,0 +1,97 @@
+[
+  {
+    "file": "$IXXXXXX (Recycle Bin info file)",
+    "expected": {
+      "baseline": "project synthetic Recycle Bin $I file fixture; v2 format header, file_size, deletion FILETIME, and original UTF-16LE path validated against known values",
+      "assertions": {
+        "fileSizeGt": 0,
+        "deletionTimeParseable": true,
+        "deletionTimeInReasonableRange": true,
+        "originalPathNonEmpty": true,
+        "originalPathUtf16LeDecoded": true,
+        "headerSizeAtLeast24": true,
+        "fileSizeMatchesOriginal": true
+      },
+      "guaranteedFields": [
+        {
+          "name": "recovered_file_size",
+          "type": "u64",
+          "guarantee": "guaranteed",
+          "description": "original file size in bytes from $I header; always present in valid $I files"
+        },
+        {
+          "name": "deletion_time",
+          "type": "RFC 3339 string",
+          "guarantee": "guaranteed",
+          "description": "deletion FILETIME from $I header converted to UTC RFC 3339; null when FILETIME is zero, max, or out of reasonable year range (2001-2099)"
+        },
+        {
+          "name": "original_path",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "original file path from $I file (UTF-16LE decoded, null-terminated); null when header_size <= 24 or path is empty after trimming"
+        },
+        {
+          "name": "artifact_type",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "always \"RecycleBin\" for recycle bin artifacts"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "header_size",
+          "type": "u64",
+          "guarantee": "bestEffort",
+          "description": "$I header size field; determines whether path follows the fixed-size header; value varies between v1 and v2 formats"
+        },
+        {
+          "name": "original_filename",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "filename extracted from original_path (last path component); derived field, not directly parsed"
+        },
+        {
+          "name": "recycled_file_extension",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "file extension extracted from original_path; derived field"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "$R_file_content_match",
+          "type": "bool",
+          "guarantee": "notGuaranteed",
+          "description": "verification that $R file content matches $I recorded size; requires paired $R file which may not always be present"
+        },
+        {
+          "name": "corrupted_i_file_recovery",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "recovery of partial path from corrupted/damaged $I files; known limitation documented in parser-support-matrix.md"
+        },
+        {
+          "name": "v1_format_support",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "Windows XP-style Recycle Bin (INFO2 format); not supported, only v2 $I/$R format"
+        },
+        {
+          "name": "unicode_normalization_form",
+          "type": "string",
+          "guarantee": "notGuaranteed",
+          "description": "UTF-16LE path normalization variant; surrogate pairs and normalization forms may vary by Windows version"
+        }
+      ],
+      "fieldNamingConvention": "camelCase for top-level DTO; snake_case for attrs map keys within artifacts",
+      "timezoneNormalizationRule": "deletion FILETIME converted to UTC via Windows epoch offset (1601-01-01); serialized as RFC 3339; timestamps outside year range 2001-2099 are excluded as unreasonable",
+      "emptyValueStrategy": {
+        "null": "absent deletion_time (FILETIME zero, max, or out of range) or absent original_path (header_size <= 24 or path string empty)",
+        "emptyString": "original_path present but empty after UTF-16LE decode and trim (treated as absent)",
+        "zero": "valid zero for file_size (should not occur for valid $I files)"
+      },
+      "sortOrderRule": "artifacts sorted by deletion_time descending; timeline events sorted by timestamp ascending"
+    }
+  }
+]

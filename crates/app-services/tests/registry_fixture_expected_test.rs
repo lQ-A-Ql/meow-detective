@@ -73,6 +73,7 @@ fn registry_fixture_expected_regression() {
             partition_index: None,
             path: entry.file.clone(),
             size: bytes.len() as u64,
+            encrypted: false,
             content_identity: format!("test:{}", entry.file),
             evidence_kind: "registry_hive".to_string(),
             parser: "registry.lookup".to_string(),

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use domain::{CaseId, DataSourceId, EntryType, FileEntry, FileEntryId};
+use domain::{CaseId, DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use serde_json::Value;
 
@@ -17,8 +17,9 @@ use crate::{
         FileServiceError,
     },
 };
-
 mod derived_cache;
+mod metadata;
+mod stream;
 
 use derived_cache::DerivedSourceReadCache;
 
@@ -27,21 +28,23 @@ const MAX_SOURCE_PARTITION_CACHE_ENTRIES: usize = 64;
 const MAX_CEPHFS_PREPARED_READERS: usize = 8;
 
 #[derive(Debug, Clone)]
-struct SourceReadFileHint {
+pub(crate) struct SourceReadFileHint {
     file_id: FileEntryId,
     data_source_id: DataSourceId,
     partition_index: Option<usize>,
     path: String,
     size: u64,
+    encrypted: bool,
 }
 
 impl SourceReadFileHint {
-    fn new(
+    pub(crate) fn new(
         file_id: FileEntryId,
         data_source_id: DataSourceId,
         partition_index: Option<usize>,
         path: String,
         size: u64,
+        encrypted: bool,
     ) -> Self {
         Self {
             file_id,
@@ -49,6 +52,7 @@ impl SourceReadFileHint {
             partition_index,
             path,
             size,
+            encrypted,
         }
     }
 }
@@ -128,20 +132,15 @@ impl<'a> SourceReadContext<'a> {
 
     pub(crate) fn read_file_header_with_metadata(
         &mut self,
-        file_id: &FileEntryId,
-        data_source_id: &DataSourceId,
-        partition_index: Option<usize>,
-        path: &str,
-        size: u64,
+        hint: SourceReadFileHint,
         max_bytes: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
-        let hint = SourceReadFileHint::new(
-            file_id.clone(),
-            data_source_id.clone(),
-            partition_index,
-            path.to_string(),
-            size,
-        );
+        if hint.data_source_id != *self.data_source_id {
+            return Err(FileServiceError::security(
+                "Source-read hint does not belong to the bound data source",
+            ));
+        }
+        metadata::validate_hint_encryption(self.source_conn, &hint)?;
         let Some(partition_index) = hint.partition_index else {
             return self.read_file_header_by_id(&hint.file_id, max_bytes);
         };
@@ -254,7 +253,7 @@ impl<'a> SourceReadContext<'a> {
         if let Some(cached) = self.partition_candidates.get(&partition_index) {
             return Ok(cached.clone());
         }
-        let entry = hint_file_entry(hint);
+        let entry = metadata::hint_file_entry(hint);
         let candidates = match source_kind {
             "e01" | "ceph_rbd" => crate::file_service::viewer::e01_partition_candidates(
                 self.source_conn,
@@ -466,33 +465,6 @@ fn cache_partition_candidates(
         cache.clear();
     }
     cache.insert(partition_index, candidates);
-}
-
-fn hint_file_entry(hint: &SourceReadFileHint) -> FileEntry {
-    let name = Path::new(&hint.path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(&hint.path)
-        .to_string();
-    FileEntry {
-        id: hint.file_id.clone(),
-        parent_id: None,
-        data_source_id: hint.data_source_id.clone(),
-        path: hint.path.clone(),
-        name,
-        entry_type: EntryType::File,
-        size: Some(hint.size),
-        ext: None,
-        deleted: false,
-        hidden: false,
-        system: false,
-        encrypted: false,
-        created_at: None,
-        modified_at: None,
-        accessed_at: None,
-        changed_at: None,
-        hash_sha256: None,
-    }
 }
 
 #[cfg(test)]

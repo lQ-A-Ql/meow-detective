@@ -10,6 +10,7 @@ fn candidate(path: &str, id: &str) -> EvidenceCandidate {
         partition_index: Some(2),
         path: path.to_string(),
         size: 32,
+        encrypted: false,
         content_identity: format!("identity-{id}"),
         evidence_kind: "linux_artifact".to_string(),
         parser: "linux.artifacts".to_string(),
@@ -77,4 +78,35 @@ fn reports_real_candidate_inventory_and_monotonic_processing() {
         update.current_path.as_deref() == Some("/var/lib/unknown-artifact")
             && update.detail.contains("unsupported")
     }));
+}
+
+#[test]
+fn encrypted_windows_candidate_is_reported_as_unsupported() {
+    let capability = find_capability("EventLogs").expect("event log capability");
+    let mut encrypted = candidate(
+        "/Windows/System32/winevt/Logs/Security.evtx",
+        "encrypted-evtx",
+    );
+    encrypted.data_source_id = "source-windows".to_string();
+    encrypted.category = "EventLogs".to_string();
+    encrypted.encrypted = true;
+    let mut updates = Vec::new();
+    let mut collect_update = |update| updates.push(update);
+    let mut reporter = ExtractionProgressReporter::new(
+        DataSourcePlatform::Windows,
+        &[capability],
+        &mut collect_update,
+    );
+
+    reporter.register_candidate(capability, &encrypted);
+    reporter.complete();
+    drop(reporter);
+
+    let completed = updates
+        .iter()
+        .find(|update| update.phase == AnalysisExtractionPhaseDto::Completed)
+        .expect("completed progress event");
+    assert_eq!(completed.total_candidates, 1);
+    assert_eq!(completed.unsupported_candidates, 1);
+    assert_eq!(completed.structured_candidates, 0);
 }

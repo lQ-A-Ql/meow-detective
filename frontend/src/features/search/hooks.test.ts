@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ vi.mock('@/lib/api/search', () => ({
   searchFiles: mocks.searchFiles,
 }));
 
-import { useSearchResults } from './hooks';
+import { useInfiniteSearchResults, useSearchResults } from './hooks';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -80,6 +80,77 @@ describe('search hooks', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(mocks.searchFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads subsequent search cursors without replaying a cumulative offset', async () => {
+    mocks.searchFiles
+      .mockResolvedValueOnce({
+        total: 3,
+        available: 3,
+        truncated: false,
+        items: [{ id: 'f1' }, { id: 'f2' }],
+        nextCursor: 'cursor-1',
+      })
+      .mockResolvedValueOnce({
+        total: 3,
+        available: 3,
+        truncated: false,
+        items: [{ id: 'f3' }],
+      });
+
+    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.searchFiles).toHaveBeenNthCalledWith(1, 'evidence', 0, 2, undefined);
+
+    let nextResult: Awaited<ReturnType<typeof result.current.fetchNextPage>> | undefined;
+    await act(async () => {
+      nextResult = await result.current.fetchNextPage();
+    });
+
+    expect(mocks.searchFiles).toHaveBeenNthCalledWith(2, 'evidence', 0, 2, 'cursor-1');
+    expect(nextResult?.data?.pages.flatMap((page) => page.items)).toHaveLength(3);
+    expect(nextResult?.hasNextPage).toBe(false);
+  });
+
+  it('stops search pagination when a stale total yields an empty page', async () => {
+    mocks.searchFiles
+      .mockResolvedValueOnce({
+        total: 3,
+        available: 3,
+        truncated: false,
+        items: [{ id: 'f1' }, { id: 'f2' }],
+        nextCursor: 'cursor-1',
+      })
+      .mockResolvedValueOnce({ total: 3, available: 3, truncated: false, items: [] });
+    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+    await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+  });
+
+  it('stops at the backend result window while preserving the real total', async () => {
+    mocks.searchFiles.mockResolvedValueOnce({
+      total: 200_000,
+      available: 2,
+      truncated: true,
+      items: [{ id: 'f1' }, { id: 'f2' }],
+    });
+    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.pages[0]?.total).toBe(200_000);
+    expect(result.current.hasNextPage).toBe(false);
     expect(mocks.searchFiles).toHaveBeenCalledTimes(1);
   });
 });

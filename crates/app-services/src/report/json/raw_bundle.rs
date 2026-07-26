@@ -1,4 +1,6 @@
 use super::{RawExportBundle, ReportError};
+use domain::FileEncryptionStatus;
+use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::Connection;
 use sha2::Digest;
 use std::fs::{self, OpenOptions};
@@ -28,6 +30,11 @@ struct RawExportManifest {
     skipped_count: usize,
     skipped_files: Vec<String>,
     files: Vec<RawExportManifestEntry>,
+}
+
+struct ExportableFileEntry {
+    entry: domain::FileEntry,
+    encryption_status: FileEncryptionStatus,
 }
 
 #[derive(Default)]
@@ -83,13 +90,18 @@ pub(super) fn export_raw_file_bundle_for_case(
 fn export_legacy_entries(
     conn: &Connection,
     bundle_dir: &Path,
-    entries: Vec<domain::FileEntry>,
+    entries: Vec<ExportableFileEntry>,
 ) -> Result<ExportAccumulator, ReportError> {
     let export_root = bundle_dir.join("files");
     fs::create_dir_all(&export_root)?;
     let mut exported = ExportAccumulator::default();
 
-    for entry in entries {
+    for exportable in entries {
+        let entry = exportable.entry;
+        if let Some(reason) = content_access_skip_reason(exportable.encryption_status) {
+            exported.skip(&entry, reason);
+            continue;
+        }
         let mut reader = match crate::file_service::open_file_content_by_id(conn, &entry.id) {
             Ok(reader) => reader,
             Err(error) => {
@@ -115,13 +127,18 @@ fn export_source_entries(
     case_root: &Path,
     case_id: &str,
     bundle_dir: &Path,
-    entries: Vec<domain::FileEntry>,
+    entries: Vec<ExportableFileEntry>,
 ) -> Result<ExportAccumulator, ReportError> {
     let export_root = bundle_dir.join("files");
     fs::create_dir_all(&export_root)?;
     let mut exported = ExportAccumulator::default();
 
-    for entry in entries {
+    for exportable in entries {
+        let entry = exportable.entry;
+        if let Some(reason) = content_access_skip_reason(exportable.encryption_status) {
+            exported.skip(&entry, reason);
+            continue;
+        }
         let global_file_id =
             crate::source_db::GlobalFileId::new(entry.data_source_id.clone(), entry.id.clone())
                 .encode();
@@ -315,37 +332,41 @@ fn write_bundle_metadata(
 
 fn collect_exportable_file_entries(
     conn: &Connection,
-) -> Result<Vec<domain::FileEntry>, ReportError> {
+) -> Result<Vec<ExportableFileEntry>, ReportError> {
     let mut stmt = conn.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
          FROM file_entries
          WHERE entry_type = 'file'
          ORDER BY data_source_id ASC, path ASC",
     )?;
     let rows = stmt.query_map([], |row| {
         let entry_type: String = row.get(5)?;
-        Ok(domain::FileEntry {
-            id: domain::FileEntryId(row.get::<_, String>(0)?),
-            parent_id: row.get::<_, Option<String>>(1)?.map(domain::FileEntryId),
-            data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
-            path: row.get(3)?,
-            name: row.get(4)?,
-            entry_type: if entry_type.eq_ignore_ascii_case("directory") {
-                domain::EntryType::Directory
-            } else {
-                domain::EntryType::File
+        let encryption_status = file_encryption_status_from_row(row, 16)?;
+        Ok(ExportableFileEntry {
+            entry: domain::FileEntry {
+                id: domain::FileEntryId(row.get::<_, String>(0)?),
+                parent_id: row.get::<_, Option<String>>(1)?.map(domain::FileEntryId),
+                data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
+                path: row.get(3)?,
+                name: row.get(4)?,
+                entry_type: if entry_type.eq_ignore_ascii_case("directory") {
+                    domain::EntryType::Directory
+                } else {
+                    domain::EntryType::File
+                },
+                size: row.get(6)?,
+                ext: row.get(7)?,
+                deleted: row.get::<_, i32>(8)? != 0,
+                hidden: row.get::<_, i32>(9)? != 0,
+                system: row.get::<_, i32>(10)? != 0,
+                encrypted: encryption_status.blocks_content(),
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: row.get(15)?,
             },
-            size: row.get(6)?,
-            ext: row.get(7)?,
-            deleted: row.get::<_, i32>(8)? != 0,
-            hidden: row.get::<_, i32>(9)? != 0,
-            system: row.get::<_, i32>(10)? != 0,
-            encrypted: false,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hash_sha256: row.get(15)?,
+            encryption_status,
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>()
@@ -356,7 +377,7 @@ fn collect_exportable_file_entries_for_case(
     conn: &Connection,
     case_root: &Path,
     case_id: &str,
-) -> Result<Vec<domain::FileEntry>, ReportError> {
+) -> Result<Vec<ExportableFileEntry>, ReportError> {
     let mut entries = Vec::new();
     for (_source_id, source_conn) in super::super::open_ready_source_connections(
         conn,
@@ -366,13 +387,26 @@ fn collect_exportable_file_entries_for_case(
         entries.extend(collect_exportable_file_entries(&source_conn)?);
     }
     entries.sort_by(|left, right| {
-        left.data_source_id
+        left.entry
+            .data_source_id
             .0
-            .cmp(&right.data_source_id.0)
-            .then_with(|| left.path.cmp(&right.path))
-            .then_with(|| left.id.0.cmp(&right.id.0))
+            .cmp(&right.entry.data_source_id.0)
+            .then_with(|| left.entry.path.cmp(&right.entry.path))
+            .then_with(|| left.entry.id.0.cmp(&right.entry.id.0))
     });
     Ok(entries)
+}
+
+fn content_access_skip_reason(status: FileEncryptionStatus) -> Option<&'static str> {
+    match status {
+        FileEncryptionStatus::Clear => None,
+        FileEncryptionStatus::Encrypted => {
+            Some("NTFS EFS-encrypted content is unavailable without a key")
+        }
+        FileEncryptionStatus::Unknown => {
+            Some("File encryption status is unknown; raw content export requires re-enumeration")
+        }
+    }
 }
 
 fn create_parent(path: &Path) -> Result<(), ReportError> {

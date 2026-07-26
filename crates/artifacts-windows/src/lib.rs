@@ -23,10 +23,12 @@ pub use evtx::capability::{
 };
 pub use evtx::parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
-    extract_structured_events, extract_structured_events_from_json_records, probe_newest_records,
-    EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
-    EvtxBootExtraction, EvtxEventCategory, EvtxSecurityEvent, EvtxSecurityEventKind,
-    EvtxStructuredExtraction, MAX_EVTX_ANALYSIS_BYTES,
+    extract_structured_events, extract_structured_events_from_json_records,
+    extract_structured_events_from_read_seek, probe_newest_records,
+    visit_structured_events_from_read_seek, EvtxApplicationEvent, EvtxApplicationEventKind,
+    EvtxBootEvent, EvtxBootEventKind, EvtxBootExtraction, EvtxEventCategory, EvtxSecurityEvent,
+    EvtxSecurityEventKind, EvtxStructuredEvent, EvtxStructuredExtraction, EvtxVisitError,
+    EvtxVisitSummary, MAX_EVTX_ANALYSIS_BYTES,
 };
 pub use jumplist::JumpListExtractor;
 pub use lnk::parser::LnkExtractor;

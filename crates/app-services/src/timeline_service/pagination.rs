@@ -1,6 +1,8 @@
-use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
+use persistence_sqlite::repositories::timeline_repo::{
+    TimelineCursorRow, TimelineRepo, TimelineSortKey,
+};
 use rusqlite::{params, Connection};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use transport::{
     dto::{TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineStripeDto},
@@ -11,6 +13,10 @@ use super::export::timeline_event_to_source_dto;
 use super::projection::ensure_macb_timeline_projected;
 use super::{TimelineQuery, TimelineServiceError};
 use crate::source_db;
+
+mod cursor;
+
+const TIMELINE_MERGE_BATCH_SIZE: u32 = 256;
 
 struct ClusterRow {
     event_type: String,
@@ -42,12 +48,25 @@ pub fn query_timeline_filtered_for_case(
     case_id: &domain::CaseId,
     query: TimelineQuery<'_>,
 ) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
+    if query.cursor.is_some() && query.offset != 0 {
+        return Err(TimelineServiceError::InvalidInput(
+            "offset must be zero when cursor is provided".to_string(),
+        ));
+    }
+    if query.cursor.is_some() || query.offset == 0 {
+        return cursor::query_cursor_page(case_conn, case_root, case_id, query);
+    }
+    query_timeline_offset_page(case_conn, case_root, case_id, query)
+}
+
+fn query_timeline_offset_page(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    query: TimelineQuery<'_>,
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
     let mut total = 0u64;
-    let mut events = Vec::new();
-    let per_source_limit = query
-        .offset
-        .saturating_add(query.limit as u64)
-        .min(u32::MAX as u64) as u32;
+    let mut sources = Vec::new();
 
     for (source_id, source_conn) in
         source_db::open_ready_source_connections(case_conn, case_root, case_id)?
@@ -59,38 +78,122 @@ pub fn query_timeline_filtered_for_case(
             query.time_end,
             query.event_type,
         )?);
-        let source_events = repo.query_filtered(
-            0,
-            per_source_limit,
+        sources.push(SourceTimelineCursor::new(source_id, source_conn));
+    }
+
+    if query.limit == 0 || query.offset >= total {
+        return Ok(PageResponse {
+            total,
+            items: Vec::new(),
+            next_cursor: None,
+        });
+    }
+
+    let scan_end = query
+        .offset
+        .saturating_add(u64::from(query.limit))
+        .min(total);
+    let batch_size = query.limit.max(TIMELINE_MERGE_BATCH_SIZE);
+    let mut position = 0u64;
+    let mut items = Vec::with_capacity(query.limit as usize);
+    while position < scan_end {
+        for source in &mut sources {
+            source.refill(query, batch_size)?;
+        }
+        let Some(source_index) = next_timeline_source(&sources) else {
+            break;
+        };
+        let source = &mut sources[source_index];
+        let event = source.buffer.pop_front().ok_or_else(|| {
+            TimelineServiceError::Other(
+                "timeline merge cursor selected a source without a buffered event".to_string(),
+            )
+        })?;
+        if position >= query.offset {
+            items.push(timeline_event_to_source_dto(event.event, &source.source_id));
+        }
+        position = position.saturating_add(1);
+    }
+    Ok(PageResponse {
+        total,
+        items,
+        next_cursor: None,
+    })
+}
+
+struct SourceTimelineCursor {
+    source_id: domain::DataSourceId,
+    connection: Connection,
+    after: Option<TimelineSortKey>,
+    buffer: VecDeque<TimelineCursorRow>,
+    exhausted: bool,
+}
+
+impl SourceTimelineCursor {
+    fn new(source_id: domain::DataSourceId, connection: Connection) -> Self {
+        Self {
+            source_id,
+            connection,
+            after: None,
+            buffer: VecDeque::new(),
+            exhausted: false,
+        }
+    }
+
+    fn refill(
+        &mut self,
+        query: TimelineQuery<'_>,
+        batch_size: u32,
+    ) -> Result<(), TimelineServiceError> {
+        if self.exhausted || !self.buffer.is_empty() {
+            return Ok(());
+        }
+        let rows = TimelineRepo::new(&self.connection).query_filtered_after(
+            self.after.as_ref(),
+            batch_size,
             query.time_start,
             query.time_end,
             query.event_type,
         )?;
-        events.extend(
-            source_events
-                .into_iter()
-                .map(|event| (source_id.clone(), event)),
-        );
+        let fetched = rows.len();
+        if let Some(last) = rows.last() {
+            self.after = Some(last.sort_key.clone());
+        }
+        self.buffer.extend(rows);
+        self.exhausted = fetched < batch_size as usize;
+        Ok(())
     }
-
-    sort_source_events(&mut events);
-    let items = events
-        .into_iter()
-        .skip(query.offset as usize)
-        .take(query.limit as usize)
-        .map(|(source_id, event)| timeline_event_to_source_dto(event, &source_id))
-        .collect();
-    Ok(PageResponse { total, items })
 }
 
-fn sort_source_events(events: &mut [(domain::DataSourceId, domain::TimelineEvent)]) {
-    events.sort_by(|(left_source, left), (right_source, right)| {
-        right
-            .timestamp
-            .cmp(&left.timestamp)
-            .then_with(|| left_source.0.cmp(&right_source.0))
-            .then_with(|| left.id.0.cmp(&right.id.0))
-    });
+fn next_timeline_source(sources: &[SourceTimelineCursor]) -> Option<usize> {
+    let mut selected: Option<(usize, &SourceTimelineCursor, &TimelineCursorRow)> = None;
+    for (index, source) in sources.iter().enumerate() {
+        let Some(candidate) = source.buffer.front() else {
+            continue;
+        };
+        if selected
+            .as_ref()
+            .is_none_or(|(_, current_source, current)| {
+                timeline_precedes(source, candidate, current_source, current)
+            })
+        {
+            selected = Some((index, source, candidate));
+        }
+    }
+    selected.map(|(index, _, _)| index)
+}
+
+fn timeline_precedes(
+    left_source: &SourceTimelineCursor,
+    left: &TimelineCursorRow,
+    right_source: &SourceTimelineCursor,
+    right: &TimelineCursorRow,
+) -> bool {
+    left.sort_key.timestamp > right.sort_key.timestamp
+        || (left.sort_key.timestamp == right.sort_key.timestamp
+            && (left_source.source_id.0 < right_source.source_id.0
+                || (left_source.source_id == right_source.source_id
+                    && left.sort_key.event_id < right.sort_key.event_id)))
 }
 
 pub fn query_timeline_aggregated(

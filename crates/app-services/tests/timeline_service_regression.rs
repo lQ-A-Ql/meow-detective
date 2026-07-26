@@ -1,7 +1,8 @@
 use app_services::timeline_service::{
     ensure_macb_timeline_projected, get_timeline_event_by_id_for_case, project_and_store_macb,
-    query_timeline, query_timeline_aggregated, query_timeline_filtered_instrumented,
-    query_timeline_for_case, query_timeline_instrumented, TimelineServiceError,
+    query_timeline, query_timeline_aggregated, query_timeline_filtered_for_case,
+    query_timeline_filtered_instrumented, query_timeline_for_case, query_timeline_instrumented,
+    TimelineQuery, TimelineServiceError,
 };
 use chrono::{TimeZone, Utc};
 use domain::{
@@ -277,6 +278,398 @@ fn timeline_case_pagination_is_stable_across_source_identity_ties() {
             assert_eq!(page.items.len(), 1);
             assert_eq!(page.items[0].id, "ds:source-a:event-2");
             assert_eq!(page.items[0].source_object_id, "ds:source-a:file-event-2");
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn timeline_cursor_freezes_snapshot_and_tracks_only_consumed_keys() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active =
+        app_services::case_service::create_case(temp.path(), "timeline-cursor", Some("tester"))
+            .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let source_a =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let source_b =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-b")?;
+            let timestamp = Utc.with_ymd_and_hms(2026, 2, 3, 4, 5, 6).unwrap();
+            TimelineRepo::new(&source_a).insert_batch_with_case(
+                &[
+                    timeline_event("same-a", timestamp),
+                    timeline_event("same-b", timestamp),
+                    timeline_event("old", timestamp - chrono::Duration::days(1)),
+                ],
+                &active.meta.id.0,
+            )?;
+            TimelineRepo::new(&source_b).insert_batch_with_case(
+                &[timeline_event("same-a", timestamp)],
+                &active.meta.id.0,
+            )?;
+            drop(source_a);
+            drop(source_b);
+
+            let first = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 2,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: None,
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(first.total, 4);
+            assert_eq!(
+                first
+                    .items
+                    .iter()
+                    .map(|event| event.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["ds:source-a:same-a", "ds:source-a:same-b"]
+            );
+            let cursor = first
+                .next_cursor
+                .expect("cursor for remaining snapshot rows");
+
+            let source_b = app_services::source_db::open_source_db(
+                &active.case_root,
+                &DataSourceId("source-b".to_string()),
+            )?;
+            TimelineRepo::new(&source_b).insert_batch_with_case(
+                &[timeline_event(
+                    "inserted-later",
+                    timestamp + chrono::Duration::days(1),
+                )],
+                &active.meta.id.0,
+            )?;
+            drop(source_b);
+
+            let second = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 10,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(second.total, 4);
+            assert_eq!(
+                second
+                    .items
+                    .iter()
+                    .map(|event| event.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["ds:source-b:same-a", "ds:source-a:old"]
+            );
+            assert!(second.next_cursor.is_none());
+
+            let wrong_filter = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 10,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_MODIFIED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(
+                wrong_filter,
+                TimelineServiceError::InvalidInput(_)
+            ));
+
+            let mut tampered = cursor.clone().into_bytes();
+            let payload_index = tampered.iter().position(|byte| *byte == b'.').unwrap() + 1;
+            tampered[payload_index] = if tampered[payload_index] == b'A' {
+                b'B'
+            } else {
+                b'A'
+            };
+            let tampered = String::from_utf8(tampered).unwrap();
+            let error = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 10,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&tampered),
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(error, TimelineServiceError::InvalidInput(_)));
+
+            drop(register_ready_source(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                "source-c",
+            )?);
+            let stale = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(stale, TimelineServiceError::InvalidInput(_)));
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn timeline_cursor_rejects_offset_and_deleted_unconsumed_rows() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "timeline-stale-cursor",
+        Some("tester"),
+    )
+    .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let source =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let timestamp = Utc.with_ymd_and_hms(2026, 2, 3, 4, 5, 6).unwrap();
+            TimelineRepo::new(&source).insert_batch_with_case(
+                &[
+                    timeline_event("newest", timestamp),
+                    timeline_event("middle", timestamp - chrono::Duration::hours(1)),
+                    timeline_event("oldest", timestamp - chrono::Duration::hours(2)),
+                ],
+                &active.meta.id.0,
+            )?;
+            drop(source);
+
+            let first = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: None,
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            let cursor = first.next_cursor.expect("cursor for remaining rows");
+
+            let offset_error = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 1,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .unwrap_err();
+            assert!(matches!(
+                offset_error,
+                TimelineServiceError::InvalidInput(_)
+            ));
+
+            let source = app_services::source_db::open_source_db(
+                &active.case_root,
+                &DataSourceId("source-a".to_string()),
+            )?;
+            source
+                .execute("DELETE FROM timeline_events WHERE id = 'oldest'", [])
+                .map_err(persistence_sqlite::DbError::from)?;
+            drop(source);
+
+            let stale = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .unwrap_err();
+            match stale {
+                TimelineServiceError::InvalidInput(message) => {
+                    assert!(message.contains("timeline snapshot changed"));
+                }
+                other => panic!("expected stale cursor validation error, got {other}"),
+            }
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn timeline_cursor_rejects_equal_count_replacement() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "timeline-equal-count-replacement",
+        Some("tester"),
+    )
+    .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let source =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let timestamp = Utc.with_ymd_and_hms(2026, 2, 3, 4, 5, 6).unwrap();
+            let mut originals = vec![
+                timeline_event("newest", timestamp),
+                timeline_event("middle", timestamp - chrono::Duration::hours(1)),
+                timeline_event("oldest", timestamp - chrono::Duration::hours(2)),
+            ];
+            for event in &mut originals {
+                event.source_object_id = "shared-source".to_string();
+            }
+            TimelineRepo::new(&source).insert_batch_with_case(&originals, &active.meta.id.0)?;
+            drop(source);
+
+            let first = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: None,
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            let cursor = first.next_cursor.expect("cursor for remaining rows");
+
+            let source = app_services::source_db::open_source_db(
+                &active.case_root,
+                &DataSourceId("source-a".to_string()),
+            )?;
+            let transaction = source.unchecked_transaction()?;
+            let repository = TimelineRepo::new(&transaction);
+            assert_eq!(
+                repository.delete_analysis_outputs_in_transaction("shared-source", "test.")?,
+                3
+            );
+            let mut replacements = vec![
+                timeline_event("replacement-newest", timestamp),
+                timeline_event("replacement-middle", timestamp - chrono::Duration::hours(1)),
+                timeline_event("replacement-oldest", timestamp - chrono::Duration::hours(2)),
+            ];
+            for event in &mut replacements {
+                event.source_object_id = "shared-source".to_string();
+            }
+            repository.insert_batch_with_case_in_transaction(&replacements, &active.meta.id.0)?;
+            transaction.commit()?;
+
+            let stale = query_timeline_filtered_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 1,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: Some(&cursor),
+                },
+            )
+            .unwrap_err();
+            match stale {
+                TimelineServiceError::InvalidInput(message) => {
+                    assert!(message.contains("timeline snapshot changed"));
+                }
+                other => panic!("expected stale cursor validation error, got {other}"),
+            }
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn timeline_case_deep_page_refills_sources_in_bounded_batches() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active =
+        app_services::case_service::create_case(temp.path(), "timeline-deep", Some("tester"))
+            .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let first =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let second =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-b")?;
+            let first_base = Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
+            let second_base = Utc.with_ymd_and_hms(2026, 6, 2, 0, 0, 0).unwrap();
+            let first_events = (0..300)
+                .map(|index| {
+                    timeline_event(
+                        &format!("first-{index:03}"),
+                        first_base + chrono::Duration::seconds(index),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let second_events = (0..300)
+                .map(|index| {
+                    timeline_event(
+                        &format!("second-{index:03}"),
+                        second_base + chrono::Duration::seconds(index),
+                    )
+                })
+                .collect::<Vec<_>>();
+            TimelineRepo::new(&first).insert_batch_with_case(&first_events, &active.meta.id.0)?;
+            TimelineRepo::new(&second).insert_batch_with_case(&second_events, &active.meta.id.0)?;
+
+            let page =
+                query_timeline_for_case(case_conn, &active.case_root, &active.meta.id, 520, 40)
+                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+
+            assert_eq!(page.total, 600);
+            assert_eq!(page.items.len(), 40);
+            assert!(page
+                .items
+                .iter()
+                .all(|event| event.id.starts_with("ds:source-a:first-")));
+            assert_eq!(page.items.first().unwrap().id, "ds:source-a:first-079");
+            assert_eq!(page.items.last().unwrap().id, "ds:source-a:first-040");
             Ok(())
         })
         .unwrap();

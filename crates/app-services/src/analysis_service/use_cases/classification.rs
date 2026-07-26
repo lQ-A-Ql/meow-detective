@@ -9,7 +9,7 @@ use crate::analysis_service::file_classification::{
     build_file_classification_board, MAGIC_HEADER_BYTES,
 };
 use crate::analysis_service::{classify_files_by_metadata, AnalysisServiceError};
-use crate::file_service::read_file_header_by_id;
+use crate::file_service::SourceReadContext;
 
 pub fn classify_source_files(
     case_conn: &Connection,
@@ -36,10 +36,22 @@ pub fn get_file_classification_board(
     magic_read_limit: u32,
 ) -> Result<FileClassificationBoardDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let mut source_reader = SourceReadContext::new(
+        &source.connection,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    );
     let mut board =
         build_file_classification_board(&source.connection, magic_read_limit, |file_id| {
-            read_file_header_by_id(&source.connection, file_id, MAGIC_HEADER_BYTES)
+            source_reader.read_file_header_by_id(file_id, MAGIC_HEADER_BYTES)
         })?;
+    if let Err(error) = source_reader.flush_derived_filesystem_locators() {
+        board.warnings.push(format!(
+            "derived filesystem locator hints could not be persisted: {error}"
+        ));
+    }
     for group in &mut board.groups {
         for subcategory in &mut group.subcategories {
             for file in &mut subcategory.files {

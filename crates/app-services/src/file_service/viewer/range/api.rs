@@ -16,8 +16,8 @@ use crate::file_service::{
         try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
         try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
         try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
-        try_read_ntfs_image_range_for_entry, PreviewDescriptor, PreviewPartitionCandidate,
-        PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
+        try_read_ntfs_image_range_for_entry, validate_readable_file_entry, PreviewDescriptor,
+        PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
     },
     FileServiceError,
 };
@@ -102,6 +102,7 @@ fn read_file_bytes_for_entry(
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
+    validate_readable_file_entry(conn, entry)?;
     let length = clamp_range_length(length);
     if let Some(bytes) = try_read_ntfs_image_range_for_entry(conn, repo, entry, offset, length)? {
         return Ok(bytes);

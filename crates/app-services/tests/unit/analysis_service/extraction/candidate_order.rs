@@ -14,6 +14,7 @@ fn candidate(id: &str, partition_index: Option<usize>, path: &str) -> EvidenceCa
         partition_index,
         path: path.to_string(),
         size: 32,
+        encrypted: false,
         content_identity: format!("test:{id}"),
         evidence_kind: "linux".to_string(),
         parser: "linux.web".to_string(),

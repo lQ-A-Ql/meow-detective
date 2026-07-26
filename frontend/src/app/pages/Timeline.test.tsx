@@ -2,10 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PagedResponse } from '@/lib/api/timeline';
+import type { TimelineEvent } from '@/types/models';
 import { Timeline } from './Timeline';
 
 const mocks = vi.hoisted(() => ({
-  timelineEvents: vi.fn(),
+  infiniteTimelineEvents: vi.fn(),
   timelineEventById: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
@@ -20,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/timeline/hooks', () => ({
   useTimelineEventById: mocks.timelineEventById,
-  useTimelineEvents: mocks.timelineEvents,
+  useInfiniteTimelineEvents: mocks.infiniteTimelineEvents,
 }));
 
 vi.mock('@/stores/selection-store', () => ({
@@ -42,6 +44,16 @@ function queryState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function infiniteQueryState(page: typeof emptyTimelineResult) {
+  return queryState({
+    data: { pages: [page], pageParams: [0] },
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+  });
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -55,8 +67,8 @@ function renderPage() {
   );
 }
 
-const emptyTimelineResult = { items: [], total: 0 };
-const populatedTimelineResult = {
+const emptyTimelineResult: PagedResponse<TimelineEvent> = { items: [], total: 0 };
+const populatedTimelineResult: PagedResponse<TimelineEvent> = {
   items: [
     {
       id: 'evt-1',
@@ -92,17 +104,17 @@ describe('Timeline page', () => {
   });
 
   it('renders empty state when no events', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: emptyTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(emptyTimelineResult));
 
     renderPage();
 
     expect(screen.getByText('当前时间范围无事件')).toBeDefined();
     expect(screen.getByText('请扩大时间范围或调整事件过滤条件。')).toBeDefined();
-    expect(screen.getByText(/事件 0 条/)).toBeDefined();
+    expect(screen.getByText(/事件 0\/0 条/)).toBeDefined();
   });
 
   it('renders event list when data is available', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
 
     renderPage();
 
@@ -110,12 +122,12 @@ describe('Timeline page', () => {
     expect(screen.getAllByText('Registry key modified').length).toBeGreaterThan(0);
     expect(screen.getAllByText('FileAccess').length).toBeGreaterThan(0);
     expect(screen.getAllByText('RegistryModified').length).toBeGreaterThan(0);
-    expect(screen.getByText(/事件 2 条/)).toBeDefined();
+    expect(screen.getByText(/事件 2\/2 条/)).toBeDefined();
     expect(screen.getByText(/数据源 2 个/)).toBeDefined();
   });
 
   it('shows inspector pane for selected event', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
     Object.assign(mocks.selectionState, { selectedTimelineId: 'evt-1' });
 
     renderPage();
@@ -127,7 +139,7 @@ describe('Timeline page', () => {
   });
 
   it('hydrates a selected event from by-id query when it is outside the current page', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: emptyTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(emptyTimelineResult));
     Object.assign(mocks.selectionState, { selectedTimelineId: 'evt-offpage' });
     mocks.timelineEventById.mockReturnValue(
       queryState({
@@ -150,7 +162,7 @@ describe('Timeline page', () => {
   });
 
   it('zoom buttons change the number of rendered timeline bars', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
 
     renderPage();
 
@@ -166,7 +178,7 @@ describe('Timeline page', () => {
   });
 
   it('disables Apply and shows an error when the date input does not parse', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
 
     renderPage();
 
@@ -180,7 +192,7 @@ describe('Timeline page', () => {
   });
 
   it('applies a valid date range without throwing', () => {
-    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
 
     renderPage();
 

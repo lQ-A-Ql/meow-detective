@@ -62,7 +62,8 @@ fn unsupported_platform(platform: DataSourcePlatform) -> ImportAnalysisError {
 }
 
 pub(super) fn registry_supports_file(registry: &ExtractorRegistry, file: &FileEntry) -> bool {
-    !registry.find_for_path(&file.path).is_empty()
+    !file.encrypted
+        && !registry.find_for_path(&file.path).is_empty()
         && file
             .size
             .is_some_and(|size| size <= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES)

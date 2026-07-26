@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
+import { Button } from '@/app/components/ui/button';
 import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
 import { SortIndicator } from './SortIndicator';
 
@@ -55,8 +56,21 @@ interface DenseDataTableProps<T> {
   onSort?: (key: string) => void;
   /** 接近当前数据末尾时请求下一段。 */
   onReachEnd?: () => void;
+  /** 逻辑数据上下文变化时重置滚动位置与续载去重状态。 */
+  loadContextKey?: string;
+  /** 查询缓存完成一次更新时变化，用于解除被取消请求留下的续载锁。 */
+  loadStateKey?: string | number;
   hasMore?: boolean;
   loadingMore?: boolean;
+  loadMoreFailed?: boolean;
+  loadMoreErrorText?: string;
+  retryLoadMoreLabel?: string;
+  /** 续载失败后的恢复动作；游标分页通常应重建查询链，而非重放旧游标。 */
+  onRetryLoadMore?: () => unknown;
+  initialLoadFailed?: boolean;
+  initialLoadErrorText?: string;
+  retryInitialLoadLabel?: string;
+  onRetryInitialLoad?: () => void;
 }
 
 interface TableRowMemoProps<T> {
@@ -69,6 +83,7 @@ interface TableRowMemoProps<T> {
 const ROW_HEIGHT = 31;
 const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
+const AUTOMATIC_RETRY_DELAY_MS = 500;
 
 /**
  * 表格行组件 (使用 memo 优化)
@@ -139,11 +154,25 @@ export function DenseDataTable<T>({
   sortDirection,
   onSort,
   onReachEnd,
+  loadContextKey,
+  loadStateKey,
   hasMore = false,
   loadingMore = false,
+  loadMoreFailed = false,
+  loadMoreErrorText = '加载更多记录失败。',
+  retryLoadMoreLabel = '重试',
+  onRetryLoadMore,
+  initialLoadFailed = false,
+  initialLoadErrorText = '记录加载失败。',
+  retryInitialLoadLabel = '重试',
+  onRetryInitialLoad,
 }: DenseDataTableProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
+  const automaticRetryKeyRef = useRef<string | undefined>(undefined);
+  const automaticRetryTimerRef = useRef<number | undefined>(undefined);
+  const retryInFlightRef = useRef(false);
+  const wasLoadingMoreRef = useRef(false);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
 
@@ -153,6 +182,55 @@ export function DenseDataTable<T>({
     },
     [onSort]
   );
+
+  const requestMore = useCallback(() => {
+    if (
+      !hasMore
+      || loadingMore
+      || loadMoreFailed
+      || !onReachEnd
+      || requestedRowCountRef.current === rows.length
+    ) {
+      return;
+    }
+
+    requestedRowCountRef.current = rows.length;
+    onReachEnd();
+  }, [hasMore, loadMoreFailed, loadingMore, onReachEnd, rows.length]);
+
+  const runLoadMoreRecovery = useCallback(() => {
+    const recovery = onRetryLoadMore ?? onReachEnd;
+    if (
+      !hasMore
+      || loadingMore
+      || !recovery
+      || retryInFlightRef.current
+    ) {
+      return;
+    }
+
+    retryInFlightRef.current = true;
+    requestedRowCountRef.current = rows.length;
+    let result: unknown;
+    try {
+      result = recovery();
+    } catch {
+      retryInFlightRef.current = false;
+      return;
+    }
+    void Promise.resolve(result).then(
+      () => { retryInFlightRef.current = false; },
+      () => { retryInFlightRef.current = false; },
+    );
+  }, [hasMore, loadingMore, onReachEnd, onRetryLoadMore, rows.length]);
+
+  const retryMore = useCallback(() => {
+    if (automaticRetryTimerRef.current !== undefined) {
+      window.clearTimeout(automaticRetryTimerRef.current);
+      automaticRetryTimerRef.current = undefined;
+    }
+    runLoadMoreRecovery();
+  }, [runLoadMoreRecovery]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -177,33 +255,99 @@ export function DenseDataTable<T>({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    requestedRowCountRef.current = undefined;
+    automaticRetryKeyRef.current = undefined;
+    retryInFlightRef.current = false;
+    if (automaticRetryTimerRef.current !== undefined) {
+      window.clearTimeout(automaticRetryTimerRef.current);
+      automaticRetryTimerRef.current = undefined;
+    }
+    setScrollTop(0);
+
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [loadContextKey]);
+
+  useEffect(() => {
+    requestedRowCountRef.current = undefined;
+    automaticRetryKeyRef.current = undefined;
+    retryInFlightRef.current = false;
+  }, [loadStateKey]);
+
+  useEffect(() => {
+    if (loadingMore) {
+      wasLoadingMoreRef.current = true;
+      return;
+    }
+    if (wasLoadingMoreRef.current) {
+      wasLoadingMoreRef.current = false;
+      requestedRowCountRef.current = undefined;
+    }
+  }, [loadingMore]);
+
+  useEffect(() => {
+    if (!loadingMore && loadMoreFailed) {
+      requestedRowCountRef.current = undefined;
+    }
+  }, [loadMoreFailed, loadingMore]);
+
+  useEffect(() => {
+    if (!loadMoreFailed || loadingMore || !hasMore || !(onRetryLoadMore ?? onReachEnd)) return;
+
+    const retryKey = `${loadContextKey ?? ''}:${rows.length}`;
+    if (automaticRetryKeyRef.current === retryKey) return;
+    automaticRetryKeyRef.current = retryKey;
+
+    automaticRetryTimerRef.current = window.setTimeout(() => {
+      automaticRetryTimerRef.current = undefined;
+      runLoadMoreRecovery();
+    }, AUTOMATIC_RETRY_DELAY_MS);
+    return () => {
+      if (automaticRetryTimerRef.current !== undefined) {
+        window.clearTimeout(automaticRetryTimerRef.current);
+        automaticRetryTimerRef.current = undefined;
+      }
+    };
+  }, [
+    hasMore,
+    loadContextKey,
+    loadMoreFailed,
+    loadingMore,
+    onReachEnd,
+    onRetryLoadMore,
+    runLoadMoreRecovery,
+    rows.length,
+  ]);
+
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
     setScrollTop(container.scrollTop);
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (
-      hasMore
-      && !loadingMore
-      && remaining <= ROW_HEIGHT * OVERSCAN_ROWS
-      && requestedRowCountRef.current !== rows.length
-    ) {
-      requestedRowCountRef.current = rows.length;
-      onReachEnd?.();
+    if (remaining <= ROW_HEIGHT * OVERSCAN_ROWS) {
+      requestMore();
     }
-  }, [hasMore, loadingMore, onReachEnd, rows.length]);
+  }, [requestMore]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !hasMore || loadingMore || !onReachEnd) return;
+    if (!container || !hasMore || loadingMore || loadMoreFailed || !onReachEnd) return;
     if (container.clientHeight <= 0) return;
 
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (remaining > ROW_HEIGHT * OVERSCAN_ROWS) return;
-    if (requestedRowCountRef.current === rows.length) return;
-
-    requestedRowCountRef.current = rows.length;
-    onReachEnd();
-  }, [containerHeight, hasMore, loadingMore, onReachEnd, rows.length]);
+    requestMore();
+  }, [
+    containerHeight,
+    hasMore,
+    loadContextKey,
+    loadMoreFailed,
+    loadingMore,
+    onReachEnd,
+    requestMore,
+    rows.length,
+  ]);
 
   const visibleRange = useMemo(() => {
     const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
@@ -255,7 +399,26 @@ export function DenseDataTable<T>({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
+          {rows.length === 0 && initialLoadFailed ? (
+            <TableRow aria-live="polite" className="hover:bg-transparent">
+              <TableCell colSpan={columns.length} className="px-4 py-8">
+                <div className="flex items-center justify-center gap-2 text-forensics-error-text">
+                  <span>{initialLoadErrorText}</span>
+                  {onRetryInitialLoad ? (
+                    <Button
+                      type="button"
+                      variant="forensicsOutline"
+                      size="compact"
+                      onClick={onRetryInitialLoad}
+                    >
+                      {retryInitialLoadLabel}
+                    </Button>
+                  ) : null}
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {rows.length === 0 && !initialLoadFailed ? (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columns.length} className="px-4 py-8">
                 <div className="space-y-1 text-center font-serif">
@@ -307,6 +470,26 @@ export function DenseDataTable<T>({
                 className="border-r-0 px-3 py-2 text-center text-forensics-muted"
               >
                 正在加载更多记录...
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {loadMoreFailed && !loadingMore ? (
+            <TableRow aria-live="polite" className="hover:bg-transparent">
+              <TableCell
+                colSpan={columns.length}
+                className="border-r-0 px-3 py-2 text-center text-forensics-error-text"
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <span>{loadMoreErrorText}</span>
+                  <Button
+                    type="button"
+                    variant="forensicsOutline"
+                    size="compact"
+                    onClick={retryMore}
+                  >
+                    {retryLoadMoreLabel}
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ) : null}

@@ -16,7 +16,7 @@ import {
   InspectorSection,
   InspectorValue,
 } from '@/components/layout/InspectorPane';
-import { useTimelineEventById, useTimelineEvents } from '@/features/timeline/hooks';
+import { useInfiniteTimelineEvents, useTimelineEventById } from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import { TimelineEvent } from '@/types/models';
 
@@ -106,14 +106,21 @@ export function Timeline() {
   const draftDatesValid = isValidDateInput(draftTimeStart) && isValidDateInput(draftTimeEnd);
   const normalizedTimeStart = useMemo(() => toIsoOrUndefined(timeStart), [timeStart]);
   const normalizedTimeEnd = useMemo(() => toIsoOrUndefined(timeEnd), [timeEnd]);
-  const { data: timelineData } = useTimelineEvents({
-    offset: 0,
-    limit: 100,
+  const timelineQuery = useInfiniteTimelineEvents({
     timeStart: normalizedTimeStart,
     timeEnd: normalizedTimeEnd,
     eventType: eventType || undefined,
   });
-  const events = timelineData?.items ?? [];
+  const timelineLoadContextKey = JSON.stringify([
+    normalizedTimeStart ?? null,
+    normalizedTimeEnd ?? null,
+    eventType || null,
+  ]);
+  const events = useMemo(
+    () => timelineQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [timelineQuery.data],
+  );
+  const totalEvents = timelineQuery.data?.pages[0]?.total ?? 0;
   const {
     eventLookupId,
     jumpToSource,
@@ -180,7 +187,7 @@ export function Timeline() {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title="时间线控制带" meta={`事件 ${events.length} 条 / 数据源 ${sourceCount} 个`}>
+      <PageSubbar title="时间线控制带" meta={`事件 ${events.length}/${totalEvents} 条 / 数据源 ${sourceCount} 个`}>
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
           <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
@@ -322,6 +329,15 @@ export function Timeline() {
             emptyTitle="当前时间范围无事件"
             emptyDescription="请扩大时间范围或调整事件过滤条件。"
             columns={TIMELINE_COLUMNS}
+            loadContextKey={timelineLoadContextKey}
+            loadStateKey={timelineQuery.dataUpdatedAt}
+            onReachEnd={() => { void timelineQuery.fetchNextPage(); }}
+            onRetryLoadMore={() => timelineQuery.refetch()}
+            hasMore={timelineQuery.hasNextPage}
+            loadingMore={timelineQuery.isFetchingNextPage}
+            loadMoreFailed={timelineQuery.isFetchNextPageError}
+            initialLoadFailed={timelineQuery.isError && events.length === 0}
+            onRetryInitialLoad={() => { void timelineQuery.refetch(); }}
           />
         </div>
 

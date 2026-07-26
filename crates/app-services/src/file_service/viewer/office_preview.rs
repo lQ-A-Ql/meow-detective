@@ -4,11 +4,17 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{Cursor, Read};
-use transport::dto::{DocumentPreviewDto, DocumentSectionDto, DocumentTableDto};
+use transport::dto::{DocumentPreviewDto, DocumentSectionDto};
 use zip::ZipArchive;
 
-use super::document::{bounded_line, DocumentKind, MAX_SECTION_LINES};
+use super::document::{bounded_line_with_status, DocumentKind, MAX_LINE_CHARS, MAX_SECTION_LINES};
 use crate::file_service::FileServiceError;
+
+mod pptx;
+mod xlsx;
+
+pub(crate) use pptx::preview_pptx;
+pub(crate) use xlsx::preview_xlsx;
 
 const MAX_OFFICE_PARTS: usize = 20;
 
@@ -16,7 +22,7 @@ const MAX_ZIP_ENTRY_TEXT_BYTES: u64 = 32 * 1024 * 1024;
 pub(crate) fn preview_office_part(
     bytes: &[u8],
     kind: DocumentKind,
-    extract: impl Fn(&str) -> Vec<String>,
+    extract: impl Fn(&str) -> BoundedTextLines,
 ) -> Result<DocumentPreviewDto, FileServiceError> {
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
         FileServiceError::invalid_input(format!("Office container parse failed: {error}"))
@@ -25,141 +31,147 @@ pub(crate) fn preview_office_part(
         DocumentKind::Docx => "word/document.xml",
         _ => unreachable!("preview_office_part only handles docx"),
     };
-    let xml = read_zip_text(&mut archive, part_path)?;
-    let lines = extract(&xml);
-    let truncated = lines.len() >= MAX_SECTION_LINES;
+    let part = read_zip_text(&mut archive, part_path)?;
+    let text = extract(&part.text);
+    let truncated = part.truncated || text.truncated;
+    let mut warnings = part.warnings(part_path);
+    if text.line_count_truncated {
+        warnings.push(format!(
+            "{part_path}: paragraph preview limited to {MAX_SECTION_LINES} lines"
+        ));
+    }
+    if text.line_width_truncated {
+        warnings.push(format!(
+            "{part_path}: paragraph text limited to {MAX_LINE_CHARS} characters per line"
+        ));
+    }
     Ok(DocumentPreviewDto {
         kind: kind.as_str().to_string(),
-        summary: format!("{} paragraphs", lines.len()),
+        summary: format!("{} paragraphs", text.lines.len()),
         sections: vec![DocumentSectionDto {
             title: "Content".to_string(),
-            lines,
+            lines: text.lines,
             table: None,
         }],
-        truncated,
-        warnings: Vec::new(),
-    })
-}
-
-/// `ppt/presentation.xml` only holds the slide-id list and deck defaults.
-pub(crate) fn preview_pptx(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
-        FileServiceError::invalid_input(format!("PPTX container parse failed: {error}"))
-    })?;
-    let mut sections = Vec::new();
-    let mut missing = 0usize;
-    for index in 1..=MAX_OFFICE_PARTS {
-        let path = format!("ppt/slides/slide{index}.xml");
-        match read_zip_text(&mut archive, &path) {
-            Ok(xml) => sections.push(DocumentSectionDto {
-                title: format!("Slide {index}"),
-                lines: office_pptx_lines(&xml),
-                table: None,
-            }),
-            Err(_) => {
-                missing += 1;
-                // Slide parts are numbered contiguously from 1; stop after the
-                // first gap once at least one slide was read.
-                if !sections.is_empty() {
-                    break;
-                }
-                if missing >= 3 {
-                    break;
-                }
-            }
-        }
-    }
-    let truncated = sections.len() >= MAX_OFFICE_PARTS;
-    Ok(DocumentPreviewDto {
-        kind: DocumentKind::Pptx.as_str().to_string(),
-        summary: format!("{} slides", sections.len()),
-        sections,
-        truncated,
-        warnings: Vec::new(),
-    })
-}
-
-pub(crate) fn preview_xlsx(bytes: &[u8]) -> Result<DocumentPreviewDto, FileServiceError> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
-        FileServiceError::invalid_input(format!("XLSX container parse failed: {error}"))
-    })?;
-    let sheets = xlsx_sheet_entries(&read_zip_text(&mut archive, "xl/workbook.xml")?);
-    let rels = read_zip_text(&mut archive, "xl/_rels/workbook.xml.rels")
-        .map(|xml| xlsx_rels_targets(&xml))
-        .unwrap_or_default();
-    let shared = read_zip_text(&mut archive, "xl/sharedStrings.xml")
-        .map(|xml| xlsx_shared_strings(&xml))
-        .unwrap_or_default();
-    let mut sections = Vec::new();
-    let mut warnings = Vec::new();
-    for (index, (name, relationship_id)) in sheets.iter().take(MAX_OFFICE_PARTS).enumerate() {
-        // The r:id -> target mapping is authoritative: reordered or deleted
-        // sheets make `sheetN.xml` guesses wrong on real workbooks.
-        let path = relationship_id
-            .as_deref()
-            .and_then(|rid| rels.get(rid))
-            .map(|target| format!("xl/{target}"))
-            .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", index + 1));
-        match read_zip_text(&mut archive, &path) {
-            Ok(xml) => {
-                let rows = xlsx_sheet_rows(&xml, &shared);
-                let lines = rows
-                    .iter()
-                    .map(|cells| bounded_line(&cells.join(" | ")))
-                    .collect::<Vec<_>>();
-                let width = rows.iter().map(Vec::len).max().unwrap_or(0);
-                sections.push(DocumentSectionDto {
-                    title: format!("Sheet: {name}"),
-                    lines,
-                    table: Some(DocumentTableDto {
-                        columns: spreadsheet_column_names(width),
-                        rows,
-                    }),
-                });
-            }
-            Err(error) => warnings.push(format!("{path}: {error}")),
-        }
-    }
-    let truncated = sheets.len() > MAX_OFFICE_PARTS;
-    Ok(DocumentPreviewDto {
-        kind: DocumentKind::Xlsx.as_str().to_string(),
-        summary: format!("{} sheets", sheets.len()),
-        sections,
         truncated,
         warnings,
     })
 }
 
+pub(super) struct ZipText {
+    pub(super) text: String,
+    pub(super) truncated: bool,
+}
+
+impl ZipText {
+    pub(super) fn warnings(&self, path: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if self.truncated {
+            warnings.push(format!(
+                "{path}: XML entry limited to {} MiB",
+                MAX_ZIP_ENTRY_TEXT_BYTES / (1024 * 1024)
+            ));
+        }
+        if let Some(warning) = xml_parse_warning(path, &self.text) {
+            warnings.push(warning);
+        }
+        warnings
+    }
+}
+
 pub(crate) fn read_zip_text(
     archive: &mut ZipArchive<Cursor<&[u8]>>,
     path: &str,
-) -> Result<String, FileServiceError> {
+) -> Result<ZipText, FileServiceError> {
     let entry = archive
         .by_name(path)
         .map_err(|error| FileServiceError::invalid_input(format!("{path}: {error}")))?;
+    let declared_size = entry.size();
     let mut bytes = Vec::with_capacity(entry.size().min(MAX_ZIP_ENTRY_TEXT_BYTES) as usize);
     entry
-        .take(MAX_ZIP_ENTRY_TEXT_BYTES)
+        .take(MAX_ZIP_ENTRY_TEXT_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(FileServiceError::from)?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    let truncated =
+        declared_size > MAX_ZIP_ENTRY_TEXT_BYTES || bytes.len() as u64 > MAX_ZIP_ENTRY_TEXT_BYTES;
+    bytes.truncate(MAX_ZIP_ENTRY_TEXT_BYTES as usize);
+    Ok(ZipText {
+        text: String::from_utf8_lossy(&bytes).into_owned(),
+        truncated,
+    })
+}
+
+pub(super) fn xml_parse_warning(path: &str, xml: &str) -> Option<String> {
+    let mut reader = Reader::from_str(xml);
+    let mut depth = 0usize;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(_)) => depth = depth.saturating_add(1),
+            Ok(Event::End(_)) if depth > 0 => depth -= 1,
+            Ok(Event::End(_)) => {
+                return Some(format!(
+                    "{path}: XML parse warning: unmatched closing element"
+                ));
+            }
+            Ok(Event::Eof) if depth > 0 => {
+                return Some(format!(
+                    "{path}: XML parse warning: {depth} unclosed element(s)"
+                ));
+            }
+            Ok(Event::Eof) => return None,
+            Err(error) => return Some(format!("{path}: XML parse warning: {error}")),
+            _ => {}
+        }
+    }
+}
+
+pub(super) fn resolve_zip_target(base: &str, target: &str) -> Option<String> {
+    let target = target.replace('\\', "/");
+    if target.contains("://") || target.contains('\0') {
+        return None;
+    }
+    let joined = if target.starts_with('/') {
+        target.trim_start_matches('/').to_string()
+    } else {
+        format!("{base}/{target}")
+    };
+    let mut parts = Vec::new();
+    for part in joined.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            _ => parts.push(part),
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
 }
 
 /// Decode a quick-xml text node and unescape XML entities.
-pub(crate) fn office_docx_lines(xml: &str) -> Vec<String> {
+pub(crate) fn office_docx_lines(xml: &str) -> BoundedTextLines {
     tagged_lines(xml, b"w:p", b"w:t")
 }
 
-pub(crate) fn office_pptx_lines(xml: &str) -> Vec<String> {
+pub(super) fn office_pptx_lines(xml: &str) -> BoundedTextLines {
     tagged_lines(xml, b"a:p", b"a:t")
 }
 
 /// Group `<text_tag>` text runs into one line per `<para_tag>` element.
-pub(crate) fn tagged_lines(xml: &str, para_tag: &[u8], text_tag: &[u8]) -> Vec<String> {
+pub(crate) struct BoundedTextLines {
+    pub(super) lines: Vec<String>,
+    pub(super) truncated: bool,
+    pub(super) line_count_truncated: bool,
+    pub(super) line_width_truncated: bool,
+}
+
+fn tagged_lines(xml: &str, para_tag: &[u8], text_tag: &[u8]) -> BoundedTextLines {
     let mut reader = Reader::from_str(xml);
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut in_text = false;
+    let mut line_count_truncated = false;
+    let mut line_width_truncated = false;
     loop {
         match reader.read_event() {
             Ok(Event::Start(element)) if element.name().as_ref() == para_tag => current.clear(),
@@ -173,150 +185,37 @@ pub(crate) fn tagged_lines(xml: &str, para_tag: &[u8], text_tag: &[u8]) -> Vec<S
             }
             Ok(Event::GeneralRef(reference)) => {
                 if in_text {
-                    if let Ok(name) = std::str::from_utf8(&reference) {
-                        let resolved = resolve_char_reference(name)
-                            .or_else(|| quick_xml::escape::resolve_predefined_entity(name));
-                        if let Some(value) = resolved {
-                            current.push_str(value);
-                        }
+                    if let Some(value) = resolve_xml_reference(reference.as_ref()) {
+                        current.push_str(&value);
                     }
                 }
             }
             Ok(Event::End(element)) if element.name().as_ref() == text_tag => in_text = false,
             Ok(Event::End(element)) if element.name().as_ref() == para_tag => {
-                let line = bounded_line(&current);
+                let (line, was_truncated) = bounded_line_with_status(&current);
+                line_width_truncated |= was_truncated;
                 if !line.is_empty() {
+                    if lines.len() >= MAX_SECTION_LINES {
+                        line_count_truncated = true;
+                        break;
+                    }
                     lines.push(line);
                 }
                 current.clear();
-                if lines.len() >= MAX_SECTION_LINES {
-                    break;
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        if lines.len() >= MAX_SECTION_LINES {
-            break;
-        }
-    }
-    lines
-}
-
-/// Sheet entries from `xl/workbook.xml`: `(name, r:id)`.
-/// `Id -> Target` map from `xl/_rels/workbook.xml.rels`.
-pub(crate) fn xlsx_shared_strings(xml: &str) -> Vec<String> {
-    let mut reader = Reader::from_str(xml);
-    let mut strings = Vec::new();
-    let mut current = String::new();
-    let mut in_si = false;
-    loop {
-        match reader.read_event() {
-            Ok(Event::Start(element)) if element.name().as_ref() == b"si" => {
-                in_si = true;
-                current.clear();
-            }
-            Ok(Event::Text(text)) if in_si => {
-                if let Some(value) = xml_text(&text) {
-                    current.push_str(&value);
-                }
-            }
-            Ok(Event::End(element)) if element.name().as_ref() == b"si" => {
-                strings.push(std::mem::take(&mut current));
-                in_si = false;
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
             _ => {}
         }
     }
-    strings
-}
-
-/// Bounded cell-grid rows for one worksheet: shared strings resolved, each
-/// cell text bounded, and fully empty rows dropped.
-pub(crate) fn xlsx_sheet_rows(xml: &str, shared: &[String]) -> Vec<Vec<String>> {
-    let mut reader = Reader::from_str(xml);
-    let mut rows = Vec::new();
-    let mut cells = Vec::new();
-    let mut cell_type = String::new();
-    let mut cell_value = String::new();
-    loop {
-        match reader.read_event() {
-            Ok(Event::Start(element)) => match element.name().as_ref() {
-                b"row" => cells.clear(),
-                b"c" => {
-                    cell_value.clear();
-                    cell_type.clear();
-                    for attribute in element.attributes().flatten() {
-                        if attribute.key.as_ref() == b"t" {
-                            cell_type = String::from_utf8_lossy(&attribute.value).into_owned();
-                        }
-                    }
-                }
-                b"v" | b"t" => {}
-                _ => {}
-            },
-            Ok(Event::Text(text)) => {
-                if let Some(value) = xml_text(&text) {
-                    cell_value.push_str(&value);
-                }
-            }
-            Ok(Event::End(element)) => match element.name().as_ref() {
-                b"c" => {
-                    let rendered = if cell_type == "s" {
-                        cell_value
-                            .parse::<usize>()
-                            .ok()
-                            .and_then(|index| shared.get(index))
-                            .cloned()
-                            .unwrap_or_default()
-                    } else {
-                        std::mem::take(&mut cell_value)
-                    };
-                    cells.push(bounded_line(&rendered));
-                    cell_value.clear();
-                    cell_type.clear();
-                }
-                b"row" => {
-                    if cells.iter().any(|cell| !cell.is_empty()) {
-                        rows.push(std::mem::take(&mut cells));
-                    } else {
-                        cells.clear();
-                    }
-                    if rows.len() >= MAX_SECTION_LINES {
-                        break;
-                    }
-                }
-                _ => {}
-            },
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
+    BoundedTextLines {
+        lines,
+        truncated: line_count_truncated || line_width_truncated,
+        line_count_truncated,
+        line_width_truncated,
     }
-    rows
 }
 
-/// Spreadsheet-style column letters (A..Z, AA..) for `width` columns.
-fn spreadsheet_column_names(width: usize) -> Vec<String> {
-    (0..width)
-        .map(|index| {
-            let mut remaining = index;
-            let mut name = String::new();
-            loop {
-                name.insert(0, (b'A' + (remaining % 26) as u8) as char);
-                remaining /= 26;
-                if remaining == 0 {
-                    break;
-                }
-                remaining -= 1;
-            }
-            name
-        })
-        .collect()
-}
 pub(crate) fn xml_text(text: &quick_xml::events::BytesText<'_>) -> Option<String> {
     let decoded = text.decode().ok()?;
     quick_xml::escape::unescape(&decoded)
@@ -324,81 +223,15 @@ pub(crate) fn xml_text(text: &quick_xml::events::BytesText<'_>) -> Option<String
         .map(|value| value.into_owned())
 }
 /// Resolve a numeric character reference (`&#38;` / `&#x26;`).
-pub(crate) fn xlsx_sheet_entries(xml: &str) -> Vec<(String, Option<String>)> {
-    let mut reader = Reader::from_str(xml);
-    let mut entries = Vec::new();
-    loop {
-        match reader.read_event() {
-            Ok(Event::Empty(element)) | Ok(Event::Start(element))
-                if element.name().as_ref() == b"sheet" =>
-            {
-                let mut name = String::new();
-                let mut relationship_id = None;
-                for attribute in element.attributes().flatten() {
-                    match attribute.key.as_ref() {
-                        b"name" => name = String::from_utf8_lossy(&attribute.value).into_owned(),
-                        b"r:id" => {
-                            relationship_id =
-                                Some(String::from_utf8_lossy(&attribute.value).into_owned())
-                        }
-                        _ => {}
-                    }
-                }
-                entries.push((name, relationship_id));
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
+pub(crate) fn resolve_xml_reference(reference: &[u8]) -> Option<String> {
+    let name = std::str::from_utf8(reference).ok()?;
+    if let Some(value) = quick_xml::escape::resolve_predefined_entity(name) {
+        return Some(value.to_string());
     }
-    entries
-}
-
-pub(crate) fn xlsx_rels_targets(xml: &str) -> std::collections::HashMap<String, String> {
-    let mut reader = Reader::from_str(xml);
-    let mut targets = std::collections::HashMap::new();
-    loop {
-        match reader.read_event() {
-            Ok(Event::Empty(element)) | Ok(Event::Start(element))
-                if element.name().as_ref() == b"Relationship" =>
-            {
-                let mut id = None;
-                let mut target = None;
-                for attribute in element.attributes().flatten() {
-                    match attribute.key.as_ref() {
-                        b"Id" => id = Some(String::from_utf8_lossy(&attribute.value).into_owned()),
-                        b"Target" => {
-                            target = Some(String::from_utf8_lossy(&attribute.value).into_owned())
-                        }
-                        _ => {}
-                    }
-                }
-                if let (Some(id), Some(target)) = (id, target) {
-                    targets.insert(id, target);
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-    }
-    targets
-}
-
-pub(crate) fn resolve_char_reference(name: &str) -> Option<&'static str> {
     let code = name
         .strip_prefix("#x")
         .or_else(|| name.strip_prefix("#X"))
         .and_then(|hex| u32::from_str_radix(hex, 16).ok())
         .or_else(|| name.strip_prefix('#')?.parse::<u32>().ok())?;
-    // Only the XML-significant ASCII references are returned statically;
-    // everything else is left to the caller's plain-text handling.
-    match code {
-        38 => Some("&"),
-        60 => Some("<"),
-        62 => Some(">"),
-        34 => Some("\""),
-        39 => Some("'"),
-        _ => None,
-    }
+    char::from_u32(code).map(|value| value.to_string())
 }

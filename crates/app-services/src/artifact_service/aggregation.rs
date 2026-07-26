@@ -12,6 +12,12 @@ use super::{
     ArtifactServiceError,
 };
 
+mod pagination;
+
+pub use pagination::{
+    get_artifact_rows_page_for_case, get_artifact_rows_page_with_cursor_for_case,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceArtifactFamilyCount {
     pub data_source_id: DataSourceId,
@@ -59,7 +65,7 @@ pub fn get_artifact_rows_for_case(
             .cmp(&left.created_at)
             .then_with(|| left.id.cmp(&right.id))
     });
-    rows.truncate(1000);
+    rows.truncate(1_000);
     Ok(rows)
 }
 

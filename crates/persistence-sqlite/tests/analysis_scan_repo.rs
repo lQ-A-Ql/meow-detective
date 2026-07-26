@@ -105,6 +105,50 @@ fn complete_candidate_scan_round_trips_output_identity() {
 }
 
 #[test]
+fn checkpoint_state_transition_removes_superseded_variant() {
+    let connection = open_in_memory().expect("open source database");
+    runner::run_source_all(&connection).expect("run source migrations");
+    let repository = AnalysisScanRepo::new(&connection);
+    let diagnostic = DiagnosticAnalysisCandidateScan {
+        source_object_id: "inode-99".to_string(),
+        capability_key: "EventLogs".to_string(),
+        extractor_version: "2.0.0".to_string(),
+        source_size: 16384,
+        content_identity: "content-v1".to_string(),
+        warnings: vec!["temporary parse failure".to_string()],
+    };
+    repository
+        .insert_diagnostic_batch(std::slice::from_ref(&diagnostic))
+        .expect("insert diagnostic checkpoint");
+    let complete = CompleteAnalysisCandidateScan {
+        source_object_id: diagnostic.source_object_id.clone(),
+        capability_key: diagnostic.capability_key.clone(),
+        extractor_version: diagnostic.extractor_version.clone(),
+        source_size: diagnostic.source_size,
+        content_identity: diagnostic.content_identity.clone(),
+        artifact_count: 4,
+        timeline_event_count: 4,
+        output_digest: "b".repeat(64),
+        warnings: Vec::new(),
+    };
+
+    repository
+        .insert_all_checkpoint_batch(&[], &[], std::slice::from_ref(&complete))
+        .expect("replace checkpoint with complete state");
+
+    assert!(repository
+        .list_diagnostics_for_version("2.0.0")
+        .expect("list diagnostics")
+        .is_empty());
+    assert_eq!(
+        repository
+            .list_complete_for_version("2.0.0")
+            .expect("list complete checkpoints"),
+        vec![complete]
+    );
+}
+
+#[test]
 fn checkpoint_cache_is_optional_for_non_source_databases() {
     let connection = open_in_memory().expect("open application database");
     runner::run_all(&connection).expect("run application migrations");

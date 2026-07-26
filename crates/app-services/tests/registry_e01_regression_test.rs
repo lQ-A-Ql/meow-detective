@@ -7,10 +7,9 @@ use std::path::Path;
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
-    std::env::var("FORENSICS_JC2_E01_FIXTURE")
-        .ok()
+    std::env::var_os("FORENSICS_JC2_E01_FIXTURE")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("D:/獬豸杯/检材2.E01"))
+        .unwrap_or_else(|| panic!("set FORENSICS_JC2_E01_FIXTURE to run ignored registry tests"))
 }
 
 const MAIN_NTFS_OFFSET: u64 = 608_174_080;
@@ -36,6 +35,7 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
         partition_index: None,
         path: path.to_string(),
         size: 0,
+        encrypted: false,
         content_identity: format!("test:{file_id}"),
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.hive".to_string(),
@@ -44,7 +44,7 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
 }
 
 // Local run example:
-//   $env:FORENSICS_JC2_E01_FIXTURE='D:/獬豸杯/检材2.E01'
+//   $env:FORENSICS_JC2_E01_FIXTURE='<path-to-private-windows-sample.E01>'
 //   cargo test -p app-services --test registry_e01_regression_test -- --ignored --nocapture
 #[test]
 #[ignore = "requires FORENSICS_JC2_E01_FIXTURE real E01 sample"]

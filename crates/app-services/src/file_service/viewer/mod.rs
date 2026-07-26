@@ -16,6 +16,7 @@ mod preview_bytes;
 mod range;
 mod range_fs;
 mod text;
+mod validation;
 
 pub use crate::e01_reader_cache::{clear_e01_reader_cache, clear_e01_reader_cache_for_case};
 pub use document::document_preview_for_file;
@@ -25,6 +26,7 @@ pub use io::skip_reader_bytes;
 pub use media::{media_preview_plan_for_file, media_range_for_file, MediaPreviewPlan};
 pub use path::safe_relative_path;
 pub use preview_bytes::read_preview_bytes_for_file;
+pub(crate) use range::open_range_content_for_descriptor_with_context;
 pub(crate) use range::read_file_header_with_context;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,
@@ -65,6 +67,7 @@ pub(crate) use range_fs::{
     try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
     try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
 };
+pub(crate) use validation::{validate_file_encryption_status, validate_readable_file_entry};
 
 #[cfg(test)]
 #[path = "../../../tests/unit/file_service/viewer.rs"]

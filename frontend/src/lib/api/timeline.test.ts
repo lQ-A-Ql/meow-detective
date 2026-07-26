@@ -26,6 +26,7 @@ describe('timeline API', () => {
         timeStart: undefined,
         timeEnd: undefined,
         eventType: undefined,
+        cursor: undefined,
       },
     });
     expect(result).toEqual({ total: 0, items: [] });
@@ -47,6 +48,22 @@ describe('timeline API', () => {
         timeStart: '2026-01-01T00:00:00Z',
         timeEnd: '2026-06-01T00:00:00Z',
         eventType: 'file_access',
+        cursor: undefined,
+      },
+    });
+  });
+
+  it('getTimelineEvents forwards an opaque cursor', async () => {
+    requestMock.mockResolvedValueOnce({ total: 5, items: [] } as never);
+    await getTimelineEvents({ limit: 25, cursor: 'timeline-cursor-1' });
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.timeline.GET_TIMELINE_EVENTS, {
+      request: {
+        offset: 0,
+        limit: 25,
+        timeStart: undefined,
+        timeEnd: undefined,
+        eventType: undefined,
+        cursor: 'timeline-cursor-1',
       },
     });
   });

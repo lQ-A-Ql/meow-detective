@@ -1,5 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::collections::BTreeSet;
 
 const CLEAN_SCAN_KEY_PREFIX: &str = "analysis_candidate_scan:clean:";
 const DIAGNOSTIC_SCAN_KEY_PREFIX: &str = "analysis_candidate_scan:diagnostic:";
@@ -130,6 +131,7 @@ impl<'a> AnalysisScanRepo<'a> {
         if !self.source_meta_available()? {
             return Ok(());
         }
+        self.clear_superseded_checkpoint_variants(clean_scans, diagnostic_scans, complete_scans)?;
         let mut statement = self.conn.prepare_cached(
             "INSERT INTO source_meta (key, value)
              VALUES (?1, ?2)
@@ -163,6 +165,47 @@ impl<'a> AnalysisScanRepo<'a> {
                     &scan.extractor_version
                 ),
                 encode_complete_scan(scan),
+            ])?;
+        }
+        Ok(())
+    }
+
+    fn clear_superseded_checkpoint_variants(
+        &self,
+        clean_scans: &[CleanAnalysisCandidateScan],
+        diagnostic_scans: &[DiagnosticAnalysisCandidateScan],
+        complete_scans: &[CompleteAnalysisCandidateScan],
+    ) -> DbResult<()> {
+        let mut identities = BTreeSet::new();
+        for scan in clean_scans {
+            identities.insert((
+                scan.source_object_id.as_str(),
+                scan.capability_key.as_str(),
+                scan.extractor_version.as_str(),
+            ));
+        }
+        for scan in diagnostic_scans {
+            identities.insert((
+                scan.source_object_id.as_str(),
+                scan.capability_key.as_str(),
+                scan.extractor_version.as_str(),
+            ));
+        }
+        for scan in complete_scans {
+            identities.insert((
+                scan.source_object_id.as_str(),
+                scan.capability_key.as_str(),
+                scan.extractor_version.as_str(),
+            ));
+        }
+        let mut statement = self
+            .conn
+            .prepare_cached("DELETE FROM source_meta WHERE key IN (?1, ?2, ?3)")?;
+        for (source_object_id, capability_key, extractor_version) in identities {
+            statement.execute(params![
+                clean_scan_key(source_object_id, capability_key, extractor_version),
+                diagnostic_scan_key(source_object_id, capability_key, extractor_version),
+                complete_scan_key(source_object_id, capability_key, extractor_version),
             ])?;
         }
         Ok(())

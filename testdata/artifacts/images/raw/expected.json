@@ -1,0 +1,36 @@
+[
+  {
+    "file": "tiny.raw",
+    "expected": {
+      "baseline": "project fixture tiny.raw; raw image reader backed by OS file I/O with no transformation",
+      "assertions": {
+        "kind": "raw",
+        "sizeGt": 0,
+        "sizeMatchesOSMetadata": true,
+        "opensWithoutError": true,
+        "readReturnsExactRequestedBytes": true,
+        "seekToStartThenReadFirstByte": true,
+        "seekToEnd": true,
+        "seekFromCurrent": true,
+        "readAtEOFReturnsZero": true,
+        "passthroughIntegrity": true
+      },
+      "guaranteedFields": [
+        "path",
+        "size",
+        "kind",
+        "read",
+        "seek"
+      ],
+      "bestEffortFields": [],
+      "notGuaranteedFields": [],
+      "fieldNamingConvention": "camelCase",
+      "timezoneNormalizationRule": "not applicable; RAW reader does not produce timestamp fields",
+      "emptyValueStrategy": {
+        "null": "absent field (not used in RAW reader output)",
+        "zero": "valid zero size (empty raw image; rejected by open)"
+      },
+      "sortOrderRule": "not applicable; RAW reader produces single entry per image"
+    }
+  }
+]

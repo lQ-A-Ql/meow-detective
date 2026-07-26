@@ -72,7 +72,7 @@ fn source_migration_installs_sanitized_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_024_ntfs_deleted_recovery"
+        "source_027_artifact_keyset_indexes"
     );
     for table in ["ceph_osd_inventory", "ceph_osd_label_replicas"] {
         let exists: bool = conn

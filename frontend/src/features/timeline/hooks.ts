@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { getTimelineEventById, getTimelineEvents, TimelineRequest } from '@/lib/api/timeline';
 import { timelineQueryKeys } from '@/features/cache-invalidation';
 
@@ -6,6 +6,22 @@ export function useTimelineEvents(request?: TimelineRequest) {
   return useQuery({
     queryKey: timelineQueryKeys.events(request),
     queryFn: () => getTimelineEvents(request),
+  });
+}
+
+export function useInfiniteTimelineEvents(
+  request?: Omit<TimelineRequest, 'offset' | 'limit' | 'cursor'>,
+  pageSize = 200,
+) {
+  return useInfiniteQuery({
+    queryKey: [...timelineQueryKeys.events({ ...request, limit: pageSize }), 'infinite'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getTimelineEvents({
+      ...request,
+      limit: pageSize,
+      cursor: pageParam,
+    }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
 }
 

@@ -386,7 +386,7 @@ fn source_migrations_are_current_and_reapplication_is_idempotent() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_024_ntfs_deleted_recovery"
+        "source_027_artifact_keyset_indexes"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     let index_count: u64 = conn

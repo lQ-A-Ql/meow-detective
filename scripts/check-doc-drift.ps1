@@ -108,15 +108,32 @@ function Assert-TableFact {
     [Parameter(Mandatory = $true)][string]$Message
   )
 
-  $escapedMarker = [regex]::Escape($StableMarker)
-  $pattern = "\|[^\r\n|]*\|[^\r\n|]*$ExpectedValue[^\r\n|]*\|[^\r\n|]*$escapedMarker[^\r\n|]*\|"
-  if ($Content -notmatch $pattern) {
-    throw $Message
+  $matchingRows = @(
+    foreach ($line in $Content -split '\r?\n') {
+      if ($line -cnotmatch '^\s*\|' -or $line -cmatch '^\s*\|\s*:?-+') {
+        continue
+      }
+      $rowCells = @(
+        $line.Trim().Trim('|').Split('|') |
+          ForEach-Object { $_.Trim() }
+      )
+      if ($rowCells.Count -gt 0 -and $rowCells[0].Trim('`') -ceq $StableMarker) {
+        [pscustomobject]@{ Line = $line; Cells = $rowCells }
+      }
+    }
+  )
+  if ($matchingRows.Count -ne 1) {
+    throw "$Message Expected exactly one row containing '$StableMarker', found $($matchingRows.Count)"
+  }
+
+  $cells = $matchingRows[0].Cells
+  $expectedText = [string]$ExpectedValue
+  if ($cells -cnotcontains $expectedText) {
+    throw "$Message Expected exact cell '$expectedText', row='$($matchingRows[0].Line.Trim())'"
   }
 }
 
 $readme = Read-Text 'README.md'
-$agents = Read-Text 'AGENTS.md'
 $docIndex = Read-Text 'docs/documentation-index.md'
 $diagramDoc = Read-Text 'docs/model-architecture-algorithm-diagrams.md'
 $knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
@@ -181,16 +198,15 @@ Assert-Contains $readme "$serviceModuleCount source modules" 'README app-service
 Assert-Contains $readme "migration scripts ($migrationCount)" 'README migration script count is stale'
 Assert-Contains $readme "$frontendTestCount test files" 'README frontend test file count is stale'
 
-Assert-Contains $agents "$repoCount repos, $migrationCount migration scripts" 'AGENTS persistence-sqlite count is stale'
-Assert-Contains $agents "$frontendTestCount frontend test files" 'AGENTS frontend test file count is stale'
-
-Assert-Contains $docIndex "Rust workspace crate | $crateCount" 'documentation-index crate count is stale'
-Assert-Contains $docIndex "Tauri commands | $commandCount" 'documentation-index command count is stale'
-Assert-Contains $docIndex "app-services source modules | $serviceModuleCount" 'documentation-index app-services module count is stale'
-Assert-Contains $docIndex "SQLite repositories | $repoCount" 'documentation-index repository count is stale'
-Assert-Contains $docIndex "SQLite migration scripts | $migrationCount" 'documentation-index migration count is stale'
+Assert-TableFact $docIndex 'Rust workspace crate' $crateCount 'documentation-index crate count is stale'
+Assert-TableFact $docIndex 'Tauri commands' $commandCount 'documentation-index command count is stale'
+Assert-TableFact $docIndex 'app-services source modules' $serviceModuleCount 'documentation-index app-services module count is stale'
+Assert-TableFact $docIndex 'SQLite repositories' "$repoCount logical repositories" 'documentation-index repository count is stale'
+Assert-TableFact $docIndex 'SQLite migration scripts' $migrationCount 'documentation-index migration count is stale'
+Assert-TableFact $docIndex 'frontend test files' $frontendTestCount 'documentation-index frontend test summary is stale'
 Assert-TableFact $docIndex 'frontend/src/app/pages/*.tsx' $pageCount 'documentation-index frontend page row is stale'
 Assert-TableFact $docIndex 'frontend/src/**/*.test.ts(x)' $frontendTestCount 'documentation-index frontend test row is stale'
+Assert-TableFact $docIndex 'apps/desktop/src-tauri/src/commands/**/*.rs' $commandCount 'documentation-index command path row is stale'
 Assert-Matches $docIndex "\|\s*[^|]*Mermaid[^|]*\|\s*$mermaidCount\s*\|" 'documentation-index Mermaid count is stale'
 Assert-Equals $appServicesModuleDebtCount 0 'app-services module baseline debt was reintroduced'
 Assert-Equals $appServicesFunctionDebtCount 0 'app-services function baseline debt was reintroduced'
@@ -219,7 +235,6 @@ $requiredCheckCount = $benchmarkBaseline.requiredChecks.Count
 $scenarioCount = $benchmarkBaseline.scenarios.Count
 Assert-Contains $readme "v2-benchmark-baseline.json" 'README is missing benchmark baseline fact source'
 Assert-Contains $docIndex "v2-benchmark-baseline.json" 'documentation-index is missing benchmark baseline fact source'
-Assert-Contains $agents "v2-benchmark-baseline.json" 'AGENTS is missing benchmark baseline fact source'
 
 # Verify required checks reference existing scenarios
 $scenarioKeys = @{}
@@ -275,7 +290,6 @@ foreach ($path in @(
     throw "Required engineering document is missing: $path"
   }
   Assert-Contains $readme $path "README is missing engineering doc entry: $path"
-  Assert-Contains $agents $path "AGENTS is missing engineering doc entry: $path"
   Assert-Contains $docIndex $path "documentation-index is missing engineering doc entry: $path"
 }
 

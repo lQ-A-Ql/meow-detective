@@ -7,7 +7,7 @@ import { Artifacts } from './Artifacts';
 const mocks = vi.hoisted(() => ({
   artifactFamilies: vi.fn(),
   artifactFamilyCounts: vi.fn(),
-  artifactRows: vi.fn(),
+  infiniteArtifactRows: vi.fn(),
   artifactById: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
@@ -24,7 +24,7 @@ vi.mock('@/features/artifacts/hooks', () => ({
   useArtifactById: mocks.artifactById,
   useArtifactFamilies: mocks.artifactFamilies,
   useArtifactFamilyCounts: mocks.artifactFamilyCounts,
-  useArtifactRows: mocks.artifactRows,
+  useInfiniteArtifactRows: mocks.infiniteArtifactRows,
 }));
 
 vi.mock('@/stores/selection-store', () => ({
@@ -44,6 +44,16 @@ function queryState(overrides: Record<string, unknown> = {}) {
     refetch: vi.fn(),
     ...overrides,
   };
+}
+
+function infiniteQueryState(items: unknown[]) {
+  return queryState({
+    data: { pages: [{ total: items.length, items }], pageParams: [0] },
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+  });
 }
 
 function renderPage() {
@@ -114,7 +124,7 @@ describe('Artifacts page', () => {
   });
 
   it('renders empty state when no artifacts', () => {
-    mocks.artifactRows.mockReturnValue(queryState({ data: emptyRows }));
+    mocks.infiniteArtifactRows.mockReturnValue(infiniteQueryState(emptyRows));
 
     renderPage();
 
@@ -123,7 +133,7 @@ describe('Artifacts page', () => {
   });
 
   it('renders family tabs when data is available', () => {
-    mocks.artifactRows.mockReturnValue(queryState({ data: populatedRows }));
+    mocks.infiniteArtifactRows.mockReturnValue(infiniteQueryState(populatedRows));
 
     renderPage();
 
@@ -134,7 +144,7 @@ describe('Artifacts page', () => {
   });
 
   it('shows artifact table rows', () => {
-    mocks.artifactRows.mockReturnValue(queryState({ data: populatedRows }));
+    mocks.infiniteArtifactRows.mockReturnValue(infiniteQueryState(populatedRows));
 
     renderPage();
 
@@ -146,7 +156,7 @@ describe('Artifacts page', () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText('D:\\Documents\\classified.pdf').length).toBeGreaterThan(0);
     expect(screen.getAllByText('E:\\Work\\report.xlsx').length).toBeGreaterThan(0);
-    expect(screen.getByText(/记录 2 条/)).toBeDefined();
+    expect(screen.getByText(/记录 2\/2 条/)).toBeDefined();
   });
 
   it('hydrates a selected artifact from by-id query when family list does not contain it', () => {
@@ -154,7 +164,7 @@ describe('Artifacts page', () => {
       selectedArtifactFamily: 'LNK',
       selectedArtifactId: 'prefetch-1',
     });
-    mocks.artifactRows.mockReturnValue(queryState({ data: populatedRows }));
+    mocks.infiniteArtifactRows.mockReturnValue(infiniteQueryState(populatedRows));
     mocks.artifactById.mockReturnValue(
       queryState({
         data: {
@@ -181,4 +191,3 @@ describe('Artifacts page', () => {
     expect(screen.getAllByText('C:\\Windows\\System32\\cmd.exe').length).toBeGreaterThan(0);
   });
 });
-

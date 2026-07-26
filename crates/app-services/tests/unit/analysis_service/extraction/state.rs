@@ -34,6 +34,7 @@ fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
         partition_index: None,
         path: "var/www/html/index.php".to_string(),
         size: 32,
+        encrypted: false,
         content_identity: "test:web-1".to_string(),
         evidence_kind: "File".to_string(),
         parser: "XFS".to_string(),
@@ -132,4 +133,20 @@ fn output_digest_is_canonical_across_insertion_order() {
     };
 
     assert_eq!(output_digest(&forward), output_digest(&reverse));
+}
+
+#[test]
+fn output_digest_preserves_duplicate_multiplicity() {
+    let source = FileEntryId("web-1".to_string());
+    let artifact = warning_artifact(&source);
+    let single = ExtractionOutcome {
+        artifacts: vec![artifact.clone()],
+        ..ExtractionOutcome::default()
+    };
+    let duplicate = ExtractionOutcome {
+        artifacts: vec![artifact.clone(), artifact],
+        ..ExtractionOutcome::default()
+    };
+
+    assert_ne!(output_digest(&single), output_digest(&duplicate));
 }

@@ -254,7 +254,7 @@ impl<'a> ExtractionProgressReporter<'a> {
                 category = %capability.key,
                 support = support.as_label(),
                 current_path = %candidate.path,
-                "Linux candidate uses a non-structured extraction path"
+                "Analysis candidate uses a non-structured extraction path"
             );
         }
     }
@@ -341,7 +341,21 @@ impl<'a> ExtractionProgressReporter<'a> {
         );
     }
 
+    pub(crate) fn fail(&mut self, retryable_failure_count: u64) {
+        self.emit_all(
+            AnalysisExtractionPhaseDto::Failed,
+            "extraction has retryable candidate failures",
+        );
+        tracing::warn!(
+            retryable_failure_count,
+            "Analysis extraction finished with retryable candidate failures"
+        );
+    }
+
     fn candidate_support(&self, candidate: &EvidenceCandidate) -> CandidateSupport {
+        if candidate.encrypted {
+            return CandidateSupport::Unsupported;
+        }
         if self.platform != DataSourcePlatform::Linux {
             return CandidateSupport::Structured;
         }

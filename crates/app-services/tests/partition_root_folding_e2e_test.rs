@@ -38,6 +38,7 @@ fn seed_main_db(conn: &Connection) {
             deleted INTEGER NOT NULL DEFAULT 0,
             hidden INTEGER NOT NULL DEFAULT 0,
             system INTEGER NOT NULL DEFAULT 0,
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
             created_at TEXT,
             modified_at TEXT,
             accessed_at TEXT,

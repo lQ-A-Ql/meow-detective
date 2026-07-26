@@ -31,11 +31,13 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
     let transaction = connection
         .unchecked_transaction()
         .expect("begin catalog batch");
+    let mut encrypted_file = entry("file", Some("root"), "etc/passwd", EntryType::File);
+    encrypted_file.encrypted = true;
     CatalogFileRepo::new(&transaction)
         .insert_batch_with_partition_index_in_transaction(
             &[
                 entry("root", None, "", EntryType::Directory),
-                entry("file", Some("root"), "etc/passwd", EntryType::File),
+                encrypted_file,
             ],
             7,
         )
@@ -67,4 +69,12 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
             ("root".to_string(), None, 7),
         ]
     );
+    let encrypted: bool = connection
+        .query_row(
+            "SELECT encrypted <> 0 FROM file_entries WHERE id = 'file'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read encrypted flag");
+    assert!(encrypted);
 }

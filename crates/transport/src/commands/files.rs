@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::validation::{validate_export_destination_path, MAX_PAGE_LIMIT};
+use crate::paging::validate_opaque_cursor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -160,6 +161,8 @@ pub struct SearchFilesRequest {
     pub offset: u64,
     #[serde(default = "default_search_limit")]
     pub limit: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -246,6 +249,12 @@ impl SearchFilesRequest {
             self.limit = default_search_limit();
         }
         self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        if let Some(cursor) = self.cursor.as_deref() {
+            validate_opaque_cursor(cursor).map_err(|error| error.to_string())?;
+            if self.offset != 0 {
+                return Err("offset must be zero when cursor is provided".to_string());
+            }
+        }
         Ok(())
     }
 }

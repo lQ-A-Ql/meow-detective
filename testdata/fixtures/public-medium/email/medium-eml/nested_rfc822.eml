@@ -1,0 +1,31 @@
+Content-Type: multipart/mixed; boundary="===============6347173737306457640=="
+MIME-Version: 1.0
+From: forwarder@example.com
+To: archive@example.com
+Subject: Forwarded message 12
+Date: Fri, 01 Mar 2024 21:00:00 GMT
+Message-ID: <meow-detective-nested-012@example.com>
+
+--===============6347173737306457640==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+U2VlIGF0dGFjaGVkIGZvcndhcmRlZCBtZXNzYWdlIDEyLgo=
+
+--===============6347173737306457640==
+Content-Type: message/rfc822
+MIME-Version: 1.0
+
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+From: original@example.com
+To: final@example.com
+Subject: Original message 12
+Date: Fri, 01 Mar 2024 20:00:00 GMT
+Message-ID: <meow-detective-nested-inner-012@example.com>
+
+T3JpZ2luYWwgYm9keSAxMi4K
+
+--===============6347173737306457640==--

@@ -18,6 +18,7 @@ fn candidate_db() -> Connection {
                 accessed_at TEXT,
                 changed_at TEXT,
                 hash_sha256 TEXT,
+                encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
                 entry_type TEXT NOT NULL
             );",
         )
@@ -28,8 +29,9 @@ fn candidate_db() -> Connection {
 fn insert_file(connection: &Connection, id: &str, path: &str) {
     connection
         .execute(
-            "INSERT INTO file_entries (id, data_source_id, path, size, entry_type)
-             VALUES (?1, 'source-1', ?2, 1, 'file')",
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, encrypted, entry_type)
+             VALUES (?1, 'source-1', ?2, 1, 0, 'file')",
             params![id, path],
         )
         .expect("insert candidate file");
@@ -127,6 +129,50 @@ fn discovery_carries_file_entry_partition_index() {
 
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0].partition_index, Some(7));
+}
+
+#[test]
+fn discovery_preserves_efs_encryption_fact_and_identity() {
+    let connection = candidate_db();
+    connection
+        .execute(
+            "INSERT INTO file_entries
+             (id, data_source_id, path, size, partition_index, encrypted, entry_type)
+             VALUES ('encrypted-web', 'source-1', 'var/www/html/secret.php', 12, 7, 1, 'file')",
+            [],
+        )
+        .expect("insert encrypted candidate");
+
+    let encrypted = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect("discover encrypted candidate")
+        .remove(0);
+    assert!(encrypted.encrypted);
+
+    connection
+        .execute(
+            "UPDATE file_entries SET encrypted = NULL WHERE id = 'encrypted-web'",
+            [],
+        )
+        .expect("mark encryption status unknown");
+    let unknown = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect("discover unknown-status candidate")
+        .remove(0);
+    assert!(unknown.encrypted, "unknown candidate must fail closed");
+    assert_ne!(encrypted.content_identity, unknown.content_identity);
+
+    connection
+        .execute(
+            "UPDATE file_entries SET encrypted = 0 WHERE id = 'encrypted-web'",
+            [],
+        )
+        .expect("clear encryption flag");
+    let unencrypted = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
+        .expect("rediscover unencrypted candidate")
+        .remove(0);
+
+    assert!(!unencrypted.encrypted);
+    assert_ne!(encrypted.content_identity, unencrypted.content_identity);
+    assert_ne!(unknown.content_identity, unencrypted.content_identity);
 }
 
 #[test]

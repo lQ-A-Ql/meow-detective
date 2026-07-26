@@ -45,6 +45,7 @@ fn source_read_hint(
         partition_index,
         path.to_string(),
         16,
+        false,
     )
 }
 
@@ -130,9 +131,9 @@ fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
         .execute(
             "INSERT INTO file_entries
              (id, data_source_id, path, name, entry_type, size, deleted, hidden, system,
-              partition_index)
+              encrypted, partition_index)
              VALUES ('fallback-file', 'logical-linux', 'fallback.txt', 'fallback.txt',
-                     'file', 14, 0, 0, 0, NULL)",
+                     'file', 14, 0, 0, 0, 0, NULL)",
             [],
         )
         .expect("insert fallback file entry");
@@ -150,16 +151,76 @@ fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
 
     let bytes = context
         .read_file_header_with_metadata(
-            &FileEntryId("fallback-file".to_string()),
-            &DataSourceId("logical-linux".to_string()),
-            None,
-            "ignored-candidate-path",
-            16,
+            SourceReadFileHint::new(
+                FileEntryId("fallback-file".to_string()),
+                DataSourceId("logical-linux".to_string()),
+                None,
+                "ignored-candidate-path".to_string(),
+                16,
+                false,
+            ),
             64,
         )
         .expect("read through file-id fallback");
 
     assert_eq!(bytes, b"fallback-by-id");
+}
+
+#[test]
+fn encrypted_metadata_hint_is_rejected_before_derived_runtime_initialization() {
+    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
+    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
+    insert_source(
+        &source_conn,
+        "derived-linux",
+        "ceph_rbd",
+        "missing-derived.rbd",
+    );
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
+    let case_root = TempDir::new().expect("create case root");
+    let case_id = CaseId("case-1".to_string());
+    let source_id = DataSourceId("derived-linux".to_string());
+    let mut context = SourceReadContext::new(
+        &source_conn,
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &source_id,
+    );
+
+    let error = context
+        .read_file_header_with_metadata(
+            SourceReadFileHint::new(
+                FileEntryId("encrypted-rbd-file".to_string()),
+                source_id.clone(),
+                Some(2),
+                "Windows/System32/config/SYSTEM".to_string(),
+                4096,
+                true,
+            ),
+            4096,
+        )
+        .expect_err("EFS metadata hint must fail before opening the RBD provider");
+
+    assert!(matches!(error, FileServiceError::Unsupported(_)));
+    assert!(error.to_string().contains("EFS-encrypted"));
+    assert!(!error.to_string().contains("Windows/System32/config/SYSTEM"));
+    assert!(!error.to_string().contains("missing-derived.rbd"));
+    assert!(context.derived_runtime.is_none());
+}
+
+#[test]
+fn source_read_hint_preserves_encrypted_file_fact() {
+    let hint = SourceReadFileHint::new(
+        FileEntryId("encrypted-rbd-file".to_string()),
+        DataSourceId("derived-linux".to_string()),
+        Some(2),
+        "Windows/System32/config/SYSTEM".to_string(),
+        4096,
+        true,
+    );
+
+    assert!(hint.encrypted);
 }
 
 #[test]
