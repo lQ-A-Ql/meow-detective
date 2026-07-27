@@ -1,6 +1,6 @@
 # BitLocker 卷层设计
 
-**状态**: Stage 2b 读路径接入完成，Stage 3 服务与导入编排待实施（2026-07-27）
+**状态**: Stage 3 服务与导入编排完成，Stage 4 密钥包持久化待实施（2026-07-27）
 **范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
 **事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
 `docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
@@ -14,7 +14,9 @@ BitLocker 仍由引导扇区签名
 （偏移 3，8 字节）识别并记录为 `ImageFilesystemKind::BitLocker`。Stage 2b
 读路径只有在运行时注册了已验证的 `VerifiedUnlock` 后，才会在精确分区窗口内
 构造 `BitLockerReader`，重新探测明文 NTFS/FAT/exFAT，并将读者交给预览链路。
-未注册密钥时仍返回 typed `Unsupported`，导入枚举仍跳过并记录锁定状态。
+未注册密钥时仍返回 typed locked/unsupported。Stage 3 新增 source-scoped inspect、
+密码/恢复密码解锁、显式目录导入和锁定命令；初次导入仍先记录锁定分区，不要求凭据
+进入导入请求。
 
 Stage 2b 的实际接入点如下：
 
@@ -27,8 +29,9 @@ Stage 2b 的实际接入点如下：
 | `file_service/source_read/bitlocker.rs` | 按 source + partition 路由解密卷 |
 | `file_service/viewer/range/*` | Hex/range、文本、图片、文档和媒体范围读取统一走解密读者 |
 | `bitlocker_runtime/*` | 仅缓存 `Arc<UnlockedVolume>`，按 case/source/partition/fingerprint 隔离 |
+| `bitlocker_service/*` | 案件归属校验、inspect/unlock/lock、审计与解锁后目录枚举 |
 | `apps/desktop/src-tauri/src/commands/file_commands/*` | 实际预览命令注入 BitLocker runtime |
-| `import_pipeline/partition/*` | 未解锁时仍排除导入工作项，并保留锁定提示 |
+| `import_pipeline/partition/*` | 未解锁时排除工作项；解锁后由显式 catalog 用例复用统一分区枚举器 |
 
 文件系统候选和导入 gate 仍保持穷尽处理，预览侧则先依据 source-local 分区元数据
 判断是否需要解密，再进入统一的文件系统打开逻辑。这能避免普通 E01/RAW 预览绕过
@@ -144,7 +147,7 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 | 1 ✅ | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
 | 2a ✅ | 扇区 cipher 与明文读者 | 五种方法往返、区域映射、有界缓存、合并 I/O、端到端解密 |
 | 2b ✅ | 预览读路径 | 运行时 verified unlock registry；分区窗口；Hex/文本/图片/文档/媒体统一路由；锁定返回 typed Unsupported |
-| 3 | 服务与导入编排 | 解锁/锁定用例；凭据以独立 secret 参数进入；phase 记录 |
+| 3 ✅ | 服务与导入编排 | inspect/解锁/锁定；凭据以独立 secret 参数进入；显式 catalog 导入与审计记录 |
 | 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
 | 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
 | 6 | 报告、性能、文档 | 报告含 protector inventory；KDF 不重跑；文档与矩阵同步 |
@@ -215,6 +218,29 @@ KDF 本来只在解锁时跑一次。
 一条已接受的限制:`aes 0.8` 没有 `zeroize` feature,所以 `SectorCipher` 里展开的
 AES key schedule 不会在 drop 时擦除(FVEK 字节会)。升到 `aes 0.9` 能解决,但会
 拆掉 `xts-mode 0.5`。理由与边界记在 `docs/bitlocker-dependency-decision.md`。
+
+### Stage 3 交付物（已完成 2026-07-27）
+
+- 新增 `inspect_bitlocker_volume`、密码/恢复密码解锁、
+  `import_unlocked_bitlocker_catalog` 与 `lock_bitlocker_volume` 五个真实 Tauri command。
+- 凭据不定义 transport request DTO；command 收到独立字符串后立即转为不可
+  `Debug/Clone/Serialize` 的 `Passphrase`，KDF 返回后不进入目录枚举作用域。
+- inspect 响应只包含加密方法、protector inventory、metadata fingerprint、解锁状态
+  与明文文件系统，不包含凭据或密钥材料。
+- catalog 导入只接受 case/source/partition，依赖已验证运行时密钥，复用统一
+  `enumerate_partition_with_fs` 写入 source DB；重复调用遇到真实分区根时幂等返回。
+- inspect、unlock 和 catalog 读取都持有 preview scope lease。锁定先 retire source、等待
+  活跃读操作排空，再只失效目标分区密钥，最后恢复 source preview 路由；并发 unlock
+  不能在锁定窗口内重新注册密钥。
+- unlock、lock、catalog import 写入案件审计日志；审计只含 source、partition、
+  metadata fingerprint、方法、结果和稳定错误码。
+- 若解锁验证成功但明文复探测失败，立即撤销刚注册的运行时密钥，避免半成功状态。
+- `check-bitlocker-credential-guard.ps1` 同时禁止 transport DTO 新增 secret 字段。
+
+Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百万轮 KDF 完成后凭据即可
+离开作用域，可能长时间运行的文件树枚举只使用已验证 cipher state；初次镜像导入
+仍可在无凭据时完成并保留锁定分区节点。Stage 5 UI 应按 inspect -> unlock -> catalog
+顺序编排，但不得把凭据放入 Zustand、TanStack Query 或持久化表单状态。
 
 ### Stage 0 交付物
 

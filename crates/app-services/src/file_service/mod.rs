@@ -55,6 +55,7 @@ pub use mft::{
     populate_file_graph_for_data_source, read_ntfs_mft_stream, records_to_file_entries,
     update_entry_parent_ids, update_entry_paths,
 };
+pub(crate) use partition_roots::partition_placeholder_status;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,
     replace_placeholder_root_with_real, replace_placeholder_root_with_real_and_cancel,

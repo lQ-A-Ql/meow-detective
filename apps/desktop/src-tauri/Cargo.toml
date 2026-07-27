@@ -24,6 +24,7 @@ domain.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
+volume-bitlocker.workspace = true
 artifacts-core.workspace = true
 image-e01 = { path = "../../../crates/image-e01" }
 fs-ntfs = { path = "../../../crates/fs-ntfs" }

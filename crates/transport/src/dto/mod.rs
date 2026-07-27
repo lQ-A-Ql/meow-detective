@@ -10,6 +10,7 @@ mod analysis_system;
 pub mod android;
 pub mod artifacts;
 pub mod batch;
+pub mod bitlocker;
 pub mod case;
 pub mod correlation;
 pub mod entity_resolution;
@@ -65,6 +66,7 @@ pub use android::{
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
+pub use bitlocker::{BitLockerCatalogImportDto, BitLockerProtectorDto, BitLockerVolumeStatusDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,

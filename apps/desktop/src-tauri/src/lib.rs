@@ -31,9 +31,11 @@ use commands::{
         close_file_handle, export_deleted_recovery, extract_file, get_document_preview,
         get_file_children, get_file_children_request, get_file_jump_context, get_file_rows,
         get_file_rows_request, get_file_tree, get_file_tree_request, get_image_preview,
-        get_media_url, get_text_preview, list_deleted_recoveries, open_file_handle,
+        get_media_url, get_text_preview, import_unlocked_bitlocker_catalog,
+        inspect_bitlocker_volume, list_deleted_recoveries, lock_bitlocker_volume, open_file_handle,
         open_file_handle_request, read_deleted_recovery_range, read_file_range, read_media_range,
-        run_deleted_recovery,
+        run_deleted_recovery, unlock_bitlocker_with_password,
+        unlock_bitlocker_with_recovery_password,
     },
     graph_commands::{
         get_graph_snapshot, get_node_neighborhood, get_provenance_chain, list_graph_nodes,
@@ -62,13 +64,7 @@ use commands::{
 use state::AppState;
 
 pub fn run() {
-    media_protocol::register(tauri::Builder::default())
-        .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-            cache_invalidation::register(app.handle().clone());
-            Ok(())
-        })
-        .manage(AppState::default())
+    desktop_builder()
         .invoke_handler(tauri::generate_handler![
             create_case,
             create_analysis_demo_case,
@@ -100,6 +96,11 @@ pub fn run() {
             open_file_handle_request,
             close_file_handle,
             read_file_range,
+            inspect_bitlocker_volume,
+            unlock_bitlocker_with_password,
+            unlock_bitlocker_with_recovery_password,
+            import_unlocked_bitlocker_catalog,
+            lock_bitlocker_volume,
             extract_file,
             get_text_preview,
             get_image_preview,
@@ -181,6 +182,16 @@ pub fn run() {
             tracing::error!("Failed to run Tauri application: {error}");
             std::process::exit(1);
         });
+}
+
+fn desktop_builder() -> tauri::Builder<tauri::Wry> {
+    media_protocol::register(tauri::Builder::default())
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            cache_invalidation::register(app.handle().clone());
+            Ok(())
+        })
+        .manage(AppState::default())
 }
 
 #[cfg(test)]

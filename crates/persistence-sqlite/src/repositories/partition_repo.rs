@@ -155,6 +155,22 @@ impl<'a> PartitionRepo<'a> {
         }))
     }
 
+    pub fn mark_bitlocker_catalog_ready(
+        &self,
+        data_source_id: &str,
+        partition_index: u32,
+        filesystem: &str,
+    ) -> DbResult<usize> {
+        self.conn
+            .execute(
+                "UPDATE data_source_partitions
+                 SET status = 'ready', filesystem = ?1, unlock_hint = NULL
+                 WHERE data_source_id = ?2 AND partition_index = ?3",
+                params![filesystem, data_source_id, partition_index],
+            )
+            .map_err(Into::into)
+    }
+
     /// 批量插入分区记录
     pub fn insert_batch(&self, records: &[DataSourcePartitionRecord]) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;

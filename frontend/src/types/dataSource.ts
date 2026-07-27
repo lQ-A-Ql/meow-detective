@@ -61,3 +61,35 @@ export interface DataSourcePartition {
   filesystem?: string;
   unlockHint?: string;
 }
+
+export interface BitLockerProtector {
+  code: number;
+  kind: 'clearKey' | 'recoveryPassword' | 'password' | 'tpm' | 'startupKey' | 'unknown';
+  label: string;
+  unlockable: boolean;
+}
+
+export interface BitLockerVolumeStatus {
+  dataSourceId: string;
+  partitionIndex: number;
+  unlocked: boolean;
+  encryptionMethod: string;
+  encryptionMethodCode: number;
+  decryptable: boolean;
+  bytesPerSector: number;
+  metadataFingerprint: string;
+  metadataCopyCount: number;
+  protectors: BitLockerProtector[];
+  supportsPassword: boolean;
+  supportsRecoveryPassword: boolean;
+  plaintextFilesystem?: string;
+}
+
+export interface BitLockerCatalogImport {
+  volume: BitLockerVolumeStatus;
+  imported: boolean;
+  fileCount?: number;
+  directoryCount?: number;
+  totalSize?: number;
+  warnings: string[];
+}

@@ -274,8 +274,14 @@ fn partition_candidate_cache_is_bounded() {
 
 #[test]
 fn encrypted_bitlocker_partitions_remain_preview_candidates() {
-    assert!(crate::file_service::viewer::is_previewable_partition_status("encrypted_bitlocker"));
-    assert!(!crate::file_service::viewer::is_previewable_partition_status("unsupported"));
+    assert!(
+        crate::file_service::viewer::partition::is_previewable_partition_status(
+            "encrypted_bitlocker"
+        )
+    );
+    assert!(
+        !crate::file_service::viewer::partition::is_previewable_partition_status("unsupported")
+    );
 }
 
 #[test]

@@ -39,6 +39,11 @@ export const COMMANDS = {
     RUN_DELETED_RECOVERY: 'run_deleted_recovery',
     READ_DELETED_RECOVERY_RANGE: 'read_deleted_recovery_range',
     EXPORT_DELETED_RECOVERY: 'export_deleted_recovery',
+    INSPECT_BITLOCKER_VOLUME: 'inspect_bitlocker_volume',
+    UNLOCK_BITLOCKER_WITH_PASSWORD: 'unlock_bitlocker_with_password',
+    UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD: 'unlock_bitlocker_with_recovery_password',
+    IMPORT_UNLOCKED_BITLOCKER_CATALOG: 'import_unlocked_bitlocker_catalog',
+    LOCK_BITLOCKER_VOLUME: 'lock_bitlocker_volume',
   },
   jobs: {
     GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',

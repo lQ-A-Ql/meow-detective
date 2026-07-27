@@ -17,6 +17,8 @@ import {
   TextPreviewResponse,
   ViewerHandle,
   ViewerRangeRequest,
+  BitLockerCatalogImport,
+  BitLockerVolumeStatus,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -81,6 +83,60 @@ export async function closeFileHandle(handleId: string): Promise<boolean> {
 
 export async function readFileRange(request: ViewerRangeRequest): Promise<import('@/types/models').ViewerRangeResponse> {
   return apiClient.request(COMMANDS.files.READ_FILE_RANGE, { request });
+}
+
+export async function inspectBitLockerVolume(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.INSPECT_BITLOCKER_VOLUME, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function unlockBitLockerWithPassword(
+  dataSourceId: string,
+  partitionIndex: number,
+  credential: string,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.UNLOCK_BITLOCKER_WITH_PASSWORD, {
+    dataSourceId,
+    partitionIndex,
+    credential,
+  });
+}
+
+export async function unlockBitLockerWithRecoveryPassword(
+  dataSourceId: string,
+  partitionIndex: number,
+  credential: string,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD, {
+    dataSourceId,
+    partitionIndex,
+    credential,
+  });
+}
+
+export async function importUnlockedBitLockerCatalog(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerCatalogImport> {
+  return apiClient.request(COMMANDS.files.IMPORT_UNLOCKED_BITLOCKER_CATALOG, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function lockBitLockerVolume(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.LOCK_BITLOCKER_VOLUME, {
+    dataSourceId,
+    partitionIndex,
+  });
 }
 
 export async function cancelImport(jobId: string) {

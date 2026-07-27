@@ -1,6 +1,6 @@
 {
-  "lastVerifiedAt": "2026-07-16T00:00:00Z",
-  "documentedLimitCount": 51,
+  "lastVerifiedAt": "2026-07-27T00:00:00Z",
+  "documentedLimitCount": 54,
   "items": [
     {
       "category": "E01",
@@ -41,6 +41,36 @@
       "affectedChains": [
         "FAT",
         "exFAT"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "BitLocker",
+      "item": "TPM / TPM+PIN / 启动密钥 / clear-key 解锁",
+      "status": "unsupported",
+      "summary": "当前仅清点 protector inventory；不会自动使用 clear key，也不处理 TPM-sealed 或 `.BEK` 密钥",
+      "affectedChains": [
+        "BitLocker"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "BitLocker",
+      "item": "AES-256-CBC + Elephant Diffuser (`0x8001`)",
+      "status": "partial",
+      "summary": "缺少可信 oracle，拒绝产生可能看似合理但错误的明文",
+      "affectedChains": [
+        "BitLocker"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "BitLocker",
+      "item": "已验证密钥包持久化与调查员 UI",
+      "status": "partial",
+      "summary": "Stage 3 已提供真实 inspect/unlock/lock/catalog command；应用重启后需重新解锁，Stage 4/5 分别补持久化和前端流程",
+      "affectedChains": [
+        "BitLocker"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

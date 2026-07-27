@@ -164,7 +164,7 @@ fn governance_snapshot_aggregates_runtime_signals() {
     assert!(audit_actions.contains(&"mcp.tool.call"));
     assert!(!snapshot.verification_chains.is_empty());
     assert!(!snapshot.support_matrix_entries.is_empty());
-    assert_eq!(snapshot.known_limitations.len(), 51);
+    assert_eq!(snapshot.known_limitations.len(), 54);
     assert_eq!(
         snapshot.support_matrix.documented_limit_count,
         snapshot.known_limitations.len() as u32

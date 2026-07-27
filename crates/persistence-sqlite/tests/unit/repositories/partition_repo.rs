@@ -152,3 +152,36 @@ fn lvm_identity_round_trips() {
         )
     );
 }
+
+#[test]
+fn mark_bitlocker_catalog_ready_updates_only_the_scoped_partition() {
+    let conn = setup_db();
+    let repo = PartitionRepo::new(&conn);
+    let mut target = make_partition("p1", "ds-1", 2, "Encrypted volume");
+    target.kind_label = "BitLocker".to_string();
+    target.status = "locked".to_string();
+    target.filesystem = Some("BitLocker".to_string());
+    target.unlock_hint = Some("unlock required".to_string());
+    repo.insert_batch(&[target, make_partition("p2", "ds-2", 2, "Other")])
+        .unwrap();
+
+    assert_eq!(
+        repo.mark_bitlocker_catalog_ready("ds-1", 2, "NTFS")
+            .unwrap(),
+        1
+    );
+    let updated = repo
+        .find_by_data_source_and_index("ds-1", 2)
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated.status, "ready");
+    assert_eq!(updated.filesystem.as_deref(), Some("NTFS"));
+    assert!(updated.unlock_hint.is_none());
+    assert_eq!(
+        repo.find_by_data_source_and_index("ds-2", 2)
+            .unwrap()
+            .unwrap()
+            .status,
+        "ok"
+    );
+}

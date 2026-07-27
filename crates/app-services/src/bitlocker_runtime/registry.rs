@@ -121,6 +121,19 @@ impl BitLockerUnlockRegistry {
         self.retain(|scope| scope.case_id != case_id || scope.data_source_id != data_source_id)
     }
 
+    pub fn invalidate_partition(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        partition_index: usize,
+    ) -> Result<usize, BitLockerRuntimeError> {
+        self.retain(|scope| {
+            scope.case_id != case_id
+                || scope.data_source_id != data_source_id
+                || scope.partition_index != partition_index
+        })
+    }
+
     pub fn invalidate_case(&self, case_id: &str) -> Result<usize, BitLockerRuntimeError> {
         self.retain(|scope| scope.case_id != case_id)
     }

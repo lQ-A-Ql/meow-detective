@@ -19,6 +19,11 @@ import {
   readFileRange,
   readMediaRange,
   runDeletedRecovery,
+  importUnlockedBitLockerCatalog,
+  inspectBitLockerVolume,
+  lockBitLockerVolume,
+  unlockBitLockerWithPassword,
+  unlockBitLockerWithRecoveryPassword,
 } from './files';
 
 vi.mock('./client', () => ({
@@ -164,6 +169,45 @@ describe('files API', () => {
     requestMock.mockResolvedValueOnce({ data: [] } as never);
     await readFileRange(req);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.READ_FILE_RANGE, { request: req });
+  });
+
+  it('routes BitLocker inspection and catalog import by source and partition', async () => {
+    requestMock.mockResolvedValue({} as never);
+    await inspectBitLockerVolume('source-1', 2);
+    await importUnlockedBitLockerCatalog('source-1', 2);
+    await lockBitLockerVolume('source-1', 2);
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.files.INSPECT_BITLOCKER_VOLUME, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.files.IMPORT_UNLOCKED_BITLOCKER_CATALOG, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(3, COMMANDS.files.LOCK_BITLOCKER_VOLUME, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
+  });
+
+  it('passes BitLocker credentials only to the selected unlock command', async () => {
+    requestMock.mockResolvedValue({} as never);
+    await unlockBitLockerWithPassword('source-1', 2, 'test-password');
+    await unlockBitLockerWithRecoveryPassword('source-1', 2, 'test-recovery');
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.files.UNLOCK_BITLOCKER_WITH_PASSWORD, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      credential: 'test-password',
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(
+      2,
+      COMMANDS.files.UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD,
+      {
+        dataSourceId: 'source-1',
+        partitionIndex: 2,
+        credential: 'test-recovery',
+      },
+    );
   });
 
   it('cancelImport sends jobId', async () => {

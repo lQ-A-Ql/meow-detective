@@ -15,6 +15,8 @@
     4. unsafe_code must stay forbidden.
     5. docs/bitlocker-dependency-decision.md must keep naming the pinned
        upstream commit, so a silent upstream refresh cannot pass.
+    6. Transport DTOs must not contain password, recovery-password,
+       credential, or passphrase fields.
 
   Rule 1 is the one that matters most in practice: a single #[derive(Debug)] on a
   key type plus one tracing call is enough to write a volume key to disk.
@@ -221,6 +223,28 @@ function Find-ProvenanceViolations {
   return $violations.ToArray()
 }
 
+function Find-SerializedSecretContractViolations {
+  param([Parameter(Mandatory = $true)][string]$Root)
+
+  $violations = New-Object System.Collections.Generic.List[string]
+  $dtoRoot = Join-Path $Root 'crates/transport/src/dto'
+  if (-not (Test-Path -LiteralPath $dtoRoot -PathType Container)) {
+    return $violations.ToArray()
+  }
+  $fieldPattern = '(?m)^\s*pub\s+(?<field>credential|passphrase|password|recovery_password)\s*:'
+  foreach ($file in Get-ChildItem -LiteralPath $dtoRoot -Recurse -File -Filter '*.rs') {
+    $relative = $file.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
+    $source = Read-Utf8Text -Path $file.FullName
+    foreach ($match in [regex]::Matches($source, $fieldPattern)) {
+      $line = Get-LineNumber -Text $source -Index $match.Index
+      $violations.Add(
+        "[secret-dto] ${relative}:$line transport DTO field '$($match.Groups['field'].Value)' cannot carry a BitLocker credential"
+      )
+    }
+  }
+  return $violations.ToArray()
+}
+
 function Find-BitLockerCredentialViolations {
   param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -255,6 +279,9 @@ function Find-BitLockerCredentialViolations {
   }
 
   foreach ($violation in Find-ProvenanceViolations -Root $Root) {
+    $violations.Add($violation)
+  }
+  foreach ($violation in Find-SerializedSecretContractViolations -Root $Root) {
     $violations.Add($violation)
   }
   return $violations.ToArray()
@@ -450,6 +477,19 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     $attribution = @(Find-BitLockerCredentialViolations -Root $temp)
     if (-not ($attribution -match '^\[attribution\]')) {
       throw 'Self-test did not reject a missing NOTICE file'
+    }
+
+    New-SelfTestCrate -Root $temp -SecretSource $validSecret
+    $dtoRoot = Join-Path $temp 'crates/transport/src/dto'
+    [void](New-Item -ItemType Directory -Path $dtoRoot -Force)
+    [System.IO.File]::WriteAllText(
+      (Join-Path $dtoRoot 'bitlocker.rs'),
+      "pub struct RequestDto {`n    pub credential: String,`n}`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $secretDto = @(Find-BitLockerCredentialViolations -Root $temp)
+    if (-not ($secretDto -match '^\[secret-dto\]')) {
+      throw 'Self-test did not reject a serializable BitLocker credential field'
     }
   } finally {
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue

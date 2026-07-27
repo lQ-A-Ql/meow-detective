@@ -10,7 +10,7 @@ mod io;
 mod media;
 mod model;
 mod office_preview;
-mod partition;
+pub(crate) mod partition;
 mod path;
 mod preview_bytes;
 mod range;
@@ -53,8 +53,6 @@ pub(crate) use model::{
     PreviewCephFsDescriptor, PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
-#[cfg(test)]
-pub(crate) use partition::is_previewable_partition_status;
 pub(crate) use partition::{
     e01_partition_candidates, exact_partition_candidate, preview_lvm_identity_from_datasource,
     preview_partition_candidate_from_record, raw_partition_candidates,

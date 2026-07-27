@@ -96,20 +96,20 @@ fs-ntfs fs-fat fs-exfat fs-ext4 fs-xfs fs-btrfs fs-lvm image-e01
   runtime-cache, testing, evtx-patched, volume-bitlocker
 ```
 
-`volume-bitlocker` 已完成 Stage 2a：能在无凭据时报告加密方法与全部保护器，能由
-密码/恢复密码产出**已验证**的密钥包，并能把加密卷呈现为明文 `Read + Seek`。它仍
-无生产调用者 —— 把它接进 `open_candidate_block_reader_with_lvm_cache` 的组装点、
-改掉 11 个 gate point，是 Stage 2b，需要运行时密钥注册表。
+`volume-bitlocker` 已完成 Stage 3：能在无凭据时报告加密方法与全部保护器，能由
+密码/恢复密码产出**已验证**的密钥包，并能把加密卷呈现为明文 `Read + Seek`。
+生产预览、source-scoped inspect/unlock/lock 和显式 source-local catalog 导入均已接入；
+密钥包持久化与调查员 UI 分别属于 Stage 4/5。
 见 `docs/bitlocker-volume-layer-design.md`。
 
-`app-services` 是最大的汇聚点，依赖 23 个内部 crate：domain、transport、
+`app-services` 是最大的汇聚点，依赖 24 个内部 crate：domain、transport、
 infrastructure、persistence-sqlite、evidence-core、六个 fs-*、fs-lvm、
 image-e01、search、timeline、artifacts-core/windows/linux、reports、
-containers-pst、ceph-wire、rocksdb-wire、testing。
+containers-pst、ceph-wire、rocksdb-wire、volume-bitlocker、testing。
 
-`forensics-desktop`（Tauri host）依赖 12 个：domain、transport、
+`forensics-desktop`（Tauri host）依赖 13 个：domain、transport、
 infrastructure、persistence-sqlite、evidence-core、fs-ntfs、fs-fat、
-image-e01、artifacts-core、runtime-cache、app-services、mcp-client。
+image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、mcp-client。
 
 ### 边界说明
 
@@ -150,7 +150,7 @@ image-e01、artifacts-core、runtime-cache、app-services、mcp-client。
 | **fs-xfs** | XFS | v1/v2/v3 inode、MACB、internal log |
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
-| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 2a：元数据/密钥推导 + 五种方法扇区 cipher + 明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；180 个 lib 测试；接入 11 个 gate point 属 Stage 2b |
+| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 3：元数据/密钥推导 + 五种方法扇区 cipher + 明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；真实预览、inspect/unlock/lock 与显式 source-local catalog 导入已接入；持久化密钥包和 UI 属 Stage 4/5 |
 
 ### 分布式存储重建层
 

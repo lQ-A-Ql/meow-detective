@@ -14,6 +14,12 @@ fn invalidating_unknown_scope_is_a_noop() {
     let registry = BitLockerUnlockRegistry::default();
 
     assert_eq!(registry.invalidate_source("case-a", "source-a").unwrap(), 0);
+    assert_eq!(
+        registry
+            .invalidate_partition("case-a", "source-a", 3)
+            .unwrap(),
+        0
+    );
     assert_eq!(registry.invalidate_case("case-a").unwrap(), 0);
     assert_eq!(registry.len(), 0);
 }

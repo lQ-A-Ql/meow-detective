@@ -30,6 +30,9 @@ pub enum AuditAction {
     DataSourceImport,
     DataSourceDelete,
     DataSourceRename,
+    BitLockerUnlock,
+    BitLockerLock,
+    BitLockerCatalogImport,
     FileView,
     FileExtract,
     SearchExecute,
@@ -58,6 +61,9 @@ impl AuditAction {
             Self::DataSourceImport => "datasource.import",
             Self::DataSourceDelete => "datasource.delete",
             Self::DataSourceRename => "datasource.rename",
+            Self::BitLockerUnlock => "bitlocker.unlock",
+            Self::BitLockerLock => "bitlocker.lock",
+            Self::BitLockerCatalogImport => "bitlocker.catalog.import",
             Self::FileView => "file.view",
             Self::FileExtract => "file.extract",
             Self::SearchExecute => "search.execute",
@@ -82,6 +88,9 @@ impl AuditAction {
             Self::CaseCreate | Self::CaseOpen | Self::CaseClose | Self::CaseDelete => "case",
             Self::DataSourceImport | Self::DataSourceDelete | Self::DataSourceRename => {
                 "datasource"
+            }
+            Self::BitLockerUnlock | Self::BitLockerLock | Self::BitLockerCatalogImport => {
+                "bitlocker"
             }
             Self::FileView | Self::FileExtract => "file",
             Self::SearchExecute => "search",

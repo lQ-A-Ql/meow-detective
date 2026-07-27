@@ -1509,6 +1509,7 @@ dependencies = [
  "tracing-subscriber",
  "transport",
  "uuid",
+ "volume-bitlocker",
  "windows 0.58.0",
 ]
 
