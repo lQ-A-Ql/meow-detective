@@ -17,7 +17,7 @@
 │  架构: 分层 + 能力族拆分，backend-led                            │
 │  代码量: 1,719 个 .rs / ~296k 行；256 个 .ts(x) / ~29k 行        │
 │  测试: ~3,038 个 Rust 测试函数；86 个前端 Vitest 测试文件         │
-│  workspace: 27 个 crate + 1 个 Tauri host package               │
+│  workspace: 28 个 crate + 1 个 Tauri host package               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -93,8 +93,13 @@ fs-ntfs fs-fat fs-exfat fs-ext4 fs-xfs fs-btrfs fs-lvm image-e01
 
 无内部依赖的独立 crate:
   ceph-wire, rocksdb-wire, containers-pst, artifacts-linux,
-  runtime-cache, testing, evtx-patched
+  runtime-cache, testing, evtx-patched, volume-bitlocker
 ```
+
+`volume-bitlocker` 目前只有冻结的类型契约（Stage 0），尚无调用者。它不是
+`image-raw` 那类孤儿 crate：契约存在的目的就是让 guard 有扫描根、让编译器从
+第一天起约束密钥类型，Stage 1-2 会把它接进 `evidence-core` 与 `app-services`
+的读路径。见 `docs/bitlocker-volume-layer-design.md`。
 
 `app-services` 是最大的汇聚点，依赖 23 个内部 crate：domain、transport、
 infrastructure、persistence-sqlite、evidence-core、六个 fs-*、fs-lvm、
@@ -144,6 +149,7 @@ image-e01、artifacts-core、runtime-cache、app-services、mcp-client。
 | **fs-xfs** | XFS | v1/v2/v3 inode、MACB、internal log |
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
+| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 0：加密方法/保护器/错误/密钥类型契约冻结，26 个 lib 测试，无实现 |
 
 ### 分布式存储重建层
 
@@ -519,7 +525,7 @@ baseline 只允许减少：
 |---|---|
 | Rust 源文件 / 行 | 1,719 / ~296,000 |
 | TypeScript 源文件 / 行（不含测试） | 256 / ~28,900 |
-| workspace 成员 | 28（27 crate + Tauri host package） |
+| workspace 成员 | 29（28 crate + Tauri host package） |
 | Tauri commands / 命令文件 | 105 / 68 |
 | transport DTO 文件 | 32 |
 | SQLite 逻辑 repository / 迁移脚本 | 45 / 70 |

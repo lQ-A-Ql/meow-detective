@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 27 Rust crates, 10 frontend pages, 105 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 105 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance. See `docs/progress-ledger.md` for the verified milestone trail.
 
@@ -78,6 +78,7 @@ cd frontend && pnpm test
 | `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
+| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 0: frozen contracts only) |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |

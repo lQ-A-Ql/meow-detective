@@ -1,0 +1,219 @@
+# BitLocker 卷层设计
+
+**状态**: Stage 0 边界冻结（2026-07-27）
+**范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
+**事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
+`docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
+
+---
+
+## 0. 当前状态（代码事实）
+
+BitLocker 目前是"识别即跳过"。检测唯一入口是引导扇区签名
+`crates/app-services/src/datasource_service/fs_magic.rs:93` 的 `-FVE-FS-`
+（偏移 3，8 字节），映射成 `ImageFilesystemKind::BitLocker`，随后被 11 个
+gate point 一致地当作不可读卷处理：
+
+| 位置 | 当前行为 |
+|------|---------|
+| `datasource_service/fs_magic.rs:10` | 显示名 `"BitLocker"` |
+| `datasource_service/fs_magic.rs:24` | 签名命中即返回该 kind |
+| `datasource_service/probe.rs:296` | 映射 `PartitionStatus::EncryptedBitLocker` |
+| `datasource_service/probe/gpt.rs:130` | GPT 分区不推导文件系统 |
+| `file_service/filesystem_locators.rs:228` | 不定位文件系统读者 |
+| `file_service/partition_roots.rs:319` | 根节点仅显示名字 |
+| `file_service/viewer/partition.rs:117` | 预览枚举直接 `continue` |
+| `import_pipeline/partition/candidates.rs:166` | 排除出导入候选 |
+| `import_pipeline/partition/candidates.rs:362` | 产出 `Skipping locked …` 警告 |
+| `import_pipeline/partition/status.rs:9` | 状态字符串 `"BitLocker"` |
+| `import_pipeline/partition/work.rs:62` | 返回 `Ok(None)`，不排工作项 |
+
+这 11 处全部是对 `ImageFilesystemKind` 的穷尽 `match`，所以新增解密分支会让
+每一处变成编译错误。这是设计上的安全网：不存在"漏改一个入口导致静默跳过"
+的可能，也因此 Stage 2 的改动面是可枚举、可验证的。
+
+两个已在 Stage 0 之前修掉的前置错误：
+
+- `crates/evidence-core/src/volume/mbr.rs` 曾把 MBR 类型字节 `0x42` 标成
+  BitLocker。`0x42` 实际是 LDM（Windows 动态磁盘）。MBR 磁盘上的 BitLocker
+  卷保留原类型字节（通常 `0x07`），分区表无法识别它。已改为 LDM/`Unsupported`，
+  并加了 `no_mbr_type_byte_reports_bitlocker` 回归断言。
+- `MbrPartitionStatus::EncryptedBitLocker` 仍然存活，来源是 GPT 类型 GUID
+  路径（`probe/gpt.rs`），不是 MBR。
+
+---
+
+## 1. 定版架构
+
+```
+E01 / RAW 镜像
+  └─ PartitionWindowReader      分区窗口（绝对偏移 -> 卷内偏移 0）
+       └─ BitLockerReader       本层新增：明文 Read + Seek 视图
+            └─ NTFS / FAT / exFAT Reader
+                 └─ 文件树 / 预览 / hex / 媒体 / 分析 / 搜索 / 导出
+```
+
+关键性质：
+
+- `BitLockerReader` 只实现 `Read + Seek`，对上层完全透明。已有的 NTFS/FAT/exFAT
+  读者不需要知道自己在解密卷上。
+- 解密在读路径上按扇区惰性进行，**不产生明文卷副本，不挂载，不修改证据**。
+- 原始镜像句柄始终只读。
+
+---
+
+## 2. 核心契约
+
+### 2.1 加密方法与保护器是两个正交维度
+
+原方案把这两者混成一张表，这是必须先纠正的错误，否则 Stage 1 的类型设计会错。
+
+**加密方法**（卷怎么加密，FVE 元数据里的 `encryption_method`）：
+
+| 码 | 算法 | v1 |
+|----|------|-----|
+| `0x8000` | AES-128-CBC + Elephant Diffuser | 支持 |
+| `0x8001` | AES-256-CBC + Elephant Diffuser | 识别但拒绝（上游无 oracle） |
+| `0x8002` | AES-128-CBC | 支持 |
+| `0x8003` | AES-256-CBC | 支持 |
+| `0x8004` | XTS-AES-128 | 支持 |
+| `0x8005` | XTS-AES-256 | 支持 |
+
+**保护器**（VMK 怎么被包裹，FVE 元数据里的 protector entry 类型）：
+
+| 码 | 保护器 | v1 |
+|----|--------|-----|
+| `0x2000` | 密码 | 解锁 |
+| `0x0800` | 恢复密码（48 位） | 解锁 |
+| `0x0000` | Clear key | 仅清点，不解锁（见 2.2） |
+| — | TPM / TPM+PIN | 仅清点 |
+| — | 启动密钥（`.BEK`） | 仅清点 |
+
+v1 解锁面 = {密码, 恢复密码} × {`0x8000`, `0x8002`, `0x8003`, `0x8004`, `0x8005`}。
+其余组合返回 typed unsupported，但**元数据解析始终报告它找到的全部保护器和方法**
+（protector inventory），这是取证价值所在：调查员需要知道"这卷能用什么解锁"。
+
+### 2.2 v1 明确不做
+
+- Clear key 解锁。上游有实现，我们 v1 不启用：它意味着无凭据即可解密，
+  取证上应当是一个显式的、被记录的调查员动作，不能是自动 fallback。
+  留作 Stage 6+ 的独立决策。
+- 启动密钥 / TPM 解锁。
+- 密码破解、字典攻击、内存取密钥。
+- 写回、挂载、生成明文卷文件。
+
+### 2.3 密码算法
+
+BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解包 VMK
+-> AES-CCM 解包 FVEK。**不使用 DPAPI**（DPAPI 是 Windows 用户态凭据保护，
+与 BDE 卷密钥推导无关）。恢复密码走 48 位分组 / mod-11 校验后的独立推导路径。
+
+### 2.4 凭据边界
+
+| 事项 | 规则 |
+|------|------|
+| 密码 / 恢复密码落盘 | 禁止。不入 SQLite、job 参数、事件、日志、错误详情、报告、前端缓存 |
+| Credential Manager | 只保存已验证的 FVEK/tweak 密钥包，绝不保存密码或恢复密码 |
+| Credential target | `Meow_Detective/BitLocker/v1/<metadataFingerprint>` |
+| 运行时注册键 | `caseId + dataSourceId + partitionIndex + metadataFingerprint` |
+| 密钥类型 | 禁止派生 `Debug` / `Clone` / `Serialize`；`Drop` 必须 zeroize |
+| Stage 3 传参 | 凭据作为独立 secret 参数进入，不进现有可 `Debug`/`Clone` 的导入请求 |
+| Stage 5 前端 | 密码不进 Zustand / TanStack Query；锁定与遗忘密钥是两个独立动作 |
+| "锁定"语义 | 只清除读取密钥。已入库的文件名、artifact、索引属于案件派生数据，不自动清除 |
+
+### 2.5 读路径形态
+
+- 每次读取用独立 `BitLockerReader`，共享只读的密钥/布局快照。
+- 有界扇区缓存，约 128 KB；I/O 合并上限 1 MB。
+- 重复的 1 MB 区间读取**不得重跑 KDF**——密钥推导结果按运行时注册键缓存。
+- 活跃 reader 数量与内存都必须有上界。
+- 锁定后所有新的证据读取返回 `BITLOCKER_LOCKED`，已有 read lease 先排空。
+
+---
+
+## 3. 分阶段计划
+
+每个 Stage 结束后必须单独复审：模块边界、错误分类、凭据泄漏、文件长度、
+测试覆盖。**存在 High/Critical 问题不得进入下一阶段。**
+
+| Stage | 内容 | 退出条件 |
+|-------|------|---------|
+| 0 | 边界冻结 | 本文件 + 依赖决策定稿；两个 guard 上线；crate 骨架编译通过 |
+| 1 | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
+| 2 | 卷读者与 11 个 gate point | `BitLockerReader` 通过 oracle；11 处 match 全部显式处理 |
+| 3 | 服务与导入编排 | 解锁/锁定用例；凭据以独立 secret 参数进入；phase 记录 |
+| 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
+| 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
+| 6 | 报告、性能、文档 | 报告含 protector inventory；KDF 不重跑；文档与矩阵同步 |
+
+### Stage 0 交付物（本次）
+
+1. `docs/bitlocker-dependency-decision.md` — 上游 commit、tree hash、逐文件
+   SHA-256、许可与归属、被排除的上游部分、新增 crates.io 依赖。
+2. `crates/volume-bitlocker/` 骨架 — 冻结的类型契约（加密方法、保护器、
+   错误分类、secret 类型），`#![forbid(unsafe_code)]`，无实现。
+3. `scripts/check-bitlocker-credential-guard.ps1` — 禁止凭据进日志/错误/序列化，
+   禁止 secret 类型派生 `Debug`/`Clone`/`Serialize`，禁止明文卷临时文件。
+4. 公开 oracle 清单（下节）。
+5. 注册：`Cargo.toml`、`CLAUDE.md` guard 表、`docs/documentation-index.md`、
+   `README.md`、`scripts/check-doc-drift.ps1` crate 计数。
+
+---
+
+## 4. 测试 oracle
+
+上游全部 oracle 都是环境变量门控、不提交 fixture，与本仓库
+`check-private-real-sample-tests.ps1` 的私有样本纪律一致。公开可获取的镜像：
+
+| 镜像 | 方法 | 凭据 | 来源 |
+|------|------|------|------|
+| `bdetogo.raw` | `0x8000` | 密码 `bde-TEST` | dfvfs 测试数据 |
+| `bitlocker-1.dd` | `0x8002` | 密码 `jacqueline` | picoCTF 2025 |
+| `vault.raw` | `0x8004` | 恢复密码（已公开） | BelkaCTF #6 |
+| `m8003.raw` | `0x8003` | 恢复密码（自铸） | 自铸，需自行生成 |
+| `m8004.raw` | `0x8004` | 恢复密码（自铸） | 自铸，需自行生成 |
+| `m8005.raw` | `0x8005` | 恢复密码（自铸） | 自铸，需自行生成 |
+
+约束：
+
+- 不提交任何 BitLocker 镜像到仓库。体积和来源许可都不允许。
+- oracle 测试用 `FORENSICS_BITLOCKER_*_ORACLE` 命名，这样
+  `check-private-real-sample-tests.ps1` 的 `FORENSICS_*_ORACLE` 规则会自动
+  要求 `#[ignore]`，无需改 guard。
+- 私有 E01 门控：`FORENSICS_BITLOCKER_E01_FIXTURE`、
+  `FORENSICS_BITLOCKER_PARTITION_INDEX`、`FORENSICS_BITLOCKER_EXPECTED_PATH`、
+  `FORENSICS_BITLOCKER_EXPECTED_SHA256`。
+- **恢复密码不通过环境变量传给 CI**。它是凭据；本地调查员自己提供。测试断言
+  的是解密后扇区的 SHA-256，不是凭据本身。
+
+---
+
+## 5. 验收标准
+
+1. 密码、恢复密码不进入 SQLite、job 参数、事件、日志、错误详情、报告或前端缓存。
+2. 原始证据保持只读，不产生明文卷副本。
+3. 重复的 1 MB 区间读取不重跑 KDF。
+4. 内存占用与活跃 reader 数量有上界。
+5. 锁定后新的证据读取返回 `BITLOCKER_LOCKED`，已有 read lease 先排空。
+6. 11 个 gate point 全部显式处理，无静默跳过。
+7. 支持的方法逐一通过 oracle 校验；不支持的组合返回 typed unsupported 且
+   仍报告 protector inventory。
+8. `unsafe_code` 保持 forbid；`unwrap`/`expect` 不出现在生产路径。
+
+---
+
+## 6. 待办与已知风险
+
+- **FVEK 落盘的取证风险**：Credential Manager 里的 FVEK 密钥包等价于该卷的
+  永久解密能力。Stage 4 必须决定过期/清除策略，并在报告中记录密钥包的存在。
+- **`catalog_manifest.rs` 版本号**：`unlock_hint` 已经被序列化进 manifest，
+  新增解锁状态字段需要 bump manifest 版本，否则旧案件的指纹会失配。
+- **descriptor cache 版本升级**：原方案假设存在这个机制，代码里没有。
+  Stage 2 若需要缓存失效，得先建机制或改用 `data_source_processing_phases`
+  的 input fingerprint。
+- **`MSWIN4.1` 误判**：当前检测只看 `-FVE-FS-`，没有这个问题。若 Stage 1
+  为了兼容旧版 BDE 而加 `MSWIN4.1` 签名，必须同时校验 FVE 元数据块，
+  否则普通 FAT 卷会被误判成 BitLocker。
+- **unsafe 代码文档同步**：新 crate 是 forbid，需在相关安全文档中登记。
+- **读租约排空**：复用 `preview_runtime` 已有的 retire / read-drain 机制，
+  不要新造一套。

@@ -30,6 +30,8 @@
 | Expected JSON 契约 **(V2)** | `docs/expected-json-contract.md` | expected JSON 结构、字段分级、差异规则 |
 | Parser 支持矩阵 | `docs/parser-support-matrix.md` | 支持边界、验证样本、字段承诺 |
 | 已知不支持格式 | `docs/known-unsupported-formats.md` | 明确不支持或仅部分支持的格式 |
+| BitLocker 卷层设计 | `docs/bitlocker-volume-layer-design.md` | BDE 解密分层、加密方法与保护器契约、Stage 0-6 计划与验收 |
+| BitLocker 依赖决策 | `docs/bitlocker-dependency-decision.md` | 上游 commit/tree/逐文件校验和、许可归属、被排除范围、新增依赖 |
 | 错误分类 | `docs/error-taxonomy.md` | 错误类别、脱敏策略、前后端约定 |
 | 错误分类手册 **(V2)** | `docs/error-classification-manual.md` | V2 错误分层、脱敏与审计实施口径 |
 | Benchmark 基线 **(V2)** | `docs/benchmark-baseline.md` | 数据集分级、指标口径、默认阈值 |
@@ -86,7 +88,7 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 27 | `crates/`（Tauri shell 为独立 workspace package） |
+| Rust workspace crate | 28 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 105 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 28 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
@@ -102,7 +104,7 @@
 | V5 保留新增 crate | 0 | V5 未新增保留 crate；同期 8 个无消费者 crate 于 `a3c1f265` 退役 |
 | Rust 测试函数 | ~3,038 | `crates/`+`apps/` 中 `#[test]` / `#[tokio::test]` 属性计数（2026-07 校准） |
 | Rust 源码 | 1,719 文件 / ~296k 行 | `crates/`+`apps/` 下 `*.rs`（2026-07 校准） |
-| 守卫脚本 | 31 | `scripts/check-*.ps1` |
+| 守卫脚本 | 32 | `scripts/check-*.ps1` |
 
 ## 3. 路径级事实校准
 

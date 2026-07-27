@@ -124,6 +124,14 @@ powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1
 # Tauri command layer SQL boundary guard
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 
+# BitLocker credential boundary guard. This forbids Debug/Clone/Serialize on
+# secret-bearing types, secret accessors reaching log/format/assert sinks in
+# production code, plaintext volume materialization, and dropping
+# #![forbid(unsafe_code)]. It also asserts the pinned upstream commit and the
+# Apache-2.0 attribution files stay in place. Run with -SelfTest first.
+powershell -ExecutionPolicy Bypass -File scripts\check-bitlocker-credential-guard.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-bitlocker-credential-guard.ps1
+
 # Stage 0 architecture boundary guard. This prevents private fixture case IDs
 # in frontend production code, requires media APIs to use COMMANDS.files, and
 # restricts direct invoke usage to the API client. Backend Tauri/AppHandle

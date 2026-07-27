@@ -27,6 +27,7 @@ members = [
   "crates/fs-btrfs",
   "crates/fs-xfs",
   "crates/fs-lvm",
+  "crates/volume-bitlocker",
   "crates/ceph-wire",
   "crates/rocksdb-wire",
 ]
@@ -73,6 +74,7 @@ fs-ext4 = { path = "crates/fs-ext4" }
 fs-btrfs = { path = "crates/fs-btrfs" }
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }
+volume-bitlocker = { path = "crates/volume-bitlocker" }
 image-e01 = { path = "crates/image-e01" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }

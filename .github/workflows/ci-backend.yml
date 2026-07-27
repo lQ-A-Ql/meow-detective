@@ -88,6 +88,11 @@ jobs:
       - name: EVTX dependency decision guard
         shell: pwsh
         run: ./scripts/check-evtx-dependency-decision.ps1
+      - name: BitLocker credential guard
+        shell: pwsh
+        run: |
+          ./scripts/check-bitlocker-credential-guard.ps1 -SelfTest
+          ./scripts/check-bitlocker-credential-guard.ps1
       - name: Stage 5 regression guard
         shell: pwsh
         run: ./scripts/check-stage5-regression-guard.ps1

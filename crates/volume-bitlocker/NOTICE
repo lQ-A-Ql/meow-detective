@@ -1,0 +1,34 @@
+volume-bitlocker
+Copyright 2026 lQ-A-Ql (Meow~Detective)
+
+This product includes software derived from bitlocker-forensic.
+
+  bitlocker-core and elephant-diffuser
+  Copyright Albert Hui <albert@securityronin.com>
+  Licensed under the Apache License, Version 2.0
+  https://github.com/SecurityRonin/bitlocker-forensic
+  https://github.com/SecurityRonin/elephant-diffuser
+
+Derived from bitlocker-forensic at commit
+7c931d4be338a172de9799476eb744ba089e0867 (bitlocker-core 0.3.5, 2026-07-25)
+and elephant-diffuser at commit
+09f029505f01e0ade7d986b6a2f3b2421453a02a.
+
+The upstream projects ship no NOTICE file; this file is original to the derived
+work and does not reproduce an upstream notice.
+
+Statement of modification, as required by Apache-2.0 section 4(b). The derived
+work differs from upstream as follows:
+
+  - Errors are classified into this project's evidence-layer error taxonomy
+    instead of the upstream BdeError type.
+  - The volume reader composes with this project's partition-window readers
+    rather than owning the image handle.
+  - Secret-bearing types are forbidden from deriving Debug, Clone, and
+    Serialize, and zeroize on drop. Upstream does not impose this.
+  - Clear-key and startup-key unlock are not enabled.
+  - The upstream `vfs` feature, the forensic-vfs dependency, the `forensic`
+    binary crate, fuzz targets, and documentation tooling are excluded.
+
+Full upstream provenance, per-file source checksums, and the rationale for
+vendoring are recorded in docs/bitlocker-dependency-decision.md.

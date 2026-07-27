@@ -1,0 +1,16 @@
+[package]
+name = "volume-bitlocker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+# Apache-2.0, not the workspace MIT: this crate is a derived work of
+# bitlocker-core from SecurityRonin/bitlocker-forensic. See NOTICE and
+# docs/bitlocker-dependency-decision.md.
+license = "Apache-2.0"
+description = "Read-only BitLocker (BDE) volume decryption layer"
+
+[dependencies]
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
