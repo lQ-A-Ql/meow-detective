@@ -4,6 +4,9 @@ import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import {
+  findTreeNode,
+  findTreeRoot,
+  flattenExpandedTree,
   mergeTreeNodePages,
   rebaseTreeNodeDepths,
   sameTreeNodeList,
@@ -44,23 +47,9 @@ function normalizeChildrenForParent(
   children: FileTreeNode[],
   parent: FileTreeNode | undefined,
 ) {
-  return rebaseTreeNodeDepths(children, parent?.depth ?? -1);
-}
-
-function findTreeNode(
-  nodeId: string | undefined,
-  roots: FileTreeNode[],
-  childrenById: Record<string, FileTreeNode[]>,
-) {
-  if (!nodeId) return undefined;
-  const stack = [...roots];
-  while (stack.length > 0) {
-    const node = stack.shift();
-    if (!node) continue;
-    if (node.id === nodeId) return node;
-    stack.unshift(...(childrenById[node.id] ?? []));
-  }
-  return undefined;
+  const normalized = rebaseTreeNodeDepths(children, parent?.depth ?? -1);
+  if (!parent) return normalized;
+  return normalized.filter((child) => child.id !== parent.id);
 }
 
 interface UseFileTreeOptions {
@@ -230,19 +219,10 @@ export function useFileTree({
 
   const expandedIdSet = useMemo(() => new Set(expandedDirectoryIds), [expandedDirectoryIds]);
 
-  const flatTree = useMemo(() => {
-    const visible: FileTreeNode[] = [];
-    const appendNodes = (nodes: FileTreeNode[]) => {
-      for (const node of nodes) {
-        visible.push(node);
-        if (expandedIdSet.has(node.id)) {
-          appendNodes(treeChildren[node.id] ?? []);
-        }
-      }
-    };
-    appendNodes(rootNodes);
-    return visible;
-  }, [expandedIdSet, rootNodes, treeChildren]);
+  const flatTree = useMemo(
+    () => flattenExpandedTree(rootNodes, treeChildren, expandedIdSet),
+    [expandedIdSet, rootNodes, treeChildren],
+  );
 
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
   const parentDirectory = useMemo(() => {
@@ -261,17 +241,7 @@ export function useFileTree({
   }, [parentDirectory, setSelectedDirectoryId, setSelectedFileId]);
 
   const activeRootNode = useMemo(() => {
-    if (!activeDirectoryId || !rootNodes.length) return rootNodes[0];
-    for (const root of rootNodes) {
-      if (root.id === activeDirectoryId) return root;
-      const stack: FileTreeNode[] = [...(treeChildren[root.id] ?? [])];
-      while (stack.length > 0) {
-        const next: FileTreeNode = stack.pop()!;
-        if (next.id === activeDirectoryId) return root;
-        stack.push(...(treeChildren[next.id] ?? []));
-      }
-    }
-    return rootNodes[0];
+    return findTreeRoot(activeDirectoryId, rootNodes, treeChildren) ?? rootNodes[0];
   }, [activeDirectoryId, rootNodes, treeChildren]);
 
   const displayNodeName = useCallback(

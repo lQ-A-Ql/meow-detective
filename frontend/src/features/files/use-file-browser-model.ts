@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useFileJumpContext } from '@/features/files/hooks';
+import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { useFileSelection } from '@/features/files/hooks/use-file-selection';
@@ -57,15 +58,7 @@ export function useFileBrowserModel() {
   );
 
   useEffect(() => {
-    const visibleIds = new Set<string>();
-    const collect = (nodes: typeof tree.rootTree) => {
-      for (const node of nodes ?? []) {
-        visibleIds.add(node.id);
-        const children = tree.treeChildren[node.id];
-        if (children?.length) collect(children);
-      }
-    };
-    collect(tree.rootTree);
+    const visibleIds = collectTreeNodeIds(tree.rootTree, tree.treeChildren);
     if (jumpContext) {
       visibleIds.add(jumpContext.directory.id);
       for (const id of jumpContext.ancestorDirectoryIds) visibleIds.add(id);

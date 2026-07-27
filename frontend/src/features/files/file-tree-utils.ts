@@ -1,5 +1,7 @@
 import type { FileTreeNode } from '@/types/models';
 
+type TreeChildrenById = Readonly<Record<string, readonly FileTreeNode[]>>;
+
 export function sameTreeNode(left: FileTreeNode, right: FileTreeNode) {
   return (
     left.id === right.id &&
@@ -74,4 +76,100 @@ export function rebaseTreeNodeDepths(
     ...node,
     depth: Math.max(0, node.depth + delta),
   }));
+}
+
+export function flattenExpandedTree(
+  roots: readonly FileTreeNode[],
+  childrenById: TreeChildrenById,
+  expandedIds: ReadonlySet<string>,
+) {
+  const visible: FileTreeNode[] = [];
+  const visited = new Set<string>();
+  const stack = [...roots].reverse();
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || visited.has(node.id)) continue;
+    visited.add(node.id);
+    visible.push(node);
+
+    if (!expandedIds.has(node.id)) continue;
+    const children = childrenById[node.id] ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+  }
+
+  return visible;
+}
+
+export function findTreeNode(
+  nodeId: string | undefined,
+  roots: readonly FileTreeNode[],
+  childrenById: TreeChildrenById,
+) {
+  if (!nodeId) return undefined;
+  const visited = new Set<string>();
+  const stack = [...roots].reverse();
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || visited.has(node.id)) continue;
+    if (node.id === nodeId) return node;
+    visited.add(node.id);
+
+    const children = childrenById[node.id] ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+  }
+
+  return undefined;
+}
+
+export function findTreeRoot(
+  nodeId: string | undefined,
+  roots: readonly FileTreeNode[],
+  childrenById: TreeChildrenById,
+) {
+  if (!nodeId) return undefined;
+  const visited = new Set<string>();
+  const stack = roots
+    .map((root) => ({ node: root, root }))
+    .reverse();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || visited.has(current.node.id)) continue;
+    if (current.node.id === nodeId) return current.root;
+    visited.add(current.node.id);
+
+    const children = childrenById[current.node.id] ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push({ node: children[index], root: current.root });
+    }
+  }
+
+  return undefined;
+}
+
+export function collectTreeNodeIds(
+  roots: readonly FileTreeNode[],
+  childrenById: TreeChildrenById,
+) {
+  const ids = new Set<string>();
+  const stack = [...roots].reverse();
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || ids.has(node.id)) continue;
+    ids.add(node.id);
+
+    const children = childrenById[node.id] ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+  }
+
+  return ids;
 }
