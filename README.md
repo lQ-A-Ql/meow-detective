@@ -1,8 +1,8 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 105 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 105 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
-**V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
+**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance. See `docs/progress-ledger.md` for the verified milestone trail.
 
 ## Architecture
 
@@ -12,6 +12,14 @@ Tauri Command Layer (apps/desktop/src-tauri/) -> 105 commands
 Application Services (crates/app-services/) -> 28 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
+
+Storage is not a single database. Beyond the main case database there is a
+per-data-source database (`source_*` migrations), and derived sources such as a
+reconstructed Ceph RBD VM disk get their own source database again. A data
+source reaching `import_state=ready` only means its catalog is browseable;
+per-phase progress for Catalog / Graph / Platform / Artifacts / Timeline /
+Search is tracked separately in `data_source_processing_phases` with version,
+input fingerprint, owner/attempt, lease, and heartbeat.
 
 ## Quick Start
 
@@ -41,7 +49,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (90 test files)
+cd frontend && pnpm test            # Frontend (86 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -167,6 +175,36 @@ Current validation uses the repository quality gates listed above; historical ph
 - **Entity resolution**: cross-case entity matching and canonicalization (`crates/app-services/src/entity_resolution/`)
 
 APFS/HFS+ partition-type recognition is metadata-only and remains `Unsupported`; it does not provide a file tree, preview, artifact extraction, or deleted-file recovery.
+
+## V5 Status
+
+**V5 narrowed to depth over breadth.** `docs/v5-plan.md` is retained as a
+historical design record, not a statement of current scope. Of its five
+pillars, only advanced filesystem forensics partially landed:
+
+| V5 pillar | Outcome |
+|---|---|
+| Advanced filesystem forensics | Partially delivered — NTFS/ext4/XFS deleted-file recovery (`crates/app-services/src/deleted_recovery/`) and header/footer carving (`crates/app-services/src/file_carving.rs`) |
+| Mobile & embedded disk forensics | Retired — `artifacts-ios` / `artifacts-android` crates removed |
+| Cloud audit log forensics | Retired — `cloud-audit` crate removed |
+| Graph Query Language (GQL) | Retired — `gql` crate and its unmounted UI shell removed |
+| Production deployment & marketplace | Retired — `updater` / `crash_handler` crates and the marketplace UI shell removed |
+
+Eight member crates with no consumers were retired in `a3c1f265` (`ingest`,
+`artifacts-ios`, `artifacts-android`, `exchange`, `cloud-audit`, `gql`,
+`updater`, `crash_handler`), shrinking the workspace from 36 to 28. The
+matching dead transport DTO modules (`ios.rs`, `cloud_audit.rs`) and the
+unmounted frontend feature shells (`features/gql`, `features/marketplace`) were
+removed afterwards.
+
+`crates/transport/src/dto/android.rs` is deliberately kept as a **reserved**
+contract surface: the DTO shapes are documented but there is no parser, no
+command, and no TypeScript mirror. Android remains typed `Unsupported`.
+
+The engineering effort that actually accumulated in this period is Ceph/PVE
+cluster reconstruction (`ceph-wire`, `rocksdb-wire`) and Windows registry /
+browser-credential depth. Both are validated against private opt-in real
+samples only; neither raises a public support level.
 
 ## License
 

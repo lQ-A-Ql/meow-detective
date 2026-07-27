@@ -1,5 +1,22 @@
 # Forensics Workbench V5 Execution Plan
 
+> **状态：历史设计记录，不是当前范围。** 本文档保留 2026-06 的阶段设计原样，
+> 便于追溯决策，但其中的基线数字与四根柱子已被代码否决。当前事实以
+> `docs/documentation-index.md` §4.3c、`docs/progress-ledger.md` 和
+> `docs/parser-support-matrix.md` 为准。
+>
+> 已失效之处：
+>
+> - 基线数字（31 crates、1,483 Rust + 228 frontend tests）已过期；当前为 28 crates、~3,038 个 Rust 测试函数、86 个前端测试文件
+> - 8 个文件系统 reader 的说法包含 APFS/HFS+，与 Stage 1 平台边界冲突；生产 reader 为 NTFS/FAT/exFAT/ext4/XFS/Btrfs 六个，APFS/HFS+ 只做分区类型元数据识别
+> - **Stage V5-1（高级文件系统取证）：部分落地** — NTFS/ext4/XFS 已删除文件恢复与 header/footer carving 已实现；journal replay、APFS checkpoint rewind、Btrfs snapshot diff、`$LogFile`/USN/ADS 未实现
+> - **Stage V5-2（移动与云）：已退役** — `artifacts-ios`、`artifacts-android`、`cloud-audit` crate 于 `a3c1f265` 移除；对应 transport DTO 亦已删除，仅 `dto/android.rs` 保留为预留契约面
+> - **Stage V5-3（GQL）：已退役** — `gql` crate 与未挂载的前端 `features/gql` 空壳均已移除
+> - **Stage V5-4（生产化与市场）：已退役** — `updater`、`crash_handler` crate 与 `features/marketplace` 空壳均已移除
+>
+> V5 期间实际累积的工程量在 Ceph/PVE 集群重建（`ceph-wire`、`rocksdb-wire`）与
+> Windows registry / 浏览器凭据深度，两者都不在本文档的原始规划中。
+
 ## 0. V5 Baseline (as of 2026-06-17)
 
 V5 builds on V4 core: 31 crates, 1,483 Rust + 228 frontend tests, 8 filesystem readers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs/APFS/HFS+), entity resolution, STIX 2.1 export, Ed25519 signing, Merkle custody.

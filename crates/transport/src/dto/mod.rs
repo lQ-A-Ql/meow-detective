@@ -11,7 +11,6 @@ pub mod android;
 pub mod artifacts;
 pub mod batch;
 pub mod case;
-pub mod cloud_audit;
 pub mod correlation;
 pub mod entity_resolution;
 pub mod exchange;
@@ -19,7 +18,6 @@ pub mod files;
 mod governance;
 pub mod graph;
 pub mod import;
-pub mod ios;
 pub mod jobs;
 pub mod mcp;
 pub mod notebook;
@@ -71,7 +69,6 @@ pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,
 };
-pub use cloud_audit::{CloudAuditEntryDto, CloudAuditSourceDto};
 pub use correlation::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,
     CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
@@ -92,10 +89,6 @@ pub use import::{
     ImportPhaseMetricsDto, ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto,
     JobCancellationDto, PartialResultDto, PartialResultKindDto, PerformanceMetricDto,
     PerformanceReportDto, PerformanceReportSummaryDto, ResultFreshnessDto,
-};
-pub use ios::{
-    IosBackupFileDto, IosCallDto, IosContactDto, IosMessageDto, IosNoteDto, IosPhotoDto,
-    IosSafariEntryDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use mcp::{

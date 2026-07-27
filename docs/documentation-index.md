@@ -78,6 +78,7 @@
 | PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵 |
 | V3 演练 **(V3)** | `docs/v3-walkthrough.md` | 端到端 V3 调查工作流演练：导入、图浏览、关联、笔记本、规则包、批处理 |
 | V4 执行计划（历史设计记录） **(V4)** | `docs/v4-plan.md` | 保留阶段设计；其中 APFS/HFS+ 范围已被 Stage 1 unsupported 边界取代 |
+| V5 执行计划（历史设计记录） **(V5)** | `docs/v5-plan.md` | 保留阶段设计；移动/云/GQL/市场四根柱子已退役，crate 数与文件系统 reader 数均已过期，见 §4.3c |
 
 ## 2. 当前事实快照
 
@@ -91,20 +92,24 @@
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
 | SQLite migration scripts | 70 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0042 + source_001-source_027 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 90 | `frontend/src/**/*.test.ts(x)` |
+| frontend test files | 86 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 8 | 历史 V3 文档清单；当前支持事实以 parser matrix 为准 |
 | V3 保留新增 crate | 2 | `crates/containers-pst/`, `crates/artifacts-linux/` |
 | V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
 | V4 保留新增 crate | 3 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/` |
-| Rust tests | ~2,061 | `cargo test --workspace` 汇总 (2026-06 校准) |
+| V5 参考文档 | 1 | `docs/v5-plan.md`（历史设计记录；五根柱子中四根已退役，见 §4.6） |
+| V5 保留新增 crate | 0 | V5 未新增保留 crate；同期 8 个无消费者 crate 于 `a3c1f265` 退役 |
+| Rust 测试函数 | ~3,038 | `crates/`+`apps/` 中 `#[test]` / `#[tokio::test]` 属性计数（2026-07 校准） |
+| Rust 源码 | 1,719 文件 / ~296k 行 | `crates/`+`apps/` 下 `*.rs`（2026-07 校准） |
+| 守卫脚本 | 31 | `scripts/check-*.ps1` |
 
 ## 3. 路径级事实校准
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 90 | Vitest 测试文件总数 |
+| `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 105 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 70 | SQLite migration 脚本 (0001-0042 + source_001-source_027 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
@@ -183,6 +188,16 @@
 - V4 文档入口：`docs/v4-plan.md`（主计划）
 - V4 参考文档（待创建）：`docs/v4-entity-resolution.md`、`docs/v4-multi-os-filesystems.md`、`docs/v4-ai-models.md`、`docs/v4-ai-privacy.md`、`docs/v4-release-signing.md`、`docs/v4-release-checklist.md`
 - V4 将在完工后替代 V2 治理工作台为 `/v4`，引入实体解析统计、跨案关联指标、文件系统覆盖、AI使用审计、保管链验证、流式采集状态等信号
+
+### 4.3c V5 规划与当前状态
+
+- V5 主计划位于 `docs/v5-plan.md`，作为历史阶段设计保留；其中的 crate 数（31）、8 个文件系统 reader（含 APFS/HFS+）与移动/云/GQL/市场范围均不构成当前产品范围或支持声明
+- V5 五根柱子中只有"高级文件系统取证"部分落地：NTFS/ext4/XFS 已删除文件恢复（`crates/app-services/src/deleted_recovery/`）与 header/footer carving（`crates/app-services/src/file_carving.rs`）
+- 移动（iOS/Android）、云审计日志、GQL 图查询语言、生产化部署与规则包市场四根柱子已退役：`a3c1f265` 移除 8 个无消费者 crate（`ingest`、`artifacts-ios`、`artifacts-android`、`exchange`、`cloud-audit`、`gql`、`updater`、`crash_handler`），workspace 从 36 降至 28
+- 随后清理对应的死契约面与前端空壳：`crates/transport/src/dto/ios.rs`、`crates/transport/src/dto/cloud_audit.rs`、`frontend/src/features/gql/`、`frontend/src/features/marketplace/`
+- `crates/transport/src/dto/android.rs` 保留为**预留契约面**：DTO 形状有文档说明，但无 parser、无 command、无 `frontend/src/types/models.ts` 镜像；Android 仍为 typed `Unsupported`
+- V5 期间真正累积的工程量在 Ceph/PVE 集群重建（`crates/ceph-wire/`、`crates/rocksdb-wire/`）与 Windows registry / 浏览器凭据深度；两者均只由私有 opt-in 真实样本验证，不提升公开支持等级
+- 2026-07 实际开发方向为分析链路加固与预览深度，而非能力横向铺开；已验证里程碑以 `docs/progress-ledger.md` 为准
 
 ### 4.4 MCP 与安全边界
 

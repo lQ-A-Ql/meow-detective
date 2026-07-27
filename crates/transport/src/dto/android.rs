@@ -1,3 +1,15 @@
+//! Reserved Android contract surface.
+//!
+//! These DTOs describe the intended wire shape for Android disk-image artifact
+//! extraction. They are **reserved, not implemented**: there is no Android
+//! parser crate, no Tauri command, and no TypeScript mirror in
+//! `frontend/src/types/models.ts`. Android data sources remain typed
+//! `Unsupported` (see `docs/known-unsupported-formats.md`).
+//!
+//! Keep this module free of consumers until an Android parser lands. When it
+//! does, mirror the types in `models.ts` and register the commands per the
+//! contract flow in `CLAUDE.md`.
+
 use serde::{Deserialize, Serialize};
 
 /// An Android contact from contacts2.db.

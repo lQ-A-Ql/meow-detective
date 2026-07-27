@@ -59,15 +59,15 @@ V2 长期计划与能力评级请同时参考：
 | 平台 | macOS 数据源分析与制品提取 | 不支持 | Windows 与 Linux 是仅有的生产分析平台；macOS 数据源请求和 MacArtifacts 能力返回 typed unsupported，不运行候选发现或提取器 |
 | 文件系统 | APFS/HFS+ 分区内容解析 | 不支持 | 仅识别已知 Apple 分区类型标识符并记录为元数据；当前不识别 APFS/HFS+ 文件系统 magic/signature，不实例化文件系统 reader，也不提供文件树、预览、制品提取或已删除恢复 |
 | 案件兼容 | 旧 macOS 案件 | 不支持 | 含 platform='macos' 的旧案件不做迁移；当前开发版本打开时返回 typed unsupported，需要新建案件，并仅将可归类为 Windows 或 Linux 的证据重新导入 |
-| 移动设备 | iOS 制品 | 不支持 | iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）规划于 V4 |
-| 移动设备 | Android 制品 | 不支持 | Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）规划于 V4 |
-| 云 | AWS CloudTrail | 不支持 | 云审计日志采集与关联规划于 V4 |
-| 云 | Azure Audit Logs | 不支持 | 云审计日志采集与关联规划于 V4 |
-| 云 | GCP Audit Logs | 不支持 | 云审计日志采集与关联规划于 V4 |
-| 云 | Google Workspace Logs | 不支持 | 云工作空间日志规划于 V4 |
-| 云 | Microsoft 365 Unified Audit Log | 不支持 | 云审计日志规划于 V4 |
-| 网络 | PCAP/网络捕获 | 不支持 | 网络数据包捕获摄入与流记录解析规划于 V4 |
-| 内存 | 内存镜像采集与分析 | 不支持 | 实时响应采集与内存镜像集成规划于 V4 |
+| 移动设备 | iOS 制品 | 不支持 | iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）已退役；artifacts-ios crate 与 transport DTO 均已移除，不保留预留契约面 |
+| 移动设备 | Android 制品 | 不支持 | Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）无实现；artifacts-android crate 已退役，仅 transport/src/dto/android.rs 保留为零消费者预留契约面 |
+| 云 | AWS CloudTrail | 不支持 | 云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除 |
+| 云 | Azure Audit Logs | 不支持 | 云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除 |
+| 云 | GCP Audit Logs | 不支持 | 云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除 |
+| 云 | Google Workspace Logs | 不支持 | 云工作空间日志无实现，且不在当前磁盘取证范围内 |
+| 云 | Microsoft 365 Unified Audit Log | 不支持 | 云审计日志已退役；cloud-audit crate 与 transport DTO 均已移除 |
+| 网络 | PCAP/网络捕获 | 不支持 | 网络数据包捕获摄入与流记录解析从未实现，且不在当前磁盘取证范围内 |
+| 内存 | 内存镜像采集与分析 | 不支持 | 实时响应采集与内存镜像集成从未实现，且不在当前磁盘取证范围内 |
 
 ## 3. V2 期间仍不得被市场化夸大的边界
 

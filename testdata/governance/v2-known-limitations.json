@@ -444,7 +444,7 @@
       "category": "移动设备",
       "item": "iOS 制品",
       "status": "unsupported",
-      "summary": "iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）规划于 V4",
+      "summary": "iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）已退役；artifacts-ios crate 与 transport DTO 均已移除，不保留预留契约面",
       "affectedChains": [
         "iOS"
       ],
@@ -454,7 +454,7 @@
       "category": "移动设备",
       "item": "Android 制品",
       "status": "unsupported",
-      "summary": "Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）规划于 V4",
+      "summary": "Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）无实现；artifacts-android crate 已退役，仅 transport/src/dto/android.rs 保留为零消费者预留契约面",
       "affectedChains": [
         "Android"
       ],
@@ -464,7 +464,7 @@
       "category": "云",
       "item": "AWS CloudTrail",
       "status": "unsupported",
-      "summary": "云审计日志采集与关联规划于 V4",
+      "summary": "云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除",
       "affectedChains": [
         "CloudAudit"
       ],
@@ -474,7 +474,7 @@
       "category": "云",
       "item": "Azure Audit Logs",
       "status": "unsupported",
-      "summary": "云审计日志采集与关联规划于 V4",
+      "summary": "云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除",
       "affectedChains": [
         "CloudAudit"
       ],
@@ -484,7 +484,7 @@
       "category": "云",
       "item": "GCP Audit Logs",
       "status": "unsupported",
-      "summary": "云审计日志采集与关联规划于 V4",
+      "summary": "云审计日志采集与关联已退役；cloud-audit crate 与 transport DTO 均已移除",
       "affectedChains": [
         "CloudAudit"
       ],
@@ -494,7 +494,7 @@
       "category": "云",
       "item": "Google Workspace Logs",
       "status": "unsupported",
-      "summary": "云工作空间日志规划于 V4",
+      "summary": "云工作空间日志无实现，且不在当前磁盘取证范围内",
       "affectedChains": [
         "CloudAudit"
       ],
@@ -504,7 +504,7 @@
       "category": "云",
       "item": "Microsoft 365 Unified Audit Log",
       "status": "unsupported",
-      "summary": "云审计日志规划于 V4",
+      "summary": "云审计日志已退役；cloud-audit crate 与 transport DTO 均已移除",
       "affectedChains": [
         "CloudAudit"
       ],
@@ -514,7 +514,7 @@
       "category": "网络",
       "item": "PCAP/网络捕获",
       "status": "unsupported",
-      "summary": "网络数据包捕获摄入与流记录解析规划于 V4",
+      "summary": "网络数据包捕获摄入与流记录解析从未实现，且不在当前磁盘取证范围内",
       "affectedChains": [
         "PCAP"
       ],
@@ -524,7 +524,7 @@
       "category": "内存",
       "item": "内存镜像采集与分析",
       "status": "unsupported",
-      "summary": "实时响应采集与内存镜像集成规划于 V4",
+      "summary": "实时响应采集与内存镜像集成从未实现，且不在当前磁盘取证范围内",
       "affectedChains": [
         "Memory"
       ],
