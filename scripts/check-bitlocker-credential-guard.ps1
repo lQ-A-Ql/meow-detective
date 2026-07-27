@@ -37,11 +37,16 @@ $script:PinnedUpstreamCommit = '7c931d4be338a172de9799476eb744ba089e0867'
 
 # Types that hold credential or key material. Adding a secret type means adding
 # it here; the guard cannot infer secrecy from a name alone.
-$script:SecretTypeNames = @('Passphrase', 'VolumeKeyPackage')
+$script:SecretTypeNames = @('Passphrase', 'VolumeKeyPackage', 'PersistedKeyBlob')
 
 # Accessors that hand out secret bytes. Any of these appearing inside a logging
 # or formatting macro is a leak.
-$script:SecretAccessors = @('expose_for_derivation', 'expose_fvek', 'expose_tweak')
+$script:SecretAccessors = @(
+  'expose_for_derivation',
+  'expose_fvek',
+  'expose_tweak',
+  'expose_for_storage'
+)
 
 function Read-Utf8Text {
   param([Parameter(Mandatory = $true)][string]$Path)
@@ -231,7 +236,7 @@ function Find-SerializedSecretContractViolations {
   if (-not (Test-Path -LiteralPath $dtoRoot -PathType Container)) {
     return $violations.ToArray()
   }
-  $fieldPattern = '(?m)^\s*pub\s+(?<field>credential|passphrase|password|recovery_password)\s*:'
+  $fieldPattern = '(?m)^\s*pub\s+(?<field>credential|passphrase|password|recovery_password|fvek|tweak|volume_key|key_package|persisted_key_blob|key_material)\s*:'
   foreach ($file in Get-ChildItem -LiteralPath $dtoRoot -Recurse -File -Filter '*.rs') {
     $relative = $file.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
     $source = Read-Utf8Text -Path $file.FullName
@@ -347,6 +352,16 @@ pub struct VolumeKeyPackage {
 impl VolumeKeyPackage {
     pub fn expose_fvek(&self) -> &[u8] {
         &self.fvek
+    }
+}
+
+pub struct PersistedKeyBlob {
+    inner: Zeroizing<Vec<u8>>,
+}
+
+impl PersistedKeyBlob {
+    pub fn expose_for_storage(&self) -> &[u8] {
+        &self.inner
     }
 }
 '@
@@ -484,11 +499,11 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     [void](New-Item -ItemType Directory -Path $dtoRoot -Force)
     [System.IO.File]::WriteAllText(
       (Join-Path $dtoRoot 'bitlocker.rs'),
-      "pub struct RequestDto {`n    pub credential: String,`n}`n",
+      "pub struct RequestDto {`n    pub credential: String,`n    pub key_package: Vec<u8>,`n}`n",
       [System.Text.UTF8Encoding]::new($false)
     )
     $secretDto = @(Find-BitLockerCredentialViolations -Root $temp)
-    if (-not ($secretDto -match '^\[secret-dto\]')) {
+    if (-not ($secretDto -match "field 'credential'") -or -not ($secretDto -match "field 'key_package'")) {
       throw 'Self-test did not reject a serializable BitLocker credential field'
     }
   } finally {

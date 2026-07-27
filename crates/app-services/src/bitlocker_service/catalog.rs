@@ -139,6 +139,9 @@ fn prepare_catalog(
         &identities,
     )?;
     let identity = matching_identity(&identities, registered.scope().metadata_fingerprint());
+    let stored_key_available = runtimes
+        .key_store
+        .contains(registered.scope().metadata_fingerprint())?;
     let mut plaintext = open_registered_plaintext(&source, case_id, runtimes.bitlocker_runtime)?;
     let filesystem = probe_plaintext_filesystem(plaintext.as_mut())?
         .ok_or_else(|| BitLockerServiceError::UnsupportedFilesystem("unknown".to_string()))?;
@@ -148,6 +151,7 @@ fn prepare_catalog(
         identity,
         identities.len(),
         true,
+        stored_key_available,
         Some(filesystem.clone()),
     );
     Ok(PreparedCatalog {

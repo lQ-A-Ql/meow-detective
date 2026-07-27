@@ -1,5 +1,8 @@
 use transport::ServiceErrorCategory;
-use volume_bitlocker::{EncryptionMethod, FveMetadata, MetadataEntry, VolumeIdentity};
+use volume_bitlocker::{
+    restore_volume_from_persisted_key, EncryptionMethod, FveMetadata, MetadataEntry,
+    MetadataFingerprint, PersistedKeyBlob, VolumeIdentity,
+};
 
 use super::*;
 
@@ -41,7 +44,7 @@ fn identity_with_password_and_recovery() -> VolumeIdentity {
 #[test]
 fn status_reports_non_secret_unlock_capabilities() {
     let identity = identity_with_password_and_recovery();
-    let status = status::build_status("source-1", 2, &identity, 3, false, None);
+    let status = status::build_status("source-1", 2, &identity, 3, false, false, None);
 
     assert!(!status.unlocked);
     assert!(status.supports_password);
@@ -50,6 +53,7 @@ fn status_reports_non_secret_unlock_capabilities() {
     assert_eq!(status.protectors[0].kind, "password");
     assert_eq!(status.protectors[1].kind, "recoveryPassword");
     assert_eq!(status.metadata_copy_count, 3);
+    assert!(!status.stored_key_available);
     assert!(status.plaintext_filesystem.is_none());
 }
 
@@ -63,4 +67,107 @@ fn rejected_credentials_keep_the_stable_security_contract() {
         transport::ErrorCategory::Security
     ));
     assert_eq!(error.recoverable(), Some(true));
+}
+
+#[derive(Default)]
+struct TestKeyStore {
+    blobs: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
+}
+
+impl BitLockerKeyStore for TestKeyStore {
+    fn load(
+        &self,
+        fingerprint: &MetadataFingerprint,
+    ) -> Result<Option<PersistedKeyBlob>, BitLockerKeyStoreError> {
+        let bytes = self
+            .blobs
+            .lock()
+            .expect("test key store lock")
+            .get(fingerprint.as_str())
+            .cloned();
+        bytes
+            .map(PersistedKeyBlob::from_storage)
+            .transpose()
+            .map_err(BitLockerKeyStoreError::CorruptBlob)
+    }
+
+    fn store(
+        &self,
+        fingerprint: &MetadataFingerprint,
+        blob: PersistedKeyBlob,
+    ) -> Result<(), BitLockerKeyStoreError> {
+        self.blobs.lock().expect("test key store lock").insert(
+            fingerprint.as_str().to_string(),
+            blob.expose_for_storage().to_vec(),
+        );
+        Ok(())
+    }
+
+    fn delete(&self, fingerprint: &MetadataFingerprint) -> Result<bool, BitLockerKeyStoreError> {
+        Ok(self
+            .blobs
+            .lock()
+            .expect("test key store lock")
+            .remove(fingerprint.as_str())
+            .is_some())
+    }
+}
+
+fn persisted_envelope(identity: &VolumeIdentity) -> Vec<u8> {
+    let fingerprint = MetadataFingerprint::from_metadata(&identity.metadata);
+    let fvek_len = identity
+        .metadata
+        .encryption_method
+        .fvek_len()
+        .expect("test method is decryptable");
+    let mut bytes = Vec::with_capacity(48 + fvek_len);
+    bytes.extend_from_slice(b"MEOWBLK1");
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&identity.metadata.encryption_method_code.to_le_bytes());
+    bytes.extend_from_slice(fingerprint.as_str().as_bytes());
+    bytes.extend_from_slice(&(fvek_len as u16).to_le_bytes());
+    bytes.extend_from_slice(&0u16.to_le_bytes());
+    bytes.extend(std::iter::repeat_n(0x5a, fvek_len));
+    bytes
+}
+
+#[test]
+fn runtime_lock_and_persisted_key_forget_are_independent() {
+    let identity = identity_with_password_and_recovery();
+    let fingerprint = MetadataFingerprint::from_metadata(&identity.metadata);
+    let bytes = persisted_envelope(&identity);
+    let store = TestKeyStore::default();
+    store
+        .store(
+            &fingerprint,
+            PersistedKeyBlob::from_storage(bytes.clone()).expect("valid envelope"),
+        )
+        .expect("store key");
+    let registry = crate::bitlocker_runtime::BitLockerUnlockRegistry::default();
+    let verified = restore_volume_from_persisted_key(
+        identity.clone(),
+        PersistedKeyBlob::from_storage(bytes.clone()).expect("valid envelope"),
+    )
+    .expect("restore verified state");
+    registry
+        .register_verified("case-1", "source-1", 2, verified)
+        .expect("register runtime");
+
+    registry
+        .invalidate_partition("case-1", "source-1", 2)
+        .expect("lock runtime");
+    assert!(store.contains(&fingerprint).expect("stored key remains"));
+
+    let verified = restore_volume_from_persisted_key(
+        identity.clone(),
+        PersistedKeyBlob::from_storage(bytes).expect("valid envelope"),
+    )
+    .expect("restore verified state");
+    registry
+        .register_verified("case-1", "source-1", 2, verified)
+        .expect("register runtime");
+    assert!(store.delete(&fingerprint).expect("forget key"));
+    assert!(registry
+        .resolve_for_identities("case-1", "source-1", 2, &[identity])
+        .is_ok());
 }

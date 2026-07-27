@@ -10,6 +10,14 @@
 
 use zeroize::Zeroizing;
 
+use crate::{BitLockerError, Result};
+
+/// The v1 envelope is fixed-header and contains at most a 64-byte FVEK and a
+/// 16-byte diffuser tweak. Keeping the transport type bounded prevents a
+/// corrupt platform credential from allocating or retaining arbitrary data.
+pub(crate) const MAX_PERSISTED_KEY_BLOB_LEN: usize = 128;
+pub(crate) const MIN_PERSISTED_KEY_BLOB_LEN: usize = 48;
+
 /// An investigator-supplied credential: a password or a 48-digit recovery password.
 ///
 /// Process-lifetime only. This type must never be persisted, serialized, put in
@@ -95,6 +103,45 @@ impl VolumeKeyPackage {
     pub fn expose_tweak(&self) -> Option<&[u8]> {
         // Two derefs: Zeroizing<Vec<u8>> -> Vec<u8> -> [u8].
         self.tweak.as_ref().map(|tweak| tweak.as_slice())
+    }
+}
+
+/// An opaque, bounded key-package envelope read from or written to secure
+/// platform storage.
+///
+/// The bytes are deliberately inaccessible except to the storage adapter and
+/// the crate's validated decoder. This type is not serializable and never
+/// crosses the transport contract.
+pub struct PersistedKeyBlob {
+    inner: Zeroizing<Vec<u8>>,
+}
+
+impl PersistedKeyBlob {
+    /// Accepts an untrusted platform credential blob after enforcing the
+    /// allocation bound. Structural and volume-identity checks happen during
+    /// restore.
+    pub fn from_storage(bytes: Vec<u8>) -> Result<Self> {
+        if !(MIN_PERSISTED_KEY_BLOB_LEN..=MAX_PERSISTED_KEY_BLOB_LEN).contains(&bytes.len()) {
+            return Err(BitLockerError::PersistedKeyInvalid {
+                reason: "blob length is outside the v1 envelope bounds",
+            });
+        }
+        Ok(Self {
+            inner: Zeroizing::new(bytes),
+        })
+    }
+
+    pub(crate) fn encoded(bytes: Vec<u8>) -> Self {
+        debug_assert!(bytes.len() <= MAX_PERSISTED_KEY_BLOB_LEN);
+        Self {
+            inner: Zeroizing::new(bytes),
+        }
+    }
+
+    /// Borrows the opaque envelope for a secure-storage write.
+    #[must_use]
+    pub fn expose_for_storage(&self) -> &[u8] {
+        &self.inner
     }
 }
 

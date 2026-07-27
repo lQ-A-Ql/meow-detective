@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 110 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 112 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance. See `docs/progress-ledger.md` for the verified milestone trail.
 
@@ -8,7 +8,7 @@ A Tauri 2 desktop application for disk-image forensic analysis on Windows. The b
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 105 commands
+Tauri Command Layer (apps/desktop/src-tauri/) -> 112 commands
 Application Services (crates/app-services/) -> 28 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
@@ -69,7 +69,7 @@ cd frontend && pnpm test
 | Directory | Description |
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (105 commands) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (112 commands) |
 | `crates/app-services/` | Application orchestration (28 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (40) and migration scripts (70) |
@@ -78,7 +78,7 @@ cd frontend && pnpm test
 | `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 3: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock commands, and explicit source-local catalog import) |
+| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, explicit source-local catalog import, and verified-key persistence) |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |

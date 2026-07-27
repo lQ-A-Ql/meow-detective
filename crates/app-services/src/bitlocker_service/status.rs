@@ -7,6 +7,7 @@ pub(crate) fn build_status(
     identity: &VolumeIdentity,
     metadata_copy_count: usize,
     unlocked: bool,
+    stored_key_available: bool,
     plaintext_filesystem: Option<String>,
 ) -> BitLockerVolumeStatusDto {
     let metadata = &identity.metadata;
@@ -33,6 +34,7 @@ pub(crate) fn build_status(
         supports_recovery_password: inventory
             .protectors()
             .contains(&ProtectorKind::RecoveryPassword),
+        stored_key_available,
         protectors,
         plaintext_filesystem,
     }

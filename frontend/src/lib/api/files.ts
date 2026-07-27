@@ -139,6 +139,26 @@ export async function lockBitLockerVolume(
   });
 }
 
+export async function restorePersistedBitLockerKey(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.RESTORE_PERSISTED_BITLOCKER_KEY, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function forgetPersistedBitLockerKey(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.FORGET_PERSISTED_BITLOCKER_KEY, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
 export async function cancelImport(jobId: string) {
   return apiClient.request(COMMANDS.files.CANCEL_IMPORT, { jobId });
 }

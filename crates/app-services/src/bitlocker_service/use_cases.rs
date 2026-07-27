@@ -12,6 +12,7 @@ use volume_bitlocker::{
 use crate::bitlocker_runtime::BitLockerRuntimeError;
 
 use super::{
+    activation::activate_verified,
     audit::{self, BitLockerAudit},
     source::{
         open_partition_window, open_registered_plaintext, open_source_read_only,
@@ -53,10 +54,13 @@ pub fn inspect_bitlocker_volume(
         Err(BitLockerRuntimeError::Locked) => None,
         Err(error) => return Err(error.into()),
     };
-    let identity = registered
-        .as_ref()
-        .map(|value| matching_identity(&identities, value.scope().metadata_fingerprint()))
-        .unwrap_or(&identities[0]);
+    let (identity, stored_key_available) = status_identity(
+        &identities,
+        registered
+            .as_ref()
+            .map(|value| value.scope().metadata_fingerprint()),
+        runtimes.key_store,
+    )?;
     let plaintext_filesystem = if registered.is_some() {
         let mut plaintext =
             open_registered_plaintext(&source, case_id, runtimes.bitlocker_runtime)?;
@@ -70,6 +74,7 @@ pub fn inspect_bitlocker_volume(
         identity,
         identities.len(),
         registered.is_some(),
+        stored_key_available,
         plaintext_filesystem,
     ))
 }
@@ -187,38 +192,19 @@ fn unlock_with(
             return Err(error.into());
         }
     };
-    let selected = verified.identity().clone();
-    let selected_fingerprint = MetadataFingerprint::from_metadata(&selected.metadata);
-    context.runtimes.bitlocker_runtime.register_verified(
-        &context.case_id.0,
-        &context.data_source_id.0,
-        context.partition_index as usize,
+    let persisted_blob = verified.persisted_key_blob();
+    let activated = match activate_verified(
+        &source,
+        context.case_id,
+        context.partition_index,
+        context.runtimes.bitlocker_runtime,
         verified,
-    )?;
-    let plaintext_filesystem = (|| {
-        let mut plaintext = open_registered_plaintext(
-            &source,
-            context.case_id,
-            context.runtimes.bitlocker_runtime,
-        )?;
-        match probe_plaintext_filesystem(plaintext.as_mut()) {
-            Ok(Some(value)) if value == "BitLocker" => Err(BitLockerServiceError::CatalogState(
-                "verified plaintext still carries the BitLocker signature".to_string(),
-            )),
-            result => result,
-        }
-    })();
-    let plaintext_filesystem = match plaintext_filesystem {
+    ) {
         Ok(value) => value,
         Err(error) => {
-            context.runtimes.bitlocker_runtime.invalidate_partition(
-                &context.case_id.0,
-                &context.data_source_id.0,
-                context.partition_index as usize,
-            )?;
             audit_unlock(
                 &context,
-                selected_fingerprint.as_str(),
+                fingerprint.as_str(),
                 method,
                 "failed",
                 Some("BITLOCKER_PLAINTEXT_PROBE_FAILED"),
@@ -226,9 +212,28 @@ fn unlock_with(
             return Err(error);
         }
     };
+    if let Err(error) = context
+        .runtimes
+        .key_store
+        .store(&activated.fingerprint, persisted_blob)
+    {
+        context.runtimes.bitlocker_runtime.invalidate_partition(
+            &context.case_id.0,
+            &context.data_source_id.0,
+            context.partition_index as usize,
+        )?;
+        audit_unlock(
+            &context,
+            activated.fingerprint.as_str(),
+            method,
+            "failed",
+            Some("BITLOCKER_KEY_STORE_FAILED"),
+        );
+        return Err(error.into());
+    }
     audit_unlock(
         &context,
-        selected_fingerprint.as_str(),
+        activated.fingerprint.as_str(),
         method,
         "success",
         None,
@@ -236,11 +241,30 @@ fn unlock_with(
     Ok(build_status(
         &context.data_source_id.0,
         context.partition_index,
-        &selected,
+        &activated.identity,
         identities.len(),
         true,
-        plaintext_filesystem,
+        true,
+        activated.plaintext_filesystem,
     ))
+}
+
+fn status_identity<'a>(
+    identities: &'a [volume_bitlocker::VolumeIdentity],
+    registered: Option<&MetadataFingerprint>,
+    key_store: &dyn super::BitLockerKeyStore,
+) -> Result<(&'a volume_bitlocker::VolumeIdentity, bool), BitLockerServiceError> {
+    if let Some(fingerprint) = registered {
+        let identity = matching_identity(identities, fingerprint);
+        return Ok((identity, key_store.contains(fingerprint)?));
+    }
+    for identity in identities {
+        let fingerprint = MetadataFingerprint::from_metadata(&identity.metadata);
+        if key_store.contains(&fingerprint)? {
+            return Ok((identity, true));
+        }
+    }
+    Ok((&identities[0], false))
 }
 
 fn audit_unlock(

@@ -44,6 +44,8 @@ export const COMMANDS = {
     UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD: 'unlock_bitlocker_with_recovery_password',
     IMPORT_UNLOCKED_BITLOCKER_CATALOG: 'import_unlocked_bitlocker_catalog',
     LOCK_BITLOCKER_VOLUME: 'lock_bitlocker_volume',
+    RESTORE_PERSISTED_BITLOCKER_KEY: 'restore_persisted_bitlocker_key',
+    FORGET_PERSISTED_BITLOCKER_KEY: 'forget_persisted_bitlocker_key',
   },
   jobs: {
     GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',

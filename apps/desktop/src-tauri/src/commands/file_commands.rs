@@ -9,8 +9,9 @@ mod support;
 mod viewer;
 
 pub use bitlocker::{
-    import_unlocked_bitlocker_catalog, inspect_bitlocker_volume, lock_bitlocker_volume,
-    unlock_bitlocker_with_password, unlock_bitlocker_with_recovery_password,
+    forget_persisted_bitlocker_key, import_unlocked_bitlocker_catalog, inspect_bitlocker_volume,
+    lock_bitlocker_volume, restore_persisted_bitlocker_key, unlock_bitlocker_with_password,
+    unlock_bitlocker_with_recovery_password,
 };
 pub use browse::{
     get_file_children, get_file_children_request, get_file_jump_context, get_file_rows,

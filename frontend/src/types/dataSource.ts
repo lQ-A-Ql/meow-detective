@@ -82,6 +82,7 @@ export interface BitLockerVolumeStatus {
   protectors: BitLockerProtector[];
   supportsPassword: boolean;
   supportsRecoveryPassword: boolean;
+  storedKeyAvailable: boolean;
   plaintextFilesystem?: string;
 }
 

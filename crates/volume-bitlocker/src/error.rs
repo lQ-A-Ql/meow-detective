@@ -40,6 +40,14 @@ pub enum BitLockerError {
     #[error("FVE metadata is unreadable: {reason}")]
     MetadataUnreadable { reason: String },
 
+    /// A key package loaded from persistent storage is malformed or corrupt.
+    #[error("persisted BitLocker key package is invalid: {reason}")]
+    PersistedKeyInvalid { reason: &'static str },
+
+    /// A stored key package belongs to different FVE metadata.
+    #[error("persisted BitLocker key package does not match this volume")]
+    PersistedKeyMismatch,
+
     /// A read against the underlying evidence reader failed.
     #[error("evidence read failed at volume offset {offset}: {source}")]
     EvidenceRead {
@@ -67,6 +75,8 @@ impl BitLockerError {
             Self::UnsupportedEncryptionMethod { .. } => "BITLOCKER_UNSUPPORTED_METHOD",
             Self::UnsupportedProtector { .. } => "BITLOCKER_UNSUPPORTED_PROTECTOR",
             Self::MetadataUnreadable { .. } => "BITLOCKER_METADATA_UNREADABLE",
+            Self::PersistedKeyInvalid { .. } => "BITLOCKER_STORED_KEY_INVALID",
+            Self::PersistedKeyMismatch => "BITLOCKER_STORED_KEY_MISMATCH",
             Self::EvidenceRead { .. } => "BITLOCKER_EVIDENCE_READ_FAILED",
             Self::OutOfBounds { .. } => "BITLOCKER_OUT_OF_BOUNDS",
         }

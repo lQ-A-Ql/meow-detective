@@ -20,6 +20,7 @@ fn volume_status_uses_camel_case_without_secret_fields() {
         }],
         supports_password: false,
         supports_recovery_password: true,
+        stored_key_available: false,
         plaintext_filesystem: None,
     };
 
@@ -27,6 +28,7 @@ fn volume_status_uses_camel_case_without_secret_fields() {
     assert_eq!(value["dataSourceId"], "source-1");
     assert_eq!(value["partitionIndex"], 2);
     assert_eq!(value["metadataCopyCount"], 3);
+    assert_eq!(value["storedKeyAvailable"], false);
     assert!(value.get("password").is_none());
     assert!(value.get("recoveryPassword").is_none());
     assert!(value.get("plaintextFilesystem").is_none());

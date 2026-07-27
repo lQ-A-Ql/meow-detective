@@ -1,6 +1,6 @@
 # BitLocker 卷层设计
 
-**状态**: Stage 3 服务与导入编排完成，Stage 4 密钥包持久化待实施（2026-07-27）
+**状态**: Stage 4 密钥包持久化完成，Stage 5 前端解锁流程待实施（2026-07-28）
 **范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
 **事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
 `docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
@@ -18,6 +18,13 @@ BitLocker 仍由引导扇区签名
 密码/恢复密码解锁、显式目录导入和锁定命令；初次导入仍先记录锁定分区，不要求凭据
 进入导入请求。
 
+Stage 4 已将“已验证密钥包”的持久化接入真实 Windows Credential Manager：解锁成功后
+只保存有界、版本化并经过卷身份校验的 FVEK/tweak 包，不保存密码或恢复密码。恢复时
+必须重新读取当前卷元数据、校验 metadata fingerprint、加密方法和密钥长度，并重新探测
+明文文件系统后才注册运行时；恢复失败不会留下半激活的运行时状态。非 Windows 构建
+返回 typed unsupported，不提供内存或文件系统 mock。锁定只清理运行时密钥，遗忘密钥
+只删除 Credential Manager 条目，两者分别审计且互不替代。
+
 Stage 2b 的实际接入点如下：
 
 | 位置 | 当前行为 |
@@ -25,7 +32,7 @@ Stage 2b 的实际接入点如下：
 | `datasource_service/fs_magic.rs:10` | 显示名 `"BitLocker"` |
 | `datasource_service/fs_magic.rs:24` | 签名命中即返回该 kind |
 | `datasource_service/probe.rs:296` | 映射 `PartitionStatus::EncryptedBitLocker` |
-| `datasource_service/probe/gpt.rs:130` | GPT 分区不推导文件系统 |
+| `datasource_service/probe/gpt.rs:130` | GPT 分区按引导区识别候选；BitLocker 保留为加密候选，等待解锁 |
 | `file_service/source_read/bitlocker.rs` | 按 source + partition 路由解密卷 |
 | `file_service/viewer/range/*` | Hex/range、文本、图片、文档和媒体范围读取统一走解密读者 |
 | `bitlocker_runtime/*` | 仅缓存 `Arc<UnlockedVolume>`，按 case/source/partition/fingerprint 隔离 |
@@ -148,7 +155,7 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 | 2a ✅ | 扇区 cipher 与明文读者 | 五种方法往返、区域映射、有界缓存、合并 I/O、端到端解密 |
 | 2b ✅ | 预览读路径 | 运行时 verified unlock registry；分区窗口；Hex/文本/图片/文档/媒体统一路由；锁定返回 typed Unsupported |
 | 3 ✅ | 服务与导入编排 | inspect/解锁/锁定；凭据以独立 secret 参数进入；显式 catalog 导入与审计记录 |
-| 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
+| 4 ✅ | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定；Windows Credential Manager 真实读写；恢复复探测；锁定/遗忘独立 |
 | 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
 | 6 | 报告、性能、文档 | 报告含 protector inventory；KDF 不重跑；文档与矩阵同步 |
 
@@ -191,7 +198,7 @@ Stage 1 的取舍记录：
 
 ### Stage 2a 交付物（已完成 2026-07-27）
 
-`crates/volume-bitlocker` 185 个 lib 测试（Stage 1 为 112）。Stage 2b 已在
+`crates/volume-bitlocker` 191 个 lib 测试（Stage 1 为 112）。Stage 2b 已在
 app-services 读路径接入，不改变该 crate 的只读边界。
 
 - `diffuser.rs` — vendor 进来的 Elephant Diffuser,只有解密方向。带上游回归向量,
@@ -222,7 +229,7 @@ AES key schedule 不会在 drop 时擦除(FVEK 字节会)。升到 `aes 0.9` 能
 ### Stage 3 交付物（已完成 2026-07-27）
 
 - 新增 `inspect_bitlocker_volume`、密码/恢复密码解锁、
-  `import_unlocked_bitlocker_catalog` 与 `lock_bitlocker_volume` 五个真实 Tauri command。
+  `import_unlocked_bitlocker_catalog` 与 `lock_bitlocker_volume` 六个真实 Tauri command。
 - 凭据不定义 transport request DTO；command 收到独立字符串后立即转为不可
   `Debug/Clone/Serialize` 的 `Passphrase`，KDF 返回后不进入目录枚举作用域。
 - inspect 响应只包含加密方法、protector inventory、metadata fingerprint、解锁状态
@@ -241,6 +248,24 @@ Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百
 离开作用域，可能长时间运行的文件树枚举只使用已验证 cipher state；初次镜像导入
 仍可在无凭据时完成并保留锁定分区节点。Stage 5 UI 应按 inspect -> unlock -> catalog
 顺序编排，但不得把凭据放入 Zustand、TanStack Query 或持久化表单状态。
+
+### Stage 4 交付物（已完成 2026-07-28）
+
+- `PersistedKeyBlob` — v1 有界二进制包，包含 magic、版本、加密方法、metadata
+  fingerprint、FVEK/tweak 长度和密钥材料；解析拒绝未知版本、身份不匹配、错误长度、
+  截断和尾随数据。包及内部密钥字节均使用 zeroize，且不进入 transport DTO。
+- `BitLockerKeyStore` — app-services 的平台无关存储契约。应用层只接收已验证包，
+  不知道 Credential Manager 细节，也不把密钥写入 SQLite、案件目录或任务参数。
+- `WindowsCredentialBitLockerKeyStore` — 桌面端真实调用 `CredReadW`、`CredWriteW`、
+  `CredDeleteW`、`CredFree`；读取完成后在释放 Credential Manager 分配前清零 blob。
+  非 Windows 分支只返回 typed unsupported。
+- `restore_persisted_bitlocker_key` 与 `forget_persisted_bitlocker_key` — 恢复重新
+  读取元数据并复探测明文文件系统后才注册 runtime；`lock` 只清 runtime，`forget`
+  只删持久化条目；失败、恢复和遗忘动作写入审计日志。
+- `BitLockerVolumeStatusDto.storedKeyAvailable` 及 frontend API 镜像 — 只暴露是否有
+  可恢复的持久化条目，不暴露 fingerprint 之外的密钥材料或凭据。
+- 验证覆盖：volume-bitlocker 191 项、app-services 769 项、Credential Manager
+  Windows 读写删测试、命令注册完整性、credential/module/function/test-layout guards。
 
 ### Stage 0 交付物
 
@@ -301,7 +326,9 @@ Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百
 ## 6. 待办与已知风险
 
 - **FVEK 落盘的取证风险**：Credential Manager 里的 FVEK 密钥包等价于该卷的
-  永久解密能力。Stage 4 必须决定过期/清除策略，并在报告中记录密钥包的存在。
+  永久解密能力。当前策略是不自动过期，只提供显式 `forget` 删除动作；Stage 5/6
+  仍需把这个持久化状态纳入前端操作提示和报告策略，避免调查员误以为“锁定”已经删除
+  密钥包。
 - **`catalog_manifest.rs` 版本号**：`unlock_hint` 已经被序列化进 manifest，
   新增解锁状态字段需要 bump manifest 版本，否则旧案件的指纹会失配。
 - **descriptor cache 版本升级**：原方案假设存在这个机制，代码里没有。

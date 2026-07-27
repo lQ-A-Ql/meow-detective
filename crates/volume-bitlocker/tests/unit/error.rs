@@ -14,6 +14,10 @@ fn sample_errors() -> Vec<BitLockerError> {
         BitLockerError::MetadataUnreadable {
             reason: "all three metadata copies failed signature validation".to_string(),
         },
+        BitLockerError::PersistedKeyInvalid {
+            reason: "truncated envelope",
+        },
+        BitLockerError::PersistedKeyMismatch,
         BitLockerError::EvidenceRead {
             offset: 65_536,
             source: std::io::Error::from(std::io::ErrorKind::UnexpectedEof),

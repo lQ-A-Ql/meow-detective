@@ -82,7 +82,7 @@ fn collect_from_source(text: &str, names: &mut HashSet<String>) {
 }
 
 fn collect_registered_command_names() -> HashSet<String> {
-    let lib = fs::read_to_string("src/lib.rs").expect("lib.rs");
+    let lib = fs::read_to_string("src/lib.rs").expect("desktop lib");
     let marker = "tauri::generate_handler![";
     let start = lib.find(marker).expect("generate_handler macro") + marker.len();
     let end = lib[start..].find(']').expect("closing bracket") + start;

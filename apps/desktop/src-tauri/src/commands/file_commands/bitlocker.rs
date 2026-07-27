@@ -8,6 +8,10 @@ use crate::state::AppState;
 
 use super::support::run_active_case_command;
 
+mod persistence;
+
+pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
+
 #[tauri::command]
 pub async fn inspect_bitlocker_volume(
     state: State<'_, AppState>,
@@ -17,8 +21,13 @@ pub async fn inspect_bitlocker_volume(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let runtime = app_state.bitlocker_runtime.clone();
+    let key_store = app_state.bitlocker_key_store.clone();
     run_active_case_command(app_state, move |connection, active| {
-        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(&preview_runtime, &runtime);
+        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
+            &preview_runtime,
+            &runtime,
+            key_store.as_ref(),
+        );
         bitlocker_service::inspect_bitlocker_volume(
             connection,
             &active.case_root,
@@ -43,8 +52,13 @@ pub async fn unlock_bitlocker_with_password(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let runtime = app_state.bitlocker_runtime.clone();
+    let key_store = app_state.bitlocker_key_store.clone();
     run_active_case_command(app_state, move |connection, active| {
-        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(&preview_runtime, &runtime);
+        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
+            &preview_runtime,
+            &runtime,
+            key_store.as_ref(),
+        );
         bitlocker_service::unlock_bitlocker_with_password(
             connection,
             &active.case_root,
@@ -70,8 +84,13 @@ pub async fn unlock_bitlocker_with_recovery_password(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let runtime = app_state.bitlocker_runtime.clone();
+    let key_store = app_state.bitlocker_key_store.clone();
     run_active_case_command(app_state, move |connection, active| {
-        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(&preview_runtime, &runtime);
+        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
+            &preview_runtime,
+            &runtime,
+            key_store.as_ref(),
+        );
         bitlocker_service::unlock_bitlocker_with_recovery_password(
             connection,
             &active.case_root,
@@ -95,9 +114,13 @@ pub async fn import_unlocked_bitlocker_catalog(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let bitlocker_runtime = app_state.bitlocker_runtime.clone();
+    let key_store = app_state.bitlocker_key_store.clone();
     run_active_case_command(app_state, move |connection, active| {
-        let runtimes =
-            bitlocker_service::BitLockerRuntimeContext::new(&preview_runtime, &bitlocker_runtime);
+        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
+            &preview_runtime,
+            &bitlocker_runtime,
+            key_store.as_ref(),
+        );
         bitlocker_service::import_unlocked_bitlocker_catalog(
             connection,
             &active.case_root,
@@ -120,9 +143,13 @@ pub async fn lock_bitlocker_volume(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let bitlocker_runtime = app_state.bitlocker_runtime.clone();
+    let key_store = app_state.bitlocker_key_store.clone();
     run_active_case_command(app_state, move |connection, active| {
-        let runtimes =
-            bitlocker_service::BitLockerRuntimeContext::new(&preview_runtime, &bitlocker_runtime);
+        let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
+            &preview_runtime,
+            &bitlocker_runtime,
+            key_store.as_ref(),
+        );
         bitlocker_service::lock_bitlocker_volume(
             connection,
             &active.case_root,

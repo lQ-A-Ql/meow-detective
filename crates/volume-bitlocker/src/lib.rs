@@ -44,6 +44,7 @@ mod kdf;
 mod layout;
 mod metadata;
 mod method;
+mod persisted_key;
 mod protector;
 mod reader;
 mod secret;
@@ -60,8 +61,9 @@ pub use metadata::{FveMetadata, MetadataEntry};
 pub use method::EncryptionMethod;
 pub use protector::{ProtectorInventory, ProtectorKind};
 pub use reader::{BitLockerReader, UnlockedVolume};
-pub use secret::Passphrase;
+pub use secret::{Passphrase, PersistedKeyBlob};
 pub use unlock::{
-    read_volume_identities, read_volume_identity, unlock_volume_with_password,
-    unlock_volume_with_recovery_password, VerifiedUnlock, VolumeIdentity,
+    read_volume_identities, read_volume_identity, restore_volume_from_persisted_key,
+    unlock_volume_with_password, unlock_volume_with_recovery_password, VerifiedUnlock,
+    VolumeIdentity,
 };

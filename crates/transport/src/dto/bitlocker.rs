@@ -24,6 +24,7 @@ pub struct BitLockerVolumeStatusDto {
     pub protectors: Vec<BitLockerProtectorDto>,
     pub supports_password: bool,
     pub supports_recovery_password: bool,
+    pub stored_key_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plaintext_filesystem: Option<String>,
 }

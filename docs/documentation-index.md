@@ -89,7 +89,7 @@
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
 | Rust workspace crate | 28 | `crates/`（Tauri shell 为独立 workspace package） |
-| Tauri commands | 110 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| Tauri commands | 112 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 28 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
 | SQLite migration scripts | 70 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0042 + source_001-source_027 + staging_001) |
@@ -112,7 +112,7 @@
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 110 | Tauri command 定义数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 112 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 70 | SQLite migration 脚本 (0001-0042 + source_001-source_027 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |

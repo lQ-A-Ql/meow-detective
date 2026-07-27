@@ -1,5 +1,6 @@
 use app_services::active_case::ActiveCase;
 use app_services::bitlocker_runtime::BitLockerUnlockRegistry;
+use app_services::bitlocker_service::BitLockerKeyStore;
 use mcp_client::{
     validate_mcp_config, validate_mcp_server_config, McpClient, McpConfig, McpServerConfig,
 };
@@ -41,6 +42,8 @@ pub struct AppState {
     pub preview_runtime: Arc<PreviewRuntimeRegistry>,
     /// Verified BitLocker cipher state. Credentials are never stored here.
     pub bitlocker_runtime: Arc<BitLockerUnlockRegistry>,
+    /// OS-protected persistence for verified FVEK/tweak packages.
+    pub bitlocker_key_store: Arc<dyn BitLockerKeyStore>,
 }
 
 impl Default for AppState {
@@ -63,6 +66,7 @@ impl Default for AppState {
             runtime_cache: Arc::new(Mutex::new(runtime_cache)),
             preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),
             bitlocker_runtime: Arc::new(BitLockerUnlockRegistry::default()),
+            bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
         }
     }
 }

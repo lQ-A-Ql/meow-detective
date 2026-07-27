@@ -217,7 +217,11 @@ fn detect_image_filesystem_marks_bitlocker_partition() {
     let mut cursor = Cursor::new(image);
     let probe = detect_image_filesystem(&mut cursor).unwrap();
 
-    assert!(probe.candidates.is_empty());
+    assert_eq!(probe.candidates.len(), 1);
+    assert_eq!(probe.candidates[0].kind, ImageFilesystemKind::BitLocker);
+    assert_eq!(probe.candidates[0].partition_index, Some(1));
+    assert_eq!(probe.candidates[0].offset, bitlocker as u64);
+    assert_eq!(probe.candidates[0].length, Some(2048 * 512));
     assert_eq!(probe.partitions.len(), 1);
     assert_eq!(
         probe.partitions[0].filesystem,

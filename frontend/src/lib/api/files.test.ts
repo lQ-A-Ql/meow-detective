@@ -21,7 +21,9 @@ import {
   runDeletedRecovery,
   importUnlockedBitLockerCatalog,
   inspectBitLockerVolume,
+  forgetPersistedBitLockerKey,
   lockBitLockerVolume,
+  restorePersistedBitLockerKey,
   unlockBitLockerWithPassword,
   unlockBitLockerWithRecoveryPassword,
 } from './files';
@@ -176,6 +178,8 @@ describe('files API', () => {
     await inspectBitLockerVolume('source-1', 2);
     await importUnlockedBitLockerCatalog('source-1', 2);
     await lockBitLockerVolume('source-1', 2);
+    await restorePersistedBitLockerKey('source-1', 2);
+    await forgetPersistedBitLockerKey('source-1', 2);
     expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.files.INSPECT_BITLOCKER_VOLUME, {
       dataSourceId: 'source-1',
       partitionIndex: 2,
@@ -188,6 +192,16 @@ describe('files API', () => {
       dataSourceId: 'source-1',
       partitionIndex: 2,
     });
+    expect(requestMock).toHaveBeenNthCalledWith(
+      4,
+      COMMANDS.files.RESTORE_PERSISTED_BITLOCKER_KEY,
+      { dataSourceId: 'source-1', partitionIndex: 2 },
+    );
+    expect(requestMock).toHaveBeenNthCalledWith(
+      5,
+      COMMANDS.files.FORGET_PERSISTED_BITLOCKER_KEY,
+      { dataSourceId: 'source-1', partitionIndex: 2 },
+    );
   });
 
   it('passes BitLocker credentials only to the selected unlock command', async () => {

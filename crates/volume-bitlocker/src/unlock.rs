@@ -27,7 +27,7 @@ use crate::metadata::{
 };
 use crate::protector::ProtectorKind;
 use crate::reader::UnlockedVolume;
-use crate::secret::{Passphrase, VolumeKeyPackage};
+use crate::secret::{Passphrase, PersistedKeyBlob, VolumeKeyPackage};
 
 /// The 512-byte volume header sector.
 const HEADER_LEN: usize = 512;
@@ -48,6 +48,7 @@ pub struct VolumeIdentity {
 pub struct VerifiedUnlock {
     identity: VolumeIdentity,
     volume: Arc<UnlockedVolume>,
+    keys: VolumeKeyPackage,
 }
 
 impl VerifiedUnlock {
@@ -63,6 +64,34 @@ impl VerifiedUnlock {
     pub fn into_unlocked_volume(self) -> (VolumeIdentity, Arc<UnlockedVolume>) {
         (self.identity, self.volume)
     }
+
+    /// Exports the verified key material into the bounded v1 storage envelope.
+    /// The raw FVEK remains inaccessible to application and transport layers.
+    #[must_use]
+    pub fn persisted_key_blob(&self) -> PersistedKeyBlob {
+        crate::persisted_key::encode(&self.identity, &self.keys)
+    }
+
+    pub(crate) fn from_restored(
+        identity: VolumeIdentity,
+        volume: Arc<UnlockedVolume>,
+        keys: VolumeKeyPackage,
+    ) -> Self {
+        Self {
+            identity,
+            volume,
+            keys,
+        }
+    }
+}
+
+/// Rebuilds verified runtime state from a persisted key package after strict
+/// identity and envelope validation.
+pub fn restore_volume_from_persisted_key(
+    identity: VolumeIdentity,
+    blob: PersistedKeyBlob,
+) -> Result<VerifiedUnlock> {
+    crate::persisted_key::restore(identity, blob)
 }
 
 /// Reads the volume header and the first valid FVE metadata block.
@@ -189,12 +218,15 @@ fn unlock_volume_with_hash<R: Read + Seek>(
             credential_hash,
             iterations,
         )
-        .and_then(|keys| UnlockedVolume::new(&identity.metadata, &keys))
-        {
-            Ok(volume) => {
+        .and_then(|keys| {
+            let volume = UnlockedVolume::new(&identity.metadata, &keys)?;
+            Ok((keys, volume))
+        }) {
+            Ok((keys, volume)) => {
                 return Ok(VerifiedUnlock {
                     identity,
                     volume: Arc::new(volume),
+                    keys,
                 });
             }
             Err(error) => retain_preferred_error(&mut preferred_error, error),

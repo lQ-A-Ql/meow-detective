@@ -23,12 +23,16 @@ pub enum BitLockerServiceError {
     Volume(#[from] volume_bitlocker::BitLockerError),
     #[error(transparent)]
     Runtime(#[from] crate::bitlocker_runtime::BitLockerRuntimeError),
+    #[error(transparent)]
+    KeyStore(#[from] super::BitLockerKeyStoreError),
     #[error("BitLocker plaintext filesystem is unsupported: {0}")]
     UnsupportedFilesystem(String),
     #[error("BitLocker catalog root state is inconsistent: {0}")]
     CatalogState(String),
     #[error("BitLocker preview reads did not drain before the lock timeout")]
     DrainTimeout,
+    #[error("no persisted key package exists for this BitLocker volume")]
+    StoredKeyNotFound,
     #[error("BitLocker preview runtime failed: {0}")]
     PreviewRuntime(#[from] crate::file_service::FileServiceError),
 }
@@ -42,6 +46,15 @@ impl ServiceErrorCategory for BitLockerServiceError {
             }
             Self::InvalidWindow(_) | Self::EvidenceOpen(_) | Self::Database(_) => ErrorCategory::Io,
             Self::Volume(error) => volume_error_category(error),
+            Self::KeyStore(super::BitLockerKeyStoreError::Unsupported) => {
+                ErrorCategory::Unsupported
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(error)) => {
+                volume_error_category(error)
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => {
+                ErrorCategory::External
+            }
             Self::Source(crate::source_db::ReadySourceError::UnsupportedPlatform { .. }) => {
                 ErrorCategory::Unsupported
             }
@@ -50,6 +63,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             | Self::Runtime(_)
             | Self::PreviewRuntime(_) => ErrorCategory::Internal,
             Self::DrainTimeout => ErrorCategory::Timeout,
+            Self::StoredKeyNotFound => ErrorCategory::Validation,
         }
     }
 
@@ -64,9 +78,17 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::Runtime(crate::bitlocker_runtime::BitLockerRuntimeError::Locked) => {
                 Some("BITLOCKER_LOCKED")
             }
+            Self::KeyStore(super::BitLockerKeyStoreError::Unsupported) => {
+                Some("BITLOCKER_KEY_STORE_UNSUPPORTED")
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => {
+                Some("BITLOCKER_KEY_STORE_FAILED")
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(error)) => Some(error.code()),
             Self::UnsupportedFilesystem(_) => Some("BITLOCKER_FILESYSTEM_UNSUPPORTED"),
             Self::CatalogState(_) => Some("BITLOCKER_CATALOG_STATE_INVALID"),
             Self::DrainTimeout => Some("BITLOCKER_LOCK_TIMEOUT"),
+            Self::StoredKeyNotFound => Some("BITLOCKER_STORED_KEY_NOT_FOUND"),
             _ => None,
         }
     }
@@ -83,6 +105,16 @@ impl ServiceErrorCategory for BitLockerServiceError {
                 Some("The BitLocker volume is locked")
             }
             Self::DrainTimeout => Some("Active preview reads prevented the volume from locking"),
+            Self::StoredKeyNotFound => Some("No saved key is available for this BitLocker volume"),
+            Self::KeyStore(super::BitLockerKeyStoreError::Unsupported) => {
+                Some("Secure BitLocker key storage is unavailable on this platform")
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => {
+                Some("Windows Credential Manager could not complete the BitLocker key operation")
+            }
+            Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => {
+                Some("The stored BitLocker key package is invalid")
+            }
             _ => None,
         }
     }
@@ -92,7 +124,11 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::Volume(error) => Some(error.is_retryable_with_credential()),
             Self::Runtime(crate::bitlocker_runtime::BitLockerRuntimeError::Locked)
             | Self::DrainTimeout => Some(true),
+            Self::StoredKeyNotFound => Some(false),
             Self::UnsupportedSourceKind { .. } | Self::UnsupportedFilesystem(_) => Some(false),
+            Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => Some(true),
+            Self::KeyStore(super::BitLockerKeyStoreError::Unsupported)
+            | Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => Some(false),
             _ => None,
         }
     }
@@ -107,6 +143,8 @@ fn volume_error_category(error: &volume_bitlocker::BitLockerError) -> ErrorCateg
             ErrorCategory::Unsupported
         }
         volume_bitlocker::BitLockerError::MetadataUnreadable { .. } => ErrorCategory::Parser,
+        volume_bitlocker::BitLockerError::PersistedKeyInvalid { .. }
+        | volume_bitlocker::BitLockerError::PersistedKeyMismatch => ErrorCategory::Security,
         volume_bitlocker::BitLockerError::EvidenceRead { .. }
         | volume_bitlocker::BitLockerError::OutOfBounds { .. } => ErrorCategory::Io,
     }
