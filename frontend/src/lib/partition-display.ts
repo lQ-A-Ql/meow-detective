@@ -2,6 +2,15 @@ import type { DataSourcePartition } from '@/types/models';
 
 const PARTITION_ROOT_RE = /^Partition\s+(\d+)(?:\s*\(([^)]+)\))?/i;
 
+export function partitionIndexFromRootName(rootName: string): number | undefined {
+  const match = rootName.trim().match(PARTITION_ROOT_RE);
+  if (!match) {
+    return undefined;
+  }
+  const index = Number.parseInt(match[1] ?? '', 10);
+  return Number.isFinite(index) ? index : undefined;
+}
+
 function normalizePartitionLabel(value?: string) {
   const text = value?.trim();
   if (!text) {
@@ -51,13 +60,8 @@ export function formatPartitionRootDisplayName(
   rootName: string,
   partitions: DataSourcePartition[] = [],
 ) {
-  const match = rootName.trim().match(PARTITION_ROOT_RE);
-  if (!match) {
-    return rootName;
-  }
-
-  const index = Number.parseInt(match[1] ?? '', 10);
-  if (!Number.isFinite(index)) {
+  const index = partitionIndexFromRootName(rootName);
+  if (index === undefined) {
     return rootName;
   }
 
@@ -66,6 +70,6 @@ export function formatPartitionRootDisplayName(
     return formatPartitionDisplayName(partition);
   }
 
-  const label = normalizePartitionLabel(match[2]) ?? 'UNKNOWN';
+  const label = normalizePartitionLabel(rootName.trim().match(PARTITION_ROOT_RE)?.[2]) ?? 'UNKNOWN';
   return `分区${index}（${label}）`;
 }

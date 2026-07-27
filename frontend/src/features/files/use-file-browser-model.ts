@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useFileJumpContext } from '@/features/files/hooks';
 import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
@@ -6,10 +6,30 @@ import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { useFileSelection } from '@/features/files/hooks/use-file-selection';
 import { useFileTree } from '@/features/files/hooks/use-file-tree';
+import { isBitLockerPartition, type BitLockerTarget } from '@/features/files/bitlocker';
+import { useBitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 import { useUiStore } from '@/stores/ui-store';
+import { partitionIndexFromRootName } from '@/lib/partition-display';
 import type { DataSourcePartition } from '@/types/models';
 
 const FILE_BROWSER_PAGE_LIMIT = 500;
+
+function findActivePartitionNode(
+  nodes: ReturnType<typeof useFileTree>['treeNodes'],
+  activeDirectoryId?: string,
+) {
+  const activeIndex = nodes.findIndex((node) => node.id === activeDirectoryId);
+  if (activeIndex < 0) {
+    return undefined;
+  }
+  for (let index = activeIndex; index >= 0; index -= 1) {
+    const node = nodes[index];
+    if (node.depth === 1 && node.dataSourceId) {
+      return node;
+    }
+  }
+  return undefined;
+}
 
 export function useFileBrowserModel() {
   const { data: currentCase } = useCurrentCase();
@@ -130,6 +150,32 @@ export function useFileBrowserModel() {
 
   const selectedFile = pagination.rows?.find((row) => row.id === selectedFileId);
 
+  const activePartitionContext = useMemo(() => {
+    const node = findActivePartitionNode(tree.treeNodes, tree.activeDirectoryId);
+    const partitionIndex = node ? partitionIndexFromRootName(node.name) : undefined;
+    if (!node?.dataSourceId || partitionIndex === undefined) {
+      return undefined;
+    }
+    const source = dataSources?.find((item) => item.id === node.dataSourceId);
+    const partition = source?.partitions?.find((item) => item.index === partitionIndex);
+    return source && partition
+      ? { dataSourceId: source.id, partition }
+      : undefined;
+  }, [dataSources, tree.activeDirectoryId, tree.treeNodes]);
+
+  const activePartition = activePartitionContext?.partition;
+
+  const bitLockerTarget = useMemo<BitLockerTarget | undefined>(() => {
+    if (!activePartitionContext || !isBitLockerPartition(activePartitionContext.partition)) {
+      return undefined;
+    }
+    return {
+      dataSourceId: activePartitionContext.dataSourceId,
+      partitionIndex: activePartitionContext.partition.index,
+    };
+  }, [activePartitionContext]);
+  const bitLocker = useBitLockerVolumeModel(bitLockerTarget);
+
   const preview = useFilePreview({
     selectedFile,
     viewerTab,
@@ -185,6 +231,9 @@ export function useFileBrowserModel() {
     mediaUrl: preview.mediaUrl,
     documentPreview: preview.documentPreview,
     selectedFile,
+    activePartition,
+    bitLockerPartition: bitLockerTarget ? activePartition : undefined,
+    bitLocker,
     activeDirectoryPath: pagination.activeDirectoryPath,
     currentDirectory: tree.currentDirectory,
     parentDirectory: tree.parentDirectory,

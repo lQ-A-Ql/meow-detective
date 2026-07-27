@@ -6,6 +6,9 @@ import {
   InspectorValue,
 } from '@/components/layout/InspectorPane';
 import type { FileEntryRow, FileTreeNode } from '@/types/models';
+import type { DataSourcePartition } from '@/types/models';
+import { BitLockerVolumePanel } from '@/features/files/components/BitLockerVolumePanel';
+import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -16,6 +19,8 @@ interface FileBrowserInspectorProps {
     isPending: boolean;
   };
   onViewTimeline: () => void;
+  bitLockerPartition?: DataSourcePartition;
+  bitLocker?: BitLockerVolumeModel;
 }
 
 export function FileBrowserInspector({
@@ -24,6 +29,8 @@ export function FileBrowserInspector({
   currentDirectory,
   extractFile,
   onViewTimeline,
+  bitLockerPartition,
+  bitLocker,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
 
@@ -39,6 +46,9 @@ export function FileBrowserInspector({
       widthClassName="w-80"
     >
       <div className="space-y-5">
+        {bitLockerPartition && bitLocker ? (
+          <BitLockerVolumePanel partition={bitLockerPartition} model={bitLocker} />
+        ) : null}
         <InspectorSection title={t('fileBrowser.inspector.sections.identity')}>
           <InspectorValue value={selectedFile?.name ?? '-'} mono strong />
         </InspectorSection>

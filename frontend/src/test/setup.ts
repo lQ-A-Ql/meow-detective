@@ -1,5 +1,6 @@
 // Initialize i18n for tests so components using react-i18next render without extra wrappers.
 import '@/i18n';
+import '@testing-library/jest-dom/vitest';
 
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false;

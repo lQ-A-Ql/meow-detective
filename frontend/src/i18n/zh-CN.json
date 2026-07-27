@@ -49,7 +49,39 @@
         "pending": "提取中...",
         "button": "提取文件"
       },
-      "viewTimeline": "在时间线中查看"
+      "viewTimeline": "在时间线中查看",
+      "bitlocker": {
+        "title": "BitLocker 分区",
+        "refresh": "重新检查 BitLocker 分区",
+        "loading": "正在读取 BitLocker 元数据...",
+        "partitionLabel": "分区",
+        "statusLabel": "状态",
+        "stateUnlocked": "已解锁",
+        "stateLocked": "已锁定",
+        "encryption": "加密",
+        "protectors": "保护器",
+        "storedKey": "保存密钥",
+        "storedKeyAvailable": "可恢复",
+        "storedKeyMissing": "无",
+        "plaintextFilesystem": "明文文件系统",
+        "protectorList": "保护器清单",
+        "unlockable": "可用",
+        "unavailable": "不可用",
+        "password": "密码",
+        "recoveryPassword": "48 位恢复密码",
+        "credentialPlaceholder": "BitLocker 密码",
+        "recoveryPlaceholder": "48 位恢复密码",
+        "credentialLabel": "BitLocker 凭据",
+        "unlock": "解锁并保存已验证密钥",
+        "unlocking": "解锁中...",
+        "restore": "从安全存储恢复",
+        "importCatalog": "导入解锁后的文件目录",
+        "importing": "导入目录中...",
+        "lock": "锁定运行时卷",
+        "forget": "删除安全存储中的已验证密钥",
+        "catalogSummary": "已导入 {{files}} 个文件、{{directories}} 个目录",
+        "error": "BitLocker 操作失败，请查看错误抽屉中的详细信息。"
+      }
     }
   },
   "importDataSource": {

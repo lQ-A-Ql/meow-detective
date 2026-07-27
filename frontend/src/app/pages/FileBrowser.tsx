@@ -160,6 +160,8 @@ export function FileBrowser() {
           currentDirectory={fb.currentDirectory}
           extractFile={fb.extractFile}
           onViewTimeline={fb.onViewTimeline}
+          bitLockerPartition={fb.bitLockerPartition}
+          bitLocker={fb.bitLocker}
         />
       </div>
     </div>

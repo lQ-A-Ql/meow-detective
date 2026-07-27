@@ -49,7 +49,39 @@
         "pending": "Extracting...",
         "button": "Extract File"
       },
-      "viewTimeline": "View in Timeline"
+      "viewTimeline": "View in Timeline",
+      "bitlocker": {
+        "title": "BitLocker volume",
+        "refresh": "Inspect BitLocker volume again",
+        "loading": "Reading BitLocker metadata...",
+        "partitionLabel": "Partition",
+        "statusLabel": "Status",
+        "stateUnlocked": "Unlocked",
+        "stateLocked": "Locked",
+        "encryption": "Encryption",
+        "protectors": "Protectors",
+        "storedKey": "Saved key",
+        "storedKeyAvailable": "Available",
+        "storedKeyMissing": "None",
+        "plaintextFilesystem": "Plaintext filesystem",
+        "protectorList": "Protector inventory",
+        "unlockable": "Available",
+        "unavailable": "Unavailable",
+        "password": "Password",
+        "recoveryPassword": "48-digit recovery password",
+        "credentialPlaceholder": "BitLocker password",
+        "recoveryPlaceholder": "48-digit recovery password",
+        "credentialLabel": "BitLocker credential",
+        "unlock": "Unlock and save verified key",
+        "unlocking": "Unlocking...",
+        "restore": "Restore from secure storage",
+        "importCatalog": "Import unlocked file catalog",
+        "importing": "Importing catalog...",
+        "lock": "Lock runtime volume",
+        "forget": "Delete verified key from secure storage",
+        "catalogSummary": "Imported {{files}} files and {{directories}} directories",
+        "error": "BitLocker operation failed. See the error drawer for details."
+      }
     }
   },
   "importDataSource": {
