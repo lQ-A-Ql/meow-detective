@@ -49,7 +49,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (86 test files)
+cd frontend && pnpm test            # Frontend (87 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -78,7 +78,7 @@ cd frontend && pnpm test
 | `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, explicit source-local catalog import, and verified-key persistence) |
+| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4-6: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, source-local catalog import, verified-key persistence, secure restore, and safe report inventory) |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |

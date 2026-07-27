@@ -94,7 +94,7 @@
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |
 | SQLite migration scripts | 70 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0042 + source_001-source_027 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 86 | `frontend/src/**/*.test.ts(x)` |
+| frontend test files | 87 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 8 | 历史 V3 文档清单；当前支持事实以 parser matrix 为准 |
 | V3 保留新增 crate | 2 | `crates/containers-pst/`, `crates/artifacts-linux/` |
@@ -111,7 +111,7 @@
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 86 | Vitest 测试文件总数 |
+| `frontend/src/**/*.test.ts(x)` | 87 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 112 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 70 | SQLite migration 脚本 (0001-0042 + source_001-source_027 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |

@@ -7,6 +7,7 @@ pub mod error;
 pub mod html;
 mod html_export;
 pub mod json;
+mod json_case;
 mod json_records;
 mod output;
 mod snapshot;
@@ -25,10 +26,8 @@ pub use html_export::{
     generate_html_report, generate_html_report_for_case,
     generate_html_report_for_case_with_bitlocker,
 };
-pub use json::{
-    generate_json_export, generate_json_export_for_case,
-    generate_json_export_for_case_with_bitlocker,
-};
+pub use json::generate_json_export;
+pub use json_case::{generate_json_export_for_case, generate_json_export_for_case_with_bitlocker};
 
 pub(crate) use output::{persist_report_record, prepare_report_output, write_report_atomically};
 pub(crate) use snapshot::{

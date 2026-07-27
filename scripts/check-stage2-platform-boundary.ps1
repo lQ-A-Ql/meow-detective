@@ -318,7 +318,7 @@ foreach ($relativePath in @(
 foreach ($relativePath in @(
   'crates/app-services/src/report/mod.rs',
   'crates/app-services/src/report/csv.rs',
-  'crates/app-services/src/report/json.rs'
+  'crates/app-services/src/report/json_case.rs'
 )) {
   $absolutePath = Join-Path $repoRoot $relativePath
   if ((Test-Path -LiteralPath $absolutePath -PathType Leaf) -and

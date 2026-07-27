@@ -1,6 +1,6 @@
 # BitLocker 卷层设计
 
-**状态**: Stage 4 密钥包持久化完成，Stage 5 前端解锁流程待实施（2026-07-28）
+**状态**: Stage 4-7 已完成（2026-07-28）
 **范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
 **事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
 `docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
@@ -24,6 +24,16 @@ Stage 4 已将“已验证密钥包”的持久化接入真实 Windows Credentia
 明文文件系统后才注册运行时；恢复失败不会留下半激活的运行时状态。非 Windows 构建
 返回 typed unsupported，不提供内存或文件系统 mock。锁定只清理运行时密钥，遗忘密钥
 只删除 Credential Manager 条目，两者分别审计且互不替代。
+
+Stage 5 已将真实解锁流程接入文件浏览器检查器。BitLocker 面板只在当前分区确认为
+BitLocker 时出现；密码和恢复密码仅存在于组件的瞬时输入状态，提交后立即清空，不进入
+全局 store、查询缓存、持久化表单或 DTO。目录导入后的状态直接采用后端返回的
+`BitLockerCatalogImportDto.volume`，前端不自行推导解锁状态。
+
+Stage 6 已将非秘密 BitLocker inventory 接入 HTML/JSON 案件报告。报告仅输出加密方法、
+protector 清单、解锁能力、运行时状态、持久化密钥可用性、明文文件系统和稳定错误码；
+不输出密码、恢复密码、FVEK、tweak、metadata fingerprint 或 Credential Manager blob。
+持久化密钥恢复通过独立性能回归证明不会重新执行密码 KDF。
 
 Stage 2b 的实际接入点如下：
 
@@ -156,8 +166,8 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 | 2b ✅ | 预览读路径 | 运行时 verified unlock registry；分区窗口；Hex/文本/图片/文档/媒体统一路由；锁定返回 typed Unsupported |
 | 3 ✅ | 服务与导入编排 | inspect/解锁/锁定；凭据以独立 secret 参数进入；显式 catalog 导入与审计记录 |
 | 4 ✅ | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定；Windows Credential Manager 真实读写；恢复复探测；锁定/遗忘独立 |
-| 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
-| 6 | 报告、性能、文档 | 报告含 protector inventory；KDF 不重跑；文档与矩阵同步 |
+| 5 ✅ | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离；BitLocker 面板按真实分区显示 |
+| 6 ✅ | 报告、性能、文档 | HTML/JSON 含非秘密 protector inventory；KDF 不重跑；恢复 oracle 与文档已同步 |
 
 ### Stage 1 交付物（已完成 2026-07-27）
 
@@ -198,7 +208,7 @@ Stage 1 的取舍记录：
 
 ### Stage 2a 交付物（已完成 2026-07-27）
 
-`crates/volume-bitlocker` 191 个 lib 测试（Stage 1 为 112）。Stage 2b 已在
+`crates/volume-bitlocker` 192 个 lib 测试（Stage 1 为 112）。Stage 2b 已在
 app-services 读路径接入，不改变该 crate 的只读边界。
 
 - `diffuser.rs` — vendor 进来的 Elephant Diffuser,只有解密方向。带上游回归向量,
@@ -264,8 +274,30 @@ Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百
   只删持久化条目；失败、恢复和遗忘动作写入审计日志。
 - `BitLockerVolumeStatusDto.storedKeyAvailable` 及 frontend API 镜像 — 只暴露是否有
   可恢复的持久化条目，不暴露 fingerprint 之外的密钥材料或凭据。
-- 验证覆盖：volume-bitlocker 191 项、app-services 769 项、Credential Manager
+- 验证覆盖：volume-bitlocker 192 项、app-services 770 项、Credential Manager
   Windows 读写删测试、命令注册完整性、credential/module/function/test-layout guards。
+
+### Stage 5 交付物（已完成 2026-07-28）
+
+- 文件浏览器检查器新增 BitLocker 专用真实数据面板，按显式 `dataSourceId + partitionIndex`
+  调用 inspect/unlock/restore/import/lock/forget API；非 BitLocker 分区不会渲染该面板。
+- 支持密码和 48 位恢复密码选择；输入框使用密码类型、关闭自动完成，提交动作先清空
+  输入再进入后端调用；前端只编排请求和展示 DTO，不参与卷解密或状态推导。
+- `BitLockerCatalogImportDto.volume` 是目录导入成功后的唯一状态来源，面板显示的明文
+  文件系统、保护器和持久化密钥可用性与后端返回保持一致。
+- 前端验证覆盖 typecheck、lint、87 个测试文件共 591 项测试、生产构建和 runtime guard。
+
+### Stage 6 交付物（已完成 2026-07-28）
+
+- HTML/JSON 报告命令注入 `BitLockerReportContext`，报告从 ready source DB 读取真实分区
+  inventory；CSV 保持 artifact-oriented，不伪装为 BitLocker 专用报告。
+- 报告输出脱敏边界由 app-services 单元测试锁定，明确拒绝 credential、FVEK、tweak 和
+  fingerprint 字段。
+- 32 次连续 persisted-key restore 性能回归通过；恢复路径只解析有界 key envelope、
+  重建 cipher，并不调用密码或恢复密码 KDF。
+- 新增 `FORENSICS_BITLOCKER_RECOVERY_ORACLE` 与
+  `FORENSICS_BITLOCKER_RECOVERY_PASSWORD` 环境门控的 ignored 真实恢复密码 oracle；不
+  提交镜像或凭据。
 
 ### Stage 0 交付物
 
@@ -326,9 +358,9 @@ Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百
 ## 6. 待办与已知风险
 
 - **FVEK 落盘的取证风险**：Credential Manager 里的 FVEK 密钥包等价于该卷的
-  永久解密能力。当前策略是不自动过期，只提供显式 `forget` 删除动作；Stage 5/6
-  仍需把这个持久化状态纳入前端操作提示和报告策略，避免调查员误以为“锁定”已经删除
-  密钥包。
+  永久解密能力。当前策略是不自动过期，只提供显式 `forget` 删除动作；Stage 5 面板已
+  将“锁定运行时卷”和“删除安全存储”分成两个动作，Stage 6 报告只披露
+  `storedKeyAvailable`，不披露密钥材料。调查员仍需明确执行 forget 才能删除密钥包。
 - **`catalog_manifest.rs` 版本号**：`unlock_hint` 已经被序列化进 manifest，
   新增解锁状态字段需要 bump manifest 版本，否则旧案件的指纹会失配。
 - **descriptor cache 版本升级**：原方案假设存在这个机制，代码里没有。

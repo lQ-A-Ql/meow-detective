@@ -1,4 +1,4 @@
-use super::{RawExportBundle, ReportError};
+use crate::report::{RawExportBundle, ReportError};
 use domain::FileEncryptionStatus;
 use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::Connection;
@@ -65,7 +65,7 @@ pub(super) fn export_raw_file_bundle(
     )
 }
 
-pub(super) fn export_raw_file_bundle_for_case(
+pub(crate) fn export_raw_file_bundle_for_case(
     conn: &Connection,
     case_root: &Path,
     output_dir: &Path,
