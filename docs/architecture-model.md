@@ -96,10 +96,10 @@ fs-ntfs fs-fat fs-exfat fs-ext4 fs-xfs fs-btrfs fs-lvm image-e01
   runtime-cache, testing, evtx-patched, volume-bitlocker
 ```
 
-`volume-bitlocker` 目前只有冻结的类型契约（Stage 0），尚无调用者。它不是
-`image-raw` 那类孤儿 crate：契约存在的目的就是让 guard 有扫描根、让编译器从
-第一天起约束密钥类型，Stage 1-2 会把它接进 `evidence-core` 与 `app-services`
-的读路径。见 `docs/bitlocker-volume-layer-design.md`。
+`volume-bitlocker` 已完成 Stage 1（元数据解析与密钥推导），但仍无生产调用者：
+它能在无凭据时报告密码学方法与全部保护器，也能在给定密码/恢复密码时产出**已验证**
+的密钥包，但还不解密扇区。Stage 2 会加上扇区 cipher 与明文 `Read + Seek` 视图，
+并同时改掉 11 个 gate point。见 `docs/bitlocker-volume-layer-design.md`。
 
 `app-services` 是最大的汇聚点，依赖 23 个内部 crate：domain、transport、
 infrastructure、persistence-sqlite、evidence-core、六个 fs-*、fs-lvm、
@@ -149,7 +149,7 @@ image-e01、artifacts-core、runtime-cache、app-services、mcp-client。
 | **fs-xfs** | XFS | v1/v2/v3 inode、MACB、internal log |
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
-| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 0：加密方法/保护器/错误/密钥类型契约冻结，26 个 lib 测试，无实现 |
+| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 1：FVE 元数据解析、密码/恢复密码密钥推导、protector inventory、卷指纹；112 个 lib 测试；扇区解密仍属 Stage 2 |
 
 ### 分布式存储重建层
 

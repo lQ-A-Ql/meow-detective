@@ -64,7 +64,7 @@ function Get-LineNumber {
 
 function Find-SecretDeriveViolations {
   param(
-    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Source,
     [Parameter(Mandatory = $true)][string]$RelativePath
   )
 
@@ -101,7 +101,7 @@ function Find-SecretDeriveViolations {
 
 function Find-SecretSinkViolations {
   param(
-    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Source,
     [Parameter(Mandatory = $true)][string]$RelativePath
   )
 
@@ -135,7 +135,7 @@ function Find-SecretSinkViolations {
 
 function Find-PlaintextArtifactViolations {
   param(
-    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Source,
     [Parameter(Mandatory = $true)][string]$RelativePath
   )
 

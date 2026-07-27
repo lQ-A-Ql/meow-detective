@@ -6,12 +6,17 @@
 //! E01 / RAW -> PartitionWindowReader -> BitLockerReader -> NTFS / FAT / exFAT
 //! ```
 //!
-//! # Stage 0 status
+//! # Stage 1 status
 //!
-//! This is the frozen contract surface only. The types here define the boundary
-//! that Stages 1-6 fill in; there is no metadata parser, no key derivation, and
-//! no reader yet. See `docs/bitlocker-volume-layer-design.md` for the staged
-//! plan and `docs/bitlocker-dependency-decision.md` for upstream provenance.
+//! Metadata parsing and key derivation are implemented: given a volume reader
+//! this crate reports the cipher and the full protector inventory with no
+//! credential, and given a password or recovery password it produces a *verified*
+//! [`VolumeKeyPackage`]. It does not decrypt sectors yet — the sector cipher and
+//! the `Read + Seek` plaintext view are Stage 2, so nothing here is wired into
+//! the evidence read path.
+//!
+//! See `docs/bitlocker-volume-layer-design.md` for the staged plan and
+//! `docs/bitlocker-dependency-decision.md` for upstream provenance.
 //!
 //! # Boundaries that must not move
 //!
@@ -25,12 +30,27 @@
 
 #![forbid(unsafe_code)]
 
+mod bytes;
 mod error;
+mod fingerprint;
+mod guid;
+mod header;
+mod kdf;
+mod metadata;
 mod method;
 mod protector;
 mod secret;
+mod unlock;
 
 pub use error::{BitLockerError, Result};
+pub use fingerprint::MetadataFingerprint;
+pub use guid::format_guid;
+pub use header::{HeaderVariant, VolumeHeader};
+pub use kdf::RecoveryPasswordError;
+pub use metadata::{FveMetadata, MetadataEntry};
 pub use method::EncryptionMethod;
 pub use protector::{ProtectorInventory, ProtectorKind};
 pub use secret::{Passphrase, VolumeKeyPackage};
+pub use unlock::{
+    read_volume_identity, unlock_with_password, unlock_with_recovery_password, VolumeIdentity,
+};

@@ -138,15 +138,44 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 
 | Stage | 内容 | 退出条件 |
 |-------|------|---------|
-| 0 | 边界冻结 | 本文件 + 依赖决策定稿；两个 guard 上线；crate 骨架编译通过 |
-| 1 | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
+| 0 ✅ | 边界冻结 | 本文件 + 依赖决策定稿；两个 guard 上线；crate 骨架编译通过 |
+| 1 ✅ | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
 | 2 | 卷读者与 11 个 gate point | `BitLockerReader` 通过 oracle；11 处 match 全部显式处理 |
 | 3 | 服务与导入编排 | 解锁/锁定用例；凭据以独立 secret 参数进入；phase 记录 |
 | 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
 | 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
 | 6 | 报告、性能、文档 | 报告含 protector inventory；KDF 不重跑；文档与矩阵同步 |
 
-### Stage 0 交付物（本次）
+### Stage 1 交付物（已完成 2026-07-27）
+
+`crates/volume-bitlocker` 112 个 lib 测试，零生产调用者（Stage 2 才接入读路径）：
+
+- `bytes.rs` — 越界即返回零值的小端读取器。输入是攻击者可控的卷，谎报的长度必须
+  在上层变成解析失败，不能在证据读路径上 panic。
+- `guid.rs` — 混合端序 GUID 渲染，与 libbde/pybde 输出一致。
+- `header.rs` — 三种卷头布局。**`MSWIN4.1` 不能单独证明是 BitLocker**：Windows
+  格式化的普通 FAT 卷带同样签名，所以该变体只是候选，必须由 FVE 元数据块确认。
+  `HeaderVariant::is_self_identifying()` 把这个区别做成类型上的事实。
+- `metadata.rs` — FVE 块与条目解析，三份副本、protector inventory、被 metadata_size
+  限界的条目游走。
+- `kdf.rs` — UTF-16LE + 双 SHA-256 + 0x100000 轮 stretch + AES-CCM 解包；48 位
+  恢复密码的 mod-11 校验先于推导执行（打错一位若漏过去，会产生与"密码错误"
+  无法区分的错误密钥）。
+- `fingerprint.rs` — 凭据无关的卷身份，用于 Credential target 与运行时注册键。
+  保护器集合参与哈希，所以重新加密过的卷不会复用旧密钥包。
+- `unlock.rs` — 编排：定位 VMK → stretch → 解包 VMK → 解包 FVEK。两次 AES-CCM
+  tag 校验都通过才返回，这是"已验证"的含义。
+
+Stage 1 的取舍记录：
+
+- stretch 轮数在 crate 内部函数上是参数，两个公开入口恒定传
+  `STRETCH_ITERATIONS`。测试用小轮数跑编排，另有一个测试走真实轮数的生产路径，
+  以及一个反向测试确认小轮数解不开真实卷。
+- 不支持的加密方法在任何凭据运算之前就被拒绝，所以不支持的卷不会先花掉一百万轮
+  SHA-256 才失败。
+- 恢复密码"结构非法"与"就是错的"都映射为 `CredentialRejected`，不向调用方区分。
+
+### Stage 0 交付物
 
 1. `docs/bitlocker-dependency-decision.md` — 上游 commit、tree hash、逐文件
    SHA-256、许可与归属、被排除的上游部分、新增 crates.io 依赖。

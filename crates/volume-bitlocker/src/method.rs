@@ -74,6 +74,34 @@ impl EncryptionMethod {
         )
     }
 
+    /// Length in bytes of the FVEK this method uses.
+    ///
+    /// The XTS methods carry two AES keys concatenated, so `0x8004` needs 32
+    /// bytes for two AES-128 keys and `0x8005` needs 64 for two AES-256 keys.
+    /// Reading the wrong length yields a key that decrypts to plausible garbage
+    /// rather than an error, so this mapping is load-bearing.
+    #[must_use]
+    pub fn fvek_len(self) -> Option<usize> {
+        match self {
+            Self::Aes128CbcDiffuser | Self::Aes128Cbc => Some(16),
+            Self::Aes256Cbc | Self::XtsAes128 => Some(32),
+            Self::XtsAes256 => Some(64),
+            // 0x8001 would be 32 bytes, but reporting a length would imply a
+            // decrypt path exists for it.
+            Self::Aes256CbcDiffuser | Self::Unknown(_) => None,
+        }
+    }
+
+    /// Whether this method uses a separate 16-byte diffuser tweak key.
+    ///
+    /// Only the Elephant Diffuser methods do. The XTS methods have a tweak in the
+    /// cipher sense, but it comes from the second half of the FVEK rather than a
+    /// distinct metadata field.
+    #[must_use]
+    pub fn uses_diffuser_tweak(self) -> bool {
+        matches!(self, Self::Aes128CbcDiffuser | Self::Aes256CbcDiffuser)
+    }
+
     /// A stable label for display and reporting.
     #[must_use]
     pub fn label(self) -> &'static str {

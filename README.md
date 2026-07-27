@@ -78,7 +78,7 @@ cd frontend && pnpm test
 | `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 0: frozen contracts only) |
+| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 1: FVE metadata and key derivation; sector decryption pending) |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
