@@ -71,6 +71,9 @@ interface DenseDataTableProps<T> {
   initialLoadErrorText?: string;
   retryInitialLoadLabel?: string;
   onRetryInitialLoad?: () => void;
+  /** 为动态多列表格保留最小列宽，并允许整个表格横向滚动。 */
+  horizontalScroll?: boolean;
+  minColumnWidth?: number;
 }
 
 interface TableRowMemoProps<T> {
@@ -166,6 +169,8 @@ export function DenseDataTable<T>({
   initialLoadErrorText = '记录加载失败。',
   retryInitialLoadLabel = '重试',
   onRetryInitialLoad,
+  horizontalScroll = false,
+  minColumnWidth = 140,
 }: DenseDataTableProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
@@ -367,26 +372,43 @@ export function DenseDataTable<T>({
     0,
     (rows.length - visibleRange.endIndex) * ROW_HEIGHT
   );
+  const tableStyle = horizontalScroll
+    ? {
+        width: `${Math.max(columns.length, 1) * minColumnWidth}px`,
+        minWidth: '100%',
+      }
+    : undefined;
 
   return (
     <div
       ref={containerRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-transparent font-mono text-[11px]"
+      className={`min-h-0 flex-1 overflow-y-auto bg-transparent font-mono text-[11px] ${
+        horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'
+      }`}
       onScroll={handleScroll}
     >
-      <Table className="text-[11px]">
+      <Table
+        className="text-[11px]"
+        containerClassName={horizontalScroll ? 'overflow-visible' : undefined}
+        style={tableStyle}
+      >
         <TableHeader className="sticky top-0 z-10 bg-forensics-panel">
           <TableRow className="border-b border-forensics-border hover:bg-forensics-panel">
             {columns.map((column) => (
               <TableHead
                 key={column.key}
-                className={`group h-7 border-r border-forensics-border px-2 text-[11px] font-light tracking-wide text-forensics-text-tertiary last:border-r-0 ${
+                className={`group h-7 overflow-hidden border-r border-forensics-border px-2 text-[11px] font-light tracking-wide text-forensics-text-tertiary last:border-r-0 ${
                   column.sortable ? 'cursor-pointer select-none hover:bg-forensics-hover' : ''
                 } ${column.className ?? ''}`}
                 onClick={() => column.sortable && handleSort(column.sortKey ?? column.key)}
               >
-                <div className="flex items-center gap-1">
-                  <span>{column.title}</span>
+                <div className="flex min-w-0 items-center gap-1">
+                  <span
+                    className="min-w-0 flex-1 truncate"
+                    title={typeof column.title === 'string' ? column.title : undefined}
+                  >
+                    {column.title}
+                  </span>
                   {column.sortable && (
                     <SortIndicator
                       active={sortKey === (column.sortKey ?? column.key)}

@@ -192,7 +192,6 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
       (title, index) => ({
         key: `c${index}`,
         title,
-        className: 'min-w-[120px]',
         render: (row) => row.cells[index] ?? '',
       }),
     );
@@ -207,6 +206,8 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
           rows={table.rows}
           columns={table.columns}
           getRowKey={(row) => row.key}
+          horizontalScroll
+          minColumnWidth={140}
           emptyTitle="空表格"
           emptyDescription="该段没有可展示的数据行。"
         />

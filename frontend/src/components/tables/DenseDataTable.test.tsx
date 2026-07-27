@@ -145,6 +145,35 @@ describe('DenseDataTable', () => {
     ).toBeNull();
   });
 
+  it('keeps dynamic columns readable in horizontal scroll mode', () => {
+    const wideColumns: DenseColumn<Row>[] = Array.from({ length: 8 }, (_, index) => ({
+      key: `column-${index}`,
+      title: `Long evidence column ${index}`,
+      render: (row) => row.name,
+    }));
+    const { container } = render(
+      <DenseDataTable
+        columns={wideColumns}
+        rows={[{ id: 'row-1', name: 'Cell value' }]}
+        getRowKey={(row) => row.id}
+        horizontalScroll
+        minColumnWidth={160}
+      />,
+    );
+
+    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const tableContainer = container.querySelector('[data-slot="table-container"]');
+    const table = container.querySelector('[data-slot="table"]') as HTMLTableElement;
+    const headerTitle = screen.getByText('Long evidence column 0');
+
+    expect(scrollContainer.className).toContain('overflow-x-auto');
+    expect(tableContainer?.className).toContain('overflow-visible');
+    expect(table.style.width).toBe('1280px');
+    expect(table.style.minWidth).toBe('100%');
+    expect(headerTitle.className).toContain('truncate');
+    expect(headerTitle.getAttribute('title')).toBe('Long evidence column 0');
+  });
+
   it('does not activate a row while selecting cell text', () => {
     const onRowClick = vi.fn();
     render(
