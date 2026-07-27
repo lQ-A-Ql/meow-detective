@@ -1,7 +1,7 @@
 use super::{
     current_analysis, current_analysis_for_case, current_correlation, current_correlation_for_case,
     current_governance, persist_report_record, prepare_report_output, write_report_atomically,
-    RawExportBundle, ReportCorrelation, ReportError, ReportGovernance,
+    BitLockerReportContext, RawExportBundle, ReportCorrelation, ReportError, ReportGovernance,
 };
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use reports::JsonExporter;
@@ -85,6 +85,35 @@ pub fn generate_json_export_for_case(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
+    generate_json_export_for_case_with_context(conn, case, case_root, output_dir, scope, None)
+}
+
+pub fn generate_json_export_for_case_with_bitlocker(
+    conn: &Connection,
+    case: &domain::CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+    bitlocker_context: BitLockerReportContext<'_>,
+) -> Result<String, ReportError> {
+    generate_json_export_for_case_with_context(
+        conn,
+        case,
+        case_root,
+        output_dir,
+        scope,
+        Some(bitlocker_context),
+    )
+}
+
+fn generate_json_export_for_case_with_context(
+    conn: &Connection,
+    case: &domain::CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+    bitlocker_context: Option<BitLockerReportContext<'_>>,
+) -> Result<String, ReportError> {
     let events = if scope.full_timeline {
         crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)?.items
     } else {
@@ -96,6 +125,8 @@ pub fn generate_json_export_for_case(
     let governance = super::current_governance_for_case(conn, case_root, &case.id.0)?;
     let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
     let analysis_section = super::analysis_json::analysis_json_section(&analysis, scope);
+    let bitlocker =
+        super::bitlocker::current_inventory(conn, case_root, &case.id, scope, bitlocker_context)?;
     let timeline_events = events
         .iter()
         .map(super::json_records::source_timeline_event)
@@ -112,6 +143,7 @@ pub fn generate_json_export_for_case(
         "analysis": analysis_section,
         "governance": governance_json_section(&governance),
         "correlation": correlation_json_section(&correlation),
+        "bitlocker": super::bitlocker::json_section(&bitlocker),
     });
 
     let file_name = format!("export-{}.json", Uuid::new_v4());

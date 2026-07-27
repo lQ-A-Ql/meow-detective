@@ -1,5 +1,17 @@
 use transport::dto::{CorrelationSnapshotDto, V2GovernanceSnapshotDto};
 
+#[derive(Clone, Copy)]
+pub struct BitLockerReportContext<'a> {
+    pub(crate) runtimes: crate::bitlocker_service::BitLockerRuntimeContext<'a>,
+}
+
+impl<'a> BitLockerReportContext<'a> {
+    #[must_use]
+    pub fn new(runtimes: crate::bitlocker_service::BitLockerRuntimeContext<'a>) -> Self {
+        Self { runtimes }
+    }
+}
+
 pub(crate) struct ReportCorrelation {
     pub(crate) snapshot: CorrelationSnapshotDto,
 }

@@ -3,7 +3,8 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use volume_bitlocker::{
-    unlock_volume_with_password, BitLockerReader, EncryptionMethod, Passphrase,
+    unlock_volume_with_password, unlock_volume_with_recovery_password, BitLockerReader,
+    EncryptionMethod, Passphrase,
 };
 
 fn oracle_path(name: &str) -> PathBuf {
@@ -39,6 +40,26 @@ fn assert_password_oracle(
     if let Some(oem) = expected_oem {
         assert_eq!(&boot_sector[3..11], oem);
     }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_BITLOCKER_RECOVERY_ORACLE and FORENSICS_BITLOCKER_RECOVERY_PASSWORD"]
+fn recovery_password_oracle_reaches_plaintext() {
+    let path = oracle_path("FORENSICS_BITLOCKER_RECOVERY_ORACLE");
+    let password = std::env::var("FORENSICS_BITLOCKER_RECOVERY_PASSWORD")
+        .expect("set FORENSICS_BITLOCKER_RECOVERY_PASSWORD to the local oracle password");
+    let mut evidence = File::open(&path).expect("open read-only BitLocker recovery oracle");
+    let credential = Passphrase::new(password);
+    let verified = unlock_volume_with_recovery_password(&mut evidence, &credential)
+        .expect("recovery password must unlock the oracle image");
+    let (_, volume) = verified.into_unlocked_volume();
+    let mut plaintext = BitLockerReader::new(volume, evidence).expect("build plaintext reader");
+    let mut boot_sector = [0u8; 512];
+    plaintext
+        .read_exact(&mut boot_sector)
+        .expect("read decrypted filesystem boot sector");
+    assert_eq!(&boot_sector[510..512], &[0x55, 0xAA]);
+    assert_ne!(&boot_sector[3..11], b"-FVE-FS-");
 }
 
 #[test]

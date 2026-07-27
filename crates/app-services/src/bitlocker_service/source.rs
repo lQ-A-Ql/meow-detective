@@ -166,7 +166,7 @@ fn validate_source_kind(kind: &DataSourceKind) -> Result<(), BitLockerServiceErr
     })
 }
 
-fn is_bitlocker_partition(partition: &DataSourcePartitionRecord) -> bool {
+pub(crate) fn is_bitlocker_partition(partition: &DataSourcePartitionRecord) -> bool {
     partition.kind_label.eq_ignore_ascii_case("bitlocker")
         || partition
             .filesystem

@@ -1,5 +1,6 @@
 mod analysis_json;
 mod analysis_rows;
+mod bitlocker;
 mod catalog;
 pub mod csv;
 pub mod error;
@@ -20,8 +21,14 @@ pub use csv::{
     generate_csv_correlation_for_case,
 };
 pub use error::ReportError;
-pub use html_export::{generate_html_report, generate_html_report_for_case};
-pub use json::{generate_json_export, generate_json_export_for_case};
+pub use html_export::{
+    generate_html_report, generate_html_report_for_case,
+    generate_html_report_for_case_with_bitlocker,
+};
+pub use json::{
+    generate_json_export, generate_json_export_for_case,
+    generate_json_export_for_case_with_bitlocker,
+};
 
 pub(crate) use output::{persist_report_record, prepare_report_output, write_report_atomically};
 pub(crate) use snapshot::{
@@ -30,6 +37,7 @@ pub(crate) use snapshot::{
     open_ready_source_connections,
 };
 pub(crate) use source_analysis::{current_analysis_for_case, ReportAnalysis, ReportSourceAnalysis};
+pub use types::BitLockerReportContext;
 pub(crate) use types::{RawExportBundle, ReportCorrelation, ReportGovernance};
 pub(crate) use warnings::{evidence_hash_warnings, report_scope_warnings, report_warnings};
 

@@ -856,3 +856,36 @@ fn csv_correlation_export_scope_gates_empty_when_no_scope() {
     // Header should exist even with empty data (no rows)
     assert!(csv.contains("lead_id,title,confidence,families,primary_file_path,supporting_node_count,match_signals_count,provenance_sources,caveats"));
 }
+
+#[test]
+fn bitlocker_report_sections_exclude_credentials_and_key_material() {
+    let entry = crate::bitlocker_service::BitLockerReportEntry {
+        data_source_id: "source-report".to_string(),
+        partition_index: 2,
+        partition_name: "BitLocker volume".to_string(),
+        encryption_method: Some("XTS-AES-256".to_string()),
+        encryption_method_code: Some(0x8005),
+        decryptable: Some(true),
+        unlocked: Some(false),
+        stored_key_available: Some(true),
+        supports_password: Some(true),
+        supports_recovery_password: Some(true),
+        protectors: Vec::new(),
+        plaintext_filesystem: Some("NTFS".to_string()),
+        inspection_error_code: None,
+    };
+    let entries = vec![entry];
+    let json = super::bitlocker::json_section(&entries).to_string();
+    let rows = super::bitlocker::report_rows(&entries).join("\n");
+
+    for output in [json, rows] {
+        assert!(output.contains("encryptionMethod"));
+        assert!(output.contains("storedKeyAvailable"));
+        assert!(!output.contains("metadataFingerprint"));
+        assert!(!output.contains("fingerprint"));
+        assert!(!output.contains("fvek"));
+        assert!(!output.contains("tweak"));
+        assert!(!output.contains("credential"));
+        assert!(!output.contains("recoveryPasswordValue"));
+    }
+}

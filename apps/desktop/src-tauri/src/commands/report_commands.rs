@@ -44,12 +44,20 @@ pub async fn export_html_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_html_report_for_case(
+        let bitlocker = app_services::report::BitLockerReportContext::new(
+            app_services::bitlocker_service::BitLockerRuntimeContext::new(
+                &app_state.preview_runtime,
+                &app_state.bitlocker_runtime,
+                app_state.bitlocker_key_store.as_ref(),
+            ),
+        );
+        app_services::report::generate_html_report_for_case_with_bitlocker(
             &conn,
             &active.meta,
             &active.case_root,
             &output_dir,
             &scope,
+            bitlocker,
         )
         .map_err(CommandError::from_typed_service_error)
     })
@@ -119,12 +127,20 @@ pub async fn export_json_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_json_export_for_case(
+        let bitlocker = app_services::report::BitLockerReportContext::new(
+            app_services::bitlocker_service::BitLockerRuntimeContext::new(
+                &app_state.preview_runtime,
+                &app_state.bitlocker_runtime,
+                app_state.bitlocker_key_store.as_ref(),
+            ),
+        );
+        app_services::report::generate_json_export_for_case_with_bitlocker(
             &conn,
             &active.meta,
             &active.case_root,
             &output_dir,
             &scope,
+            bitlocker,
         )
         .map_err(CommandError::from_typed_service_error)
     })

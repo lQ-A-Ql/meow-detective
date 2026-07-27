@@ -2,7 +2,7 @@ use super::{
     analysis_rows, current_analysis, current_analysis_for_case, current_correlation,
     current_correlation_for_case, current_governance, current_governance_for_case, html,
     persist_report_record, prepare_report_output, source_analysis, write_report_atomically,
-    ReportAnalysis, ReportError,
+    BitLockerReportContext, ReportAnalysis, ReportError,
 };
 use domain::CaseMeta;
 use persistence_sqlite::repositories::{
@@ -30,9 +30,34 @@ pub fn generate_html_report_for_case(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
-    generate_html_report_for_case_with_analysis(conn, case, case_root, output_dir, scope, || {
-        current_analysis_for_case(conn, case_root, &case.id)
-    })
+    generate_html_report_for_case_with_analysis(
+        conn,
+        case,
+        case_root,
+        output_dir,
+        scope,
+        None,
+        || current_analysis_for_case(conn, case_root, &case.id),
+    )
+}
+
+pub fn generate_html_report_for_case_with_bitlocker(
+    conn: &Connection,
+    case: &CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+    bitlocker_context: BitLockerReportContext<'_>,
+) -> Result<String, ReportError> {
+    generate_html_report_for_case_with_analysis(
+        conn,
+        case,
+        case_root,
+        output_dir,
+        scope,
+        Some(bitlocker_context),
+        || current_analysis_for_case(conn, case_root, &case.id),
+    )
 }
 
 fn generate_html_report_with_analysis(
@@ -69,6 +94,7 @@ fn generate_html_report_for_case_with_analysis(
     case_root: &Path,
     output_dir: &Path,
     scope: &ExportScopeDto,
+    bitlocker_context: Option<BitLockerReportContext<'_>>,
     analysis_loader: impl FnOnce() -> Result<ReportAnalysis, ReportError>,
 ) -> Result<String, ReportError> {
     let file_count = file_count_for_case(conn, case, case_root)?;
@@ -76,7 +102,10 @@ fn generate_html_report_for_case_with_analysis(
     let files = file_summary(scope, file_count);
     let artifacts = source_timeline_rows(conn, case, case_root, scope, timeline_count)?;
     let analysis = analysis_loader()?;
-    let analysis_rows = analysis_rows::report_analysis_rows(conn, &case.id.0, &analysis, scope);
+    let mut analysis_rows = analysis_rows::report_analysis_rows(conn, &case.id.0, &analysis, scope);
+    let bitlocker =
+        super::bitlocker::current_inventory(conn, case_root, &case.id, scope, bitlocker_context)?;
+    analysis_rows.extend(super::bitlocker::report_rows(&bitlocker));
     let governance = current_governance_for_case(conn, case_root, &case.id.0)?;
     let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
     write_html_report(

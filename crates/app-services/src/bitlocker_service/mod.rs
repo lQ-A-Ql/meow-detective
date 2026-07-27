@@ -4,6 +4,7 @@ mod catalog;
 mod error;
 mod key_store;
 mod persistence;
+mod report;
 mod source;
 mod status;
 mod use_cases;
@@ -34,6 +35,7 @@ pub use catalog::import_unlocked_bitlocker_catalog;
 pub use error::BitLockerServiceError;
 pub use key_store::{BitLockerKeyStore, BitLockerKeyStoreError, BitLockerKeyStoreOperation};
 pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
+pub(crate) use report::{collect_report_inventory, BitLockerReportEntry};
 pub use use_cases::{
     inspect_bitlocker_volume, lock_bitlocker_volume, unlock_bitlocker_with_password,
     unlock_bitlocker_with_recovery_password,

@@ -49,6 +49,25 @@ fn v1_envelope_restores_runtime_state_for_the_same_volume() {
 }
 
 #[test]
+fn repeated_persisted_key_restore_is_bounded_without_password_kdf() {
+    let source = identity(0x42);
+    let original = encoded_bytes(&source);
+    let started = std::time::Instant::now();
+
+    for _ in 0..32 {
+        let blob = PersistedKeyBlob::from_storage(original.clone()).expect("valid blob");
+        let restored = restore(source.clone(), blob).expect("matching package restores");
+        std::hint::black_box(restored);
+    }
+
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "persisted-key restore unexpectedly entered a password KDF path: {:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
 fn envelope_rejects_a_different_metadata_fingerprint() {
     let bytes = encoded_bytes(&identity(0x42));
     let error = restore_error(identity(0x24), bytes);
