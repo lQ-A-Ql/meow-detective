@@ -5858,9 +5858,11 @@ name = "volume-bitlocker"
 version = "0.1.0"
 dependencies = [
  "aes 0.8.4",
+ "cbc 0.1.2",
  "ccm",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+ "xts-mode",
  "zeroize",
 ]
 
@@ -6691,6 +6693,16 @@ dependencies = [
  "libc",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "xts-mode"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cbddb7545ca0b9ffa7bdc653e8743303e1712687a6918ced25f2cdbed42520"
+dependencies = [
+ "byteorder",
+ "cipher 0.4.4",
 ]
 
 [[package]]

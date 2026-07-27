@@ -124,6 +124,11 @@ pub struct VolumeSpec<'a> {
     pub with_block_signature: bool,
     /// Stretch rounds used to wrap the VMK. Must match what the unlock call uses.
     pub iterations: u64,
+    /// Whether to write encrypted content at [`RELOCATED_OFFSET`].
+    ///
+    /// Only meaningful for method `0x8002`; the end-to-end read test uses it to
+    /// prove the whole chain — parse, unlock, decrypt — lands on real plaintext.
+    pub with_encrypted_content: bool,
 }
 
 impl Default for VolumeSpec<'_> {
@@ -137,8 +142,39 @@ impl Default for VolumeSpec<'_> {
             with_fvek_entry: true,
             with_block_signature: true,
             iterations: TEST_ITERATIONS,
+            with_encrypted_content: false,
         }
     }
+}
+
+/// The plaintext the end-to-end test expects to read back at logical offset 0.
+pub fn expected_relocated_plaintext() -> [u8; 512] {
+    let mut sector = [0u8; 512];
+    for (index, byte) in sector.iter_mut().enumerate() {
+        *byte = ((index as u32).wrapping_mul(7) ^ 0x5A) as u8;
+    }
+    sector
+}
+
+/// AES-128-CBC-encrypts one sector in place with the BitLocker-derived IV.
+///
+/// Method `0x8002` only. Local to this module because the test-layout guard
+/// forbids sharing a helper across test trees; the all-method encrypt side lives
+/// in the cipher tests.
+fn cbc128_encrypt(fvek: &[u8], sector: &mut [u8], offset: u64) {
+    use aes::cipher::block_padding::NoPadding;
+    use aes::cipher::{BlockEncrypt, BlockEncryptMut, KeyIvInit};
+    use aes::Aes128;
+
+    let mut iv_block = [0u8; 16];
+    iv_block[0..8].copy_from_slice(&offset.to_le_bytes());
+    let mut iv = GenericArray::clone_from_slice(&iv_block);
+    <Aes128 as KeyInit>::new(GenericArray::from_slice(fvek)).encrypt_block(&mut iv);
+
+    let len = sector.len() - (sector.len() % 16);
+    cbc::Encryptor::<Aes128>::new(GenericArray::from_slice(fvek), &iv)
+        .encrypt_padded_mut::<NoPadding>(&mut sector[..len], len)
+        .expect("NoPadding CBC over a 16-byte multiple cannot fail");
 }
 
 /// Builds a synthetic BitLocker To Go volume from `spec`.
@@ -161,7 +197,15 @@ pub fn build_volume(spec: &VolumeSpec<'_>) -> SyntheticVolume {
         entries.extend_from_slice(&fvek_entry(&vmk, &fvek, tweak.as_deref()));
     }
 
-    let image = assemble_image(spec, &entries);
+    let mut image = assemble_image(spec, &entries);
+    if spec.with_encrypted_content {
+        // The relocated header holds real plaintext, encrypted at its *physical*
+        // offset. Reading logical 0 must therefore decrypt at RELOCATED_OFFSET.
+        let mut sector = expected_relocated_plaintext();
+        cbc128_encrypt(&fvek, &mut sector, RELOCATED_OFFSET);
+        let start = RELOCATED_OFFSET as usize;
+        image[start..start + 512].copy_from_slice(&sector);
+    }
     SyntheticVolume { image, fvek, tweak }
 }
 

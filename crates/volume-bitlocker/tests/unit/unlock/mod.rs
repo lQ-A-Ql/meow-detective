@@ -389,6 +389,49 @@ fn a_reduced_stretch_does_not_unlock_a_real_volume() {
 }
 
 #[test]
+fn the_whole_chain_reaches_plaintext() {
+    // The Stage 2 integration proof: parse the volume, unlock it with a password,
+    // build the reader, and read real plaintext back. Each layer is unit-tested
+    // separately; this is the one test that shows they compose.
+    //
+    // Logical offset 0 is the relocated header, so a pass here also confirms the
+    // physical offset — not the logical one — reached the cipher.
+    use std::io::Cursor;
+    use std::sync::Arc;
+
+    let volume = build_volume(&VolumeSpec {
+        method: 0x8002,
+        fvek_len: 16,
+        with_tweak: false,
+        protectors: &[Credential::Password(TEST_PASSWORD)],
+        with_encrypted_content: true,
+        ..VolumeSpec::default()
+    });
+    let image = volume.image.clone();
+
+    let identity = read_volume_identity(&mut Cursor::new(image.clone())).expect("volume parses");
+    let keys = unlock_at_test_cost(
+        &identity.metadata,
+        &Passphrase::new(TEST_PASSWORD.to_string()),
+    )
+    .expect("the password unlocks");
+
+    let unlocked = Arc::new(
+        crate::reader::UnlockedVolume::new(&identity.metadata, &keys).expect("cipher builds"),
+    );
+    let mut reader =
+        crate::reader::BitLockerReader::new(unlocked, Cursor::new(image)).expect("reader opens");
+
+    let mut got = [0u8; 512];
+    reader.read_at(0, &mut got).expect("read succeeds");
+    assert_eq!(
+        got,
+        crate::unlock::tests::support::expected_relocated_plaintext(),
+        "the decrypted relocated header must match the plaintext it was built from"
+    );
+}
+
+#[test]
 fn key_lengths_follow_the_encryption_method() {
     for (method, fvek_len, with_tweak) in [
         (0x8000u16, 16usize, true),

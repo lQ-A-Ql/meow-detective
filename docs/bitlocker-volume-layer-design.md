@@ -140,7 +140,8 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 |-------|------|---------|
 | 0 ✅ | 边界冻结 | 本文件 + 依赖决策定稿；两个 guard 上线；crate 骨架编译通过 |
 | 1 ✅ | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
-| 2 | 卷读者与 11 个 gate point | `BitLockerReader` 通过 oracle；11 处 match 全部显式处理 |
+| 2a ✅ | 扇区 cipher 与明文读者 | 五种方法往返、区域映射、有界缓存、合并 I/O、端到端解密 |
+| 2b | 11 个 gate point | 11 处 match 全部显式处理；需要运行时密钥注册表 |
 | 3 | 服务与导入编排 | 解锁/锁定用例；凭据以独立 secret 参数进入；phase 记录 |
 | 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
 | 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
@@ -174,6 +175,36 @@ Stage 1 的取舍记录：
 - 不支持的加密方法在任何凭据运算之前就被拒绝，所以不支持的卷不会先花掉一百万轮
   SHA-256 才失败。
 - 恢复密码"结构非法"与"就是错的"都映射为 `CredentialRejected`，不向调用方区分。
+
+### Stage 2a 交付物（已完成 2026-07-27）
+
+`crates/volume-bitlocker` 180 个 lib 测试(Stage 1 为 112),仍**零生产调用者** ——
+接入 11 个 gate point 是 2b。
+
+- `diffuser.rs` — vendor 进来的 Elephant Diffuser,只有解密方向。带上游回归向量,
+  这是唯一能抓到"旋转常量写错"的检查:往返测试抓不到,因为两个方向会一起错。
+- `cipher.rs` — 五种方法的扇区变换。三个**错了不报错**的点已各自钉住测试:
+  CBC 的 IV 是 `ECB(FVEK, LE128(offset))` 而非裸偏移;diffuser sector key 是
+  tweak 对同一块做两次 ECB(第二次 byte[15]=0x80);**XTS 按扇区号定址而 CBC 按
+  字节偏移** —— 两轴交叉会解出貌似合理的垃圾。
+- `layout.rs` — 纯地址运算,无密钥,可独立测试。三条重塑规则:卷头重定位、
+  元数据块置零、`encrypted_volume_size` 之后为明文。已钉住的两个反直觉语义:
+  **blanking 优先于重定位**,以及**加密边界按物理偏移判定而非逻辑偏移**。
+- `reader.rs` — 明文 `Read + Seek`。`UnlockedVolume`(cipher + layout)用 `Arc`
+  共享,每个 reader 只自带证据句柄、位置和 128 KiB 直接映射缓存。缓存按构造有界
+  而非靠淘汰策略,所以内存上限在建 reader 那一刻就固定了。
+
+Stage 2a 期间发现并修掉的一个真实缺陷:读到镜像末尾之外时,全零缓冲被送进 cipher,
+解出**看起来像数据的垃圾**。在证据路径上这比报错更糟 —— 越界读会拿到貌似合理的
+内容且无人报告。现在按实际读到的字节数判定,完全不存在的扇区直接返回零。
+
+I/O 合并已落地并被测试量化:连续 64 KiB 读取只发出 ≤4 次 seek(未合并需 128 次)。
+重复读同一区间不触碰证据句柄 —— 这是"重复 1MB 区间不重跑 KDF"验收项的实测形式,
+KDF 本来只在解锁时跑一次。
+
+一条已接受的限制:`aes 0.8` 没有 `zeroize` feature,所以 `SectorCipher` 里展开的
+AES key schedule 不会在 drop 时擦除(FVEK 字节会)。升到 `aes 0.9` 能解决,但会
+拆掉 `xts-mode 0.5`。理由与边界记在 `docs/bitlocker-dependency-decision.md`。
 
 ### Stage 0 交付物
 

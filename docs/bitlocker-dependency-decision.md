@@ -54,6 +54,13 @@ It is vendored rather than depended on because it has 614 total downloads from a
 single author. At 220 lines the review cost is lower than the supply-chain cost
 of an unreviewed low-adoption crate on an evidence-decryption path.
 
+Vendored in Stage 2 as `crates/volume-bitlocker/src/diffuser.rs`, decrypt
+direction only — production never encrypts, and the test-layout rules forbid
+hiding an unused encrypt path behind `#[cfg(test)]` in `src`. The upstream
+regression vector came across into the tests: it is the only check that can catch
+a transposed rotation constant, because a round-trip moves both directions
+together.
+
 ### Source checksums at the pinned commit
 
 SHA-256 of each upstream file the derived work is based on. These are the
@@ -106,12 +113,41 @@ Added by this decision:
 | `ccm` | `~0.5` | Apache-2.0 OR MIT | RustCrypto AES-CCM, for VMK/FVEK unwrap |
 | `xts-mode` | `~0.5` | MIT | XTS-AES sector mode, methods `0x8004`/`0x8005` |
 
-`xts-mode` is pinned to `~0.5` deliberately: 0.6 moves to `cipher` 0.5 / `aes`
-0.9, which is incompatible with this workspace's `aes ~0.8`. `ccm` is pinned to
-the `0.5` release line rather than the `0.6.0-rc` prerelease.
+`ccm` is pinned to the `0.5` release line rather than the `0.6.0-rc` prerelease.
+
+### Why `xts-mode ~0.5` adds no AES generation
+
+Measured, not assumed. `xts-mode` 0.5.1 requires `cipher ^0.4`, which is the same
+generation this workspace already pins through `aes ~0.8`. `cargo tree -p
+volume-bitlocker` shows the whole crate resolving to `aes 0.8.4` and `cipher
+0.4.4`, with `xts-mode 0.5.1` and the already-present `byteorder 1.5.0` as the
+only additions.
+
+`xts-mode` 0.6 would move to `cipher` 0.5 / `aes` 0.9. That is the version to
+avoid, and not because 0.9 is absent: `Cargo.lock` already carries **both** `aes`
+0.8.4 and 0.9.1. The 0.9 edge comes from `lopdf` 0.44 through `app-services` for
+PDF decryption, entirely separate from the evidence-cipher path. Taking
+`xts-mode` 0.6 would put a third crypto stack in the tree and split
+`volume-bitlocker`'s own AES between two generations for no capability gain.
+
+The pre-existing 0.8/0.9 duplication is out of scope here. `deny.toml` sets
+`multiple-versions = "warn"`, so it needs no ban exception, and collapsing it
+would mean changing the PDF path.
 
 Both licenses are already in the `deny.toml` allow list, so no license exception
 is required. No advisory exception is required.
+
+### Accepted limitation: AES key-schedule residue
+
+`aes` 0.8 exposes only a `hazmat` feature — there is no `zeroize` there. The FVEK
+and tweak bytes in `VolumeKeyPackage` are wiped on drop, but the expanded key
+schedules inside the `Aes128` / `Aes256` values held by `SectorCipher` are not.
+
+`aes` 0.9 does offer key-schedule zeroization, and adopting it would break
+`xts-mode` 0.5 as described above. The residue is therefore accepted for v1 and
+bounded structurally instead: one `SectorCipher` exists per unlocked volume rather
+than per read, so the number of live schedules is the number of unlocked volumes,
+not the number of reads. Revisit when a maintained XTS crate tracks `cipher` 0.5.
 
 ## Attribution
 

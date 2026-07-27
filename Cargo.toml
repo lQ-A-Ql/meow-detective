@@ -115,6 +115,10 @@ aes = "~0.8"
 # AES-CCM unwraps the BitLocker VMK and FVEK. Pinned to the 0.5 release line
 # rather than the 0.6 prerelease.
 ccm = "~0.5"
+# XTS-AES sector mode for BitLocker methods 0x8004/0x8005. Pinned to ~0.5, which
+# tracks cipher 0.4 and therefore the aes 0.8 line above. 0.6 moves to cipher 0.5
+# / aes 0.9 and would add a third AES generation to the tree for no gain.
+xts-mode = "~0.5"
 cipher = "~0.4"
 zeroize = "~1"
 rand = "~0.8"
