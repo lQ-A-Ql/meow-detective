@@ -12,7 +12,7 @@
 - **优先处理**：Windows 证据处理、Windows 制品解析（`artifacts-windows`）、Windows 相关应用服务与前端展示。
 - **暂不处理**：Linux/macOS 制品解析器接入流水线、Linux/macOS 前端面板、PST/OST/mbox 邮件容器端到端集成。
   - 这些模块的 crate 级实现可继续保留，但不在当前 sprint 中修复其接入问题。
-- **证据处理通用层**（`evidence-core`、`image-raw`、`image-e01`、`fs-ntfs`、`fs-fat`、`fs-exfat`）属于 Windows 取证基础，纳入优先范围。
+- **证据处理通用层**（`evidence-core`、`image-e01`、`fs-ntfs`、`fs-fat`、`fs-exfat`）属于 Windows 取证基础，纳入优先范围。
 
 ### 1.2 工作类型优先级
 按以下顺序投入精力：

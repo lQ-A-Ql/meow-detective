@@ -113,11 +113,14 @@ fn classify_mbr_partition_type_known_types() {
         MbrPartitionStatus::Supported
     );
 
-    // BitLocker
-    assert_eq!(classify_mbr_partition_type(0x42).name, "BitLocker");
+    // 0x42 is LDM, not BitLocker.
+    assert_eq!(
+        classify_mbr_partition_type(0x42).name,
+        "Windows dynamic disk (LDM)"
+    );
     assert_eq!(
         classify_mbr_partition_type(0x42).status,
-        MbrPartitionStatus::EncryptedBitLocker
+        MbrPartitionStatus::Unsupported
     );
 
     // Unsupported Linux
@@ -136,6 +139,21 @@ fn classify_mbr_partition_type_known_types() {
 
     // Unknown
     assert_eq!(classify_mbr_partition_type(0xFE).name, "Unknown");
+}
+
+#[test]
+fn no_mbr_type_byte_reports_bitlocker() {
+    // MBR has no BitLocker partition type. Windows leaves the original type byte
+    // (normally 0x07) in place on an encrypted MBR volume, so claiming any byte
+    // means BitLocker would both mislabel real volumes (0x42 = dynamic disk) and
+    // let a caller skip the `-FVE-FS-` boot-sector check that actually detects it.
+    for byte in 0u8..=0xFF {
+        assert_ne!(
+            classify_mbr_partition_type(byte).status,
+            MbrPartitionStatus::EncryptedBitLocker,
+            "MBR type byte {byte:#04X} must not classify as BitLocker"
+        );
+    }
 }
 
 #[test]

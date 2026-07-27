@@ -11,7 +11,6 @@ members = [
   "crates/fs-ntfs",
   "crates/fs-fat",
   "crates/fs-exfat",
-  "crates/image-raw",
   "crates/image-e01",
   "crates/mcp-client",
   "crates/search",
@@ -74,7 +73,6 @@ fs-ext4 = { path = "crates/fs-ext4" }
 fs-btrfs = { path = "crates/fs-btrfs" }
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }
-image-raw = { path = "crates/image-raw" }
 image-e01 = { path = "crates/image-e01" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }

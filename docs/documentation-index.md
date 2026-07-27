@@ -86,7 +86,7 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 28 | `crates/`（Tauri shell 为独立 workspace package） |
+| Rust workspace crate | 27 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 105 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 28 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 40 logical repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` 与 `*_repo/`；包含 `deleted_recovery_repo` |

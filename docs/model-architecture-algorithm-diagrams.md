@@ -43,7 +43,6 @@ flowchart LR
   NTFS["fs-ntfs"]
   FAT["fs-fat"]
   EXFAT["fs-exfat"]
-  Raw["image-raw"]
   E01["image-e01"]
   Search["search"]
   Timeline["timeline"]
@@ -61,7 +60,6 @@ flowchart LR
   App --> NTFS
   App --> FAT
   App --> EXFAT
-  App --> Raw
   App --> E01
   App --> Search
   App --> Timeline

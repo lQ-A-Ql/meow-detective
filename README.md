@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 105 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 27 Rust crates, 10 frontend pages, 105 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance. See `docs/progress-ledger.md` for the verified milestone trail.
 
@@ -75,7 +75,7 @@ cd frontend && pnpm test
 | `crates/persistence-sqlite/` | SQLite repos (40) and migration scripts (70) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
-| `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
+| `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |

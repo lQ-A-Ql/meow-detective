@@ -61,9 +61,13 @@ pub fn classify_mbr_partition_type(type_code: u8) -> MbrPartitionClass {
             name: "Hidden FAT32 (LBA)",
             status: MbrPartitionStatus::Supported,
         },
+        // 0x42 is LDM (Windows dynamic disk), not BitLocker. A BitLocker volume
+        // on an MBR disk keeps its original type byte (normally 0x07), so the
+        // partition table cannot identify it — only the `-FVE-FS-` boot-sector
+        // signature can (see `volume::fs_magic`).
         0x42 => MbrPartitionClass {
-            name: "BitLocker",
-            status: MbrPartitionStatus::EncryptedBitLocker,
+            name: "Windows dynamic disk (LDM)",
+            status: MbrPartitionStatus::Unsupported,
         },
         0x82 => MbrPartitionClass {
             name: "Linux swap",
