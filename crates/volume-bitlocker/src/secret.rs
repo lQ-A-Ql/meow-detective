@@ -77,7 +77,7 @@ impl VolumeKeyPackage {
     ///
     /// `tweak` is `Some` only for the XTS methods (`0x8004` / `0x8005`).
     #[must_use]
-    pub fn new(fvek: Vec<u8>, tweak: Option<Vec<u8>>) -> Self {
+    pub(crate) fn new(fvek: Vec<u8>, tweak: Option<Vec<u8>>) -> Self {
         Self {
             fvek: Zeroizing::new(fvek),
             tweak: tweak.map(Zeroizing::new),

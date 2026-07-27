@@ -6,9 +6,10 @@ use rusqlite::Connection;
 
 use crate::file_service::{
     viewer::{
-        descriptor_file_entry, open_descriptor_image_file, open_descriptor_image_file_with_context,
-        open_e01_file, open_e01_reader_cached, open_raw_file, resolve_partition_index_for_entry,
-        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
+        descriptor_file_entry, exact_partition_candidate, open_descriptor_image_file,
+        open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
+        open_raw_file, resolve_partition_index_for_entry, validate_readable_file_entry,
+        PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -35,7 +36,14 @@ pub(crate) fn open_file_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    if descriptor.source_kind != "ceph_rbd" {
+    if matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+        && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
+    {
+        return open_file_content_for_descriptor(descriptor);
+    }
+    if descriptor.source_kind != "ceph_rbd"
+        && !matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+    {
         return open_file_content_for_descriptor(descriptor);
     }
     Ok(
@@ -79,7 +87,14 @@ pub(crate) fn open_range_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    if descriptor.source_kind != "ceph_rbd" {
+    if matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+        && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
+    {
+        return open_range_content_for_descriptor(descriptor);
+    }
+    if descriptor.source_kind != "ceph_rbd"
+        && !matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+    {
         return open_range_content_for_descriptor(descriptor);
     }
     open_descriptor_image_file_with_context(context, descriptor)

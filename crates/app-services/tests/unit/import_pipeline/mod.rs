@@ -148,6 +148,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         partition_name: Some("System Volume Information".to_string()),
         kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 2048,
+        length: None,
         source: crate::datasource_service::ImageFilesystemSource::GptPartition,
         lvm_identity: None,
     };
@@ -195,6 +196,7 @@ fn partition_root_names_preserve_meaningful_names() {
         partition_name: Some("Evidence Volume".to_string()),
         kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 4096,
+        length: None,
         source: crate::datasource_service::ImageFilesystemSource::GptPartition,
         lvm_identity: None,
     };

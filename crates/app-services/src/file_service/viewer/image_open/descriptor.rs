@@ -48,11 +48,89 @@ pub(crate) fn open_descriptor_image_file_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    open_descriptor_image_file(descriptor, |_: &Path| {
-        context
-            .open_evidence_reader(descriptor)
-            .map_err(|error| std::io::Error::other(error.to_string()))
-    })
+    let candidate = exact_partition_candidate(descriptor)?;
+    let paths = descriptor_image_path_candidates(descriptor);
+    match open_candidate_with_context(context, descriptor, candidate, &paths) {
+        Ok(Some(reader)) => Ok(reader),
+        Ok(None) => Err(FileServiceError::other(format!(
+            "Cannot open image-backed file '{}' from its exact partition",
+            descriptor.path
+        ))),
+        Err(error) => Err(error),
+    }
+}
+
+fn open_candidate_with_context<C>(
+    context: &mut C,
+    descriptor: &PreviewDescriptor,
+    candidate: &PreviewPartitionCandidate,
+    paths: &[String],
+) -> Result<Option<RangeContentReader>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    let (reader, fs_offset, filesystem_kind) =
+        context.open_candidate_block_reader(descriptor, candidate)?;
+    if filesystem_kind == "NTFS" {
+        return open_first_image_path_seekable(
+            &fs_ntfs::NtfsReader::open(reader, fs_offset)?,
+            paths,
+        )
+        .map(Some)
+        .map_err(FileServiceError::Io);
+    }
+    if is_linux_filesystem_kind(&filesystem_kind) {
+        let filesystem = match filesystem_kind.as_str() {
+            kind if kind.eq_ignore_ascii_case("ext4") => {
+                fs_ext4::Ext4Reader::open(reader, fs_offset).map(|filesystem| {
+                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+                })?
+            }
+            kind if kind.eq_ignore_ascii_case("xfs") => fs_xfs::XfsReader::open(reader, fs_offset)
+                .map(|filesystem| {
+                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+                })?,
+            kind if kind.eq_ignore_ascii_case("btrfs") => {
+                fs_btrfs::BtrfsReader::open(reader, fs_offset).map(|filesystem| {
+                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+                })?
+            }
+            _ => return Ok(None),
+        };
+        return open_first_image_path_seekable(filesystem.as_ref(), paths)
+            .map(Some)
+            .map_err(FileServiceError::Io);
+    }
+    if is_fat_filesystem_kind(&filesystem_kind) {
+        return match fs_fat::FatReader::open(reader, fs_offset) {
+            Ok(filesystem) => open_first_image_path_seekable(&filesystem, paths)
+                .map(Some)
+                .map_err(FileServiceError::Io),
+            Err(fat_error) => {
+                let (reader, fs_offset, _) =
+                    context.open_candidate_block_reader(descriptor, candidate)?;
+                match fs_exfat::ExfatReader::open(reader, fs_offset) {
+                    Ok(filesystem) => open_first_image_path_seekable(&filesystem, paths)
+                        .map(Some)
+                        .map_err(FileServiceError::Io),
+                    Err(exfat_error) => Err(FileServiceError::Io(std::io::Error::new(
+                        exfat_error.kind(),
+                        format!("FAT open failed: {fat_error}; exFAT open failed: {exfat_error}"),
+                    ))),
+                }
+            }
+        };
+    }
+    let mut reader = context.open_candidate_block_reader(descriptor, candidate)?;
+    if !is_exfat_filesystem_kind(&reader.2)
+        && !looks_like_exfat_boot_sector(reader.0.as_mut(), reader.1).unwrap_or(false)
+    {
+        return Ok(None);
+    }
+    let filesystem = fs_exfat::ExfatReader::open(reader.0, reader.1)?;
+    open_first_image_path_seekable(&filesystem, paths)
+        .map(Some)
+        .map_err(FileServiceError::Io)
 }
 
 fn open_candidate<F>(

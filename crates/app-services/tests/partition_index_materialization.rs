@@ -65,6 +65,7 @@ fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
         partition_name: None,
         kind: ImageFilesystemKind::Xfs,
         offset: 0,
+        length: None,
         source: ImageFilesystemSource::DirectVolume,
         lvm_identity: None,
     };

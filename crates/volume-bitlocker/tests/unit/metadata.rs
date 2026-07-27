@@ -65,6 +65,7 @@ fn build_block(spec: &BlockSpec<'_>) -> Vec<u8> {
     if spec.with_signature {
         block[0..8].copy_from_slice(b"-FVE-FS-");
     }
+    block[10..12].copy_from_slice(&2u16.to_le_bytes());
     block[28..32].copy_from_slice(&spec.volume_header_sectors.to_le_bytes());
     block[32..40].copy_from_slice(&0x1000u64.to_le_bytes());
     block[40..48].copy_from_slice(&0x2000u64.to_le_bytes());
@@ -356,34 +357,48 @@ fn a_truncated_block_parses_without_panicking() {
 }
 
 #[test]
-fn an_oversized_metadata_size_is_bounded_by_the_block() {
-    // The size field is attacker-controllable. Trusting it would read past the
-    // buffer; the parser must clamp to what was actually read.
+fn an_oversized_metadata_size_is_rejected() {
     let entries = vmk_entry(0x2000);
     let block = build_block(&BlockSpec {
         entries: &entries,
         metadata_size: Some(u32::MAX),
         ..BlockSpec::default()
     });
-    let metadata = FveMetadata::parse(&block, 512).expect("still parses");
-    assert_eq!(metadata.metadata_size, u32::MAX);
-    assert_eq!(
-        metadata.vmk_entries().count(),
-        1,
-        "the entry walk stopped at the buffer end"
-    );
+    assert!(FveMetadata::parse(&block, 512).is_none());
 }
 
 #[test]
-fn an_undersized_metadata_size_yields_no_entries() {
-    // A size below the 48-byte metadata header leaves no room for entries, which
-    // must be an empty list rather than a reversed range.
+fn an_undersized_metadata_size_is_rejected() {
     let entries = vmk_entry(0x2000);
     let block = build_block(&BlockSpec {
         entries: &entries,
         metadata_size: Some(8),
         ..BlockSpec::default()
     });
-    let metadata = FveMetadata::parse(&block, 512).expect("still parses");
-    assert!(metadata.entries.is_empty());
+    assert!(FveMetadata::parse(&block, 512).is_none());
+}
+
+#[test]
+fn a_corrupt_top_level_entry_tail_rejects_the_copy() {
+    let mut entries = vmk_entry(0x2000);
+    entries.extend_from_slice(&[0x10, 0x00, 0x02]);
+    let block = build_block(&BlockSpec {
+        entries: &entries,
+        ..BlockSpec::default()
+    });
+    assert!(FveMetadata::parse(&block, 512).is_none());
+}
+
+#[test]
+fn only_v2_metadata_blocks_are_accepted() {
+    let mut block = build_block(&BlockSpec::default());
+    block[10..12].copy_from_slice(&1u16.to_le_bytes());
+    assert!(FveMetadata::parse(&block, 512).is_none());
+}
+
+#[test]
+fn unreasonable_sector_sizes_are_rejected() {
+    let block = build_block(&BlockSpec::default());
+    assert!(FveMetadata::parse(&block, 256).is_none());
+    assert!(FveMetadata::parse(&block, 8192).is_none());
 }

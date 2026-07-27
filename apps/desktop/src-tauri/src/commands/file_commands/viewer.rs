@@ -116,7 +116,8 @@ pub async fn get_document_preview(
     tauri::async_runtime::spawn_blocking(move || {
         let connection = crate::commands::command_support::get_case_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
-        file_service::document_preview_for_source_case(
+        file_service::document_preview_for_source_case_with_bitlocker(
+            &app_state.bitlocker_runtime,
             &connection,
             &active.case_root,
             &active.meta.id,
@@ -134,7 +135,8 @@ pub(super) fn read_file_range_for_state(
 ) -> Result<ViewerRangeResponseDto, CommandError> {
     let connection = crate::commands::command_support::get_case_connection(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::read_preview_session_range_for_case(
+    file_service::read_preview_session_range_for_case_with_bitlocker(
+        &state.bitlocker_runtime,
         &state.preview_runtime,
         &connection,
         &active.case_root,
@@ -150,7 +152,8 @@ pub(super) fn image_preview_for_file(
     file_id: &str,
 ) -> Result<ImagePreviewDto, CommandError> {
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::image_preview_for_source_case(
+    file_service::image_preview_for_source_case_with_bitlocker(
+        &state.bitlocker_runtime,
         connection,
         &active.case_root,
         &active.meta.id,
@@ -166,7 +169,8 @@ pub(super) fn text_preview_for_file(
     max_bytes: Option<usize>,
 ) -> Result<TextPreviewDto, CommandError> {
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::text_preview_for_source_case(
+    file_service::text_preview_for_source_case_with_bitlocker(
+        &state.bitlocker_runtime,
         connection,
         &active.case_root,
         &active.meta.id,

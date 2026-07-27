@@ -164,6 +164,7 @@ dependencies = [
  "transport",
  "unicode-normalization",
  "uuid",
+ "volume-bitlocker",
  "zip",
 ]
 

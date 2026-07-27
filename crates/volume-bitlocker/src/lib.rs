@@ -10,13 +10,13 @@
 //!
 //! The layer works end to end in isolation. Given a volume reader it reports the
 //! cipher and the full protector inventory with no credential; given a password or
-//! recovery password it produces a *verified* [`VolumeKeyPackage`]; and given that
-//! package it presents the volume as plaintext through [`BitLockerReader`].
+//! recovery password it produces a [`VerifiedUnlock`], whose cipher state presents
+//! the volume as plaintext through [`BitLockerReader`].
 //!
-//! It has no production callers yet. Wiring it into
-//! `open_candidate_block_reader_with_lvm_cache` and resolving the eleven
-//! `ImageFilesystemKind::BitLocker` gate points is Stage 2b, which needs the
-//! runtime key registry.
+//! The read path is integrated through the application service's verified
+//! unlock registry. Credential entry, import enumeration, and persistence of
+//! verified key packages remain later stages; the crate itself never owns those
+//! application concerns.
 //!
 //! See `docs/bitlocker-volume-layer-design.md` for the staged plan and
 //! `docs/bitlocker-dependency-decision.md` for upstream provenance.
@@ -60,7 +60,8 @@ pub use metadata::{FveMetadata, MetadataEntry};
 pub use method::EncryptionMethod;
 pub use protector::{ProtectorInventory, ProtectorKind};
 pub use reader::{BitLockerReader, UnlockedVolume};
-pub use secret::{Passphrase, VolumeKeyPackage};
+pub use secret::Passphrase;
 pub use unlock::{
-    read_volume_identity, unlock_with_password, unlock_with_recovery_password, VolumeIdentity,
+    read_volume_identities, read_volume_identity, unlock_volume_with_password,
+    unlock_volume_with_recovery_password, VerifiedUnlock, VolumeIdentity,
 };

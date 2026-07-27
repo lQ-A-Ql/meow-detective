@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use base64::Engine;
 use domain::{CaseId, DataSourceId};
@@ -97,6 +97,35 @@ pub fn read_preview_session_range_for_case(
     case_id: &CaseId,
     request: &ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, FileServiceError> {
+    read_preview_session_range_internal(registry, case_conn, case_root, case_id, request, None)
+}
+
+pub fn read_preview_session_range_for_case_with_bitlocker(
+    bitlocker_runtime: &Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
+    registry: &PreviewRuntimeRegistry,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    request: &ViewerRangeRequestDto,
+) -> Result<ViewerRangeResponseDto, FileServiceError> {
+    read_preview_session_range_internal(
+        registry,
+        case_conn,
+        case_root,
+        case_id,
+        request,
+        Some(bitlocker_runtime),
+    )
+}
+
+fn read_preview_session_range_internal(
+    registry: &PreviewRuntimeRegistry,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    request: &ViewerRangeRequestDto,
+    bitlocker_runtime: Option<&Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
+) -> Result<ViewerRangeResponseDto, FileServiceError> {
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let session = registry.get_session(&case_id.0, &request.handle_id)?;
@@ -111,7 +140,12 @@ pub fn read_preview_session_range_for_case(
     }
 
     request.handle_id = format!("file:{}", session.global_file_id());
-    read_file_range_for_source_case(case_conn, case_root, case_id, &request)
+    match bitlocker_runtime {
+        Some(runtime) => crate::file_service::read_file_range_for_source_case_with_bitlocker(
+            runtime, case_conn, case_root, case_id, &request,
+        ),
+        None => read_file_range_for_source_case(case_conn, case_root, case_id, &request),
+    }
 }
 
 pub fn read_preview_session_media_range_for_case(
@@ -120,6 +154,37 @@ pub fn read_preview_session_media_range_for_case(
     case_root: &Path,
     case_id: &CaseId,
     request: &MediaRangeRequestDto,
+) -> Result<MediaRangeResponseDto, FileServiceError> {
+    read_preview_session_media_range_internal(
+        registry, case_conn, case_root, case_id, request, None,
+    )
+}
+
+pub fn read_preview_session_media_range_for_case_with_bitlocker(
+    bitlocker_runtime: &Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
+    registry: &PreviewRuntimeRegistry,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    request: &MediaRangeRequestDto,
+) -> Result<MediaRangeResponseDto, FileServiceError> {
+    read_preview_session_media_range_internal(
+        registry,
+        case_conn,
+        case_root,
+        case_id,
+        request,
+        Some(bitlocker_runtime),
+    )
+}
+
+fn read_preview_session_media_range_internal(
+    registry: &PreviewRuntimeRegistry,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    request: &MediaRangeRequestDto,
+    bitlocker_runtime: Option<&Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 ) -> Result<MediaRangeResponseDto, FileServiceError> {
     let session = registry.get_session(&case_id.0, &request.handle_id)?;
     if request.offset >= session.size() {
@@ -134,15 +199,31 @@ pub fn read_preview_session_media_range_for_case(
         .length
         .min(transport::dto::MAX_VIEWER_RANGE_LENGTH)
         .min((session.size() - request.offset).min(u32::MAX as u64) as u32);
-    let bytes = read_preview_session_bytes_for_case(
-        registry,
-        case_conn,
-        case_root,
-        case_id,
-        &request.handle_id,
-        request.offset,
-        readable_len,
-    )?;
+    let range_request = ViewerRangeRequestDto {
+        handle_id: request.handle_id.clone(),
+        offset: request.offset,
+        length: readable_len,
+    };
+    let response = match bitlocker_runtime {
+        Some(runtime) => read_preview_session_range_for_case_with_bitlocker(
+            runtime,
+            registry,
+            case_conn,
+            case_root,
+            case_id,
+            &range_request,
+        )?,
+        None => read_preview_session_range_for_case(
+            registry,
+            case_conn,
+            case_root,
+            case_id,
+            &range_request,
+        )?,
+    };
+    let bytes = response
+        .raw_bytes
+        .ok_or_else(|| FileServiceError::other("Preview session returned no bytes"))?;
     let bytes_read = bytes.len();
     Ok(MediaRangeResponseDto {
         offset: request.offset,
@@ -161,17 +242,13 @@ pub fn read_preview_session_bytes_for_case(
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
-    let response = read_preview_session_range_for_case(
-        registry,
-        case_conn,
-        case_root,
-        case_id,
-        &ViewerRangeRequestDto {
-            handle_id: handle_id.to_string(),
-            offset,
-            length,
-        },
-    )?;
+    let request = ViewerRangeRequestDto {
+        handle_id: handle_id.to_string(),
+        offset,
+        length,
+    };
+    let response =
+        read_preview_session_range_for_case(registry, case_conn, case_root, case_id, &request)?;
     response
         .raw_bytes
         .ok_or_else(|| FileServiceError::other("Preview session returned no bytes"))

@@ -69,7 +69,7 @@ pub(crate) fn e01_partition_candidates(
 pub(crate) fn is_previewable_partition_status(status: &str) -> bool {
     matches!(
         status.to_ascii_lowercase().as_str(),
-        "supported" | "queued" | "done" | "ready"
+        "supported" | "queued" | "done" | "ready" | "encrypted_bitlocker"
     )
 }
 
@@ -114,7 +114,7 @@ pub(crate) fn raw_partition_candidates(
         let filesystem_kind = match candidate.kind {
             crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
             crate::datasource_service::ImageFilesystemKind::Fat => "FAT",
-            crate::datasource_service::ImageFilesystemKind::BitLocker => continue,
+            crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
             crate::datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
             crate::datasource_service::ImageFilesystemKind::Xfs => "XFS",
             crate::datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",

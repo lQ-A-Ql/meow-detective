@@ -121,6 +121,53 @@ fn identity_tries_every_copy_before_failing() {
 }
 
 #[test]
+fn identity_continues_after_a_copy_read_failure() {
+    let mut volume = build_volume(&VolumeSpec {
+        protectors: &[Credential::Password(TEST_PASSWORD)],
+        ..VolumeSpec::default()
+    });
+    volume.image[440..448].copy_from_slice(&0x8000u64.to_le_bytes());
+    volume.image[448..456].copy_from_slice(&META_BLOCK_OFFSET.to_le_bytes());
+    assert!(identity_of(volume.image).is_ok());
+}
+
+#[test]
+fn volume_unlock_falls_back_after_a_complete_copy_fails_key_validation() {
+    let mut volume = build_volume(&VolumeSpec {
+        protectors: &[Credential::Password(TEST_PASSWORD)],
+        ..VolumeSpec::default()
+    });
+    let first = META_BLOCK_OFFSET as usize;
+    let metadata_size = u32::from_le_bytes(
+        volume.image[first + 64..first + 68]
+            .try_into()
+            .expect("fixed metadata-size slice"),
+    ) as usize;
+    let block_len = 64 + metadata_size;
+    let healthy_copy = volume.image[first..first + block_len].to_vec();
+    let second = 0x2000usize;
+    volume.image[second..second + block_len].copy_from_slice(&healthy_copy);
+    volume.image[448..456].copy_from_slice(&(second as u64).to_le_bytes());
+
+    // Both copies remain structurally valid, but the first advertises a cipher
+    // that cannot build an unlocked reader. The second must still be attempted.
+    volume.image[first + 64 + 36..first + 64 + 38].copy_from_slice(&0x8001u16.to_le_bytes());
+    let hash = password_hash(TEST_PASSWORD);
+    let unlocked = unlock_volume_with_hash(
+        &mut Cursor::new(volume.image),
+        ProtectorKind::Password,
+        PROTECTION_PASSWORD,
+        &hash,
+        TEST_ITERATIONS,
+    )
+    .expect("healthy redundant copy unlocks");
+    assert_eq!(
+        unlocked.identity().metadata.encryption_method,
+        EncryptionMethod::Aes128CbcDiffuser
+    );
+}
+
+#[test]
 fn identity_error_names_the_candidate_offsets() {
     let volume = build_volume(&VolumeSpec {
         with_block_signature: false,
@@ -360,11 +407,15 @@ fn full_stretch_matches_the_production_path() {
     let expected_fvek = volume.fvek.clone();
     let identity = identity_of(volume.image).expect("readable");
 
-    let package = unlock_with_password(
+    let hash = password_hash(TEST_PASSWORD);
+    let package = derive_key_package(
         &identity.metadata,
-        &Passphrase::new(TEST_PASSWORD.to_string()),
+        ProtectorKind::Password,
+        PROTECTION_PASSWORD,
+        &hash,
+        STRETCH_ITERATIONS,
     )
-    .expect("the production path must unlock a volume built at the same count");
+    .expect("the production derivation must unlock a volume built at the same count");
     assert_eq!(package.expose_fvek(), expected_fvek.as_slice());
 }
 

@@ -44,7 +44,8 @@ pub(super) fn media_data_url_for_file(
     file_id: &str,
 ) -> Result<MediaUrlDto, CommandError> {
     let active = crate::commands::command_support::require_active_case(state)?;
-    let plan = file_service::media_preview_plan_for_source_case(
+    let plan = file_service::media_preview_plan_for_source_case_with_bitlocker(
+        &state.bitlocker_runtime,
         connection,
         &active.case_root,
         &active.meta.id,
@@ -83,7 +84,8 @@ pub(super) fn media_range_for_file(
     request: &MediaRangeRequestDto,
 ) -> Result<MediaRangeResponseDto, CommandError> {
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::read_preview_session_media_range_for_case(
+    file_service::read_preview_session_media_range_for_case_with_bitlocker(
+        &state.bitlocker_runtime,
         &state.preview_runtime,
         connection,
         &active.case_root,

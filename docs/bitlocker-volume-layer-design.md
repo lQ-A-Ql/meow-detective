@@ -1,6 +1,6 @@
 # BitLocker 卷层设计
 
-**状态**: Stage 0 边界冻结（2026-07-27）
+**状态**: Stage 2b 读路径接入完成，Stage 3 服务与导入编排待实施（2026-07-27）
 **范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
 **事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
 `docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
@@ -9,10 +9,14 @@
 
 ## 0. 当前状态（代码事实）
 
-BitLocker 目前是"识别即跳过"。检测唯一入口是引导扇区签名
+BitLocker 仍由引导扇区签名
 `crates/app-services/src/datasource_service/fs_magic.rs:93` 的 `-FVE-FS-`
-（偏移 3，8 字节），映射成 `ImageFilesystemKind::BitLocker`，随后被 11 个
-gate point 一致地当作不可读卷处理：
+（偏移 3，8 字节）识别并记录为 `ImageFilesystemKind::BitLocker`。Stage 2b
+读路径只有在运行时注册了已验证的 `VerifiedUnlock` 后，才会在精确分区窗口内
+构造 `BitLockerReader`，重新探测明文 NTFS/FAT/exFAT，并将读者交给预览链路。
+未注册密钥时仍返回 typed `Unsupported`，导入枚举仍跳过并记录锁定状态。
+
+Stage 2b 的实际接入点如下：
 
 | 位置 | 当前行为 |
 |------|---------|
@@ -20,17 +24,15 @@ gate point 一致地当作不可读卷处理：
 | `datasource_service/fs_magic.rs:24` | 签名命中即返回该 kind |
 | `datasource_service/probe.rs:296` | 映射 `PartitionStatus::EncryptedBitLocker` |
 | `datasource_service/probe/gpt.rs:130` | GPT 分区不推导文件系统 |
-| `file_service/filesystem_locators.rs:228` | 不定位文件系统读者 |
-| `file_service/partition_roots.rs:319` | 根节点仅显示名字 |
-| `file_service/viewer/partition.rs:117` | 预览枚举直接 `continue` |
-| `import_pipeline/partition/candidates.rs:166` | 排除出导入候选 |
-| `import_pipeline/partition/candidates.rs:362` | 产出 `Skipping locked …` 警告 |
-| `import_pipeline/partition/status.rs:9` | 状态字符串 `"BitLocker"` |
-| `import_pipeline/partition/work.rs:62` | 返回 `Ok(None)`，不排工作项 |
+| `file_service/source_read/bitlocker.rs` | 按 source + partition 路由解密卷 |
+| `file_service/viewer/range/*` | Hex/range、文本、图片、文档和媒体范围读取统一走解密读者 |
+| `bitlocker_runtime/*` | 仅缓存 `Arc<UnlockedVolume>`，按 case/source/partition/fingerprint 隔离 |
+| `apps/desktop/src-tauri/src/commands/file_commands/*` | 实际预览命令注入 BitLocker runtime |
+| `import_pipeline/partition/*` | 未解锁时仍排除导入工作项，并保留锁定提示 |
 
-这 11 处全部是对 `ImageFilesystemKind` 的穷尽 `match`，所以新增解密分支会让
-每一处变成编译错误。这是设计上的安全网：不存在"漏改一个入口导致静默跳过"
-的可能，也因此 Stage 2 的改动面是可枚举、可验证的。
+文件系统候选和导入 gate 仍保持穷尽处理，预览侧则先依据 source-local 分区元数据
+判断是否需要解密，再进入统一的文件系统打开逻辑。这能避免普通 E01/RAW 预览绕过
+既有优化读路径，也避免把密文误交给明文文件系统解析器。
 
 两个已在 Stage 0 之前修掉的前置错误：
 
@@ -141,7 +143,7 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 | 0 ✅ | 边界冻结 | 本文件 + 依赖决策定稿；两个 guard 上线；crate 骨架编译通过 |
 | 1 ✅ | 元数据与密钥层 | FVE 解析 + 密码/恢复密码推导；protector inventory 可枚举 |
 | 2a ✅ | 扇区 cipher 与明文读者 | 五种方法往返、区域映射、有界缓存、合并 I/O、端到端解密 |
-| 2b | 11 个 gate point | 11 处 match 全部显式处理；需要运行时密钥注册表 |
+| 2b ✅ | 预览读路径 | 运行时 verified unlock registry；分区窗口；Hex/文本/图片/文档/媒体统一路由；锁定返回 typed Unsupported |
 | 3 | 服务与导入编排 | 解锁/锁定用例；凭据以独立 secret 参数进入；phase 记录 |
 | 4 | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定 |
 | 5 | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离 |
@@ -149,7 +151,8 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 
 ### Stage 1 交付物（已完成 2026-07-27）
 
-`crates/volume-bitlocker` 112 个 lib 测试，零生产调用者（Stage 2 才接入读路径）：
+`crates/volume-bitlocker` 的元数据、解锁和 cipher 测试，以及 app-services 的
+运行时注册和预览路由测试：
 
 - `bytes.rs` — 越界即返回零值的小端读取器。输入是攻击者可控的卷，谎报的长度必须
   在上层变成解析失败，不能在证据读路径上 panic。
@@ -167,6 +170,13 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 - `unlock.rs` — 编排：定位 VMK → stretch → 解包 VMK → 解包 FVEK。两次 AES-CCM
   tag 校验都通过才返回，这是"已验证"的含义。
 
+Stage 2b 前阻断复审已加固元数据冗余副本语义：元数据按声明长度有界精读，拒绝
+非 v2 block、短 header、超过 `0x80000` 的 entries、截断 entry 尾部和不完整读取；
+密码/恢复密码解锁会对每个结构完整副本继续执行 VMK、FVEK 与 cipher 验证，只有整条
+链路成功才选中副本。单个副本的 seek/read/parse/unwrap 失败不会遮蔽后续健康副本。
+`VolumeKeyPackage` 构造和 metadata-level 派生不再是 crate 外部 API，外部只能取得
+`VerifiedUnlock`，避免调用方伪造“已验证”密钥包。
+
 Stage 1 的取舍记录：
 
 - stretch 轮数在 crate 内部函数上是参数，两个公开入口恒定传
@@ -178,8 +188,8 @@ Stage 1 的取舍记录：
 
 ### Stage 2a 交付物（已完成 2026-07-27）
 
-`crates/volume-bitlocker` 180 个 lib 测试(Stage 1 为 112),仍**零生产调用者** ——
-接入 11 个 gate point 是 2b。
+`crates/volume-bitlocker` 185 个 lib 测试（Stage 1 为 112）。Stage 2b 已在
+app-services 读路径接入，不改变该 crate 的只读边界。
 
 - `diffuser.rs` — vendor 进来的 Elephant Diffuser,只有解密方向。带上游回归向量,
   这是唯一能抓到"旋转常量写错"的检查:往返测试抓不到,因为两个方向会一起错。

@@ -371,6 +371,7 @@ fn build_logical_volume_candidate(
             partition_name: Some(format!("{vg_name}/{}", lv_info.name)),
             kind: fs_kind,
             offset: expanded.candidate_offset,
+            length: Some(lv_info.size_bytes),
             source: ImageFilesystemSource::LvmLogicalVolume,
             lvm_identity: Some(lvm_identity),
         },

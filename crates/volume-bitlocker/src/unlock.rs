@@ -11,29 +11,28 @@
 //!    decrypt anything; the sector reader is Stage 2.
 
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
+use crate::bytes::le_u32;
 use crate::error::{BitLockerError, Result};
 use crate::header::VolumeHeader;
 use crate::kdf::{
     aes_ccm_unwrap, password_hash, recovery_key_hash, stretch_key_n, STRETCH_ITERATIONS,
 };
 use crate::metadata::{
-    FveMetadata, MetadataEntry, PROTECTION_PASSWORD, PROTECTION_RECOVERY, VALUE_TYPE_AES_CCM,
-    VALUE_TYPE_STRETCH,
+    FveMetadata, MetadataEntry, BLOCK_HEADER_LEN, MAX_METADATA_ENTRIES_LEN, METADATA_HEADER_LEN,
+    PROTECTION_PASSWORD, PROTECTION_RECOVERY, VALUE_TYPE_AES_CCM, VALUE_TYPE_STRETCH,
 };
 use crate::protector::ProtectorKind;
+use crate::reader::UnlockedVolume;
 use crate::secret::{Passphrase, VolumeKeyPackage};
-
-/// How much of a metadata block to read before parsing it.
-///
-/// The FVE metadata region is small; 64 KiB covers the header, all entries, and
-/// slack without letting a lying size field pull an unbounded read into memory.
-const METADATA_READ_LEN: usize = 64 * 1024;
 
 /// The 512-byte volume header sector.
 const HEADER_LEN: usize = 512;
+/// Enough bytes to validate both fixed headers and obtain the metadata size.
+const METADATA_PREFIX_LEN: usize = BLOCK_HEADER_LEN + METADATA_HEADER_LEN;
 
 /// What a locked volume reveals without any credential.
 #[derive(Debug, Clone)]
@@ -42,6 +41,28 @@ pub struct VolumeIdentity {
     pub metadata: FveMetadata,
     /// Bytes per sector, from the volume header.
     pub bytes_per_sector: u16,
+}
+
+/// A volume identity paired with immutable cipher state produced only after both
+/// AES-CCM authentication checks succeed.
+pub struct VerifiedUnlock {
+    identity: VolumeIdentity,
+    volume: Arc<UnlockedVolume>,
+}
+
+impl VerifiedUnlock {
+    /// The metadata copy that produced the verified keys.
+    #[must_use]
+    pub fn identity(&self) -> &VolumeIdentity {
+        &self.identity
+    }
+
+    /// Transfers the verified identity and shared plaintext-volume state to the
+    /// runtime registry.
+    #[must_use]
+    pub fn into_unlocked_volume(self) -> (VolumeIdentity, Arc<UnlockedVolume>) {
+        (self.identity, self.volume)
+    }
 }
 
 /// Reads the volume header and the first valid FVE metadata block.
@@ -59,48 +80,74 @@ pub struct VolumeIdentity {
 /// no candidate offset yields a valid block; [`BitLockerError::EvidenceRead`] when
 /// the underlying reader fails.
 pub fn read_volume_identity<R: Read + Seek>(reader: &mut R) -> Result<VolumeIdentity> {
-    let mut header_sector = [0u8; HEADER_LEN];
-    seek_to(reader, 0)?;
-    read_exact_at(reader, 0, &mut header_sector)?;
-    let header = VolumeHeader::parse(&header_sector)?;
-
-    let offsets = header.fve_metadata_offsets;
-    for &offset in &offsets {
-        if offset == 0 {
-            continue;
-        }
-        let mut block = vec![0u8; METADATA_READ_LEN];
-        seek_to(reader, offset)?;
-        let read = read_available(reader, offset, &mut block)?;
-        block.truncate(read);
-        if let Some(metadata) = FveMetadata::parse(&block, header.bytes_per_sector) {
-            return Ok(VolumeIdentity {
-                metadata,
-                bytes_per_sector: header.bytes_per_sector,
-            });
-        }
-    }
-
-    Err(BitLockerError::MetadataUnreadable {
-        reason: format!(
-            "no -FVE-FS- metadata block at any of the {} candidate offsets {offsets:?}",
-            offsets.iter().filter(|offset| **offset != 0).count()
-        ),
-    })
+    read_volume_identities(reader)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| BitLockerError::MetadataUnreadable {
+            reason: "the volume header contains no non-zero metadata offsets".to_string(),
+        })
 }
 
-/// Derives the verified key package for a volume using a password.
+/// Reads every structurally valid FVE metadata copy reachable from the volume
+/// header. A failed seek, short read, or malformed copy is isolated to that copy.
 ///
 /// # Errors
 ///
-/// See [`derive_key_package`].
-pub fn unlock_with_password(
-    metadata: &FveMetadata,
+/// Returns an evidence-read error when the volume header itself is unavailable,
+/// or metadata-unreadable after all non-zero copies fail validation.
+pub fn read_volume_identities<R: Read + Seek>(reader: &mut R) -> Result<Vec<VolumeIdentity>> {
+    let mut header_sector = [0u8; HEADER_LEN];
+    read_exact_at(reader, 0, &mut header_sector)?;
+    let header = VolumeHeader::parse(&header_sector)?;
+
+    let mut offsets = header
+        .fve_metadata_offsets
+        .into_iter()
+        .filter(|offset| *offset != 0)
+        .collect::<Vec<_>>();
+    offsets.dedup();
+    let mut identities = Vec::new();
+    let mut failures = Vec::new();
+    let mut index = 0usize;
+    while index < offsets.len() {
+        let offset = offsets[index];
+        index += 1;
+        match read_metadata_copy(reader, offset, header.bytes_per_sector) {
+            Ok(metadata) => {
+                for discovered in metadata.metadata_offsets {
+                    if discovered != 0 && !offsets.contains(&discovered) {
+                        offsets.push(discovered);
+                    }
+                }
+                identities.push(VolumeIdentity {
+                    metadata,
+                    bytes_per_sector: header.bytes_per_sector,
+                });
+            }
+            Err(error) => failures.push(format!("{offset:#X}: {error}")),
+        }
+    }
+
+    if identities.is_empty() {
+        return Err(BitLockerError::MetadataUnreadable {
+            reason: format!(
+                "no complete v2 metadata block at candidate offsets {offsets:?}; {}",
+                failures.join("; ")
+            ),
+        });
+    }
+    Ok(identities)
+}
+
+/// Unlocks a volume with a password, trying every complete metadata copy through
+/// VMK unwrap, FVEK unwrap, and cipher construction before failing.
+pub fn unlock_volume_with_password<R: Read + Seek>(
+    reader: &mut R,
     password: &Passphrase,
-) -> Result<VolumeKeyPackage> {
+) -> Result<VerifiedUnlock> {
     let hash = password_hash(password.expose_for_derivation());
-    derive_key_package(
-        metadata,
+    unlock_volume_with_hash(
+        reader,
         ProtectorKind::Password,
         PROTECTION_PASSWORD,
         &hash,
@@ -108,27 +155,105 @@ pub fn unlock_with_password(
     )
 }
 
-/// Derives the verified key package for a volume using a 48-digit recovery password.
-///
-/// # Errors
-///
-/// [`BitLockerError::CredentialRejected`] when the recovery password is
-/// structurally invalid, plus everything [`derive_key_package`] can return.
-/// A malformed recovery password maps to the same rejection as a wrong one so the
-/// distinction never reaches a caller that might report it.
-pub fn unlock_with_recovery_password(
-    metadata: &FveMetadata,
+/// Unlocks a volume with a 48-digit recovery password, trying every complete
+/// metadata copy before failing.
+pub fn unlock_volume_with_recovery_password<R: Read + Seek>(
+    reader: &mut R,
     recovery: &Passphrase,
-) -> Result<VolumeKeyPackage> {
+) -> Result<VerifiedUnlock> {
     let hash = recovery_key_hash(recovery.expose_for_derivation())
         .map_err(|_| BitLockerError::CredentialRejected)?;
-    derive_key_package(
-        metadata,
+    unlock_volume_with_hash(
+        reader,
         ProtectorKind::RecoveryPassword,
         PROTECTION_RECOVERY,
         &hash,
         STRETCH_ITERATIONS,
     )
+}
+
+fn unlock_volume_with_hash<R: Read + Seek>(
+    reader: &mut R,
+    protector: ProtectorKind,
+    protection_code: u16,
+    credential_hash: &[u8; 32],
+    iterations: u64,
+) -> Result<VerifiedUnlock> {
+    let identities = read_volume_identities(reader)?;
+    let mut preferred_error = None;
+    for identity in identities {
+        match derive_key_package(
+            &identity.metadata,
+            protector,
+            protection_code,
+            credential_hash,
+            iterations,
+        )
+        .and_then(|keys| UnlockedVolume::new(&identity.metadata, &keys))
+        {
+            Ok(volume) => {
+                return Ok(VerifiedUnlock {
+                    identity,
+                    volume: Arc::new(volume),
+                });
+            }
+            Err(error) => retain_preferred_error(&mut preferred_error, error),
+        }
+    }
+    Err(
+        preferred_error.unwrap_or_else(|| BitLockerError::MetadataUnreadable {
+            reason: "no metadata copy produced a verified volume key".to_string(),
+        }),
+    )
+}
+
+fn retain_preferred_error(slot: &mut Option<BitLockerError>, candidate: BitLockerError) {
+    let candidate_rank = unlock_error_rank(&candidate);
+    let current_rank = slot.as_ref().map(unlock_error_rank).unwrap_or(0);
+    if candidate_rank >= current_rank {
+        *slot = Some(candidate);
+    }
+}
+
+fn unlock_error_rank(error: &BitLockerError) -> u8 {
+    match error {
+        BitLockerError::CredentialRejected => 4,
+        BitLockerError::UnsupportedProtector { .. } => 3,
+        BitLockerError::UnsupportedEncryptionMethod { .. } => 2,
+        _ => 1,
+    }
+}
+
+fn read_metadata_copy<R: Read + Seek>(
+    reader: &mut R,
+    offset: u64,
+    bytes_per_sector: u16,
+) -> Result<FveMetadata> {
+    let mut prefix = [0u8; METADATA_PREFIX_LEN];
+    read_exact_at(reader, offset, &mut prefix)?;
+    let metadata_size = le_u32(&prefix, BLOCK_HEADER_LEN) as usize;
+    let entries_len = metadata_size
+        .checked_sub(METADATA_HEADER_LEN)
+        .ok_or_else(|| BitLockerError::MetadataUnreadable {
+            reason: format!("metadata copy at {offset:#X} has a header smaller than 48 bytes"),
+        })?;
+    if entries_len > MAX_METADATA_ENTRIES_LEN {
+        return Err(BitLockerError::MetadataUnreadable {
+            reason: format!(
+                "metadata copy at {offset:#X} declares {entries_len} entry bytes; maximum is {MAX_METADATA_ENTRIES_LEN}"
+            ),
+        });
+    }
+    let total_len = BLOCK_HEADER_LEN.checked_add(metadata_size).ok_or_else(|| {
+        BitLockerError::MetadataUnreadable {
+            reason: format!("metadata copy at {offset:#X} has an overflowing size"),
+        }
+    })?;
+    let mut block = vec![0u8; total_len];
+    read_exact_at(reader, offset, &mut block)?;
+    FveMetadata::parse(&block, bytes_per_sector).ok_or_else(|| BitLockerError::MetadataUnreadable {
+        reason: format!("metadata copy at {offset:#X} failed strict v2 validation"),
+    })
 }
 
 /// Derives and verifies the key package for one protector.
@@ -284,27 +409,11 @@ fn seek_to<R: Seek>(reader: &mut R, offset: u64) -> Result<()> {
 }
 
 /// Fills `buf` completely, treating a short read as a failure.
-fn read_exact_at<R: Read>(reader: &mut R, offset: u64, buf: &mut [u8]) -> Result<()> {
+fn read_exact_at<R: Read + Seek>(reader: &mut R, offset: u64, buf: &mut [u8]) -> Result<()> {
+    seek_to(reader, offset)?;
     reader
         .read_exact(buf)
         .map_err(|source| BitLockerError::EvidenceRead { offset, source })
-}
-
-/// Reads as much as is available, returning the byte count.
-///
-/// A metadata block near the end of a volume can legitimately be short, so this
-/// tolerates a partial read and lets the parser judge the result.
-fn read_available<R: Read>(reader: &mut R, offset: u64, buf: &mut [u8]) -> Result<usize> {
-    let mut filled = 0usize;
-    while filled < buf.len() {
-        match reader.read(&mut buf[filled..]) {
-            Ok(0) => break,
-            Ok(count) => filled += count,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(source) => return Err(BitLockerError::EvidenceRead { offset, source }),
-        }
-    }
-    Ok(filled)
 }
 
 #[cfg(test)]

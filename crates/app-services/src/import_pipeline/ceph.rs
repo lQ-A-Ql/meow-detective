@@ -132,6 +132,7 @@ fn open_bluestore_reader(
         partition_name: volume.name.clone(),
         kind: ImageFilesystemKind::LvmPool,
         offset: 0,
+        length: volume.size_bytes,
         source: volume.source,
         lvm_identity: volume.lvm_identity.clone(),
     };

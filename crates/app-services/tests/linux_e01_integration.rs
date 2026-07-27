@@ -749,6 +749,7 @@ fn synthetic_lvm_partition(
             partition_name: Some(name.to_string()),
             kind: ImageFilesystemKind::LvmPool,
             offset,
+            length: Some(SYNTHETIC_PV_SIZE),
             source: ImageFilesystemSource::GptPartition,
             lvm_identity: None,
         },

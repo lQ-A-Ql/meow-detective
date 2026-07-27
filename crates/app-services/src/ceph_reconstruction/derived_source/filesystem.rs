@@ -373,6 +373,7 @@ fn expand_one_rbd_lvm_pool(
             partition_name: Some(format!("{}/{}", identity.vg_name, identity.lv_name)),
             kind: fs_candidate.kind,
             offset: pool_candidate.offset,
+            length: Some(volume.size_bytes),
             source: ImageFilesystemSource::LvmLogicalVolume,
             lvm_identity: Some(identity.clone()),
         };

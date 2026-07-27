@@ -567,6 +567,7 @@ fn candidate(offset: u64, partition_index: Option<usize>) -> ImageFilesystemCand
         partition_name: None,
         kind: ImageFilesystemKind::Ntfs,
         offset,
+        length: None,
         source: ImageFilesystemSource::MbrPartition,
         lvm_identity: None,
     }

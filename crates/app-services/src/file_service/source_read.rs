@@ -17,6 +17,7 @@ use crate::{
         FileServiceError,
     },
 };
+mod bitlocker;
 mod derived_cache;
 mod metadata;
 mod stream;
@@ -74,6 +75,7 @@ pub(crate) struct SourceReadContext<'a> {
     derived_runtime: Option<Arc<DerivedRbdRuntime>>,
     derived_reads: DerivedSourceReadCache,
     cephfs_readers: HashMap<String, PreparedCephFsFileReader>,
+    bitlocker_runtime: Option<Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 }
 
 /// Per-worker state for reading a derived source through one shared runtime.
@@ -108,6 +110,7 @@ impl<'a> SourceReadContext<'a> {
             derived_runtime: None,
             derived_reads: DerivedSourceReadCache::default(),
             cephfs_readers: HashMap::new(),
+            bitlocker_runtime: None,
         }
     }
 
@@ -356,6 +359,21 @@ impl PreviewReadContext for SourceReadContext<'_> {
             Path::new(&descriptor.source_path),
             &self.case_id.0,
         )
+    }
+
+    fn open_candidate_block_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        candidate: &crate::file_service::viewer::PreviewPartitionCandidate,
+    ) -> Result<(Box<dyn evidence_core::EvidenceReader>, u64, String), FileServiceError> {
+        bitlocker::open_candidate_block_reader(self, descriptor, candidate)
+    }
+
+    fn is_bitlocker_candidate(
+        &self,
+        candidate: &crate::file_service::viewer::PreviewPartitionCandidate,
+    ) -> Result<bool, FileServiceError> {
+        bitlocker::is_bitlocker_candidate(self, candidate)
     }
 
     fn read_cephfs_range(

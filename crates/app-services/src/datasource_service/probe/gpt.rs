@@ -125,15 +125,23 @@ fn gpt_candidate(
             | ImageFilesystemKind::Ext4
             | ImageFilesystemKind::Xfs
             | ImageFilesystemKind::Btrfs
-            | ImageFilesystemKind::LvmPool),
+            | ImageFilesystemKind::LvmPool
+            | ImageFilesystemKind::BitLocker),
         ) => kind,
-        Some(ImageFilesystemKind::BitLocker) | None => return None,
+        None => return None,
     };
     Some(ImageFilesystemCandidate {
         partition_index: Some(partition.index),
         partition_name: Some(partition.name.clone()),
         kind,
         offset,
+        length: Some(
+            partition
+                .end_lba
+                .saturating_sub(partition.start_lba)
+                .saturating_add(1)
+                * SECTOR_SIZE,
+        ),
         source: ImageFilesystemSource::GptPartition,
         lvm_identity: None,
     })

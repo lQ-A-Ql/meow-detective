@@ -16,6 +16,13 @@ use crate::protector::{ProtectorInventory, ProtectorKind};
 
 const FVE_SIGNATURE: &[u8; 8] = b"-FVE-FS-";
 
+/// Bytes before the variable-size metadata header.
+pub(crate) const BLOCK_HEADER_LEN: usize = 64;
+/// Fixed part of the v2 metadata header, including its size field.
+pub(crate) const METADATA_HEADER_LEN: usize = 48;
+/// Largest metadata-entry region accepted from an untrusted volume.
+pub(crate) const MAX_METADATA_ENTRIES_LEN: usize = 0x80000;
+
 /// Entry type: a volume master key protector.
 pub(crate) const ENTRY_TYPE_VMK: u16 = 0x0002;
 /// Entry type: the wrapped full volume encryption key.
@@ -102,6 +109,33 @@ impl MetadataEntry {
         entries
     }
 
+    /// Parses a top-level sequence and requires every declared byte to belong to
+    /// a complete entry. Metadata-copy selection must never accept a valid prefix
+    /// followed by a corrupt tail.
+    fn parse_sequence_exact(data: &[u8]) -> Option<Vec<Self>> {
+        let mut entries = Vec::new();
+        let mut position = 0usize;
+        while position < data.len() {
+            let header_end = position.checked_add(8)?;
+            if header_end > data.len() {
+                return None;
+            }
+            let size = le_u16(data, position) as usize;
+            let end = position.checked_add(size)?;
+            if size < 8 || end > data.len() {
+                return None;
+            }
+            entries.push(Self {
+                entry_type: le_u16(data, position + 2),
+                value_type: le_u16(data, position + 4),
+                version: le_u16(data, position + 6),
+                data: slice_owned(data, position + 8, size - 8),
+            });
+            position = end;
+        }
+        Some(entries)
+    }
+
     /// Parses this entry's value data from `offset` as a nested entry sequence.
     #[must_use]
     pub fn nested(&self, offset: usize) -> Vec<Self> {
@@ -151,13 +185,17 @@ pub struct FveMetadata {
 impl FveMetadata {
     /// Parses an FVE metadata block starting at its block header.
     ///
-    /// Returns `None` when the `-FVE-FS-` block signature is absent, so a caller
-    /// walking the three copies can move to the next offset. This is also what
-    /// disambiguates a real BitLocker To Go volume from plain FAT: the `MSWIN4.1`
-    /// header signature is shared, but only an encrypted volume has this block.
+    /// Returns `None` unless the entire v2 block is structurally valid. In
+    /// particular, the declared metadata size must be present in full and every
+    /// top-level entry must be consumed. This prevents a signed but truncated
+    /// copy from hiding a healthy redundant copy.
     #[must_use]
     pub fn parse(block: &[u8], bytes_per_sector: u16) -> Option<Self> {
-        if block.get(0..8) != Some(FVE_SIGNATURE.as_slice()) {
+        if block.get(0..8) != Some(FVE_SIGNATURE.as_slice())
+            || le_u16(block, 10) != 2
+            || !supported_sector_size(bytes_per_sector)
+            || block.len() < BLOCK_HEADER_LEN + METADATA_HEADER_LEN
+        {
             return None;
         }
 
@@ -166,24 +204,26 @@ impl FveMetadata {
         let metadata_offsets = [le_u64(block, 32), le_u64(block, 40), le_u64(block, 48)];
         let block_volume_header_offset = le_u64(block, 56);
 
-        // The FVE metadata header starts at block offset 64.
-        let header = 64usize;
+        let header = BLOCK_HEADER_LEN;
         let metadata_size = le_u32(block, header);
+        let metadata_size_usize = metadata_size as usize;
+        if metadata_size_usize < METADATA_HEADER_LEN {
+            return None;
+        }
+        let entries_len = metadata_size_usize - METADATA_HEADER_LEN;
+        if entries_len > MAX_METADATA_ENTRIES_LEN {
+            return None;
+        }
+        let block_end = header.checked_add(metadata_size_usize)?;
+        if block_end > block.len() {
+            return None;
+        }
         let volume_guid = read_guid(block, header + 16);
         let encryption_method_code = le_u16(block, header + 36);
         let creation_time = le_u64(block, header + 40);
 
-        // Entries follow the 48-byte metadata header, bounded by metadata_size so
-        // an oversized field cannot walk past the block we actually read.
-        let entries_start = header + 48;
-        let entries_end = header
-            .saturating_add(metadata_size as usize)
-            .min(block.len());
-        let entries = if entries_end > entries_start {
-            MetadataEntry::parse_sequence(&block[entries_start..entries_end])
-        } else {
-            Vec::new()
-        };
+        let entries_start = header + METADATA_HEADER_LEN;
+        let entries = MetadataEntry::parse_sequence_exact(&block[entries_start..block_end])?;
 
         let (volume_header_offset, volume_header_size) = resolve_volume_header_region(
             &entries,
@@ -239,6 +279,10 @@ impl FveMetadata {
             .filter_map(MetadataEntry::protection_code)
             .collect()
     }
+}
+
+fn supported_sector_size(bytes_per_sector: u16) -> bool {
+    bytes_per_sector.is_power_of_two() && (512..=4096).contains(&bytes_per_sector)
 }
 
 /// Resolves the relocated volume-header region.

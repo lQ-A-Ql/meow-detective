@@ -51,6 +51,7 @@ fn image_candidate() -> ImageFilesystemCandidate {
         partition_name: Some("root".to_string()),
         kind: crate::datasource_service::ImageFilesystemKind::Xfs,
         offset: 4096,
+        length: None,
         source: crate::datasource_service::ImageFilesystemSource::LvmLogicalVolume,
         lvm_identity: None,
     }

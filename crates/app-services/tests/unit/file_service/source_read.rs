@@ -1,6 +1,44 @@
 use super::*;
 use domain::FileEntryId;
+use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::path::PathBuf;
 use tempfile::TempDir;
+
+struct MemoryEvidence {
+    cursor: Cursor<Vec<u8>>,
+    info: evidence_core::ReaderInfo,
+}
+
+impl MemoryEvidence {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            info: evidence_core::ReaderInfo {
+                path: PathBuf::from("memory.raw"),
+                size: bytes.len() as u64,
+                kind: "memory".to_string(),
+            },
+            cursor: Cursor::new(bytes),
+        }
+    }
+}
+
+impl Read for MemoryEvidence {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        self.cursor.read(bytes)
+    }
+}
+
+impl Seek for MemoryEvidence {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.cursor.seek(position)
+    }
+}
+
+impl evidence_core::EvidenceReader for MemoryEvidence {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        &self.info
+    }
+}
 
 #[test]
 fn descriptor_cache_is_bounded_for_large_analysis_scans() {
@@ -232,4 +270,153 @@ fn partition_candidate_cache_is_bounded() {
 
     assert_eq!(cache.len(), 1);
     assert!(cache.contains_key(&MAX_SOURCE_PARTITION_CACHE_ENTRIES));
+}
+
+#[test]
+fn encrypted_bitlocker_partitions_remain_preview_candidates() {
+    assert!(crate::file_service::viewer::is_previewable_partition_status("encrypted_bitlocker"));
+    assert!(!crate::file_service::viewer::is_previewable_partition_status("unsupported"));
+}
+
+#[test]
+fn bitlocker_plaintext_probe_resolves_ntfs_and_exfat() {
+    let mut ntfs = vec![0u8; 0x11000];
+    ntfs[3..11].copy_from_slice(b"NTFS    ");
+    let mut ntfs = MemoryEvidence::new(ntfs);
+    assert_eq!(
+        bitlocker::detect_plaintext_filesystem(&mut ntfs).unwrap(),
+        "NTFS"
+    );
+
+    let mut exfat = vec![0u8; 0x11000];
+    exfat[3..11].copy_from_slice(b"EXFAT   ");
+    exfat[11..13].copy_from_slice(&512u16.to_le_bytes());
+    exfat[108] = 9;
+    exfat[510] = 0x55;
+    exfat[511] = 0xAA;
+    let mut exfat = MemoryEvidence::new(exfat);
+    assert_eq!(
+        bitlocker::detect_plaintext_filesystem(&mut exfat).unwrap(),
+        "EXFAT"
+    );
+}
+
+#[test]
+fn bitlocker_candidate_detection_is_scoped_to_the_bound_source() {
+    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
+    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
+    source_conn
+        .execute_batch(
+            "INSERT INTO data_source_partitions
+             (id, data_source_id, partition_index, name, kind_label, status,
+              offset, length, filesystem)
+             VALUES
+             ('locked', 'source-a', 2, 'Encrypted', 'BitLocker', 'ready', 4096, 8192, 'NTFS'),
+             ('plain', 'source-b', 2, 'Plain', 'NTFS', 'ready', 4096, 8192, 'NTFS');",
+        )
+        .expect("insert partition metadata");
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
+    let case_root = TempDir::new().expect("create case root");
+    let case_id = CaseId("case-1".to_string());
+    let source_a = DataSourceId("source-a".to_string());
+    let source_b = DataSourceId("source-b".to_string());
+    let candidate = crate::file_service::viewer::PreviewPartitionCandidate {
+        partition_index: 2,
+        filesystem_kind: "NTFS".to_string(),
+        offset: 4096,
+        lvm_identity: None,
+    };
+
+    let context_a = SourceReadContext::new(
+        &source_conn,
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &source_a,
+    );
+    let context_b = SourceReadContext::new(
+        &source_conn,
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &source_b,
+    );
+
+    assert!(context_a.is_bitlocker_candidate(&candidate).unwrap());
+    assert!(!context_b.is_bitlocker_candidate(&candidate).unwrap());
+}
+
+#[test]
+fn locked_bitlocker_candidate_fails_before_plaintext_filesystem_open() {
+    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
+    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
+    source_conn
+        .execute(
+            "INSERT INTO data_source_partitions
+             (id, data_source_id, partition_index, name, kind_label, status,
+              offset, length, filesystem)
+             VALUES ('locked', 'source-a', 0, 'Encrypted', 'BitLocker', 'ready',
+                     0, 4096, 'NTFS')",
+            [],
+        )
+        .expect("insert partition metadata");
+    let raw = TempDir::new().expect("create raw evidence root");
+    let raw_path = raw.path().join("locked.raw");
+    std::fs::write(&raw_path, vec![0u8; 4096]).expect("write bounded raw image");
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
+    let case_root = TempDir::new().expect("create case root");
+    let case_id = CaseId("case-1".to_string());
+    let source_id = DataSourceId("source-a".to_string());
+    let mut context = SourceReadContext::new(
+        &source_conn,
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &source_id,
+    );
+    let descriptor = PreviewDescriptor {
+        case_id: case_id.0.clone(),
+        file_id: "locked-file".to_string(),
+        source_kind: "raw".to_string(),
+        source_path: raw_path.display().to_string(),
+        partition_index: Some(0),
+        filesystem_kind: Some("NTFS".to_string()),
+        path: "[P0]/locked.txt".to_string(),
+        mime: None,
+        size: 1,
+        data_source_id: source_id.0.clone(),
+        partition_candidates: Vec::new(),
+        entry_size: 1,
+        entry_modified_at: None,
+        ceph_fs: None,
+    };
+    let candidate = crate::file_service::viewer::PreviewPartitionCandidate {
+        partition_index: 0,
+        filesystem_kind: "NTFS".to_string(),
+        offset: 0,
+        lvm_identity: None,
+    };
+    let mut descriptor = descriptor;
+    descriptor.partition_candidates = vec![candidate.clone()];
+
+    let error = match context.open_candidate_block_reader(&descriptor, &candidate) {
+        Err(error) => error,
+        Ok(_) => panic!("locked volume must not expose a plaintext reader"),
+    };
+
+    assert!(matches!(error, FileServiceError::Unsupported(_)));
+    assert!(error.to_string().contains("BitLocker volume is locked"));
+    assert!(!error
+        .to_string()
+        .contains(raw_path.to_string_lossy().as_ref()));
+
+    let routed_error =
+        match crate::file_service::viewer::open_range_content_for_descriptor_with_context(
+            &mut context,
+            &descriptor,
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("locked range path must not bypass BitLocker routing"),
+        };
+    assert!(matches!(routed_error, FileServiceError::Unsupported(_)));
 }

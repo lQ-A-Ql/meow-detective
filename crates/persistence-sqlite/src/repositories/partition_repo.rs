@@ -118,6 +118,43 @@ impl<'a> PartitionRepo<'a> {
         Ok(result)
     }
 
+    pub fn find_by_data_source_and_index(
+        &self,
+        data_source_id: &str,
+        partition_index: usize,
+    ) -> DbResult<Option<DataSourcePartitionRecord>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, data_source_id, partition_index, name, kind_label, status, type_guid,
+                    offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
+                    lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json, lvm_pv_sources_json
+             FROM data_source_partitions
+             WHERE data_source_id = ?1 AND partition_index = ?2",
+        )?;
+        let mut rows = stmt.query(params![data_source_id, partition_index as u64])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        Ok(Some(DataSourcePartitionRecord {
+            id: row.get(0)?,
+            data_source_id: row.get(1)?,
+            partition_index: row.get(2)?,
+            name: row.get(3)?,
+            kind_label: row.get(4)?,
+            status: row.get(5)?,
+            type_guid: row.get(6)?,
+            offset: row.get(7)?,
+            length: row.get(8)?,
+            filesystem: row.get(9)?,
+            unlock_hint: row.get(10)?,
+            lvm_vg_uuid: row.get(11)?,
+            lvm_vg_name: row.get(12)?,
+            lvm_lv_uuid: row.get(13)?,
+            lvm_lv_name: row.get(14)?,
+            lvm_pv_offsets_json: row.get(15)?,
+            lvm_pv_sources_json: row.get(16)?,
+        }))
+    }
+
     /// 批量插入分区记录
     pub fn insert_batch(&self, records: &[DataSourcePartitionRecord]) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;

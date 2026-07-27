@@ -34,7 +34,14 @@ pub use extraction::{extract_file_to_destination, extract_file_to_destination_fo
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,
     preview_session_file_id, preview_session_metadata, read_preview_session_bytes_for_case,
-    read_preview_session_media_range_for_case, read_preview_session_range_for_case,
+    read_preview_session_media_range_for_case,
+    read_preview_session_media_range_for_case_with_bitlocker, read_preview_session_range_for_case,
+    read_preview_session_range_for_case_with_bitlocker,
+};
+pub use metadata::source_bitlocker::{
+    document_preview_for_source_case_with_bitlocker, image_preview_for_source_case_with_bitlocker,
+    media_preview_plan_for_source_case_with_bitlocker,
+    read_file_range_for_source_case_with_bitlocker, text_preview_for_source_case_with_bitlocker,
 };
 pub use metadata::source_routing::{
     document_preview_for_source_case, get_data_sources_for_case, get_file_children_for_case,

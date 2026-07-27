@@ -274,14 +274,17 @@ fn read_media_protocol_bytes(
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, (StatusCode, String)> {
-    file_service::read_preview_session_bytes_for_case(
+    let response = file_service::read_preview_session_range_for_case_with_bitlocker(
+        &state.bitlocker_runtime,
         &state.preview_runtime,
         conn,
         case_root,
         case_id,
-        handle_id,
-        offset,
-        length,
+        &transport::dto::ViewerRangeRequestDto {
+            handle_id: handle_id.to_string(),
+            offset,
+            length,
+        },
     )
     .map_err(|error| {
         if matches!(error, file_service::FileServiceError::NotFound(_)) {
@@ -295,6 +298,12 @@ fn read_media_protocol_bytes(
                 "media backend unavailable".to_string(),
             )
         }
+    })?;
+    response.raw_bytes.ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend returned no bytes".to_string(),
+        )
     })
 }
 

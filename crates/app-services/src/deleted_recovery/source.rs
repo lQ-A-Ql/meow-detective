@@ -138,6 +138,7 @@ fn candidate_from_partition(
         partition_name: Some(partition.name.clone()),
         kind,
         offset: partition.offset,
+        length: Some(partition.length),
         source: if lvm_identity.is_some() {
             ImageFilesystemSource::LvmLogicalVolume
         } else {

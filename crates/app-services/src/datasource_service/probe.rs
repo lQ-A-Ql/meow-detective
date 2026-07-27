@@ -84,6 +84,7 @@ where
                 candidate.partition_name.clone(),
                 candidate.kind,
                 candidate.offset,
+                candidate.length,
                 ImageFilesystemSource::GptPartition,
             );
         }
@@ -127,6 +128,7 @@ where
         partition_name: Some("Volume".to_string()),
         kind,
         offset: 0,
+        length: None,
         source: ImageFilesystemSource::DirectVolume,
         lvm_identity: None,
     };
@@ -190,6 +192,7 @@ where
                 name,
                 kind,
                 offset,
+                Some(entry.sector_count as u64 * SECTOR_SIZE),
                 ImageFilesystemSource::MbrPartition,
             );
         }
@@ -309,6 +312,7 @@ fn push_candidate(
     partition_name: Option<String>,
     kind: ImageFilesystemKind,
     offset: u64,
+    length: Option<u64>,
     source: ImageFilesystemSource,
 ) {
     if candidates
@@ -323,6 +327,7 @@ fn push_candidate(
         partition_name,
         kind,
         offset,
+        length,
         source,
         lvm_identity: None,
     });

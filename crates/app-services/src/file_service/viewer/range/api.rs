@@ -145,6 +145,13 @@ where
     if descriptor.source_kind == "ceph_rbd" {
         return read_ceph_rbd_descriptor_range(context, descriptor, offset, length);
     }
+    if matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        let candidate = exact_partition_candidate(descriptor)?;
+        if context.is_bitlocker_candidate(candidate)? {
+            return open_range_content_for_descriptor_with_context(context, descriptor)
+                .and_then(|reader| read_from_range_reader(reader, offset, length));
+        }
+    }
     let mut reasons = Vec::new();
     if let Some(bytes) =
         try_read_ntfs_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?

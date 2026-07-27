@@ -42,8 +42,8 @@ pub(crate) use filesystem::{
     resolve_partition_index_for_entry,
 };
 pub(crate) use image_open::{
-    open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
-    open_raw_file,
+    open_candidate_block_reader_with_lvm_cache, open_descriptor_image_file,
+    open_descriptor_image_file_with_context, open_e01_file, open_raw_file, LvmPoolRequestCache,
 };
 pub(crate) use io::{
     open_first_image_path, open_first_image_path_seekable, read_bounded, read_seekable_range,
@@ -53,6 +53,8 @@ pub(crate) use model::{
     PreviewCephFsDescriptor, PreviewDescriptor, PreviewLvmIdentity, PreviewLvmPhysicalVolumeSource,
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
+#[cfg(test)]
+pub(crate) use partition::is_previewable_partition_status;
 pub(crate) use partition::{
     e01_partition_candidates, exact_partition_candidate, preview_lvm_identity_from_datasource,
     preview_partition_candidate_from_record, raw_partition_candidates,

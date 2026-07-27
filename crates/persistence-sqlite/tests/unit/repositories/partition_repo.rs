@@ -66,6 +66,27 @@ fn insert_batch_then_find_by_data_source() {
 }
 
 #[test]
+fn find_by_data_source_and_index_is_source_scoped() {
+    let conn = setup_db();
+    let repo = PartitionRepo::new(&conn);
+    repo.insert_batch(&[
+        make_partition("p1", "ds-1", 2, "Source one"),
+        make_partition("p2", "ds-2", 2, "Source two"),
+    ])
+    .unwrap();
+
+    let found = repo
+        .find_by_data_source_and_index("ds-1", 2)
+        .unwrap()
+        .expect("partition must be found");
+    assert_eq!(found.id, "p1");
+    assert!(repo
+        .find_by_data_source_and_index("ds-1", 7)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn count_by_data_source_returns_correct_count() {
     let conn = setup_db();
     let repo = PartitionRepo::new(&conn);

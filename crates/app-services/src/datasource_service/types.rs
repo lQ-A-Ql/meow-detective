@@ -156,6 +156,7 @@ pub struct ImageFilesystemCandidate {
     pub partition_name: Option<String>,
     pub kind: ImageFilesystemKind,
     pub offset: u64,
+    pub length: Option<u64>,
     pub source: ImageFilesystemSource,
     pub lvm_identity: Option<LvmLogicalVolumeIdentity>,
 }

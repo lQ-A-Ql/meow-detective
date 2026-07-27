@@ -113,6 +113,38 @@ pub trait PreviewReadContext {
         )
     }
 
+    fn open_candidate_block_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        candidate: &PreviewPartitionCandidate,
+    ) -> Result<
+        (Box<dyn evidence_core::EvidenceReader>, u64, String),
+        crate::file_service::FileServiceError,
+    > {
+        let source_path = Path::new(&descriptor.source_path);
+        let mut lvm_cache = crate::file_service::viewer::LvmPoolRequestCache::new();
+        let mut open_reader = |_: &Path| {
+            self.open_evidence_reader(descriptor)
+                .map_err(|error| std::io::Error::other(error.to_string()))
+        };
+        let (reader, filesystem_offset) =
+            crate::file_service::viewer::open_candidate_block_reader_with_lvm_cache(
+                source_path,
+                candidate,
+                &mut open_reader,
+                &mut lvm_cache,
+            )
+            .map_err(crate::file_service::FileServiceError::Io)?;
+        Ok((reader, filesystem_offset, candidate.filesystem_kind.clone()))
+    }
+
+    fn is_bitlocker_candidate(
+        &self,
+        _candidate: &PreviewPartitionCandidate,
+    ) -> Result<bool, crate::file_service::FileServiceError> {
+        Ok(false)
+    }
+
     fn read_cephfs_range(
         &mut self,
         _descriptor: &PreviewDescriptor,
@@ -154,6 +186,24 @@ where
         descriptor: &PreviewDescriptor,
     ) -> Result<Box<dyn evidence_core::EvidenceReader>, crate::file_service::FileServiceError> {
         (**self).open_evidence_reader(descriptor)
+    }
+
+    fn open_candidate_block_reader(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        candidate: &PreviewPartitionCandidate,
+    ) -> Result<
+        (Box<dyn evidence_core::EvidenceReader>, u64, String),
+        crate::file_service::FileServiceError,
+    > {
+        (**self).open_candidate_block_reader(descriptor, candidate)
+    }
+
+    fn is_bitlocker_candidate(
+        &self,
+        candidate: &PreviewPartitionCandidate,
+    ) -> Result<bool, crate::file_service::FileServiceError> {
+        (**self).is_bitlocker_candidate(candidate)
     }
 
     fn read_cephfs_range(

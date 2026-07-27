@@ -13,6 +13,7 @@ pub mod active_case;
 pub mod analysis_service;
 pub mod artifact_service;
 pub mod batch_service;
+pub mod bitlocker_runtime;
 pub mod case_service;
 pub mod ceph_reconstruction;
 pub mod cluster_service;

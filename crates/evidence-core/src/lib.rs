@@ -11,4 +11,4 @@ pub use filesystem::{
 };
 pub use image::raw_reader::RawImageReader;
 pub use probe::{probe, ProbeResult};
-pub use reader::{EvidenceReader, ReaderInfo};
+pub use reader::{EvidenceReader, PartitionWindowReader, ReaderInfo};

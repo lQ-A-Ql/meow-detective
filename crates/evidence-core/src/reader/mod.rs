@@ -1,6 +1,10 @@
 use std::io::{Read, Seek};
 use std::path::PathBuf;
 
+mod partition_window;
+
+pub use partition_window::PartitionWindowReader;
+
 #[derive(Debug, Clone)]
 pub struct ReaderInfo {
     pub path: PathBuf,
