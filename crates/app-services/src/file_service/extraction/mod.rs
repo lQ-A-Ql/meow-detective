@@ -1,6 +1,7 @@
 mod audit;
 mod copy;
 mod destination;
+mod parallel;
 pub(crate) mod policy;
 mod progress;
 

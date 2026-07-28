@@ -183,6 +183,8 @@ fn measure_candidate(
     candidate: &Candidate,
     destination: &Path,
 ) -> Result<(), String> {
+    let rss_before_mb = app_services::import_analysis::current_rss_mb();
+    let peak_rss_before_mb = app_services::import_analysis::peak_rss_mb();
     let started = Instant::now();
     let mut copying_started = None;
     let mut finalizing_started = None;
@@ -214,6 +216,8 @@ fn measure_candidate(
     )
     .map_err(|error| error.to_string())?;
     let completed = Instant::now();
+    let rss_after_mb = app_services::import_analysis::current_rss_mb();
+    let peak_rss_after_mb = app_services::import_analysis::peak_rss_mb();
     let copying_started = copying_started.ok_or("copying progress phase was not emitted")?;
     let finalizing_started =
         finalizing_started.ok_or("finalizing progress phase was not emitted")?;
@@ -243,6 +247,10 @@ fn measure_candidate(
         "copyMiBPerSecond": mib_per_second(candidate.size, copy_elapsed),
         "totalMiBPerSecond": mib_per_second(candidate.size, total_elapsed),
         "progressEvents": progress_events,
+        "rssBeforeMiB": rss_before_mb,
+        "rssAfterMiB": rss_after_mb,
+        "peakRssBeforeMiB": peak_rss_before_mb,
+        "peakRssAfterMiB": peak_rss_after_mb,
         "sha256": result.sha256,
     });
     println!("FILE_EXTRACTION_BENCHMARK_JSON={record}");

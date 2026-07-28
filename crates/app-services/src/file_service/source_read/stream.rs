@@ -1,5 +1,6 @@
 use domain::FileEntryId;
 
+use super::ParallelSourceReaders;
 use super::SourceReadContext;
 use crate::file_service::{
     viewer::{
@@ -11,6 +12,7 @@ use crate::file_service::{
 
 pub(crate) enum SourceExtractionMode {
     Reader(RangeContentReader),
+    Parallel(ParallelSourceReaders),
     Chunked,
 }
 
@@ -35,6 +37,8 @@ impl SourceReadContext<'_> {
         let descriptor = descriptor_for_file_with_cache(&mut *self, file_id)?;
         let mode = if descriptor.source_kind == "ceph_fs" {
             SourceExtractionMode::Chunked
+        } else if let Some(readers) = self.parallel_extraction_readers(&descriptor)? {
+            SourceExtractionMode::Parallel(readers)
         } else {
             SourceExtractionMode::Reader(open_range_content_for_descriptor_with_context(
                 self,

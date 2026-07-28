@@ -15,14 +15,17 @@ const COPY_BUFFER_SIZE: usize = 1024 * 1024;
 const PROGRESS_BYTE_INTERVAL: u64 = 8 * 1024 * 1024;
 const PROGRESS_TIME_INTERVAL: Duration = Duration::from_millis(100);
 
-struct ProgressReporter<'a> {
+pub(super) struct ProgressReporter<'a> {
     callback: Option<FileExtractionProgressCallback<'a>>,
     last_reported: u64,
     last_reported_at: Instant,
 }
 
 impl<'a> ProgressReporter<'a> {
-    fn new(callback: Option<FileExtractionProgressCallback<'a>>, total_bytes: Option<u64>) -> Self {
+    pub(super) fn new(
+        callback: Option<FileExtractionProgressCallback<'a>>,
+        total_bytes: Option<u64>,
+    ) -> Self {
         let mut reporter = Self {
             callback,
             last_reported: 0,
@@ -36,7 +39,12 @@ impl<'a> ProgressReporter<'a> {
         reporter
     }
 
-    fn report_copying(&mut self, bytes_written: u64, total_bytes: Option<u64>, force: bool) {
+    pub(super) fn report_copying(
+        &mut self,
+        bytes_written: u64,
+        total_bytes: Option<u64>,
+        force: bool,
+    ) {
         if bytes_written == self.last_reported {
             return;
         }
@@ -55,7 +63,7 @@ impl<'a> ProgressReporter<'a> {
         self.last_reported_at = Instant::now();
     }
 
-    fn report_finalizing(&mut self, bytes_written: u64, total_bytes: Option<u64>) {
+    pub(super) fn report_finalizing(&mut self, bytes_written: u64, total_bytes: Option<u64>) {
         self.emit(FileExtractionProgressUpdate {
             phase: FileExtractionProgressPhase::Finalizing,
             bytes_written,
@@ -187,7 +195,7 @@ fn copy_and_hash(
     })
 }
 
-fn sync_and_publish(
+pub(super) fn sync_and_publish(
     mut temporary: NamedTempFile,
     destination: &Path,
     overwrite: bool,

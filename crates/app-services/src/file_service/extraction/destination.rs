@@ -77,6 +77,20 @@ pub(crate) fn extract_source_file(
                 request.progress,
             )?
         }
+        SourceExtractionMode::Parallel(readers) => {
+            let size = source_size.ok_or_else(|| {
+                FileServiceError::integrity("Parallel evidence source has no catalog size")
+            })?;
+            super::parallel::copy_parallel_readers_to_destination(
+                readers.readers,
+                size,
+                readers.chunk_bytes,
+                readers.max_in_flight,
+                &destination,
+                request.overwrite,
+                request.progress,
+            )?
+        }
         SourceExtractionMode::Chunked => {
             let size = source_size.ok_or_else(|| {
                 FileServiceError::integrity("Chunked evidence source has no catalog size")

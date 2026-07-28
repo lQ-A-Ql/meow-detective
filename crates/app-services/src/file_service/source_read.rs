@@ -20,9 +20,11 @@ use crate::{
 mod bitlocker;
 mod derived_cache;
 mod metadata;
+mod parallel;
 mod stream;
 
 use derived_cache::DerivedSourceReadCache;
+pub(crate) use parallel::ParallelSourceReaders;
 pub(crate) use stream::SourceExtractionMode;
 
 const MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES: usize = 4_096;

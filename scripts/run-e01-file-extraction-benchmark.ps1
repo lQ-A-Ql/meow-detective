@@ -249,6 +249,17 @@ foreach ($sampleEnvironment in $fixtureEnvironment.Keys) {
 }
 
 [void]$builder.AppendLine()
+[void]$builder.AppendLine("## Memory")
+[void]$builder.AppendLine()
+[void]$builder.AppendLine("| Sample | RSS before MiB | RSS after MiB | Peak RSS before MiB | Peak RSS after MiB |")
+[void]$builder.AppendLine("|---|---:|---:|---:|---:|")
+foreach ($sampleEnvironment in $fixtureEnvironment.Keys) {
+  $record = @($records | Where-Object { $_.sample -eq $sampleEnvironment })[0]
+  [void]$builder.AppendLine(
+    "| $($sampleLabels[$sampleEnvironment]) | $($record.rssBeforeMiB) | $($record.rssAfterMiB) | $($record.peakRssBeforeMiB) | $($record.peakRssAfterMiB) |"
+  )
+}
+[void]$builder.AppendLine()
 [void]$builder.AppendLine("## Integrity verification")
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("| Sample | Bytes | SHA-256 |")
