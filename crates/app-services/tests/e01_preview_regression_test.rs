@@ -58,6 +58,16 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 domain::DataSourcePlatform::Windows,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("attach: {e}")))?;
+            let source_conn = app_services::source_db::open_source_db(&active.case_root, &ds.id)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("source db: {e}")))?;
+            DataSourceRepo::new(conn)
+                .update_import_state(&ds.id, "ready", None)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("ready: {e}")))?;
+            DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(&case_id, &ds)
+                .map_err(|e| {
+                    persistence_sqlite::DbError::System(format!("source metadata: {e}"))
+                })?;
 
             // 2. Probe partitions
             let mut probe_reader = E01Reader::open(e01_path)
@@ -66,7 +76,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .map_err(|e| persistence_sqlite::DbError::System(format!("probe: {e}")))?;
 
             // 3. Store partition metadata
-            let part_repo = PartitionRepo::new(conn);
+            let part_repo = PartitionRepo::new(&source_conn);
             let records: Vec<_> = probe
                 .candidates
                 .iter()
@@ -171,7 +181,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 })?;
 
             let stats = file_service::enumerate_filesystem_mft(
-                conn,
+                &source_conn,
                 &stored_ds.id,
                 e01_path,
                 ntfs.offset,
@@ -201,8 +211,13 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
 
 fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &str, label: &str) {
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.to_string()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
@@ -211,13 +226,13 @@ fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &st
                 .find(|f| {
                     f.entry_type == domain::EntryType::File
                         && f.size.unwrap_or(0) > 0
-                        && f.path.starts_with('/')
+                        && !f.path.is_empty()
                 })
                 .unwrap_or_else(|| {
                     panic!("{label}: no previewable NTFS file in {} entries", all.len())
                 });
 
-            let mut reader = file_service::open_file_content_by_id(conn, &file.id)
+            let mut reader = file_service::open_file_content_by_id(&source_conn, &file.id)
                 .unwrap_or_else(|e| panic!("{label}: preview failed for '{}': {e:?}", file.path));
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
@@ -234,15 +249,20 @@ fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &st
 
 fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &str, label: &str) {
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.to_string()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let chinese = all.iter().find(|f| {
                 f.entry_type == domain::EntryType::File
                     && f.size.unwrap_or(0) > 0
-                    && f.path.starts_with('/')
+                    && !f.path.is_empty()
                     && f.path.chars().any(|c| c as u32 > 0x7F)
             });
 
@@ -251,8 +271,8 @@ fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &
                 return Ok(());
             };
 
-            let mut reader =
-                file_service::open_file_content_by_id(conn, &file.id).unwrap_or_else(|e| {
+            let mut reader = file_service::open_file_content_by_id(&source_conn, &file.id)
+                .unwrap_or_else(|e| {
                     panic!(
                         "{label}: Chinese path preview failed for '{}': {e:?}",
                         file.path
@@ -277,8 +297,13 @@ fn preview_large_7z_head_range(
     label: &str,
 ) {
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.to_string()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
@@ -299,12 +324,12 @@ fn preview_large_7z_head_range(
                     )
                 });
 
-            let handle = file_service::open_file_handle_real(conn, &file.id.0)
+            let handle = file_service::open_file_handle_real(&source_conn, &file.id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let first_start = Instant::now();
             let first = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id.clone(),
                     offset: 0,
@@ -317,7 +342,7 @@ fn preview_large_7z_head_range(
             let mid_offset = 64 * 1024 * 1024;
             let second_start = Instant::now();
             let second = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id,
                     offset: mid_offset,
@@ -369,8 +394,13 @@ fn is_liuyang_attribute_list_7z_target(file: &domain::FileEntry) -> bool {
 
 fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveCase, ds_id: &str) {
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.to_string()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
@@ -384,10 +414,10 @@ fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveC
                     )
                 });
 
-            let handle = file_service::open_file_handle_real(conn, &file.id.0)
+            let handle = file_service::open_file_handle_real(&source_conn, &file.id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let first = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id.clone(),
                     offset: 0,
@@ -396,7 +426,7 @@ fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveC
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let middle = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id,
                     offset: 64 * 1024 * 1024,
@@ -557,7 +587,26 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                     },
                 )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            PartitionRepo::new(conn)
+            DataSourceRepo::new(conn)
+                .update_import_state(&data_source_id, "ready", None)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let source_conn =
+                app_services::source_db::open_source_db(&active.case_root, &data_source_id)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(
+                    &case_id,
+                    &domain::DataSource {
+                        id: data_source_id.clone(),
+                        name: "seeded-liuyang-e01".to_string(),
+                        kind: domain::DataSourceKind::E01,
+                        source_path: path.clone(),
+                        imported_at: chrono::Utc::now(),
+                        provenance: domain::DataSourceProvenance::unknown(),
+                    },
+                )
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            PartitionRepo::new(&source_conn)
                 .replace_for_data_source(
                     &data_source_id.0,
                     &[DataSourcePartitionRecord {
@@ -581,7 +630,7 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                     }],
                 )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            FileRepo::new(conn)
+            FileRepo::new(&source_conn)
                 .insert_batch(&[domain::FileEntry {
                     id: file_id.clone(),
                     parent_id: None,
@@ -604,16 +653,16 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                 }])
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            let mut reader = file_service::open_file_content_by_id(conn, &file_id)
+            let mut reader = file_service::open_file_content_by_id(&source_conn, &file_id)
                 .unwrap_or_else(|e| panic!("seeded open_file_content_by_id failed: {e:?}"));
             let mut open_head = vec![0u8; 4096];
             let open_read = reader.read(&mut open_head).unwrap_or(0);
             assert!(open_read > 0, "seeded open_file_content_by_id is empty");
 
-            let handle = file_service::open_file_handle_real(conn, &file_id.0)
+            let handle = file_service::open_file_handle_real(&source_conn, &file_id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let first = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id.clone(),
                     offset: 0,
@@ -622,7 +671,7 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let middle = file_service::read_file_range_for_case(
-                conn,
+                &source_conn,
                 &ViewerRangeRequestDto {
                     handle_id: handle.handle_id,
                     offset: 64 * 1024 * 1024,

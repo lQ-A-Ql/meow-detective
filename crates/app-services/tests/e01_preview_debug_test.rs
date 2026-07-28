@@ -48,6 +48,16 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 domain::DataSourcePlatform::Windows,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("attach: {e}")))?;
+            let source_conn = app_services::source_db::open_source_db(&active.case_root, &ds.id)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("source db: {e}")))?;
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .update_import_state(&ds.id, "ready", None)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("ready: {e}")))?;
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(&case_id, &ds)
+                .map_err(|e| {
+                    persistence_sqlite::DbError::System(format!("source metadata: {e}"))
+                })?;
 
             // Probe
             let mut probe_reader = E01Reader::open(e01_path)
@@ -56,7 +66,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .map_err(|e| persistence_sqlite::DbError::System(format!("probe: {e}")))?;
 
             // Store partitions
-            let part_repo = PartitionRepo::new(conn);
+            let part_repo = PartitionRepo::new(&source_conn);
             let records: Vec<_> = probe
                 .candidates
                 .iter()
@@ -149,7 +159,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .ok_or_else(|| persistence_sqlite::DbError::System("ds not found".to_string()))?;
 
             let stats = file_service::enumerate_filesystem_mft(
-                conn,
+                &source_conn,
                 &stored_ds.id,
                 e01_path,
                 ntfs.offset,
@@ -183,8 +193,13 @@ fn assert_file_magic(
     label: &str,
 ) {
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.to_string()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
@@ -212,7 +227,7 @@ fn assert_file_magic(
                 file.size.unwrap_or(0)
             );
 
-            let mut reader = file_service::open_file_content_by_id(conn, &file.id)
+            let mut reader = file_service::open_file_content_by_id(&source_conn, &file.id)
                 .unwrap_or_else(|e| panic!("{label}: preview failed for '{}': {e:?}", file.path));
             let mut buf = [0u8; 16];
             let n = reader.read(&mut buf).unwrap();
@@ -318,8 +333,13 @@ fn liuyang_full_scan_read_first_8_bytes() {
     let mut err = 0u64;
 
     active
-        .with_conn(|conn| {
-            let all = FileRepo::new(conn)
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &domain::DataSourceId(ds_id.clone()),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let all = FileRepo::new(&source_conn)
                 .find_by_data_source(&domain::DataSourceId(ds_id.clone()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
@@ -328,7 +348,7 @@ fn liuyang_full_scan_read_first_8_bytes() {
                 .filter(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0)
             {
                 total += 1;
-                match file_service::open_file_content_by_id(conn, &f.id) {
+                match file_service::open_file_content_by_id(&source_conn, &f.id) {
                     Ok(mut reader) => {
                         let mut buf = [0u8; 8];
                         match reader.read(&mut buf) {
