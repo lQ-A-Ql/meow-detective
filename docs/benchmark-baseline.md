@@ -203,5 +203,12 @@ V2 benchmark 至少覆盖：
 该结果覆盖 Windows、BitLocker NTFS、XFS 与 Ext4 的 `203-312 MiB` 文件，记录
 reader/filesystem 准备、复制并计算 SHA-256、持久化同步及原子发布的分段耗时。
 
-该轮属于单次、枚举后暖缓存基线，不进入发布阈值。补齐冷缓存、多 GiB 持续导出、
-重复运行 p50/p95 以及 RSS/CPU 遥测后，才能提升为正式 large dataset gate。
+liuyang BitLocker 分区精确 `3 GiB` 文件的 production `release` 持续提取实测见
+[`benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md`](benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md)。
+该轮通过 NTFS data-run 有界流式读取完成 `3,221,225,472` 字节导出，复制耗时
+`8.763s`，包含 reader 准备、SHA-256、持久化同步和原子发布的端到端耗时
+`8.932s`，端到端吞吐 `343.898 MiB/s`；目录枚举、BitLocker 解锁以及计时后的
+目标文件独立 SHA-256 复核不计入提取阶段。
+
+上述结果均属于单次、枚举后缓存基线，不进入发布阈值。补齐受控冷缓存、重复运行
+p50/p95 以及 RSS/CPU 遥测后，才能提升为正式 large dataset gate。

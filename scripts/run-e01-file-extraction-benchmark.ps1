@@ -220,6 +220,7 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine("- Storage: $storageSummary")
 [void]$builder.AppendLine("- Mode: $modeDescription")
 [void]$builder.AppendLine("- Destination: system temporary directory; SHA-256, flush, sync, and atomic publish are included")
+[void]$builder.AppendLine("- Verification: destination size and an independent post-timing SHA-256 re-read must match the extraction result")
 [void]$builder.AppendLine("- Scheduling: samples and exports are serial; import/enumeration time is excluded from the reported extraction phases")
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("| Sample | Image | Image GiB | Internal file | Partition | BitLocker | File MiB | Prepare s | Copy s | Finalize s | Total s | Copy MiB/s | Total MiB/s | Progress events |")
@@ -247,6 +248,17 @@ foreach ($sampleEnvironment in $fixtureEnvironment.Keys) {
   )
 }
 
+[void]$builder.AppendLine()
+[void]$builder.AppendLine("## Integrity verification")
+[void]$builder.AppendLine()
+[void]$builder.AppendLine("| Sample | Bytes | SHA-256 |")
+[void]$builder.AppendLine("|---|---:|---|")
+foreach ($sampleEnvironment in $fixtureEnvironment.Keys) {
+  $record = @($records | Where-Object { $_.sample -eq $sampleEnvironment })[0]
+  [void]$builder.AppendLine(
+    "| $($sampleLabels[$sampleEnvironment]) | $($record.bytes) | ``$($record.sha256)`` |"
+  )
+}
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("## Findings")
 [void]$builder.AppendLine()
