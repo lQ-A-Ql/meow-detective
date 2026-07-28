@@ -54,6 +54,7 @@ pub fn restore_persisted_bitlocker_key(
         &source,
         case_id,
         partition_index,
+        runtimes.preview_runtime,
         runtimes.bitlocker_runtime,
         verified,
     )

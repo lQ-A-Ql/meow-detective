@@ -60,7 +60,8 @@ pub(super) fn media_data_url_for_file(
             size,
             can_read_ranges,
         } => {
-            let handle = file_service::open_preview_session_for_case(
+            let handle = file_service::open_preview_session_for_case_with_bitlocker(
+                &state.bitlocker_runtime,
                 &state.preview_runtime,
                 connection,
                 &active.case_root,

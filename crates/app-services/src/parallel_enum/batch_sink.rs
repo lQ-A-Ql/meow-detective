@@ -9,6 +9,7 @@ pub(super) struct EnumerationStats {
     pub(super) file_count: u64,
     pub(super) dir_count: u64,
     pub(super) total_size: u64,
+    pub(super) directory_index_failures: u64,
 }
 
 impl EnumerationStats {

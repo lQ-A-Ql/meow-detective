@@ -19,6 +19,6 @@ pub use schema::{
     PartitionStatus, StagingManifest,
 };
 pub use writer::{
-    analysis_staging_counts, get_staging_meta, get_worker_meta, set_staging_meta, set_worker_meta,
-    staging_db_row_count,
+    analysis_staging_counts, get_staging_meta, get_worker_meta, reset_partition_staging,
+    set_staging_meta, set_worker_meta, staging_db_row_count,
 };

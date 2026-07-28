@@ -33,7 +33,8 @@ pub use error::FileServiceError;
 pub use extraction::{extract_file_to_destination, extract_file_to_destination_for_case};
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,
-    preview_session_file_id, preview_session_metadata, read_preview_session_bytes_for_case,
+    open_preview_session_for_case_with_bitlocker, preview_session_file_id,
+    preview_session_metadata, read_preview_session_bytes_for_case,
     read_preview_session_media_range_for_case,
     read_preview_session_media_range_for_case_with_bitlocker, read_preview_session_range_for_case,
     read_preview_session_range_for_case_with_bitlocker,

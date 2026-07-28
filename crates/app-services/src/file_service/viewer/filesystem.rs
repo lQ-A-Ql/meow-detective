@@ -5,9 +5,15 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 use crate::file_service::FileServiceError;
 
 pub fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize> {
+    mft_file_locator_from_entry_id(entry_id).map(|(partition_index, _)| partition_index)
+}
+
+pub(crate) fn mft_file_locator_from_entry_id(entry_id: &str) -> Option<(usize, u64)> {
     let mut parts = entry_id.split(':');
     match (parts.next(), parts.next(), parts.next(), parts.next()) {
-        (Some("mft"), Some(partition), Some(_record), None) => partition.parse().ok(),
+        (Some("mft"), Some(partition), Some(record), None) => {
+            Some((partition.parse().ok()?, record.parse().ok()?))
+        }
         _ => None,
     }
 }

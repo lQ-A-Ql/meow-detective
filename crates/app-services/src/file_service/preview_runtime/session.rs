@@ -4,12 +4,14 @@ use crate::{
     ceph_reconstruction::PreparedCephFsFileReader,
     file_service::{
         preview_runtime::prepared_ceph::{PreparedCephFile, SharedPreparedFilesystem},
+        preview_runtime::PreparedBitLockerNtfsFile,
         viewer::PreviewDescriptor,
         FileServiceError,
     },
 };
 
 enum PreparedPreview {
+    BitLockerNtfs(Box<Mutex<PreparedBitLockerNtfsFile>>),
     Rbd(Mutex<PreparedCephFile>),
     CephFs(Box<Mutex<PreparedCephFsFileReader>>),
 }
@@ -65,6 +67,25 @@ impl PreviewSession {
         })
     }
 
+    pub(crate) fn prepared_bitlocker_ntfs(
+        case_id: String,
+        data_source_id: String,
+        global_file_id: String,
+        size: u64,
+        mime: Option<String>,
+        file: PreparedBitLockerNtfsFile,
+    ) -> Self {
+        Self {
+            case_id,
+            data_source_id,
+            global_file_id,
+            size,
+            mime,
+            runtime_fingerprint: None,
+            prepared: Some(PreparedPreview::BitLockerNtfs(Box::new(Mutex::new(file)))),
+        }
+    }
+
     pub(crate) fn prepared_cephfs(
         case_id: String,
         global_file_id: String,
@@ -118,6 +139,11 @@ impl PreviewSession {
             return Ok(None);
         };
         match prepared {
+            PreparedPreview::BitLockerNtfs(prepared) => prepared
+                .lock()
+                .map_err(|_| FileServiceError::other("Preview session lock is poisoned"))?
+                .read_range(offset, length)
+                .map(Some),
             PreparedPreview::Rbd(prepared) => prepared
                 .lock()
                 .map_err(|_| FileServiceError::other("Preview session lock is poisoned"))?

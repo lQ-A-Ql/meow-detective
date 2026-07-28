@@ -18,6 +18,7 @@ pub(crate) fn activate_verified(
     source: &BitLockerSource,
     case_id: &CaseId,
     partition_index: u32,
+    preview_runtime: &crate::file_service::PreviewRuntimeRegistry,
     registry: &std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
     verified: VerifiedUnlock,
 ) -> Result<ActivatedUnlock, BitLockerServiceError> {
@@ -29,6 +30,10 @@ pub(crate) fn activate_verified(
         partition_index as usize,
         verified,
     )?;
+    if let Err(error) = preview_runtime.invalidate_source(&case_id.0, &source.source.id.0) {
+        registry.invalidate_partition(&case_id.0, &source.source.id.0, partition_index as usize)?;
+        return Err(error.into());
+    }
     let plaintext_filesystem = probe_registered(source, case_id, registry);
     match plaintext_filesystem {
         Ok(plaintext_filesystem) => Ok(ActivatedUnlock {

@@ -11,6 +11,10 @@ pub fn staging_db_row_count(conn: &Connection) -> DbResult<u64> {
     StagingRepo::staging_db_row_count(conn)
 }
 
+pub fn reset_partition_staging(conn: &Connection) -> DbResult<()> {
+    StagingRepo::reset_partition_staging(conn)
+}
+
 pub fn analysis_staging_counts(conn: &Connection) -> DbResult<(u64, u64, u64)> {
     StagingRepo::analysis_staging_counts(conn)
 }

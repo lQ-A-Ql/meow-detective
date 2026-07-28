@@ -12,12 +12,13 @@ use crate::file_service::{
         descriptor_for_file_with_cache, descriptor_image_path_candidates,
         exact_partition_candidate, format_image_range_error, is_exfat_filesystem_kind,
         is_fat_filesystem_kind, is_linux_filesystem_kind, looks_like_exfat_boot_sector,
-        read_bounded, read_seekable_range, try_read_exfat_image_range_for_descriptor,
-        try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
-        try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
-        try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
-        try_read_ntfs_image_range_for_entry, validate_readable_file_entry, PreviewDescriptor,
-        PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
+        read_bounded, read_seekable_range, try_read_bitlocker_ntfs_range_for_descriptor,
+        try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
+        try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
+        try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
+        try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
+        validate_readable_file_entry, PreviewDescriptor, PreviewPartitionCandidate,
+        PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
     },
     FileServiceError,
 };
@@ -148,6 +149,11 @@ where
     if matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
         let candidate = exact_partition_candidate(descriptor)?;
         if context.is_bitlocker_candidate(candidate)? {
+            if let Some(bytes) = try_read_bitlocker_ntfs_range_for_descriptor(
+                context, descriptor, candidate, offset, length,
+            )? {
+                return Ok(bytes);
+            }
             return open_range_content_for_descriptor_with_context(context, descriptor)
                 .and_then(|reader| read_from_range_reader(reader, offset, length));
         }

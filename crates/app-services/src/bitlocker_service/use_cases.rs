@@ -197,6 +197,7 @@ fn unlock_with(
         &source,
         context.case_id,
         context.partition_index,
+        context.runtimes.preview_runtime,
         context.runtimes.bitlocker_runtime,
         verified,
     ) {

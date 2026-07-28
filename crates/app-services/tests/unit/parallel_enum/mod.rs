@@ -3,19 +3,19 @@ use super::{
     batch_sink::prepare_mft_insert,
     ntfs::{
         mft_scan::{
-            open_partition_evidence_reader, read_ntfs_mft_parameters, read_ntfs_mft_stream,
+            open_partition_evidence_reader, read_ntfs_mft_parameters_at, read_ntfs_mft_stream,
         },
         path_reconstruction::{
-            mft_directory_index_backfill_actions, update_mft_staging_paths_via_sqlite,
-            validate_mft_staging_shape, MftCatalog,
+            mft_directory_index_backfill_actions, update_mft_staging_paths_via_sqlite, MftCatalog,
         },
+        validation::validate_mft_staging_shape,
     },
     partition_work::enumerate_single_partition,
 };
 use crate::staging;
 use domain::DataSourceId;
 use evidence_core::filesystem::root_node;
-use evidence_core::{EvidenceReader, FileSystemReader, FsNode};
+use evidence_core::{EvidenceReader, FileSystemReader, FsNode, PartitionWindowReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use fs_ntfs::{NtfsDirectoryEntry, NtfsReader};
 use image_e01::E01Reader;
@@ -26,6 +26,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use volume_bitlocker::{unlock_volume_with_recovery_password, Passphrase};
 
 struct FakeFsReader {
     name: String,
@@ -599,7 +600,7 @@ fn ntfs_mft_deleted_orphan_uses_deleted_orphans_path() {
 }
 
 #[test]
-fn ntfs_mft_flat_windows_shape_is_rejected() {
+fn ntfs_mft_data_volume_without_windows_directories_is_accepted() {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     conn.execute_batch(include_str!(
         "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
@@ -614,19 +615,44 @@ fn ntfs_mft_flat_windows_shape_is_rejected() {
     .unwrap();
     conn.execute(
         "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
-             VALUES ('mft:3:5662', 'mft:3:5', ?1, 'System32', 'System32', 'directory')",
+             VALUES ('mft:3:5662', 'mft:3:5', ?1, 'Media', 'Media', 'directory')",
         rusqlite::params![ds_id],
     )
     .unwrap();
     conn.execute(
         "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
-             VALUES ('mft:3:109959', 'mft:3:5', ?1, 'SOFTWARE', 'SOFTWARE', 'file')",
+             VALUES ('mft:3:109959', 'mft:3:5662', ?1, 'Media/video.mp4', 'video.mp4', 'file')",
         rusqlite::params![ds_id],
     )
     .unwrap();
 
-    let err = validate_mft_staging_shape(&conn, ds_id, 3).unwrap_err();
-    assert!(err.to_string().contains("suspicious flat NTFS tree"));
+    validate_mft_staging_shape(&conn, ds_id, 3).unwrap();
+}
+
+#[test]
+fn ntfs_mft_orphaned_tree_is_rejected() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+    ))
+    .unwrap();
+    let ds_id = "ds-orphan-mft";
+    conn.execute(
+        "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+         VALUES ('mft:4:5', NULL, ?1, '\\', '\\', 'directory')",
+        rusqlite::params![ds_id],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+         VALUES ('mft:4:42', 'mft:4:999', ?1, 'orphan.txt', 'orphan.txt', 'file')",
+        rusqlite::params![ds_id],
+    )
+    .unwrap();
+
+    let error = validate_mft_staging_shape(&conn, ds_id, 4).unwrap_err();
+    assert!(error.to_string().contains("reachable=1"));
+    assert!(error.to_string().contains("orphans=1"));
 }
 
 #[test]
@@ -641,6 +667,279 @@ fn ntfs_mft_stream_reads_split_runs() {
 
     assert!(out[..512].iter().all(|byte| *byte == 0xAA));
     assert!(out[512..].iter().all(|byte| *byte == 0xBB));
+}
+
+#[test]
+#[ignore = "requires private Liu Yang BitLocker E01 path and recovery password"]
+fn real_liuyang_bitlocker_reader_uses_mft_catalog_path() {
+    let sample = std::env::var_os("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_E01")
+        .map(PathBuf::from)
+        .expect("set FORENSICS_BITLOCKER_PRIVATE_LIUYANG_E01");
+    let credential = std::env::var("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD")
+        .map(Passphrase::new)
+        .expect("set FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD");
+
+    let mut probe_reader = E01Reader::open(&sample).expect("open Liu Yang E01 read-only");
+    let probe = crate::datasource_service::detect_image_filesystem(&mut probe_reader)
+        .expect("probe Liu Yang E01");
+    let partition = probe
+        .partitions
+        .iter()
+        .find(|partition| partition.index == 5)
+        .expect("find Liu Yang BitLocker partition 5");
+
+    let evidence: Box<dyn EvidenceReader> =
+        Box::new(E01Reader::open(&sample).expect("reopen Liu Yang E01 read-only"));
+    let mut window = PartitionWindowReader::new(
+        evidence,
+        partition.offset,
+        (partition.length > 0).then_some(partition.length),
+    )
+    .expect("open Liu Yang BitLocker partition window");
+    let verified = unlock_volume_with_recovery_password(&mut window, &credential)
+        .expect("unlock Liu Yang BitLocker partition");
+    let registry = Arc::new(crate::bitlocker_runtime::BitLockerUnlockRegistry::default());
+    registry
+        .register_verified("case-liuyang", "source-liuyang", 5, verified)
+        .expect("register Liu Yang BitLocker runtime");
+    let plaintext = crate::bitlocker_runtime::open_registered_bitlocker_volume(
+        Box::new(E01Reader::open(&sample).expect("reopen Liu Yang E01 for catalog")),
+        partition.offset,
+        (partition.length > 0).then_some(partition.length),
+        "case-liuyang",
+        "source-liuyang",
+        5,
+        &registry,
+    )
+    .expect("open Liu Yang plaintext reader");
+
+    let mut diagnostic_plaintext = crate::bitlocker_runtime::open_registered_bitlocker_volume(
+        Box::new(E01Reader::open(&sample).expect("reopen Liu Yang E01 for MFT diagnostics")),
+        partition.offset,
+        (partition.length > 0).then_some(partition.length),
+        "case-liuyang",
+        "source-liuyang",
+        5,
+        &registry,
+    )
+    .expect("open Liu Yang plaintext reader for MFT diagnostics");
+    let mft = read_ntfs_mft_parameters_at(diagnostic_plaintext.as_mut(), 0)
+        .expect("read Liu Yang MFT parameters");
+    let run_bytes = mft
+        .mft_data_runs
+        .iter()
+        .map(|(_, clusters)| clusters.saturating_mul(mft.cluster_size))
+        .sum::<u64>();
+    eprintln!(
+        "Liu Yang BitLocker NTFS: partitionBytes={} mftDataBytes={} recordBytes={} totalRecords={} runs={} runBytes={}",
+        partition.length,
+        mft.mft_data_size,
+        mft.record_size,
+        mft.mft_data_size / u64::from(mft.record_size),
+        mft.mft_data_runs.len(),
+        run_bytes,
+    );
+
+    let temp = tempfile::TempDir::new().unwrap();
+    let conn = staging::open_partition_staging(temp.path(), "source-liuyang", 5).unwrap();
+    let started = Instant::now();
+    let stats = enumerate_ntfs_reader_to_staging(
+        &conn,
+        plaintext,
+        "source-liuyang",
+        5,
+        0,
+        &AtomicBool::new(false),
+    )
+    .expect("enumerate Liu Yang NTFS catalog via plaintext reader");
+    let elapsed = started.elapsed();
+    let rows = stats.file_count + stats.dir_count;
+    eprintln!(
+        "Liu Yang BitLocker MFT catalog: rows={rows} files={} dirs={} directoryIndexFailures={} elapsedMs={} rowsPerSec={:.0}",
+        stats.file_count,
+        stats.dir_count,
+        stats.directory_index_failures,
+        elapsed.as_millis(),
+        rows as f64 / elapsed.as_secs_f64().max(0.001),
+    );
+
+    assert!(stats.file_count > 0, "catalog must contain files");
+    assert!(stats.dir_count > 0, "catalog must contain directories");
+    let root_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE data_source_id = 'source-liuyang'
+               AND partition_index = 5
+               AND parent_id IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let root_child_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE data_source_id = 'source-liuyang'
+               AND partition_index = 5
+               AND parent_id = 'mft:5:5'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let reachable_count: i64 = conn
+        .query_row(
+            "WITH RECURSIVE reachable(id) AS (
+                 SELECT id FROM file_entries
+                  WHERE data_source_id = 'source-liuyang'
+                    AND partition_index = 5
+                    AND parent_id IS NULL
+                 UNION ALL
+                 SELECT child.id FROM file_entries child
+                 JOIN reachable parent ON child.parent_id = parent.id
+                  WHERE child.data_source_id = 'source-liuyang'
+                    AND child.partition_index = 5
+             )
+             SELECT COUNT(*) FROM reachable",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let orphan_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries child
+              WHERE child.data_source_id = 'source-liuyang'
+                AND child.partition_index = 5
+                AND child.parent_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM file_entries parent WHERE parent.id = child.parent_id
+                )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    eprintln!(
+        "Liu Yang BitLocker tree: rootChildren={root_child_count} reachable={reachable_count} orphans={orphan_count} total={rows}"
+    );
+    assert_eq!(root_count, 1, "catalog must contain one NTFS root");
+    assert_eq!(
+        reachable_count as u64, rows,
+        "all catalog rows must be reachable"
+    );
+    assert_eq!(orphan_count, 0, "catalog must not contain orphan rows");
+    assert!(
+        root_child_count > 0,
+        "catalog must contain at least one reachable root child"
+    );
+
+    let (target_id, target_path, target_size, target_is_media): (String, String, u64, bool) = conn
+        .query_row(
+            "SELECT id, path, size,
+                    CASE WHEN LOWER(name) GLOB '*.mp4'
+                           OR LOWER(name) GLOB '*.mov'
+                           OR LOWER(name) GLOB '*.avi'
+                           OR LOWER(name) GLOB '*.mkv'
+                           OR LOWER(name) GLOB '*.wmv'
+                           OR LOWER(name) GLOB '*.webm'
+                           OR LOWER(name) GLOB '*.mp3'
+                           OR LOWER(name) GLOB '*.wav'
+                           OR LOWER(name) GLOB '*.flac'
+                           OR LOWER(name) GLOB '*.m4a'
+                         THEN 1 ELSE 0 END AS is_media
+               FROM file_entries
+              WHERE data_source_id = 'source-liuyang'
+                AND partition_index = 5
+                AND entry_type = 'file'
+                AND size > 0
+              ORDER BY is_media DESC, size DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("find a non-empty Liu Yang BitLocker file");
+    let target_inode = target_id
+        .rsplit(':')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .expect("parse target MFT inode");
+    let target_plaintext = crate::bitlocker_runtime::open_registered_bitlocker_volume(
+        Box::new(E01Reader::open(&sample).expect("reopen Liu Yang E01 for range reads")),
+        partition.offset,
+        (partition.length > 0).then_some(partition.length),
+        "case-liuyang",
+        "source-liuyang",
+        5,
+        &registry,
+    )
+    .expect("open Liu Yang plaintext reader for range reads");
+    let target_fs = NtfsReader::open(target_plaintext, 0).expect("open target NTFS reader");
+    eprintln!(
+        "Liu Yang BitLocker range target: id={target_id} size={target_size} media={target_is_media} path={target_path}"
+    );
+    for (label, offset) in [
+        ("head", 0),
+        ("middle", target_size / 2),
+        ("tail", target_size.saturating_sub(64 * 1024)),
+    ] {
+        let started = Instant::now();
+        let bytes = target_fs
+            .read_file_range_by_inode(target_inode, offset, 64 * 1024)
+            .unwrap_or_else(|error| panic!("read {label} file range at {offset}: {error}"));
+        eprintln!(
+            "Liu Yang BitLocker file range: label={label} offset={offset} bytes={} elapsedMs={}",
+            bytes.len(),
+            started.elapsed().as_millis()
+        );
+        assert!(!bytes.is_empty(), "{label} file range must return bytes");
+    }
+
+    let source_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    source_conn
+        .execute_batch(include_str!(
+            "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+        ))
+        .unwrap();
+    source_conn
+        .execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, partition_index)
+             VALUES ('placeholder-5', NULL, 'source-liuyang',
+                     '__partition_placeholder__/5/unlocked', 'Encrypted volume', 'directory', 5)",
+            [],
+        )
+        .unwrap();
+    drop(conn);
+    let merge_conn = staging::open_partition_staging(temp.path(), "source-liuyang", 5).unwrap();
+    persistence_sqlite::repositories::staging_repo::StagingRepo::merge_enum_staging_to_main(
+        &source_conn,
+        &merge_conn,
+        "source-liuyang",
+        5,
+        "Partition 5 (NTFS, unlocked)",
+    )
+    .expect("fold Liu Yang staging catalog into the partition root");
+    let merged_roots: Vec<(String, String)> = source_conn
+        .prepare(
+            "SELECT id, name FROM file_entries
+             WHERE data_source_id = 'source-liuyang' AND parent_id IS NULL",
+        )
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let merged_root_children: i64 = source_conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = 'placeholder-5'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        merged_roots,
+        vec![(
+            "placeholder-5".to_string(),
+            "Partition 5 (NTFS, unlocked)".to_string()
+        )]
+    );
+    assert!(merged_root_children > 0, "merged root must expose children");
 }
 
 #[test]
@@ -681,7 +980,8 @@ fn real_e01_ntfs_mft_parameters_include_data_runs() {
     };
 
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
-    let params = read_ntfs_mft_parameters(&partition, &mut *evidence_reader).unwrap();
+    let params =
+        read_ntfs_mft_parameters_at(&mut *evidence_reader, partition.volume_offset).unwrap();
     eprintln!(
         "mft cluster={} record_size={} data_size={} runs={:?}",
         params.mft_cluster,
@@ -729,7 +1029,8 @@ fn real_e01_mft_parser_keeps_windows_parent_chain() {
         volume_offset: ntfs.offset,
     };
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
-    let params = read_ntfs_mft_parameters(&partition, &mut *evidence_reader).unwrap();
+    let params =
+        read_ntfs_mft_parameters_at(&mut *evidence_reader, partition.volume_offset).unwrap();
     let scanner = MftScanner::new(
         params.volume_offset,
         params.mft_cluster,

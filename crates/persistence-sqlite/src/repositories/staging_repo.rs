@@ -247,6 +247,15 @@ impl StagingRepo {
 // ---------------------------------------------------------------------------
 
 impl StagingRepo {
+    pub fn reset_partition_staging(conn: &Connection) -> DbResult<()> {
+        conn.execute_batch(
+            "DELETE FROM file_entries;
+             DELETE FROM staging_meta
+              WHERE key IN ('status', 'error', 'merged', 'mft_fallback_warning');",
+        )?;
+        Ok(())
+    }
+
     pub fn get_staging_meta(conn: &Connection, key: &str) -> DbResult<Option<String>> {
         let mut stmt = conn.prepare("SELECT value FROM staging_meta WHERE key = ?1")?;
         let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;

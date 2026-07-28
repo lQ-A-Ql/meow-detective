@@ -77,8 +77,15 @@ impl MftScan {
 pub(in crate::parallel_enum) fn prepare_mft_scan(
     partition: &PartitionWork,
 ) -> Result<MftScan, ParallelEnumError> {
-    let mut reader = open_partition_evidence_reader(partition)?;
-    let params = read_ntfs_mft_parameters(partition, &mut *reader)?;
+    let reader = open_partition_evidence_reader(partition)?;
+    prepare_mft_scan_from_reader(reader, partition.volume_offset)
+}
+
+pub(in crate::parallel_enum) fn prepare_mft_scan_from_reader(
+    mut reader: Box<dyn EvidenceReader>,
+    volume_offset: u64,
+) -> Result<MftScan, ParallelEnumError> {
+    let params = read_ntfs_mft_parameters_at(&mut *reader, volume_offset)?;
     if params.mft_data_size == 0 {
         return Err(ParallelEnumError::MftParams(
             "MFT data size is zero".to_string(),
@@ -118,12 +125,12 @@ pub(in crate::parallel_enum) struct NtfsMftParams {
     pub(in crate::parallel_enum) mft_data_runs: Vec<(i64, u64)>,
 }
 
-pub(in crate::parallel_enum) fn read_ntfs_mft_parameters(
-    partition: &PartitionWork,
+pub(in crate::parallel_enum) fn read_ntfs_mft_parameters_at(
     reader: &mut dyn EvidenceReader,
+    volume_offset: u64,
 ) -> Result<NtfsMftParams, ParallelEnumError> {
     reader
-        .seek(SeekFrom::Start(partition.volume_offset))
+        .seek(SeekFrom::Start(volume_offset))
         .map_err(|error| format!("Seek NTFS boot sector: {error}"))?;
     let mut boot = [0; 512];
     reader
@@ -138,14 +145,14 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_parameters(
     let record_size = mft_record_size_from_boot(&boot);
     let mut record = read_mft_record_zero(
         reader,
-        partition.volume_offset + mft_cluster * cluster_size,
+        volume_offset + mft_cluster * cluster_size,
         record_size,
     )?;
     apply_ntfs_record_fixup(&mut record, bytes_per_sector as usize)
         .map_err(|error| format!("Fix up MFT record 0: {error}"))?;
 
     Ok(NtfsMftParams {
-        volume_offset: partition.volume_offset,
+        volume_offset,
         mft_cluster,
         cluster_size,
         record_size,

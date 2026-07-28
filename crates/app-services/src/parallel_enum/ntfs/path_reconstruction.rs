@@ -1,9 +1,7 @@
 use super::super::batch_sink::{
-    insert_ntfs_index_entry, mft_entry_id, prepare_ntfs_index_insert, stage_mft_record,
-    EnumerationStats,
+    insert_ntfs_index_entry, prepare_ntfs_index_insert, stage_mft_record, EnumerationStats,
 };
 use super::super::error::ParallelEnumError;
-use super::super::partition_work::PartitionWork;
 use evidence_core::EvidenceReader;
 use fs_ntfs::mft_scanner::MftRecord;
 use fs_ntfs::{NtfsDirectoryEntry, NtfsReader};
@@ -59,16 +57,16 @@ impl MftCatalog {
         conn: &Connection,
         data_source_id: &str,
         evidence_reader: Box<dyn EvidenceReader>,
-        partition: &PartitionWork,
+        partition_index: usize,
+        volume_offset: u64,
     ) -> Result<(), ParallelEnumError> {
-        let ntfs = NtfsReader::open(evidence_reader, partition.volume_offset).map_err(|error| {
+        let ntfs = NtfsReader::open(evidence_reader, volume_offset).map_err(|error| {
             ParallelEnumError::MftParams(format!("Open NTFS reader for directory indexes: {error}"))
         })?;
         let mut statement =
             prepare_ntfs_index_insert(conn).map_err(ParallelEnumError::MftParams)?;
         let mut queue = VecDeque::from([5]);
         let mut visited = HashSet::new();
-
         while let Some(directory_ref) = queue.pop_front() {
             if !visited.insert(directory_ref) {
                 continue;
@@ -76,10 +74,12 @@ impl MftCatalog {
             let entries = match ntfs.list_directory_entries_by_inode(directory_ref) {
                 Ok(entries) => entries,
                 Err(error) => {
+                    self.stats.directory_index_failures =
+                        self.stats.directory_index_failures.saturating_add(1);
                     tracing::warn!(
-                        "Failed to list NTFS directory index {}: {}",
-                        directory_ref,
-                        error
+                        inode = directory_ref,
+                        %error,
+                        "Failed to list NTFS directory index during MFT catalog backfill"
                     );
                     continue;
                 }
@@ -90,7 +90,7 @@ impl MftCatalog {
                 self.insert_backfill_action(
                     &mut statement,
                     data_source_id,
-                    partition.index,
+                    partition_index,
                     directory_ref,
                     &action,
                 )?;
@@ -217,56 +217,6 @@ fn index_entry_should_update(
                 || *is_dir != entry.is_dir
         }
     }
-}
-
-pub(in crate::parallel_enum) fn validate_mft_staging_shape(
-    conn: &Connection,
-    data_source_id: &str,
-    partition_index: usize,
-) -> Result<(), ParallelEnumError> {
-    let root_id = mft_entry_id(partition_index, 5);
-    let system32 = root_child_count(conn, data_source_id, &root_id, "System32")?;
-    let hives = root_child_count(conn, data_source_id, &root_id, "SOFTWARE")?
-        + root_child_count(conn, data_source_id, &root_id, "System.evtx")?;
-    let windows = directory_name_count(conn, data_source_id, partition_index, "Windows")?;
-    let users = directory_name_count(conn, data_source_id, partition_index, "Users")?;
-    if windows == 0 && users == 0 && (system32 > 0 || hives > 0) {
-        return Err(ParallelEnumError::MftParams(format!(
-            "MFT fast path produced suspicious flat NTFS tree: root System32={system32}, root hive/log candidates={hives}, Windows dirs={windows}, Users dirs={users}. Falling back to recursive NTFS reader."
-        )));
-    }
-    Ok(())
-}
-
-fn root_child_count(
-    conn: &Connection,
-    data_source_id: &str,
-    root_id: &str,
-    name: &str,
-) -> Result<i64, String> {
-    conn.query_row(
-        "SELECT COUNT(*) FROM file_entries
-         WHERE data_source_id = ?1 AND parent_id = ?2 AND name = ?3 COLLATE NOCASE",
-        params![data_source_id, root_id, name],
-        |row| row.get(0),
-    )
-    .map_err(|error| error.to_string())
-}
-
-fn directory_name_count(
-    conn: &Connection,
-    data_source_id: &str,
-    partition_index: usize,
-    name: &str,
-) -> Result<i64, String> {
-    conn.query_row(
-        "SELECT COUNT(*) FROM file_entries
-         WHERE data_source_id = ?1 AND id LIKE ?2
-           AND entry_type = 'directory' COLLATE NOCASE AND name = ?3 COLLATE NOCASE",
-        params![data_source_id, format!("mft:{partition_index}:%"), name],
-        |row| row.get(0),
-    )
-    .map_err(|error| error.to_string())
 }
 
 pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(

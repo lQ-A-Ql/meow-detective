@@ -1,7 +1,9 @@
+mod prepared_bitlocker;
 mod prepared_ceph;
 mod registry;
 mod session;
 
+pub(crate) use prepared_bitlocker::PreparedBitLockerNtfsFile;
 pub use registry::{PreviewRuntimeRegistry, PreviewRuntimeStats};
 pub(crate) use session::PreviewSession;
 

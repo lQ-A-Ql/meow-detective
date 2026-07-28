@@ -21,8 +21,10 @@ pub async fn open_file_handle(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
+    let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     run_active_case_command(app_state, move |connection, active| {
-        file_service::open_preview_session_for_case(
+        file_service::open_preview_session_for_case_with_bitlocker(
+            &bitlocker_runtime,
             &preview_runtime,
             connection,
             &active.case_root,

@@ -1,8 +1,12 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::atomic::AtomicBool, time::Instant};
 
 use domain::{CaseId, DataSourceId, FileEntryId};
-use evidence_core::{EvidenceReader, FileSystemReader};
-use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
+use evidence_core::{
+    EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader,
+};
+use persistence_sqlite::repositories::{
+    file_repo::FileRepo, partition_repo::PartitionRepo, staging_repo::StagingRepo,
+};
 use rusqlite::Connection;
 use transport::dto::BitLockerCatalogImportDto;
 use volume_bitlocker::read_volume_identities;
@@ -10,6 +14,7 @@ use volume_bitlocker::read_volume_identities;
 use crate::{
     file_service::{self, EnumerationStats},
     import_pipeline::partition::{enumerate_partition_with_fs, PartitionEnumerationRequest},
+    staging,
 };
 
 use super::{
@@ -91,6 +96,7 @@ fn import_catalog_under_lease(
     }
     let placeholder = resolve_placeholder(&source, data_source_id, partition_index, root)?;
     let stats = enumerate_catalog(
+        case_root,
         &source,
         data_source_id,
         partition_index,
@@ -187,6 +193,7 @@ fn resolve_placeholder(
 }
 
 fn enumerate_catalog(
+    case_root: &Path,
     source: &BitLockerSource,
     data_source_id: &DataSourceId,
     partition_index: u32,
@@ -194,6 +201,15 @@ fn enumerate_catalog(
     plaintext: Box<dyn EvidenceReader>,
     filesystem: &str,
 ) -> Result<EnumerationStats, BitLockerServiceError> {
+    if filesystem.eq_ignore_ascii_case("NTFS") {
+        return enumerate_ntfs_catalog(
+            case_root,
+            source,
+            data_source_id,
+            partition_index,
+            plaintext,
+        );
+    }
     let fs = open_plaintext_filesystem(plaintext, filesystem)?;
     let placeholders = HashMap::from([(partition_index as usize, placeholder)]);
     let candidate = crate::datasource_service::ImageFilesystemCandidate {
@@ -216,6 +232,103 @@ fn enumerate_catalog(
         cancel_token: None,
     })
     .map_err(Into::into)
+}
+
+fn enumerate_ntfs_catalog(
+    case_root: &Path,
+    source: &BitLockerSource,
+    data_source_id: &DataSourceId,
+    partition_index: u32,
+    plaintext: Box<dyn EvidenceReader>,
+) -> Result<EnumerationStats, BitLockerServiceError> {
+    let staging_conn =
+        staging::open_partition_staging(case_root, &data_source_id.0, partition_index as usize)
+            .map_err(|error| {
+                BitLockerServiceError::CatalogState(format!("Open NTFS staging: {error}"))
+            })?;
+    staging::reset_partition_staging(&staging_conn).map_err(|error| {
+        BitLockerServiceError::CatalogState(format!("Reset NTFS staging: {error}"))
+    })?;
+    staging::set_staging_meta(&staging_conn, "status", "running").map_err(|error| {
+        BitLockerServiceError::CatalogState(format!("Mark NTFS staging running: {error}"))
+    })?;
+
+    let cancel_token = AtomicBool::new(false);
+    let scan_started = Instant::now();
+    let ntfs_stats = match crate::parallel_enum::enumerate_ntfs_reader_to_staging(
+        &staging_conn,
+        plaintext,
+        &data_source_id.0,
+        partition_index as usize,
+        0,
+        &cancel_token,
+    ) {
+        Ok(stats) => stats,
+        Err(error) => {
+            let _ = staging::set_staging_meta(&staging_conn, "status", "failed");
+            let _ = staging::set_staging_meta(&staging_conn, "error", &error.to_string());
+            return Err(BitLockerServiceError::CatalogState(format!(
+                "NTFS MFT catalog failed: {error}"
+            )));
+        }
+    };
+    let scan_elapsed = scan_started.elapsed();
+
+    drop(staging_conn);
+    let merge_conn =
+        staging::open_partition_staging(case_root, &data_source_id.0, partition_index as usize)
+            .map_err(|error| {
+                BitLockerServiceError::CatalogState(format!(
+                    "Reopen NTFS staging for merge: {error}"
+                ))
+            })?;
+
+    let merge_started = Instant::now();
+    if let Err(error) = StagingRepo::merge_enum_staging_to_main(
+        &source.source_conn,
+        &merge_conn,
+        &data_source_id.0,
+        partition_index as usize,
+        &source.partition.name,
+    ) {
+        let _ = staging::set_staging_meta(&merge_conn, "status", "failed");
+        let _ = staging::set_staging_meta(&merge_conn, "error", &error.to_string());
+        return Err(BitLockerServiceError::CatalogState(format!(
+            "Merge NTFS catalog: {error}"
+        )));
+    }
+    let merge_elapsed = merge_started.elapsed();
+    staging::set_staging_meta(&merge_conn, "status", "done").map_err(|error| {
+        BitLockerServiceError::CatalogState(format!("Mark NTFS staging done: {error}"))
+    })?;
+    tracing::info!(
+        data_source_id = %data_source_id.0,
+        partition_index,
+        rows = ntfs_stats.file_count + ntfs_stats.dir_count,
+        scan_ms = scan_elapsed.as_millis(),
+        merge_ms = merge_elapsed.as_millis(),
+        "BitLocker NTFS catalog imported through the MFT fast path"
+    );
+    let mut warnings = Vec::new();
+    let mut diagnostics = Vec::new();
+    if ntfs_stats.directory_index_failures > 0 {
+        let message = format!(
+            "{} NTFS directory index(es) could not be read during MFT catalog backfill",
+            ntfs_stats.directory_index_failures
+        );
+        warnings.push(message.clone());
+        diagnostics.push(FileSystemDiagnostic::new(
+            FileSystemDiagnosticKind::DirectoryPartial,
+            message,
+        ));
+    }
+    Ok(EnumerationStats {
+        file_count: ntfs_stats.file_count,
+        dir_count: ntfs_stats.dir_count,
+        total_size: ntfs_stats.total_size,
+        warnings,
+        diagnostics,
+    })
 }
 
 fn record_catalog_audit(

@@ -39,7 +39,7 @@ pub(crate) use descriptor::{descriptor_for_file_with_cache, preview_descriptor_f
 pub(crate) use filesystem::{
     format_image_range_error, is_exfat_filesystem_kind, is_fat_filesystem_kind,
     is_linux_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,
-    resolve_partition_index_for_entry,
+    mft_file_locator_from_entry_id, resolve_partition_index_for_entry,
 };
 pub(crate) use image_open::{
     open_candidate_block_reader_with_lvm_cache, open_descriptor_image_file,
@@ -62,10 +62,11 @@ pub(crate) use path::{
 };
 pub(crate) use range::file_id_from_handle;
 pub(crate) use range_fs::{
-    try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
-    try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
-    try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
-    try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
+    try_read_bitlocker_ntfs_range_for_descriptor, try_read_exfat_image_range_for_descriptor,
+    try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
+    try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
+    try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
+    try_read_ntfs_image_range_for_entry,
 };
 pub(crate) use validation::{validate_file_encryption_status, validate_readable_file_entry};
 

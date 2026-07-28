@@ -4,7 +4,10 @@ use super::{
     range::api::read_file_bytes_for_descriptor_with_context,
 };
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
-use crate::file_service::FileServiceError;
+use crate::file_service::{
+    preview_runtime::{PreparedBitLockerNtfsFile, PreviewRuntimeRegistry, PreviewSession},
+    FileServiceError,
+};
 use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
@@ -98,13 +101,17 @@ fn section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {
     desc
 }
 
-fn write_large_ntfs_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::io::Result<()> {
+fn write_large_ntfs_raw_fixture(
+    path: &std::path::Path,
+    marker: &[u8],
+    sparse_prefix_bytes: u64,
+) -> std::io::Result<()> {
     const CLUSTER_SIZE: usize = 512;
     const MFT_RECORD_SIZE: usize = 1024;
     const MFT_CLUSTER: usize = 2;
     const FILE_RECORD: u64 = 6;
     const DATA_CLUSTER: usize = 32;
-    const SPARSE_PREFIX_CLUSTERS: u64 = (128 * 1024 * 1024) / CLUSTER_SIZE as u64;
+    let sparse_prefix_clusters = sparse_prefix_bytes / CLUSTER_SIZE as u64;
 
     let rec5_off = MFT_CLUSTER * CLUSTER_SIZE + 5 * MFT_RECORD_SIZE;
     let rec6_off = MFT_CLUSTER * CLUSTER_SIZE + FILE_RECORD as usize * MFT_RECORD_SIZE;
@@ -136,8 +143,7 @@ fn write_large_ntfs_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
     let entry_len = entry.len();
     entry[0..8].copy_from_slice(&FILE_RECORD.to_le_bytes());
     entry[8..10].copy_from_slice(&(entry_len as u16).to_le_bytes());
-    entry[0x40..0x48]
-        .copy_from_slice(&((128u64 * 1024 * 1024) + marker.len() as u64).to_le_bytes());
+    entry[0x40..0x48].copy_from_slice(&(sparse_prefix_bytes + marker.len() as u64).to_le_bytes());
     entry[0x50] = "large.bin".encode_utf16().count() as u8;
     for (i, ch) in "large.bin".encode_utf16().enumerate() {
         entry[0x52 + i * 2..0x54 + i * 2].copy_from_slice(&ch.to_le_bytes());
@@ -155,17 +161,17 @@ fn write_large_ntfs_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
     rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
     rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     let data_attr = 0x68usize;
-    let logical_size = (128u64 * 1024 * 1024) + marker.len() as u64;
+    let logical_size = sparse_prefix_bytes + marker.len() as u64;
     rec6[data_attr..data_attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
     rec6[data_attr + 8] = 1;
     rec6[data_attr + 0x20..data_attr + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec6[data_attr + 0x28..data_attr + 0x30]
-        .copy_from_slice(&((SPARSE_PREFIX_CLUSTERS + 1) * CLUSTER_SIZE as u64).to_le_bytes());
+        .copy_from_slice(&((sparse_prefix_clusters + 1) * CLUSTER_SIZE as u64).to_le_bytes());
     rec6[data_attr + 0x30..data_attr + 0x38].copy_from_slice(&logical_size.to_le_bytes());
 
     let run = data_attr + 0x40;
     rec6[run] = 0x03;
-    rec6[run + 1..run + 4].copy_from_slice(&SPARSE_PREFIX_CLUSTERS.to_le_bytes()[..3]);
+    rec6[run + 1..run + 4].copy_from_slice(&sparse_prefix_clusters.to_le_bytes()[..3]);
     rec6[run + 4] = 0x11;
     rec6[run + 5] = 1;
     rec6[run + 6] = DATA_CLUSTER as u8;
@@ -586,6 +592,38 @@ impl PreviewReadContext for CephRbdRangeContext<'_> {
             self.image.clone(),
             self.rejected.clone(),
         )))
+    }
+}
+
+struct BitLockerNtfsRangeContext<'a> {
+    conn: &'a rusqlite::Connection,
+    source_path: std::path::PathBuf,
+    open_calls: usize,
+}
+
+impl PreviewReadContext for BitLockerNtfsRangeContext<'_> {
+    fn conn(&self) -> &rusqlite::Connection {
+        self.conn
+    }
+
+    fn is_bitlocker_candidate(
+        &self,
+        _candidate: &PreviewPartitionCandidate,
+    ) -> Result<bool, FileServiceError> {
+        Ok(true)
+    }
+
+    fn open_candidate_block_reader(
+        &mut self,
+        _descriptor: &PreviewDescriptor,
+        _candidate: &PreviewPartitionCandidate,
+    ) -> Result<(Box<dyn evidence_core::EvidenceReader>, u64, String), FileServiceError> {
+        self.open_calls += 1;
+        Ok((
+            Box::new(evidence_core::RawImageReader::open(&self.source_path)?),
+            0,
+            "NTFS".to_string(),
+        ))
     }
 }
 
@@ -1122,7 +1160,7 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
     let dir = tempfile::TempDir::new().unwrap();
     let raw_path = dir.path().join("large_ntfs.raw");
     let marker = b"RANGE-ONLY";
-    write_large_ntfs_raw_fixture(&raw_path, marker).unwrap();
+    write_large_ntfs_raw_fixture(&raw_path, marker, 128u64 * 1024 * 1024).unwrap();
 
     let huge_size = (128u64 * 1024 * 1024) + marker.len() as u64;
     let descriptor = PreviewDescriptor {
@@ -1152,6 +1190,119 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
             .unwrap();
 
     assert_eq!(bytes, marker);
+}
+
+#[test]
+fn bitlocker_ntfs_range_uses_inode_without_materializing_large_file() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let raw_path = dir.path().join("bitlocker_plaintext_ntfs.raw");
+    let marker = b"BITLOCKER-RANGE-ONLY";
+    let sparse_prefix_bytes = 300u64 * 1024 * 1024;
+    write_large_ntfs_raw_fixture(&raw_path, marker, sparse_prefix_bytes).unwrap();
+
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let mut context = BitLockerNtfsRangeContext {
+        conn: &conn,
+        source_path: raw_path.clone(),
+        open_calls: 0,
+    };
+    let descriptor = PreviewDescriptor {
+        case_id: "case-bitlocker-ntfs-range".to_string(),
+        file_id: "mft:5:6".to_string(),
+        source_kind: "raw".to_string(),
+        source_path: raw_path.display().to_string(),
+        partition_index: Some(5),
+        filesystem_kind: Some("BitLocker".to_string()),
+        path: "[P5]/large.mp4".to_string(),
+        mime: Some("video/mp4".to_string()),
+        size: sparse_prefix_bytes + marker.len() as u64,
+        data_source_id: "ds-bitlocker-ntfs-range".to_string(),
+        partition_candidates: vec![PreviewPartitionCandidate {
+            partition_index: 5,
+            filesystem_kind: "BitLocker".to_string(),
+            offset: 0,
+            lvm_identity: None,
+        }],
+        entry_size: sparse_prefix_bytes + marker.len() as u64,
+        entry_modified_at: None,
+        ceph_fs: None,
+    };
+
+    let bytes = read_file_bytes_for_descriptor_with_context(
+        &mut context,
+        &descriptor,
+        sparse_prefix_bytes,
+        marker.len() as u32,
+    )
+    .unwrap();
+
+    assert_eq!(bytes, marker);
+    assert_eq!(context.open_calls, 1);
+}
+
+#[test]
+fn prepared_bitlocker_session_reuses_reader_for_nonsequential_ranges() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let raw_path = dir.path().join("prepared_bitlocker_plaintext_ntfs.raw");
+    let marker = b"PREPARED-BITLOCKER-RANGE";
+    let sparse_prefix_bytes = 300u64 * 1024 * 1024;
+    write_large_ntfs_raw_fixture(&raw_path, marker, sparse_prefix_bytes).unwrap();
+
+    let prepared = PreparedBitLockerNtfsFile::open(
+        Box::new(evidence_core::RawImageReader::open(&raw_path).unwrap()),
+        0,
+        6,
+    )
+    .unwrap();
+    let case_id = CaseId("case-prepared-bitlocker".to_string());
+    let source_id = DataSourceId("source-prepared-bitlocker".to_string());
+    let registry = PreviewRuntimeRegistry::default();
+    let token = registry.begin_session(&case_id, &source_id).unwrap();
+    let handle = registry
+        .insert_session(
+            &token,
+            PreviewSession::prepared_bitlocker_ntfs(
+                case_id.0.clone(),
+                source_id.0.clone(),
+                "ds:source-prepared-bitlocker:mft:5:6".to_string(),
+                sparse_prefix_bytes + marker.len() as u64,
+                Some("video/mp4".to_string()),
+                prepared,
+            ),
+        )
+        .unwrap();
+    drop(token);
+
+    let session = registry.get_session(&case_id.0, &handle).unwrap();
+    assert_eq!(
+        session
+            .read_prepared_range(0, 64 * 1024)
+            .unwrap()
+            .unwrap()
+            .len(),
+        64 * 1024
+    );
+    assert_eq!(
+        session
+            .read_prepared_range(sparse_prefix_bytes / 2, 64 * 1024)
+            .unwrap()
+            .unwrap()
+            .len(),
+        64 * 1024
+    );
+    assert_eq!(
+        session
+            .read_prepared_range(sparse_prefix_bytes, marker.len())
+            .unwrap()
+            .unwrap(),
+        marker
+    );
+    drop(session);
+
+    registry
+        .invalidate_source(&case_id.0, &source_id.0)
+        .unwrap();
+    assert!(registry.get_session(&case_id.0, &handle).is_err());
 }
 
 #[test]
