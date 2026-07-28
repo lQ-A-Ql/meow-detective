@@ -62,11 +62,11 @@ pub(crate) use path::{
 };
 pub(crate) use range::file_id_from_handle;
 pub(crate) use range_fs::{
-    try_read_bitlocker_ntfs_range_for_descriptor, try_read_exfat_image_range_for_descriptor,
-    try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
-    try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
-    try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
-    try_read_ntfs_image_range_for_entry,
+    open_filesystem_reader, try_read_bitlocker_ntfs_range_for_descriptor,
+    try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
+    try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
+    try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
+    try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
 };
 pub(crate) use validation::{validate_file_encryption_status, validate_readable_file_entry};
 

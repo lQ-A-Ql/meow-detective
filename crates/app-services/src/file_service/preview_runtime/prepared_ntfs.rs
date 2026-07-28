@@ -1,11 +1,11 @@
 use crate::file_service::FileServiceError;
 
-pub(crate) struct PreparedBitLockerNtfsFile {
+pub(crate) struct PreparedNtfsFile {
     filesystem: fs_ntfs::NtfsReader,
     inode: u64,
 }
 
-impl PreparedBitLockerNtfsFile {
+impl PreparedNtfsFile {
     pub(crate) fn open(
         reader: Box<dyn evidence_core::EvidenceReader>,
         filesystem_offset: u64,

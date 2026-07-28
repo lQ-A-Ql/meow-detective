@@ -5,7 +5,7 @@ use super::{
 };
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
 use crate::file_service::{
-    preview_runtime::{PreparedBitLockerNtfsFile, PreviewRuntimeRegistry, PreviewSession},
+    preview_runtime::{PreparedFile, PreviewRuntimeRegistry, PreviewSession},
     FileServiceError,
 };
 use domain::{
@@ -1241,30 +1241,30 @@ fn bitlocker_ntfs_range_uses_inode_without_materializing_large_file() {
 }
 
 #[test]
-fn prepared_bitlocker_session_reuses_reader_for_nonsequential_ranges() {
+fn prepared_ntfs_session_reuses_reader_for_nonsequential_ranges() {
     let dir = tempfile::TempDir::new().unwrap();
-    let raw_path = dir.path().join("prepared_bitlocker_plaintext_ntfs.raw");
-    let marker = b"PREPARED-BITLOCKER-RANGE";
+    let raw_path = dir.path().join("prepared_ntfs.raw");
+    let marker = b"PREPARED-NTFS-RANGE";
     let sparse_prefix_bytes = 300u64 * 1024 * 1024;
     write_large_ntfs_raw_fixture(&raw_path, marker, sparse_prefix_bytes).unwrap();
 
-    let prepared = PreparedBitLockerNtfsFile::open(
+    let prepared = PreparedFile::open_ntfs(
         Box::new(evidence_core::RawImageReader::open(&raw_path).unwrap()),
         0,
         6,
     )
     .unwrap();
-    let case_id = CaseId("case-prepared-bitlocker".to_string());
-    let source_id = DataSourceId("source-prepared-bitlocker".to_string());
+    let case_id = CaseId("case-prepared-ntfs".to_string());
+    let source_id = DataSourceId("source-prepared-ntfs".to_string());
     let registry = PreviewRuntimeRegistry::default();
     let token = registry.begin_session(&case_id, &source_id).unwrap();
     let handle = registry
         .insert_session(
             &token,
-            PreviewSession::prepared_bitlocker_ntfs(
+            PreviewSession::prepared_file(
                 case_id.0.clone(),
                 source_id.0.clone(),
-                "ds:source-prepared-bitlocker:mft:5:6".to_string(),
+                "ds:source-prepared-ntfs:mft:5:6".to_string(),
                 sparse_prefix_bytes + marker.len() as u64,
                 Some("video/mp4".to_string()),
                 prepared,

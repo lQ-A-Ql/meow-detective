@@ -11,10 +11,10 @@ use crate::{
     ceph_reconstruction::open_cephfs_file_reader,
     file_service::{
         metadata::source_routing::{open_source_for_file_id, read_file_range_for_source_case},
-        preview_runtime::{PreparedBitLockerNtfsFile, PreviewSession},
+        preview_runtime::{PreparedFile, PreviewSession},
         viewer::{
-            exact_partition_candidate, mft_file_locator_from_entry_id, preview_descriptor_for_case,
-            PreviewReadContext,
+            exact_partition_candidate, mft_file_locator_from_entry_id, open_filesystem_reader,
+            preview_descriptor_for_case, PreviewReadContext,
         },
         FileServiceError, PreviewRuntimeRegistry, SourceReadContext,
     },
@@ -64,7 +64,7 @@ fn open_preview_session_internal(
             .encode()
             .0;
 
-    let prepared_bitlocker = prepare_bitlocker_ntfs_file(
+    let prepared_file = prepare_local_preview_file(
         bitlocker_runtime,
         &source_conn,
         case_conn,
@@ -73,8 +73,8 @@ fn open_preview_session_internal(
         &global_id.data_source_id,
         &descriptor,
     )?;
-    let session = if let Some(file) = prepared_bitlocker {
-        PreviewSession::prepared_bitlocker_ntfs(
+    let session = if let Some(file) = prepared_file {
+        PreviewSession::prepared_file(
             case_id.0.clone(),
             global_id.data_source_id.0.clone(),
             global_file_id,
@@ -140,6 +140,37 @@ fn open_preview_session_internal(
     })
 }
 
+fn prepare_local_preview_file(
+    bitlocker_runtime: Option<&Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
+    source_conn: &rusqlite::Connection,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    descriptor: &crate::file_service::PreviewDescriptor,
+) -> Result<Option<PreparedFile>, FileServiceError> {
+    let prepared_bitlocker = prepare_bitlocker_ntfs_file(
+        bitlocker_runtime,
+        source_conn,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        descriptor,
+    )?;
+    if prepared_bitlocker.is_some() {
+        return Ok(prepared_bitlocker);
+    }
+    prepare_native_filesystem_file(
+        source_conn,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        descriptor,
+    )
+}
+
 fn prepare_bitlocker_ntfs_file(
     runtime: Option<&Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
     source_conn: &rusqlite::Connection,
@@ -148,7 +179,7 @@ fn prepare_bitlocker_ntfs_file(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     descriptor: &crate::file_service::PreviewDescriptor,
-) -> Result<Option<PreparedBitLockerNtfsFile>, FileServiceError> {
+) -> Result<Option<PreparedFile>, FileServiceError> {
     let Some(runtime) = runtime else {
         return Ok(None);
     };
@@ -173,7 +204,50 @@ fn prepare_bitlocker_ntfs_file(
     if !filesystem_kind.eq_ignore_ascii_case("NTFS") {
         return Ok(None);
     }
-    PreparedBitLockerNtfsFile::open(reader, filesystem_offset, inode).map(Some)
+    PreparedFile::open_ntfs(reader, filesystem_offset, inode).map(Some)
+}
+
+fn prepare_native_filesystem_file(
+    source_conn: &rusqlite::Connection,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    descriptor: &crate::file_service::PreviewDescriptor,
+) -> Result<Option<PreparedFile>, FileServiceError> {
+    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        return Ok(None);
+    }
+    let candidate = match exact_partition_candidate(descriptor) {
+        Ok(candidate) => candidate,
+        Err(_) => return Ok(None),
+    };
+    let mut context =
+        SourceReadContext::new(source_conn, case_conn, case_root, case_id, data_source_id);
+    if context.is_bitlocker_candidate(candidate)? {
+        return Ok(None);
+    }
+    let (reader, filesystem_offset, filesystem_kind) =
+        match context.open_candidate_block_reader(descriptor, candidate) {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+    if filesystem_kind.eq_ignore_ascii_case("NTFS") {
+        if let Some((partition_index, inode)) = mft_file_locator_from_entry_id(&descriptor.file_id)
+        {
+            if partition_index != candidate.partition_index {
+                return Err(FileServiceError::security(
+                    "MFT file identifier does not match the routed partition",
+                ));
+            }
+            return PreparedFile::open_ntfs(reader, filesystem_offset, inode).map(Some);
+        }
+    }
+    let filesystem = match open_filesystem_reader(candidate, reader, filesystem_offset) {
+        Ok(filesystem) => filesystem,
+        Err(_) => return Ok(None),
+    };
+    PreparedFile::open_filesystem(filesystem, descriptor).map(Some)
 }
 
 pub fn read_preview_session_range_for_case(

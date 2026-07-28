@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use evidence_core::FileSystemReader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
@@ -12,7 +11,10 @@ use crate::file_service::{
     FileServiceError,
 };
 
-use super::common::{read_descriptor_range, read_entry_range, record_failure, ReaderFactory};
+use super::{
+    common::{read_descriptor_range, read_entry_range, record_failure, ReaderFactory},
+    factory::open_filesystem_reader,
+};
 
 pub(crate) fn try_read_linux_image_range_for_descriptor(
     descriptor: &PreviewDescriptor,
@@ -70,8 +72,19 @@ fn read_candidates(
                     continue;
                 }
             };
-        let Some(fs) = open_filesystem(candidate, reader, fs_offset, reasons) else {
-            continue;
+        let fs = match open_filesystem_reader(candidate, reader, fs_offset) {
+            Ok(fs) => fs,
+            Err(error) => {
+                record_failure(
+                    reasons,
+                    format!(
+                        "{} partition {} @{} open failed: {}",
+                        candidate.filesystem_kind, candidate.partition_index, fs_offset, error
+                    ),
+                    "Descriptor Linux range filesystem open failed",
+                );
+                continue;
+            }
         };
         for path in paths {
             match fs.read_file_range(path, offset, length) {
@@ -92,40 +105,4 @@ fn read_candidates(
         }
     }
     Ok(None)
-}
-
-fn open_filesystem(
-    candidate: &PreviewPartitionCandidate,
-    reader: Box<dyn evidence_core::EvidenceReader>,
-    fs_offset: u64,
-    reasons: &mut Vec<String>,
-) -> Option<Box<dyn FileSystemReader>> {
-    let result: std::io::Result<Box<dyn FileSystemReader>> = match candidate
-        .filesystem_kind
-        .as_str()
-    {
-        kind if kind.eq_ignore_ascii_case("ext4") => fs_ext4::Ext4Reader::open(reader, fs_offset)
-            .map(|fs| Box::new(fs) as Box<dyn FileSystemReader>),
-        kind if kind.eq_ignore_ascii_case("xfs") => fs_xfs::XfsReader::open(reader, fs_offset)
-            .map(|fs| Box::new(fs) as Box<dyn FileSystemReader>),
-        kind if kind.eq_ignore_ascii_case("btrfs") => {
-            fs_btrfs::BtrfsReader::open(reader, fs_offset)
-                .map(|fs| Box::new(fs) as Box<dyn FileSystemReader>)
-        }
-        _ => return None,
-    };
-    match result {
-        Ok(fs) => Some(fs),
-        Err(error) => {
-            record_failure(
-                reasons,
-                format!(
-                    "{} partition {} @{} open failed: {}",
-                    candidate.filesystem_kind, candidate.partition_index, fs_offset, error
-                ),
-                "Descriptor Linux range filesystem open failed",
-            );
-            None
-        }
-    }
 }
