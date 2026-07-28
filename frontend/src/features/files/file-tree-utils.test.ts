@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectTreeNodeIds,
+  findEvictableTreeCacheKey,
   findTreeNode,
   findTreeRoot,
   flattenExpandedTree,
@@ -76,5 +77,44 @@ describe('file-tree-utils', () => {
 
     expect(flattened).toHaveLength(depth);
     expect(flattened.at(-1)?.id).toBe(`node-${depth - 1}`);
+  });
+
+  it('evicts a collapsed cache entry before a visible expanded ancestor', () => {
+    const root = node('root', 0);
+    const expandedBranch = node('expanded', 1);
+    const collapsedBranch = node('collapsed', 1);
+    const nested = node('nested', 2);
+    const children = {
+      root: [expandedBranch, collapsedBranch],
+      expanded: [nested],
+      collapsed: [],
+    };
+
+    expect(
+      findEvictableTreeCacheKey(
+        [root],
+        children,
+        new Set(['root', 'expanded']),
+        new Set(),
+      ),
+    ).toBe('collapsed');
+  });
+
+  it('keeps the cache intact when every entry renders an expanded branch', () => {
+    const root = node('root', 0);
+    const branch = node('branch', 1);
+    const children = {
+      root: [branch],
+      branch: [],
+    };
+
+    expect(
+      findEvictableTreeCacheKey(
+        [root],
+        children,
+        new Set(['root', 'branch']),
+        new Set(),
+      ),
+    ).toBeUndefined();
   });
 });

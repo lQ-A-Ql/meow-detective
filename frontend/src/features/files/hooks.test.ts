@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HexViewer } from '@/components/viewers/HexViewer';
+import type { FileChildrenPage } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   getFileTree: vi.fn(),
+  getFileChildrenPage: vi.fn(),
   getMediaUrl: vi.fn(),
   readMediaRange: vi.fn(),
   openFileHandle: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock('@/lib/api/files', () => ({
   getFileRowsPage: vi.fn(),
   getFileJumpContext: vi.fn(),
   getFileChildren: vi.fn(),
-  getFileChildrenPage: vi.fn(),
+  getFileChildrenPage: mocks.getFileChildrenPage,
   importDataSource: mocks.importDataSource,
   openFileHandle: mocks.openFileHandle,
   closeFileHandle: mocks.closeFileHandle,
@@ -44,6 +46,7 @@ vi.mock('@/features/cache-invalidation', () => ({
 
 import {
   useFileHandle,
+  useFileChildrenPage,
   useImportDataSource,
   useFileTree,
   useFileViewer,
@@ -119,6 +122,36 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       // staleTime Infinity means the data never becomes stale
       expect(result.current.isStale).toBe(false);
+    });
+
+    it('does not reuse another parent directory page while switching branches', async () => {
+      const firstPage = deferred<FileChildrenPage>();
+      const secondPage = deferred<FileChildrenPage>();
+      mocks.getFileChildrenPage
+        .mockReturnValueOnce(firstPage.promise)
+        .mockReturnValueOnce(secondPage.promise);
+
+      const { result, rerender } = renderHook(
+        ({ parentId }: { parentId?: string }) => useFileChildrenPage(parentId),
+        { initialProps: { parentId: 'parent-a' }, wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(mocks.getFileChildrenPage).toHaveBeenCalledWith('parent-a', 0, 500, false));
+      await act(async () => {
+        firstPage.resolve({
+          children: [{ id: 'child-a', name: 'A', depth: 1, hasChildren: false, deleted: false, hidden: false, system: false }],
+          totalCount: 1,
+          offset: 0,
+          limit: 500,
+          truncated: false,
+        });
+        await firstPage.promise;
+      });
+      await waitFor(() => expect(result.current.data?.children[0]?.id).toBe('child-a'));
+
+      rerender({ parentId: 'parent-b' });
+
+      expect(result.current.data).toBeUndefined();
     });
   });
 

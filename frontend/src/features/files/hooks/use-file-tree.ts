@@ -6,6 +6,7 @@ import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import {
   findTreeNode,
   findTreeRoot,
+  findEvictableTreeCacheKey,
   flattenExpandedTree,
   mergeTreeNodePages,
   rebaseTreeNodeDepths,
@@ -186,10 +187,15 @@ export function useFileTree({
         : normalizedChildren;
       if (sameTreeNodeList(previousChildren, nextChildren)) return current;
       if (!current[activeDirectoryId] && keys.length >= MAX_TREE_CACHE_SIZE) {
-        // Never evict synthetic data-source slots: the pre-population effect
-        // only rewrites them when its deps change, so evicting one would leave
-        // the data-source node permanently unexpandable.
-        const evictKey = keys.find((key) => !isDataSourceTreeNodeId(key));
+        // Keep every expanded, visible branch resident. Evicting an ancestor
+        // would make its whole subtree disappear despite its expanded state.
+        const pinnedIds = new Set(keys.filter(isDataSourceTreeNodeId));
+        const evictKey = findEvictableTreeCacheKey(
+          rootNodes,
+          current,
+          new Set(expandedDirectoryIds),
+          pinnedIds,
+        );
         if (evictKey) {
           const { [evictKey]: _, ...rest } = current;
           return { ...rest, [activeDirectoryId]: nextChildren };
@@ -202,6 +208,7 @@ export function useFileTree({
     activeChildrenOffset,
     activeDirectoryId,
     activeDirectoryIsDataSource,
+    expandedDirectoryIds,
     rootNodes,
     treeChildren,
   ]);

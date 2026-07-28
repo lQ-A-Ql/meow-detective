@@ -134,7 +134,6 @@ export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, 
     queryFn: () => getFileChildrenPage(parentId!, offset, limit, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
-    placeholderData: keepPreviousData,
   });
 }
 

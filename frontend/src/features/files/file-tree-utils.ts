@@ -103,6 +103,28 @@ export function flattenExpandedTree(
   return visible;
 }
 
+/**
+ * Returns a cache entry that is not needed to render the currently visible
+ * expanded tree. A visible ancestor must never be evicted: doing so removes
+ * the entire branch from the tree until the next backend fetch.
+ */
+export function findEvictableTreeCacheKey(
+  roots: readonly FileTreeNode[],
+  childrenById: TreeChildrenById,
+  expandedIds: ReadonlySet<string>,
+  pinnedIds: ReadonlySet<string>,
+) {
+  const visibleExpandedIds = new Set(
+    flattenExpandedTree(roots, childrenById, expandedIds)
+      .filter((node) => expandedIds.has(node.id))
+      .map((node) => node.id),
+  );
+
+  return Object.keys(childrenById).find(
+    (nodeId) => !pinnedIds.has(nodeId) && !visibleExpandedIds.has(nodeId),
+  );
+}
+
 export function findTreeNode(
   nodeId: string | undefined,
   roots: readonly FileTreeNode[],
