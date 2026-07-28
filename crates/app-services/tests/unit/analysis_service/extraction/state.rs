@@ -150,3 +150,21 @@ fn output_digest_preserves_duplicate_multiplicity() {
 
     assert_ne!(output_digest(&single), output_digest(&duplicate));
 }
+
+#[test]
+fn retryable_source_read_failure_does_not_create_a_checkpoint() {
+    let capability = crate::analysis_service::capability::find_capability("Registry")
+        .expect("registry capability");
+    let mut state = ExtractionState::new(&[capability]);
+
+    state.record_retryable_failure(
+        capability,
+        "BitLocker volume is locked; register a verified unlock first".to_string(),
+    );
+
+    assert_eq!(state.retryable_failure_count, 1);
+    assert!(state.clean_scans.is_empty());
+    assert!(state.diagnostic_scans.is_empty());
+    assert!(state.complete_scans.is_empty());
+    assert!(!state.has_pending_outputs());
+}

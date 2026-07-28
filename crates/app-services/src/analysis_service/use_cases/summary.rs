@@ -10,21 +10,24 @@ use crate::analysis_service::{
 };
 use crate::file_service::SourceReadContext;
 
+use super::runtime::AnalysisSourceReadRuntime;
+
 pub fn generate_source_analysis_summary(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
+    runtime: &AnalysisSourceReadRuntime,
 ) -> Result<String, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["Registry"])?;
-    let mut source_reader = SourceReadContext::new(
+    let mut source_reader = runtime.bind(SourceReadContext::new(
         &source.connection,
         case_conn,
         case_root,
         case_id,
         data_source_id,
-    );
+    ));
     let system_info = extract_system_info_for_case(&source.connection, |file_id, max_bytes| {
         source_reader.read_file_header_by_id(file_id, max_bytes)
     });

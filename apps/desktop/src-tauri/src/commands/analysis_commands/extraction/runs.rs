@@ -18,6 +18,9 @@ pub async fn run_evidence_classification(
 ) -> Result<EvidenceClassificationSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
     let data_source_id = DataSourceId(request.data_source_id);
     let requested_categories = request.categories;
 
@@ -32,6 +35,7 @@ pub async fn run_evidence_classification(
             &active.meta.id,
             &data_source_id,
             &categories,
+            &source_runtime,
         )
         .map_err(CommandError::from_typed_service_error)
     })
@@ -46,6 +50,9 @@ pub async fn run_analysis_extraction(
 ) -> Result<AnalysisExtractionRunDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
     let data_source_id = DataSourceId(request.data_source_id);
     let requested_categories = request.categories;
     let run_id = uuid::Uuid::new_v4().to_string();
@@ -61,7 +68,7 @@ pub async fn run_analysis_extraction(
             &active.meta.id,
             &data_source_id,
             &categories,
-            &run_id,
+            analysis_service::AnalysisExtractionProgressContext::new(&source_runtime, &run_id),
             |progress| event_bridge::emit_analysis_extraction_progress(&app, &progress),
         );
         if let Err(error) = &result {

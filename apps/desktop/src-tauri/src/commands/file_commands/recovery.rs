@@ -50,16 +50,18 @@ pub async fn run_deleted_recovery(
 ) -> Result<DeletedRecoveryRunDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
     run_active_case_command(app_state, move |case_conn, active| {
-        deleted_recovery::run_deleted_recovery(
+        deleted_recovery::DeletedRecoveryContext::new(
             case_conn,
             &active.case_root,
             &active.meta.id,
             &data_source_id,
-            request.partition_index,
         )
+        .with_bitlocker_runtime(bitlocker_runtime)
+        .run(request.partition_index)
         .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -72,18 +74,18 @@ pub async fn read_deleted_recovery_range(
 ) -> Result<DeletedRecoveryContentRangeDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
     run_active_case_command(app_state, move |case_conn, active| {
-        deleted_recovery::read_deleted_recovery_range(
+        deleted_recovery::DeletedRecoveryContext::new(
             case_conn,
             &active.case_root,
             &active.meta.id,
             &data_source_id,
-            &request.recovery_id,
-            request.offset,
-            request.length,
         )
+        .with_bitlocker_runtime(bitlocker_runtime)
+        .read_range(&request.recovery_id, request.offset, request.length)
         .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -96,6 +98,7 @@ pub async fn export_deleted_recovery(
 ) -> Result<DeletedRecoveryExportDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     let audit_state = app_state.clone();
     let audit_recovery_id = request.recovery_id.clone();
     let audit_destination = request.destination_path.clone();
@@ -104,15 +107,14 @@ pub async fn export_deleted_recovery(
     let destination = PathBuf::from(request.destination_path);
 
     let outcome = run_active_case_command(app_state, move |case_conn, active| {
-        deleted_recovery::export_deleted_recovery(
+        deleted_recovery::DeletedRecoveryContext::new(
             case_conn,
             &active.case_root,
             &active.meta.id,
             &data_source_id,
-            &request.recovery_id,
-            &destination,
-            request.overwrite,
         )
+        .with_bitlocker_runtime(bitlocker_runtime)
+        .export(&request.recovery_id, &destination, request.overwrite)
         .map_err(CommandError::from_typed_service_error)
     })
     .await;

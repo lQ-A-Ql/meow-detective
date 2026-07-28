@@ -25,6 +25,8 @@ pub enum DeletedRecoveryError {
     Integrity(String),
     #[error("unsupported recovery target: {0}")]
     Unsupported(String),
+    #[error("BitLocker volume is locked; unlock it before deleted-file recovery")]
+    BitLockerLocked,
     #[error("invalid recovery state: {0}")]
     InvalidState(String),
     #[error("recovery parser error: {0}")]
@@ -39,6 +41,7 @@ impl ServiceErrorCategory for DeletedRecoveryError {
             Self::Database(_) | Self::Io(_) => ErrorCategory::Io,
             Self::Source(crate::source_db::ReadySourceError::UnsupportedPlatform { .. })
             | Self::Unsupported(_)
+            | Self::BitLockerLocked
             | Self::ContentUnavailable(_) => ErrorCategory::Unsupported,
             Self::Source(crate::source_db::ReadySourceError::NotFound { .. })
             | Self::Source(crate::source_db::ReadySourceError::NotReady { .. })
@@ -63,6 +66,7 @@ impl ServiceErrorCategory for DeletedRecoveryError {
             Self::InvalidRange(_) => "RECOVERY_RANGE_INVALID",
             Self::Integrity(_) => "RECOVERY_INTEGRITY_MISMATCH",
             Self::Unsupported(_) => "RECOVERY_UNSUPPORTED",
+            Self::BitLockerLocked => "RECOVERY_BITLOCKER_LOCKED",
             Self::InvalidState(_) => "RECOVERY_INVALID_STATE",
             Self::Parser(_) => "RECOVERY_PARSER_ERROR",
             Self::Io(_) => "RECOVERY_IO_ERROR",
@@ -75,6 +79,7 @@ impl ServiceErrorCategory for DeletedRecoveryError {
             Self::NotFound { .. }
                 | Self::RecoveryNotFound { .. }
                 | Self::Unsupported(_)
+                | Self::BitLockerLocked
                 | Self::ContentUnavailable(_)
                 | Self::InvalidRange(_)
                 | Self::Parser(_)

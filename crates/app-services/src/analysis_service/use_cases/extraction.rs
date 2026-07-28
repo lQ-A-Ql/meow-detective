@@ -16,6 +16,29 @@ use crate::file_service::{
 };
 use transport::dto::{AnalysisExtractionProgressDto, AnalysisExtractionRunDto};
 
+use super::runtime::AnalysisSourceReadRuntime;
+
+pub struct AnalysisExtractionProgressContext<'a> {
+    pub source_runtime: &'a AnalysisSourceReadRuntime,
+    pub run_id: &'a str,
+}
+
+impl<'a> AnalysisExtractionProgressContext<'a> {
+    #[must_use]
+    pub fn new(source_runtime: &'a AnalysisSourceReadRuntime, run_id: &'a str) -> Self {
+        Self {
+            source_runtime,
+            run_id,
+        }
+    }
+}
+
+struct AnalysisExecutionControl<'a> {
+    cancel_token: Arc<AtomicBool>,
+    source_runtime: &'a AnalysisSourceReadRuntime,
+    progress: &'a mut dyn FnMut(ExtractionProgressUpdate),
+}
+
 pub fn run_source_analysis_extraction(
     case_conn: &Connection,
     case_root: &Path,
@@ -59,13 +82,13 @@ pub fn run_source_analysis_extraction_with_progress(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     categories: &[&str],
-    run_id: &str,
+    context: AnalysisExtractionProgressContext<'_>,
     mut progress: impl FnMut(AnalysisExtractionProgressDto),
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
     let cancel_token = Arc::new(AtomicBool::new(false));
     let mut emit = |update: ExtractionProgressUpdate| {
         progress(AnalysisExtractionProgressDto {
-            run_id: run_id.to_string(),
+            run_id: context.run_id.to_string(),
             case_id: case_id.0.clone(),
             data_source_id: data_source_id.0.clone(),
             category: update.category,
@@ -84,14 +107,18 @@ pub fn run_source_analysis_extraction_with_progress(
             detail: update.detail,
         });
     };
+    let control = AnalysisExecutionControl {
+        cancel_token,
+        source_runtime: context.source_runtime,
+        progress: &mut emit,
+    };
     run_source_analysis_extraction_execution_with_progress(
         case_conn,
         case_root,
         case_id,
         data_source_id,
         categories,
-        cancel_token,
-        &mut emit,
+        control,
     )
     .map(|execution| execution.dto)
 }
@@ -104,15 +131,20 @@ pub(crate) fn run_source_analysis_extraction_execution_with_cancel(
     categories: &[&str],
     cancel_token: Arc<AtomicBool>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    let runtime = AnalysisSourceReadRuntime::default();
     let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+    let control = AnalysisExecutionControl {
+        cancel_token,
+        source_runtime: &runtime,
+        progress: &mut ignore_progress,
+    };
     run_source_analysis_extraction_execution_with_progress(
         case_conn,
         case_root,
         case_id,
         data_source_id,
         categories,
-        cancel_token,
-        &mut ignore_progress,
+        control,
     )
 }
 
@@ -122,17 +154,16 @@ fn run_source_analysis_extraction_execution_with_progress(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     categories: &[&str],
-    cancel_token: Arc<AtomicBool>,
-    progress: &mut dyn FnMut(ExtractionProgressUpdate),
+    control: AnalysisExecutionControl<'_>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
-    let mut source_reader = SourceReadContext::new(
+    let mut source_reader = control.source_runtime.bind(SourceReadContext::new(
         &source.connection,
         case_conn,
         case_root,
         case_id,
         data_source_id,
-    );
+    ));
     let mut source_read_count = 0u64;
     let mut source_read_elapsed = Duration::ZERO;
     let mut extraction = run_analysis_extraction_with_source_and_progress(
@@ -140,8 +171,8 @@ fn run_source_analysis_extraction_execution_with_progress(
         &case_id.0,
         source.platform,
         categories,
-        cancel_token.as_ref(),
-        progress,
+        control.cancel_token.as_ref(),
+        control.progress,
         |candidate, read_limit| -> Result<CandidateSource, FileServiceError> {
             if let Some(warning) = encrypted_candidate_warning(candidate) {
                 return Err(FileServiceError::Unsupported(warning));

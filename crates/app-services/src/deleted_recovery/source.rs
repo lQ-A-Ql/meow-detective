@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use domain::{DataSourceId, DataSourceKind, DataSourcePlatform};
 use evidence_core::EvidenceReader;
@@ -13,7 +13,7 @@ use crate::datasource_service::{
     LvmPhysicalVolumeSource,
 };
 
-use super::DeletedRecoveryError;
+use super::{DeletedRecoveryContext, DeletedRecoveryError};
 
 #[derive(Debug, Clone)]
 pub(super) struct RecoverySource {
@@ -81,29 +81,66 @@ pub(super) fn load_targets(
 }
 
 pub(super) fn open_target_reader(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-    data_source_id: &DataSourceId,
+    context: &DeletedRecoveryContext<'_>,
     source: &RecoverySource,
     target: &RecoveryTarget,
 ) -> Result<(Box<dyn EvidenceReader>, u64), DeletedRecoveryError> {
     if source.kind == DataSourceKind::CephRbd {
         let reader = crate::ceph_reconstruction::open_derived_rbd_reader(
-            case_conn,
-            case_root,
-            case_id,
-            data_source_id,
+            context.case_conn,
+            context.case_root,
+            context.case_id,
+            context.data_source_id,
         )
         .map_err(|error| DeletedRecoveryError::Unsupported(error.to_string()))?;
         return Ok((Box::new(reader), target.partition.offset));
     }
-    crate::import_pipeline::partition::open_candidate_reader(
+    let (reader, offset) = crate::import_pipeline::partition::open_candidate_reader(
         &source.path,
         &source.kind,
         &target.candidate,
     )
-    .map_err(DeletedRecoveryError::Parser)
+    .map_err(DeletedRecoveryError::Parser)?;
+    if !crate::bitlocker_service::is_bitlocker_partition(&target.partition) {
+        return Ok((reader, offset));
+    }
+    let runtime = context
+        .bitlocker_runtime
+        .as_ref()
+        .ok_or_else(|| DeletedRecoveryError::BitLockerLocked)?;
+    let length = (target.partition.length > 0).then_some(target.partition.length);
+    crate::bitlocker_runtime::open_registered_bitlocker_volume(
+        reader,
+        offset,
+        length,
+        &context.case_id.0,
+        &context.data_source_id.0,
+        target.partition.partition_index as usize,
+        runtime,
+    )
+    .map(|reader| (reader, 0))
+    .map_err(map_bitlocker_runtime_error)
+}
+
+fn map_bitlocker_runtime_error(
+    error: crate::bitlocker_runtime::BitLockerRuntimeError,
+) -> DeletedRecoveryError {
+    match error {
+        crate::bitlocker_runtime::BitLockerRuntimeError::Locked => {
+            DeletedRecoveryError::BitLockerLocked
+        }
+        crate::bitlocker_runtime::BitLockerRuntimeError::RegistryUnavailable => {
+            DeletedRecoveryError::InvalidState(
+                "BitLocker runtime registry is unavailable".to_string(),
+            )
+        }
+        crate::bitlocker_runtime::BitLockerRuntimeError::InvalidWindow(error) => {
+            DeletedRecoveryError::Io(error)
+        }
+        crate::bitlocker_runtime::BitLockerRuntimeError::Volume(error) => {
+            DeletedRecoveryError::Parser(format!("BitLocker volume open failed: {error}"))
+        }
+    }
 }
 
 fn recovery_filesystem(

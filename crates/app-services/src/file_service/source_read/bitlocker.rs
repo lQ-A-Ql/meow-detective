@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
+use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 
 use crate::file_service::{
     viewer::{PreviewDescriptor, PreviewPartitionCandidate, PreviewReadContext},
@@ -47,7 +47,7 @@ pub(super) fn open_candidate_block_reader(
             candidate.partition_index
         )));
     };
-    if !is_bitlocker_partition(&partition) {
+    if !crate::bitlocker_service::is_bitlocker_partition(&partition) {
         return Ok((reader, filesystem_offset, candidate.filesystem_kind.clone()));
     }
     let Some(runtime) = context.bitlocker_runtime.as_ref() else {
@@ -78,16 +78,7 @@ pub(super) fn is_bitlocker_candidate(
 ) -> Result<bool, FileServiceError> {
     Ok(PartitionRepo::new(context.source_conn)
         .find_by_data_source_and_index(&context.data_source_id.0, candidate.partition_index)?
-        .is_some_and(|partition| is_bitlocker_partition(&partition)))
-}
-
-fn is_bitlocker_partition(partition: &DataSourcePartitionRecord) -> bool {
-    partition.kind_label.eq_ignore_ascii_case("bitlocker")
-        || partition
-            .filesystem
-            .as_deref()
-            .is_some_and(|filesystem| filesystem.eq_ignore_ascii_case("bitlocker"))
-        || partition.status.eq_ignore_ascii_case("encrypted_bitlocker")
+        .is_some_and(|partition| crate::bitlocker_service::is_bitlocker_partition(&partition)))
 }
 
 pub(super) fn detect_plaintext_filesystem(

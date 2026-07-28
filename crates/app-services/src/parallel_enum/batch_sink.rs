@@ -77,7 +77,11 @@ fn enumerate_transaction(
 ) -> Result<EnumerationStats, String> {
     let mut statement = prepare_insert(conn)?;
     let mut stack = vec![(roots, None)];
-    let mut stats = EnumerationStats::default();
+    let mut stats = EnumerationStats {
+        // The staging rows are folded under one persisted partition root at merge time.
+        dir_count: 1,
+        ..EnumerationStats::default()
+    };
 
     while let Some((entries, parent_id)) = stack.pop() {
         check_cancelled(cancel_token)?;

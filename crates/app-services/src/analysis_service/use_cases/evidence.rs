@@ -10,6 +10,8 @@ use crate::analysis_service::{
 };
 use crate::{artifact_service, file_service};
 
+use super::runtime::AnalysisSourceReadRuntime;
+
 pub fn get_source_evidence_summary(
     case_conn: &Connection,
     case_root: &Path,
@@ -26,16 +28,17 @@ pub fn run_source_evidence_scan(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     requested_categories: &[&str],
+    runtime: &AnalysisSourceReadRuntime,
 ) -> Result<EvidenceClassificationSummaryDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     let categories = select_evidence_scan_categories(source.platform, requested_categories)?;
-    let mut source_reader = file_service::SourceReadContext::new(
+    let mut source_reader = runtime.bind(file_service::SourceReadContext::new(
         &source.connection,
         case_conn,
         case_root,
         case_id,
         data_source_id,
-    );
+    ));
     artifact_service::run_targeted_evidence_scan(
         &source.connection,
         &case_id.0,

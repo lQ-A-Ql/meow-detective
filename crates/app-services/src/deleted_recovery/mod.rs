@@ -1,5 +1,6 @@
 mod access;
 mod content;
+mod context;
 mod error;
 mod export;
 mod ext4;
@@ -12,6 +13,7 @@ mod source;
 mod xfs;
 
 pub use content::read_deleted_recovery_range;
+pub use context::DeletedRecoveryContext;
 pub use error::DeletedRecoveryError;
 pub use export::export_deleted_recovery;
 pub use query::list_deleted_recoveries;

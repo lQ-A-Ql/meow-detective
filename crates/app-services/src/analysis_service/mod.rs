@@ -49,7 +49,7 @@ pub use use_cases::{
     get_source_evtx_summary, get_source_linux_summary, get_source_registry_structured_summary,
     get_source_registry_summary, get_source_system_info, run_source_analysis_extraction,
     run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
-    run_source_evidence_scan,
+    run_source_evidence_scan, AnalysisExtractionProgressContext, AnalysisSourceReadRuntime,
 };
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;

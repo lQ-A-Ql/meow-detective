@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use transport::dto::DeletedRecoveryContentRangeDto;
 
 use super::access::open_recovery_content_source;
-use super::DeletedRecoveryError;
+use super::{DeletedRecoveryContext, DeletedRecoveryError};
 
 pub const MAX_RECOVERY_READ_LENGTH: u32 = 1024 * 1024;
 const VERIFY_BUFFER_BYTES: usize = 256 * 1024;
@@ -26,13 +26,26 @@ pub fn read_deleted_recovery_range(
     offset: u64,
     length: u32,
 ) -> Result<DeletedRecoveryContentRangeDto, DeletedRecoveryError> {
+    read_deleted_recovery_range_in_context(
+        &DeletedRecoveryContext::new(case_conn, case_root, case_id, data_source_id),
+        recovery_id,
+        offset,
+        length,
+    )
+}
+
+pub(super) fn read_deleted_recovery_range_in_context(
+    context: &DeletedRecoveryContext<'_>,
+    recovery_id: &str,
+    offset: u64,
+    length: u32,
+) -> Result<DeletedRecoveryContentRangeDto, DeletedRecoveryError> {
     if length == 0 || length > MAX_RECOVERY_READ_LENGTH {
         return Err(DeletedRecoveryError::InvalidRange(format!(
             "length must be between 1 and {MAX_RECOVERY_READ_LENGTH} bytes"
         )));
     }
-    let mut source =
-        open_recovery_content_source(case_conn, case_root, case_id, data_source_id, recovery_id)?;
+    let mut source = open_recovery_content_source(context, recovery_id)?;
     let read = read_verified_content(&mut source.reader, &source.recovery, offset, length)?;
     Ok(DeletedRecoveryContentRangeDto {
         recovery_id: recovery_id.to_string(),

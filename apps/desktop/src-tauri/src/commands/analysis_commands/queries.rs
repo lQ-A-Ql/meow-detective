@@ -20,6 +20,9 @@ pub async fn get_system_info(
 ) -> Result<AnalysisSystemInfoDto, CommandError> {
     validate_source_request(&request)?;
     let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
     let data_source_id = DataSourceId(request.data_source_id);
 
     run_active_case_command(app_state, move |case_conn, active| {
@@ -28,6 +31,7 @@ pub async fn get_system_info(
             &active.case_root,
             &active.meta.id,
             &data_source_id,
+            &source_runtime,
         )
         .map_err(CommandError::from_typed_service_error)
     })
@@ -64,6 +68,9 @@ pub async fn get_file_classification_board(
 ) -> Result<FileClassificationBoardDto, CommandError> {
     let magic_read_limit = resolve_sample_size(&request)?;
     let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
     let data_source_id = DataSourceId(request.data_source_id);
 
     run_active_case_command(app_state, move |case_conn, active| {
@@ -73,6 +80,7 @@ pub async fn get_file_classification_board(
             &active.meta.id,
             &data_source_id,
             magic_read_limit,
+            &source_runtime,
         )
         .map_err(CommandError::from_typed_service_error)
     })

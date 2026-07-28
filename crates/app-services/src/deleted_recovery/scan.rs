@@ -7,7 +7,7 @@ use transport::dto::{DeletedRecoveryFailureDto, DeletedRecoveryRunDto, DeletedRe
 
 use super::mapping::scan_to_dto;
 use super::source::{load_source, load_targets, open_target_reader, RecoveryTarget};
-use super::DeletedRecoveryError;
+use super::{DeletedRecoveryContext, DeletedRecoveryError};
 
 pub fn run_deleted_recovery(
     case_conn: &Connection,
@@ -16,8 +16,22 @@ pub fn run_deleted_recovery(
     data_source_id: &DataSourceId,
     partition_index: Option<u32>,
 ) -> Result<DeletedRecoveryRunDto, DeletedRecoveryError> {
-    let ready =
-        crate::source_db::open_ready_source_by_id(case_conn, case_root, case_id, data_source_id)?;
+    run_deleted_recovery_in_context(
+        &DeletedRecoveryContext::new(case_conn, case_root, case_id, data_source_id),
+        partition_index,
+    )
+}
+
+pub(super) fn run_deleted_recovery_in_context(
+    context: &DeletedRecoveryContext<'_>,
+    partition_index: Option<u32>,
+) -> Result<DeletedRecoveryRunDto, DeletedRecoveryError> {
+    let ready = crate::source_db::open_ready_source_by_id(
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        context.data_source_id,
+    )?;
     if !matches!(
         ready.platform,
         DataSourcePlatform::Windows | DataSourcePlatform::Linux
@@ -26,10 +40,10 @@ pub fn run_deleted_recovery(
             "deleted recovery is available only for Windows and Linux data sources".to_string(),
         ));
     }
-    let source = load_source(case_conn, data_source_id)?;
+    let source = load_source(context.case_conn, context.data_source_id)?;
     let targets = load_targets(
         &ready.connection,
-        data_source_id,
+        context.data_source_id,
         ready.platform,
         partition_index,
     )?;
@@ -40,16 +54,14 @@ pub fn run_deleted_recovery(
     // parallel journal snapshots would amplify seeks and peak memory.
     for target in targets {
         let started_at = chrono::Utc::now().to_rfc3339();
-        let result = open_target_reader(
-            case_conn,
-            case_root,
-            case_id,
-            data_source_id,
-            &source,
-            &target,
-        )
-        .and_then(|(reader, offset)| {
-            scan_target(&data_source_id.0, &target, reader, offset, started_at)
+        let result = open_target_reader(context, &source, &target).and_then(|(reader, offset)| {
+            scan_target(
+                &context.data_source_id.0,
+                &target,
+                reader,
+                offset,
+                started_at,
+            )
         });
         match result {
             Ok(aggregate) => {
@@ -61,7 +73,7 @@ pub fn run_deleted_recovery(
             }
             Err(error) => {
                 tracing::warn!(
-                    data_source_id = %data_source_id.0,
+                    data_source_id = %context.data_source_id.0,
                     partition_index = target.partition.partition_index,
                     filesystem = target.filesystem_type,
                     error = %error,
@@ -72,7 +84,7 @@ pub fn run_deleted_recovery(
         }
     }
     Ok(DeletedRecoveryRunDto {
-        data_source_id: data_source_id.0.clone(),
+        data_source_id: context.data_source_id.0.clone(),
         scans,
         failures,
     })
@@ -121,6 +133,10 @@ fn failure(target: &RecoveryTarget, error: &DeletedRecoveryError) -> DeletedReco
         DeletedRecoveryError::Unsupported(_) => (
             "RECOVERY_UNSUPPORTED",
             "The filesystem recovery layout is not supported by the read-only recovery adapter",
+        ),
+        DeletedRecoveryError::BitLockerLocked => (
+            "RECOVERY_BITLOCKER_LOCKED",
+            "Unlock the BitLocker volume before running deleted-file recovery",
         ),
         DeletedRecoveryError::Parser(_) => (
             "RECOVERY_PARSER_ERROR",

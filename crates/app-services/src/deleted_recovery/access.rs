@@ -1,14 +1,9 @@
-use std::path::Path;
-
-use domain::{CaseId, DataSourceId};
+use super::source::{load_source, load_targets, open_target_reader};
+use super::{DeletedRecoveryContext, DeletedRecoveryError};
 use evidence_core::EvidenceReader;
 use persistence_sqlite::repositories::deleted_recovery_repo::{
     DeletedRecoveryRecord, DeletedRecoveryRepo, RecoveryScanRecord,
 };
-use rusqlite::Connection;
-
-use super::source::{load_source, load_targets, open_target_reader};
-use super::DeletedRecoveryError;
 
 pub(super) struct RecoveryContentSource {
     pub recovery: DeletedRecoveryRecord,
@@ -16,30 +11,27 @@ pub(super) struct RecoveryContentSource {
 }
 
 pub(super) fn open_recovery_content_source(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
+    context: &DeletedRecoveryContext<'_>,
     recovery_id: &str,
 ) -> Result<RecoveryContentSource, DeletedRecoveryError> {
     let ready = crate::source_db::open_ready_source_read_only_by_id(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
+        context.case_conn,
+        context.case_root,
+        context.case_id,
+        context.data_source_id,
     )?;
     let (scan, recovery) = DeletedRecoveryRepo::new(&ready.connection)
-        .find_recovery(&data_source_id.0, recovery_id)?
+        .find_recovery(&context.data_source_id.0, recovery_id)?
         .ok_or_else(|| DeletedRecoveryError::RecoveryNotFound {
-            data_source_id: data_source_id.0.clone(),
+            data_source_id: context.data_source_id.0.clone(),
             recovery_id: recovery_id.to_string(),
         })?;
     require_content_candidate(&recovery)?;
 
-    let source = load_source(case_conn, data_source_id)?;
+    let source = load_source(context.case_conn, context.data_source_id)?;
     let target = load_targets(
         &ready.connection,
-        data_source_id,
+        context.data_source_id,
         ready.platform,
         Some(scan.partition_index),
     )?
@@ -51,14 +43,7 @@ pub(super) fn open_recovery_content_source(
         )
     })?;
     verify_target_identity(&scan, target.filesystem_type)?;
-    let (reader, offset) = open_target_reader(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-        &source,
-        &target,
-    )?;
+    let (reader, offset) = open_target_reader(context, &source, &target)?;
     let reader = if scan.filesystem_type == "ntfs" {
         let filesystem = fs_ntfs::NtfsReader::open(reader, offset)?;
         verify_ntfs_volume_identity(&scan, &filesystem)?;

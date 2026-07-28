@@ -1134,6 +1134,7 @@ fn ntfs_mft_fast_path_fallback_records_warning() {
 
     assert!(result.error.is_none());
     assert_eq!(result.file_count, 3);
+    assert_eq!(result.dir_count, 1);
     assert_eq!(result.warnings.len(), 1);
     assert!(result.warnings[0].starts_with("MFT fast path fallback:"));
     let conn = staging::open_partition_staging(tmp.path(), "ds-mft-fallback", 0).unwrap();

@@ -22,6 +22,12 @@ fn partition(filesystem: &str) -> DataSourcePartitionRecord {
     }
 }
 
+fn bitlocker_partition() -> DataSourcePartitionRecord {
+    let mut value = partition("NTFS");
+    value.kind_label = "BitLocker".to_string();
+    value
+}
+
 #[test]
 fn windows_recovery_accepts_only_ntfs() {
     assert_eq!(
@@ -47,5 +53,26 @@ fn linux_recovery_accepts_only_ext4_and_xfs() {
     assert_eq!(
         recovery_filesystem(&partition("NTFS"), DataSourcePlatform::Linux),
         None,
+    );
+}
+
+#[test]
+fn ready_bitlocker_partition_routes_as_ntfs_recovery() {
+    let partition = bitlocker_partition();
+    assert!(crate::bitlocker_service::is_bitlocker_partition(&partition));
+    assert_eq!(
+        recovery_filesystem(&partition, DataSourcePlatform::Windows),
+        Some(("ntfs", ImageFilesystemKind::Ntfs)),
+    );
+}
+
+#[test]
+fn locked_bitlocker_runtime_maps_to_an_actionable_typed_error() {
+    let error =
+        map_bitlocker_runtime_error(crate::bitlocker_runtime::BitLockerRuntimeError::Locked);
+    assert!(matches!(error, DeletedRecoveryError::BitLockerLocked));
+    assert_eq!(
+        transport::ServiceErrorCategory::code(&error),
+        Some("RECOVERY_BITLOCKER_LOCKED")
     );
 }

@@ -11,6 +11,8 @@ use crate::analysis_service::file_classification::{
 use crate::analysis_service::{classify_files_by_metadata, AnalysisServiceError};
 use crate::file_service::SourceReadContext;
 
+use super::runtime::AnalysisSourceReadRuntime;
+
 pub fn classify_source_files(
     case_conn: &Connection,
     case_root: &Path,
@@ -34,15 +36,16 @@ pub fn get_file_classification_board(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     magic_read_limit: u32,
+    runtime: &AnalysisSourceReadRuntime,
 ) -> Result<FileClassificationBoardDto, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
-    let mut source_reader = SourceReadContext::new(
+    let mut source_reader = runtime.bind(SourceReadContext::new(
         &source.connection,
         case_conn,
         case_root,
         case_id,
         data_source_id,
-    );
+    ));
     let mut board =
         build_file_classification_board(&source.connection, magic_read_limit, |file_id| {
             source_reader.read_file_header_by_id(file_id, MAGIC_HEADER_BYTES)

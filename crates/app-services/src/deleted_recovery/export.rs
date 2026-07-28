@@ -11,7 +11,7 @@ use transport::dto::DeletedRecoveryExportDto;
 
 use super::access::open_recovery_content_source;
 use super::content::require_verified_content_range;
-use super::DeletedRecoveryError;
+use super::{DeletedRecoveryContext, DeletedRecoveryError};
 
 const EXPORT_BUFFER_BYTES: usize = 1024 * 1024;
 
@@ -24,8 +24,21 @@ pub fn export_deleted_recovery(
     destination_path: &Path,
     overwrite: bool,
 ) -> Result<DeletedRecoveryExportDto, DeletedRecoveryError> {
-    let mut source =
-        open_recovery_content_source(case_conn, case_root, case_id, data_source_id, recovery_id)?;
+    export_deleted_recovery_in_context(
+        &DeletedRecoveryContext::new(case_conn, case_root, case_id, data_source_id),
+        recovery_id,
+        destination_path,
+        overwrite,
+    )
+}
+
+pub(super) fn export_deleted_recovery_in_context(
+    context: &DeletedRecoveryContext<'_>,
+    recovery_id: &str,
+    destination_path: &Path,
+    overwrite: bool,
+) -> Result<DeletedRecoveryExportDto, DeletedRecoveryError> {
+    let mut source = open_recovery_content_source(context, recovery_id)?;
     let outcome = export_complete_content(
         &mut source.reader,
         &source.recovery,
