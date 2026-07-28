@@ -34,6 +34,7 @@ function model(overrides: Partial<BitLockerVolumeModel> = {}): BitLockerVolumeMo
     loading: false,
     unlocking: false,
     importing: false,
+    catalogImport: undefined,
     inspect: vi.fn(),
     unlock: vi.fn().mockResolvedValue(true),
     restore: vi.fn().mockResolvedValue(true),

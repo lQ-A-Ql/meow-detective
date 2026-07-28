@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import {
   forgetPersistedBitLockerKey,
@@ -13,6 +14,12 @@ import type { BitLockerCatalogImport, BitLockerVolumeStatus } from '@/types/mode
 import type { BitLockerTarget } from '@/features/files/bitlocker';
 
 export type BitLockerUnlockMethod = 'password' | 'recoveryPassword';
+export type BitLockerCatalogImportPhase = 'catalog' | 'refreshing';
+
+export interface BitLockerCatalogImportLifecycle {
+  phase: BitLockerCatalogImportPhase;
+  startedAt: number;
+}
 
 export interface BitLockerVolumeModel {
   status?: BitLockerVolumeStatus;
@@ -20,6 +27,7 @@ export interface BitLockerVolumeModel {
   loading: boolean;
   unlocking: boolean;
   importing: boolean;
+  catalogImport?: BitLockerCatalogImportLifecycle;
   error?: string;
   inspect: () => Promise<void>;
   unlock: (method: BitLockerUnlockMethod, credential: string) => Promise<boolean>;
@@ -36,12 +44,30 @@ function safeErrorMessage(error: unknown): string {
   return 'BitLocker 操作失败，请查看错误抽屉中的详细信息。';
 }
 
+const CATALOG_QUERY_KEYS = [
+  ['files', 'tree'],
+  ['files', 'rows'],
+  ['files', 'rows-page'],
+  ['files', 'children'],
+  ['files', 'children-page'],
+] as const;
+
+async function refreshFileCatalogQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all(
+    CATALOG_QUERY_KEYS.map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey }),
+    ),
+  );
+}
+
 export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolumeModel {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<BitLockerVolumeStatus>();
   const [catalog, setCatalog] = useState<BitLockerCatalogImport>();
   const [loading, setLoading] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [catalogImport, setCatalogImport] = useState<BitLockerCatalogImportLifecycle>();
   const [error, setError] = useState<string>();
 
   const inspect = useCallback(async () => {
@@ -62,6 +88,8 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   useEffect(() => {
     setStatus(undefined);
     setCatalog(undefined);
+    setCatalogImport(undefined);
+    setImporting(false);
     setError(undefined);
     if (target) {
       void inspect();
@@ -113,13 +141,17 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     if (!target) {
       return false;
     }
+    const startedAt = Date.now();
     setImporting(true);
+    setCatalogImport({ phase: 'catalog', startedAt });
     setError(undefined);
     try {
       const result = await importUnlockedBitLockerCatalog(
         target.dataSourceId,
         target.partitionIndex,
       );
+      setCatalogImport({ phase: 'refreshing', startedAt });
+      await refreshFileCatalogQueries(queryClient);
       setCatalog(result);
       setStatus(result.volume);
       return true;
@@ -127,9 +159,10 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
       setError(safeErrorMessage(reason));
       return false;
     } finally {
+      setCatalogImport(undefined);
       setImporting(false);
     }
-  }, [target]);
+  }, [queryClient, target]);
 
   const lock = useCallback(async () => {
     if (!target) {
@@ -172,6 +205,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     loading,
     unlocking,
     importing,
+    catalogImport,
     error,
     inspect,
     unlock,

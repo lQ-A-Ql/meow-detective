@@ -22,6 +22,13 @@
     },
     "itemCount": "显示 {{visibleCount}} 个项目",
     "itemCountWithTotal": "显示 {{visibleCount}} / {{total}} 个项目",
+    "bitlockerImport": {
+      "ariaLabel": "正在导入 BitLocker 解锁后的文件目录",
+      "title": "正在构建 BitLocker 文件目录",
+      "cataloging": "正在遍历解锁后的文件系统。完成前无法浏览目录，避免显示不完整结果。",
+      "refreshing": "目录遍历完成，正在刷新文件树和当前目录。",
+      "elapsed": "已耗时 {{seconds}} 秒"
+    },
     "inspector": {
       "title": "对象检查器",
       "selected": "已选对象 {{name}}",
