@@ -460,23 +460,6 @@ pub fn read_preview_bytes_for_source_case(
     )
 }
 
-pub fn extract_file_to_destination_for_case(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    file_id: &str,
-    destination_path: &Path,
-    overwrite: bool,
-) -> Result<u64, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
-    crate::file_service::extract_file_to_destination(
-        &source_conn,
-        &global_id.local_id.0,
-        destination_path,
-        overwrite,
-    )
-}
-
 #[cfg(test)]
 #[path = "../../../tests/unit/file_service/source_routing.rs"]
 mod tests;

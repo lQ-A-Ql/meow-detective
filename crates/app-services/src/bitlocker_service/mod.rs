@@ -29,6 +29,12 @@ impl<'a> BitLockerRuntimeContext<'a> {
             key_store,
         }
     }
+
+    pub(crate) fn unlock_registry(
+        self,
+    ) -> &'a std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry> {
+        self.bitlocker_runtime
+    }
 }
 
 pub use catalog::import_unlocked_bitlocker_catalog;

@@ -6,5 +6,5 @@ pub use api::{open_file_content_by_id, read_file_bytes_for_case, read_file_range
 pub(crate) use header::read_file_header_with_context;
 pub use header::{read_file_header_by_id, FileHeaderReadCache};
 
-pub(crate) use api::file_id_from_handle;
+pub(crate) use api::{file_id_from_handle, read_file_bytes_for_descriptor_with_context};
 pub(crate) use content::open_range_content_for_descriptor_with_context;

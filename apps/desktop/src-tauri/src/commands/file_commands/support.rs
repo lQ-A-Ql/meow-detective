@@ -51,12 +51,28 @@ pub(super) fn write_file_extract_audit(
     file_id: &str,
     details: serde_json::Value,
 ) {
-    // Stage 3 compatibility: audit action ownership remains in persistence until
-    // the Stage 4 service boundary can expose a file-extraction audit operation.
-    crate::commands::command_support::write_audit_log(
-        state,
-        persistence_sqlite::repositories::audit_repo::AuditAction::FileExtract,
-        Some(file_id),
-        details,
-    );
+    let result = state
+        .get_connection()
+        .map_err(CommandError::from_service_error)
+        .and_then(|connection| {
+            let case_id = crate::commands::command_support::current_case_id(state);
+            persist_file_extract_audit(&connection, case_id.as_deref(), file_id, details)
+        });
+    if let Err(error) = result {
+        tracing::error!(
+            file_id,
+            error_code = %error.code,
+            "Failed to persist file extraction audit record"
+        );
+    }
+}
+
+pub(super) fn persist_file_extract_audit(
+    connection: &rusqlite::Connection,
+    case_id: Option<&str>,
+    file_id: &str,
+    details: serde_json::Value,
+) -> Result<(), CommandError> {
+    app_services::file_service::record_file_extraction_audit(connection, case_id, file_id, &details)
+        .map_err(CommandError::from_typed_service_error)
 }

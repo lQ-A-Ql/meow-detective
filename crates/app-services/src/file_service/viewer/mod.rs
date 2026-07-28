@@ -27,6 +27,7 @@ pub use media::{media_preview_plan_for_file, media_range_for_file, MediaPreviewP
 pub use path::safe_relative_path;
 pub use preview_bytes::read_preview_bytes_for_file;
 pub(crate) use range::open_range_content_for_descriptor_with_context;
+pub(crate) use range::read_file_bytes_for_descriptor_with_context;
 pub(crate) use range::read_file_header_with_context;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,

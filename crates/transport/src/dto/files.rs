@@ -1,5 +1,17 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileExtractionResultDto {
+    pub file_id: String,
+    pub bytes_written: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_size: Option<u64>,
+    pub sha256: String,
+    pub destination_file_name: String,
+    pub size_verified: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileTreeNodeDto {

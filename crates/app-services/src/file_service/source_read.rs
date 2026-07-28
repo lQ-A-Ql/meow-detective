@@ -23,6 +23,7 @@ mod metadata;
 mod stream;
 
 use derived_cache::DerivedSourceReadCache;
+pub(crate) use stream::SourceExtractionMode;
 
 const MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES: usize = 4_096;
 const MAX_SOURCE_PARTITION_CACHE_ENTRIES: usize = 64;
@@ -112,6 +113,10 @@ impl<'a> SourceReadContext<'a> {
             cephfs_readers: HashMap::new(),
             bitlocker_runtime: None,
         }
+    }
+
+    pub(crate) fn source_connection(&self) -> &rusqlite::Connection {
+        self.source_conn
     }
 
     pub(crate) fn read_file_header_by_id(

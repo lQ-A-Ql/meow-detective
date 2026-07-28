@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn file_extraction_result_serializes_integrity_fields_as_camel_case() {
+    let dto = FileExtractionResultDto {
+        file_id: "ds:source-1:file-1".to_string(),
+        bytes_written: 12,
+        source_size: Some(12),
+        sha256: "a".repeat(64),
+        destination_file_name: "evidence.bin".to_string(),
+        size_verified: true,
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["fileId"], "ds:source-1:file-1");
+    assert_eq!(value["bytesWritten"], 12);
+    assert_eq!(value["sourceSize"], 12);
+    assert_eq!(value["destinationFileName"], "evidence.bin");
+    assert_eq!(value["sizeVerified"], true);
+    assert!(value.get("bytes_written").is_none());
+}
+
+#[test]
 fn file_entry_row_serializes_visibility_flags_as_camel_case() {
     let dto = FileEntryRowDto {
         id: "file-1".to_string(),

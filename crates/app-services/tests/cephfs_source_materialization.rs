@@ -10,7 +10,8 @@ use app_services::{
         CephFsSourceError, CephFsSourceMaterializationRequest, CephFsSparseExtentProof,
     },
     file_service::{
-        get_file_tree_for_case, open_preview_session_for_case, read_preview_bytes_for_source_case,
+        extract_file_to_destination_for_case, get_file_tree_for_case,
+        open_preview_session_for_case, read_preview_bytes_for_source_case,
         read_preview_session_bytes_for_case, PreviewRuntimeRegistry,
     },
 };
@@ -27,6 +28,7 @@ use persistence_sqlite::repositories::{
     datasource_cluster_repo::{DataSourceClusterRecord, DataSourceClusterRepo},
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
+use sha2::Digest;
 
 const CASE_ID: &str = "case-cephfs-materialization";
 const CLUSTER_ID: &str = "cluster-cephfs-materialization";
@@ -478,6 +480,30 @@ fn complete_cephfs_source_publishes_tree_and_bounded_preview() {
         .expect("read CephFS preview session"),
         FILE_CONTENT
     );
+
+    let export_root = tempfile::tempdir().expect("create external export root");
+    let destination = export_root.path().join("hello.txt");
+    let extraction = extract_file_to_destination_for_case(
+        &fixture.case_conn,
+        fixture.root.path(),
+        &fixture.case_id,
+        &file_id,
+        &destination,
+        false,
+    )
+    .expect("extract bounded-preview CephFS file");
+    assert_eq!(
+        std::fs::read(&destination).expect("read export"),
+        FILE_CONTENT
+    );
+    assert_eq!(extraction.bytes_written, FILE_CONTENT.len() as u64);
+    assert_eq!(extraction.source_size, Some(FILE_CONTENT.len() as u64));
+    assert_eq!(
+        extraction.sha256,
+        hex::encode(sha2::Sha256::digest(FILE_CONTENT))
+    );
+    assert!(extraction.size_verified);
+
     let analysis_error = run_source_analysis_extraction(
         &fixture.case_conn,
         fixture.root.path(),
@@ -532,6 +558,20 @@ fn metadata_browseable_source_keeps_tree_but_rejects_file_preview() {
     )
     .expect_err("metadata-browseable source must not expose file bytes");
     assert!(error.to_string().contains("bounded-preview"));
+
+    let export_root = tempfile::tempdir().expect("create external export root");
+    let destination = export_root.path().join("must-not-exist.bin");
+    let error = extract_file_to_destination_for_case(
+        &fixture.case_conn,
+        fixture.root.path(),
+        &fixture.case_id,
+        &file_id,
+        &destination,
+        false,
+    )
+    .expect_err("metadata-browseable source must reject extraction");
+    assert!(error.to_string().contains("bounded-preview"));
+    assert!(!destination.exists());
 }
 
 #[test]

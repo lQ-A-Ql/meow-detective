@@ -64,6 +64,7 @@ impl From<FileServiceError> for ArtifactServiceError {
             FileServiceError::NotFound(message) => Self::NotFound(message),
             FileServiceError::InvalidInput(message) => Self::InvalidInput(message),
             FileServiceError::Unsupported(message) => Self::Unsupported(message),
+            FileServiceError::Integrity(message) => Self::Extractor(message),
             FileServiceError::PathTraversal(message)
             | FileServiceError::Security(message)
             | FileServiceError::Other(message) => Self::Other(message),

@@ -1,88 +1,120 @@
-//! Export file content from evidence to a host filesystem destination.
-//!
-//! Handles streaming the evidence reader through a temp file and
-//! atomically renaming on success, with automatic cleanup on error.
+//! Stream evidence content to a verified host filesystem destination.
 
-use std::io::Write;
 use std::path::Path;
 
 use domain::FileEntryId;
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
+use transport::dto::FileExtractionResultDto;
 
-use crate::file_service::{self, FileServiceError};
+use crate::file_service::{source_read::SourceExtractionMode, FileServiceError, SourceReadContext};
 
-/// Extract a file from evidence to a destination path on the host filesystem.
-///
-/// Writes to a temp file first. On success the temp file is atomically
-/// renamed to `destination_path`. The temp file is cleaned up on any error.
+use super::{copy, policy};
+
 pub fn extract_file_to_destination(
     conn: &Connection,
     file_id: &str,
     destination_path: &Path,
     overwrite: bool,
-) -> Result<u64, FileServiceError> {
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &FileEntryId(file_id.to_string()))?;
+) -> Result<FileExtractionResultDto, FileServiceError> {
+    let entry = FileRepo::new(conn)
+        .find_by_id(&FileEntryId(file_id.to_string()))?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+    let mut reader = crate::file_service::open_file_content_by_id(conn, &entry.id)?;
+    let destination = policy::prepare_destination(
+        destination_path,
+        overwrite,
+        policy::DestinationScope::Unscoped,
+    )?;
+    let copied =
+        copy::copy_reader_to_destination(reader.as_mut(), entry.size, &destination, overwrite)?;
+    Ok(extraction_result(file_id, entry.size, &destination, copied))
+}
 
-    // --- destination validation ---
-    if destination_path.exists() && destination_path.is_dir() {
-        return Err(FileServiceError::invalid_input(
-            "destinationPath must point to a file, not a directory",
+pub(crate) struct SourceExtractionRequest<'a> {
+    pub(crate) global_file_id: &'a str,
+    pub(crate) local_file_id: &'a FileEntryId,
+    pub(crate) source_size: Option<u64>,
+    pub(crate) destination_path: &'a Path,
+    pub(crate) overwrite: bool,
+    pub(crate) destination_scope: policy::DestinationScope<'a>,
+}
+
+pub(crate) fn extract_source_file(
+    context: &mut SourceReadContext<'_>,
+    request: SourceExtractionRequest<'_>,
+) -> Result<FileExtractionResultDto, FileServiceError> {
+    validate_source_entry(context, request.local_file_id)?;
+    let destination = policy::prepare_destination(
+        request.destination_path,
+        request.overwrite,
+        request.destination_scope,
+    )?;
+    let plan = context.extraction_plan_by_id(request.local_file_id)?;
+    if request.source_size.is_some_and(|size| size != plan.size) {
+        return Err(FileServiceError::integrity(
+            "File catalog size changed while preparing extraction",
         ));
     }
-    if destination_path.exists() && !overwrite {
-        return Err(FileServiceError::invalid_input(
-            "destinationPath already exists; set overwrite=true to replace it",
-        ));
-    }
-    if let Some(parent) = destination_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
+    let source_size = request.source_size.or(Some(plan.size));
+    let copied = match plan.mode {
+        SourceExtractionMode::Reader(mut reader) => {
+            let reader: &mut dyn std::io::Read = match &mut reader {
+                crate::file_service::RangeContentReader::Seekable(reader) => reader.as_mut(),
+                crate::file_service::RangeContentReader::Streaming(reader) => reader.as_mut(),
+            };
+            copy::copy_reader_to_destination(reader, source_size, &destination, request.overwrite)?
         }
+        SourceExtractionMode::Chunked => {
+            let size = source_size.ok_or_else(|| {
+                FileServiceError::integrity("Chunked evidence source has no catalog size")
+            })?;
+            copy::copy_chunks_to_destination(
+                size,
+                &destination,
+                request.overwrite,
+                |offset, length| {
+                    context.read_extraction_chunk_by_id(request.local_file_id, offset, length)
+                },
+            )?
+        }
+    };
+    Ok(extraction_result(
+        request.global_file_id,
+        source_size,
+        &destination,
+        copied,
+    ))
+}
+
+fn validate_source_entry(
+    context: &SourceReadContext<'_>,
+    file_id: &FileEntryId,
+) -> Result<(), FileServiceError> {
+    let repo = FileRepo::new(context.source_connection());
+    let entry = repo
+        .find_by_id(file_id)?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+    crate::file_service::viewer::validate_readable_file_entry(context.source_connection(), &entry)?;
+    Ok(())
+}
+
+fn extraction_result(
+    file_id: &str,
+    source_size: Option<u64>,
+    destination: &Path,
+    copied: copy::StreamCopyResult,
+) -> FileExtractionResultDto {
+    let destination_file_name = destination
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "extracted-file".to_string());
+    FileExtractionResultDto {
+        file_id: file_id.to_string(),
+        bytes_written: copied.bytes_written,
+        source_size,
+        sha256: copied.sha256,
+        destination_file_name,
+        size_verified: source_size.is_some_and(|size| size == copied.bytes_written),
     }
-
-    // --- unique temp path ---
-    let temp_path = destination_path.with_extension(format!(
-        "{}{}.tmp",
-        destination_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| format!("{ext}."))
-            .unwrap_or_default(),
-        uuid::Uuid::new_v4()
-    ));
-
-    // --- extract with cleanup on error ---
-    let mut output = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp_path)?;
-
-    let bytes = std::io::copy(&mut reader, &mut output).map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        FileServiceError::Io(err)
-    })?;
-
-    output.flush().map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        FileServiceError::Io(err)
-    })?;
-    output.sync_all().map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        FileServiceError::Io(err)
-    })?;
-    drop(output);
-
-    if overwrite && destination_path.exists() {
-        std::fs::remove_file(destination_path).map_err(|err| {
-            let _ = std::fs::remove_file(&temp_path);
-            FileServiceError::Io(err)
-        })?;
-    }
-    std::fs::rename(&temp_path, destination_path).map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        FileServiceError::Io(err)
-    })?;
-
-    Ok(bytes)
 }

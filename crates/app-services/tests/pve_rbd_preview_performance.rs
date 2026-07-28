@@ -5,9 +5,10 @@ use std::{
 
 use app_services::{
     file_service::{
-        close_preview_session_for_case, open_preview_session_for_case,
-        read_preview_session_bytes_for_case, read_preview_session_media_range_for_case,
-        FileServiceError, PreviewRuntimeRegistry, PreviewRuntimeStats,
+        close_preview_session_for_case, extract_file_to_destination_for_case,
+        open_preview_session_for_case, read_preview_session_bytes_for_case,
+        read_preview_session_media_range_for_case, FileServiceError, PreviewRuntimeRegistry,
+        PreviewRuntimeStats,
     },
     import_analysis::{current_rss_mb, peak_rss_mb},
     source_db::{GlobalFileId, SourceConnectionManager},
@@ -273,6 +274,24 @@ fn retained_pve_rbd_preview_performance() {
     metrics.push(metric("coldSmallOpen", &[small_open_elapsed]));
     metrics.push(metric("coldSmallRead", &[small_read_elapsed]));
     metrics.push(metric("coldSmallOpenRead", &[cold_elapsed]));
+
+    let export_root = tempfile::tempdir().expect("create external RBD export root");
+    let destination = export_root.path().join("rbd-small-export.bin");
+    let extraction = extract_file_to_destination_for_case(
+        &case_conn,
+        &case_root,
+        &case_id,
+        &targets[0].file_id,
+        &destination,
+        false,
+    )
+    .expect("extract retained RBD file");
+    let exported = std::fs::read(&destination).expect("read retained RBD export");
+    assert_eq!(extraction.bytes_written, targets[0].size);
+    assert_eq!(extraction.source_size, Some(targets[0].size));
+    assert_eq!(extraction.sha256, sha256_hex(&exported));
+    assert_eq!(&exported[..small_bytes.len()], small_bytes.as_slice());
+    assert!(extraction.size_verified);
 
     for (target, open_scenario, read_scenario) in [
         (&targets[1], "directXfsOpen", "directXfs64KiB"),

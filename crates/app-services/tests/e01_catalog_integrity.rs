@@ -27,6 +27,7 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, staging_repo::StagingRepo,
 };
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -393,6 +394,15 @@ fn run_catalog_integrity_test(env_name: &str, platform: DataSourcePlatform) {
                 counts.reachable,
                 counts.orphans,
             );
+            assert_source_file_extraction(
+                case_conn,
+                &active.case_root,
+                &case_id,
+                &source.id,
+                &source_conn,
+                &bitlocker_runtime,
+                env_name,
+            )?;
             if !bitlocker_indices.is_empty() {
                 assert_bitlocker_analysis_and_recovery(
                     case_conn,
@@ -408,6 +418,97 @@ fn run_catalog_integrity_test(env_name: &str, platform: DataSourcePlatform) {
             Ok(())
         })
         .expect("catalog integrity test failed");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn assert_source_file_extraction(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    data_source_id: &DataSourceId,
+    source_conn: &Connection,
+    bitlocker_runtime: &Arc<BitLockerUnlockRegistry>,
+    env_name: &str,
+) -> persistence_sqlite::DbResult<()> {
+    let mut statement = source_conn.prepare(
+        "SELECT id, size FROM file_entries
+         WHERE data_source_id = ?1
+           AND entry_type = 'file' COLLATE NOCASE
+           AND encrypted = 0 AND size BETWEEN 1 AND 4194304
+         ORDER BY size ASC LIMIT 512",
+    )?;
+    let candidates = statement
+        .query_map([&data_source_id.0], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+
+    let export_root = TempDir::new()?;
+    let mut failures = Vec::new();
+    for (local_id, size) in candidates {
+        let global_id = app_services::source_db::GlobalFileId::new(
+            data_source_id.clone(),
+            domain::FileEntryId(local_id),
+        )
+        .encode()
+        .0;
+        let preview = transport::dto::ViewerRangeRequestDto {
+            handle_id: format!("file:{global_id}"),
+            offset: 0,
+            length: size.min(4_096) as u32,
+        };
+        let preview = match file_service::read_file_range_for_source_case_with_bitlocker(
+            bitlocker_runtime,
+            case_conn,
+            case_root,
+            case_id,
+            &preview,
+        ) {
+            Ok(response) => response.raw_bytes.unwrap_or_default(),
+            Err(error) => {
+                failures.push(error.to_string());
+                continue;
+            }
+        };
+        if preview.is_empty() {
+            continue;
+        }
+
+        let destination = export_root.path().join(format!("{}.bin", failures.len()));
+        let extraction = match file_service::extract_file_to_destination_for_case_with_bitlocker(
+            bitlocker_runtime,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id,
+            &destination,
+            false,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                failures.push(error.to_string());
+                continue;
+            }
+        };
+        let exported = std::fs::read(&destination)?;
+        assert_eq!(&exported[..preview.len()], preview.as_slice());
+        assert_eq!(exported.len() as u64, size);
+        assert_eq!(extraction.bytes_written, size);
+        assert_eq!(extraction.source_size, Some(size));
+        assert_eq!(extraction.sha256, hex::encode(Sha256::digest(&exported)));
+        assert!(extraction.size_verified);
+        eprintln!(
+            "{env_name}: physical extraction file={global_id} bytes={size} sha256={}",
+            extraction.sha256
+        );
+        return Ok(());
+    }
+
+    Err(persistence_sqlite::DbError::System(format!(
+        "{env_name}: no bounded regular file could be previewed and physically extracted; first failures: {}",
+        failures.into_iter().take(5).collect::<Vec<_>>().join(" | ")
+    )))
 }
 
 #[allow(clippy::too_many_arguments)]

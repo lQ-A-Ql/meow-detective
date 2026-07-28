@@ -89,6 +89,7 @@ fn generate_json_export_for_case_with_context(
             &case.id.0,
             &file_name,
             scope.overwrite,
+            bitlocker_context.map(BitLockerReportContext::unlock_registry),
         )?)
     } else {
         None

@@ -10,6 +10,12 @@ impl<'a> BitLockerReportContext<'a> {
     pub fn new(runtimes: crate::bitlocker_service::BitLockerRuntimeContext<'a>) -> Self {
         Self { runtimes }
     }
+
+    pub(crate) fn unlock_registry(
+        self,
+    ) -> &'a std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry> {
+        self.runtimes.unlock_registry()
+    }
 }
 
 pub(crate) struct ReportCorrelation {

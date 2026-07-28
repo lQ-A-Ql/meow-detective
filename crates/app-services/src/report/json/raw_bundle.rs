@@ -72,12 +72,20 @@ pub(crate) fn export_raw_file_bundle_for_case(
     case_id: &str,
     report_file_name: &str,
     overwrite: bool,
+    bitlocker_runtime: Option<&std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 ) -> Result<RawExportBundle, ReportError> {
     let bundle_dir_name = bundle_dir_name_from_report(report_file_name);
     let bundle_dir = output_dir.join(&bundle_dir_name);
     prepare_bundle_directory(&bundle_dir, overwrite)?;
     let entries = collect_exportable_file_entries_for_case(conn, case_root, case_id)?;
-    let exported = export_source_entries(conn, case_root, case_id, &bundle_dir, entries)?;
+    let exported = export_source_entries(
+        conn,
+        case_root,
+        case_id,
+        &bundle_dir,
+        entries,
+        bitlocker_runtime,
+    )?;
     write_bundle_metadata(
         bundle_dir,
         bundle_dir_name,
@@ -128,6 +136,7 @@ fn export_source_entries(
     case_id: &str,
     bundle_dir: &Path,
     entries: Vec<ExportableFileEntry>,
+    bitlocker_runtime: Option<&std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 ) -> Result<ExportAccumulator, ReportError> {
     let export_root = bundle_dir.join("files");
     fs::create_dir_all(&export_root)?;
@@ -149,7 +158,8 @@ fn export_source_entries(
         ));
         let export_path = export_root.join(&export_rel);
         create_parent(&export_path)?;
-        let extracted = match crate::file_service::extract_file_to_destination_for_case(
+        let extracted = match crate::file_service::extract_file_to_managed_destination_for_case(
+            bitlocker_runtime,
             conn,
             case_root,
             &domain::CaseId(case_id.to_string()),
@@ -164,8 +174,13 @@ fn export_source_entries(
                 continue;
             }
         };
-        let sha256 = hash_file(&export_path)?;
-        exported.push_source(entry, global_file_id.0, export_rel, extracted, sha256);
+        exported.push_source(
+            entry,
+            global_file_id.0,
+            export_rel,
+            extracted.bytes_written,
+            extracted.sha256,
+        );
     }
     Ok(exported)
 }
@@ -208,20 +223,6 @@ fn copy_and_hash(reader: &mut impl Read, export_path: &Path) -> Result<(u64, Str
             Err(error)
         }
     }
-}
-
-fn hash_file(path: &Path) -> Result<String, ReportError> {
-    let mut input = OpenOptions::new().read(true).open(path)?;
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let read = input.read(&mut buffer).map_err(ReportError::Io)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
 }
 
 impl ExportAccumulator {

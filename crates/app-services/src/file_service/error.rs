@@ -14,6 +14,8 @@ pub enum FileServiceError {
     InvalidInput(String),
     #[error("security error: {0}")]
     Security(String),
+    #[error("integrity error: {0}")]
+    Integrity(String),
     #[error("path traversal: {0}")]
     PathTraversal(String),
     #[error("unsupported: {0}")]
@@ -33,6 +35,10 @@ impl FileServiceError {
 
     pub fn security(message: impl Into<String>) -> Self {
         Self::Security(message.into())
+    }
+
+    pub fn integrity(message: impl Into<String>) -> Self {
+        Self::Integrity(message.into())
     }
 
     pub fn path_traversal(message: impl Into<String>) -> Self {
@@ -121,6 +127,7 @@ impl transport::ServiceErrorCategory for FileServiceError {
             Self::InvalidInput(_) | Self::PathTraversal(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Security(_) => transport::ErrorCategory::Security,
+            Self::Integrity(_) => transport::ErrorCategory::Parser,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

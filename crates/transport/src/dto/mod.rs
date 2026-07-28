@@ -79,7 +79,8 @@ pub use correlation::{
 pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
 pub use exchange::{StixExportRequestDto, StixExportResultDto};
 pub use files::{
-    FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+    FileChildrenDto, FileEntryRowDto, FileExtractionResultDto, FileJumpContextDto, FileRowsPageDto,
+    FileTreeNodeDto,
 };
 pub use graph::{
     GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphEdgeDto, GraphEdgeTypeDto,

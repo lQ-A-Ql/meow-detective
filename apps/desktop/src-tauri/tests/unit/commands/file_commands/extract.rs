@@ -1,10 +1,13 @@
 use app_services::{case_service, file_service};
 use evidence_core::LogicalFsReader;
 use persistence_sqlite::repositories::{
+    audit_repo::AuditRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
     file_repo::FileRepo,
 };
 use tempfile::TempDir;
+
+use super::support::with_raw_exfat_case_file;
 
 #[test]
 fn extract_file_uses_entry_reader_and_writes_destination() {
@@ -69,10 +72,82 @@ fn extract_file_uses_entry_reader_and_writes_destination() {
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
 
-            assert_eq!(written, 10);
+            assert_eq!(written.bytes_written, 10);
+            assert_eq!(written.source_size, Some(10));
+            assert_eq!(
+                written.sha256,
+                "805b8560cbda878ebc1eae0e5fdac9c0ed9172bcba8a263541c2a5ebd1cc26ac"
+            );
+            assert!(written.size_verified);
             assert_eq!(std::fs::read(&destination).unwrap(), b"extract me");
 
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn file_extraction_audit_is_persisted_with_case_and_resource() {
+    let connection = persistence_sqlite::open_in_memory().expect("open audit database");
+    persistence_sqlite::runner::run_all(&connection).expect("run audit schema migrations");
+    super::super::support::persist_file_extract_audit(
+        &connection,
+        Some("case-extract"),
+        "ds:source:file",
+        serde_json::json!({"status": "ok", "bytesWritten": 10}),
+    )
+    .expect("persist extraction audit");
+
+    let entries = AuditRepo::new(&connection)
+        .query(Some("case-extract"), Some("file.extract"), 10, 0)
+        .expect("query extraction audit");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].resource_id.as_deref(), Some("ds:source:file"));
+    assert!(entries[0].details.contains("bytesWritten"));
+}
+
+#[test]
+fn file_extraction_audit_failure_is_not_silently_ignored() {
+    let connection = rusqlite::Connection::open_in_memory().expect("open unmigrated database");
+    let error = super::super::support::persist_file_extract_audit(
+        &connection,
+        Some("case-extract"),
+        "ds:source:file",
+        serde_json::json!({"status": "ok"}),
+    )
+    .expect_err("missing audit schema must be reported");
+
+    assert_eq!(error.category, "io");
+}
+
+#[test]
+fn raw_source_extraction_uses_the_global_file_route() {
+    with_raw_exfat_case_file(
+        "raw-extraction",
+        "bin",
+        |connection, case_id, file_id, case_root| {
+            let destination = case_root
+                .parent()
+                .expect("case workspace parent")
+                .join("raw-export.bin");
+            let extraction = file_service::extract_file_to_destination_for_case(
+                connection,
+                &case_root,
+                &domain::CaseId(case_id),
+                &file_id,
+                &destination,
+                false,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+
+            let exported = std::fs::read(&destination)?;
+            assert_eq!(exported.len(), 1536);
+            assert!(exported[..512].iter().all(|byte| *byte == b'A'));
+            assert!(exported[512..1024].iter().all(|byte| *byte == b'B'));
+            assert!(exported[1024..].iter().all(|byte| *byte == b'C'));
+            assert_eq!(extraction.bytes_written, 1536);
+            assert!(extraction.size_verified);
+            Ok(())
+        },
+    );
 }

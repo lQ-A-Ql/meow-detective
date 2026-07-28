@@ -30,7 +30,10 @@ pub use enumeration::{
     enumerate_filesystem_with_root_name_and_cancel, EnumerationStats,
 };
 pub use error::FileServiceError;
-pub use extraction::{extract_file_to_destination, extract_file_to_destination_for_case};
+pub use extraction::{
+    extract_file_to_destination, extract_file_to_destination_for_case,
+    extract_file_to_destination_for_case_with_bitlocker, record_file_extraction_audit,
+};
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,
     open_preview_session_for_case_with_bitlocker, preview_session_file_id,
@@ -44,6 +47,7 @@ pub use metadata::source_bitlocker::{
     media_preview_plan_for_source_case_with_bitlocker,
     read_file_range_for_source_case_with_bitlocker, text_preview_for_source_case_with_bitlocker,
 };
+pub(crate) use metadata::source_extraction::extract_file_to_managed_destination_for_case;
 pub use metadata::source_routing::{
     document_preview_for_source_case, get_data_sources_for_case, get_file_children_for_case,
     get_file_jump_context_for_case, get_file_rows_for_case, get_file_tree_for_case,
