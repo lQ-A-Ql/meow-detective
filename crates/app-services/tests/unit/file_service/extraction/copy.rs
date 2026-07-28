@@ -131,7 +131,7 @@ fn reader_progress_is_monotonic_and_finishes_at_the_source_size() {
     let destination = temporary.path().join("progress.bin");
     let source = vec![0x7f; 2 * 1024 * 1024 + 17];
     let mut updates = Vec::new();
-    let mut progress = |bytes_written, total_bytes| updates.push((bytes_written, total_bytes));
+    let mut progress = |update| updates.push(update);
 
     let result = copy_reader_to_destination(
         &mut Cursor::new(&source),
@@ -142,11 +142,41 @@ fn reader_progress_is_monotonic_and_finishes_at_the_source_size() {
     )
     .unwrap();
 
-    assert!(updates.windows(2).all(|pair| pair[0].0 <= pair[1].0));
-    assert_eq!(updates.first(), Some(&(0, Some(source.len() as u64))));
+    assert!(updates
+        .windows(2)
+        .all(|pair| pair[0].bytes_written <= pair[1].bytes_written));
+    assert_eq!(
+        updates.first(),
+        Some(&FileExtractionProgressUpdate {
+            phase: FileExtractionProgressPhase::Copying,
+            bytes_written: 0,
+            total_bytes: Some(source.len() as u64),
+        })
+    );
     assert_eq!(
         updates.last(),
-        Some(&(source.len() as u64, Some(source.len() as u64)))
+        Some(&FileExtractionProgressUpdate {
+            phase: FileExtractionProgressPhase::Finalizing,
+            bytes_written: source.len() as u64,
+            total_bytes: Some(source.len() as u64),
+        })
     );
     assert_eq!(result.bytes_written, source.len() as u64);
+}
+
+#[test]
+fn progress_reporter_coalesces_small_fast_copy_updates() {
+    let mut updates = Vec::new();
+    {
+        let mut callback = |update| updates.push(update);
+        let mut reporter = ProgressReporter::new(Some(&mut callback), Some(16 * 1024 * 1024));
+        for mebibytes in 1..8 {
+            reporter.report_copying(mebibytes * 1024 * 1024, Some(16 * 1024 * 1024), false);
+        }
+        reporter.report_copying(8 * 1024 * 1024, Some(16 * 1024 * 1024), false);
+    }
+
+    assert_eq!(updates.len(), 2);
+    assert_eq!(updates[0].bytes_written, 0);
+    assert_eq!(updates[1].bytes_written, 8 * 1024 * 1024);
 }

@@ -1,42 +1,72 @@
 use std::io::{Read, Write};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
 use crate::file_service::FileServiceError;
 
+use super::progress::{
+    FileExtractionProgressCallback, FileExtractionProgressPhase, FileExtractionProgressUpdate,
+};
+
 const COPY_BUFFER_SIZE: usize = 1024 * 1024;
-pub(crate) type CopyProgressCallback<'a> = &'a mut dyn FnMut(u64, Option<u64>);
+const PROGRESS_BYTE_INTERVAL: u64 = 8 * 1024 * 1024;
+const PROGRESS_TIME_INTERVAL: Duration = Duration::from_millis(100);
 
 struct ProgressReporter<'a> {
-    callback: Option<CopyProgressCallback<'a>>,
+    callback: Option<FileExtractionProgressCallback<'a>>,
     last_reported: u64,
+    last_reported_at: Instant,
 }
 
 impl<'a> ProgressReporter<'a> {
-    fn new(callback: Option<CopyProgressCallback<'a>>, total_bytes: Option<u64>) -> Self {
+    fn new(callback: Option<FileExtractionProgressCallback<'a>>, total_bytes: Option<u64>) -> Self {
         let mut reporter = Self {
             callback,
             last_reported: 0,
+            last_reported_at: Instant::now(),
         };
-        if let Some(callback) = reporter.callback.as_deref_mut() {
-            callback(0, total_bytes);
-        }
+        reporter.emit(FileExtractionProgressUpdate {
+            phase: FileExtractionProgressPhase::Copying,
+            bytes_written: 0,
+            total_bytes,
+        });
         reporter
     }
 
-    fn report(&mut self, bytes_written: u64, total_bytes: Option<u64>, force: bool) {
+    fn report_copying(&mut self, bytes_written: u64, total_bytes: Option<u64>, force: bool) {
         if bytes_written == self.last_reported {
             return;
         }
-        if !force && bytes_written.saturating_sub(self.last_reported) < COPY_BUFFER_SIZE as u64 {
+        let byte_interval_reached =
+            bytes_written.saturating_sub(self.last_reported) >= PROGRESS_BYTE_INTERVAL;
+        let time_interval_reached = self.last_reported_at.elapsed() >= PROGRESS_TIME_INTERVAL;
+        if !force && !byte_interval_reached && !time_interval_reached {
             return;
         }
-        if let Some(callback) = self.callback.as_deref_mut() {
-            callback(bytes_written, total_bytes);
-        }
+        self.emit(FileExtractionProgressUpdate {
+            phase: FileExtractionProgressPhase::Copying,
+            bytes_written,
+            total_bytes,
+        });
         self.last_reported = bytes_written;
+        self.last_reported_at = Instant::now();
+    }
+
+    fn report_finalizing(&mut self, bytes_written: u64, total_bytes: Option<u64>) {
+        self.emit(FileExtractionProgressUpdate {
+            phase: FileExtractionProgressPhase::Finalizing,
+            bytes_written,
+            total_bytes,
+        });
+    }
+
+    fn emit(&mut self, update: FileExtractionProgressUpdate) {
+        if let Some(callback) = self.callback.as_deref_mut() {
+            callback(update);
+        }
     }
 }
 
@@ -51,7 +81,7 @@ pub(crate) fn copy_reader_to_destination(
     source_size: Option<u64>,
     destination: &Path,
     overwrite: bool,
-    progress: Option<CopyProgressCallback<'_>>,
+    progress: Option<FileExtractionProgressCallback<'_>>,
 ) -> Result<StreamCopyResult, FileServiceError> {
     let parent = destination.parent().ok_or_else(|| {
         FileServiceError::invalid_input("destinationPath must have a parent directory")
@@ -60,7 +90,9 @@ pub(crate) fn copy_reader_to_destination(
         .prefix(".meow-detective-extract-")
         .suffix(".tmp")
         .tempfile_in(parent)?;
-    let result = copy_and_hash(reader, temporary.as_file_mut(), source_size, progress)?;
+    let mut progress = ProgressReporter::new(progress, source_size);
+    let result = copy_and_hash(reader, temporary.as_file_mut(), source_size, &mut progress)?;
+    progress.report_finalizing(result.bytes_written, source_size);
     sync_and_publish(temporary, destination, overwrite)?;
     Ok(result)
 }
@@ -69,7 +101,7 @@ pub(crate) fn copy_chunks_to_destination<F>(
     source_size: u64,
     destination: &Path,
     overwrite: bool,
-    progress: Option<CopyProgressCallback<'_>>,
+    progress: Option<FileExtractionProgressCallback<'_>>,
     mut read_chunk: F,
 ) -> Result<StreamCopyResult, FileServiceError>
 where
@@ -99,7 +131,7 @@ where
         temporary.as_file_mut().write_all(&bytes)?;
         hasher.update(&bytes);
         offset = offset.saturating_add(bytes.len() as u64);
-        progress.report(offset, Some(source_size), offset == source_size);
+        progress.report_copying(offset, Some(source_size), offset == source_size);
     }
     if offset != source_size {
         return Err(size_mismatch(source_size, offset));
@@ -108,6 +140,7 @@ where
         bytes_written: offset,
         sha256: hex::encode(hasher.finalize()),
     };
+    progress.report_finalizing(offset, Some(source_size));
     sync_and_publish(temporary, destination, overwrite)?;
     Ok(result)
 }
@@ -116,12 +149,11 @@ fn copy_and_hash(
     reader: &mut dyn Read,
     output: &mut std::fs::File,
     source_size: Option<u64>,
-    progress: Option<CopyProgressCallback<'_>>,
+    progress: &mut ProgressReporter<'_>,
 ) -> Result<StreamCopyResult, FileServiceError> {
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; COPY_BUFFER_SIZE];
     let mut bytes_written = 0_u64;
-    let mut progress = ProgressReporter::new(progress, source_size);
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 {
@@ -137,7 +169,7 @@ fn copy_and_hash(
         output.write_all(&buffer[..read])?;
         hasher.update(&buffer[..read]);
         bytes_written = next_bytes_written;
-        progress.report(
+        progress.report_copying(
             bytes_written,
             source_size,
             source_size == Some(bytes_written),
@@ -148,7 +180,7 @@ fn copy_and_hash(
             return Err(size_mismatch(expected, bytes_written));
         }
     }
-    progress.report(bytes_written, source_size, true);
+    progress.report_copying(bytes_written, source_size, true);
     Ok(StreamCopyResult {
         bytes_written,
         sha256: hex::encode(hasher.finalize()),

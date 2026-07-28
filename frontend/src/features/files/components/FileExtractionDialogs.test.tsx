@@ -66,6 +66,7 @@ describe('FileExtractionDialogs', () => {
         sha256: 'b'.repeat(64),
         destinationFileName: 'evidence.bin',
         sizeVerified: true,
+        auditPersisted: true,
       },
     });
 
@@ -78,5 +79,42 @@ describe('FileExtractionDialogs', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '确定' }));
     expect(model.setResultOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('distinguishes finalization from copying and reports an audit warning', () => {
+    const finalizingModel = createModel({
+      formOpen: true,
+      isExtracting: true,
+      progress: {
+        operationId: 'operation-1',
+        fileId: 'file-1',
+        phase: 'finalizing',
+        bytesWritten: 4096,
+        totalBytes: 4096,
+        percent: 100,
+      },
+    });
+    const warningModel = createModel({
+      resultOpen: true,
+      result: {
+        fileId: 'file-1',
+        bytesWritten: 4096,
+        sourceSize: 4096,
+        sha256: 'd'.repeat(64),
+        destinationFileName: 'evidence.bin',
+        sizeVerified: true,
+        auditPersisted: false,
+        warning: '审计记录写入失败，请核对目标文件。',
+      },
+    });
+
+    const { rerender } = render(<FileExtractionDialogs model={finalizingModel} />);
+
+    expect(screen.getByText(/正在同步并发布目标文件/)).toBeInTheDocument();
+
+    rerender(<FileExtractionDialogs model={warningModel} />);
+
+    expect(screen.getByText('写入失败')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('审计记录写入失败');
   });
 });

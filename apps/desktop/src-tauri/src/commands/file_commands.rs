@@ -3,6 +3,7 @@
 mod bitlocker;
 mod browse;
 mod extract;
+mod extract_progress;
 mod media;
 mod recovery;
 mod support;

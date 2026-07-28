@@ -43,7 +43,7 @@ pub(crate) struct SourceExtractionRequest<'a, 'progress> {
     pub(crate) destination_path: &'a Path,
     pub(crate) overwrite: bool,
     pub(crate) destination_scope: policy::DestinationScope<'a>,
-    pub(crate) progress: Option<copy::CopyProgressCallback<'progress>>,
+    pub(crate) progress: Option<super::FileExtractionProgressCallback<'progress>>,
 }
 
 pub(crate) fn extract_source_file(
@@ -129,5 +129,7 @@ fn extraction_result(
         sha256: copied.sha256,
         destination_file_name,
         size_verified: source_size.is_some_and(|size| size == copied.bytes_written),
+        audit_persisted: false,
+        warning: None,
     }
 }

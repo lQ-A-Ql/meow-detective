@@ -43,7 +43,13 @@ export interface FileEntryRow {
   hashSha256?: string;
 }
 
-export type FileExtractionPhase = 'preparing' | 'copying' | 'completed' | 'failed';
+export type FileExtractionPhase =
+  | 'preparing'
+  | 'copying'
+  | 'finalizing'
+  | 'completed'
+  | 'completedWithWarning'
+  | 'failed';
 
 export interface FileExtractionProgress {
   operationId: string;
@@ -61,6 +67,8 @@ export interface FileExtractionResult {
   sha256: string;
   destinationFileName: string;
   sizeVerified: boolean;
+  auditPersisted: boolean;
+  warning?: string;
 }
 
 export interface ExtractFileRequest {

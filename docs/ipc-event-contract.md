@@ -29,6 +29,8 @@
 | `analysis-extraction-progress` | `AnalysisExtractionProgress` | `emit_analysis_extraction_progress` | `AnalysisExtractionProgressDto`（`crates/transport/src/dto/analysis.rs`） |
 | `file-extract-progress` | `FileExtractProgress` | `emit_file_extraction_progress` | `FileExtractionProgressDto`（`crates/transport/src/dto/files.rs`） |
 
+`file-extract-progress.phase` 依次使用 `preparing`、`copying`、`finalizing` 和终态。`finalizing` 表示证据字节复制完成，但仍在执行目标文件 flush、持久化同步和原子发布；终态为 `completed`、`completedWithWarning` 或 `failed`。进度事件按字节与时间双重节流，终态和阶段切换不丢弃。
+
 ## 两类 payload
 
 - **匿名 JSON payload**（大多数 topic）：直接用 `serde_json::json!({...})` 构造，字段名在发送处手写为 camelCase 字符串常量。这类 topic 没有专门的 Rust struct，因此 `check-dto-drift.ps1` 无法覆盖它们——修改字段时必须同时手动更新消费该事件的前端订阅代码，并检查 `frontend/src/lib/events/bus.ts` 或具体 hook 里的字段访问。

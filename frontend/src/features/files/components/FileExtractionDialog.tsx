@@ -20,9 +20,12 @@ export interface FileExtractionDialogProps {
 
 export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
   const totalBytes = model.progress?.totalBytes;
-  const progressText = totalBytes === undefined
-    ? '正在准备证据读取...'
+  const copiedBytesText = totalBytes === undefined
+    ? undefined
     : `${formatBytes(model.progress?.bytesWritten ?? 0)} / ${formatBytes(totalBytes)}`;
+  const progressText = model.progress?.phase === 'finalizing'
+    ? `已复制 ${copiedBytesText ?? formatBytes(model.progress.bytesWritten)}，正在同步并发布目标文件...`
+    : copiedBytesText ?? '正在准备证据读取...';
 
   return (
     <Dialog open={model.formOpen} onOpenChange={model.setFormOpen}>

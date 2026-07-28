@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 pub enum FileExtractionPhaseDto {
     Preparing,
     Copying,
+    Finalizing,
     Completed,
+    CompletedWithWarning,
     Failed,
 }
 
@@ -32,6 +34,9 @@ pub struct FileExtractionResultDto {
     pub sha256: String,
     pub destination_file_name: String,
     pub size_verified: bool,
+    pub audit_persisted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

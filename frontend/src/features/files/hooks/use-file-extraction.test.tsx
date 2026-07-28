@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventEnvelope, FileEntryRow, FileExtractionProgress } from '@/types/models';
+import type {
+  EventEnvelope,
+  FileEntryRow,
+  FileExtractionProgress,
+  FileExtractionResult,
+} from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   extractFileToPath: vi.fn(),
@@ -84,14 +89,7 @@ describe('useFileExtractionModel', () => {
   });
 
   it('uses the save dialog, tracks matching byte progress, and opens the result dialog', async () => {
-    const extraction = deferred<{
-      fileId: string;
-      bytesWritten: number;
-      sourceSize: number;
-      sha256: string;
-      destinationFileName: string;
-      sizeVerified: boolean;
-    }>();
+    const extraction = deferred<FileExtractionResult>();
     mocks.saveDialog.mockResolvedValue('D:/exports/evidence.bin');
     mocks.extractFileToPath.mockReturnValue(extraction.promise);
     const { result } = renderHook(() => useFileExtractionModel(), {
@@ -144,6 +142,21 @@ describe('useFileExtractionModel', () => {
     expect(result.current.progress?.bytesWritten).toBe(2048);
     expect(result.current.progress?.percent).toBe(50);
 
+    act(() => progressListener?.({
+      eventId: 'event-finalizing',
+      topic: 'file-extract-progress',
+      ts: '2026-07-28T00:00:02Z',
+      payload: {
+        operationId: 'extract-operation-1',
+        fileId: FILE.id,
+        phase: 'finalizing',
+        bytesWritten: 4096,
+        totalBytes: 4096,
+        percent: 100,
+      },
+    }));
+    expect(result.current.progress?.phase).toBe('finalizing');
+
     await act(async () => {
       extraction.resolve({
         fileId: FILE.id,
@@ -152,6 +165,7 @@ describe('useFileExtractionModel', () => {
         sha256: 'a'.repeat(64),
         destinationFileName: 'evidence.bin',
         sizeVerified: true,
+        auditPersisted: true,
       });
       await extraction.promise;
     });
@@ -159,5 +173,37 @@ describe('useFileExtractionModel', () => {
     await waitFor(() => expect(result.current.resultOpen).toBe(true));
     expect(result.current.formOpen).toBe(false);
     expect(result.current.result?.sizeVerified).toBe(true);
+  });
+
+  it('starts only one extraction when submit is invoked repeatedly before rerender', async () => {
+    const extraction = deferred<FileExtractionResult>();
+    mocks.extractFileToPath.mockReturnValue(extraction.promise);
+    const { result } = renderHook(() => useFileExtractionModel(), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.openForFile(FILE);
+      result.current.setDestinationPath('D:/exports/evidence.bin');
+    });
+    await act(async () => {
+      void result.current.submit();
+      void result.current.submit();
+    });
+
+    await waitFor(() => expect(mocks.extractFileToPath).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      extraction.resolve({
+        fileId: FILE.id,
+        bytesWritten: 4096,
+        sourceSize: 4096,
+        sha256: 'c'.repeat(64),
+        destinationFileName: 'evidence.bin',
+        sizeVerified: true,
+        auditPersisted: true,
+      });
+      await extraction.promise;
+    });
   });
 });

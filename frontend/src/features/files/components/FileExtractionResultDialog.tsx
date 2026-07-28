@@ -1,4 +1,4 @@
-import { CircleCheck } from 'lucide-react';
+import { AlertTriangle, CircleCheck } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import {
   Dialog,
@@ -36,12 +36,25 @@ export function FileExtractionResultDialog({ model }: FileExtractionResultDialog
               value={model.result.sizeVerified ? '通过' : '未通过'}
             />
             <KeyValueField
+              label="审计记录"
+              value={model.result.auditPersisted ? '已写入' : '写入失败'}
+            />
+            <KeyValueField
               className="sm:col-span-2"
               label="SHA-256"
               value={model.result.sha256}
               valueClassName="break-all"
               mono
             />
+            {model.result.warning ? (
+              <div
+                role="alert"
+                className="flex gap-2 border border-forensics-warning-border bg-forensics-warning-bg p-3 text-forensics-warning-text sm:col-span-2"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>{model.result.warning}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

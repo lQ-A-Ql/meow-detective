@@ -30,6 +30,7 @@ function createOperationId() {
 
 export function useFileExtractionModel() {
   const operationIdRef = useRef<string>();
+  const inFlightRef = useRef(false);
   const [file, setFile] = useState<FileEntryRow>();
   const [formOpen, setFormOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
@@ -39,7 +40,12 @@ export function useFileExtractionModel() {
   const [progress, setProgress] = useState<FileExtractionProgress>();
   const [result, setResult] = useState<FileExtractionResult>();
 
-  const extraction = useMutation({
+  const {
+    mutateAsync,
+    reset: resetExtraction,
+    isPending,
+    error: extractionError,
+  } = useMutation({
     mutationFn: (request: Parameters<typeof extractFileToPath>[0]) => extractFileToPath(request),
     onSuccess: (nextResult) => {
       setResult(nextResult);
@@ -63,11 +69,11 @@ export function useFileExtractionModel() {
   }, []);
 
   const openForFile = useCallback((nextFile: FileEntryRow) => {
-    if (nextFile.entryType !== 'file') {
+    if (nextFile.entryType !== 'file' || inFlightRef.current) {
       return;
     }
     operationIdRef.current = undefined;
-    extraction.reset();
+    resetExtraction();
     setFile(nextFile);
     setDestinationPathState('');
     setValidationError(undefined);
@@ -76,7 +82,7 @@ export function useFileExtractionModel() {
     setResult(undefined);
     setResultOpen(false);
     setFormOpen(true);
-  }, [extraction]);
+  }, [resetExtraction]);
 
   const setDestinationPath = useCallback((value: string) => {
     setDestinationPathState(value);
@@ -85,7 +91,7 @@ export function useFileExtractionModel() {
   }, []);
 
   const browseDestination = useCallback(async () => {
-    if (!file || extraction.isPending) {
+    if (!file || inFlightRef.current) {
       return;
     }
     try {
@@ -96,10 +102,10 @@ export function useFileExtractionModel() {
     } catch (error) {
       setInteractionError(errorMessage(error, '无法打开目标路径选择器。'));
     }
-  }, [extraction.isPending, file, setDestinationPath]);
+  }, [file, setDestinationPath]);
 
   const submit = useCallback(async () => {
-    if (!file || extraction.isPending) {
+    if (!file || inFlightRef.current) {
       return;
     }
     const pathError = validateDestinationPath(destinationPath);
@@ -110,10 +116,11 @@ export function useFileExtractionModel() {
 
     const operationId = createOperationId();
     operationIdRef.current = operationId;
+    inFlightRef.current = true;
     setProgress(undefined);
     setInteractionError(undefined);
     try {
-      await extraction.mutateAsync({
+      await mutateAsync({
         operationId,
         fileId: file.id,
         destinationPath: destinationPath.trim(),
@@ -121,14 +128,16 @@ export function useFileExtractionModel() {
       });
     } catch {
       // The typed mutation error remains visible in the form.
+    } finally {
+      inFlightRef.current = false;
     }
-  }, [destinationPath, extraction, file]);
+  }, [destinationPath, file, mutateAsync]);
 
   const setFormOpenSafely = useCallback((open: boolean) => {
-    if (!extraction.isPending) {
+    if (!inFlightRef.current && !isPending) {
       setFormOpen(open);
     }
-  }, [extraction.isPending]);
+  }, [isPending]);
 
   return {
     file,
@@ -136,12 +145,12 @@ export function useFileExtractionModel() {
     resultOpen,
     destinationPath,
     validationError,
-    error: interactionError ?? (extraction.error
-      ? errorMessage(extraction.error, '文件提取失败。')
+    error: interactionError ?? (extractionError
+      ? errorMessage(extractionError, '文件提取失败。')
       : undefined),
     progress,
     result,
-    isExtracting: extraction.isPending,
+    isExtracting: isPending,
     openForFile,
     setFormOpen: setFormOpenSafely,
     setResultOpen,

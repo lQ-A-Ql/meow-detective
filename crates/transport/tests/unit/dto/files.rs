@@ -30,6 +30,8 @@ fn file_extraction_result_serializes_integrity_fields_as_camel_case() {
         sha256: "a".repeat(64),
         destination_file_name: "evidence.bin".to_string(),
         size_verified: true,
+        audit_persisted: false,
+        warning: Some("audit unavailable".to_string()),
     };
 
     let value = serde_json::to_value(dto).unwrap();
@@ -39,7 +41,18 @@ fn file_extraction_result_serializes_integrity_fields_as_camel_case() {
     assert_eq!(value["sourceSize"], 12);
     assert_eq!(value["destinationFileName"], "evidence.bin");
     assert_eq!(value["sizeVerified"], true);
+    assert_eq!(value["auditPersisted"], false);
+    assert_eq!(value["warning"], "audit unavailable");
     assert!(value.get("bytes_written").is_none());
+}
+
+#[test]
+fn file_extraction_finalizing_phase_serializes_as_camel_case() {
+    let phase = serde_json::to_value(FileExtractionPhaseDto::Finalizing).unwrap();
+    let warning = serde_json::to_value(FileExtractionPhaseDto::CompletedWithWarning).unwrap();
+
+    assert_eq!(phase, "finalizing");
+    assert_eq!(warning, "completedWithWarning");
 }
 
 #[test]

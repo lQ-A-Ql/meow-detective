@@ -9,6 +9,15 @@ use crate::file_service::{FileServiceError, SourceReadContext};
 
 use super::source_routing::open_source_for_file_id;
 
+pub struct CaseFileExtractionRequest<'a> {
+    pub case_conn: &'a Connection,
+    pub case_root: &'a Path,
+    pub case_id: &'a CaseId,
+    pub file_id: &'a str,
+    pub destination_path: &'a Path,
+    pub overwrite: bool,
+}
+
 pub fn extract_file_to_destination_for_case(
     case_conn: &Connection,
     case_root: &Path,
@@ -54,22 +63,17 @@ pub fn extract_file_to_destination_for_case_with_bitlocker(
 
 pub fn extract_file_to_destination_for_case_with_bitlocker_and_progress(
     bitlocker_runtime: &Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    file_id: &str,
-    destination_path: &Path,
-    overwrite: bool,
-    progress: &mut dyn FnMut(u64, Option<u64>),
+    request: CaseFileExtractionRequest<'_>,
+    progress: crate::file_service::FileExtractionProgressCallback<'_>,
 ) -> Result<FileExtractionResultDto, FileServiceError> {
     extract_routed_file(ExtractionRouteRequest {
         bitlocker_runtime: Some(bitlocker_runtime),
-        case_conn,
-        case_root,
-        case_id,
-        file_id,
-        destination_path,
-        overwrite,
+        case_conn: request.case_conn,
+        case_root: request.case_root,
+        case_id: request.case_id,
+        file_id: request.file_id,
+        destination_path: request.destination_path,
+        overwrite: request.overwrite,
         case_managed: false,
         progress: Some(progress),
     })
@@ -106,7 +110,7 @@ struct ExtractionRouteRequest<'a> {
     destination_path: &'a Path,
     overwrite: bool,
     case_managed: bool,
-    progress: Option<&'a mut dyn FnMut(u64, Option<u64>)>,
+    progress: Option<crate::file_service::FileExtractionProgressCallback<'a>>,
 }
 
 fn extract_routed_file(

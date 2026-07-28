@@ -2,16 +2,15 @@ use std::path::{Path, PathBuf};
 
 use app_services::file_service;
 use tauri::{AppHandle, State};
-use transport::{
-    commands::ExtractFileRequest,
-    dto::{FileExtractionPhaseDto, FileExtractionProgressDto, FileExtractionResultDto},
-    CommandError,
-};
+use transport::{commands::ExtractFileRequest, dto::FileExtractionResultDto, CommandError};
 
-use crate::events::event_bridge;
 use crate::state::AppState;
 
+use super::extract_progress::{emit_copy_update, emit_preparing, emit_terminal};
 use super::support::persist_file_extract_audit;
+
+const AUDIT_PERSISTENCE_WARNING: &str =
+    "The file was extracted, but its audit record could not be persisted. Verify the destination before continuing.";
 
 /// Extract a file from evidence to a user-selected destination path.
 #[tauri::command]
@@ -21,14 +20,7 @@ pub async fn extract_file(
     request: ExtractFileRequest,
 ) -> Result<FileExtractionResultDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
-    emit_extract_progress(
-        &app,
-        &request.operation_id,
-        &request.file_id,
-        FileExtractionPhaseDto::Preparing,
-        0,
-        None,
-    );
+    emit_preparing(&app, &request.operation_id, &request.file_id);
     let app_state = state.inner().clone();
     let operation_id = request.operation_id;
     let audit_file_id = request.file_id.clone();
@@ -43,27 +35,22 @@ pub async fn extract_file(
         let result = (|| {
             let connection = crate::commands::command_support::get_case_connection(&app_state)?;
             let active = crate::commands::command_support::require_active_case(&app_state)?;
-            let mut report_progress = |bytes_written, total_bytes| {
-                last_bytes_written = bytes_written;
-                last_total_bytes = total_bytes;
-                emit_extract_progress(
-                    &app,
-                    &operation_id,
-                    &file_id,
-                    FileExtractionPhaseDto::Copying,
-                    bytes_written,
-                    total_bytes,
-                );
+            let mut report_progress = |update: file_service::FileExtractionProgressUpdate| {
+                last_bytes_written = update.bytes_written;
+                last_total_bytes = update.total_bytes;
+                emit_copy_update(&app, &operation_id, &file_id, update);
             };
             let outcome =
                 file_service::extract_file_to_destination_for_case_with_bitlocker_and_progress(
                     &app_state.bitlocker_runtime,
-                    &connection,
-                    &active.case_root,
-                    &active.meta.id,
-                    &file_id,
-                    &destination,
-                    overwrite,
+                    file_service::CaseFileExtractionRequest {
+                        case_conn: &connection,
+                        case_root: &active.case_root,
+                        case_id: &active.meta.id,
+                        file_id: &file_id,
+                        destination_path: &destination,
+                        overwrite,
+                    },
                     &mut report_progress,
                 )
                 .map_err(CommandError::from_typed_service_error);
@@ -79,59 +66,18 @@ pub async fn extract_file(
             resolve_extract_and_audit(outcome, audit_result)
         })();
 
-        match &result {
-            Ok(extraction) => emit_extract_progress(
-                &app,
-                &operation_id,
-                &file_id,
-                FileExtractionPhaseDto::Completed,
-                extraction.bytes_written,
-                extraction.source_size,
-            ),
-            Err(_) => emit_extract_progress(
-                &app,
-                &operation_id,
-                &file_id,
-                FileExtractionPhaseDto::Failed,
-                last_bytes_written,
-                last_total_bytes,
-            ),
-        }
+        emit_terminal(
+            &app,
+            &operation_id,
+            &file_id,
+            &result,
+            last_bytes_written,
+            last_total_bytes,
+        );
         result
     })
     .await
     .map_err(CommandError::from_join_error)?
-}
-
-fn emit_extract_progress(
-    app: &AppHandle,
-    operation_id: &str,
-    file_id: &str,
-    phase: FileExtractionPhaseDto,
-    bytes_written: u64,
-    total_bytes: Option<u64>,
-) {
-    let percent = total_bytes.map(|total| {
-        if total == 0 {
-            100
-        } else {
-            bytes_written
-                .saturating_mul(100)
-                .saturating_div(total)
-                .min(100) as u32
-        }
-    });
-    event_bridge::emit_file_extraction_progress(
-        app,
-        &FileExtractionProgressDto {
-            operation_id: operation_id.to_string(),
-            file_id: file_id.to_string(),
-            phase,
-            bytes_written,
-            total_bytes,
-            percent,
-        },
-    );
 }
 
 fn audit_extract_outcome(
@@ -167,20 +113,24 @@ fn audit_extract_outcome(
     persist_file_extract_audit(connection, Some(case_id), file_id, details)
 }
 
-fn resolve_extract_and_audit(
+pub(super) fn resolve_extract_and_audit(
     outcome: Result<FileExtractionResultDto, CommandError>,
     audit_result: Result<(), CommandError>,
 ) -> Result<FileExtractionResultDto, CommandError> {
     match (outcome, audit_result) {
-        (Ok(result), Ok(())) => Ok(result),
-        (Ok(_), Err(error)) => {
+        (Ok(mut result), Ok(())) => {
+            result.audit_persisted = true;
+            result.warning = None;
+            Ok(result)
+        }
+        (Ok(mut result), Err(error)) => {
             tracing::error!(
                 error_code = %error.code,
                 "File was extracted but its audit record could not be persisted"
             );
-            Err(CommandError::internal(
-                "The file was extracted, but its audit record could not be persisted. Check the destination before retrying.",
-            ))
+            result.audit_persisted = false;
+            result.warning = Some(AUDIT_PERSISTENCE_WARNING.to_string());
+            Ok(result)
         }
         (Err(error), Ok(())) => Err(error),
         (Err(operation_error), Err(audit_error)) => {
