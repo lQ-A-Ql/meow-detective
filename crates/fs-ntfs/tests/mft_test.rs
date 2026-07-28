@@ -851,6 +851,26 @@ fn read_nonresident_file_data() {
 }
 
 #[test]
+fn stream_nonresident_file_supports_bounded_reads_and_seeks() {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let img = build_nonresident_data_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    assert!(ntfs.supports_file_stream_by_inode(6).unwrap());
+
+    let mut file = ntfs.into_file_stream_by_inode(6).unwrap();
+    let mut prefix = [0_u8; 7];
+    file.read_exact(&mut prefix).unwrap();
+    assert_eq!(&prefix, b"This is");
+
+    file.seek(SeekFrom::End(-8)).unwrap();
+    let mut suffix = Vec::new();
+    file.read_to_end(&mut suffix).unwrap();
+    assert_eq!(suffix, b"cluster.");
+}
+
+#[test]
 fn read_external_attribute_list_data_by_inode_and_range() {
     let img = build_attribute_list_external_data_fixture();
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));

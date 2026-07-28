@@ -1,16 +1,19 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)]
+  [Parameter(Mandatory = $true, ParameterSetName = "FourSamples")]
   [string]$Windows1FixturePath,
 
-  [Parameter(Mandatory = $true)]
+  [Parameter(Mandatory = $true, ParameterSetName = "FourSamples")]
   [string]$Windows2FixturePath,
 
-  [Parameter(Mandatory = $true)]
+  [Parameter(Mandatory = $true, ParameterSetName = "FourSamples")]
   [string]$Linux1FixturePath,
 
-  [Parameter(Mandatory = $true)]
+  [Parameter(Mandatory = $true, ParameterSetName = "FourSamples")]
   [string]$Linux2FixturePath,
+
+  [Parameter(Mandatory = $true, ParameterSetName = "Liuyang3GiB")]
+  [string]$LiuyangFixturePath,
 
   [string]$OutputPath = "artifacts/file-extraction-benchmark/file-extraction-benchmark.md"
 )
@@ -21,17 +24,41 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
 $benchmarkMarker = "FILE_EXTRACTION_BENCHMARK_JSON="
-$fixtureEnvironment = [ordered]@{
-  FORENSICS_WINDOWS1_E01_FIXTURE = $Windows1FixturePath
-  FORENSICS_WINDOWS2_E01_FIXTURE = $Windows2FixturePath
-  FORENSICS_LINUX1_E01_FIXTURE = $Linux1FixturePath
-  FORENSICS_LINUX2_E01_FIXTURE = $Linux2FixturePath
-}
-$sampleLabels = @{
-  FORENSICS_WINDOWS1_E01_FIXTURE = "Windows 1"
-  FORENSICS_WINDOWS2_E01_FIXTURE = "Windows 2"
-  FORENSICS_LINUX1_E01_FIXTURE = "Linux 1"
-  FORENSICS_LINUX2_E01_FIXTURE = "Linux 2"
+if ($PSCmdlet.ParameterSetName -eq "Liuyang3GiB") {
+  $fixtureEnvironment = [ordered]@{
+    FORENSICS_WINDOWS1_E01_FIXTURE = $LiuyangFixturePath
+  }
+  $sampleLabels = @{ FORENSICS_WINDOWS1_E01_FIXTURE = "Windows 1 / BitLocker 3 GiB" }
+  $requiredSecrets = @("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD")
+  $benchmarkMinBytes = "3221225472"
+  $benchmarkMaxBytes = "3221225472"
+  $benchmarkRequireBitLocker = "1"
+  $testFilter = "windows1_catalog_integrity"
+  $reportTitle = "Liuyang BitLocker 3 GiB file extraction benchmark"
+  $modeDescription = "post-enumeration 3 GiB BitLocker extraction"
+} else {
+  $fixtureEnvironment = [ordered]@{
+    FORENSICS_WINDOWS1_E01_FIXTURE = $Windows1FixturePath
+    FORENSICS_WINDOWS2_E01_FIXTURE = $Windows2FixturePath
+    FORENSICS_LINUX1_E01_FIXTURE = $Linux1FixturePath
+    FORENSICS_LINUX2_E01_FIXTURE = $Linux2FixturePath
+  }
+  $sampleLabels = @{
+    FORENSICS_WINDOWS1_E01_FIXTURE = "Windows 1"
+    FORENSICS_WINDOWS2_E01_FIXTURE = "Windows 2"
+    FORENSICS_LINUX1_E01_FIXTURE = "Linux 1"
+    FORENSICS_LINUX2_E01_FIXTURE = "Linux 2"
+  }
+  $requiredSecrets = @(
+    "FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD",
+    "FORENSICS_BITLOCKER_PRIVATE_JC2_RECOVERY_PASSWORD"
+  )
+  $benchmarkMinBytes = "134217728"
+  $benchmarkMaxBytes = "536870912"
+  $benchmarkRequireBitLocker = "0"
+  $testFilter = "catalog_integrity"
+  $reportTitle = "Four-sample E01 file extraction benchmark"
+  $modeDescription = "post-enumeration warm extraction, one successful 128-512 MiB file per sample"
 }
 
 function Resolve-FixtureFile {
@@ -76,12 +103,9 @@ foreach ($name in @($fixtureEnvironment.Keys)) {
   $fixtureEnvironment[$name] = Resolve-FixtureFile $fixtureEnvironment[$name]
 }
 
-foreach ($requiredSecret in @(
-  "FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD",
-  "FORENSICS_BITLOCKER_PRIVATE_JC2_RECOVERY_PASSWORD"
-)) {
+foreach ($requiredSecret in $requiredSecrets) {
   if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($requiredSecret, "Process"))) {
-    throw "Set $requiredSecret before running the four-sample extraction benchmark."
+    throw "Set $requiredSecret before running the extraction benchmark."
   }
 }
 
@@ -96,7 +120,12 @@ $logDirectory = Join-Path $repoRoot "artifacts/file-extraction-benchmark"
 [System.IO.Directory]::CreateDirectory($logDirectory) | Out-Null
 $logPath = Join-Path $logDirectory "cargo-test.log"
 
-$managedEnvironment = @($fixtureEnvironment.Keys) + "FORENSICS_E01_EXTRACTION_BENCHMARK_ONLY"
+$managedEnvironment = @($fixtureEnvironment.Keys) + @(
+  "FORENSICS_E01_EXTRACTION_BENCHMARK_ONLY",
+  "FORENSICS_E01_EXTRACTION_BENCHMARK_MIN_BYTES",
+  "FORENSICS_E01_EXTRACTION_BENCHMARK_MAX_BYTES",
+  "FORENSICS_E01_EXTRACTION_BENCHMARK_REQUIRE_BITLOCKER"
+)
 $previousEnvironment = @{}
 foreach ($name in $managedEnvironment) {
   $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
@@ -113,6 +142,21 @@ try {
     "1",
     "Process"
   )
+  [Environment]::SetEnvironmentVariable(
+    "FORENSICS_E01_EXTRACTION_BENCHMARK_MIN_BYTES",
+    $benchmarkMinBytes,
+    "Process"
+  )
+  [Environment]::SetEnvironmentVariable(
+    "FORENSICS_E01_EXTRACTION_BENCHMARK_MAX_BYTES",
+    $benchmarkMaxBytes,
+    "Process"
+  )
+  [Environment]::SetEnvironmentVariable(
+    "FORENSICS_E01_EXTRACTION_BENCHMARK_REQUIRE_BITLOCKER",
+    $benchmarkRequireBitLocker,
+    "Process"
+  )
 
   Push-Location $repoRoot
   try {
@@ -122,7 +166,7 @@ try {
       # ErrorRecord values even when the process exits successfully.
       $ErrorActionPreference = "Continue"
       $commandOutput = @(
-        & cargo test --release -p app-services --test e01_catalog_integrity catalog_integrity -- `
+        & cargo test --release -p app-services --test e01_catalog_integrity $testFilter -- `
           --ignored --nocapture --test-threads=1 2>&1 | Tee-Object -FilePath $logPath
       )
       $exitCode = $LASTEXITCODE
@@ -149,8 +193,12 @@ $records = @(
   }
 )
 
-if ($records.Count -ne 4) {
-  throw "Expected four extraction benchmark records, found $($records.Count). See $logPath."
+if ($exitCode -ne 0) {
+  throw "Extraction benchmark tests failed with exit code $exitCode. See $logPath."
+}
+
+if ($records.Count -ne $fixtureEnvironment.Count) {
+  throw "Expected $($fixtureEnvironment.Count) extraction benchmark record(s), found $($records.Count). See $logPath."
 }
 
 $gitCommit = (& git -C $repoRoot rev-parse --short=12 HEAD).Trim()
@@ -162,7 +210,7 @@ $storageSummary = Get-StorageSummary (
   @($fixtureEnvironment.Values) + [System.IO.Path]::GetTempPath()
 )
 $builder = [System.Text.StringBuilder]::new()
-[void]$builder.AppendLine("# Four-sample E01 file extraction benchmark")
+[void]$builder.AppendLine("# $reportTitle")
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("- Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
 [void]$builder.AppendLine("- Commit: ``$gitCommit``")
@@ -170,7 +218,7 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine("- Host: $($cpu.Name.Trim()), $($cpu.NumberOfCores) cores / $($cpu.NumberOfLogicalProcessors) logical processors, $memoryGiB GiB RAM")
 [void]$builder.AppendLine("- OS: $($operatingSystem.Caption) $($operatingSystem.Version) build $($operatingSystem.BuildNumber)")
 [void]$builder.AppendLine("- Storage: $storageSummary")
-[void]$builder.AppendLine("- Mode: post-enumeration warm extraction, one successful 128-512 MiB file per sample")
+[void]$builder.AppendLine("- Mode: $modeDescription")
 [void]$builder.AppendLine("- Destination: system temporary directory; SHA-256, flush, sync, and atomic publish are included")
 [void]$builder.AppendLine("- Scheduling: samples and exports are serial; import/enumeration time is excluded from the reported extraction phases")
 [void]$builder.AppendLine()
@@ -214,22 +262,26 @@ $prepareMinimum = Format-Decimal (($prepareTimes | Measure-Object -Minimum).Mini
 $prepareMaximum = Format-Decimal (($prepareTimes | Measure-Object -Maximum).Maximum)
 $finalizeMinimum = Format-Decimal (($finalizeTimes | Measure-Object -Minimum).Minimum)
 $finalizeMaximum = Format-Decimal (($finalizeTimes | Measure-Object -Maximum).Maximum)
-[void]$builder.AppendLine("- Warm-cache copy throughput spans $copyMinimum-$copyMaximum MiB/s across the four source and filesystem combinations.")
+[void]$builder.AppendLine("- Copy throughput spans $copyMinimum-$copyMaximum MiB/s across the measured source and filesystem combination(s).")
 [void]$builder.AppendLine("- End-to-end throughput is $totalMinimum-$totalMaximum MiB/s; reader/filesystem preparation takes $prepareMinimum-$prepareMaximum s and durable finalization takes $finalizeMinimum-$finalizeMaximum s per extraction.")
 [void]$builder.AppendLine("- Copy throughput can exceed sustained physical-device throughput because enumeration and candidate preview warm the Windows page cache. These values must not be treated as cold-cache or long-duration sequential-I/O limits.")
-[void]$builder.AppendLine("- Windows 1 exercises a BitLocker-backed file. Windows 2 falls back to a non-BitLocker file because its unlocked BitLocker catalog has no regular file in the 128-512 MiB benchmark tier.")
+if ($PSCmdlet.ParameterSetName -eq "Liuyang3GiB") {
+  [void]$builder.AppendLine("- The selected file is exactly 3 GiB and the benchmark rejects non-BitLocker candidates.")
+} else {
+  [void]$builder.AppendLine("- Windows 1 exercises a BitLocker-backed file. Windows 2 falls back to a non-BitLocker file because its unlocked BitLocker catalog has no regular file in the 128-512 MiB benchmark tier.")
+}
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("## Interpretation boundary")
 [void]$builder.AppendLine()
-[void]$builder.AppendLine("This is a single-run, post-enumeration warm-cache private-sample baseline, not a release threshold. It measures the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Cold-cache runs, repeated-run p50/p95, sustained multi-GiB exports, and RSS/CPU telemetry remain separate follow-up work.")
+if ($PSCmdlet.ParameterSetName -eq "Liuyang3GiB") {
+  [void]$builder.AppendLine("This is a single-run, post-enumeration private-sample baseline, not a release threshold. It measures one complete 3 GiB BitLocker export through the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Controlled cold-cache runs, repeated-run p50/p95, and RSS/CPU telemetry remain separate follow-up work.")
+} else {
+  [void]$builder.AppendLine("This is a single-run, post-enumeration warm-cache private-sample baseline, not a release threshold. It measures the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Cold-cache runs, repeated-run p50/p95, sustained multi-GiB exports, and RSS/CPU telemetry remain separate follow-up work.")
+}
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("Raw cargo output: ``artifacts/file-extraction-benchmark/cargo-test.log``")
 
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [System.IO.File]::WriteAllText($resolvedOutput, $builder.ToString(), $utf8NoBom)
-
-if ($exitCode -ne 0) {
-  throw "Extraction benchmark tests failed with exit code $exitCode. See $logPath."
-}
 
 Write-Host "Extraction benchmark report: $resolvedOutput"

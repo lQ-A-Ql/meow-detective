@@ -1,4 +1,5 @@
 use std::{
+    io::Read,
     path::Path,
     sync::Arc,
     time::{Duration, Instant},
@@ -10,11 +11,15 @@ use app_services::{
 };
 use domain::DataSourceId;
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 const ENABLE_ENV: &str = "FORENSICS_E01_EXTRACTION_BENCHMARK_ONLY";
-const MIN_BYTES: u64 = 128 * 1024 * 1024;
-const MAX_BYTES: u64 = 512 * 1024 * 1024;
+const MIN_BYTES_ENV: &str = "FORENSICS_E01_EXTRACTION_BENCHMARK_MIN_BYTES";
+const MAX_BYTES_ENV: &str = "FORENSICS_E01_EXTRACTION_BENCHMARK_MAX_BYTES";
+const REQUIRE_BITLOCKER_ENV: &str = "FORENSICS_E01_EXTRACTION_BENCHMARK_REQUIRE_BITLOCKER";
+const DEFAULT_MIN_BYTES: u64 = 128 * 1024 * 1024;
+const DEFAULT_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 pub(crate) struct Context<'a> {
     pub(crate) case_conn: &'a Connection,
@@ -35,14 +40,19 @@ struct Candidate {
     bitlocker: bool,
 }
 
+struct Config {
+    min_bytes: u64,
+    max_bytes: u64,
+    require_bitlocker: bool,
+}
+
 pub(crate) fn is_enabled() -> bool {
-    std::env::var(ENABLE_ENV)
-        .ok()
-        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+    env_bool(ENABLE_ENV)
 }
 
 pub(crate) fn run(context: Context<'_>) -> persistence_sqlite::DbResult<()> {
-    let candidates = candidates(context.source_conn, context.data_source_id)?;
+    let config = Config::from_env()?;
+    let candidates = candidates(context.source_conn, context.data_source_id, &config)?;
     let export_root = TempDir::new()?;
     let mut failures = Vec::new();
 
@@ -66,10 +76,46 @@ pub(crate) fn run(context: Context<'_>) -> persistence_sqlite::DbResult<()> {
     }
 
     Err(persistence_sqlite::DbError::System(format!(
-        "{}: no 128-512 MiB regular file completed the extraction benchmark; first failures: {}",
+        "{}: no regular file in {}-{} bytes completed the extraction benchmark; first failures: {}",
         context.env_name,
+        config.min_bytes,
+        config.max_bytes,
         failures.into_iter().take(5).collect::<Vec<_>>().join(" | ")
     )))
+}
+
+impl Config {
+    fn from_env() -> persistence_sqlite::DbResult<Self> {
+        let min_bytes = env_u64(MIN_BYTES_ENV, DEFAULT_MIN_BYTES)?;
+        let max_bytes = env_u64(MAX_BYTES_ENV, DEFAULT_MAX_BYTES)?;
+        if min_bytes == 0 || min_bytes > max_bytes {
+            return Err(persistence_sqlite::DbError::System(format!(
+                "invalid extraction benchmark bounds: min={min_bytes} max={max_bytes}"
+            )));
+        }
+        Ok(Self {
+            min_bytes,
+            max_bytes,
+            require_bitlocker: env_bool(REQUIRE_BITLOCKER_ENV),
+        })
+    }
+}
+
+fn env_u64(name: &str, default: u64) -> persistence_sqlite::DbResult<u64> {
+    let Some(value) = std::env::var(name).ok() else {
+        return Ok(default);
+    };
+    value.trim().parse::<u64>().map_err(|error| {
+        persistence_sqlite::DbError::System(format!(
+            "invalid {name} extraction benchmark value: {error}"
+        ))
+    })
+}
+
+fn env_bool(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
 }
 
 fn preview_candidate(context: &Context<'_>, global_id: &str) -> Result<(), String> {
@@ -92,26 +138,31 @@ fn preview_candidate(context: &Context<'_>, global_id: &str) -> Result<(), Strin
 fn candidates(
     source_conn: &Connection,
     data_source_id: &DataSourceId,
+    config: &Config,
 ) -> persistence_sqlite::DbResult<Vec<Candidate>> {
     let mut statement = source_conn.prepare(
         "SELECT f.id, f.path, f.size, f.partition_index,
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM data_source_partitions p
-                    WHERE p.data_source_id = f.data_source_id
-                      AND p.partition_index = f.partition_index
-                      AND lower(p.kind_label) = 'bitlocker'
-                ) THEN 1 ELSE 0 END AS is_bitlocker
+                CASE WHEN lower(p.kind_label) = 'bitlocker' THEN 1 ELSE 0 END AS is_bitlocker
          FROM file_entries f
+         LEFT JOIN data_source_partitions p
+           ON p.data_source_id = f.data_source_id
+          AND p.partition_index = f.partition_index
          WHERE f.data_source_id = ?1
            AND f.entry_type = 'file' COLLATE NOCASE
            AND f.encrypted = 0
            AND f.size BETWEEN ?2 AND ?3
+           AND (?4 = 0 OR lower(p.kind_label) = 'bitlocker')
          ORDER BY is_bitlocker DESC, f.size DESC
          LIMIT 64",
     )?;
     let candidates = statement
         .query_map(
-            rusqlite::params![&data_source_id.0, MIN_BYTES, MAX_BYTES],
+            rusqlite::params![
+                &data_source_id.0,
+                config.min_bytes,
+                config.max_bytes,
+                config.require_bitlocker
+            ],
             |row| {
                 Ok(Candidate {
                     local_id: row.get(0)?,
@@ -176,6 +227,7 @@ fn measure_candidate(
         candidate.size,
         result.bytes_written,
         last_bytes_written,
+        &result.sha256,
     )?;
     let record = serde_json::json!({
         "sample": context.env_name,
@@ -202,6 +254,7 @@ fn verify_output(
     expected: u64,
     result_bytes: u64,
     progress_bytes: u64,
+    expected_sha256: &str,
 ) -> Result<(), String> {
     if result_bytes != expected || progress_bytes != expected {
         return Err(format!(
@@ -214,6 +267,22 @@ fn verify_output(
     if destination_size != expected {
         return Err(format!(
             "destination size mismatch: catalog={expected} destination={destination_size}"
+        ));
+    }
+    let mut file = std::fs::File::open(destination).map_err(|error| error.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let destination_sha256 = hex::encode(hasher.finalize());
+    if destination_sha256 != expected_sha256 {
+        return Err(format!(
+            "destination SHA-256 mismatch: extraction={expected_sha256} destination={destination_sha256}"
         ));
     }
     Ok(())

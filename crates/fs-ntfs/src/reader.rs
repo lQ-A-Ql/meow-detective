@@ -463,7 +463,7 @@ impl crate::NtfsReader {
         }
     }
 
-    fn read_data_extents_range(
+    pub(crate) fn read_data_extents_range(
         &self,
         extents: &[DataAttributeExtent],
         offset: u64,

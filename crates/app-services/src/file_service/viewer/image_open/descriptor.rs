@@ -13,6 +13,7 @@ use crate::file_service::{
 };
 
 use super::lvm::open_candidate_block_reader;
+use super::ntfs::open_ntfs_descriptor_file;
 
 pub(crate) fn open_descriptor_image_file<F>(
     descriptor: &PreviewDescriptor,
@@ -24,7 +25,13 @@ where
     let candidate = exact_partition_candidate(descriptor)?;
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
-    match open_candidate(source_path, candidate, &path_candidates, &mut open_reader) {
+    match open_candidate(
+        source_path,
+        descriptor,
+        candidate,
+        &path_candidates,
+        &mut open_reader,
+    ) {
         Ok(Some(reader)) => return Ok(reader),
         Ok(None) => {}
         Err(error) => tracing::warn!(
@@ -72,12 +79,13 @@ where
     let (reader, fs_offset, filesystem_kind) =
         context.open_candidate_block_reader(descriptor, candidate)?;
     if filesystem_kind == "NTFS" {
-        return open_first_image_path_seekable(
-            &fs_ntfs::NtfsReader::open(reader, fs_offset)?,
+        return open_ntfs_descriptor_file(
+            fs_ntfs::NtfsReader::open(reader, fs_offset)?,
+            descriptor,
+            candidate,
             paths,
         )
-        .map(Some)
-        .map_err(FileServiceError::Io);
+        .map(Some);
     }
     if is_linux_filesystem_kind(&filesystem_kind) {
         let filesystem = match filesystem_kind.as_str() {
@@ -135,6 +143,7 @@ where
 
 fn open_candidate<F>(
     source_path: &Path,
+    descriptor: &PreviewDescriptor,
     candidate: &PreviewPartitionCandidate,
     paths: &[String],
     open_reader: &mut F,
@@ -143,7 +152,7 @@ where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
     if candidate.filesystem_kind == "NTFS" {
-        return open_ntfs(source_path, candidate, paths, open_reader).map(Some);
+        return open_ntfs(source_path, descriptor, candidate, paths, open_reader).map(Some);
     }
     if is_linux_filesystem_kind(&candidate.filesystem_kind) {
         return open_linux_image_candidate(source_path, candidate, paths, open_reader).map(Some);
@@ -157,6 +166,7 @@ where
 
 fn open_ntfs<F>(
     source_path: &Path,
+    descriptor: &PreviewDescriptor,
     candidate: &PreviewPartitionCandidate,
     paths: &[String],
     open_reader: &mut F,
@@ -166,7 +176,10 @@ where
 {
     let (reader, fs_offset) = open_candidate_block_reader(source_path, candidate, open_reader)?;
     let fs = fs_ntfs::NtfsReader::open(reader, fs_offset)?;
-    open_first_image_path_seekable(&fs, paths)
+    open_ntfs_descriptor_file(fs, descriptor, candidate, paths).map_err(|error| match error {
+        FileServiceError::Io(error) => error,
+        other => std::io::Error::other(other.to_string()),
+    })
 }
 
 fn open_fat_or_exfat_image_candidate<F>(

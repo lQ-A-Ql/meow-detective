@@ -1,6 +1,7 @@
 mod descriptor;
 pub(crate) mod e01;
 pub(crate) mod lvm;
+mod ntfs;
 mod raw;
 
 pub(crate) use descriptor::{open_descriptor_image_file, open_descriptor_image_file_with_context};
