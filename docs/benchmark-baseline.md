@@ -205,10 +205,19 @@ reader/filesystem 准备、复制并计算 SHA-256、持久化同步及原子发
 
 liuyang BitLocker 分区精确 `3 GiB` 文件的 production `release` 持续提取实测见
 [`benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md`](benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md)。
-该轮通过 NTFS data-run 有界流式读取完成 `3,221,225,472` 字节导出，复制耗时
-`8.763s`，包含 reader 准备、SHA-256、持久化同步和原子发布的端到端耗时
-`8.932s`，端到端吞吐 `343.898 MiB/s`；目录枚举、BitLocker 解锁以及计时后的
-目标文件独立 SHA-256 复核不计入提取阶段。
+串行基线通过单个 NTFS data-run 有界流读取完成 `3,221,225,472` 字节导出，复制
+耗时 `8.763s`，端到端耗时 `8.932s`，吞吐 `343.898 MiB/s`。提交
+`76496f59e5e9` 在同一样本上使用两个独立 reader、`4 MiB` chunk、最多四个在途
+chunk 和单顺序 writer，复制耗时 `5.004s`，端到端耗时 `5.576s`，吞吐
+`550.890 MiB/s`；复制和端到端耗时分别下降 `42.9%`、`37.6%`，两次导出的
+SHA-256 均为 `9a87318e9ca5e1b0861f1cc46a10424a668db530b38d14946da87d43a98b5134`。
+
+并行路径仅用于 `>=512 MiB` 的 E01/RAW NTFS 文件，并在 CPU、内存余量、压缩
+属性或 reader 能力不满足时回退串行。四个在途 chunk 的 payload 上界为 `16 MiB`；
+在可获得 RSS 遥测时，还要求当前 RSS 距 `4 GiB` 软限制至少保留 `128 MiB`。本轮
+导出前后记录的进程生命周期峰值 RSS 均为 `1384 MiB`，说明未突破此前枚举阶段
+峰值，但该指标不能替代提取窗口内的高频峰值采样。目录枚举、BitLocker 解锁以及
+计时后的目标文件独立 SHA-256 复核不计入提取阶段。
 
 上述结果均属于单次、枚举后缓存基线，不进入发布阈值。补齐受控冷缓存、重复运行
-p50/p95 以及 RSS/CPU 遥测后，才能提升为正式 large dataset gate。
+p50/p95 以及提取窗口高频 RSS/CPU 遥测后，才能提升为正式 large dataset gate。

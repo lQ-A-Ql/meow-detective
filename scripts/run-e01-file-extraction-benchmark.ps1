@@ -221,7 +221,7 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine("- Mode: $modeDescription")
 [void]$builder.AppendLine("- Destination: system temporary directory; SHA-256, flush, sync, and atomic publish are included")
 [void]$builder.AppendLine("- Verification: destination size and an independent post-timing SHA-256 re-read must match the extraction result")
-[void]$builder.AppendLine("- Scheduling: samples and exports are serial; import/enumeration time is excluded from the reported extraction phases")
+[void]$builder.AppendLine("- Scheduling: benchmark samples are serial; each production export selects its bounded reader policy independently; import/enumeration time is excluded")
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("| Sample | Image | Image GiB | Internal file | Partition | BitLocker | File MiB | Prepare s | Copy s | Finalize s | Total s | Copy MiB/s | Total MiB/s | Progress events |")
 [void]$builder.AppendLine("|---|---|---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|")
@@ -297,9 +297,9 @@ if ($PSCmdlet.ParameterSetName -eq "Liuyang3GiB") {
 [void]$builder.AppendLine("## Interpretation boundary")
 [void]$builder.AppendLine()
 if ($PSCmdlet.ParameterSetName -eq "Liuyang3GiB") {
-  [void]$builder.AppendLine("This is a single-run, post-enumeration private-sample baseline, not a release threshold. It measures one complete 3 GiB BitLocker export through the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Controlled cold-cache runs, repeated-run p50/p95, and RSS/CPU telemetry remain separate follow-up work.")
+  [void]$builder.AppendLine("This is a single-run, post-enumeration private-sample baseline, not a release threshold. It measures one complete 3 GiB BitLocker export through the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Controlled cold-cache runs, repeated-run p50/p95, and high-frequency extraction-only RSS/CPU sampling remain separate follow-up work; the process-wide RSS counters above cannot isolate short-lived peaks inside the extraction interval.")
 } else {
-  [void]$builder.AppendLine("This is a single-run, post-enumeration warm-cache private-sample baseline, not a release threshold. It measures the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Cold-cache runs, repeated-run p50/p95, sustained multi-GiB exports, and RSS/CPU telemetry remain separate follow-up work.")
+  [void]$builder.AppendLine("This is a single-run, post-enumeration warm-cache private-sample baseline, not a release threshold. It measures the production evidence reader, SHA-256 calculation, destination write, durable sync, and atomic publish. It does not include image import or filesystem enumeration. Cold-cache runs, repeated-run p50/p95, sustained multi-GiB exports, and high-frequency extraction-only RSS/CPU sampling remain separate follow-up work; the process-wide RSS counters above cannot isolate short-lived peaks inside an extraction interval.")
 }
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("Raw cargo output: ``artifacts/file-extraction-benchmark/cargo-test.log``")
