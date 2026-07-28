@@ -50,9 +50,9 @@ describe('HexViewer', () => {
       return `${offset}  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50`;
     });
 
-    const { container } = render(<HexViewer lines={lines} lineHeight={20} />);
+    render(<HexViewer lines={lines} lineHeight={20} />);
 
-    const scrollContainer = container.querySelector('.overflow-auto') as HTMLDivElement;
+    const scrollContainer = screen.getByTestId('hex-scroll-container');
     const visibleWindow = screen.getByTestId('hex-visible-window');
 
     expect(visibleWindow.childElementCount).toBeLessThan(lines.length);
@@ -75,7 +75,7 @@ describe('HexViewer', () => {
     });
     const onNeedMoreRange = vi.fn();
 
-    const { container } = render(
+    render(
       <HexViewer
         lines={lines}
         lineHeight={20}
@@ -83,7 +83,7 @@ describe('HexViewer', () => {
       />,
     );
 
-    const scrollContainer = container.querySelector('.overflow-auto') as HTMLDivElement;
+    const scrollContainer = screen.getByTestId('hex-scroll-container');
     fireEvent.scroll(scrollContainer, {
       target: { scrollTop: 19_500 },
     });

@@ -8,6 +8,7 @@ import {
 import { useCallback } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -46,7 +47,8 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3 overflow-auto p-3">
+    <ScrollArea className="min-h-0 flex-1" viewportClassName="p-3">
+      <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2 text-[11px]">
         <KeyValueField label="Inode / MFT" value={recovery.inode} mono />
         {recovery.mftSequence !== undefined ? (
@@ -139,7 +141,8 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
           <div className="break-all font-mono">SHA-256: {model.lastExport.sha256}</div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </ScrollArea>
   );
 }
 

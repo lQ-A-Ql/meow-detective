@@ -26,23 +26,29 @@ pub fn extract_file_to_destination(
         overwrite,
         policy::DestinationScope::Unscoped,
     )?;
-    let copied =
-        copy::copy_reader_to_destination(reader.as_mut(), entry.size, &destination, overwrite)?;
+    let copied = copy::copy_reader_to_destination(
+        reader.as_mut(),
+        entry.size,
+        &destination,
+        overwrite,
+        None,
+    )?;
     Ok(extraction_result(file_id, entry.size, &destination, copied))
 }
 
-pub(crate) struct SourceExtractionRequest<'a> {
+pub(crate) struct SourceExtractionRequest<'a, 'progress> {
     pub(crate) global_file_id: &'a str,
     pub(crate) local_file_id: &'a FileEntryId,
     pub(crate) source_size: Option<u64>,
     pub(crate) destination_path: &'a Path,
     pub(crate) overwrite: bool,
     pub(crate) destination_scope: policy::DestinationScope<'a>,
+    pub(crate) progress: Option<copy::CopyProgressCallback<'progress>>,
 }
 
 pub(crate) fn extract_source_file(
     context: &mut SourceReadContext<'_>,
-    request: SourceExtractionRequest<'_>,
+    request: SourceExtractionRequest<'_, '_>,
 ) -> Result<FileExtractionResultDto, FileServiceError> {
     validate_source_entry(context, request.local_file_id)?;
     let destination = policy::prepare_destination(
@@ -63,7 +69,13 @@ pub(crate) fn extract_source_file(
                 crate::file_service::RangeContentReader::Seekable(reader) => reader.as_mut(),
                 crate::file_service::RangeContentReader::Streaming(reader) => reader.as_mut(),
             };
-            copy::copy_reader_to_destination(reader, source_size, &destination, request.overwrite)?
+            copy::copy_reader_to_destination(
+                reader,
+                source_size,
+                &destination,
+                request.overwrite,
+                request.progress,
+            )?
         }
         SourceExtractionMode::Chunked => {
             let size = source_size.ok_or_else(|| {
@@ -73,6 +85,7 @@ pub(crate) fn extract_source_file(
                 size,
                 &destination,
                 request.overwrite,
+                request.progress,
                 |offset, length| {
                     context.read_extraction_chunk_by_id(request.local_file_id, offset, length)
                 },

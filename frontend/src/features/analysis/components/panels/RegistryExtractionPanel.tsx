@@ -19,6 +19,7 @@ import type {
   UsbDeviceHistory,
   UserAssistEntry,
 } from '@/types/models';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
@@ -215,7 +216,7 @@ export function RegistryExtractionPanel({
             />
           </TabsContent>
           <TabsContent value="network" className="min-h-0">
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+            <ScrollArea className="min-h-0 flex-1" viewportClassName="flex min-h-full flex-col gap-3 p-3">
               <section className="flex min-h-[220px] flex-1 flex-col">
                 <div className="mb-2 text-[12px] font-light text-forensics-text">网络适配器（物理与虚拟）</div>
                 <div className="flex min-h-0 flex-1 overflow-hidden border border-forensics-border">
@@ -240,7 +241,7 @@ export function RegistryExtractionPanel({
                   />
                 </div>
               </section>
-            </div>
+            </ScrollArea>
           </TabsContent>
           <TabsContent value="software" className="min-h-0">
             <DenseDataTable

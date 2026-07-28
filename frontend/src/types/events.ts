@@ -17,7 +17,8 @@ export type EventTopic =
   | 'job-cancellation'
   | 'cache-index-status'
   | 'performance-report-ready'
-  | 'analysis-extraction-progress';
+  | 'analysis-extraction-progress'
+  | 'file-extract-progress';
 
 export interface EventEnvelope<T = unknown> {
   eventId: string;

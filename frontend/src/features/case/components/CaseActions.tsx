@@ -1,6 +1,7 @@
 import { FolderOpen, Trash2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { JobSnapshot, RecentCase } from '@/types/models';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { BRAND_DISPLAY_NAME } from '@/lib/branding';
@@ -41,7 +42,7 @@ export function CaseWelcomeForms({
   onDeleteCase,
 }: CaseWelcomeFormsProps) {
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface overflow-auto">
+    <ScrollArea className="min-h-0 flex-1 bg-forensics-surface" viewportClassName="flex min-h-full flex-col">
       <div className="border-b border-forensics-border bg-forensics-panel p-8">
         <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">{BRAND_DISPLAY_NAME}</div>
         <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
@@ -153,7 +154,7 @@ export function CaseWelcomeForms({
           )}
         </div>
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 

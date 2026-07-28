@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Tabs } from '@/app/components/ui/tabs';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
@@ -41,7 +42,7 @@ export function LinuxAnalysisView({
       onValueChange={(value) => onActiveTabChange(value as LinuxAnalysisTabKey)}
       className="h-full min-h-0 flex-1 gap-0"
     >
-      <div className="min-h-0 flex-1 overflow-auto p-6">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {activeTab === 'deletedRecovery' ? (
           <DeletedRecoveryPanel model={recoveryModel} />
@@ -56,7 +57,7 @@ export function LinuxAnalysisView({
             extractionRunning={extractionRunning}
           />
         )}
-      </div>
+      </ScrollArea>
     </Tabs>
   );
 }

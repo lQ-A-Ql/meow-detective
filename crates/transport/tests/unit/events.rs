@@ -27,6 +27,8 @@ fn event_topic_serializes_as_wire_topic() {
     assert_eq!(report, "\"performance-report-ready\"");
     let extraction = serde_json::to_string(&EventTopic::AnalysisExtractionProgress).unwrap();
     assert_eq!(extraction, "\"analysis-extraction-progress\"");
+    let file_extract = serde_json::to_string(&EventTopic::FileExtractProgress).unwrap();
+    assert_eq!(file_extract, "\"file-extract-progress\"");
 }
 
 #[test]
@@ -38,6 +40,7 @@ fn runtime_event_topics_are_tauri_safe() {
         TOPIC_CACHE_INDEX_STATUS,
         TOPIC_PERFORMANCE_REPORT_READY,
         TOPIC_ANALYSIS_EXTRACTION_PROGRESS,
+        TOPIC_FILE_EXTRACT_PROGRESS,
     ];
 
     for topic in topics {
@@ -73,6 +76,10 @@ fn new_event_topics_match_constant_strings() {
     assert_eq!(
         EventTopic::AnalysisExtractionProgress.as_str(),
         TOPIC_ANALYSIS_EXTRACTION_PROGRESS
+    );
+    assert_eq!(
+        EventTopic::FileExtractProgress.as_str(),
+        TOPIC_FILE_EXTRACT_PROGRESS
     );
 }
 

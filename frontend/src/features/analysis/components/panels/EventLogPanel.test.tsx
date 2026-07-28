@@ -82,7 +82,7 @@ describe('EventLogPanel', () => {
 
     expect(activeContent?.className).toContain('flex-col');
     expect(activeContent?.className).toContain('overflow-hidden');
-    expect(activeContent?.querySelector('.overflow-y-auto')).not.toBeNull();
+    expect(activeContent?.querySelector('[data-slot="scroll-area-viewport"]')).not.toBeNull();
   });
 
   it('routes a failed continuation through query recovery instead of the stale cursor', () => {
@@ -95,7 +95,7 @@ describe('EventLogPanel', () => {
     const activeContent = container.querySelector(
       '[data-slot="tabs-content"][data-state="active"]',
     );
-    const scrollContainer = activeContent?.querySelector('.overflow-y-auto');
+    const scrollContainer = activeContent?.querySelector('[data-slot="scroll-area-viewport"]');
     expect(scrollContainer).toBeInstanceOf(HTMLDivElement);
     Object.defineProperties(scrollContainer as HTMLDivElement, {
       clientHeight: { configurable: true, value: 600 },

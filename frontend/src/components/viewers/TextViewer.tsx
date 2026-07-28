@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, FileText, Search } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 
 interface TextViewerProps {
   /** 文本内容 */
@@ -221,11 +222,14 @@ export function TextViewer({
       </div>
 
       {/* 文本内容 */}
-      <div
-        ref={containerRef}
-        data-testid="text-scroll-container"
-        className="flex-1 overflow-auto bg-forensics-surface"
-        onScroll={handleScroll}
+      <ScrollArea
+        className="min-h-0 flex-1 bg-forensics-surface"
+        viewportRef={containerRef}
+        viewportTestId="text-scroll-container"
+        viewportProps={{
+          onScroll: handleScroll,
+        }}
+        showHorizontalScrollbar
       >
         <div
           className="font-mono text-[11px] leading-[18px]"
@@ -275,7 +279,7 @@ export function TextViewer({
             })}
           </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* 状态栏 */}
       <div className="flex items-center gap-3 px-3 py-1 border-t bg-forensics-panel text-[10px] text-forensics-muted-light shrink-0">

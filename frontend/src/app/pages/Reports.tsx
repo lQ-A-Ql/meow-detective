@@ -2,6 +2,7 @@ import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -49,7 +50,7 @@ export function Reports() {
           <div className="text-forensics-muted-light text-[10px] uppercase tracking-wider">选择模板</div>
           <div className="font-mono text-[10px] text-forensics-muted">运行中 {runningCount} / 已完成 {completedCount}</div>
         </div>
-        <div className="flex gap-4 overflow-auto">
+        <div className="flex gap-4 overflow-x-auto overflow-y-hidden">
           {templates?.map((template, index) => (
             <div
               key={template.id}
@@ -135,7 +136,7 @@ export function Reports() {
             <span>最近导出</span>
             <span className="font-mono text-forensics-muted-light">{history?.length ?? 0} 条记录</span>
           </div>
-          <div className="flex-1 overflow-auto p-4 space-y-4">
+          <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-4 p-4">
             {history?.map((item) => (
               <div key={item.id} className="border border-forensics-border bg-forensics-surface p-3">
                 <div className="flex justify-between items-center mb-2 gap-4">
@@ -169,7 +170,7 @@ export function Reports() {
                 )}
               </div>
             ))}
-          </div>
+          </ScrollArea>
         </div>
       </div>
     </div>

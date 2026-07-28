@@ -13,6 +13,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { cn } from '@/app/components/ui/utils';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
@@ -121,7 +122,7 @@ export function AnalysisSourceSidebar({
         <div className="mt-1 text-[11px] text-forensics-muted">按来源展开提取结果</div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-2">
         <div className="space-y-2">
           {dataSources.map((source) => {
             const selected = source.id === selectedDataSourceId;
@@ -216,7 +217,7 @@ export function AnalysisSourceSidebar({
             );
           })}
         </div>
-      </div>
+      </ScrollArea>
     </aside>
   );
 }

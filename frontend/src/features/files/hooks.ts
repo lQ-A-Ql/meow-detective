@@ -1,7 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  extractFileToPath,
   getFileChildren,
   getFileChildrenPage,
   getFileJumpContext,
@@ -18,7 +17,6 @@ import {
   readFileRange,
 } from '@/lib/api/files';
 import {
-  FileEntryRow,
   FileHexViewerState,
   HexByteWindowLines,
   HexLoadedRange,
@@ -32,7 +30,6 @@ import { invalidateImportProjectionQueries } from '@/features/cache-invalidation
 import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 import { getPreviewSettings } from '@/lib/settings';
-import { saveDialog } from '@/lib/platform/dialog';
 import {
   adoptPreviewHandle,
   ensurePreviewRequestActive,
@@ -472,16 +469,4 @@ export function useMediaUrl(fileId?: string, enabled = true) {
   }, [blobUrl]);
 
   return query;
-}
-
-export function useExtractFile() {
-  return useMutation({
-    mutationFn: async (file: FileEntryRow) => {
-      const destinationPath = await saveDialog({ defaultPath: file.name || file.id });
-      if (!destinationPath) {
-        return 'Export cancelled';
-      }
-      return extractFileToPath(file, destinationPath);
-    },
-  });
 }

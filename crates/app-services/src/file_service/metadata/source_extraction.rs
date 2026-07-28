@@ -26,6 +26,7 @@ pub fn extract_file_to_destination_for_case(
         destination_path,
         overwrite,
         case_managed: false,
+        progress: None,
     })
 }
 
@@ -47,6 +48,30 @@ pub fn extract_file_to_destination_for_case_with_bitlocker(
         destination_path,
         overwrite,
         case_managed: false,
+        progress: None,
+    })
+}
+
+pub fn extract_file_to_destination_for_case_with_bitlocker_and_progress(
+    bitlocker_runtime: &Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    file_id: &str,
+    destination_path: &Path,
+    overwrite: bool,
+    progress: &mut dyn FnMut(u64, Option<u64>),
+) -> Result<FileExtractionResultDto, FileServiceError> {
+    extract_routed_file(ExtractionRouteRequest {
+        bitlocker_runtime: Some(bitlocker_runtime),
+        case_conn,
+        case_root,
+        case_id,
+        file_id,
+        destination_path,
+        overwrite,
+        case_managed: false,
+        progress: Some(progress),
     })
 }
 
@@ -68,6 +93,7 @@ pub(crate) fn extract_file_to_managed_destination_for_case(
         destination_path,
         overwrite,
         case_managed: true,
+        progress: None,
     })
 }
 
@@ -80,6 +106,7 @@ struct ExtractionRouteRequest<'a> {
     destination_path: &'a Path,
     overwrite: bool,
     case_managed: bool,
+    progress: Option<&'a mut dyn FnMut(u64, Option<u64>)>,
 }
 
 fn extract_routed_file(
@@ -126,6 +153,7 @@ fn extract_routed_file(
             destination_path: request.destination_path,
             overwrite: request.overwrite,
             destination_scope,
+            progress: request.progress,
         },
     )
 }

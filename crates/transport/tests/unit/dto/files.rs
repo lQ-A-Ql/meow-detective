@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn file_extraction_progress_serializes_as_camel_case() {
+    let dto = FileExtractionProgressDto {
+        operation_id: "operation-1".to_string(),
+        file_id: "ds:source-1:file-1".to_string(),
+        phase: FileExtractionPhaseDto::Copying,
+        bytes_written: 1024,
+        total_bytes: Some(4096),
+        percent: Some(25),
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["operationId"], "operation-1");
+    assert_eq!(value["fileId"], "ds:source-1:file-1");
+    assert_eq!(value["phase"], "copying");
+    assert_eq!(value["bytesWritten"], 1024);
+    assert_eq!(value["totalBytes"], 4096);
+    assert_eq!(value["percent"], 25);
+}
+
+#[test]
 fn file_extraction_result_serializes_integrity_fields_as_camel_case() {
     let dto = FileExtractionResultDto {
         file_id: "ds:source-1:file-1".to_string(),

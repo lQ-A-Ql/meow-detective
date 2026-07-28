@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { DataSourcePartition } from '@/types/models';
 import type { BitLockerUnlockMethod, BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
@@ -80,7 +81,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
       {status?.protectors.length ? (
         <div className="space-y-1">
           <div className="text-[10px] text-forensics-muted-light">{t('fileBrowser.inspector.bitlocker.protectorList')}</div>
-          <div className="max-h-20 space-y-1 overflow-auto">
+          <ScrollArea className="max-h-20" viewportClassName="space-y-1">
             {status.protectors.map((protector) => (
               <div key={`${protector.code}-${protector.kind}`} className="flex items-center justify-between gap-2 font-mono text-[10px]">
                 <span className="truncate text-forensics-text-secondary">{protector.label}</span>
@@ -91,7 +92,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
                 </span>
               </div>
             ))}
-          </div>
+          </ScrollArea>
         </div>
       ) : null}
 

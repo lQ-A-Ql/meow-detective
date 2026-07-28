@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useSettingsPageModel } from '@/features/settings/use-settings-page-model';
 import { StoragePathsSection } from '@/features/settings/components/StoragePathsSection';
 import { ImportPerformanceSection } from '@/features/settings/components/ImportPerformanceSection';
@@ -24,7 +25,7 @@ export function Settings() {
         <div className="text-forensics-muted text-[11px] font-mono mt-1">{t('settings.subtitle')}</div>
       </div>
 
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-auto p-6">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="mx-auto w-full max-w-5xl space-y-8 p-6">
         <StoragePathsSection
           caseRoot={settings.caseRoot}
           imageSearchPaths={settings.imageSearchPaths}
@@ -52,7 +53,7 @@ export function Settings() {
         />
         <McpSection />
         <SystemInfoSection />
-      </div>
+      </ScrollArea>
     </div>
   );
 }

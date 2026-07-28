@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useResizableHeight } from '@/hooks/use-resizable-height';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import {
@@ -171,7 +172,7 @@ export function BottomDrawer() {
             title="拖拽调整抽屉高度"
           />
           <div className="grid flex-1 min-h-0 grid-cols-3 overflow-hidden border-t border-forensics-border">
-          <div className="overflow-auto border-r border-forensics-border p-3">
+          <ScrollArea className="min-h-0 border-r border-forensics-border" viewportClassName="p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.jobs.title')}</span>
               <span className="font-mono text-forensics-muted-light">
@@ -386,8 +387,8 @@ export function BottomDrawer() {
                 </div>
               ))}
             </div>
-          </div>
-          <div className="overflow-auto border-r border-forensics-border p-3">
+          </ScrollArea>
+          <ScrollArea className="min-h-0 border-r border-forensics-border" viewportClassName="p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.issues.title')}</span>
               <span className="font-mono text-forensics-muted-light">
@@ -407,8 +408,8 @@ export function BottomDrawer() {
                 </div>
               ) : null}
             </div>
-          </div>
-          <div className="overflow-auto p-3">
+          </ScrollArea>
+          <ScrollArea className="min-h-0" viewportClassName="p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.trace.title')}</span>
               <span className="font-mono text-forensics-muted-light">{t('bottomDrawer.trace.recentStream')}</span>
@@ -424,7 +425,7 @@ export function BottomDrawer() {
                 </div>
               ))}
             </div>
-          </div>
+          </ScrollArea>
         </div>
         </>
       ) : null}
@@ -671,9 +672,14 @@ function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
         </div>
       ) : null}
       {issue.details ? (
-        <pre className={`mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words border px-2 py-1.5 font-mono text-[10px] ${isError ? 'border-forensics-error-border bg-forensics-surface/70 text-forensics-error-text' : 'border-forensics-border-light bg-forensics-panel text-forensics-text-tertiary'}`}>
-          {issue.details}
-        </pre>
+        <ScrollArea
+          className={`mt-2 max-h-28 border ${isError ? 'border-forensics-error-border bg-forensics-surface/70 text-forensics-error-text' : 'border-forensics-border-light bg-forensics-panel text-forensics-text-tertiary'}`}
+          showHorizontalScrollbar
+        >
+          <pre className="whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[10px]">
+            {issue.details}
+          </pre>
+        </ScrollArea>
       ) : null}
     </div>
   );

@@ -21,6 +21,7 @@ impl OpenFileHandleRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtractFileRequest {
+    pub operation_id: String,
     pub file_id: String,
     pub destination_path: String,
     #[serde(default)]
@@ -29,6 +30,15 @@ pub struct ExtractFileRequest {
 
 impl ExtractFileRequest {
     pub fn validate(&self) -> Result<(), String> {
+        if self.operation_id.is_empty()
+            || self.operation_id.len() > 128
+            || !self
+                .operation_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err("operationId is invalid".to_string());
+        }
         if self.file_id.trim().is_empty() {
             return Err("fileId is required".to_string());
         }

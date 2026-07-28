@@ -1,6 +1,7 @@
 import { memo, useCallback, type Ref } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
@@ -128,10 +129,11 @@ export function FileTreePanel({
         目录树
       </div>
       <TreeSearch onFilter={setFilterQuery} />
-      <div
-        ref={treeContainerRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 font-mono text-[11px] select-none"
-        tabIndex={0}
+      <ScrollArea
+        className="min-h-0 flex-1"
+        viewportRef={treeContainerRef}
+        viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
+        viewportProps={{ tabIndex: 0 }}
       >
         {filteredTreeNodes.length === 0 ? (
           <div className="px-3 py-4 text-forensics-muted-light">
@@ -195,7 +197,7 @@ export function FileTreePanel({
             </div>
           </div>
         ) : null}
-      </div>
+      </ScrollArea>
     </div>
   );
 }

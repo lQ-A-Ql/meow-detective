@@ -16,9 +16,9 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
-import { BrandArt } from '@/components/brand';
 import type { ImportDataSourceRequest, ImportTargetPlatform } from '@/types/models';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
+import { BrandWatermark } from '@/components/brand';
 
 type SourceKind = 'auto' | 'linuxCluster';
 
@@ -119,7 +119,11 @@ export function ImportDataSourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="relative isolate overflow-hidden sm:max-w-md">
+        <BrandWatermark
+          motif="walking"
+          className="absolute -right-7 top-1 h-24 opacity-[0.045]"
+        />
         <DialogHeader>
           <DialogTitle>{t('importDataSource.title')}</DialogTitle>
           <DialogDescription>
@@ -156,10 +160,6 @@ export function ImportDataSourceDialog({
                   </span>
                   <span className="text-[10px] font-light text-forensics-muted">NTFS / Registry / EVTX</span>
                 </div>
-                <BrandArt
-                  variant="windows"
-                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-none"
-                />
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="linux"
@@ -173,10 +173,6 @@ export function ImportDataSourceDialog({
                   </span>
                   <span className="text-[10px] font-light text-forensics-muted">XFS / LVM / systemd</span>
                 </div>
-                <BrandArt
-                  variant="linux"
-                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-none"
-                />
               </ToggleGroupItem>
             </ToggleGroup>
             <div className="flex justify-end">

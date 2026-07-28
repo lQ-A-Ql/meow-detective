@@ -56,9 +56,13 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   );
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+const TableRow = React.forwardRef<HTMLTableRowElement, React.ComponentProps<"tr">>(function TableRow(
+  { className, ...props },
+  ref,
+) {
   return (
     <tr
+      ref={ref}
       data-slot="table-row"
       className={cn(
         "hover:bg-forensics-hover data-[state=selected]:bg-forensics-sakura-150 border-b border-forensics-border-light transition-colors",
@@ -67,7 +71,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
       {...props}
     />
   );
-}
+});
 
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (

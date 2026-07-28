@@ -9,6 +9,7 @@ import { FileListPanel } from '@/features/files/components/FileListPanel';
 import { FilePreviewPanel } from '@/features/files/components/FilePreviewPanel';
 import { FileBrowserInspector } from '@/features/files/components/FileBrowserInspector';
 import { BitLockerCatalogImportOverlay } from '@/features/files/components/BitLockerCatalogImportOverlay';
+import { FileExtractionDialogs } from '@/features/files/components/FileExtractionDialogs';
 import { useFileBrowserModel } from '@/features/files/use-file-browser-model';
 
 export function FileBrowser() {
@@ -140,6 +141,7 @@ export function FileBrowser() {
             canGoToNextRows={fb.canGoToNextRows}
             goToPreviousRows={fb.goToPreviousRows}
             goToNextRows={fb.goToNextRows}
+            onExtractFile={fb.fileExtraction.openForFile}
           />
 
           <FilePreviewPanel
@@ -164,7 +166,8 @@ export function FileBrowser() {
             selectedFile={fb.selectedFile}
             activeDirectoryPath={fb.activeDirectoryPath}
             currentDirectory={fb.currentDirectory}
-            extractFile={fb.extractFile}
+            onExtractFile={fb.fileExtraction.openForFile}
+            extractionPending={fb.fileExtraction.isExtracting}
             onViewTimeline={fb.onViewTimeline}
             bitLockerPartition={fb.bitLockerPartition}
             bitLocker={fb.bitLocker}
@@ -174,6 +177,7 @@ export function FileBrowser() {
       {fb.bitLocker.catalogImport ? (
         <BitLockerCatalogImportOverlay lifecycle={fb.bitLocker.catalogImport} />
       ) : null}
+      <FileExtractionDialogs model={fb.fileExtraction} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { HexByteWindowLines, HexLoadedRange } from '@/types/models';
 
 interface HexViewerProps {
@@ -195,10 +196,12 @@ export function HexViewer({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[11px]">
-      <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-auto"
-        onScroll={handleScroll}
+      <ScrollArea
+        className="min-h-0 flex-1"
+        viewportRef={containerRef}
+        viewportTestId="hex-scroll-container"
+        viewportProps={{ onScroll: handleScroll }}
+        showHorizontalScrollbar
       >
         <div style={{ height: rowCount * lineHeight, position: 'relative' }}>
           <div
@@ -265,7 +268,7 @@ export function HexViewer({
             选择文件后显示十六进制预览
           </div>
         )}
-      </div>
+      </ScrollArea>
 
       {loadedRanges?.length ? (
         <div className="shrink-0 border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">

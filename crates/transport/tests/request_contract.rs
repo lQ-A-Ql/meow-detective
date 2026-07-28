@@ -47,8 +47,21 @@ fn import_source_rejects_reserved_device_names() {
 #[test]
 fn extract_file_request_rejects_device_destination() {
     let request = ExtractFileRequest {
+        operation_id: "extract-operation-1".to_string(),
         file_id: "file-1".to_string(),
         destination_path: r"\\.\PhysicalDrive0".to_string(),
+        overwrite: false,
+    };
+
+    assert!(request.validate().is_err());
+}
+
+#[test]
+fn extract_file_request_rejects_invalid_operation_id() {
+    let request = ExtractFileRequest {
+        operation_id: "invalid operation id".to_string(),
+        file_id: "file-1".to_string(),
+        destination_path: r"C:\exports\file.bin".to_string(),
         overwrite: false,
     };
 

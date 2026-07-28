@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  useExtractFile, useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
+  useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
   useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
 import type { FileEntryRow } from '@/types/models';
@@ -87,7 +87,6 @@ export function useFilePreview({
   const { data: imagePreview } = useImagePreview(selectedFile?.id, imagePreviewEnabled);
   const { data: mediaUrl } = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
   const { data: documentPreview } = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
-  const extractFile = useExtractFile();
 
   const onViewTimeline = () => {
     if (selectedFile) {
@@ -109,7 +108,6 @@ export function useFilePreview({
     imagePreview,
     mediaUrl,
     documentPreview,
-    extractFile,
     onViewTimeline,
   };
 }

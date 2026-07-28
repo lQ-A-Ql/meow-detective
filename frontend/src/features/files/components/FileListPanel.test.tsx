@@ -1,0 +1,76 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileEntryRow } from '@/types/models';
+import { FileListPanel } from './FileListPanel';
+
+const FILE: FileEntryRow = {
+  id: 'file-1',
+  name: 'evidence.bin',
+  path: '/evidence.bin',
+  entryType: 'file',
+  size: 128,
+  deleted: false,
+  hidden: false,
+  system: false,
+};
+
+const DIRECTORY: FileEntryRow = {
+  ...FILE,
+  id: 'directory-1',
+  name: 'Documents',
+  path: '/Documents',
+  entryType: 'directory',
+  size: undefined,
+};
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+  });
+});
+
+function renderPanel(rows: FileEntryRow[], onExtractFile = vi.fn()) {
+  const setSelectedFileId = vi.fn();
+  render(
+    <FileListPanel
+      sortedRows={rows}
+      selectedFileId={undefined}
+      viewerTab="metadata"
+      fileSortKey="name"
+      fileSortDirection="asc"
+      handleSort={vi.fn()}
+      setSelectedDirectoryId={vi.fn()}
+      setSelectedFileId={setSelectedFileId}
+      setExpandedDirectoryIds={vi.fn()}
+      rowsPage={{ offset: 0, limit: 500, totalCount: rows.length, rows, truncated: false }}
+      canGoToPreviousRows={false}
+      canGoToNextRows={false}
+      goToPreviousRows={vi.fn()}
+      goToNextRows={vi.fn()}
+      onExtractFile={onExtractFile}
+    />,
+  );
+  return { onExtractFile, setSelectedFileId };
+}
+
+describe('FileListPanel extraction context menu', () => {
+  it('selects the right-clicked file and invokes the extraction workflow', async () => {
+    const { onExtractFile, setSelectedFileId } = renderPanel([FILE]);
+
+    fireEvent.contextMenu(screen.getByText('evidence.bin'));
+    const extractItem = await screen.findByText('提取文件');
+    expect(setSelectedFileId).toHaveBeenCalledWith(FILE.id);
+
+    fireEvent.click(extractItem);
+    expect(onExtractFile).toHaveBeenCalledWith(FILE);
+  });
+
+  it('does not expose file extraction for directory rows', () => {
+    renderPanel([DIRECTORY]);
+
+    fireEvent.contextMenu(screen.getByText('Documents'));
+    expect(screen.queryByText('提取文件')).toBeNull();
+  });
+});

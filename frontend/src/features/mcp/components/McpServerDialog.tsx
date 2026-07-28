@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { McpPermissionProfile } from '@/lib/api/mcp';
 
 interface McpServerDialogProps {
@@ -91,7 +92,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
 
   return (
     <div className="fixed inset-0 bg-forensics-text/40 flex items-center justify-center z-50">
-      <div className="bg-forensics-surface rounded-none shadow-none w-[480px] max-h-[90vh] overflow-auto">
+      <ScrollArea className="max-h-[90vh] w-[480px] bg-forensics-surface shadow-none">
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-serif text-[14px] font-light tracking-wide text-forensics-text">添加 MCP 服务器</h2>
           <Button
@@ -286,7 +287,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
             </Button>
           </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

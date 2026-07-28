@@ -1,3 +1,3 @@
-export { BrandArt } from './BrandArt';
 export { BrandEmptyState } from './BrandEmptyState';
-export type { BrandArtVariant } from './BrandArt';
+export { BrandWatermark } from './BrandWatermark';
+export type { BrandWatermarkMotif, BrandWatermarkProps } from './BrandWatermark';

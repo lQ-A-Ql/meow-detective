@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
 import { SortIndicator } from './SortIndicator';
 
@@ -46,6 +47,7 @@ interface DenseDataTableProps<T> {
   getRowKey: (row: T) => string;
   selectedRowKey?: string;
   onRowClick?: (row: T) => void;
+  renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
   emptyTitle?: string;
   emptyDescription?: string;
   /** 当前排序键 */
@@ -81,6 +83,7 @@ interface TableRowMemoProps<T> {
   columns: DenseColumn<T>[];
   selected: boolean;
   onRowClick?: (row: T) => void;
+  renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
 }
 
 const ROW_HEIGHT = 31;
@@ -96,6 +99,7 @@ function TableRowMemoBase<T>({
   columns,
   selected,
   onRowClick,
+  renderRowContextMenu,
 }: TableRowMemoProps<T>) {
   const handleRowClick = () => {
     if (typeof window !== 'undefined') {
@@ -107,7 +111,7 @@ function TableRowMemoBase<T>({
     onRowClick?.(row);
   };
 
-  return (
+  const tableRow = (
     <TableRow
       data-state={selected ? 'selected' : undefined}
       className={`h-[31px] cursor-pointer border-b ${
@@ -139,6 +143,7 @@ function TableRowMemoBase<T>({
       ))}
     </TableRow>
   );
+  return renderRowContextMenu?.(row, tableRow) ?? tableRow;
 }
 
 const TableRowMemo = memo(TableRowMemoBase) as <T>(
@@ -151,6 +156,7 @@ export function DenseDataTable<T>({
   getRowKey,
   selectedRowKey,
   onRowClick,
+  renderRowContextMenu,
   emptyTitle = '暂无记录',
   emptyDescription = '当前范围内没有可显示的数据。',
   sortKey,
@@ -380,12 +386,12 @@ export function DenseDataTable<T>({
     : undefined;
 
   return (
-    <div
-      ref={containerRef}
-      className={`min-h-0 flex-1 overflow-y-auto bg-transparent font-mono text-[11px] ${
-        horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'
-      }`}
-      onScroll={handleScroll}
+    <ScrollArea
+      className="min-h-0 flex-1 bg-transparent font-mono text-[11px]"
+      viewportRef={containerRef}
+      viewportClassName={horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'}
+      viewportProps={{ onScroll: handleScroll }}
+      showHorizontalScrollbar={horizontalScroll}
     >
       <Table
         className="text-[11px]"
@@ -473,6 +479,7 @@ export function DenseDataTable<T>({
                 columns={columns}
                 selected={selected}
                 onRowClick={onRowClick}
+                renderRowContextMenu={renderRowContextMenu}
               />
             );
           })}
@@ -517,6 +524,6 @@ export function DenseDataTable<T>({
           ) : null}
         </TableBody>
       </Table>
-    </div>
+    </ScrollArea>
   );
 }

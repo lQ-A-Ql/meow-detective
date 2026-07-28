@@ -182,7 +182,6 @@ export function AnalysisEmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <BrandEmptyState
-        variant="investigate"
         title="请先创建或打开案件"
         description="数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。"
         className="max-w-md"

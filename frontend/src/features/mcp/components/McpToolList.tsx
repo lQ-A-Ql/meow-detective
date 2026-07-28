@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, Loader2, Play, RefreshCw, Wrench, XCircle } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useMcpStore } from '@/stores/mcp-store';
 
 interface McpToolListProps {
@@ -121,9 +122,11 @@ export function McpToolList({ serverId }: McpToolListProps) {
             <div className="text-[10px] text-forensics-error-text">{testResult.error}</div>
           )}
           {testResult.data !== undefined && testResult.data !== null && (
-            <pre className="text-[10px] text-forensics-muted mt-1 overflow-auto max-h-20">
-              {JSON.stringify(testResult.data, null, 2)}
-            </pre>
+            <ScrollArea className="mt-1 max-h-20" showHorizontalScrollbar>
+              <pre className="p-1 text-[10px] text-forensics-muted">
+                {JSON.stringify(testResult.data, null, 2)}
+              </pre>
+            </ScrollArea>
           )}
         </div>
       )}

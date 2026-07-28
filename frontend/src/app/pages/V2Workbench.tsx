@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
 import { CorrelationWorkspace } from '@/features/analysis/components/CorrelationWorkspace';
 import {
@@ -66,7 +67,7 @@ export function V2Workbench() {
       ) : loading ? (
         <AnalysisLoadingPanel text="正在加载 V2 治理快照..." />
       ) : (
-        <div className="flex-1 space-y-6 overflow-auto p-6">
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">
           {error ? <AnalysisErrorBanner message={errorMessage(error)} onRetry={refresh} /> : null}
           {snapshot.data ? (
             <>
@@ -97,7 +98,7 @@ export function V2Workbench() {
           ) : (
             <AnalysisLoadingPanel text="当前案件尚未返回治理快照。" />
           )}
-        </div>
+        </ScrollArea>
       )}
     </div>
   );

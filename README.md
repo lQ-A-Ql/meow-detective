@@ -49,7 +49,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (87 test files)
+cd frontend && pnpm test            # Frontend (93 test files)
 cd frontend && pnpm test:coverage
 ```
 

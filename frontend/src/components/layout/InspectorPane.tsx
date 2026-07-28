@@ -1,4 +1,5 @@
 import { PropsWithChildren, ReactNode } from 'react';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 
 interface InspectorPaneProps extends PropsWithChildren {
   title: ReactNode;
@@ -14,7 +15,7 @@ export function InspectorPane({ title, widthClassName = 'w-72', subtitle, classN
         <div className="font-serif text-[11px] font-light tracking-wide text-forensics-text-tertiary">{title}</div>
         {subtitle ? <div className="mt-1 text-[10px] font-mono text-forensics-muted-light truncate">{subtitle}</div> : null}
       </div>
-      <div className="flex-1 overflow-auto p-5">{children}</div>
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-5">{children}</ScrollArea>
     </aside>
   );
 }

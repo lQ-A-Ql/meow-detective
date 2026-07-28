@@ -9,6 +9,7 @@ import { useRef, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import type { FileTreeNode } from '@/types/models';
@@ -47,10 +48,11 @@ export function VirtualFileTree({
   );
 
   return (
-    <div
-      ref={parentRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
-      style={{ contain: 'strict' }}
+    <ScrollArea
+      className="min-h-0 flex-1"
+      viewportRef={parentRef}
+      viewportClassName="overflow-x-hidden"
+      viewportProps={{ style: { contain: 'strict' } }}
     >
       <div
         style={{
@@ -130,6 +132,6 @@ export function VirtualFileTree({
           );
         })}
       </div>
-    </div>
+    </ScrollArea>
   );
 }

@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   imagePreview: vi.fn(),
   mediaUrl: vi.fn(),
   documentPreview: vi.fn(),
-  extractMutate: vi.fn(),
+  extractOpenForFile: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
     selectedDirectoryId: 'root' as string | undefined,
@@ -61,10 +61,6 @@ vi.mock('@/features/case/hooks', () => ({
 }));
 
 vi.mock('@/features/files/hooks', () => ({
-  useExtractFile: () => ({
-    mutate: mocks.extractMutate,
-    isPending: false,
-  }),
   useFileChildrenPage: mocks.fileChildren,
   useFileJumpContext: mocks.fileJumpContext,
   useFileRowsPage: mocks.fileRows,
@@ -75,6 +71,26 @@ vi.mock('@/features/files/hooks', () => ({
   useImagePreview: mocks.imagePreview,
   useMediaUrl: mocks.mediaUrl,
   useDocumentPreview: mocks.documentPreview,
+}));
+
+vi.mock('@/features/files/hooks/use-file-extraction', () => ({
+  useFileExtractionModel: () => ({
+    file: undefined,
+    formOpen: false,
+    resultOpen: false,
+    destinationPath: '',
+    validationError: undefined,
+    error: undefined,
+    progress: undefined,
+    result: undefined,
+    isExtracting: false,
+    openForFile: mocks.extractOpenForFile,
+    setFormOpen: vi.fn(),
+    setResultOpen: vi.fn(),
+    setDestinationPath: vi.fn(),
+    browseDestination: vi.fn(),
+    submit: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks/use-resizable-panel', () => ({
@@ -330,7 +346,7 @@ describe('FileBrowser media preview', () => {
 
     expect(screen.getByText(/total=7\.6 MB \/ source=opaque handle/)).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: '\u63d0\u53d6\u6587\u4ef6' }));
-    expect(mocks.extractMutate).toHaveBeenCalledWith(videoFile);
+    expect(mocks.extractOpenForFile).toHaveBeenCalledWith(videoFile);
   });
 
   it('renders small media preview directly', () => {

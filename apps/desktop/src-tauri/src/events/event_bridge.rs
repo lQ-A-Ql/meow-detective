@@ -1,14 +1,15 @@
 use tauri::{AppHandle, Emitter};
 use transport::dto::{
-    AnalysisExtractionProgressDto, DataSourceSummaryDto, ImportPhaseProgressDto,
-    IndexCacheStatusDto, JobCancellationDto, PartialResultDto, PerformanceReportDto,
+    AnalysisExtractionProgressDto, DataSourceSummaryDto, FileExtractionProgressDto,
+    ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto, PartialResultDto,
+    PerformanceReportDto,
 };
 use transport::events::{
     EventEnvelope, EventTopic, TOPIC_ANALYSIS_EXTRACTION_PROGRESS, TOPIC_ARTIFACT_ADDED,
     TOPIC_CACHE_INDEX_STATUS, TOPIC_CASE_CLOSED, TOPIC_CASE_OPENED, TOPIC_DATA_SOURCE_IMPORTED,
-    TOPIC_IMPORT_PARTIAL_RESULT, TOPIC_IMPORT_PHASE_PROGRESS, TOPIC_JOB_CANCELLATION,
-    TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED, TOPIC_JOB_FAILED,
-    TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
+    TOPIC_FILE_EXTRACT_PROGRESS, TOPIC_IMPORT_PARTIAL_RESULT, TOPIC_IMPORT_PHASE_PROGRESS,
+    TOPIC_JOB_CANCELLATION, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED,
+    TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
     TOPIC_PERFORMANCE_REPORT_READY, TOPIC_SEARCH_INDEX_PROGRESS, TOPIC_TIMELINE_UPDATED,
 };
 
@@ -160,6 +161,18 @@ pub fn emit_analysis_extraction_progress(
             category = %progress.category,
             error = %error,
             "Failed to emit analysis extraction progress"
+        );
+    }
+}
+
+pub fn emit_file_extraction_progress(app: &AppHandle, progress: &FileExtractionProgressDto) {
+    let envelope = envelope(EventTopic::FileExtractProgress, progress.clone());
+    if let Err(error) = emit_event(app, TOPIC_FILE_EXTRACT_PROGRESS, &envelope) {
+        tracing::warn!(
+            operation_id = %progress.operation_id,
+            file_id = %progress.file_id,
+            error = %error,
+            "Failed to emit file extraction progress"
         );
     }
 }

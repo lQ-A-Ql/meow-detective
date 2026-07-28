@@ -1,6 +1,6 @@
 # IPC 事件契约
 
-本文档列出后端到前端的全部 18 个 Tauri 事件 topic，及其 payload 类型来源。事件契约没有代码生成，Rust 端 `crates/transport/src/events/mod.rs` 与前端 `frontend/src/types/events.ts` 的 `EventTopic` 联合类型必须手工保持一致——`scripts/check-event-topic-drift.ps1` 在 CI 中校验两者一一对应。
+本文档列出后端到前端的全部 20 个 Tauri 事件 topic，及其 payload 类型来源。事件契约没有代码生成，Rust 端 `crates/transport/src/events/mod.rs` 与前端 `frontend/src/types/events.ts` 的 `EventTopic` 联合类型必须手工保持一致——`scripts/check-event-topic-drift.ps1` 在 CI 中校验两者一一对应。
 
 发送侧统一走 `apps/desktop/src-tauri/src/events/event_bridge.rs` 中的 `emit_*` 辅助函数，每个函数构造一个 `EventEnvelope<T>`（`eventId`/`topic`/`ts`/`payload`）并通过 `app.emit_to("main", topic, event)` 发出。接收侧统一走前端 `frontend/src/lib/events/bus.ts` 的 `EventBus`，按 `EventTopic` 字符串订阅。
 
@@ -26,11 +26,13 @@
 | `import-partial-result` | `ImportPartialResult` | `emit_import_partial_result` | `PartialResultDto`（`crates/transport/src/dto/import.rs`） |
 | `cache-index-status` | `CacheIndexStatus` | `emit_cache_index_status` | `IndexCacheStatusDto`（`crates/transport/src/dto/import.rs`） |
 | `performance-report-ready` | `PerformanceReportReady` | `emit_performance_report_ready` | `PerformanceReportDto`（`crates/transport/src/dto/timeline.rs`） |
+| `analysis-extraction-progress` | `AnalysisExtractionProgress` | `emit_analysis_extraction_progress` | `AnalysisExtractionProgressDto`（`crates/transport/src/dto/analysis.rs`） |
+| `file-extract-progress` | `FileExtractProgress` | `emit_file_extraction_progress` | `FileExtractionProgressDto`（`crates/transport/src/dto/files.rs`） |
 
 ## 两类 payload
 
 - **匿名 JSON payload**（大多数 topic）：直接用 `serde_json::json!({...})` 构造，字段名在发送处手写为 camelCase 字符串常量。这类 topic 没有专门的 Rust struct，因此 `check-dto-drift.ps1` 无法覆盖它们——修改字段时必须同时手动更新消费该事件的前端订阅代码，并检查 `frontend/src/lib/events/bus.ts` 或具体 hook 里的字段访问。
-- **DTO payload**（`job-cancellation`、`import-phase-progress`、`import-partial-result`、`cache-index-status`、`performance-report-ready`）：直接 clone 一个已有的 `crates/transport/src/dto/*.rs` 类型作为 payload。这类 topic 的字段契约由 `scripts/check-dto-drift.ps1` 间接覆盖（只要该 DTO 与其对应 TS interface 配对成功）。
+- **DTO payload**（`job-cancellation`、`import-phase-progress`、`import-partial-result`、`cache-index-status`、`performance-report-ready`、`analysis-extraction-progress`、`file-extract-progress`）：直接 clone 一个已有的 `crates/transport/src/dto/*.rs` 类型作为 payload。这类 topic 的字段契约由 `scripts/check-dto-drift.ps1` 间接覆盖（只要该 DTO 与其对应 TS interface 配对成功）。
 
 ## 修改事件契约时的步骤
 

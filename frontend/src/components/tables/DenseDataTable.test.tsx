@@ -25,6 +25,14 @@ beforeEach(() => {
   });
 });
 
+function getScrollViewport(container: HTMLElement) {
+  const viewport = container.querySelector('[data-slot="scroll-area-viewport"]');
+  if (!(viewport instanceof HTMLDivElement)) {
+    throw new Error('DenseDataTable scroll viewport was not rendered.');
+  }
+  return viewport;
+}
+
 describe('DenseDataTable', () => {
   it('renders only a bounded DOM window for large datasets', () => {
     const rows = Array.from({ length: 10_000 }, (_, index) => ({
@@ -60,7 +68,7 @@ describe('DenseDataTable', () => {
       />
     );
 
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
 
     fireEvent.scroll(scrollContainer, { target: { scrollTop: 310_000 } });
 
@@ -161,7 +169,7 @@ describe('DenseDataTable', () => {
       />,
     );
 
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
     const tableContainer = container.querySelector('[data-slot="table-container"]');
     const table = container.querySelector('[data-slot="table"]') as HTMLTableElement;
     const headerTitle = screen.getByText('Long evidence column 0');
@@ -212,7 +220,7 @@ describe('DenseDataTable', () => {
         onReachEnd={onReachEnd}
       />,
     );
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {
       clientHeight: { configurable: true, value: 600 },
       scrollHeight: { configurable: true, value: 3_100 },
@@ -325,7 +333,7 @@ describe('DenseDataTable', () => {
         loadContextKey="query:first"
       />,
     );
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
 
     fireEvent.scroll(scrollContainer, { target: { scrollTop: 310_000 } });
     expect(container.textContent).toContain('First 9999');
@@ -361,7 +369,7 @@ describe('DenseDataTable', () => {
         onReachEnd={onReachEnd}
       />,
     );
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {
       clientHeight: { configurable: true, value: 600 },
       scrollHeight: { configurable: true, value: 3_100 },
@@ -468,7 +476,7 @@ describe('DenseDataTable', () => {
         onReachEnd={onReachEnd}
       />,
     );
-    const scrollContainer = container.firstElementChild as HTMLDivElement;
+    const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {
       clientHeight: { configurable: true, value: 600 },
       scrollHeight: { configurable: true, value: 3_100 },

@@ -6,6 +6,7 @@ import type {
   EmailMessage,
 } from '@/types/models';
 import { Badge } from '@/app/components/ui/badge';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Button } from '@/app/components/ui/button';
 import { KeyValueField } from '@/components/data-display';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
@@ -316,9 +317,9 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
 
 function BodyPreview({ text }: { text?: string }) {
   return (
-    <div className="max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
+    <ScrollArea className="max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
       {text?.trim() ? text : <span className="text-forensics-muted-lighter">无正文内容</span>}
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -331,17 +332,17 @@ function HtmlPreview({ html }: { html?: string }) {
     );
   }
   return (
-    <div className="max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-3">
+    <ScrollArea className="max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-3">
       <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-forensics-text-secondary">
         {html}
       </pre>
-    </div>
+    </ScrollArea>
   );
 }
 
 function HeaderList({ headers }: { headers: EmailHeader[] }) {
   return (
-    <div className="mt-2 max-h-[240px] overflow-auto rounded-none border border-forensics-border bg-forensics-surface p-2">
+    <ScrollArea className="mt-2 max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-2">
       <div className="divide-y divide-forensics-border-light text-[11px]">
         {headers.map((header, index) => (
           <div key={index} className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 py-1">
@@ -352,7 +353,7 @@ function HeaderList({ headers }: { headers: EmailHeader[] }) {
           </div>
         ))}
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 

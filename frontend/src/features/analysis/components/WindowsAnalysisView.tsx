@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Tabs, TabsContent } from '@/app/components/ui/tabs';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
@@ -96,7 +97,7 @@ export function WindowsAnalysisView({
       onValueChange={(value) => onActiveTabChange(value as AnalysisTabKey)}
       className="h-full min-h-0 flex-1 gap-0"
     >
-      <div className="min-h-0 flex-1 overflow-auto p-6">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {loading ? (
           <AnalysisLoadingPanel text={t('analysis.loading.case')} />
@@ -191,7 +192,7 @@ export function WindowsAnalysisView({
             </TabsContent>
           </>
         )}
-      </div>
+      </ScrollArea>
     </Tabs>
   );
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -142,7 +143,7 @@ export function Search() {
                       保存当前查询
                     </Button>
                   </div>
-                  <div className="max-h-64 overflow-auto">
+                  <ScrollArea className="max-h-64">
                     {savedQueries.length ? (
                       savedQueries.map((item) => (
                         <div
@@ -179,7 +180,7 @@ export function Search() {
                     ) : (
                       <div className="p-3 text-[11px] text-forensics-muted-light">暂无保存的查询。</div>
                     )}
-                  </div>
+                  </ScrollArea>
                 </div>
               ) : null}
             </div>
@@ -232,12 +233,12 @@ export function Search() {
             <div className="h-7 border-b border-forensics-border flex items-center px-4 text-[10px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0 bg-forensics-panel">
               上下文预览
             </div>
-            <div className="flex-1 overflow-auto p-4 font-mono text-[11px] text-forensics-text-secondary leading-[1.6]">
+            <ScrollArea className="min-h-0 flex-1" viewportClassName="p-4 font-mono text-[11px] leading-[1.6] text-forensics-text-secondary">
               <div className="text-forensics-muted-light mb-2">在偏移 0x00A145 处找到匹配项</div>
               <div className="bg-forensics-surface border border-forensics-border p-3 text-forensics-text-secondary whitespace-pre-wrap">
                 {selectedHit?.snippets[0]?.text ?? '无上下文预览'}
               </div>
-            </div>
+            </ScrollArea>
           </div>
         </div>
 

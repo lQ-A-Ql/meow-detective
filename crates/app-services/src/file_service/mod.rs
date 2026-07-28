@@ -32,7 +32,8 @@ pub use enumeration::{
 pub use error::FileServiceError;
 pub use extraction::{
     extract_file_to_destination, extract_file_to_destination_for_case,
-    extract_file_to_destination_for_case_with_bitlocker, record_file_extraction_audit,
+    extract_file_to_destination_for_case_with_bitlocker,
+    extract_file_to_destination_for_case_with_bitlocker_and_progress, record_file_extraction_audit,
 };
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,

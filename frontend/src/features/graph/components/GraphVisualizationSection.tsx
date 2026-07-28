@@ -12,6 +12,7 @@ import {
 import { SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -265,7 +266,7 @@ export function GraphVisualizationSection() {
           ) : null}
         </div>
 
-        <div className="w-64 shrink-0 overflow-auto border-l border-forensics-border bg-forensics-surface p-3">
+        <ScrollArea className="min-h-0 w-64 shrink-0 border-l border-forensics-border bg-forensics-surface" viewportClassName="p-3">
           {selectedNode ? (
             <NodeMiniDetails
               node={selectedNode}
@@ -303,7 +304,7 @@ export function GraphVisualizationSection() {
               ) : null}
             </div>
           )}
-        </div>
+        </ScrollArea>
       </div>
     </section>
   );

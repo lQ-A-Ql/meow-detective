@@ -6,6 +6,7 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Badge } from '@/app/components/ui/badge';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { BatchPhaseName, BatchPlanInput, DataSourceSummary, BatchResourceLimits } from '@/types/models';
 
 const ALL_PHASES: { key: BatchPhaseName; label: string; description: string }[] = [
@@ -160,7 +161,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 {selectedDataSourceIds.size === dataSources.length ? 'Deselect All' : 'Select All'}
               </Button>
             </div>
-            <div className="max-h-60 space-y-1 overflow-auto rounded-none border p-2">
+            <ScrollArea className="max-h-60 rounded-none border" viewportClassName="space-y-1 p-2">
               {dataSources.length === 0 ? (
                 <p className="py-4 text-center text-[12px] text-muted-foreground">
                   No data sources available. Import evidence first.
@@ -187,7 +188,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                   </label>
                 ))
               )}
-            </div>
+            </ScrollArea>
           </div>
         )}
 

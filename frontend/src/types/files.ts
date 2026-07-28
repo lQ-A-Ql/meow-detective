@@ -43,6 +43,33 @@ export interface FileEntryRow {
   hashSha256?: string;
 }
 
+export type FileExtractionPhase = 'preparing' | 'copying' | 'completed' | 'failed';
+
+export interface FileExtractionProgress {
+  operationId: string;
+  fileId: string;
+  phase: FileExtractionPhase;
+  bytesWritten: number;
+  totalBytes?: number;
+  percent?: number;
+}
+
+export interface FileExtractionResult {
+  fileId: string;
+  bytesWritten: number;
+  sourceSize?: number;
+  sha256: string;
+  destinationFileName: string;
+  sizeVerified: boolean;
+}
+
+export interface ExtractFileRequest {
+  operationId: string;
+  fileId: string;
+  destinationPath: string;
+  overwrite: boolean;
+}
+
 export interface FileRowsPage {
   rows: FileEntryRow[];
   totalCount: number;

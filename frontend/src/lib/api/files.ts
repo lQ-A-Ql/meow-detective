@@ -1,6 +1,5 @@
 import {
   FileChildrenPage,
-  FileEntryRow,
   FileJumpContext,
   FileRowsPage,
   FileTreeNode,
@@ -19,6 +18,8 @@ import {
   ViewerRangeRequest,
   BitLockerCatalogImport,
   BitLockerVolumeStatus,
+  ExtractFileRequest,
+  FileExtractionResult,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -199,10 +200,10 @@ export async function readMediaRange(request: MediaRangeRequest): Promise<MediaR
   return apiClient.request<MediaRangeResponse>(COMMANDS.files.READ_MEDIA_RANGE, { request });
 }
 
-export async function extractFileToPath(file: FileEntryRow, destinationPath: string) {
-  return apiClient.request(COMMANDS.files.EXTRACT_FILE, {
-    request: { fileId: file.id, destinationPath, overwrite: false },
-  });
+export async function extractFileToPath(
+  request: ExtractFileRequest,
+): Promise<FileExtractionResult> {
+  return apiClient.request<FileExtractionResult>(COMMANDS.files.EXTRACT_FILE, { request });
 }
 
 export async function getFileJumpContext(

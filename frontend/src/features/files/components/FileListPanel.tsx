@@ -1,9 +1,10 @@
 import { ArrowUp } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
+import { FileEntryContextMenu } from '@/features/files/components/FileEntryContextMenu';
 import type { FileEntryRow } from '@/types/models';
 
 // Module-level columns: a stable reference keeps DenseDataTable's memoized
@@ -78,6 +79,7 @@ export interface FileListPanelProps {
   canGoToNextRows: boolean;
   goToPreviousRows: () => void;
   goToNextRows: () => void;
+  onExtractFile: (file: FileEntryRow) => void;
 }
 
 export function FileListPanel({
@@ -97,6 +99,7 @@ export function FileListPanel({
   canGoToNextRows,
   goToPreviousRows,
   goToNextRows,
+  onExtractFile,
 }: FileListPanelProps) {
   const { t } = useTranslation();
   const selectedFile = sortedRows.find((row) => row.id === selectedFileId);
@@ -115,6 +118,18 @@ export function FileListPanel({
       setSelectedFileId(row.id);
     },
     [setSelectedDirectoryId, setSelectedFileId, setExpandedDirectoryIds],
+  );
+  const renderRowContextMenu = useCallback(
+    (row: FileEntryRow, trigger: ReactElement) => (
+      <FileEntryContextMenu
+        file={row}
+        onOpenFileMenu={(file) => setSelectedFileId(file.id)}
+        onExtractFile={onExtractFile}
+      >
+        {trigger}
+      </FileEntryContextMenu>
+    ),
+    [onExtractFile, setSelectedFileId],
   );
 
   return (
@@ -137,6 +152,7 @@ export function FileListPanel({
         getRowKey={(row) => row.id}
         selectedRowKey={selectedFile?.id}
         onRowClick={handleRowClick}
+        renderRowContextMenu={renderRowContextMenu}
         emptyTitle="当前目录为空"
         emptyDescription={
           rowsPage?.truncated

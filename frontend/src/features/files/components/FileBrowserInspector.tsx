@@ -14,10 +14,8 @@ interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
   activeDirectoryPath?: string;
   currentDirectory?: FileTreeNode;
-  extractFile: {
-    mutate: (file: FileEntryRow) => void;
-    isPending: boolean;
-  };
+  onExtractFile: (file: FileEntryRow) => void;
+  extractionPending: boolean;
   onViewTimeline: () => void;
   bitLockerPartition?: DataSourcePartition;
   bitLocker?: BitLockerVolumeModel;
@@ -27,7 +25,8 @@ export function FileBrowserInspector({
   selectedFile,
   activeDirectoryPath,
   currentDirectory,
-  extractFile,
+  onExtractFile,
+  extractionPending,
   onViewTimeline,
   bitLockerPartition,
   bitLocker,
@@ -109,13 +108,13 @@ export function FileBrowserInspector({
               size="xs"
               onClick={() => {
                 if (selectedFile) {
-                  extractFile.mutate(selectedFile);
+                  onExtractFile(selectedFile);
                 }
               }}
-              disabled={!selectedFile || extractFile.isPending}
+              disabled={!selectedFile || extractionPending}
               className="w-full font-light"
             >
-              {extractFile.isPending
+              {extractionPending
                 ? t('fileBrowser.inspector.extract.pending')
                 : t('fileBrowser.inspector.extract.button')}
             </Button>

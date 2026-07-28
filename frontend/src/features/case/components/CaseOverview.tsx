@@ -2,6 +2,7 @@ import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Penci
 import type { ReactNode } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { InlineProgressRow } from '@/components/status/InlineProgressRow';
 import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
 import type { DataSourceSummary, DataSourcePartition, JobSnapshot, RecentObject } from '@/types/models';
@@ -79,7 +80,7 @@ export function RecentTasksPanel({
           完成 {completedJobs.length} / 部分 {partialJobCount} / 运行 {runningJob ? 1 : 0}
         </span>
       </div>
-      <div className="flex-1 overflow-auto p-4 space-y-3">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-3 p-4">
         {runningJob ? (
           <InlineProgressRow
             title={runningJob.name}
@@ -116,7 +117,7 @@ export function RecentTasksPanel({
             </div>
           </div>
         ))}
-      </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -148,7 +149,7 @@ export function DataSourcesPanel({
         <span>已有数据源</span>
         <span className="font-mono text-[10px] text-forensics-muted-light">{dataSources?.length ?? 0} 个</span>
       </div>
-      <div className="max-h-64 overflow-auto border-b border-forensics-border bg-forensics-surface">
+      <ScrollArea className="max-h-64 border-b border-forensics-border bg-forensics-surface">
         {dataSources?.length ? (
           dataSources.map((source) => {
             const isEditing = editingDataSourceId === source.id;
@@ -310,7 +311,7 @@ export function DataSourcesPanel({
         ) : (
           <div className="px-4 py-6 text-[12px] text-forensics-muted">导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。</div>
         )}
-      </div>
+      </ScrollArea>
     </>
   );
 }
@@ -324,7 +325,7 @@ export function RecentObjectsPanel({ recentObjects }: { recentObjects: RecentObj
         <span>高价值对象</span>
         <span className="font-mono text-[10px] text-forensics-muted-light">最近发现 {recentObjects?.length ?? 0} 项</span>
       </div>
-      <div className="flex-1 overflow-auto">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col border-b border-forensics-border">
           {recentObjects?.length ? (
             recentObjects.map((item) => (
@@ -343,7 +344,7 @@ export function RecentObjectsPanel({ recentObjects }: { recentObjects: RecentObj
             <div className="px-4 py-6 text-[12px] text-forensics-muted">导入并完成初步解析后，这里会展示最近发现的高价值对象。</div>
           )}
         </div>
-      </div>
+      </ScrollArea>
     </>
   );
 }

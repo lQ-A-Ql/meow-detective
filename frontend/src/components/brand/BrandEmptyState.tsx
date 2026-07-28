@@ -1,21 +1,17 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
-import { BrandArt, type BrandArtVariant } from './BrandArt';
+import { BrandWatermark } from './BrandWatermark';
 
 export function BrandEmptyState({
-  variant = 'investigate',
   title,
   description,
   children,
   className,
-  artClassName,
 }: {
-  variant?: BrandArtVariant;
   title: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
   className?: string;
-  artClassName?: string;
 }) {
   return (
     <div
@@ -24,9 +20,9 @@ export function BrandEmptyState({
         className,
       )}
     >
-      <BrandArt
-        variant={variant}
-        className={cn('relative mx-auto mb-3 h-32 w-32', artClassName)}
+      <BrandWatermark
+        motif="sitting"
+        className="absolute -bottom-12 -right-2 h-36 opacity-[0.055]"
       />
       <div className="relative font-serif text-[15px] font-light tracking-wide text-forensics-text">{title}</div>
       {description ? (

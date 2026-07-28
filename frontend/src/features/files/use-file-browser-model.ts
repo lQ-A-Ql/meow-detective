@@ -8,6 +8,7 @@ import { useFileSelection } from '@/features/files/hooks/use-file-selection';
 import { useFileTree } from '@/features/files/hooks/use-file-tree';
 import { isBitLockerPartition, type BitLockerTarget } from '@/features/files/bitlocker';
 import { useBitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
+import { useFileExtractionModel } from '@/features/files/hooks/use-file-extraction';
 import { useUiStore } from '@/stores/ui-store';
 import { partitionIndexFromRootName } from '@/lib/partition-display';
 import type { DataSourcePartition } from '@/types/models';
@@ -175,6 +176,7 @@ export function useFileBrowserModel() {
     };
   }, [activePartitionContext]);
   const bitLocker = useBitLockerVolumeModel(bitLockerTarget);
+  const fileExtraction = useFileExtractionModel();
 
   const preview = useFilePreview({
     selectedFile,
@@ -240,7 +242,7 @@ export function useFileBrowserModel() {
     goToParentDirectory: tree.goToParentDirectory,
     activeRootNode: tree.activeRootNode,
     executableCount: pagination.executableCount,
-    extractFile: preview.extractFile,
+    fileExtraction,
     onViewTimeline: preview.onViewTimeline,
     dataSources,
   };

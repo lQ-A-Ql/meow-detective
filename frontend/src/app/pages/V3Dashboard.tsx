@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useGraphSnapshot } from '@/features/graph/hooks';
@@ -71,7 +72,7 @@ export function V3Dashboard() {
       ) : loading ? (
         <AnalysisLoadingPanel text="正在加载取证总览快照..." />
       ) : (
-        <div className="flex-1 space-y-6 overflow-auto p-6">
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">
           {error ? <AnalysisErrorBanner message={errorMessage(error)} onRetry={refresh} /> : null}
 
           <GraphStatsSection data={graph.data} />
@@ -87,7 +88,7 @@ export function V3Dashboard() {
           <PlatformCoverageSection data={v3Governance.data?.platformCoverage} />
           <RulePackStatusSection data={v3Governance.data?.rulePackCoverage} />
           <BatchStatusSection data={v3Governance.data?.batchStatus} />
-        </div>
+        </ScrollArea>
       )}
     </div>
   );

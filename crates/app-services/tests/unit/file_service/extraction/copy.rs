@@ -12,6 +12,7 @@ fn reader_copy_hashes_and_verifies_the_logical_stream() {
         Some(bytes.len() as u64),
         &destination,
         false,
+        None,
     )
     .unwrap();
 
@@ -24,9 +25,14 @@ fn reader_copy_hashes_and_verifies_the_logical_stream() {
 fn size_mismatch_removes_temporary_output_and_does_not_publish() {
     let temporary = tempfile::TempDir::new().unwrap();
     let destination = temporary.path().join("truncated.bin");
-    let error =
-        copy_reader_to_destination(&mut Cursor::new(b"short"), Some(12), &destination, false)
-            .unwrap_err();
+    let error = copy_reader_to_destination(
+        &mut Cursor::new(b"short"),
+        Some(12),
+        &destination,
+        false,
+        None,
+    )
+    .unwrap_err();
 
     assert!(matches!(error, FileServiceError::Integrity(_)));
     assert!(!destination.exists());
@@ -47,6 +53,7 @@ fn overwrite_publishes_complete_replacement() {
         Some(12),
         &destination,
         true,
+        None,
     )
     .unwrap();
 
@@ -58,7 +65,7 @@ fn overwrite_publishes_complete_replacement() {
 fn chunked_copy_rejects_early_eof_without_publishing() {
     let temporary = tempfile::TempDir::new().unwrap();
     let destination = temporary.path().join("cephfs.bin");
-    let error = copy_chunks_to_destination(8, &destination, false, |offset, _| {
+    let error = copy_chunks_to_destination(8, &destination, false, None, |offset, _| {
         if offset == 0 {
             Ok(vec![1, 2, 3, 4])
         } else {
@@ -82,6 +89,7 @@ fn chunked_copy_never_requests_more_than_one_mebibyte() {
         source.len() as u64,
         &destination,
         false,
+        None,
         |offset, length| {
             requests.push((offset, length));
             let start = offset as usize;
@@ -109,9 +117,36 @@ fn no_clobber_publish_preserves_existing_destination() {
         Some(11),
         &destination,
         false,
+        None,
     )
     .unwrap_err();
 
     assert!(matches!(error, FileServiceError::Io(_)));
     assert_eq!(std::fs::read(destination).unwrap(), b"original");
+}
+
+#[test]
+fn reader_progress_is_monotonic_and_finishes_at_the_source_size() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let destination = temporary.path().join("progress.bin");
+    let source = vec![0x7f; 2 * 1024 * 1024 + 17];
+    let mut updates = Vec::new();
+    let mut progress = |bytes_written, total_bytes| updates.push((bytes_written, total_bytes));
+
+    let result = copy_reader_to_destination(
+        &mut Cursor::new(&source),
+        Some(source.len() as u64),
+        &destination,
+        false,
+        Some(&mut progress),
+    )
+    .unwrap();
+
+    assert!(updates.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+    assert_eq!(updates.first(), Some(&(0, Some(source.len() as u64))));
+    assert_eq!(
+        updates.last(),
+        Some(&(source.len() as u64, Some(source.len() as u64)))
+    );
+    assert_eq!(result.bytes_written, source.len() as u64);
 }
