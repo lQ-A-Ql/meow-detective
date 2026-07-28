@@ -41,6 +41,9 @@ use std::{
 use tempfile::TempDir;
 use volume_bitlocker::{MetadataFingerprint, Passphrase, PersistedKeyBlob};
 
+#[path = "support/e01_catalog_integrity/extraction_benchmark.rs"]
+mod extraction_benchmark;
+
 const WINDOWS1_ENV: &str = "FORENSICS_WINDOWS1_E01_FIXTURE";
 const WINDOWS2_ENV: &str = "FORENSICS_WINDOWS2_E01_FIXTURE";
 const LINUX1_ENV: &str = "FORENSICS_LINUX1_E01_FIXTURE";
@@ -394,6 +397,18 @@ fn run_catalog_integrity_test(env_name: &str, platform: DataSourcePlatform) {
                 counts.reachable,
                 counts.orphans,
             );
+            if extraction_benchmark::is_enabled() {
+                extraction_benchmark::run(extraction_benchmark::Context {
+                    case_conn,
+                    case_root: &active.case_root,
+                    case_id: &case_id,
+                    data_source_id: &source.id,
+                    source_conn: &source_conn,
+                    bitlocker_runtime: &bitlocker_runtime,
+                    env_name,
+                })?;
+                return Ok(());
+            }
             assert_source_file_extraction(
                 case_conn,
                 &active.case_root,

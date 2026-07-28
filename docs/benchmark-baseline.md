@@ -195,3 +195,13 @@ V2 benchmark 至少覆盖：
 - large 时间线筛选
 
 若场景缺失，当前口径记为 `warning`；若场景超出默认阈值，当前口径记为 `blocked`。
+
+## 10. 文件提取初始实测（2026-07-29）
+
+四个私有 E01 样本的 production `release` 文件提取初始实测见
+[`benchmark-results/2026-07-29-file-extraction-real-samples.md`](benchmark-results/2026-07-29-file-extraction-real-samples.md)。
+该结果覆盖 Windows、BitLocker NTFS、XFS 与 Ext4 的 `203-312 MiB` 文件，记录
+reader/filesystem 准备、复制并计算 SHA-256、持久化同步及原子发布的分段耗时。
+
+该轮属于单次、枚举后暖缓存基线，不进入发布阈值。补齐冷缓存、多 GiB 持续导出、
+重复运行 p50/p95 以及 RSS/CPU 遥测后，才能提升为正式 large dataset gate。
