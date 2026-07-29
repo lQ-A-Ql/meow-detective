@@ -1,206 +1,281 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 29 Rust crates, 10 frontend pages, 113 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+![ChatGPT Image 2026年7月29日 16_08_08.png|697](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/ChatGPT%20Image%202026%E5%B9%B47%E6%9C%8829%E6%97%A5%2016_08_08.png)
 
-**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, bounded BitLocker key recovery from a matching Windows x64 memory image, EVTX input bounding, document and media preview renderers, and large-list render performance.
+## 项目介绍
 
-## Architecture
+Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`。
+## 功能简介
 
-```text
-React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 113 commands
-Application Services (crates/app-services/) -> 28 source modules
-Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
+### 证据导入与文件浏览
+
+- 支持 E01、RAW/dd、逻辑目录及 Linux 集群目录作为数据源入口。
+- 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs 以及 Linux LVM 直接逻辑卷映射。
+- 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。
+- 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。
+- 支持向调查员指定的路径提取文件，默认禁止覆盖，提取过程返回真实进度和完整性信息。
+- 提供 NTFS、ext4 与 XFS 的删除文件恢复/雕刻能力，恢复范围和完整性状态会显式标注。
+
+### Windows 取证分析
+
+- 注册表：SYSTEM、SOFTWARE、NTUSER、SAM、SECURITY、USRCLASS、Amcache 与事务日志基础解析。
+- 事件日志：EVTX 解析、开关机、登录、进程、账户与应用事件分类。
+- 用户行为：Prefetch、LNK、Jump List、Recycle Bin、SRU、Thumbcache、浏览器历史/下载/会话等。
+- 浏览器与凭据：Chrome、Edge、Firefox 浏览器数据提取；离线 DPAPI 相关链路按前置材料与支持边界处理。
+- BitLocker：卷元数据检查、密码/恢复密码解锁、已验证密钥安全存储及重开案件恢复；匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证。
+
+### Linux 与 PVE 分析
+
+- Linux 制品：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth、系统配置、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
+- Linux 数据源自动进入独立分析视图；Windows 与 Linux 提取能力不会交叉调度。
+- PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
+
+### 调查、关联与输出
+
+- 全文检索、时间线、实体归并、关联图、Notebook 调查记录、规则包与批处理任务。
+- HTML、CSV、JSON 与证据包报告导出；报告和错误信息遵循脱敏规则。
+- MCP 扩展通道使用受控权限模型，默认最小权限和审计记录。
+
+## 支持边界
+
+| 范围 | 当前状态 | 说明 |
+|---|---|---|
+| Windows / Linux 数据源 | 支持 | 以 Windows 为主，Linux 文件系统与制品能力按解析器分别标注成熟度。 |
+| macOS / APFS / HFS+ | 不支持 | 可识别部分分区类型，但不创建文件系统 reader。 |
+| PVE / Ceph | 实验性 | 已覆盖私有样本中的部分 BlueStore、RBD 与派生 VM 文件树；不宣称通用集群重建。 |
+| BitLocker | 部分支持 | 仅在受支持加密方法、保护器和可验证密钥材料范围内可用。 |
+| 原始证据写入 | 禁止 | 系统仅读取原始证据；派生数据写入案件工作区或调查员显式选择的导出目录。 |
+
+完整的解析器成熟度、样本基线和已知限制见 [解析器支持矩阵](docs/parser-support-matrix.md) 与 [已知不支持格式](docs/known-unsupported-formats.md)。
+
+## 架构图
+
+### 分层架构
+
+```mermaid
+flowchart TB
+    UI["React 18 + TypeScript + Vite\n调查工作台"]
+    IPC["Tauri 2 IPC\ncommands / events"]
+    CMD["桌面命令层\n校验、DTO 适配、调用服务"]
+    SVC["应用服务层\n案件、导入、预览、分析、导出编排"]
+    CORE["核心能力层\n证据读取、文件系统、制品、检索、时间线、报告"]
+    STORE["持久化与运行时\nSQLite、索引、受限句柄、密钥存储"]
+    EVIDENCE["只读证据源\nE01 / RAW / 目录 / 集群成员"]
+
+    UI --> IPC --> CMD --> SVC
+    SVC --> CORE
+    SVC --> STORE
+    CORE --> EVIDENCE
+    STORE --> EVIDENCE
+    IPC -. "进度与状态事件" .-> UI
 ```
 
-Storage is not a single database. Beyond the main case database there is a
-per-data-source database (`source_*` migrations), and derived sources such as a
-reconstructed Ceph RBD VM disk get their own source database again. A data
-source reaching `import_state=ready` only means its catalog is browseable;
-per-phase progress for Catalog / Graph / Platform / Artifacts / Timeline /
-Search is tracked separately in `data_source_processing_phases` with version,
-input fingerprint, owner/attempt, lease, and heartbeat.
+### 案件与数据源模型
 
-## Quick Start
+```mermaid
+erDiagram
+    CASE ||--|| CASE_CONTROL_DB : "拥有 app.db"
+    CASE ||--o{ DATA_SOURCE : "注册"
+    CASE ||--o{ JOB : "调度"
+    DATA_SOURCE ||--|| SOURCE_DB : "独立 source.db"
+    DATA_SOURCE ||--|| SOURCE_INDEX : "独立索引"
+    DATA_SOURCE ||--o{ PARTITION : "包含"
+    PARTITION ||--o{ FILE_ENTRY : "枚举"
+    FILE_ENTRY ||--o{ ARTIFACT : "产生"
+    FILE_ENTRY ||--o{ TIMELINE_EVENT : "投影"
+    ARTIFACT }o--o{ ENTITY : "关联"
 
-### Frontend
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
+    CASE {
+        string case_id
+        string name
+        string case_root
+    }
+    DATA_SOURCE {
+        string data_source_id
+        string platform
+        string import_state
+        string source_db_rel_path
+    }
+    SOURCE_DB {
+        string partitions
+        string file_entries
+        string artifacts
+        string timeline_events
+    }
+    FILE_ENTRY {
+        string global_file_id
+        string local_file_id
+        string parent_id
+        string evidence_path
+    }
 ```
 
-### Desktop
+全局文件 ID 采用 `ds:<dataSourceId>:<localId>` 形式。前端只接收 DTO 和逻辑 ID，不接触主机原始路径或数据库物理路径。
 
-```bash
-cd apps/desktop/src-tauri
+### 导入状态与处理阶段
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: 注册数据源
+    Pending --> Importing: 调度器取得写入租约
+    Importing --> Ready: 目录与分区可浏览
+    Importing --> Failed: 读取、解析或校验失败
+    Failed --> Pending: 删除后重新导入
+    Ready --> [*]
+
+    state Importing {
+        [*] --> Catalog
+        Catalog --> Graph
+        Graph --> Platform
+        Platform --> Artifacts
+        Artifacts --> Timeline
+        Timeline --> Search
+        Search --> [*]
+    }
+```
+
+`ready` 表示文件目录已可浏览；Catalog、Graph、Platform、Artifacts、Timeline、Search 的完成情况分别记录，避免把“已导入”误判为“所有分析已完成”。
+
+## 模型与算法图
+
+### 证据解析与预览算法链路
+
+```mermaid
+flowchart LR
+    INPUT["证据输入"] --> PROBE["镜像与分区探测\nE01/RAW/目录"]
+    PROBE --> ROUTE{"卷类型"}
+    ROUTE -->|"NTFS/FAT/exFAT"| WINFS["Windows 文件系统 reader"]
+    ROUTE -->|"ext4/XFS/Btrfs"| LINUXFS["Linux 文件系统 reader"]
+    ROUTE -->|"LVM PV"| LVM["PV -> VG -> LV 偏移映射"]
+    LVM --> LINUXFS
+    ROUTE -->|"BitLocker"| BDE["保护器解锁与扇区解密\n卷级验证"]
+    BDE --> WINFS
+    WINFS --> CATALOG["分区文件目录与 source.db"]
+    LINUXFS --> CATALOG
+    CATALOG --> ANALYSIS["平台制品提取\n检索、时间线、关联"]
+    CATALOG --> VIEWER["文件句柄 + 范围读取\n文本/Hex/媒体/文档预览"]
+    ANALYSIS --> REPORT["可追溯报告与调查视图"]
+```
+
+关键算法约束：I/O 密集的镜像读取保持有界和顺序化，CPU 密集的独立解析任务可使用 Rayon 并行；SQLite 每个数据源单写者、多读者；大文件预览和媒体读取使用范围请求与短生命周期句柄。
+
+### BitLocker 内存辅助验证模型
+
+```mermaid
+flowchart TD
+    MEM["只读 Windows x64 内存镜像"] --> SCAN["有界物理页与 pool 扫描"]
+    SCAN --> KEY["AES 扩展密钥候选"]
+    SCAN --> CRED["恢复密码/密码候选\n严格数量上限"]
+    KEY --> VERIFY["卷级验证\nNTFS boot/MFT/$UpCase/$Bitmap"]
+    CRED --> AUTH["现有 BitLocker KDF + AES-CCM 认证"]
+    AUTH --> VERIFY
+    VERIFY -->|"成功"| RUNTIME["只读运行时解锁注册表\n安全持久化已验证密钥包"]
+    VERIFY -->|"失败"| REJECT["拒绝候选\n不记录密钥材料"]
+    RUNTIME --> PREVIEW["文件树、预览与提取"]
+```
+
+该链路不把 FVEK、VMK、AES schedule 或未验证候选写入日志、报告、案件数据库或前端。只有经过卷级认证的运行时解锁状态才可用于后续只读访问。
+
+## 开发模式运行
+
+### 环境要求
+
+- Windows 10/11 x64。
+- Rust stable（仓库的 `rust-toolchain.toml` 为准）。
+- Node.js LTS、Corepack 与 pnpm `10.25.0`。
+- Visual Studio 2022 Build Tools，安装 Desktop development with C++ 和 Windows SDK。
+- WebView2 Runtime（Tauri 桌面运行时需要）。
+
+涉及链接的 Rust 命令应在 **x64 Native Tools Command Prompt for VS 2022** 或已执行 `vcvars64.bat` 的终端中运行，避免误用 Git 自带的 `link.exe`。
+
+### 安装依赖
+
+```powershell
+corepack enable
+pnpm --dir frontend install --frozen-lockfile
+cargo fetch
+```
+
+### 启动完整桌面开发模式
+
+在仓库根目录执行：
+
+```powershell
+Set-Location apps/desktop/src-tauri
 cargo tauri dev
 ```
 
-## Build
+该命令启动 Tauri 桌面应用，并使用 Vite 前端热更新。前端页面不提供独立 mock 模式；单独运行 `pnpm --dir frontend dev` 仅适合样式和组件开发，不能替代完整的取证 IPC 运行环境。
 
-```bash
-cd frontend && pnpm build
-cd apps/desktop/src-tauri && cargo tauri build
+### 前端单独检查
+
+```powershell
+pnpm --dir frontend typecheck
+pnpm --dir frontend lint
+pnpm --dir frontend test
+pnpm --dir frontend build
 ```
 
-## Test
+### Rust 后端检查
 
-```bash
-cargo test --workspace
-cd frontend && pnpm test            # Frontend (94 test files)
-cd frontend && pnpm test:coverage
-```
-
-## Quality Gates
-
-```bash
+```powershell
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cd frontend && pnpm typecheck
-cd frontend && pnpm lint
-cd frontend && pnpm test
+cargo check -p forensics-desktop
 ```
 
-## Project Structure
+### 构建发布包
 
-| Directory | Description |
+```powershell
+pnpm --dir frontend build
+Set-Location apps/desktop/src-tauri
+cargo tauri build
+```
+
+`tauri.conf.json` 将生产前端目录固定为 `frontend/dist`，因此发布构建前必须先完成前端构建。
+
+## 工程结构
+
+| 路径 | 职责 |
 |---|---|
-| `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (113 commands) |
-| `crates/app-services/` | Application orchestration (28 source modules) |
-| `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (41) and migration scripts (71) |
-| `crates/evidence-core/` | Disk image probing and volume detection |
-| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
-| `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
-| `crates/containers-pst/` | PST/OST/mbox email container parsers |
-| `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4-7: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, source-local catalog import, verified-key persistence, automatic case-open restore, and safe report inventory) |
-| `crates/memory-windows/` | Bounded read-only Windows x64 raw-memory adapter: physical reads, page translation, kernel discovery, pool-tag inventory, and opaque BitLocker AES candidate recognition |
-| `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
-| `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
-| `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
-| `crates/search/` | Full-text indexing (tantivy) |
-| `crates/timeline/` | Timeline generation |
-| `crates/mcp-client/` | MCP client (SSE + Stdio) |
-| `crates/reports/` | HTML / CSV / JSON reports |
-| `crates/infrastructure/` | Shared utilities |
+| `frontend/` | React 18、TypeScript、Vite、Tailwind 4 调查界面与前端测试。 |
+| `apps/desktop/src-tauri/` | Tauri shell、命令薄适配器、事件桥接和桌面运行时。 |
+| `crates/transport/` | Rust DTO、请求、事件与错误契约的唯一事实源。 |
+| `crates/app-services/` | 案件、导入、预览、分析、BitLocker、恢复、导出等用例编排。 |
+| `crates/persistence-sqlite/` | SQLite 迁移、仓储与 source-local 数据库访问。 |
+| `crates/evidence-core/`、`image-e01/` | 证据 reader、镜像探测、分区和 E01 读取。 |
+| `crates/fs-*/`、`fs-lvm/` | NTFS/FAT/exFAT/ext4/XFS/Btrfs 与 LVM 文件系统能力。 |
+| `crates/artifacts-windows/`、`artifacts-linux/` | Windows 和 Linux 取证制品解析。 |
+| `crates/search/`、`timeline/`、`reports/` | 检索、时间线和报告能力。 |
+| `crates/ceph-wire/`、`rocksdb-wire/` | 只读 Ceph/BlueStore/RocksDB 低层解析原语。 |
+| `docs/` | 架构约束、支持矩阵、测试基线、错误分类和专题设计文档。 |
+| `scripts/` | 架构边界、质量门禁、真实样本回归和基准脚本。 |
 
-## Engineering Docs
+## 质量与安全约束
 
-- `docs/documentation-index.md`
-- `docs/architecture-model.md`
-- `docs/backend-module-architecture.md`
-- `docs/design-constraints.md`
-- `docs/model-architecture-algorithm-diagrams.md`
-- `docs/validation-trust-framework.md`
-- `docs/bitlocker-memory-key-recovery-design.md`
-- `docs/expected-json-contract.md`
-- `docs/parser-support-matrix.md`
-- `docs/known-unsupported-formats.md`
-- `docs/error-taxonomy.md`
-- `docs/error-classification-manual.md`
-- `docs/benchmark-baseline.md`
-- `docs/correlation-analysis-design.md`
-- `docs/mcp-security-model.md`
-- `docs/export-and-media-safety.md`
+- Rust DTO 必须定义在 `crates/transport/src/dto/`，前端 TypeScript 镜像需要手工同步。
+- 页面不得直接调用 Tauri `invoke`；所有请求必须经由 `frontend/src/lib/api/`。
+- 原始证据只读；预览不能通过拼接宿主路径访问证据内容。
+- 导出前校验目标路径，默认 `overwrite=false`，使用临时文件和原子改名避免半成品。
+- 生产代码与测试物理分离；后端模块、函数、命令边界均由仓库 PowerShell guard 检查。
 
-## V2 Status
+完整门禁、真实样本测试和文档索引见 [开发工程指南](docs/development-engineering-guide.md)、[验证可信框架](docs/validation-trust-framework.md) 与 [文档索引](docs/documentation-index.md)。
 
-**V2 is ~90% complete.** Grade: **B (81/100)**. All 7 real E01 tests pass.
+### 技术文档
 
-### What V2 delivered
+- [架构与数据模型](docs/architecture-model.md)
+- [后端模块架构](docs/backend-module-architecture.md)
+- [设计约束](docs/design-constraints.md)
+- [模型、架构与算法图谱](docs/model-architecture-algorithm-diagrams.md)
+- [预期 JSON 契约](docs/expected-json-contract.md)
+- [错误分类手册](docs/error-classification-manual.md)
+- [性能基线](docs/benchmark-baseline.md)
+- [关联分析设计](docs/correlation-analysis-design.md)
+- [解析器支持矩阵](docs/parser-support-matrix.md)
+- [MCP 安全模型](docs/mcp-security-model.md)
+- [导出与媒体安全](docs/export-and-media-safety.md)
 
-- **V2-1 (Verifiable Trust): 95%** — public-small/medium fixture layers, expected JSON contracts per core chain (E01/NTFS/Prefetch/LNK/Registry/Recycle Bin), field guarantee levels (Guaranteed/Best-effort/Not-guaranteed), support matrix driven by sample verification, 7 real E01 regression cases all passing.
-- **V2-2 (Cross-Artifact Correlation): 85%** — unified correlation model (node/edge/cluster/lead/confidence/provenance), 10+ rule families (LNK/Prefetch/Registry/RecycleBin/BrowserDownload/BrowserHistory/Email/JumpList), `CorrelationWorkspace` frontend, structured `Correlation Lead Details` in HTML/JSON/CSV reports, `familyCoverage[]` and `families[]` governance signals.
-- **V2-3 (Performance & Scale): 70%** — benchmark harness and baseline datasets defined, cold/warm performance thresholds for medium/large cases, cancel/recovery for long-running tasks, p95 targets for search/timeline/file-tree. Remaining: automated nightly regression, memory/resource boundary enforcement in CI.
-- **V2-4 (Security Governance & Release): 75%** — MCP permission model (resourceAccess/toolAccess/promptAccess/networkPolicy), export path safety (default overwrite=false), media handle short-lived lifecycle, error desensitization by taxonomy, release scorecard with hard gates, `/v2` governance dashboard with real-time signals from correlation, support matrix, error taxonomy, benchmark, and release policy.
+## 许可证
 
-### Governance fact sources
-
-- `testdata/governance/v2-verification-catalog.json`
-- `testdata/governance/v2-benchmark-baseline.json`
-- `testdata/governance/v2-known-limitations.json`
-- `testdata/governance/v2-release-policy.json`
-- `testdata/governance/v2-runtime-results.json`
-- `testdata/governance/v2-security-taxonomy.json`
-
-## V3 Status
-
-**V3 retained feature set is ~89% complete.** The current production platform slice retains the PST/OST/mbox and Linux artifact crates. The former macOS artifact slice was retired and is not a supported runtime entry.
-
-### Retained crates
-
-| Crate | Tests | Description |
-|-------|-------|-------------|
-| `crates/containers-pst/` | 63 | PST (Unicode 32/64), OST, mbox (RFC 4155) email parsing |
-| `crates/artifacts-linux/` | 30 | systemd journal, wtmp, bash hist, apt/dpkg, cron, sudo |
-
-### New capabilities
-
-- **Evidence Graph**: 6 node types + 7 edge types, graph query API, /v3 dashboard
-- **Browser parsers**: Chrome/Edge/Firefox history, downloads, cookies, sessions (123 tests)
-- **Registry txlog**: .LOG1/.LOG2 transaction log parsing (18 tests)
-- **Case Notebook**: CRUD + threading + evidence citations + step recording/replay
-- **Rule Pack engine**: TOML-based declarative correlation rules with validation
-- **Batch subsystem**: plan/build/monitor/resume/cancel for large cases
-- **MBR full parsing**: EBR chain support for extended/logical partitions
-- **Rayon parallelization**: CPU-bound artifact extraction + correlation matching
-
-Current validation uses the repository quality gates listed above; historical phase test counts are not current workspace facts.
-
-## V4 Status
-
-**V4 retained core delivered.** Three Linux filesystem crates and entity resolution remain in production.
-
-### New crates
-
-| Crate | Description |
-|---|---|
-| `crates/fs-ext4/` | ext4 filesystem parser |
-| `crates/fs-xfs/` | XFS filesystem parser |
-| `crates/fs-btrfs/` | Btrfs filesystem parser |
-
-### New capabilities
-
-- **Filesystem parsers (ext4/XFS/Btrfs)**: read-only evidence readers for Linux filesystems
-- **Entity resolution**: cross-case entity matching and canonicalization (`crates/app-services/src/entity_resolution/`)
-
-APFS/HFS+ partition-type recognition is metadata-only and remains `Unsupported`; it does not provide a file tree, preview, artifact extraction, or deleted-file recovery.
-
-## V5 Status
-
-**V5 narrowed to depth over breadth.** Historical stage plans are kept outside
-the versioned technical-document set and do not define current scope. Of the
-five evaluated pillars, only advanced filesystem forensics partially landed:
-
-| V5 pillar | Outcome |
-|---|---|
-| Advanced filesystem forensics | Partially delivered — NTFS/ext4/XFS deleted-file recovery (`crates/app-services/src/deleted_recovery/`) and header/footer carving (`crates/app-services/src/file_carving.rs`) |
-| Mobile & embedded disk forensics | Retired — `artifacts-ios` / `artifacts-android` crates removed |
-| Cloud audit log forensics | Retired — `cloud-audit` crate removed |
-| Graph Query Language (GQL) | Retired — `gql` crate and its unmounted UI shell removed |
-| Production deployment & marketplace | Retired — `updater` / `crash_handler` crates and the marketplace UI shell removed |
-
-Eight member crates with no consumers were retired in `a3c1f265` (`ingest`,
-`artifacts-ios`, `artifacts-android`, `exchange`, `cloud-audit`, `gql`,
-`updater`, `crash_handler`), shrinking the workspace from 36 to 28. The
-matching dead transport DTO modules (`ios.rs`, `cloud_audit.rs`) and the
-unmounted frontend feature shells (`features/gql`, `features/marketplace`) were
-removed afterwards.
-
-`crates/transport/src/dto/android.rs` is deliberately kept as a **reserved**
-contract surface: the DTO shapes are documented but there is no parser, no
-command, and no TypeScript mirror. Android remains typed `Unsupported`.
-
-The engineering effort that actually accumulated in this period is Ceph/PVE
-cluster reconstruction (`ceph-wire`, `rocksdb-wire`) and Windows registry /
-browser-credential depth. Both are validated against private opt-in real
-samples only; neither raises a public support level.
-
-## License
-
-MIT
+本项目采用 [MIT License](LICENSE)；如仓库未包含独立许可证文件，以根目录 `Cargo.toml` 中的 `license = "MIT"` 声明为准。
