@@ -26,7 +26,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 ### Linux 与 PVE 分析
 
-- Linux 制品：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth、系统配置、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
+- Linux 取证能力：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth、系统配置、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
 - Linux 数据源自动进入独立分析视图；Windows 与 Linux 提取能力不会交叉调度。
 - PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
 
@@ -38,13 +38,13 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 ## 支持边界
 
-| 范围 | 当前状态 | 说明 |
-|---|---|---|
-| Windows / Linux 数据源 | 支持 | 以 Windows 为主，Linux 文件系统与制品能力按解析器分别标注成熟度。 |
-| macOS / APFS / HFS+ | 不支持 | 可识别部分分区类型，但不创建文件系统 reader。 |
-| PVE / Ceph | 实验性 | 已覆盖私有样本中的部分 BlueStore、RBD 与派生 VM 文件树；不宣称通用集群重建。 |
-| BitLocker | 部分支持 | 仅在受支持加密方法、保护器和可验证密钥材料范围内可用。 |
-| 原始证据写入 | 禁止 | 系统仅读取原始证据；派生数据写入案件工作区或调查员显式选择的导出目录。 |
+| 范围                  | 当前状态 | 说明                                              |
+| ------------------- | ---- | ----------------------------------------------- |
+| Windows / Linux 数据源 | 支持   | 以 Windows 为主，Linux 文件系统与取证能力按解析器分别标注成熟度。        |
+| macOS / APFS / HFS+ | 不支持  | 可识别部分分区类型，但不创建文件系统 reader。                      |
+| PVE / Ceph          | 实验性  | 已覆盖私有样本中的部分 BlueStore、RBD 与派生 VM 文件树；不宣称通用集群重建。 |
+| BitLocker           | 部分支持 | 仅在受支持加密方法、保护器和可验证密钥材料范围内可用。                     |
+| 原始证据写入              | 禁止   | 系统仅读取原始证据；派生数据写入案件工作区或调查员显式选择的导出目录。             |
 
 完整的解析器成熟度、样本基线和已知限制见 [解析器支持矩阵](docs/parser-support-matrix.md) 与 [已知不支持格式](docs/known-unsupported-formats.md)。
 
