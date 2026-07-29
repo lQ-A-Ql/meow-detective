@@ -6,7 +6,7 @@
 
 V2 长期执行与发布口径见：
 
-- `docs/v2-longterm-plan.md`
+- `docs/documentation-index.md`
 - `docs/validation-trust-framework.md`
 - `docs/expected-json-contract.md`
 
@@ -144,6 +144,6 @@ V2 长期执行与发布口径见：
 
 - `docs/validation-trust-framework.md`
 - `docs/known-unsupported-formats.md`
-- `docs/release-scorecard.md`
-- `docs/v3-plan.md`
+- `docs/documentation-index.md`
+- `docs/documentation-index.md`
 - `docs/pst-ost-mbox-support.md`

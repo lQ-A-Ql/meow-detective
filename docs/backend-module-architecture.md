@@ -136,8 +136,9 @@ real-sample regressions, review scoring, and zero-test-debt acceptance.
 Stages 5 and 6 are complete at commits `4c2bd3a7` and `72493fce`.
 Production parser/core files are organized by capability family, and the
 non-vendored `src/` test-layout baseline is now header-only with zero test
-bodies. Stage 7 final evidence, residual debt, quality scoring, and acceptance
-commands are recorded in `docs/backend-stage7-final-acceptance.md`.
+bodies. Stage-level evidence, residual debt, quality scoring, and acceptance
+commands are local development records; durable architecture facts live in
+`docs/documentation-index.md` and the relevant support matrix.
 
 The module, function, and test-layout limits are automated in this Stage 0
 slice. The function guard uses a compiled lexer so comments, nested block

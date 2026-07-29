@@ -35,8 +35,10 @@ recovery、删除和 presence gate 均有回归覆盖。
 - 内部总耗时 `712.968s`，测试进程墙钟 `805.22s`。
 - RBD、BlueStore、source DB、文件树和预览链路保持通过。
 
-完整结果记录在
-`docs/real-sample-regression/2026-07-19-pve-cluster-import-rerun.md`。
+该结果属于私有样本运行记录，不进入 Git；可复验入口是
+`crates/app-services/tests/linux_e01_integration.rs` 和
+`scripts/check-pve-cluster-import.ps1`，能力边界以
+`docs/parser-support-matrix.md` 为准。
 
 ### 2.2 当前代码事实
 

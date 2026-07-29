@@ -11,7 +11,7 @@
 更完整的实施说明见：
 
 - `docs/error-classification-manual.md`
-- `docs/v2-longterm-plan.md`
+- `docs/documentation-index.md`
 
 ## 2. 当前错误分类
 

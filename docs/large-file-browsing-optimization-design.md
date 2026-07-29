@@ -1,316 +1,130 @@
-# 大文件浏览优化设计文档
+# 大文件浏览与提取架构
 
-## 1. 目标
+## 1. 目标与边界
 
-本文档定义本项目针对 100MB 以上文件浏览与预览的优化方案，覆盖：
+本文档描述大文件预览与证据文件提取的当前实现、性能边界和后续约束。目标是在不修改原始证据、不暴露宿主路径、且不改变既有 Tauri IPC 契约的前提下，使内存占用与请求窗口而非文件总大小相关。
 
-- Hex 预览
-- 文本预览
-- 图片预览
-- 音视频预览
-- `evidence-media://` 协议 range 读取
+覆盖范围：
 
-目标不是扩大支持格式，而是在现有 Windows-first 取证边界内，降低大文件首屏延迟、跳转延迟和无效并发开销，并保持证据只读与前后端契约稳定。
+- Hex、文本、图片、音视频预览的按需读取；
+- `evidence-media://` 的 byte-range 请求；
+- E01、RAW、逻辑目录、BitLocker NTFS、派生 RBD 与已物化 CephFS 文件的读取路由；
+- 单文件导出时的完整性校验、原子发布和受限并行读取。
 
-## 2. 当前实现基线
+这不是编辑器或内容搜索设计。预览与提取始终只读证据源，输出只可写入明确校验过的目标路径。
 
-### 2.1 前端预览激活模型
+## 2. 当前读取模型
 
-当前前端浏览入口位于：
+### 2.1 前端请求编排
 
-- `frontend/src/app/pages/FileBrowser.tsx`
-- `frontend/src/app/pages/FilePreviewPanel.tsx`
-- `frontend/src/features/files/hooks.ts`
+文件浏览器按当前 viewer tab 激活真实请求：
 
-当前实现已经开始按 `viewerTab` 收敛预览请求：
+- `hex` 仅启用 range Hex 读取；
+- `text` 仅启用文本预览；
+- `preview` 根据 MIME/扩展名启用图片或媒体协议；
+- `metadata` 仅请求文件句柄与元数据。
 
-- `hex` tab 仅启用 `useFileViewer`
-- `text` tab 仅启用 `useTextPreview`
-- `preview` tab 按扩展名或 MIME 分流到 `useImagePreview` / `useMediaUrl`
-- `metadata` tab 可单独启用轻量 `useFileHandle`
+前端不为同一选中文件并行启动所有预览类型，不持有文件系统定位、extent、分区或路径推导逻辑。Hex 对小文件全量读取；大文件按最大 1 MiB range 分段加载并支持 offset 跳转。
 
-对应证据：
+### 2.2 后端描述符与缓存
 
-- `frontend/src/app/pages/FileBrowser.tsx:291-331`
-- `frontend/src/features/files/hooks.ts:119-369`
+`file_service::viewer::descriptor` 在每次预览或提取前构造 `PreviewDescriptor`，其中包含数据源种类、已选分区候选、文件系统种类、目录项路径候选、文件大小和可选 CephFS locator。
 
-这一步已经解决了“选中文件即并发拉 4 条预览链路”的前端浪费问题，但还没有从根上解决大文件读取热点。
+描述符使用 runtime cache 保存，但每次命中都校验文件大小、修改时间、分区路由和可读性；任一不匹配、反序列化失败或源文件消失都会丢弃缓存并重新解析。描述符只保存解析元数据，不缓存或落盘证据正文。
 
-### 2.2 后端 range 接口现状
+### 2.3 统一 range reader
 
-当前 Tauri 命令入口：
+`evidence_core::FileSystemReader` 当前提供三层能力：
 
-- `apps/desktop/src-tauri/src/commands/file_commands.rs`
-- `apps/desktop/src-tauri/src/media_protocol.rs`
+- `open_file`：顺序读取兼容入口；
+- `read_file_range(path, offset, length)`：可由文件系统实现的有界随机读取；
+- `open_file_seekable`：返回 `Read + Seek`，不支持时显式返回 `Unsupported`。
 
-当前应用服务底座：
+`file_service::viewer::io` 优先使用 seekable reader；若文件系统不能提供 seekable stream，则回退顺序 reader，并仅在该回退场景按字节跳过 offset。大 offset 顺序跳过会产生日志警告，不能被误认为随机访问优化。
 
-- `crates/app-services/src/file_service/viewer.rs`
+预览 range 的路由顺序为：
 
-当前逻辑目录文件已具备 seekable 优化：
+1. 从 source-local catalog 解析全局文件 ID 并加载校验后的描述符；
+2. 对逻辑目录直接使用受限的宿主文件 seek；
+3. 对 E01/RAW 依分区和文件系统调用专用 range reader；
+4. 对派生 RBD/CephFS 使用已验证 locator 和 source-local runtime；
+5. 仅在没有 range/seek 能力时使用顺序 reader fallback，且保持长度上限。
 
-- `read_file_bytes_for_case()` / `read_file_bytes_for_entry()` 拆出了纯 bytes range 读取底座
-- `logical_directory` 分支走 `std::fs::File + seek`
-- `media_range_for_file()` 与 `evidence-media` 协议已改成复用纯 bytes helper，而不是走 Hex DTO 格式化路径
+所有 range 请求仍受统一最大长度限制，不能通过 offset 或 length 取得宿主原始路径。
 
-对应证据：
+## 3. 已实现的文件系统路径
 
-- `crates/app-services/src/file_service/viewer.rs:165-219`
-- `crates/app-services/src/file_service/viewer.rs:284-369`
-- `apps/desktop/src-tauri/src/commands/file_commands.rs:498-554`
-- `apps/desktop/src-tauri/src/media_protocol.rs:247-355`
+| 数据源或文件系统 | 当前路径 | 读取特性 | 说明 |
+|---|---|---|---|
+| 逻辑目录 | `std::fs::File` + seek | 真正随机读取 | 仅在经过 source root containment 校验后使用 |
+| E01/RAW NTFS | `range_fs::ntfs` | `read_file_range`、seekable NTFS data-run stream | 可用于预览和提取 |
+| E01/RAW FAT | `range_fs::fat` | `read_file_range` | 按 cluster chain 有界读取 |
+| E01/RAW exFAT | `range_fs::exfat` | `read_file_range` | 支持文件系统标识探测后的路径读取 |
+| E01/RAW EXT4/XFS/BTRFS | `range_fs::linux` | 通过对应 reader 的 `read_file_range` 或 seekable stream | 可包含经 LVM 转译后的逻辑卷 |
+| BitLocker NTFS | `range_fs::bitlocker` / `source_read::bitlocker` | 解锁后的 NTFS range/seek | 仅适用于已验证、持久化的解锁密钥包 |
+| 派生 RBD / CephFS | `source_read::derived_cache` | source-local runtime 缓存 + range 读取 | 依赖已发布 locator；不扩大为任意 CephFS 支持 |
 
-### 2.3 当前仍存在的结构性瓶颈
+E01 打开使用共享 chunk table 缓存，但每个 reader 保持独立读取状态。LVM 映射只作为候选 block reader 的偏移转译层，不向前端暴露物理路径或逻辑卷内部结构。
 
-文件系统抽象层当前仍然要求：
+## 4. 大文件导出
 
-- `FileSystemReader::open_file(&self, path) -> io::Result<Box<dyn Read>>`
+### 4.1 默认路径
 
-对应证据：
+提取从 `SourceReadContext::extraction_plan_by_id` 创建计划：优先选择专用 range/seek stream，目标端由 `extraction::policy` 先校验绝对路径、case scope、证据源重叠、符号链接和 Windows ADS。复制写入同目录临时文件，完成后同步并原子发布；默认不覆盖已有目标。
 
-- `crates/evidence-core/src/filesystem/mod.rs:23-27`
+复制期间计算 SHA-256，长度、读取错误、取消与 worker panic 都会失败关闭。进度经 `file-extract-progress` 事件发送，阶段为 `preparing`、`copying`、`finalizing` 及终态；终态和阶段切换不受普通节流丢弃。
 
-这导致多个文件系统 reader 仍然会在 `open_file()` 内整文件 materialize：
+### 4.2 受限并行路径
 
-- NTFS：`read_file_data()` -> `Cursor::new(data)`
-  - `crates/fs-ntfs/src/lib.rs:927-957`
-- FAT：`walk_cluster_chain()` -> `Cursor::new(data)`
-  - `crates/fs-fat/src/lib.rs:478-486`
-- exFAT：`read_entry_data()` -> `Cursor::new(data)`
-  - `crates/fs-exfat/src/lib.rs:265-279`
+仅当同时满足下列条件时，E01/RAW 中的 NTFS 文件使用并行读取：
 
-因此，即使上层只请求首个 1MB range，镜像内文件仍可能先整文件读入内存。
+- 文件大小至少 `512 MiB`；
+- 可获得至少两个 CPU；
+- 当前进程 RSS 距软内存上限仍保留至少 `128 MiB`；
+- 可为该文件重新打开两个独立、可 seek 的 NTFS data-run stream；
+- 数据源不是不支持该模型的种类或文件系统。
 
-### 2.4 当前缓存能力
+当前参数固定为两个 reader、每块 `4 MiB`、最多 `4` 个在途块。worker 只读取目标块；协调器按序写入单个临时文件，因此输出顺序、hash 和原子发布语义保持确定性。任一条件不满足即回退到单 reader 顺序复制，而不是强行并行抢占内存或 E01 I/O。
 
-当前已有 `runtime-cache`：
+## 5. 分析调度关系
 
-- 泛型 `cache_entries`
-- `file_handles`
-- `PREVIEW_CHUNKS` namespace 预留
+文件预览、文件提取和 artifact 提取使用不同的并发边界：
 
-对应证据：
+- 预览是短生命周期、按 range 请求的读路径；
+- 文件提取可为单个满足条件的 NTFS 大文件启用两个读 worker；
+- artifact 提取采用有界有序调度，worker 数由运行时 CPU 与 RSS 预算解析，默认最多 `256 MiB` 在途数据；达到软内存上限时降为 `128 MiB`；
+- artifact 结果仍由协调器有序持久化，SQLite connection 不跨 worker 共享。
 
-- `crates/runtime-cache/src/lib.rs:1-64`
+因此不能把预览、导出和分析的并发指标相互替代。性能评估必须分别记录首屏/跳转延迟、导出吞吐和分析吞吐/峰值 RSS。
 
-但预览链路当前没有系统化缓存以下高成本结果：
+## 6. 验证要求
 
-- `file_id -> preview descriptor`
-- `file_id -> partition/filesystem resolution`
-- `file_id -> extent map / cluster chain`
+### 6.1 预览
 
-现有最主要的预览缓存仅是 E01 reader chunk table：
+- 大文件 Hex 在 1 MiB range 上限内加载，滚动和 offset 跳转不触发整文件读取；
+- 文本、图片和媒体只触发当前 tab 所需链路；
+- 非零 offset 的 seekable 路径不执行线性 discard；
+- 不支持 seek/range 的 reader 明确走顺序 fallback，并保持长度限制；
+- source DB、分区、路径和 descriptor 缓存均不会跨数据源复用。
 
-- `E01_READER_CACHE`
-- `open_e01_reader_cached()`
+### 6.2 提取
 
-对应证据：
+- 输出字节数、SHA-256 和目标文件内容与顺序基线路径一致；
+- 已存在目标、符号链接、ADS、case workspace 或证据源重叠目标被拒绝；
+- 取消、读失败或 worker panic 不发布部分目标；
+- 并行条件不足时自动走串行，不提升内存峰值；
+- 真实样本只由 ignored test 或本机/CI artifact 验证，不把路径、hash 或性能结果提交到技术文档。
 
-- `crates/app-services/src/file_service/viewer.rs:13-102`
+## 7. 剩余边界
 
-## 3. 设计目标
+- `FileSystemReader` 的 range/seek 是可选能力，并非每个文件系统实现都保证相同复杂度；
+- 顺序 fallback 在超大 offset 上仍可能慢，必须通过指标识别，不可伪装为优化完成；
+- 两 reader 并行导出是 NTFS E01/RAW 的受限优化，不适用于所有文件系统、压缩属性或派生数据源；
+- 当前不引入 mmap、前端全文字节搜索、编辑、书签或证据正文持久缓存；
+- CephFS 仅在已有、验证过的 source-local locator 下提供读取基础，不声明真实集群的通用 CephFS 文件树能力。
 
-## 3.1 性能目标
+## 8. 关联文档
 
-- 选中 100MB+ 文件时，只激活当前 tab 所需预览链路
-- 逻辑目录文件的非零 offset 预览必须是 O(1) seek + O(length) read
-- `evidence-media://` 中后段 range 请求不得再随 offset 线性恶化
-- 镜像内文件的预览逐步收敛为“只读取所需 chunk”，不再整文件 materialize
-- 前端内存占用与当前可见窗口/chunk 数量相关，而不是与文件总大小线性相关
-
-## 3.2 约束目标
-
-- 不修改公开 IPC 命令名
-- 不修改已存在 DTO 字段形状
-- 不引入运行时 mock / fallback 数据分支
-- 不写入证据源，不落明文临时副本
-- 保持 Windows-first；Linux/macOS 相关文件系统优化延后
-
-## 4. 目标架构
-
-## 4.1 PreviewSession
-
-引入单文件级 `PreviewSession` 概念，用于统一当前文件的浏览状态。首版不需要做成全局复杂 session store，但至少在单文件维度统一：
-
-- `file_id`
-- `handle_id`
-- `mime`
-- `size`
-- `preview_kind`
-- `active_offset`
-- `loaded_ranges`
-- `last_error`
-
-前端继续通过 hooks 消费，但避免 Hex/Text/Image/Media 各自独立重复初始化。
-
-## 4.2 PreviewDescriptor
-
-在后端引入 `PreviewDescriptor` 中间表示，封装“浏览该文件所需的高成本解析结果”：
-
-- `case_id`
-- `file_id`
-- `source_kind`
-- `source_path`
-- `partition_index`
-- `filesystem_kind`
-- `catalog_path`
-- `mime`
-- `size`
-- 若可得，则附带 `extent_map` / `cluster_chain`
-
-`PreviewDescriptor` 不直接暴露给前端，属于应用服务层与 runtime-cache 内部结构。
-
-## 4.3 Seekable Preview Reader
-
-预览底座统一收敛到“可随机访问的预览 reader”能力：
-
-- 逻辑目录：`std::fs::File` 直接 seek
-- E01/RAW 内文件：基于 extent / cluster map 的 range reader
-
-设计原则：
-
-- `open_file_content_by_id()` 继续保留给旧调用方
-- 预览路径新增专用入口，例如：
-  - `open_preview_reader_by_id()`
-  - `resolve_preview_descriptor()`
-  - `read_preview_bytes(...)`
-
-预览路径不再依赖整文件 `Vec<u8>` materialize。
-
-## 4.4 Extent / Cluster Map
-
-镜像内文件随机访问的核心是为文件建立逻辑偏移到物理片段的映射。
-
-首批支持：
-
-- NTFS：基于 `$DATA` non-resident data runs
-- FAT：基于 cluster chain
-- exFAT：基于 cluster chain / no-fat-chain 模式
-
-首版目标不是修改所有 fs crate 的公开 trait，而是先在预览路径旁路建立“预览专用随机访问能力”。
-
-## 4.5 预览缓存策略
-
-缓存分两层：
-
-### 持久缓存（runtime-cache SQLite）
-
-缓存高代价中间结果，而不是大块正文：
-
-- preview descriptor
-- partition/filesystem resolution
-- extent/cluster map
-
-### 进程内缓存（可选）
-
-若后续需要降低重复 chunk 读取，可增加短生命周期 LRU：
-
-- key: `(case_id, file_id, chunk_index)`
-- value: `Vec<u8>` 或压缩 bytes
-- 关闭案件时清空
-
-本轮不要求实现正文 chunk 落盘缓存。
-
-## 5. 分阶段落地方案
-
-## Phase A — 已落地/低风险止血
-
-1. 前端按 tab 启用预览请求
-2. 逻辑目录大文件 range 走真实 seek
-3. 媒体协议中后段 range 不再经过线性 discard
-
-对应当前代码状态：
-
-- `frontend/src/app/pages/FileBrowser.tsx`
-- `frontend/src/features/files/hooks.ts`
-- `crates/app-services/src/file_service/viewer.rs`
-- `apps/desktop/src-tauri/src/commands/file_commands.rs`
-- `apps/desktop/src-tauri/src/media_protocol.rs`
-
-## Phase B — 结构性优化
-
-1. 引入 `PreviewDescriptor`
-2. 缓存 `file_id -> descriptor`
-3. 缓存 partition/filesystem resolution
-4. 为镜像内文件建立 extent/cluster map
-5. 让 Hex/Text/Media 共用 descriptor，而不是各自重复定位
-
-## Phase C — 预览随机访问统一化
-
-1. 为 NTFS/FAT/exFAT 预览路径新增 seekable reader
-2. 将 `read_file_range` / `get_text_preview` / `read_media_range` 全部切到统一 preview reader
-3. 将镜像内文件从“整文件 materialize fallback”推进到“真实 chunk 读取”
-
-## Phase D — 高级优化
-
-1. 前端统一 preview scroll model
-2. 仅对逻辑目录超大文本/二进制评估 mmap
-3. 根据测量结果决定是否增加进程内 chunk LRU
-
-## 6. 测试矩阵
-
-## 6.1 前端
-
-- `hex` tab 不触发 text/image/media 请求
-- `text` tab 不触发 hex/media 请求
-- `preview` tab 只触发匹配的 image 或 media 请求
-- Hex offset 跳转和滚动加载行为正确
-
-## 6.2 逻辑目录文件
-
-- 100MB 文件首屏仅读取必要窗口
-- 非零 offset range 不调用线性 discard
-- 文本预览只读取前 `DEFAULT_TEXT_PREVIEW_MAX_BYTES`
-
-## 6.3 媒体协议
-
-- `bytes=80MB-80MB+N` 的 protocol range 可正常返回
-- 耗时不再随 offset 线性恶化
-- host path 不泄露
-
-## 6.4 镜像内文件
-
-- NTFS/FAT/exFAT 大文件首屏只读取首块
-- 跳转到中后段时仅读取目标 chunk
-- descriptor / extent map 可复用
-
-## 6.5 回归
-
-- 小文件 Hex/Text/Image/Media 预览不退化
-- IPC DTO 与命令名不变
-- 关闭案件时 preview 相关 cache 被清理
-
-## 7. 验收标准
-
-- 选中 100MB+ 文件时，不再出现多条无关预览链路并发请求
-- 逻辑目录大文件的 Hex/Text/Media 首屏与中段跳转明显提速
-- `evidence-media` 协议对大 offset range 的响应明显提速
-- 镜像内文件浏览路径进入 descriptor + chunk 化改造后，不再依赖整文件 materialize
-- 前后端真实数据链路保持不变，不引入 mock
-
-## 8. 已知风险与非目标
-
-### 已知风险
-
-- 现有 fs reader trait 只暴露 `Read`，镜像内文件 seekable reader 改造会触及多个 fs crate
-- E01/RAW 随机访问优化需要谨慎处理 extent 映射正确性与边界错误
-- 前端若未来统一 preview session，需避免状态机复杂度失控
-
-### 非目标
-
-- 本轮不扩展新的预览格式支持
-- 本轮不承诺 Linux/macOS 文件系统同时完成同等级优化
-- 本轮不把所有大文件预览统一改成 mmap
-- 本轮不做预览内容编辑、搜索字节序列、书签等高级交互
-
-## 9. 与 `trace-ui` 对比报告的关系
-
-本设计文档与 `docs/trace-ui-comparative-analysis.md` 的关系如下：
-
-- 对比报告回答“哪些结构思路可借鉴、哪些不能直接照搬”
-- 本设计文档回答“本项目具体怎么落地、按什么顺序落地、验证什么结果”
-
-引用规则：
-
-- 若需要论证为何不直接照搬 `mmap + line index`，引用对比报告
-- 若需要实施任务拆分、测试矩阵与验收，引用本文档
+- `docs/export-and-media-safety.md`：输出路径、覆盖与协议安全边界；
+- `docs/ceph-rbd-vm-preview-performance-design.md`：派生 VM/RBD 预览的专门性能约束；
+- `docs/trace-ui-comparative-analysis.md`：可借鉴的可视化与数据窗口思想，不能替代本项目证据访问模型。

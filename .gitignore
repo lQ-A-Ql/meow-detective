@@ -62,3 +62,49 @@ AGENTS.md
 /*.md
 !/README.md
 *.bat
+
+# Documentation retention policy
+# Keep durable architecture, model, algorithm, protocol, security, and parser
+# contracts in Git. Local development logs, stage reports, real-sample runs,
+# benchmark outputs, walkthroughs, and editor state remain workstation-local.
+/docs/**
+!/docs/analysis-extraction-scheduling.md
+!/docs/architecture-model.md
+!/docs/backend-module-architecture.md
+!/docs/batch-processing-design.md
+!/docs/benchmark-baseline.md
+!/docs/bitlocker-dependency-decision.md
+!/docs/bitlocker-volume-layer-design.md
+!/docs/ceph-bluestore-stage2-design.md
+!/docs/ceph-bluestore-stage3-design.md
+!/docs/ceph-bluestore-stage4-design.md
+!/docs/ceph-bluestore-stage5-design.md
+!/docs/ceph-bluestore-stage6-design.md
+!/docs/ceph-rbd-vm-preview-performance-design.md
+!/docs/cephfs-stepwise-reconstruction-design.md
+!/docs/correlation-analysis-design.md
+!/docs/dependency-advisory-policy.md
+!/docs/dependency-decisions.md
+!/docs/design-constraints.md
+!/docs/documentation-index.md
+!/docs/error-classification-manual.md
+!/docs/error-taxonomy.md
+!/docs/evtx-dependency-decision.md
+!/docs/expected-json-contract.md
+!/docs/export-and-media-safety.md
+!/docs/frontend-mvp-boundary.md
+!/docs/frontend-state-management.md
+!/docs/import-scheduling.md
+!/docs/ipc-event-contract.md
+!/docs/known-unsupported-formats.md
+!/docs/large-file-browsing-optimization-design.md
+!/docs/linux-cluster-import-design.md
+!/docs/lvm-parsing-layer-design.md
+!/docs/mcp-security-model.md
+!/docs/model-architecture-algorithm-diagrams.md
+!/docs/parser-support-matrix.md
+!/docs/pst-ost-mbox-support.md
+!/docs/pve-cluster-parsing-design.md
+!/docs/pve-derived-source-performance-optimization.md
+!/docs/trace-ui-comparative-analysis.md
+!/docs/validation-trust-framework.md

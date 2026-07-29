@@ -107,7 +107,7 @@ V2 benchmark 至少覆盖：
 | small 10-message 合成 PST 解析 | ≤ 100ms |
 | medium 10 MiB PST 解析 | ≤ 10s（待流式解析器完成后实测） |
 
-如有调整，必须同步更新 `docs/v2-longterm-plan.md` 与发布评分卡。
+如有调整，必须同步更新 `testdata/governance/v2-benchmark-baseline.json`、支持矩阵和文档索引中的字段承诺。
 
 ## 6. 运行分层
 
@@ -130,7 +130,7 @@ V2 benchmark 至少覆盖：
 
 推荐输出：
 
-- `docs/benchmark-results/`
+- 私有 benchmark 输出只保存在工作站或 CI artifact；不作为 Git 技术文档提交。
 - `artifacts/import-profiles/`
 
 建议命名：
@@ -196,28 +196,16 @@ V2 benchmark 至少覆盖：
 
 若场景缺失，当前口径记为 `warning`；若场景超出默认阈值，当前口径记为 `blocked`。
 
-## 10. 文件提取初始实测（2026-07-29）
+## 10. 大文件提取测量协议
 
-四个私有 E01 样本的 production `release` 文件提取初始实测见
-[`benchmark-results/2026-07-29-file-extraction-real-samples.md`](benchmark-results/2026-07-29-file-extraction-real-samples.md)。
-该结果覆盖 Windows、BitLocker NTFS、XFS 与 Ext4 的 `203-312 MiB` 文件，记录
-reader/filesystem 准备、复制并计算 SHA-256、持久化同步及原子发布的分段耗时。
+大文件提取应分别计量 reader/filesystem 准备、复制与 SHA-256、目标同步及原子发布。
+私有样本的路径、文件名、hash、吞吐和原始日志只保存在工作站或 CI artifact，不写入 Git 文档。
 
-liuyang BitLocker 分区精确 `3 GiB` 文件的 production `release` 持续提取实测见
-[`benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md`](benchmark-results/2026-07-29-liuyang-bitlocker-3gib-extraction.md)。
-串行基线通过单个 NTFS data-run 有界流读取完成 `3,221,225,472` 字节导出，复制
-耗时 `8.763s`，端到端耗时 `8.932s`，吞吐 `343.898 MiB/s`。提交
-`76496f59e5e9` 在同一样本上使用两个独立 reader、`4 MiB` chunk、最多四个在途
-chunk 和单顺序 writer，复制耗时 `5.004s`，端到端耗时 `5.576s`，吞吐
-`550.890 MiB/s`；复制和端到端耗时分别下降 `42.9%`、`37.6%`，两次导出的
-SHA-256 均为 `9a87318e9ca5e1b0861f1cc46a10424a668db530b38d14946da87d43a98b5134`。
+当前实现对满足条件的 E01/RAW NTFS 文件可使用两个独立 reader、`4 MiB` 分片和最多四个在途块；条件不足时回退串行。评估时必须分别报告：
 
-并行路径仅用于 `>=512 MiB` 的 E01/RAW NTFS 文件，并在 CPU、内存余量、压缩
-属性或 reader 能力不满足时回退串行。四个在途 chunk 的 payload 上界为 `16 MiB`；
-在可获得 RSS 遥测时，还要求当前 RSS 距 `4 GiB` 软限制至少保留 `128 MiB`。本轮
-导出前后记录的进程生命周期峰值 RSS 均为 `1384 MiB`，说明未突破此前枚举阶段
-峰值，但该指标不能替代提取窗口内的高频峰值采样。目录枚举、BitLocker 解锁以及
-计时后的目标文件独立 SHA-256 复核不计入提取阶段。
+- 串行与并行模式、文件系统和数据源种类；
+- 端到端耗时、复制阶段耗时、吞吐、峰值 RSS/CPU；
+- 输出长度和独立 SHA-256 复核结果；
+- 冷/热缓存状态、软内存上限和回退原因。
 
-上述结果均属于单次、枚举后缓存基线，不进入发布阈值。补齐受控冷缓存、重复运行
-p50/p95 以及提取窗口高频 RSS/CPU 遥测后，才能提升为正式 large dataset gate。
+单次结果不构成发布阈值。只有在受控缓存条件、重复运行 p50/p95 与提取窗口高频 RSS/CPU 采样齐备后，才可更新治理事实源中的 large dataset gate。

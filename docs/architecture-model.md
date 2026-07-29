@@ -1,7 +1,7 @@
 # Meow~Detective 架构模型
 
-**版本**: v2.0
-**日期**: 2026-07-27
+**版本**: v2.1
+**日期**: 2026-07-29
 **校准方式**: 以代码为基准静态实测；本文档不含未经代码核实的规划内容
 
 ---
@@ -15,8 +15,7 @@
 ├─────────────────────────────────────────────────────────────────┤
 │  技术栈: Tauri 2 + Rust + React 18 + TypeScript + SQLite        │
 │  架构: 分层 + 能力族拆分，backend-led                            │
-│  代码量: 1,719 个 .rs / ~296k 行；256 个 .ts(x) / ~29k 行        │
-│  测试: ~3,038 个 Rust 测试函数；86 个前端 Vitest 测试文件         │
+│  测试: Rust 测试以 cargo 清单为准；94 个前端 Vitest 测试文件       │
 │  workspace: 28 个 crate + 1 个 Tauri host package               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -40,7 +39,7 @@ filesystem reader。
 │  页面不直接 invoke，统一经 src/lib/api/*                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                        命令层 (Commands)                        │
-│  Tauri 2 Commands + Events，105 个 command                      │
+│  Tauri 2 Commands + Events，112 个已注册 command                  │
 │  只做 validate -> service -> DTO，禁止裸 SQL                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                      应用服务层 (App Services)                   │
@@ -96,10 +95,12 @@ fs-ntfs fs-fat fs-exfat fs-ext4 fs-xfs fs-btrfs fs-lvm image-e01
   runtime-cache, testing, evtx-patched, volume-bitlocker
 ```
 
-`volume-bitlocker` 已完成 Stage 3：能在无凭据时报告加密方法与全部保护器，能由
+`volume-bitlocker` 已完成当前首版实现：能在无凭据时报告加密方法与全部保护器，能由
 密码/恢复密码产出**已验证**的密钥包，并能把加密卷呈现为明文 `Read + Seek`。
-生产预览、source-scoped inspect/unlock/lock 和显式 source-local catalog 导入均已接入；
-密钥包持久化与调查员 UI 分别属于 Stage 4/5。
+生产预览、source-scoped inspect/unlock/lock、已验证密钥包持久化/恢复/删除、
+调查员解锁面板和显式 source-local catalog 导入均已接入。公开支持等级仍为
+`Experimental`，因为真实镜像与凭据不进入仓库，且 TPM、启动密钥、clear-key 和
+`0x8001` Elephant Diffuser 仍不支持。
 见 `docs/bitlocker-volume-layer-design.md`。
 
 `app-services` 是最大的汇聚点，依赖 24 个内部 crate：domain、transport、
@@ -127,14 +128,14 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 | Crate | 职责 | 备注 |
 |-------|------|------|
 | **domain** | 领域实体、ID、时间戳、值对象 | CaseMeta、FileEntry、Artifact、TimelineEvent、Job、Report、Tag |
-| **transport** | DTO、command request、event topic、error | 32 个 `src/dto/*.rs`；前后端契约唯一源头 |
+| **transport** | DTO、command request、event topic、error | 33 个 `src/dto/*.rs`；前后端契约唯一源头 |
 
 ### 应用与基础设施层
 
 | Crate | 职责 | 备注 |
 |-------|------|------|
-| **app-services** | 跨 crate 用例编排 | 24 个能力目录 + 28 个根模块文件；模块与函数结构债务 baseline 均为 0 |
-| **persistence-sqlite** | 连接、迁移、仓库 | 45 个逻辑 repository；70 个迁移脚本（主库 42 + source 27 + staging 1） |
+| **app-services** | 跨 crate 用例编排 | 28 个根能力目录；模块与函数结构债务 baseline 均为 0 |
+| **persistence-sqlite** | 连接、迁移、仓库 | 40 个逻辑 repository；70 个迁移脚本（主库 42 + source 27 + staging 1） |
 | **infrastructure** | 日志、哈希、fs 工具、文本、时钟、配置 | 跨切面工具 |
 | **runtime-cache** | 运行时临时缓存 | 只被 Tauri host 消费；不得成为事实源 |
 
@@ -150,7 +151,7 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 | **fs-xfs** | XFS | v1/v2/v3 inode、MACB、internal log |
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
-| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | Stage 3：元数据/密钥推导 + 五种方法扇区 cipher + 明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；真实预览、inspect/unlock/lock 与显式 source-local catalog 导入已接入；持久化密钥包和 UI 属 Stage 4/5 |
+| **volume-bitlocker** | BitLocker (BDE) 卷解密层 | 元数据/保护器识别、密码/恢复密码解锁、五种已验证 cipher、明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；应用层已接入预览、inspect/unlock/lock、密钥包持久化/恢复/删除和 source-local catalog 导入 |
 
 ### 分布式存储重建层
 
@@ -295,7 +296,7 @@ TimelineRepo ArtifactRepo SearchIndex GraphRepo
 
 | 层级 | 位置 | 约定 |
 |---|---|---|
-| DTO | `crates/transport/src/dto/*.rs`（32 个文件） | `#[serde(rename_all = "camelCase")]`；可选字段用 `skip_serializing_if` |
+| DTO | `crates/transport/src/dto/*.rs`（33 个文件） | `#[serde(rename_all = "camelCase")]`；可选字段用 `skip_serializing_if` |
 | command request | `crates/transport/src/commands/mod.rs` | 请求结构集中定义 |
 | event topic | `crates/transport/src/events/mod.rs` | `EventTopic` 枚举 |
 | error | `crates/transport/src/errors/` | 跨 crate 共享 `ApiErrorDto` |
@@ -357,7 +358,7 @@ Search、Timeline、Artifacts、Reports、Settings。
 | 路径 | 职责 |
 |---|---|
 | `src/app/pages/` | 路由级页面入口（10 个） |
-| `src/app/components/ui/` | shadcn/radix UI 基元（24 个） |
+| `src/app/components/ui/` | shadcn/radix UI 基元（23 个） |
 | `src/components/layout/` | AppShell、Layout、TopBar、PageSubbar、InspectorPane、BottomDrawer、CollapsibleSection、HorizontalScroll |
 | `src/components/` | 公共域组件：`tables/`（DenseDataTable）、`tree/`、`viewers/`（Hex/Text/Image/Audio/Video）、`preview/`（FilePreviewDialog/Tabs）、`data-display/`、`status/`、`tabs/`、`brand/` |
 | `src/features/*/` | 17 个 feature：hooks + 领域组件 |
@@ -372,11 +373,13 @@ Search、Timeline、Artifacts、Reports、Settings。
 - Tailwind 4 CSS-first：无 `tailwind.config.js`，配置写在 CSS 中并用 `@source` 声明扫描范围；`@/` 别名映射 `frontend/src/`
 - 视觉方向见 `frontend-ui-ux.md`（Anime Detective Archive）
 
-### 无 mock 模式
+### 真实数据与显式演示入口
 
-前端始终调用真实 Tauri command。历史 mock provider 已移除，`pnpm dev`
-需要 Tauri 环境，完整开发循环用 `cargo tauri dev`。
-`scripts/check-frontend-runtime-guard.ps1` 固定这条边界。
+生产页面不会在真实 command 失败时切换到 mock 数据。代码仍保留显式
+`create_analysis_demo_case` 演示/审计入口，它会复制仓库内 `public-small` fixture
+到案件工作区并创建演示数据；该入口不是普通导入的 fallback，也不代表真实样本能力。
+`pnpm dev` 需要 Tauri 环境，完整开发循环用 `cargo tauri dev`。
+`scripts/check-frontend-runtime-guard.ps1` 固定生产源码不得出现隐式 mock fallback。
 
 Settings 持久化分两类：路径类设置经 `get_app_settings` /
 `save_app_settings` 进入后端校验并写配置文件；theme 与 dev event trace
@@ -481,8 +484,8 @@ baseline 只允许减少：
 
 真实 E01 验收通过 `FORENSICS_E01_FIXTURE`、`FORENSICS_LINUX_E01_FIXTURE`、
 `FORENSICS_PVE_CLUSTER_ROOT` 等 opt-in ignored slow test 执行，默认 CI 不依赖
-私有样本。详见 `docs/fixture-handbook.md`、
-`docs/validation-trust-framework.md`。
+私有样本不进入版本库；执行入口、环境变量和忽略策略以
+`docs/validation-trust-framework.md` 与仓库测试文件为准。
 
 ---
 
@@ -527,12 +530,12 @@ baseline 只允许减少：
 | Rust 源文件 / 行 | 1,719 / ~296,000 |
 | TypeScript 源文件 / 行（不含测试） | 256 / ~28,900 |
 | workspace 成员 | 29（28 crate + Tauri host package） |
-| Tauri commands / 命令文件 | 105 / 68 |
-| transport DTO 文件 | 32 |
-| SQLite 逻辑 repository / 迁移脚本 | 45 / 70 |
-| 前端页面 / feature / UI 基元 | 10 / 17 / 24 |
-| Rust 测试函数 | ~3,038 |
-| 前端测试文件 | 86 |
+| Tauri 已注册 commands / 命令文件 | 112 / 71 |
+| transport DTO 文件 | 33 |
+| SQLite 逻辑 repository / 迁移脚本 | 40 / 70 |
+| 前端页面 / feature / UI 基元 | 10 / 17 / 23 |
+| Rust 测试函数 | 以 `cargo test --workspace -- --list` 为准 |
+| 前端测试文件 | 94 |
 | 守卫脚本 | 33 |
 | Mermaid 图块（`docs/model-architecture-algorithm-diagrams.md`） | 15 |
 
@@ -553,16 +556,16 @@ V2/V3/V4/V5 阶段计划均已转为历史设计记录。V5 五根柱子中只�
 - 前端性能 — 大列表渲染 jank、文件树遍历 cycle guard
 - 数据库 — 停止 per-open migration 写入，浏览路径改只读连接
 
-下一个明示技术边界（`docs/progress-ledger.md`）：CephFS 需要真实 fresh
-FSMap/MDSMap、`EMetaBlob` mutation/dirfrag/backtrace 与真实 layout byte
-oracle；生产 cluster runner 目前只执行 presence assessment，尚无
-materialization 调用方。
+当前明示技术边界：CephFS 需要真实 fresh FSMap/MDSMap、`EMetaBlob`
+mutation/dirfrag/backtrace 与真实 layout byte oracle；生产 cluster runner
+目前只执行 presence assessment，CephFS materialization 虽有 service API 和
+synthetic 回归，但没有真实 PVE 正向数据源发布。
 
 ### 权威文档路由
 
 | 主题 | 文档 |
 |---|---|
-| 已验证进度与真实样本基线 | `docs/progress-ledger.md` |
+| 已验证进度与真实样本边界 | `docs/parser-support-matrix.md`、`docs/known-unsupported-formats.md` |
 | 支持边界与字段承诺 | `docs/parser-support-matrix.md`、`docs/known-unsupported-formats.md` |
 | 硬约束 | `docs/design-constraints.md` |
 | 文档入口与事实快照 | `docs/documentation-index.md` |

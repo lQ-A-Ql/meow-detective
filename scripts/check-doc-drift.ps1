@@ -137,10 +137,7 @@ $readme = Read-Text 'README.md'
 $docIndex = Read-Text 'docs/documentation-index.md'
 $diagramDoc = Read-Text 'docs/model-architecture-algorithm-diagrams.md'
 $knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
-$releaseScorecardDoc = Read-Text 'docs/release-scorecard.md'
 $validationDoc = Read-Text 'docs/validation-trust-framework.md'
-$progressLedger = Read-Text 'docs/progress-ledger.md'
-$stage7Acceptance = Read-Text 'docs/backend-stage7-final-acceptance.md'
 $knownLimitationsFact = Read-Text 'testdata/governance/v2-known-limitations.json' | ConvertFrom-Json
 $benchmarkBaseline = Read-Text 'testdata/governance/v2-benchmark-baseline.json' | ConvertFrom-Json
 
@@ -179,11 +176,6 @@ $mermaidCount = ([regex]::Matches($diagramDoc, '```mermaid')).Count
 $knownLimitationRows = Get-KnownLimitationDocRows $knownUnsupportedDoc
 $moduleBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-module-size-baseline.csv'))
 $functionBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-function-size-baseline.csv'))
-$moduleDebtCount = $moduleBaselineRows.Count
-$functionDebtCount = $functionBaselineRows.Count
-$hardFunctionDebtCount = @(
-  $functionBaselineRows | Where-Object { [int]$_.lines -gt 150 }
-).Count
 $appServicesModuleDebtCount = @(
   $moduleBaselineRows | Where-Object { $_.path -like 'crates/app-services/*' }
 ).Count
@@ -210,16 +202,11 @@ Assert-TableFact $docIndex 'apps/desktop/src-tauri/src/commands/**/*.rs' $comman
 Assert-Matches $docIndex "\|\s*[^|]*Mermaid[^|]*\|\s*$mermaidCount\s*\|" 'documentation-index Mermaid count is stale'
 Assert-Equals $appServicesModuleDebtCount 0 'app-services module baseline debt was reintroduced'
 Assert-Equals $appServicesFunctionDebtCount 0 'app-services function baseline debt was reintroduced'
-Assert-Matches -Content $progressLedger -Pattern "baseline\s+$moduleDebtCount[^\r\n]+baseline\s+$functionDebtCount[^\r\n]+$hardFunctionDebtCount[^\r\n]+150" -Message 'progress-ledger structural debt facts are stale'
-Assert-Contains -Content $stage7Acceptance -Needle "| Module-size baseline rows | 83 | $moduleDebtCount |" -Message 'Stage 7 module baseline result is stale'
-Assert-Contains -Content $stage7Acceptance -Needle "| Function-size baseline rows | 65 | $functionDebtCount |" -Message 'Stage 7 function baseline result is stale'
-Assert-Contains -Content $stage7Acceptance -Needle "| Historic functions above 150 lines | not separately closed | $hardFunctionDebtCount |" -Message 'Stage 7 hard-function debt result is stale'
 
 Assert-Equals $mermaidCount 15 'Mermaid diagram count drifted'
 Assert-Equals $knownLimitationsFact.documentedLimitCount $knownLimitationsFact.items.Count 'known limitations documentedLimitCount drifted'
 Assert-Equals $knownLimitationRows.Count $knownLimitationsFact.documentedLimitCount 'known unsupported formats table row count drifted'
 Assert-Contains $docIndex 'testdata/governance/v2-known-limitations.json' 'documentation-index is missing known limitations fact source'
-Assert-Contains $releaseScorecardDoc 'testdata/governance/v2-known-limitations.json' 'release-scorecard is missing known limitations fact source'
 Assert-Contains $validationDoc 'testdata/governance/v2-known-limitations.json' 'validation-trust-framework is missing known limitations fact source'
 
 foreach ($item in $knownLimitationsFact.items) {
@@ -273,18 +260,17 @@ foreach ($level in $requiredLevels) {
 }
 
 foreach ($path in @(
-    'docs/engineering-audit-plan.md',
-    'docs/development-engineering-guide.md',
+    'docs/architecture-model.md',
+    'docs/backend-module-architecture.md',
     'docs/design-constraints.md',
     'docs/model-architecture-algorithm-diagrams.md',
-    'docs/documentation-index.md',
-    'docs/v2-longterm-plan.md',
-    'docs/fixture-handbook.md',
     'docs/expected-json-contract.md',
     'docs/error-classification-manual.md',
     'docs/benchmark-baseline.md',
     'docs/correlation-analysis-design.md',
-    'docs/release-scorecard.md'
+    'docs/parser-support-matrix.md',
+    'docs/mcp-security-model.md',
+    'docs/export-and-media-safety.md'
   )) {
   if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $path))) {
     throw "Required engineering document is missing: $path"

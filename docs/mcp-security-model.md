@@ -6,8 +6,8 @@ MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权�
 
 V2 安全治理与发布门禁总计划见：
 
-- `docs/v2-longterm-plan.md`
-- `docs/release-scorecard.md`
+- `docs/documentation-index.md`
+- `docs/documentation-index.md`
 
 ## 2. 默认权限模型
 

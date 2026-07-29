@@ -131,7 +131,8 @@ V2 期间，以下链路至少应配套 expected JSON：
 - `docs/parser-support-matrix.md`
 - `docs/known-unsupported-formats.md`
 - `docs/validation-trust-framework.md`
-- `docs/real-sample-regression/README.md`
+- 私有真实样本不进入 Git；样本执行入口和结果摘要必须与
+  `docs/parser-support-matrix.md` 的支持等级保持一致
 
 ## 8. 禁止事项
 

@@ -20,7 +20,6 @@ $datasourceFacadePath = Join-Path $repoRoot "crates/app-services/src/datasource_
 $linuxIntegrationTestPath = Join-Path $repoRoot "crates/app-services/tests/linux_e01_integration.rs"
 $validationTrustPath = Join-Path $repoRoot "docs/validation-trust-framework.md"
 $parserSupportPath = Join-Path $repoRoot "docs/parser-support-matrix.md"
-$linuxStage0RegressionPath = Join-Path $repoRoot "docs/real-sample-regression/2026-07-05-linux-stage0-jiancai3.md"
 
 foreach ($path in @(
     $mcpCommandsPath,
@@ -38,8 +37,7 @@ foreach ($path in @(
     $datasourceFacadePath,
     $linuxIntegrationTestPath,
     $validationTrustPath,
-    $parserSupportPath,
-    $linuxStage0RegressionPath
+    $parserSupportPath
   )) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required Stage 5 regression guard input is missing: $path"
@@ -88,7 +86,6 @@ $datasourceFacade = Get-Content -LiteralPath $datasourceFacadePath -Raw -Encodin
 $linuxIntegrationTest = Get-Content -LiteralPath $linuxIntegrationTestPath -Raw -Encoding UTF8
 $validationTrust = Get-Content -LiteralPath $validationTrustPath -Raw -Encoding UTF8
 $parserSupport = Get-Content -LiteralPath $parserSupportPath -Raw -Encoding UTF8
-$linuxStage0Regression = Get-Content -LiteralPath $linuxStage0RegressionPath -Raw -Encoding UTF8
 
 function Assert-Matches {
   param(
@@ -374,27 +371,4 @@ foreach ($pattern in @(
     -Message "parser support matrix is missing expected Linux Stage 0 baseline marker: $pattern"
 }
 
-foreach ($pattern in @(
-    'Linux Stage 0',
-    '164AD86C83AD68137F96D770A5B8A676703ED0B075A6DCEB3ECC61B1FA5D64B4',
-    'FORENSICS_LINUX_E01_FIXTURE',
-    'linux_e01_lvm_expansion_discovers_logical_volumes',
-    'Partition 1 \(LVM\)',
-    'Expanded',
-    'Partition 2 \(XFS\) - cl/root',
-    'files=51261',
-    'dirs=7149',
-    'CI',
-    'baseline',
-    'PVE cluster',
-    'LVM thin-pool',
-    'partial/degraded VG',
-    'deleted recovery'
-  )) {
-  Assert-Matches `
-    -Content $linuxStage0Regression `
-    -Pattern $pattern `
-    -Message "Linux Stage 0 real-sample regression record is missing expected marker: $pattern"
-}
-
-Write-Host "Stage 5 regression guard passed: MCP transport validation, nested MCP DTO contract, staging conflict visibility, modular service boundaries, and Linux baseline are locked"
+Write-Host "Stage 5 regression guard passed: MCP transport validation, nested MCP DTO contract, staging conflict visibility, modular service boundaries, and Linux support contracts are locked"

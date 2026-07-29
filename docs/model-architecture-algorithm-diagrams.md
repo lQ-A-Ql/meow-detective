@@ -79,11 +79,26 @@ erDiagram
   CASES ||--o{ JOBS : tracks
   CASES ||--o{ REPORTS : exports
   CASES ||--o{ AUDIT_LOG : records
-  DATA_SOURCES ||--o{ PARTITIONS : describes
-  DATA_SOURCES ||--o{ FILE_ENTRIES : contains
+  DATA_SOURCES ||--|| SOURCE_DATABASES : routes_to
+  SOURCE_DATABASES ||--o{ PARTITIONS : describes
+  SOURCE_DATABASES ||--o{ FILE_ENTRIES : contains
   FILE_ENTRIES ||--o{ FILE_ENTRIES : parent_of
   FILE_ENTRIES ||--o{ ARTIFACTS : source_object
   FILE_ENTRIES ||--o{ TIMELINE_EVENTS : source_object
+
+  DATA_SOURCES {
+    text id PK
+    text case_id FK
+    text platform
+    text import_state
+    text source_db_rel_path
+  }
+
+  SOURCE_DATABASES {
+    text data_source_id PK
+    text relative_path
+    int schema_version
+  }
 
   FILE_ENTRIES {
     text id PK
@@ -124,18 +139,19 @@ flowchart LR
   Hook["Feature hooks"]
   ApiFn["API wrapper"]
   Client["ApiClient.request"]
-  Mode{"tauri?"}
   Invoke["invoke"]
-  Mock["mock provider"]
+  Runtime{"Tauri runtime available?"}
+  Error["explicit runtime error"]
   Cache["TanStack Query"]
 
-  Page --> Control --> Hook --> ApiFn --> Client --> Mode
-  Mode -->|yes| Invoke
-  Mode -->|no| Mock
+  Page --> Control --> Hook --> ApiFn --> Client --> Runtime
+  Runtime -->|yes| Invoke
+  Runtime -->|no| Error
   Invoke --> Cache
-  Mock --> Cache
   Cache --> Page
 ```
+
+生产 UI 没有 mock fallback。显式的 `create_analysis_demo_case` 仅用于开发/审计时复制公开 fixture；它是受命令调用的独立数据源创建动作，不参与普通 API 请求失败后的路由。
 
 ## 5. Tauri command request / response 序列图
 
@@ -181,13 +197,15 @@ flowchart TB
   Start["Import request"]
   Validate["校验路径与输入"]
   Probe["detect_image_filesystem"]
-  Persist["持久化 data source / partitions"]
+  Control["app.db: 注册 data source / job"]
+  SourceDb["sources/<dataSourceId>/source.db"]
+  Persist["持久化 partition / file tree / artifacts"]
   Placeholder["创建 partition placeholder root"]
   Enumerate["串行或并行枚举"]
   Merge["staging merge / root fold"]
   Finish["导入完成"]
 
-  Start --> Validate --> Probe --> Persist --> Placeholder --> Enumerate --> Merge --> Finish
+  Start --> Validate --> Probe --> Control --> SourceDb --> Placeholder --> Enumerate --> Merge --> Persist --> Finish
 ```
 
 ## 8. 文件系统枚举与目录树懒加载流程图

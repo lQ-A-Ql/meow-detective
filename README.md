@@ -2,7 +2,7 @@
 
 A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 112 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
-**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance. See `docs/progress-ledger.md` for the verified milestone trail.
+**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (93 test files)
+cd frontend && pnpm test            # Frontend (94 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -72,13 +72,13 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (112 commands) |
 | `crates/app-services/` | Application orchestration (28 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (40) and migration scripts (70) |
+| `crates/persistence-sqlite/` | SQLite repos (41) and migration scripts (71) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/` | E01 image reader (RAW/dd reads go through `evidence-core`) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
-| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4-6: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, source-local catalog import, verified-key persistence, secure restore, and safe report inventory) |
+| `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4-7: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, source-local catalog import, verified-key persistence, automatic case-open restore, and safe report inventory) |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
@@ -90,16 +90,13 @@ cd frontend && pnpm test
 
 ## Engineering Docs
 
-- `docs/engineering-audit-plan.md`
-- `docs/development-engineering-guide.md`
+- `docs/documentation-index.md`
+- `docs/architecture-model.md`
+- `docs/backend-module-architecture.md`
 - `docs/design-constraints.md`
 - `docs/model-architecture-algorithm-diagrams.md`
-- `docs/documentation-index.md`
-- `docs/progress-ledger.md`
-- `docs/archive/README.md`
-- `docs/v2-longterm-plan.md`
 - `docs/validation-trust-framework.md`
-- `docs/fixture-handbook.md`
+- `docs/bitlocker-memory-key-recovery-design.md`
 - `docs/expected-json-contract.md`
 - `docs/parser-support-matrix.md`
 - `docs/known-unsupported-formats.md`
@@ -107,12 +104,8 @@ cd frontend && pnpm test
 - `docs/error-classification-manual.md`
 - `docs/benchmark-baseline.md`
 - `docs/correlation-analysis-design.md`
-- `docs/release-scorecard.md`
 - `docs/mcp-security-model.md`
 - `docs/export-and-media-safety.md`
-- `docs/mcp-user-guide.md`
-- `docs/real-sample-regression/README.md`
-- `docs/benchmark-results/README.md`
 
 ## V2 Status
 
@@ -179,9 +172,9 @@ APFS/HFS+ partition-type recognition is metadata-only and remains `Unsupported`;
 
 ## V5 Status
 
-**V5 narrowed to depth over breadth.** `docs/v5-plan.md` is retained as a
-historical design record, not a statement of current scope. Of its five
-pillars, only advanced filesystem forensics partially landed:
+**V5 narrowed to depth over breadth.** Historical stage plans are kept outside
+the versioned technical-document set and do not define current scope. Of the
+five evaluated pillars, only advanced filesystem forensics partially landed:
 
 | V5 pillar | Outcome |
 |---|---|

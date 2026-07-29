@@ -46,7 +46,8 @@ PG/CRUSH/EC placement、degraded replica、multi-PV RBD LVM 与 CephFS
 完整性。ready reopen 通过 source-local 版本化 manifest O(1) 复用 Catalog，
 全表 digest 只在显式 deep audit 中执行；父 BlueStore source DB 通过 read-only
 reconstruction route 打开。后续 Stage 6 能力补齐与 OSDMap/CRUSH/PG/CephFS
-边界统一以 `docs/pve-cluster-forensics-hardening-and-capability-roadmap.md` 为准。
+边界统一以 `docs/pve-cluster-parsing-design.md`、`docs/known-unsupported-formats.md`
+和当前代码中的 `ceph_reconstruction` service API 为准。
 
 ## 开发基线与事实源
 

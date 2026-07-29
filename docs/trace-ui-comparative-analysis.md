@@ -436,7 +436,7 @@
 
 ## 7. 后续建议
 
-- 在 `docs/archive/plans/2026-06/optimization-recommendations.md` 和未来的大文件预览优化方案中，引用本报告作为“外部设计对照依据”。
+- 在 `docs/large-file-browsing-optimization-design.md` 中引用本报告作为“外部设计对照依据”。
 - 若后续需要正式实施，可先从逻辑目录与媒体协议的 `Read + Seek` 基础设施改造开始，再扩展到 E01/RAW。
 - 如果要持续对照外部项目，建议优先跟踪 `trace-ui` 的：
   - 缓存文件格式演进

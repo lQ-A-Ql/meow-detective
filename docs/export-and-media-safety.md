@@ -11,8 +11,8 @@
 
 V2 安全治理与发布门禁总计划见：
 
-- `docs/v2-longterm-plan.md`
-- `docs/release-scorecard.md`
+- `docs/design-constraints.md`
+- `docs/documentation-index.md`
 
 ## 2. 文件提取
 

@@ -106,7 +106,8 @@ cargo test -p containers-pst --test email_real_regression_test -- --ignored --no
 
 ## Performance Baseline
 
-See `docs/benchmark-results/2026-06-21-email-extraction-bench.md` for
+Private benchmark output is intentionally not committed; use the repository
+benchmark harness and the thresholds in `docs/benchmark-baseline.md` for
 measured throughput on synthetic fixtures:
 
 - 1 MiB mbox parses in ~0.08 s (>12 MiB/s).

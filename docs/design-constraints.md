@@ -42,7 +42,8 @@ React UI
 - 文件树与文件列表共享 `showHidden`
 - 状态主要通过图标 overlay 表达，文字只用于 tooltip、详情、aria 与测试辅助属性
 - 排序以“目录优先 + 状态后置 + 自然名称排序”为准
-- 后端是真实排序主入口，前端只做 mock 或展示兜底
+- 后端是真实排序主入口，前端只做展示格式化和 UI 控件状态；不得用 mock 数据或
+  前端重算替代后端文件事实
 
 ## 3. 契约约束
 
@@ -63,6 +64,22 @@ React UI
   - parser / extractor id 与版本
   - source attribution / offset / path / record id
   - confidence / warnings / parse status
+
+平台边界：
+
+- 生产分析平台只有 Windows 和 Linux，应用服务使用 `domain::DataSourcePlatform`
+  dispatch；transport 的不支持平台值在 command 边界转换为 typed `Unsupported`。
+- macOS 请求和旧 `platform='macos'` 案件 fail closed，不创建 reader、不进入候选
+  发现或提取；APFS/HFS+ 只允许保留分区类型元数据识别。
+
+存储边界：
+
+- `app.db` 只保存案件控制、数据源注册、任务、处理阶段、审计和跨源聚合状态。
+- 每个 ready 数据源的文件树、分区、artifact、timeline、source-local graph 和
+  catalog 元数据位于 `sources/<dataSourceId>/source.db`；索引位于对应 source
+  目录，staging 位于 `staging/<dataSourceId>/`。
+- 文件对象使用 `ds:<dataSourceId>:<localId>` 全局 ID；读取路由必须先解析该 ID，
+  不得回退到案件内其他数据源或宿主绝对路径。
 
 ## 5. 路径与文件系统安全
 
@@ -104,7 +121,8 @@ React UI
 ## 9. 前端约束
 
 - 新增 UI 只能使用或创建公有组件
-- mock 数据必须和真实链路 shape 一致
+- 生产页面不得提供 mock fallback；代码中的显式 `create_analysis_demo_case`
+  仅用于开发/审计演示，不能在真实 command 失败时自动启用
 - 页面不得用文字 badge 替代真实状态字段
 - 文件状态图标统一走公有组件入口
 

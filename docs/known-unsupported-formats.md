@@ -10,7 +10,7 @@
 
 V2 长期计划与能力评级请同时参考：
 
-- `docs/v2-longterm-plan.md`
+- `docs/documentation-index.md`
 - `docs/parser-support-matrix.md`
 
 ## 2. 当前已知不支持或不承诺项
@@ -141,6 +141,6 @@ V2 长期计划与能力评级请同时参考：
 
 - `docs/parser-support-matrix.md`
 - `docs/validation-trust-framework.md`
-- `docs/release-scorecard.md`
-- `docs/v3-plan.md`
+- `docs/documentation-index.md`
+- `docs/parser-support-matrix.md`
 - `docs/linux-artifact-coverage.md`

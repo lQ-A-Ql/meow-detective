@@ -24,9 +24,9 @@
 - 纯 UI/选择状态，例如：
   - `selection-store.ts`：当前选中的目录/文件/搜索命中/时间线事件/Artifact ID。
   - `ui-store.ts`：当前页面、抽屉开关、Viewer Tab、文件排序字段与方向。
-  - `mcp-store.ts`（拆分为 `mcp-server-store.ts` + `mcp-resource-store.ts`）：MCP 服务器/资源/工具/提示的本地缓存与操作方法，因为这些数据变更频繁地由用户交互触发（连接/断开/调用工具），且需要在多个组件间共享可变的“当前选中服务器”等派生状态。
-- 只在确实需要跨组件共享、且不适合作为 props 逐层传递的状态时才建 store；单个页面内部的临时状态优先用 `useState`（参考 `use-file-browser.ts` 拆分后的 `use-file-tree.ts`/`use-file-pagination.ts` 等 hook，内部状态仍是 `useState`，不是 Zustand）。
-- Store 内如需调用 Tauri 命令（如 `mcp-store.ts` 中的 `loadConfig`/`connectServer`），把结果规范化后存入 store 字段，而不是让页面组件在 `useEffect` 里手动同步 React Query 数据到 Zustand——这类情况优先重新评估是否应该迁移为 React Query。
+  - `mcp-store.ts`（由 `mcp-server-store.ts` + `mcp-resource-store.ts` 组合）：MCP 服务器/资源/工具/提示的跨组件会话状态。当前两个 slice 仍直接调用 `lib/api/mcp.ts` 承载连接、刷新和工具调用，这是 MCP 的已知边界例外；新增领域功能应使用 feature container，不得复制该模式。
+- 只在确实需要跨组件共享、且不适合作为 props 逐层传递的状态时才建 store；单个页面内部的临时状态优先用 `useState`（参考 `features/files/use-file-browser-model.ts` 组合的 `use-file-tree.ts`/`use-file-pagination.ts` 等 hook，内部状态仍是 `useState`，不是 Zustand）。
+- Store 内如需调用 Tauri 命令（当前仅 MCP slice 保留 `loadConfig`/`connectServer` 等会话动作），只把结果规范化后存入 store 字段；页面组件不得在 `useEffect` 中手动同步 API 数据到 Zustand。后续若 MCP 数据转为稳定服务器状态，应迁移到 feature hook + React Query。
 
 ## 反模式（禁止）
 
@@ -36,7 +36,7 @@
 
 ## 拆分大型 Hook/Store 的原则
 
-当一个 hook 或 store 文件职责过多（导航、分页、预览等混杂）导致行数超过约 300 行时，按“状态子域”拆分成多个小 hook/slice，由一个组合层（如 `use-file-browser.ts`、`mcp-store.ts`）负责把子 hook/slice 的返回值拼装成消费方需要的统一接口，保持外部调用方（页面组件、既有测试）不感知内部拆分。参考实现：
+当一个 hook 或 store 文件职责过多（导航、分页、预览等混杂）导致行数超过约 300 行时，按“状态子域”拆分成多个小 hook/slice，由一个组合层（如 `use-file-browser-model.ts`、`mcp-store.ts`）负责把子 hook/slice 的返回值拼装成消费方需要的统一接口，保持外部调用方（页面组件、既有测试）不感知内部拆分。参考实现：
 
 - `frontend/src/features/files/hooks/{use-file-tree,use-file-selection,use-file-pagination,use-file-preview}.ts` + `frontend/src/app/pages/use-file-browser.ts`（组合层）。
 - `frontend/src/stores/{mcp-server-store,mcp-resource-store,mcp-error-utils,mcp-types}.ts` + `frontend/src/stores/mcp-store.ts`（组合层，用 Zustand slice pattern 通过 `StateCreator` 组合）。
