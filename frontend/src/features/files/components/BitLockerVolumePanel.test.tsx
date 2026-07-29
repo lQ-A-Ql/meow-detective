@@ -33,10 +33,12 @@ function model(overrides: Partial<BitLockerVolumeModel> = {}): BitLockerVolumeMo
     },
     loading: false,
     unlocking: false,
+    memoryUnlocking: false,
     importing: false,
     catalogImport: undefined,
     inspect: vi.fn(),
     unlock: vi.fn().mockResolvedValue(true),
+    unlockFromMemoryImage: vi.fn().mockResolvedValue(true),
     restore: vi.fn().mockResolvedValue(true),
     importCatalog: vi.fn().mockResolvedValue(true),
     lock: vi.fn().mockResolvedValue(true),
@@ -81,5 +83,18 @@ describe('BitLockerVolumePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /删除安全存储/ }));
     expect(lock).toHaveBeenCalledTimes(1);
     expect(forget).toHaveBeenCalledTimes(1);
+  });
+
+  it('delegates memory image recovery to the feature model', () => {
+    const unlockFromMemoryImage = vi.fn().mockResolvedValue(true);
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({ unlockFromMemoryImage })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /从内存镜像恢复并验证/ }));
+    expect(unlockFromMemoryImage).toHaveBeenCalledTimes(1);
   });
 });

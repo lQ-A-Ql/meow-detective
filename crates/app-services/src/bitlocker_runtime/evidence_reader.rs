@@ -12,7 +12,10 @@ pub struct BitLockerEvidenceReader {
 }
 
 impl BitLockerEvidenceReader {
-    fn new(inner: BitLockerReader<PartitionWindowReader>, source_info: &ReaderInfo) -> Self {
+    pub(crate) fn from_plaintext(
+        inner: BitLockerReader<PartitionWindowReader>,
+        source_info: &ReaderInfo,
+    ) -> Self {
         Self {
             info: ReaderInfo {
                 path: source_info.path.clone(),
@@ -62,7 +65,7 @@ pub fn open_registered_bitlocker_volume(
     let registered =
         registry.resolve_for_identities(case_id, data_source_id, partition_index, &identities)?;
     let plaintext = BitLockerReader::new(registered.volume(), window)?;
-    Ok(Box::new(BitLockerEvidenceReader::new(
+    Ok(Box::new(BitLockerEvidenceReader::from_plaintext(
         plaintext,
         &source_info,
     )))

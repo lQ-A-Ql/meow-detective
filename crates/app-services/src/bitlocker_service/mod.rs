@@ -3,6 +3,7 @@ mod audit;
 mod catalog;
 mod error;
 mod key_store;
+mod memory_recovery;
 mod persistence;
 mod report;
 mod restore_on_open;
@@ -41,6 +42,7 @@ impl<'a> BitLockerRuntimeContext<'a> {
 pub use catalog::import_unlocked_bitlocker_catalog;
 pub use error::BitLockerServiceError;
 pub use key_store::{BitLockerKeyStore, BitLockerKeyStoreError, BitLockerKeyStoreOperation};
+pub use memory_recovery::unlock_bitlocker_with_memory_image;
 pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
 pub(crate) use report::{collect_report_inventory, BitLockerReportEntry};
 pub use restore_on_open::{restore_enabled_bitlocker_volumes, BitLockerRestoreSummary};

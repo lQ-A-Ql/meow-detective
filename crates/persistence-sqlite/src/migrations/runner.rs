@@ -1,7 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use rusqlite::Connection;
 use std::collections::HashSet;
-
 const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
     (

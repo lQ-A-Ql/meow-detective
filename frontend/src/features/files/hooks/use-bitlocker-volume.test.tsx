@@ -13,9 +13,16 @@ const api = vi.hoisted(() => ({
   restorePersistedBitLockerKey: vi.fn(),
   unlockBitLockerWithPassword: vi.fn(),
   unlockBitLockerWithRecoveryPassword: vi.fn(),
+  unlockBitLockerWithMemoryImage: vi.fn(),
+}));
+
+const platform = vi.hoisted(() => ({
+  openDialog: vi.fn(),
+  singleDialogPath: vi.fn((path: string | string[] | null) => Array.isArray(path) ? path[0] ?? null : path),
 }));
 
 vi.mock('@/lib/api/files', () => api);
+vi.mock('@/lib/platform/dialog', () => platform);
 
 const target = { dataSourceId: 'source-1', partitionIndex: 2 };
 
@@ -45,6 +52,32 @@ describe('useBitLockerVolumeModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.inspectBitLockerVolume.mockResolvedValue(volume);
+    platform.openDialog.mockResolvedValue(null);
+  });
+
+  it('selects a real memory image path through the platform adapter', async () => {
+    const lockedVolume = { ...volume, unlocked: false, storedKeyAvailable: false };
+    platform.openDialog.mockResolvedValue('D:\\evidence\\memory.raw');
+    api.unlockBitLockerWithMemoryImage.mockResolvedValue(lockedVolume);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const { result } = renderHook(() => useBitLockerVolumeModel(target), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(api.inspectBitLockerVolume).toHaveBeenCalled());
+    await act(async () => {
+      expect(await result.current.unlockFromMemoryImage()).toBe(true);
+    });
+
+    expect(api.unlockBitLockerWithMemoryImage).toHaveBeenCalledWith(
+      'source-1',
+      2,
+      'D:\\evidence\\memory.raw',
+    );
+    expect(result.current.status).toEqual(lockedVolume);
+    expect(result.current.memoryUnlocking).toBe(false);
   });
 
   it('keeps the file browser locked until catalog queries have refreshed', async () => {

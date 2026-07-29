@@ -1,5 +1,5 @@
 {
-  "lastVerifiedAt": "2026-07-27T00:00:00Z",
+  "lastVerifiedAt": "2026-07-29T00:00:00Z",
   "documentedLimitCount": 54,
   "items": [
     {
@@ -68,7 +68,7 @@
       "category": "BitLocker",
       "item": "已验证密钥包持久化与调查员 UI",
       "status": "partial",
-      "summary": "Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；由于不提交镜像或凭据，公开支持等级仍保持 Experimental",
+      "summary": "Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；另支持只读扫描 Windows x64 raw memory 的已知 BitLocker pool tag，以 FIPS-197 AES schedule 预筛，并要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` oracle 全部通过。密钥、schedule 和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental",
       "affectedChains": [
         "BitLocker"
       ],
@@ -554,7 +554,7 @@
       "category": "内存",
       "item": "内存镜像采集与分析",
       "status": "unsupported",
-      "summary": "实时响应采集与内存镜像集成从未实现，且不在当前磁盘取证范围内",
+      "summary": "不提供实时采集、进程/句柄/VAD/网络等通用内存取证；唯一例外是匹配 BitLocker 卷的有界密钥候选恢复，不能据此宣称完整内存分析能力",
       "affectedChains": [
         "Memory"
       ],

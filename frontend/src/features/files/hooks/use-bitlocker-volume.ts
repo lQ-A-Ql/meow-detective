@@ -8,8 +8,10 @@ import {
   restorePersistedBitLockerKey,
   unlockBitLockerWithPassword,
   unlockBitLockerWithRecoveryPassword,
+  unlockBitLockerWithMemoryImage,
 } from '@/lib/api/files';
 import { isApiErrorDto } from '@/lib/errors';
+import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import type { BitLockerCatalogImport, BitLockerVolumeStatus } from '@/types/models';
 import type { BitLockerTarget } from '@/features/files/bitlocker';
 
@@ -26,11 +28,13 @@ export interface BitLockerVolumeModel {
   catalog?: BitLockerCatalogImport;
   loading: boolean;
   unlocking: boolean;
+  memoryUnlocking: boolean;
   importing: boolean;
   catalogImport?: BitLockerCatalogImportLifecycle;
   error?: string;
   inspect: () => Promise<void>;
   unlock: (method: BitLockerUnlockMethod, credential: string) => Promise<boolean>;
+  unlockFromMemoryImage: () => Promise<boolean>;
   restore: () => Promise<boolean>;
   importCatalog: () => Promise<boolean>;
   lock: () => Promise<boolean>;
@@ -66,6 +70,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   const [catalog, setCatalog] = useState<BitLockerCatalogImport>();
   const [loading, setLoading] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [memoryUnlocking, setMemoryUnlocking] = useState(false);
   const [importing, setImporting] = useState(false);
   const [catalogImport, setCatalogImport] = useState<BitLockerCatalogImportLifecycle>();
   const [error, setError] = useState<string>();
@@ -137,6 +142,35 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
   }, [target]);
 
+  const unlockFromMemoryImage = useCallback(async () => {
+    if (!target) {
+      return false;
+    }
+    setError(undefined);
+    try {
+      const memoryImagePath = singleDialogPath(await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: 'Windows memory image', extensions: ['mem', 'raw', 'dmp', 'bin'] }],
+      }));
+      if (!memoryImagePath) {
+        return false;
+      }
+      setMemoryUnlocking(true);
+      setStatus(await unlockBitLockerWithMemoryImage(
+        target.dataSourceId,
+        target.partitionIndex,
+        memoryImagePath,
+      ));
+      return true;
+    } catch (reason) {
+      setError(safeErrorMessage(reason));
+      return false;
+    } finally {
+      setMemoryUnlocking(false);
+    }
+  }, [target]);
+
   const importCatalog = useCallback(async () => {
     if (!target) {
       return false;
@@ -204,11 +238,13 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     catalog,
     loading,
     unlocking,
+    memoryUnlocking,
     importing,
     catalogImport,
     error,
     inspect,
     unlock,
+    unlockFromMemoryImage,
     restore,
     importCatalog,
     lock,

@@ -84,6 +84,29 @@ fn persisted_key_fingerprint_mismatch_is_nonrecoverable_validation() {
     assert_eq!(error.recoverable(), Some(false));
 }
 
+#[test]
+fn memory_candidate_failure_has_a_stable_secret_free_command_contract() {
+    let error = BitLockerServiceError::MemoryKeyNotValidated;
+
+    assert_eq!(error.code(), Some("BITLOCKER_MEMORY_KEY_NOT_VALIDATED"));
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Security
+    ));
+    assert_eq!(error.recoverable(), Some(true));
+    assert!(error.safe_details().is_none());
+    assert!(error.suggestion().is_some());
+
+    let command_error = transport::CommandError::from_typed_service_error(error);
+    assert_eq!(command_error.code, "BITLOCKER_MEMORY_KEY_NOT_VALIDATED");
+    assert_eq!(command_error.category, "security");
+    assert!(command_error.details.is_none());
+    assert!(!command_error
+        .message
+        .to_ascii_lowercase()
+        .contains("key bytes"));
+}
+
 #[derive(Default)]
 struct TestKeyStore {
     blobs: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,

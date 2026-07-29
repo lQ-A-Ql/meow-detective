@@ -26,6 +26,7 @@ import {
   restorePersistedBitLockerKey,
   unlockBitLockerWithPassword,
   unlockBitLockerWithRecoveryPassword,
+  unlockBitLockerWithMemoryImage,
 } from './files';
 
 vi.mock('./client', () => ({
@@ -220,6 +221,20 @@ describe('files API', () => {
         dataSourceId: 'source-1',
         partitionIndex: 2,
         credential: 'test-recovery',
+      },
+    );
+  });
+
+  it('passes the memory image only to the dedicated BitLocker recovery command', async () => {
+    requestMock.mockResolvedValue({} as never);
+    await unlockBitLockerWithMemoryImage('source-1', 2, 'D:\\evidence\\memory.raw');
+
+    expect(requestMock).toHaveBeenCalledWith(
+      COMMANDS.files.UNLOCK_BITLOCKER_WITH_MEMORY_IMAGE,
+      {
+        dataSourceId: 'source-1',
+        partitionIndex: 2,
+        memoryImagePath: 'D:\\evidence\\memory.raw',
       },
     );
   });

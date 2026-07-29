@@ -81,6 +81,8 @@
         "credentialLabel": "BitLocker 凭据",
         "unlock": "解锁并保存已验证密钥",
         "unlocking": "解锁中...",
+        "memoryUnlock": "从内存镜像恢复并验证",
+        "memoryUnlocking": "正在扫描内存镜像...",
         "restore": "从安全存储恢复",
         "importCatalog": "导入解锁后的文件目录",
         "importing": "导入目录中...",

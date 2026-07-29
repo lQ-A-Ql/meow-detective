@@ -1,14 +1,14 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 28 Rust crates, 10 frontend pages, 112 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 29 Rust crates, 10 frontend pages, 113 Tauri commands, and roughly 3,000 Rust test functions. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
-**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, EVTX input bounding, two-level file classification, document and media preview renderers, and large-list render performance.
+**Current focus (2026-07):** evidence-analysis hardening and preview depth rather than new capability breadth — offline DPAPI / Chrome App-Bound decryption, bounded BitLocker key recovery from a matching Windows x64 memory image, EVTX input bounding, document and media preview renderers, and large-list render performance.
 
 ## Architecture
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 112 commands
+Tauri Command Layer (apps/desktop/src-tauri/) -> 113 commands
 Application Services (crates/app-services/) -> 28 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
@@ -69,7 +69,7 @@ cd frontend && pnpm test
 | Directory | Description |
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (112 commands) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (113 commands) |
 | `crates/app-services/` | Application orchestration (28 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (41) and migration scripts (71) |
@@ -79,6 +79,7 @@ cd frontend && pnpm test
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
 | `crates/volume-bitlocker/` | BitLocker (BDE) volume decryption layer (Stage 4-7: metadata/key derivation, sector cipher, verified runtime preview, inspect/unlock/lock, source-local catalog import, verified-key persistence, automatic case-open restore, and safe report inventory) |
+| `crates/memory-windows/` | Bounded read-only Windows x64 raw-memory adapter: physical reads, page translation, kernel discovery, pool-tag inventory, and opaque BitLocker AES candidate recognition |
 | `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS/CephFS wire primitives, RocksDB MANIFEST/WAL replay, single-pass live-SST streaming, and bounded latest-state reduction |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |

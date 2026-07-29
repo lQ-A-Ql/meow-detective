@@ -28,6 +28,7 @@ members = [
   "crates/fs-xfs",
   "crates/fs-lvm",
   "crates/volume-bitlocker",
+  "crates/memory-windows",
   "crates/ceph-wire",
   "crates/rocksdb-wire",
 ]
@@ -75,6 +76,7 @@ fs-btrfs = { path = "crates/fs-btrfs" }
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }
 volume-bitlocker = { path = "crates/volume-bitlocker" }
+memory-windows = { path = "crates/memory-windows" }
 image-e01 = { path = "crates/image-e01" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
@@ -95,6 +97,7 @@ r2d2_sqlite = "0.24"
 tempfile = "3"
 hex = "0.4"
 once_cell = "1"
+memchr = "2"
 byteorder = "1"
 encoding_rs = "0.8"
 csv = "1"

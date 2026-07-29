@@ -81,6 +81,8 @@
         "credentialLabel": "BitLocker credential",
         "unlock": "Unlock and save verified key",
         "unlocking": "Unlocking...",
+        "memoryUnlock": "Recover and verify from memory image",
+        "memoryUnlocking": "Scanning memory image...",
         "restore": "Restore from secure storage",
         "importCatalog": "Import unlocked file catalog",
         "importing": "Importing catalog...",

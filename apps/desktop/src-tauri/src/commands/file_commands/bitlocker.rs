@@ -8,8 +8,10 @@ use crate::state::AppState;
 
 use super::support::run_active_case_command;
 
+mod memory;
 mod persistence;
 
+pub use memory::unlock_bitlocker_with_memory_image;
 pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
 
 #[tauri::command]

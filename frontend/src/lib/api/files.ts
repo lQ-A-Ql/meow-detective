@@ -120,6 +120,18 @@ export async function unlockBitLockerWithRecoveryPassword(
   });
 }
 
+export async function unlockBitLockerWithMemoryImage(
+  dataSourceId: string,
+  partitionIndex: number,
+  memoryImagePath: string,
+): Promise<BitLockerVolumeStatus> {
+  return apiClient.request(COMMANDS.files.UNLOCK_BITLOCKER_WITH_MEMORY_IMAGE, {
+    dataSourceId,
+    partitionIndex,
+    memoryImagePath,
+  });
+}
+
 export async function importUnlockedBitLockerCatalog(
   dataSourceId: string,
   partitionIndex: number,

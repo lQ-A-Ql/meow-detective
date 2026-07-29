@@ -21,6 +21,7 @@ infrastructure.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
 volume-bitlocker.workspace = true
+memory-windows.workspace = true
 fs-ntfs.workspace = true
 fs-fat.workspace = true
 fs-exfat.workspace = true

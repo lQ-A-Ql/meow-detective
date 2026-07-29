@@ -30,9 +30,12 @@ Stage 7 补齐了案件重开恢复：控制库的 `bitlocker_restore_intents` �
 或凭据。案件打开后按已启用 intent 逐卷重新读取元数据，严格比较 fingerprint，再从
 Credential Manager 恢复并复探测明文文件系统。单卷恢复失败只让该卷保持锁定；缺失、
 损坏或 fingerprint 不匹配的安全密钥会禁用 intent，暂时 I/O/平台故障保留为可重试失败。
-已存在的 source DB 文件树不会重新导入。内存镜像恢复密钥的后续设计见
-`docs/bitlocker-memory-key-recovery-design.md`；它必须经多重明文 oracle 验证，不能
-通过随机字节扫描直接解锁。
+已存在的 source DB 文件树不会重新导入。2026-07-29 已落地受限的内存镜像恢复：
+`memory-windows` 只读顺序扫描 Windows x64 raw memory 中经过 pool header/长度约束的
+BitLocker tag allocation，并以 FIPS-197 AES schedule 作为预筛。候选保持 opaque、失败
+即 zeroize，且必须通过目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 多重 oracle，不能
+通过随机字节扫描直接解锁。验证成功后复用既有 runtime、Credential Manager、restore
+intent 和审计链路；任何 key/schedule/物理地址均不进入 transport、日志、报告或 SQLite。
 
 Stage 5 已将真实解锁流程接入文件浏览器检查器。BitLocker 面板只在当前分区确认为
 BitLocker 时出现；密码和恢复密码仅存在于组件的瞬时输入状态，提交后立即清空，不进入
@@ -175,7 +178,7 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 | 2b ✅ | 预览读路径 | 运行时 verified unlock registry；分区窗口；Hex/文本/图片/文档/媒体统一路由；锁定返回 typed Unsupported |
 | 3 ✅ | 服务与导入编排 | inspect/解锁/锁定；凭据以独立 secret 参数进入；显式 catalog 导入与审计记录 |
 | 4 ✅ | 持久化与凭据存储 | 只存已验证密钥包；metadata fingerprint 稳定；Windows Credential Manager 真实读写；恢复复探测；锁定/遗忘独立 |
-| 5 ✅ | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离；BitLocker 面板按真实分区显示 |
+| 5 ✅ | 前端解锁流程 | 密码不进前端状态层；锁定与遗忘密钥分离；BitLocker 面板按真实分区显示；内存镜像只经 platform dialog 与真实 command 传递 |
 | 6 ✅ | 报告、性能、文档 | HTML/JSON 含非秘密 protector inventory；KDF 不重跑；恢复 oracle 与文档已同步 |
 
 ### Stage 1 交付物（已完成 2026-07-27）

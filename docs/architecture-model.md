@@ -16,7 +16,7 @@
 │  技术栈: Tauri 2 + Rust + React 18 + TypeScript + SQLite        │
 │  架构: 分层 + 能力族拆分，backend-led                            │
 │  测试: Rust 测试以 cargo 清单为准；94 个前端 Vitest 测试文件       │
-│  workspace: 28 个 crate + 1 个 Tauri host package               │
+│  workspace: 29 个 crate + 1 个 Tauri host package               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -152,6 +152,7 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
 | **volume-bitlocker** | BitLocker (BDE) 卷解密层 | 元数据/保护器识别、密码/恢复密码解锁、五种已验证 cipher、明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；应用层已接入预览、inspect/unlock/lock、密钥包持久化/恢复/删除和 source-local catalog 导入 |
+| **memory-windows** | Windows x64 物理内存只读适配层 | 有界物理读取、四级页表翻译、kernel/pool 结构发现、BitLocker AES schedule 候选识别；候选密钥保持 opaque 且只允许经目标卷 NTFS oracle 验证后提升 |
 
 ### 分布式存储重建层
 

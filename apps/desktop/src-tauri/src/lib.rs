@@ -45,6 +45,7 @@ macro_rules! desktop_command_handler {
             inspect_bitlocker_volume,
             unlock_bitlocker_with_password,
             unlock_bitlocker_with_recovery_password,
+            unlock_bitlocker_with_memory_image,
             import_unlocked_bitlocker_catalog,
             lock_bitlocker_volume,
             restore_persisted_bitlocker_key,

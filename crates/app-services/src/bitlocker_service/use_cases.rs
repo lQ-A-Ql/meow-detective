@@ -126,19 +126,20 @@ pub fn unlock_bitlocker_with_recovery_password(
     )
 }
 
-struct UnlockContext<'a> {
-    case_conn: &'a Connection,
-    case_root: &'a Path,
-    case_id: &'a CaseId,
-    data_source_id: &'a DataSourceId,
-    partition_index: u32,
-    runtimes: BitLockerRuntimeContext<'a>,
+pub(super) struct UnlockContext<'a> {
+    pub(super) case_conn: &'a Connection,
+    pub(super) case_root: &'a Path,
+    pub(super) case_id: &'a CaseId,
+    pub(super) data_source_id: &'a DataSourceId,
+    pub(super) partition_index: u32,
+    pub(super) runtimes: BitLockerRuntimeContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-enum UnlockMethod {
+pub(super) enum UnlockMethod {
     Password,
     RecoveryPassword,
+    MemoryImage,
 }
 
 impl UnlockMethod {
@@ -150,6 +151,7 @@ impl UnlockMethod {
         match self {
             Self::Password => unlock_password(window, credential),
             Self::RecoveryPassword => unlock_recovery(window, credential),
+            Self::MemoryImage => unreachable!("memory recovery does not use a passphrase"),
         }
     }
 
@@ -157,6 +159,7 @@ impl UnlockMethod {
         match self {
             Self::Password => "password",
             Self::RecoveryPassword => "recoveryPassword",
+            Self::MemoryImage => "memoryImage",
         }
     }
 }
@@ -193,9 +196,20 @@ fn unlock_with(
             return Err(error.into());
         }
     };
+    complete_verified_unlock(&context, &source, &identities, verified, method)
+}
+
+pub(super) fn complete_verified_unlock(
+    context: &UnlockContext<'_>,
+    source: &super::source::BitLockerSource,
+    identities: &[volume_bitlocker::VolumeIdentity],
+    verified: VerifiedUnlock,
+    method: UnlockMethod,
+) -> Result<BitLockerVolumeStatusDto, BitLockerServiceError> {
+    let fingerprint = MetadataFingerprint::from_metadata(&verified.identity().metadata);
     let persisted_blob = verified.persisted_key_blob();
     let activated = match activate_verified(
-        &source,
+        source,
         context.case_id,
         context.partition_index,
         context.runtimes.preview_runtime,
@@ -205,7 +219,7 @@ fn unlock_with(
         Ok(value) => value,
         Err(error) => {
             audit_unlock(
-                &context,
+                context,
                 fingerprint.as_str(),
                 method,
                 "failed",
@@ -225,7 +239,7 @@ fn unlock_with(
             context.partition_index as usize,
         )?;
         audit_unlock(
-            &context,
+            context,
             activated.fingerprint.as_str(),
             method,
             "failed",
@@ -245,7 +259,7 @@ fn unlock_with(
             context.partition_index as usize,
         )?;
         audit_unlock(
-            &context,
+            context,
             activated.fingerprint.as_str(),
             method,
             "failed",
@@ -254,7 +268,7 @@ fn unlock_with(
         return Err(error.into());
     }
     audit_unlock(
-        &context,
+        context,
         activated.fingerprint.as_str(),
         method,
         "success",

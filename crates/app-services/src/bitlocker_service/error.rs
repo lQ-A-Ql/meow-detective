@@ -37,6 +37,10 @@ pub enum BitLockerServiceError {
     PersistedKeyFingerprintMismatch,
     #[error("BitLocker preview runtime failed: {0}")]
     PreviewRuntime(#[from] crate::file_service::FileServiceError),
+    #[error(transparent)]
+    MemoryImage(#[from] memory_windows::MemoryWindowsError),
+    #[error("no memory-recovered BitLocker key candidate passed volume-bound validation")]
+    MemoryKeyNotValidated,
 }
 
 impl ServiceErrorCategory for BitLockerServiceError {
@@ -66,6 +70,11 @@ impl ServiceErrorCategory for BitLockerServiceError {
             | Self::CatalogState(_)
             | Self::Runtime(_)
             | Self::PreviewRuntime(_) => ErrorCategory::Internal,
+            Self::MemoryImage(memory_windows::MemoryWindowsError::PhysicalRead { .. }) => {
+                ErrorCategory::Io
+            }
+            Self::MemoryImage(_) => ErrorCategory::Parser,
+            Self::MemoryKeyNotValidated => ErrorCategory::Security,
             Self::DrainTimeout => ErrorCategory::Timeout,
             Self::StoredKeyNotFound => ErrorCategory::Validation,
         }
@@ -96,6 +105,8 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::PersistedKeyFingerprintMismatch => {
                 Some("BITLOCKER_PERSISTED_KEY_FINGERPRINT_MISMATCH")
             }
+            Self::MemoryImage(_) => Some("BITLOCKER_MEMORY_IMAGE_INVALID"),
+            Self::MemoryKeyNotValidated => Some("BITLOCKER_MEMORY_KEY_NOT_VALIDATED"),
             _ => None,
         }
     }
@@ -122,6 +133,9 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => {
                 Some("Windows Credential Manager could not complete the BitLocker key operation")
             }
+            Self::MemoryKeyNotValidated => Some(
+                "No memory-recovered BitLocker key candidate could be validated against the volume",
+            ),
             Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => {
                 Some("The stored BitLocker key package is invalid")
             }
@@ -139,6 +153,16 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => Some(true),
             Self::KeyStore(super::BitLockerKeyStoreError::Unsupported)
             | Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => Some(false),
+            Self::MemoryKeyNotValidated => Some(true),
+            _ => None,
+        }
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        match self {
+            Self::MemoryKeyNotValidated => Some(
+                "Select a raw Windows memory image from the same system, captured while the BitLocker volume was unlocked",
+            ),
             _ => None,
         }
     }

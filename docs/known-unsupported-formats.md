@@ -23,7 +23,7 @@ V2 长期计划与能力评级请同时参考：
 | FAT / exFAT | committed fixture | 缺失 | 无 fixture 文件。expected.json 待建 |
 | BitLocker | TPM / TPM+PIN / 启动密钥 / clear-key 解锁 | 不支持 | 当前仅清点 protector inventory；不会自动使用 clear key，也不处理 TPM-sealed 或 `.BEK` 密钥 |
 | BitLocker | AES-256-CBC + Elephant Diffuser (`0x8001`) | 仅识别 | 缺少可信 oracle，拒绝产生可能看似合理但错误的明文 |
-| BitLocker | 已验证密钥包持久化与调查员 UI | 已实现（公开支持等级仍为 Experimental） | Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；由于不提交镜像或凭据，公开支持等级仍保持 Experimental |
+| BitLocker | 已验证密钥包持久化与调查员 UI | 已实现（公开支持等级仍为 Experimental） | Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；另支持只读扫描 Windows x64 raw memory 的已知 BitLocker pool tag，以 FIPS-197 AES schedule 预筛，并要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` oracle 全部通过。密钥、schedule 和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental |
 | Registry | transaction log 完整重放 | 部分支持 | `.LOG1/.LOG2` dirty-page bitmap、page recovery 与 hive 合并已实现并有测试；不承诺全部损坏组合、已删除 cell 恢复或任意历史版本的完整重放 |
 | Registry | private-real 回归 E01 | 部分完成 | liuyang_pc.E01 已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取；E01 镜像本身未提交至仓库 |
 | Registry | 已删除 cell 恢复 | 不承诺 | 当前不解析 hive bin 中未分配 cell。恢复已删除键值需要 cell 分配图与 txlog 交叉引用 |
@@ -70,7 +70,7 @@ V2 长期计划与能力评级请同时参考：
 | 云 | Google Workspace Logs | 不支持 | 云工作空间日志无实现，且不在当前磁盘取证范围内 |
 | 云 | Microsoft 365 Unified Audit Log | 不支持 | 云审计日志已退役；cloud-audit crate 与 transport DTO 均已移除 |
 | 网络 | PCAP/网络捕获 | 不支持 | 网络数据包捕获摄入与流记录解析从未实现，且不在当前磁盘取证范围内 |
-| 内存 | 内存镜像采集与分析 | 不支持 | 实时响应采集与内存镜像集成从未实现，且不在当前磁盘取证范围内 |
+| 内存 | 内存镜像采集与分析 | 不支持 | 不提供实时采集、进程/句柄/VAD/网络等通用内存取证；唯一例外是匹配 BitLocker 卷的有界密钥候选恢复，不能据此宣称完整内存分析能力 |
 
 ## 3. V2 期间仍不得被市场化夸大的边界
 

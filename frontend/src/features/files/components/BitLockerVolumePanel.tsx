@@ -1,4 +1,4 @@
-import { KeyRound, LockKeyhole, RefreshCw, ShieldCheck, Unlock } from 'lucide-react';
+import { KeyRound, LockKeyhole, MemoryStick, RefreshCw, ShieldCheck, Unlock } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -18,7 +18,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
   const [method, setMethod] = useState<BitLockerUnlockMethod>('password');
   const [credential, setCredential] = useState('');
   const status = model.status;
-  const canSubmit = Boolean(credential) && !model.unlocking;
+  const canSubmit = Boolean(credential) && !model.unlocking && !model.memoryUnlocking;
 
   const submitCredential = () => {
     const submitted = credential;
@@ -43,7 +43,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
           variant="viewerControl"
           size="iconXs"
           onClick={() => void model.inspect()}
-          disabled={model.loading || model.unlocking || model.importing}
+          disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing}
           aria-label={t('fileBrowser.inspector.bitlocker.refresh')}
           title={t('fileBrowser.inspector.bitlocker.refresh')}
         >
@@ -137,8 +137,23 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
         </div>
       ) : null}
 
+      {status && !status.unlocked ? (
+        <Button
+          type="button"
+          variant="forensicsSurface"
+          size="xs"
+          className="w-full"
+          onClick={() => void model.unlockFromMemoryImage()}
+          disabled={model.memoryUnlocking || model.unlocking || model.loading}
+        >
+          <MemoryStick size={12} /> {model.memoryUnlocking
+            ? t('fileBrowser.inspector.bitlocker.memoryUnlocking')
+            : t('fileBrowser.inspector.bitlocker.memoryUnlock')}
+        </Button>
+      ) : null}
+
       {status && !status.unlocked && status.storedKeyAvailable ? (
-        <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.restore()} disabled={model.loading}>
+        <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.restore()} disabled={model.loading || model.memoryUnlocking}>
           <KeyRound size={12} /> {t('fileBrowser.inspector.bitlocker.restore')}
         </Button>
       ) : null}
@@ -157,7 +172,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
       ) : null}
 
       {status?.storedKeyAvailable ? (
-        <Button type="button" variant="forensicsDangerGhost" size="xs" className="w-full" onClick={() => void model.forget()} disabled={model.loading || model.unlocking || model.importing}>
+        <Button type="button" variant="forensicsDangerGhost" size="xs" className="w-full" onClick={() => void model.forget()} disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing}>
           {t('fileBrowser.inspector.bitlocker.forget')}
         </Button>
       ) : null}
