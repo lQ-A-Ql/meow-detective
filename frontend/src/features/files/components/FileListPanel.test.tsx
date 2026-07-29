@@ -56,12 +56,12 @@ function renderPanel(rows: FileEntryRow[], onExtractFile = vi.fn()) {
 }
 
 describe('FileListPanel extraction context menu', () => {
-  it('selects the right-clicked file and invokes the extraction workflow', async () => {
+  it('opens extraction without selecting the right-clicked file', async () => {
     const { onExtractFile, setSelectedFileId } = renderPanel([FILE]);
 
     fireEvent.contextMenu(screen.getByText('evidence.bin'));
     const extractItem = await screen.findByText('提取文件');
-    expect(setSelectedFileId).toHaveBeenCalledWith(FILE.id);
+    expect(setSelectedFileId).not.toHaveBeenCalled();
 
     fireEvent.click(extractItem);
     expect(onExtractFile).toHaveBeenCalledWith(FILE);

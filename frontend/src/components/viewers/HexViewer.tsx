@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { memo, useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import type { HexByteWindowLines, HexLoadedRange } from '@/types/models';
 
 interface HexViewerProps {
@@ -20,8 +19,12 @@ const BYTES_PER_ROW = 16;
 interface ParsedLine {
   offset: string;
   hex: string;
-  bytes?: string[];
   ascii: string;
+}
+
+interface VisibleRange {
+  startIndex: number;
+  endIndex: number;
 }
 
 function formatOffset(offset: number) {
@@ -43,7 +46,6 @@ function formatByteWindowLine(rawBytes: number[], rowIndex: number, baseOffset: 
   return {
     offset: formatOffset(baseOffset + rowStart),
     hex: bytes.join(' '),
-    bytes,
     ascii: rowBytes.map(formatAsciiByte).join(''),
   };
 }
@@ -65,6 +67,54 @@ function parseHexLine(line: string): ParsedLine {
   return { offset: '', hex: line, ascii: '' };
 }
 
+function visibleRangeFor(
+  scrollTop: number,
+  containerHeight: number,
+  lineHeight: number,
+  rowCount: number,
+): VisibleRange {
+  return {
+    startIndex: Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_ROWS),
+    endIndex: Math.min(
+      rowCount,
+      Math.ceil((scrollTop + containerHeight) / lineHeight) + OVERSCAN_ROWS,
+    ),
+  };
+}
+
+const HexRow = memo(function HexRow({
+  line,
+  lineIndex,
+  lineHeight,
+  offsetWidth,
+}: {
+  line: ParsedLine;
+  lineIndex: number;
+  lineHeight: number;
+  offsetWidth: number;
+}) {
+  return (
+    <div
+      data-row-index={lineIndex}
+      className="flex hover:bg-forensics-panel-strong"
+      style={{ height: lineHeight }}
+    >
+      <div
+        className="shrink-0 border-r border-forensics-border-light bg-forensics-panel pr-2 text-right text-forensics-muted-lighter select-none"
+        style={{ width: offsetWidth }}
+      >
+        {line.offset}
+      </div>
+      <div className="min-w-0 flex-1 whitespace-pre px-3 tracking-wider text-forensics-text-secondary">
+        {line.hex}
+      </div>
+      <div className="w-[8rem] shrink-0 whitespace-pre border-l border-forensics-border-light pl-2 text-forensics-muted">
+        {line.ascii}
+      </div>
+    </div>
+  );
+});
+
 export function HexViewer({
   lines,
   rawBytes,
@@ -76,7 +126,6 @@ export function HexViewer({
   onNeedMoreRange,
 }: HexViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
 
   const byteWindow = useMemo(() => {
@@ -93,6 +142,19 @@ export function HexViewer({
     ? Math.ceil(byteWindow.rawBytes.length / BYTES_PER_ROW)
     : lines.length;
 
+  const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
+    visibleRangeFor(0, DEFAULT_CONTAINER_HEIGHT, lineHeight, rowCount),
+  );
+
+  const updateVisibleRange = useCallback((scrollTop: number, viewportHeight: number) => {
+    const nextRange = visibleRangeFor(scrollTop, viewportHeight, lineHeight, rowCount);
+    setVisibleRange((currentRange) => (
+      currentRange.startIndex === nextRange.startIndex && currentRange.endIndex === nextRange.endIndex
+        ? currentRange
+        : nextRange
+    ));
+  }, [lineHeight, rowCount]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -100,7 +162,10 @@ export function HexViewer({
     const updateContainerHeight = () => {
       const nextHeight = container.clientHeight;
       if (nextHeight > 0) {
-        setContainerHeight(nextHeight);
+        setContainerHeight((currentHeight) => (
+          currentHeight === nextHeight ? currentHeight : nextHeight
+        ));
+        updateVisibleRange(container.scrollTop, nextHeight);
       }
     };
 
@@ -110,22 +175,24 @@ export function HexViewer({
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height);
+        const nextHeight = entry.contentRect.height;
+        if (nextHeight > 0) {
+          setContainerHeight((currentHeight) => (
+            currentHeight === nextHeight ? currentHeight : nextHeight
+          ));
+          updateVisibleRange(container.scrollTop, nextHeight);
+        }
       }
     });
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [updateVisibleRange]);
 
-  const visibleRange = useMemo(() => {
-    const startIndex = Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_ROWS);
-    const endIndex = Math.min(
-      rowCount,
-      Math.ceil((scrollTop + containerHeight) / lineHeight) + OVERSCAN_ROWS
-    );
-    return { startIndex, endIndex };
-  }, [scrollTop, containerHeight, lineHeight, rowCount]);
+  useEffect(() => {
+    const container = containerRef.current;
+    updateVisibleRange(container?.scrollTop ?? 0, container?.clientHeight || containerHeight);
+  }, [containerHeight, rowCount, updateVisibleRange]);
 
   const visibleLines = useMemo(() => {
     if (byteWindow.rawBytes) {
@@ -151,7 +218,7 @@ export function HexViewer({
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const nextScrollTop = e.currentTarget.scrollTop;
-    setScrollTop(nextScrollTop);
+    updateVisibleRange(nextScrollTop, e.currentTarget.clientHeight);
 
     if (!onNeedMoreRange) {
       return;
@@ -159,11 +226,21 @@ export function HexViewer({
 
     const maxScrollTop = Math.max(0, e.currentTarget.scrollHeight - e.currentTarget.clientHeight);
     if (nextScrollTop <= lineHeight * OVERSCAN_ROWS) {
-      onNeedMoreRange('previous');
+      // A first chunk starts at zero. Do not duplicate the initial IPC range
+      // read when a new viewport reports its initial scroll position.
+      if (byteWindow.baseOffset > 0) {
+        onNeedMoreRange('previous');
+      }
     } else if (maxScrollTop - nextScrollTop <= lineHeight * (OVERSCAN_ROWS + 2)) {
-      onNeedMoreRange('next');
+      const hasMoreAfter =
+        byteWindow.fileSize === undefined ||
+        !byteWindow.rawBytes ||
+        byteWindow.baseOffset + byteWindow.rawBytes.length < byteWindow.fileSize;
+      if (hasMoreAfter) {
+        onNeedMoreRange('next');
+      }
     }
-  }, [lineHeight, onNeedMoreRange]);
+  }, [byteWindow, lineHeight, onNeedMoreRange, updateVisibleRange]);
 
   useEffect(() => {
     if (activeOffset === undefined || !containerRef.current) {
@@ -178,8 +255,8 @@ export function HexViewer({
     );
     const nextScrollTop = lineIndex * lineHeight;
     containerRef.current.scrollTop = nextScrollTop;
-    setScrollTop(nextScrollTop);
-  }, [activeOffset, byteWindow, lineHeight, lines, rowCount]);
+    updateVisibleRange(nextScrollTop, containerRef.current.clientHeight || containerHeight);
+  }, [activeOffset, byteWindow, containerHeight, lineHeight, lines, rowCount, updateVisibleRange]);
 
   const offsetWidth = useMemo(() => {
     if (rowCount === 0) return 80;
@@ -196,12 +273,11 @@ export function HexViewer({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[11px]">
-      <ScrollArea
-        className="min-h-0 flex-1"
-        viewportRef={containerRef}
-        viewportTestId="hex-scroll-container"
-        viewportProps={{ onScroll: handleScroll }}
-        showHorizontalScrollbar
+      <div
+        ref={containerRef}
+        data-testid="hex-scroll-container"
+        className="min-h-0 flex-1 overflow-auto"
+        onScroll={handleScroll}
       >
         <div style={{ height: rowCount * lineHeight, position: 'relative' }}>
           <div
@@ -212,54 +288,15 @@ export function HexViewer({
               width: '100%',
             }}
           >
-            {visibleLines.map(({ parsed: line, lineIndex }) => {
-              return (
-                <div
-                  key={lineIndex}
-                  data-row-index={lineIndex}
-                  className="flex hover:bg-forensics-panel-strong"
-                  style={{ height: lineHeight }}
-                >
-                  <div
-                    className="shrink-0 border-r border-forensics-border-light bg-forensics-panel pr-2 text-right text-forensics-muted-lighter select-none"
-                    style={{ width: offsetWidth }}
-                  >
-                    {line.offset}
-                  </div>
-
-                  <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0 px-3 tracking-wider">
-                    {(line.bytes ?? line.hex.split(' ')).map((byte, i) => (
-                      <span key={i} className="text-center">
-                        {byte === '00' ? (
-                          <span className="text-forensics-muted-lighter">{byte}</span>
-                        ) : byte === 'FF' ? (
-                          <span className="text-forensics-error-text">{byte}</span>
-                        ) : (
-                          <span className="text-forensics-text-secondary">{byte}</span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="shrink-0 min-w-[6rem] w-[8rem] border-l border-forensics-border-light pl-2 text-forensics-muted grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0">
-                    {line.ascii.split('').map((char, i) => (
-                      <span
-                        key={i}
-                        className={
-                          char === '.'
-                            ? 'text-forensics-muted-lighter'
-                            : char === ' '
-                              ? 'text-forensics-muted-lighter'
-                              : 'text-forensics-text-secondary'
-                        }
-                      >
-                        {char}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            {visibleLines.map(({ parsed: line, lineIndex }) => (
+              <HexRow
+                key={lineIndex}
+                line={line}
+                lineIndex={lineIndex}
+                lineHeight={lineHeight}
+                offsetWidth={offsetWidth}
+              />
+            ))}
           </div>
         </div>
 
@@ -268,7 +305,7 @@ export function HexViewer({
             选择文件后显示十六进制预览
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {loadedRanges?.length ? (
         <div className="shrink-0 border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">

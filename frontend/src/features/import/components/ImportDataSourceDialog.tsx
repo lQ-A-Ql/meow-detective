@@ -119,7 +119,7 @@ export function ImportDataSourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="relative isolate overflow-hidden sm:max-w-md">
+      <DialogContent className="isolate overflow-hidden sm:max-w-md">
         <BrandWatermark
           motif="walking"
           className="absolute -right-7 top-1 h-24 opacity-[0.045]"

@@ -11,14 +11,12 @@ import type { FileEntryRow } from '@/types/models';
 export interface FileEntryContextMenuProps {
   file: FileEntryRow;
   children: ReactElement;
-  onOpenFileMenu: (file: FileEntryRow) => void;
   onExtractFile: (file: FileEntryRow) => void;
 }
 
 export function FileEntryContextMenu({
   file,
   children,
-  onOpenFileMenu,
   onExtractFile,
 }: FileEntryContextMenuProps) {
   if (file.entryType !== 'file') {
@@ -26,7 +24,7 @@ export function FileEntryContextMenu({
   }
 
   return (
-    <ContextMenu onOpenChange={(open) => open && onOpenFileMenu(file)}>
+    <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent aria-label={`${file.name} 操作菜单`}>
         <ContextMenuItem onSelect={() => onExtractFile(file)}>

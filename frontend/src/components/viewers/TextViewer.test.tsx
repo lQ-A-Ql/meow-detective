@@ -48,7 +48,7 @@ describe('TextViewer', () => {
     const lineNumberDivs = screen.getAllByTestId('text-line-number');
     expect(lineNumberDivs.length).toBeLessThan(1000);
     expect(lineNumberDivs[0].textContent?.trim()).toBe('1');
-    expect(screen.getByText('1/3')).toBeDefined();
+    expect(screen.getByText('1+')).toBeDefined();
     expect(screen.queryByText('Line 2505')).toBeNull();
 
     const scrollContainer = screen.getByTestId('text-scroll-container');
@@ -66,6 +66,21 @@ describe('TextViewer', () => {
     const secondPageLineNumbers = screen.getAllByTestId('text-line-number');
     expect(secondPageLineNumbers.length).toBeLessThan(1000);
     expect(secondPageLineNumbers[0].textContent?.trim()).toBe('1001');
-    expect(screen.getByText('2/3')).toBeDefined();
+    expect(screen.getByText('2+')).toBeDefined();
+  });
+
+  it('segments a long logical line before rendering it', () => {
+    render(<TextViewer content={'A'.repeat(20_000)} encoding="UTF-8" />);
+
+    const renderedSegments = screen.getAllByTestId('text-line-content');
+    expect(renderedSegments.length).toBeGreaterThan(1);
+    expect(renderedSegments.every((segment) => (segment.textContent?.length ?? 0) <= 8 * 1024)).toBe(true);
+    expect(screen.queryByText('A'.repeat(20_000))).toBeNull();
+  });
+
+  it('keeps the exact logical line count without allocating a line array', () => {
+    render(<TextViewer content={'first\nsecond\nthird'} encoding="UTF-8" />);
+
+    expect(screen.getByText('3 行')).toBeDefined();
   });
 });

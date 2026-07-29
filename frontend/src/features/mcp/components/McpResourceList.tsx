@@ -1,32 +1,26 @@
-import { useEffect } from 'react';
 import { FileText, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { useMcpStore } from '@/stores/mcp-store';
 
-interface McpResourceListProps {
-  serverId: string;
+export interface McpResourceListProps {
+  resources: Array<{
+    uri: string;
+    name: string;
+    description?: string;
+  }>;
+  loading: boolean;
+  onRefresh: () => void;
 }
 
-export function McpResourceList({ serverId }: McpResourceListProps) {
-  const { resources, loading, refreshResources } = useMcpStore();
-
-  useEffect(() => {
-    if (serverId) {
-      refreshResources(serverId);
-    }
-  }, [refreshResources, serverId]);
-
+export function McpResourceList({ resources, loading, onRefresh }: McpResourceListProps) {
   return (
     <div className="bg-forensics-panel border border-forensics-border p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[11px] font-light text-forensics-muted">
-          暴露的 Resources
-        </div>
+        <div className="text-[11px] font-light text-forensics-muted">暴露的 Resources</div>
         <Button
           type="button"
           variant="forensicsGhost"
           size="iconSm"
-          onClick={() => refreshResources(serverId)}
+          onClick={onRefresh}
           disabled={loading}
           title="刷新"
         >

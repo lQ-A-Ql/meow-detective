@@ -21,8 +21,7 @@ describe('HexViewer', () => {
 
     expect(screen.getByText('00000000')).toBeDefined();
     expect(screen.getByText('00000010')).toBeDefined();
-    expect(screen.getByText('4D')).toBeDefined();
-    expect(screen.getByText('5A')).toBeDefined();
+    expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A');
   });
 
   it('shows empty state when no data', () => {
@@ -41,7 +40,7 @@ describe('HexViewer', () => {
     );
 
     expect(screen.getByText('00000000')).toBeDefined();
-    expect(screen.getByText('4D')).toBeDefined();
+    expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A');
   });
 
   it('renders only the visible window for large hex datasets', () => {
@@ -89,5 +88,47 @@ describe('HexViewer', () => {
     });
 
     expect(onNeedMoreRange).toHaveBeenCalledWith('next');
+  });
+
+  it('does not request a previous range for the initial chunk', () => {
+    const onNeedMoreRange = vi.fn();
+    const rawBytes = Array.from({ length: 64 * 1024 }, (_, index) => index % 256);
+
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={rawBytes}
+        baseOffset={0}
+        fileSize={128 * 1024}
+        onNeedMoreRange={onNeedMoreRange}
+      />,
+    );
+
+    fireEvent.scroll(screen.getByTestId('hex-scroll-container'), {
+      target: { scrollTop: 0 },
+    });
+
+    expect(onNeedMoreRange).not.toHaveBeenCalled();
+  });
+
+  it('requests a previous range from a later chunk', () => {
+    const onNeedMoreRange = vi.fn();
+    const rawBytes = Array.from({ length: 64 * 1024 }, (_, index) => index % 256);
+
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={rawBytes}
+        baseOffset={64 * 1024}
+        fileSize={128 * 1024}
+        onNeedMoreRange={onNeedMoreRange}
+      />,
+    );
+
+    fireEvent.scroll(screen.getByTestId('hex-scroll-container'), {
+      target: { scrollTop: 0 },
+    });
+
+    expect(onNeedMoreRange).toHaveBeenCalledWith('previous');
   });
 });

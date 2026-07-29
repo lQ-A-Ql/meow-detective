@@ -5,8 +5,6 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import type { McpPermissionProfile } from '@/lib/api/mcp';
-
 interface McpServerDialogProps {
   onClose: () => void;
   onAdd: (server: {
@@ -17,7 +15,6 @@ interface McpServerDialogProps {
     args?: string[];
     enabled: boolean;
     autoConnect: boolean;
-    permissions?: McpPermissionProfile;
   }) => Promise<void>;
   testConnection: (
     transportType: string,

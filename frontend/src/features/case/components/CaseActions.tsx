@@ -3,7 +3,6 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { JobSnapshot, RecentCase } from '@/types/models';
-import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { BRAND_DISPLAY_NAME } from '@/lib/branding';
 
 // ── Welcome screen: create + open case forms ──
@@ -172,6 +171,8 @@ export interface ImportSectionProps {
   onCancelImport: () => void;
   failedImportJob: JobSnapshot | undefined;
   onClose: () => void;
+  onBrowseFile: () => Promise<string | undefined>;
+  onBrowseDirectory: () => Promise<string | undefined>;
 }
 
 export function ImportSection({
@@ -186,6 +187,8 @@ export function ImportSection({
   onCancelImport,
   failedImportJob,
   onClose,
+  onBrowseFile,
+  onBrowseDirectory,
 }: ImportSectionProps) {
   return (
     <div className="border-b border-forensics-border bg-forensics-panel p-4 shrink-0">
@@ -204,18 +207,9 @@ export function ImportSection({
           variant="forensicsOutline"
           size="xs"
           onClick={async () => {
-            try {
-              const selected = await openDialog({
-                directory: false,
-                multiple: false,
-                filters: [{ name: 'Data Sources', extensions: ['e01', 'E01', 'dd', 'raw', 'img'] }],
-              });
-              const path = singleDialogPath(selected);
-              if (path) {
-                setImportPath(path);
-              }
-            } catch {
-              // Tauri dialog may be unavailable in non-tauri mode.
+            const path = await onBrowseFile();
+            if (path) {
+              setImportPath(path);
             }
           }}
         >
@@ -226,14 +220,9 @@ export function ImportSection({
           variant="forensicsOutline"
           size="xs"
           onClick={async () => {
-            try {
-              const selected = await openDialog({ directory: true, multiple: false });
-              const path = singleDialogPath(selected);
-              if (path) {
-                setImportPath(path);
-              }
-            } catch {
-              // Tauri dialog may be unavailable in non-tauri mode.
+            const path = await onBrowseDirectory();
+            if (path) {
+              setImportPath(path);
             }
           }}
         >

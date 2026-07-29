@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -100,6 +100,16 @@ function HexPreviewContent({
   'viewer' | 'onHexJumpInputChange' | 'onHexJump' | 'onLoadNextHexRange' | 'onLoadPreviousHexRange'
 >) {
   const [inspectorExpanded, setInspectorExpanded] = useState(false);
+  const handleNeedMoreRange = useCallback(
+    (direction: 'previous' | 'next') => {
+      if (direction === 'next') {
+        void onLoadNextHexRange();
+      } else {
+        void onLoadPreviousHexRange();
+      }
+    },
+    [onLoadNextHexRange, onLoadPreviousHexRange],
+  );
 
   useEffect(() => {
     setInspectorExpanded(false);
@@ -118,13 +128,7 @@ function HexPreviewContent({
           fileSize={viewer.fileSize}
           activeOffset={viewer.activeOffset}
           loadedRanges={viewer.loadedRanges}
-          onNeedMoreRange={(direction) => {
-            if (direction === 'next') {
-              void onLoadNextHexRange();
-            } else {
-              void onLoadPreviousHexRange();
-            }
-          }}
+          onNeedMoreRange={handleNeedMoreRange}
         />
       </div>
       {viewer.error ? (

@@ -1,16 +1,7 @@
-import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { AnalysisProgressDrawer } from './AnalysisProgressDrawer';
-import { useAnalysisStore } from '@/stores/analysis-store';
 import type { DataSourceSummary } from '@/types/models';
-
-const mocks = vi.hoisted(() => ({
-  dataSources: vi.fn(),
-}));
-
-vi.mock('@/features/case/hooks', () => ({
-  useDataSources: mocks.dataSources,
-}));
 
 const linuxSource: DataSourceSummary = {
   id: 'ds-linux',
@@ -23,32 +14,34 @@ const linuxSource: DataSourceSummary = {
 };
 
 describe('AnalysisProgressDrawer', () => {
-  beforeEach(() => {
-    act(() => useAnalysisStore.getState().reset());
-    mocks.dataSources.mockReturnValue({ data: [linuxSource] });
-  });
-
   it('stays out of the drawer until the selected source has extraction activity', () => {
-    act(() => useAnalysisStore.getState().setSelectedDataSourceId(linuxSource.id));
-
-    render(<AnalysisProgressDrawer />);
+    render(<AnalysisProgressDrawer source={linuxSource} extractionRunning={false} progress={[]} />);
 
     expect(screen.queryByTestId('analysis-progress-drawer')).toBeNull();
   });
 
   it('shows the selected source progress and extraction counts', () => {
-    act(() => {
-      const store = useAnalysisStore.getState();
-      store.setSelectedDataSourceId(linuxSource.id);
-      store.updateExtractionProgress('LinuxJournal', {
-        status: 'success',
-        scannedCount: 456,
-        artifactCount: 123,
-        timelineEventCount: 12,
-      });
-    });
-
-    render(<AnalysisProgressDrawer />);
+    render(
+      <AnalysisProgressDrawer
+        source={linuxSource}
+        extractionRunning={false}
+        progress={[{
+          label: 'Linux 日志提取',
+          status: 'success',
+          scannedCount: 456,
+          artifactCount: 123,
+          timelineEventCount: 12,
+          warnings: [],
+          totalCandidateCount: 456,
+          processedCandidateCount: 456,
+          structuredCandidateCount: 123,
+          unsupportedCandidateCount: 0,
+          textFallbackCandidateCount: 0,
+          warningCandidateCount: 0,
+          checkpointHitCount: 0,
+        }]}
+      />,
+    );
 
     const drawer = screen.getByTestId('analysis-progress-drawer');
     expect(drawer.textContent).toContain('数据源提取进度');

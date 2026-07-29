@@ -1,5 +1,5 @@
-import { AnalysisWorkspace } from '@/features/analysis/components/AnalysisWorkspace';
+import { AnalysisWorkspaceContainer } from '@/features/analysis/containers/AnalysisWorkspaceContainer';
 
 export function DataAnalysis() {
-  return <AnalysisWorkspace />;
+  return <AnalysisWorkspaceContainer />;
 }

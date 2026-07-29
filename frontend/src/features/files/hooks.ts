@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFileChildren,
   getFileChildrenPage,
@@ -36,6 +36,11 @@ import {
   releasePreviewHandle,
   usePreviewHandleOwner,
 } from './previewHandleOwner';
+
+// Evidence sources are read-only for the lifetime of an active case. Keep an
+// observed preview result stable while its tab is hidden so tab changes do not
+// reopen handles or schedule duplicate Tauri reads.
+const PREVIEW_STALE_TIME = Infinity;
 
 function getHexWindowSize(fileSize: number, maxViewerRangeLength: number, hexChunkBytes: number) {
   return fileSize <= maxViewerRangeLength ? fileSize : hexChunkBytes;
@@ -151,11 +156,12 @@ export function useImportDataSource() {
 }
 
 export function useFileHandle(fileId?: string, enabled = true) {
-  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}`);
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:handle`);
   const query = useQuery({
     queryKey: ['files', 'handle', fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
     gcTime: 0,
     queryFn: async ({ signal }) => {
       const handle = await openFileHandle(fileId!);
@@ -168,13 +174,14 @@ export function useFileHandle(fileId?: string, enabled = true) {
 
 export function useFileViewer(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
-  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}:viewer`);
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:viewer`);
   const [loadedRanges, setLoadedRanges] = useState<HexLoadedRange[]>([]);
   const [loadedChunks, setLoadedChunks] = useState<Record<number, ViewerRangeResponse>>({});
   const [activeOffset, setActiveOffset] = useState(0);
   const [jumpOffsetInput, setJumpOffsetInput] = useState('0x0');
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [viewerError, setViewerError] = useState<string>();
+  const rangeLoadInFlight = useRef(false);
 
   useEffect(() => {
     setLoadedRanges([]);
@@ -183,12 +190,14 @@ export function useFileViewer(fileId?: string, enabled = true) {
     setJumpOffsetInput('0x0');
     setIsLoadingMore(false);
     setViewerError(undefined);
+    rangeLoadInFlight.current = false;
   }, [fileId]);
 
   const baseQuery = useQuery({
     queryKey: ['files', 'viewer', fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
     gcTime: 0,
     queryFn: async ({ signal }) => {
       const handle = await openFileHandle(fileId!);
@@ -229,7 +238,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
   }, [baseQuery.data]);
 
   const loadRange = async (offset: number) => {
-    if (!baseQuery.data || isLoadingMore) {
+    if (!baseQuery.data || rangeLoadInFlight.current) {
       return;
     }
 
@@ -253,6 +262,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
       return;
     }
 
+    rangeLoadInFlight.current = true;
     setIsLoadingMore(true);
     setViewerError(undefined);
     try {
@@ -273,6 +283,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
     } catch (error) {
       setViewerError(error instanceof Error ? error.message : 'Hex range load failed');
     } finally {
+      rangeLoadInFlight.current = false;
       setIsLoadingMore(false);
     }
   };
@@ -356,6 +367,8 @@ export function useTextPreview(fileId?: string, enabled = true) {
     queryKey: ['files', 'text', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
+    gcTime: 60_000,
     queryFn: async () => {
       if (!fileId) return null;
       return await getTextPreview(fileId, 1024 * 1024); // 1MB limit
@@ -372,6 +385,8 @@ export function useImagePreview(fileId?: string, enabled = true) {
     queryKey: ['files', 'image', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
+    gcTime: 60_000,
     queryFn: async () => {
       if (!fileId) return null;
       return await getImagePreview(fileId);
@@ -387,6 +402,8 @@ export function useDocumentPreview(fileId?: string, enabled = true) {
     queryKey: ['files', 'document', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
+    gcTime: 60_000,
     queryFn: async () => {
       if (!fileId) return null;
       return await getDocumentPreview(fileId);
@@ -400,11 +417,12 @@ export function useDocumentPreview(fileId?: string, enabled = true) {
  */
 export function useMediaUrl(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
-  const owner = usePreviewHandleOwner(`${fileId ?? ''}:${enabled}:media`);
+  const owner = usePreviewHandleOwner(`${fileId ?? ''}:media`);
   const query = useQuery<MediaPreview | null, Error>({
     queryKey: ['files', 'media', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
+    staleTime: PREVIEW_STALE_TIME,
     gcTime: 0,
     queryFn: async ({ signal }): Promise<MediaPreview | null> => {
       if (!fileId) return null;

@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, FileText, Search } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 
 interface TextViewerProps {
   /** 文本内容 */
@@ -34,6 +33,84 @@ const ROW_HEIGHT = 18;
 const OVERSCAN_LINES = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const LARGE_TEXT_LINE_THRESHOLD = 1000;
+const MAX_RENDER_SEGMENT_LENGTH = 8 * 1024;
+
+interface TextPageLine {
+  content: string;
+  lineNumber: number;
+  continuation: boolean;
+}
+
+interface TextPage {
+  lines: TextPageLine[];
+  logicalLineCount: number;
+  nextStartOffset?: number;
+}
+
+function appendLineSegments(
+  lines: TextPageLine[],
+  content: string,
+  startOffset: number,
+  endOffset: number,
+  lineNumber: number,
+) {
+  if (startOffset === endOffset) {
+    lines.push({ content: '', lineNumber, continuation: false });
+    return;
+  }
+
+  let segmentStart = startOffset;
+  let continuation = false;
+  while (segmentStart < endOffset) {
+    const segmentEnd = Math.min(endOffset, segmentStart + MAX_RENDER_SEGMENT_LENGTH);
+    lines.push({
+      content: content.slice(segmentStart, segmentEnd),
+      lineNumber,
+      continuation,
+    });
+    segmentStart = segmentEnd;
+    continuation = true;
+  }
+}
+
+function readTextPage(content: string, startOffset: number, firstLineNumber: number): TextPage {
+  const lines: TextPageLine[] = [];
+  let cursor = startOffset;
+  let logicalLineCount = 0;
+
+  while (logicalLineCount < PAGE_SIZE && cursor <= content.length) {
+    const lineEnd = content.indexOf('\n', cursor);
+    const endOffset = lineEnd === -1 ? content.length : lineEnd;
+    appendLineSegments(lines, content, cursor, endOffset, firstLineNumber + logicalLineCount);
+    logicalLineCount += 1;
+
+    if (lineEnd === -1) {
+      cursor = content.length + 1;
+      break;
+    }
+    cursor = lineEnd + 1;
+  }
+
+  return {
+    lines,
+    logicalLineCount,
+    nextStartOffset: cursor <= content.length ? cursor : undefined,
+  };
+}
+
+function countLogicalLines(content: string) {
+  if (!content) {
+    return 1;
+  }
+
+  let count = 1;
+  for (let index = 0; index < content.length; index += 1) {
+    if (content.charCodeAt(index) === 10) {
+      count += 1;
+    }
+  }
+  return count;
+}
 
 export function TextViewer({
   content,
@@ -43,6 +120,7 @@ export function TextViewer({
 }: TextViewerProps) {
   const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(0);
+  const [pageStartOffsets, setPageStartOffsets] = useState([0]);
   const [localSearch, setLocalSearch] = useState(searchQuery || '');
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -73,6 +151,7 @@ export function TextViewer({
 
   useEffect(() => {
     setCurrentPage(0);
+    setPageStartOffsets([0]);
     setScrollTop(0);
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
@@ -86,15 +165,15 @@ export function TextViewer({
     }
   }, [currentPage]);
 
-  // 分割为行
-  const lines = useMemo(() => content.split('\n'), [content]);
-
-  // 分页
-  const totalPages = Math.ceil(lines.length / PAGE_SIZE);
-  const currentLines = useMemo(
-    () => lines.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
-    [lines, currentPage]
+  const pageStartLine = currentPage * PAGE_SIZE + 1;
+  const currentPageData = useMemo(
+    () => readTextPage(content, pageStartOffsets[currentPage] ?? 0, pageStartLine),
+    [content, currentPage, pageStartLine, pageStartOffsets],
   );
+  const totalLogicalLines = useMemo(() => countLogicalLines(content), [content]);
+  const currentLines = currentPageData.lines;
+  const hasNextPage = currentPageData.nextStartOffset !== undefined;
+  const pageEndLine = pageStartLine + Math.max(0, currentPageData.logicalLineCount - 1);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
@@ -112,10 +191,9 @@ export function TextViewer({
     [currentLines, visibleRange.endIndex, visibleRange.startIndex]
   );
 
-  const isLargeContent = lines.length >= LARGE_TEXT_LINE_THRESHOLD;
+  const isLargeContent =
+    hasNextPage || currentPage > 0 || pageEndLine >= LARGE_TEXT_LINE_THRESHOLD;
   const visibleLineCount = visibleRange.endIndex - visibleRange.startIndex;
-  const pageStartLine = currentPage * PAGE_SIZE + 1;
-  const pageEndLine = Math.min((currentPage + 1) * PAGE_SIZE, lines.length);
 
   // 高亮搜索关键词
   const highlightText = useCallback(
@@ -141,10 +219,24 @@ export function TextViewer({
 
   // 计算当前页的行号宽度
   const lineNumberWidth = useMemo(() => {
-    const maxLine = Math.min((currentPage + 1) * PAGE_SIZE, lines.length);
+    const maxLine = pageEndLine;
     const digits = String(maxLine).length;
     return Math.max(digits, 4) * 8 + 16; // 每位数字约 8px + padding
-  }, [currentPage, lines.length]);
+  }, [pageEndLine]);
+
+  const goToNextPage = () => {
+    const nextStartOffset = currentPageData.nextStartOffset;
+    if (nextStartOffset === undefined) {
+      return;
+    }
+    setPageStartOffsets((current) => {
+      if (current[currentPage + 1] === nextStartOffset) {
+        return current;
+      }
+      return [...current.slice(0, currentPage + 1), nextStartOffset];
+    });
+    setCurrentPage((page) => page + 1);
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -153,7 +245,7 @@ export function TextViewer({
         <FileText size={12} className="text-forensics-muted" />
         <span className="text-forensics-muted font-light">{encoding}</span>
         <span className="text-forensics-border-strong">|</span>
-        <span className="text-forensics-muted">{t('textViewer.lineCount', { count: lines.length })}</span>
+        <span className="text-forensics-muted">{t('textViewer.lineCount', { count: totalLogicalLines })}</span>
 
         {isTruncated && (
           <>
@@ -190,7 +282,7 @@ export function TextViewer({
         </div>
 
         {/* 分页控制 */}
-        {totalPages > 1 && (
+        {(currentPage > 0 || hasNextPage) && (
           <div className="flex items-center gap-1 ml-2">
             <Button
               type="button"
@@ -203,16 +295,14 @@ export function TextViewer({
               <ChevronLeft size={12} />
             </Button>
             <span className="text-forensics-muted w-16 text-center">
-              {currentPage + 1}/{totalPages}
+              {currentPage + 1}{hasNextPage ? '+' : ''}
             </span>
             <Button
               type="button"
               variant="viewerControl"
               size="iconXs"
-              onClick={() =>
-                setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
-              }
-              disabled={currentPage === totalPages - 1}
+              onClick={goToNextPage}
+              disabled={!hasNextPage}
               aria-label="下一页"
             >
               <ChevronRight size={12} />
@@ -222,14 +312,11 @@ export function TextViewer({
       </div>
 
       {/* 文本内容 */}
-      <ScrollArea
-        className="min-h-0 flex-1 bg-forensics-surface"
-        viewportRef={containerRef}
-        viewportTestId="text-scroll-container"
-        viewportProps={{
-          onScroll: handleScroll,
-        }}
-        showHorizontalScrollbar
+      <div
+        ref={containerRef}
+        data-testid="text-scroll-container"
+        className="min-h-0 flex-1 overflow-auto bg-forensics-surface"
+        onScroll={handleScroll}
       >
         <div
           className="font-mono text-[11px] leading-[18px]"
@@ -246,16 +333,16 @@ export function TextViewer({
           >
             {visibleLines.map((line, index) => {
               const lineIndex = visibleRange.startIndex + index;
-              const lineNum = currentPage * PAGE_SIZE + lineIndex + 1;
+              const lineNum = line.lineNumber;
               const hasMatch =
                 (searchQuery || localSearch) &&
-                line
+                line.content
                   .toLowerCase()
                   .includes((searchQuery || localSearch).toLowerCase());
 
               return (
                 <div
-                  key={lineNum}
+                  key={`${lineNum}:${lineIndex}`}
                   data-line-number={lineNum}
                   className={`flex hover:bg-forensics-highlight ${
                     hasMatch ? 'bg-forensics-warning-bg' : ''
@@ -268,18 +355,20 @@ export function TextViewer({
                     className="shrink-0 text-right text-forensics-muted-light select-none border-r border-forensics-border-light bg-forensics-panel px-2"
                     style={{ width: `${lineNumberWidth}px` }}
                   >
-                    {lineNum}
+                    {line.continuation ? '...' : lineNum}
                   </div>
                   {/* 代码内容 */}
                   <div className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0">
-                    {highlightText(line) || '\u00A0'} {/* 空行也显示高度 */}
+                    <span data-testid="text-line-content">
+                      {highlightText(line.content) || '\u00A0'}
+                    </span> {/* 空行也显示高度 */}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* 状态栏 */}
       <div className="flex items-center gap-3 px-3 py-1 border-t bg-forensics-panel text-[10px] text-forensics-muted-light shrink-0">

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GitBranch, Link2, ListFilter, Network, Search, TimerReset } from 'lucide-react';
-import { useNavigate } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -11,7 +10,6 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
-import { useSelectionStore } from '@/stores/selection-store';
 import type {
   CorrelationConfidence,
   CorrelationSnapshot,
@@ -25,15 +23,13 @@ export function CorrelationWorkspace({
   snapshot,
   onRefresh,
   refreshing = false,
+  onJumpToTarget,
 }: {
   snapshot: CorrelationSnapshot;
   onRefresh?: () => void;
   refreshing?: boolean;
+  onJumpToTarget?: (route: string, targetId: string) => void;
 }) {
-  const navigate = useNavigate();
-  const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
-  const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
-  const setSelectedTimelineId = useSelectionStore((state) => state.setSelectedTimelineId);
   const [selectedLeadId, setSelectedLeadId] = useState<string | undefined>(snapshot.leads[0]?.id);
   const [leadSearch, setLeadSearch] = useState('');
   const [focusMode, setFocusMode] = useState<'all' | 'highConfidence' | 'review'>('all');
@@ -102,24 +98,7 @@ export function CorrelationWorkspace({
     }
   }, [filteredLeads, selectedLeadId]);
 
-  function jumpToTarget(route: string, targetId: string) {
-    if (route === '/files') {
-      setSelectedFileId(targetId);
-      navigate(route);
-      return;
-    }
-    if (route === '/artifacts') {
-      setSelectedArtifactId(targetId);
-      navigate(route);
-      return;
-    }
-    if (route === '/timeline') {
-      setSelectedTimelineId(targetId);
-      navigate(route);
-      return;
-    }
-    navigate(route);
-  }
+  const jumpToTarget = onJumpToTarget ?? (() => undefined);
 
   const selectedLead = useMemo(
     () => filteredLeads.find((lead) => lead.id === selectedLeadId) ?? filteredLeads[0],

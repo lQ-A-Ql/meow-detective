@@ -17,7 +17,7 @@ import {
   useImportEventState,
 } from '@/features/jobs/import-event-state';
 import { useDataSources } from '@/features/case/hooks';
-import { AnalysisProgressDrawer } from '@/features/analysis/components/AnalysisProgressDrawer';
+import { AnalysisProgressDrawerContainer } from '@/features/analysis/containers/AnalysisProgressDrawerContainer';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { useUiStore } from '@/stores/ui-store';
 import type {
@@ -185,7 +185,7 @@ export function BottomDrawer() {
               </span>
             </div>
             <div className="space-y-3">
-              <AnalysisProgressDrawer />
+              <AnalysisProgressDrawerContainer />
               {importSignals.latestPhase || importSignals.latestCancellation || importSignals.partialResults.length || importSignals.cacheStatuses.length || importSignals.latestReport ? (
                 <div className="border border-forensics-350 bg-forensics-surface p-3 text-[11px]">
                   <div className="flex items-start justify-between gap-3">

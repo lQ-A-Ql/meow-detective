@@ -180,15 +180,64 @@ function Assert-NoRuntimeFilesUnder {
   }
 }
 
+function Assert-PageShellComposition {
+  param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
+
+  $violations = @()
+  foreach ($file in $Files) {
+    $relative = Get-RelativePath $file.FullName
+    $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    if ($content -match '\buse(?:State|Effect|LayoutEffect|Memo|Callback|Reducer|Ref)\s*\(') {
+      $violations += "{0}: route shells must not own React state or effects; move orchestration into a feature model" -f $relative
+    }
+    if ($content -match 'from\s+[''\"]@/(?:app/components|components)/') {
+      $violations += "{0}: route shells must not import UI primitives or shared components; render a feature container instead" -f $relative
+    }
+    $imports = [regex]::Matches($content, '(?m)^\s*import\s+')
+    if ($imports.Count -ne 1 -or $content -notmatch '(?m)^import\s+\{\s*\w+Container\s*\}\s+from\s+[''\"]@/features/[^''\"]+/containers/[^''\"]+[''\"];?') {
+      $violations += "{0}: route shells must import exactly one feature container" -f $relative
+    }
+    if ($content -notmatch 'return\s+<\w+Container\s*/>;') {
+      $violations += "{0}: route shells must return their feature container directly" -f $relative
+    }
+  }
+
+  if ($violations.Count -gt 0) {
+    throw "Frontend page shells must only compose feature containers`n$($violations -join "`n")"
+  }
+}
+
 $runtimeFiles = @(Get-ChildItem -LiteralPath $frontendSrc -Recurse -File -Include *.ts,*.tsx |
   Where-Object { -not (Is-TestOrFixtureFile $_) })
 
 $pageRuntimeFiles = @(Get-ChildItem -LiteralPath $pagesPath -Recurse -File -Include *.ts,*.tsx |
   Where-Object { -not (Is-TestOrFixtureFile $_) })
 
-$featureRuntimeRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "features") -Recurse -File -Include *.ts,*.tsx |
-  Where-Object { -not (Is-TestOrFixtureFile $_) } |
+Assert-PageShellComposition -Files $pageRuntimeFiles
+
+$featureAdapterRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "features") -Recurse -File -Include *.ts,*.tsx |
+  Where-Object {
+    if (Is-TestOrFixtureFile $_) {
+      return $false
+    }
+    $relative = Get-RelativePath $_.FullName
+    return $relative -match '^frontend/src/features/[^/]+/hooks\.ts$' -or
+      $relative -match '^frontend/src/features/[^/]+/hooks/' -or
+      $relative -match '^frontend/src/features/[^/]+/containers/' -or
+      $relative -match '^frontend/src/features/[^/]+/use-[^/]+-model\.ts$' -or
+      $relative -in @(
+        'frontend/src/features/analysis/extraction-runner.ts',
+        'frontend/src/features/analysis/refresh.ts',
+        'frontend/src/features/files/previewHandleOwner.ts'
+      )
+  } |
   ForEach-Object { Get-RelativePath $_.FullName })
+
+$featureComponentRuntimeFiles = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "features") -Recurse -File -Include *.ts,*.tsx |
+  Where-Object {
+    -not (Is-TestOrFixtureFile $_) -and
+      (Get-RelativePath $_.FullName) -match '^frontend/src/features/[^/]+/components/'
+  })
 
 $storeRuntimeRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "stores") -Recurse -File -Include *.ts,*.tsx |
   Where-Object { -not (Is-TestOrFixtureFile $_) } |
@@ -201,7 +250,7 @@ $sharedComponentAdapterAllowedPaths = @(
   'frontend/src/lib/api/client.ts',
   'frontend/src/lib/events/tauri-bridge.ts',
   'frontend/src/lib/platform/dialog.ts'
-) + $featureRuntimeRelativePaths + $storeRuntimeRelativePaths
+) + $featureAdapterRelativePaths + $storeRuntimeRelativePaths
 
 $apiClient = Get-Content -LiteralPath $apiClientPath -Raw -Encoding UTF8
 Assert-Matches `
@@ -253,9 +302,8 @@ Assert-NoMatchesInRuntimeFiles `
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/lib/api/(?!client['""]|mcp['""])[^'""]+['""]" `
-  -AllowedRelativePaths @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "features") -Recurse -File -Include *.ts,*.tsx |
-    ForEach-Object { Get-RelativePath $_.FullName }) `
-  -Message "Frontend pages/components/stores must not import business API modules directly; route through feature hooks"
+  -AllowedRelativePaths $featureAdapterRelativePaths `
+  -Message "Frontend runtime code must import business API modules only from feature hooks, models, or containers"
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $pageRuntimeFiles `
@@ -317,6 +365,11 @@ Assert-NoMatchesInRuntimeFiles `
   -AllowedRelativePaths $sharedComponentAdapterAllowedPaths `
   -Message "Shared components and pages must not import API, platform adapters, stores, or Tauri directly; move containers to feature layer"
 
+Assert-NoMatchesInRuntimeFiles `
+  -Files $featureComponentRuntimeFiles `
+  -Pattern "from\s+['""]@/(?:lib/api|lib/platform|stores)/|from\s+['""]@tauri-apps/" `
+  -Message "Feature components must be pure views; move API, platform, store, and Tauri access into feature hooks, models, or containers"
+
 Assert-NoRawControlsOutsideAllowedCases -Files $runtimeFiles
 Assert-NoRawButtonsOutsideAllowedCases -Files $runtimeFiles
 
@@ -338,7 +391,7 @@ Assert-NoMatchesInRuntimeFiles `
   -AllowedRelativePaths @(
     # These timers coalesce real events or schedule one bounded retry; they do not fabricate data or progress.
     'frontend/src/components/tables/DenseDataTable.tsx',
-    'frontend/src/features/analysis/components/AnalysisWorkspace.tsx',
+    'frontend/src/features/analysis/use-analysis-workspace-model.ts',
     'frontend/src/features/gql/components/GqlResultView.tsx',
     'frontend/src/components/tree/TreeContextMenu.tsx',
     'frontend/src/components/tree/TreeSearch.tsx',

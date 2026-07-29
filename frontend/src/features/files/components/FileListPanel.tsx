@@ -123,7 +123,6 @@ export function FileListPanel({
     (row: FileEntryRow, trigger: ReactElement) => (
       <FileEntryContextMenu
         file={row}
-        onOpenFileMenu={(file) => setSelectedFileId(file.id)}
         onExtractFile={onExtractFile}
       >
         {trigger}

@@ -330,6 +330,36 @@ describe('files hooks', () => {
   });
 
   describe('useFileViewer', () => {
+    it('reuses the active hex session when its tab is hidden and restored', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:tab-toggle',
+        size: 4096,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange.mockResolvedValue({
+        kind: 'hex',
+        lines: [],
+        rawBytes: [0x41],
+      });
+
+      const { result, rerender, unmount } = renderHook(
+        ({ enabled }) => useFileViewer('file-tab-toggle', enabled),
+        { initialProps: { enabled: true }, wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      rerender({ enabled: false });
+      rerender({ enabled: true });
+
+      await waitFor(() => expect(result.current.data?.handle.handleId).toBe('file:tab-toggle'));
+      expect(mocks.openFileHandle).toHaveBeenCalledTimes(1);
+      expect(mocks.readFileRange).toHaveBeenCalledTimes(1);
+      expect(mocks.closeFileHandle).not.toHaveBeenCalledWith('file:tab-toggle');
+
+      unmount();
+      await waitFor(() => expect(mocks.closeFileHandle).toHaveBeenCalledWith('file:tab-toggle'));
+    });
+
     it('loads small files completely instead of fixed 96 bytes', async () => {
       mocks.openFileHandle.mockResolvedValue({
         handleId: 'file:small',
@@ -434,10 +464,33 @@ describe('files hooks', () => {
       );
 
       expect(screen.getByText('00000000')).toBeDefined();
-      expect(screen.getByText('4D')).toBeDefined();
-      expect(screen.getByText('5A')).toBeDefined();
-      expect(screen.getByText('00')).toBeDefined();
-      expect(screen.getByText('FF')).toBeDefined();
+      expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A 00 FF');
+    });
+
+    it('deduplicates overlapping range loads before React publishes loading state', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file-range-dedupe',
+        size: 3 * 1024 * 1024,
+        mime: 'application/octet-stream',
+      });
+      const nextRange = deferred<{ kind: string; lines: string[]; rawBytes: number[] }>();
+      mocks.readFileRange
+        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
+        .mockReturnValueOnce(nextRange.promise);
+
+      const { result } = renderHook(() => useFileViewer('file-range-dedupe'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.data?.hasMoreAfter).toBe(true));
+      act(() => {
+        void result.current.loadNextRange();
+        void result.current.loadNextRange();
+      });
+
+      expect(mocks.readFileRange).toHaveBeenCalledTimes(2);
+      nextRange.resolve({ kind: 'hex', lines: [], rawBytes: [0x42] });
+      await waitFor(() => expect(result.current.data?.activeOffset).toBe(64 * 1024));
     });
 
     it('closes the handle when the initial hex range fails', async () => {

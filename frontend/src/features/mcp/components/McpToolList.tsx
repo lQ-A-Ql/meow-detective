@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle, Loader2, Play, RefreshCw, Wrench, XCircle } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { useMcpStore } from '@/stores/mcp-store';
 
-interface McpToolListProps {
-  serverId: string;
+export interface McpToolListProps {
+  tools: Array<{ name: string; description: string }>;
+  loading: boolean;
+  onRefresh: () => void;
+  onTestTool: (toolName: string) => Promise<{
+    success: boolean;
+    data?: unknown;
+    error?: string;
+  }>;
 }
 
-export function McpToolList({ serverId }: McpToolListProps) {
-  const { tools, loading, refreshTools, callTool } = useMcpStore();
+export function McpToolList({ tools, loading, onRefresh, onTestTool }: McpToolListProps) {
   const [testingTool, setTestingTool] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     toolName: string;
@@ -18,23 +23,12 @@ export function McpToolList({ serverId }: McpToolListProps) {
     error?: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (serverId) {
-      refreshTools(serverId);
-    }
-  }, [refreshTools, serverId]);
-
   const handleTestTool = async (toolName: string) => {
     setTestingTool(toolName);
     setTestResult(null);
     try {
-      const result = await callTool(serverId, toolName, {});
-      setTestResult({
-        toolName,
-        success: result.success,
-        data: result.data,
-        error: result.error,
-      });
+      const result = await onTestTool(toolName);
+      setTestResult({ toolName, ...result });
     } finally {
       setTestingTool(null);
     }
@@ -48,7 +42,7 @@ export function McpToolList({ serverId }: McpToolListProps) {
           type="button"
           variant="forensicsGhost"
           size="iconSm"
-          onClick={() => refreshTools(serverId)}
+          onClick={onRefresh}
           disabled={loading}
           title="刷新"
         >
@@ -74,23 +68,17 @@ export function McpToolList({ serverId }: McpToolListProps) {
               <Wrench size={12} className="text-forensics-success-text mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <div className="text-[11px] font-light text-forensics-muted">
-                    {tool.name}
-                  </div>
+                  <div className="text-[11px] font-light text-forensics-muted">{tool.name}</div>
                   <Button
                     type="button"
                     variant="forensicsGhost"
                     size="compact"
-                    onClick={() => handleTestTool(tool.name)}
+                    onClick={() => void handleTestTool(tool.name)}
                     disabled={testingTool === tool.name}
                     className="h-5 bg-forensics-panel px-1.5 py-0.5 text-[9px] hover:bg-forensics-panel"
                     title="测试调用"
                   >
-                    {testingTool === tool.name ? (
-                      <Loader2 size={10} className="opacity-70" />
-                    ) : (
-                      <Play size={10} />
-                    )}
+                    {testingTool === tool.name ? <Loader2 size={10} className="opacity-70" /> : <Play size={10} />}
                   </Button>
                 </div>
                 <div className="text-[10px] text-forensics-muted">{tool.description}</div>
@@ -118,9 +106,7 @@ export function McpToolList({ serverId }: McpToolListProps) {
               {testResult.toolName}
             </span>
           </div>
-          {testResult.error && (
-            <div className="text-[10px] text-forensics-error-text">{testResult.error}</div>
-          )}
+          {testResult.error && <div className="text-[10px] text-forensics-error-text">{testResult.error}</div>}
           {testResult.data !== undefined && testResult.data !== null && (
             <ScrollArea className="mt-1 max-h-20" showHorizontalScrollbar>
               <pre className="p-1 text-[10px] text-forensics-muted">

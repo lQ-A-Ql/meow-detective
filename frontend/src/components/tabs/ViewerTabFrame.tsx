@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { cn } from '@/app/components/ui/utils';
 
@@ -29,14 +28,9 @@ export function ViewerTabFrame({ value, onValueChange, tabs }: ViewerTabFramePro
         <TabsContent
           key={tab.value}
           value={tab.value}
-          className="min-h-0 flex-1 overflow-hidden"
+          className={cn('min-h-0 flex-1 overflow-hidden p-3 text-[11px]', tab.contentClassName)}
         >
-          <ScrollArea
-            className="h-full"
-            viewportClassName={cn('p-3 text-[11px]', tab.contentClassName)}
-          >
-            {tab.content}
-          </ScrollArea>
+          {tab.content}
         </TabsContent>
       ))}
     </Tabs>

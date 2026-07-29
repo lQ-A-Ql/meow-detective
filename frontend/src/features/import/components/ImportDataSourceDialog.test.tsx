@@ -45,6 +45,14 @@ describe('ImportDataSourceDialog', () => {
     expect(screen.getByLabelText('Linux')).toBeDefined();
   });
 
+  it('preserves the shared dialog fixed viewport positioning', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    const content = document.querySelector('[data-slot="dialog-content"]');
+    expect(content?.classList.contains('fixed')).toBe(true);
+    expect(content?.classList.contains('relative')).toBe(false);
+  });
+
   it('advances to the form step when clicking next', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 

@@ -1,15 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { CaseWelcomeForms, ImportSection } from '@/features/case/components/CaseActions';
 import type { CaseWelcomeFormsProps, ImportSectionProps } from '@/features/case/components/CaseActions';
-import { openDialog } from '@/lib/platform/dialog';
-
-vi.mock('@/lib/platform/dialog', () => ({
-  openDialog: vi.fn(),
-  singleDialogPath: (path: string | string[] | null) => (Array.isArray(path) ? path[0] ?? null : path),
-}));
-
-const mockedOpen = openDialog as unknown as ReturnType<typeof vi.fn>;
 
 function baseWelcomeProps(overrides: Partial<CaseWelcomeFormsProps> = {}): CaseWelcomeFormsProps {
   return {
@@ -44,6 +36,8 @@ function baseImportProps(overrides: Partial<ImportSectionProps> = {}): ImportSec
     onCancelImport: vi.fn(),
     failedImportJob: undefined,
     onClose: vi.fn(),
+    onBrowseFile: vi.fn().mockResolvedValue(undefined),
+    onBrowseDirectory: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -159,10 +153,6 @@ describe('CaseWelcomeForms', () => {
 });
 
 describe('ImportSection', () => {
-  beforeEach(() => {
-    mockedOpen.mockReset();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -178,34 +168,31 @@ describe('ImportSection', () => {
   });
 
   it('sets the import path from the file dialog result', async () => {
-    mockedOpen.mockResolvedValue('D:\\evidence\\case.e01');
     const setImportPath = vi.fn();
-    render(<ImportSection {...baseImportProps({ setImportPath })} />);
+    const onBrowseFile = vi.fn().mockResolvedValue('D:\\evidence\\case.e01');
+    render(<ImportSection {...baseImportProps({ setImportPath, onBrowseFile })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /文件/ }));
     await vi.waitFor(() => expect(setImportPath).toHaveBeenCalledWith('D:\\evidence\\case.e01'));
-    expect(mockedOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ directory: false, multiple: false }),
-    );
+    expect(onBrowseFile).toHaveBeenCalledTimes(1);
   });
 
   it('sets the import path from the directory dialog result', async () => {
-    mockedOpen.mockResolvedValue('D:\\evidence\\logical');
     const setImportPath = vi.fn();
-    render(<ImportSection {...baseImportProps({ setImportPath })} />);
+    const onBrowseDirectory = vi.fn().mockResolvedValue('D:\\evidence\\logical');
+    render(<ImportSection {...baseImportProps({ setImportPath, onBrowseDirectory })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /目录/ }));
     await vi.waitFor(() => expect(setImportPath).toHaveBeenCalledWith('D:\\evidence\\logical'));
-    expect(mockedOpen).toHaveBeenCalledWith(expect.objectContaining({ directory: true, multiple: false }));
+    expect(onBrowseDirectory).toHaveBeenCalledTimes(1);
   });
 
-  it('does not throw when the dialog plugin is unavailable', async () => {
-    mockedOpen.mockRejectedValue(new Error('dialog unavailable'));
+  it('does not update the import path when browsing returns no selection', async () => {
     const setImportPath = vi.fn();
     render(<ImportSection {...baseImportProps({ setImportPath })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /文件/ }));
-    await vi.waitFor(() => expect(mockedOpen).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(setImportPath).not.toHaveBeenCalled());
     expect(setImportPath).not.toHaveBeenCalled();
   });
 

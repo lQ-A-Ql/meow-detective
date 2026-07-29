@@ -6,7 +6,12 @@ import '../styles/fonts.css';
 export default function App() {
   return (
     <ErrorBoundary>
-      <RouterProvider router={router} />
+      <div
+        className="contents"
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        <RouterProvider router={router} />
+      </div>
     </ErrorBoundary>
   );
 }

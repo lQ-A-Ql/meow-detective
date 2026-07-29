@@ -1,15 +1,15 @@
 # Frontend MVP Boundary
 
-This document is the authoritative frontend engineering boundary for Forensics Workbench.
-It complements `AGENTS.md`, `docs/development-engineering-guide.md`, and
+This document is the authoritative frontend engineering boundary for Meow~Detective.
+It complements `AGENTS.md`, `docs/design-constraints.md`, and
 `scripts/check-frontend-runtime-guard.ps1`.
 
 ## Layer Contract
 
 | Layer | Path | Responsibility | Forbidden |
 |---|---|---|---|
-| Page shell | `frontend/src/app/pages/*.tsx` | Route entry, top-level layout assembly, feature model invocation | Direct store, API, platform adapter, or Tauri imports |
-| Feature model | `frontend/src/features/<domain>/hooks.ts`, `use-*-model.ts` | TanStack Query, mutations, UI state orchestration, navigation actions | Backend business calculation and fake data |
+| Page shell | `frontend/src/app/pages/*.tsx` | Route entry that renders one feature container | React state/effects, UI composition, direct store, API, platform adapter, or Tauri imports |
+| Feature model / container | `frontend/src/features/<domain>/hooks.ts`, `use-*-model.ts`, `containers/*` | TanStack Query, mutations, store/platform/event access, UI state orchestration, navigation actions | Backend business calculation and fake data |
 | Domain component | `frontend/src/features/<domain>/components/*` | Reusable domain UI with explicit props | Host filesystem access and direct Tauri invoke |
 | Shared component | `frontend/src/components/*` | Cross-domain layout, table, tree, viewer, status primitives | Domain state, business API imports, stores, platform adapters |
 | API layer | `frontend/src/lib/api/*` | Typed Tauri command wrappers only | UI state, routing, presentation formatting |
@@ -19,9 +19,13 @@ It complements `AGENTS.md`, `docs/development-engineering-guide.md`, and
 ## Component Ownership
 
 - Components must not live under `frontend/src/app/pages` except route pages and tests.
+- A migrated route page renders its feature container only. Query orchestration, selection state,
+  persisted UI state, navigation, and event subscriptions belong in the feature model/container;
+  JSX belongs in the feature component.
 - Cross-domain UI primitives belong in `frontend/src/components/*`.
 - Domain-specific components belong in `frontend/src/features/<domain>/components/*`, even when currently used by one route.
-- Components that need API/store/platform access must be split so the container/model sits in `features/<domain>` and the component receives props/callbacks.
+- Components under `features/<domain>/components/*` are pure views: they receive DTO-shaped data and callbacks only. They must not import API modules, stores, platform adapters, Tauri packages, or router/store navigation actions.
+- Components that need API/store/platform/event access must be split so the container/model sits in `features/<domain>/containers/*` or `use-*-model.ts` and the component receives props/callbacks.
 - Layout shell components are the only shared component exception allowed to read `ui-store`.
 
 ## Shared UI Primitives
@@ -78,7 +82,9 @@ Any new exception must be documented here and added narrowly to the guard whitel
 - `frontend/src/lib/api/client.ts` is the only `@tauri-apps/api/core` invoke entry point.
 - `frontend/src/lib/events/tauri-bridge.ts` is the event adapter.
 - `frontend/src/lib/platform/*` is the plugin/browser adapter layer.
-- Production source must not contain mock/demo runtime modes or demo-case creation entry points.
+- Production source must not contain mock fallback modes. The repository still exposes an
+  explicit `create_analysis_demo_case` development/audit entry point; it seeds public-small
+  fixtures only when explicitly requested and is not part of normal import fallback.
 - Tests may use `vi.mock`, but test doubles must not leak into runtime files.
 
 ## Guarded Rules
@@ -87,7 +93,10 @@ Any new exception must be documented here and added narrowly to the guard whitel
 
 - No direct Tauri imports outside API/event/platform adapters.
 - Page shells do not import stores, API modules, platform adapters, or Tauri packages.
+- Route pages cannot own React state/effects or import UI components. Every route must render a
+  feature container, which prevents page-local presentation logic from returning.
 - Shared components do not import stores, API modules, platform adapters, or Tauri packages, except layout shell whitelist.
+- Feature components do not import stores, API modules, platform adapters, or Tauri packages; only feature hooks, `use-*-model.ts` files, and `containers/*` may do so.
 - Domain directories no longer live under shared `components/analysis`, `components/dashboard`, `components/import`, or `components/mcp`.
 - Production source contains no mock/demo/example presentation residue.
 - Runtime code does not hand-write raw `<input>`, `<textarea>`, `<select>`, or `<table>` outside
@@ -106,14 +115,17 @@ Any new exception must be documented here and added narrowly to the guard whitel
 | case | `frontend/src/features/case/components` |
 | dashboard | `frontend/src/features/dashboard/components` |
 | files | `frontend/src/features/files/components` |
-| gql | `frontend/src/features/gql/components` |
 | graph | `frontend/src/features/graph/components` |
 | import | `frontend/src/features/import/components` |
-| marketplace | `frontend/src/features/marketplace/components` |
+| jobs | `frontend/src/features/jobs/components` |
 | mcp | `frontend/src/features/mcp/components` |
 | notebook | `frontend/src/features/notebook/components` |
+| recovery | `frontend/src/features/recovery/components` |
+| reports | `frontend/src/features/reports/components` |
 | rule-packs | `frontend/src/features/rule-packs/components` |
+| search | `frontend/src/features/search/components` |
 | settings | `frontend/src/features/settings/components` |
+| timeline | `frontend/src/features/timeline/components` |
 
 ## Acceptance Standard
 
