@@ -144,6 +144,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0042_file_entry_encrypted",
         include_str!("scripts/0042_file_entry_encrypted.sql"),
     ),
+    (
+        "0043_bitlocker_restore_intents",
+        include_str!("scripts/0043_bitlocker_restore_intents.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[

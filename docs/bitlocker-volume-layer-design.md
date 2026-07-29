@@ -1,6 +1,6 @@
 # BitLocker 卷层设计
 
-**状态**: Stage 4-7 已完成（2026-07-28）
+**状态**: Stage 4-7 已完成（2026-07-29）
 **范围**: 只读 BitLocker (BDE) 卷解密，作为 `分区 -> 文件系统` 之间的新一层
 **事实来源**: 本文件是 Stage 1-6 的唯一范围依据。上游依赖的溯源事实在
 `docs/bitlocker-dependency-decision.md`；能力矩阵在 `docs/parser-support-matrix.md`。
@@ -24,6 +24,15 @@ Stage 4 已将“已验证密钥包”的持久化接入真实 Windows Credentia
 明文文件系统后才注册运行时；恢复失败不会留下半激活的运行时状态。非 Windows 构建
 返回 typed unsupported，不提供内存或文件系统 mock。锁定只清理运行时密钥，遗忘密钥
 只删除 Credential Manager 条目，两者分别审计且互不替代。
+
+Stage 7 补齐了案件重开恢复：控制库的 `bitlocker_restore_intents` 仅保存
+`dataSourceId`、分区序号、metadata fingerprint、状态和稳定错误码，绝不保存任何 key
+或凭据。案件打开后按已启用 intent 逐卷重新读取元数据，严格比较 fingerprint，再从
+Credential Manager 恢复并复探测明文文件系统。单卷恢复失败只让该卷保持锁定；缺失、
+损坏或 fingerprint 不匹配的安全密钥会禁用 intent，暂时 I/O/平台故障保留为可重试失败。
+已存在的 source DB 文件树不会重新导入。内存镜像恢复密钥的后续设计见
+`docs/bitlocker-memory-key-recovery-design.md`；它必须经多重明文 oracle 验证，不能
+通过随机字节扫描直接解锁。
 
 Stage 5 已将真实解锁流程接入文件浏览器检查器。BitLocker 面板只在当前分区确认为
 BitLocker 时出现；密码和恢复密码仅存在于组件的瞬时输入状态，提交后立即清空，不进入

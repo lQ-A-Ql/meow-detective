@@ -10,6 +10,7 @@ use volume_bitlocker::{
 };
 
 use crate::bitlocker_runtime::BitLockerRuntimeError;
+use persistence_sqlite::repositories::bitlocker_restore_intent_repo::BitLockerRestoreIntentRepo;
 
 use super::{
     activation::activate_verified,
@@ -229,6 +230,26 @@ fn unlock_with(
             method,
             "failed",
             Some("BITLOCKER_KEY_STORE_FAILED"),
+        );
+        return Err(error.into());
+    }
+    if let Err(error) = BitLockerRestoreIntentRepo::new(context.case_conn).upsert_enabled(
+        context.data_source_id,
+        context.partition_index,
+        activated.fingerprint.as_str(),
+    ) {
+        let _ = context.runtimes.key_store.delete(&activated.fingerprint);
+        context.runtimes.bitlocker_runtime.invalidate_partition(
+            &context.case_id.0,
+            &context.data_source_id.0,
+            context.partition_index as usize,
+        )?;
+        audit_unlock(
+            &context,
+            activated.fingerprint.as_str(),
+            method,
+            "failed",
+            Some("BITLOCKER_RESTORE_INTENT_STORE_FAILED"),
         );
         return Err(error.into());
     }

@@ -1,6 +1,9 @@
 use std::path::Path;
 
 use domain::{CaseId, DataSourceId};
+use persistence_sqlite::repositories::bitlocker_restore_intent_repo::{
+    BitLockerRestoreIntentRepo, BitLockerRestoreStatus,
+};
 use rusqlite::Connection;
 use transport::dto::BitLockerVolumeStatusDto;
 use volume_bitlocker::{
@@ -25,6 +28,39 @@ pub fn restore_persisted_bitlocker_key(
     partition_index: u32,
     runtimes: BitLockerRuntimeContext<'_>,
 ) -> Result<BitLockerVolumeStatusDto, BitLockerServiceError> {
+    let status = restore_persisted_bitlocker_key_for_fingerprint(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        partition_index,
+        None,
+        runtimes,
+    )?;
+    let repo = BitLockerRestoreIntentRepo::new(case_conn);
+    repo.upsert_enabled(
+        data_source_id,
+        partition_index,
+        &status.metadata_fingerprint,
+    )?;
+    repo.mark_status(
+        data_source_id,
+        partition_index,
+        BitLockerRestoreStatus::Restored,
+        None,
+    )?;
+    Ok(status)
+}
+
+pub(crate) fn restore_persisted_bitlocker_key_for_fingerprint(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    partition_index: u32,
+    expected_fingerprint: Option<&str>,
+    runtimes: BitLockerRuntimeContext<'_>,
+) -> Result<BitLockerVolumeStatusDto, BitLockerServiceError> {
     let _read_lease = runtimes
         .preview_runtime
         .begin_session(case_id, data_source_id)?;
@@ -37,19 +73,21 @@ pub fn restore_persisted_bitlocker_key(
     )?;
     let mut window = open_partition_window(&source)?;
     let identities = read_volume_identities(&mut window)?;
-    let (identity, fingerprint, verified) = load_verified_unlock(&identities, runtimes.key_store)
-        .inspect_err(|error| {
-        audit_persistence(
-            case_conn,
-            case_id,
-            data_source_id,
-            partition_index,
-            identities.first(),
-            "restoreKey",
-            "failed",
-            error_code(error),
-        );
-    })?;
+    let (identity, fingerprint, verified) =
+        load_verified_unlock(&identities, expected_fingerprint, runtimes.key_store).inspect_err(
+            |error| {
+                audit_persistence(
+                    case_conn,
+                    case_id,
+                    data_source_id,
+                    partition_index,
+                    identities.first(),
+                    "restoreKey",
+                    "failed",
+                    error_code(error),
+                );
+            },
+        )?;
     let activated = activate_verified(
         &source,
         case_id,
@@ -119,6 +157,7 @@ pub fn forget_persisted_bitlocker_key(
         }
         identities[0].clone()
     };
+    BitLockerRestoreIntentRepo::new(case_conn).remove(data_source_id, partition_index)?;
     audit_persistence(
         case_conn,
         case_id,
@@ -141,8 +180,24 @@ pub fn forget_persisted_bitlocker_key(
 
 fn load_verified_unlock(
     identities: &[VolumeIdentity],
+    expected_fingerprint: Option<&str>,
     key_store: &dyn super::BitLockerKeyStore,
 ) -> Result<(VolumeIdentity, MetadataFingerprint, VerifiedUnlock), BitLockerServiceError> {
+    if let Some(expected_fingerprint) = expected_fingerprint {
+        let identity = identities
+            .iter()
+            .find(|identity| {
+                MetadataFingerprint::from_metadata(&identity.metadata).as_str()
+                    == expected_fingerprint
+            })
+            .ok_or(BitLockerServiceError::PersistedKeyFingerprintMismatch)?;
+        let fingerprint = MetadataFingerprint::from_metadata(&identity.metadata);
+        let blob = key_store
+            .load(&fingerprint)?
+            .ok_or(BitLockerServiceError::StoredKeyNotFound)?;
+        let verified = restore_volume_from_persisted_key(identity.clone(), blob)?;
+        return Ok((identity.clone(), fingerprint, verified));
+    }
     for identity in identities {
         let fingerprint = MetadataFingerprint::from_metadata(&identity.metadata);
         if let Some(blob) = key_store.load(&fingerprint)? {

@@ -69,6 +69,21 @@ fn rejected_credentials_keep_the_stable_security_contract() {
     assert_eq!(error.recoverable(), Some(true));
 }
 
+#[test]
+fn persisted_key_fingerprint_mismatch_is_nonrecoverable_validation() {
+    let error = BitLockerServiceError::PersistedKeyFingerprintMismatch;
+
+    assert_eq!(
+        error.code(),
+        Some("BITLOCKER_PERSISTED_KEY_FINGERPRINT_MISMATCH")
+    );
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Validation
+    ));
+    assert_eq!(error.recoverable(), Some(false));
+}
+
 #[derive(Default)]
 struct TestKeyStore {
     blobs: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,

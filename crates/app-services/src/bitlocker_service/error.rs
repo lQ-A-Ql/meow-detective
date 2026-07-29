@@ -33,6 +33,8 @@ pub enum BitLockerServiceError {
     DrainTimeout,
     #[error("no persisted key package exists for this BitLocker volume")]
     StoredKeyNotFound,
+    #[error("the persisted BitLocker key does not match the current volume metadata")]
+    PersistedKeyFingerprintMismatch,
     #[error("BitLocker preview runtime failed: {0}")]
     PreviewRuntime(#[from] crate::file_service::FileServiceError),
 }
@@ -40,7 +42,9 @@ pub enum BitLockerServiceError {
 impl ServiceErrorCategory for BitLockerServiceError {
     fn category(&self) -> ErrorCategory {
         match self {
-            Self::PartitionNotFound { .. } | Self::NotBitLocker { .. } => ErrorCategory::Validation,
+            Self::PartitionNotFound { .. }
+            | Self::NotBitLocker { .. }
+            | Self::PersistedKeyFingerprintMismatch => ErrorCategory::Validation,
             Self::UnsupportedSourceKind { .. } | Self::UnsupportedFilesystem(_) => {
                 ErrorCategory::Unsupported
             }
@@ -89,6 +93,9 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::CatalogState(_) => Some("BITLOCKER_CATALOG_STATE_INVALID"),
             Self::DrainTimeout => Some("BITLOCKER_LOCK_TIMEOUT"),
             Self::StoredKeyNotFound => Some("BITLOCKER_STORED_KEY_NOT_FOUND"),
+            Self::PersistedKeyFingerprintMismatch => {
+                Some("BITLOCKER_PERSISTED_KEY_FINGERPRINT_MISMATCH")
+            }
             _ => None,
         }
     }
@@ -106,6 +113,9 @@ impl ServiceErrorCategory for BitLockerServiceError {
             }
             Self::DrainTimeout => Some("Active preview reads prevented the volume from locking"),
             Self::StoredKeyNotFound => Some("No saved key is available for this BitLocker volume"),
+            Self::PersistedKeyFingerprintMismatch => {
+                Some("The saved BitLocker key belongs to different volume metadata")
+            }
             Self::KeyStore(super::BitLockerKeyStoreError::Unsupported) => {
                 Some("Secure BitLocker key storage is unavailable on this platform")
             }
@@ -124,7 +134,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::Volume(error) => Some(error.is_retryable_with_credential()),
             Self::Runtime(crate::bitlocker_runtime::BitLockerRuntimeError::Locked)
             | Self::DrainTimeout => Some(true),
-            Self::StoredKeyNotFound => Some(false),
+            Self::StoredKeyNotFound | Self::PersistedKeyFingerprintMismatch => Some(false),
             Self::UnsupportedSourceKind { .. } | Self::UnsupportedFilesystem(_) => Some(false),
             Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => Some(true),
             Self::KeyStore(super::BitLockerKeyStoreError::Unsupported)

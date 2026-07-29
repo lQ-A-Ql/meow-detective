@@ -57,7 +57,7 @@ fn acquire(
 #[test]
 fn migration_installs_constrained_phase_ledger_with_cascade_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0042_file_entry_encrypted");
+    assert_eq!(runner::latest_version(), "0043_bitlocker_restore_intents");
 
     let columns = conn
         .prepare("SELECT name FROM pragma_table_info('data_source_processing_phases')")

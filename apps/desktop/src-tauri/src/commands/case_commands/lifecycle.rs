@@ -92,6 +92,7 @@ pub async fn open_case(
         transition.rollback(&app_state, Duration::from_secs(5));
         return Err(error);
     }
+    restore_enabled_bitlocker_volumes(&app_state, &root, &dto).await;
     transition.commit(&app_state);
     recover_interrupted_jobs(&app_state);
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
@@ -163,6 +164,48 @@ fn initialize_and_remember(
 ) -> Result<(), CommandError> {
     init_case_db(state)?;
     remember_recent_case(case_root, dto)
+}
+
+async fn restore_enabled_bitlocker_volumes(
+    state: &AppState,
+    case_root: &std::path::Path,
+    case: &CaseSummaryDto,
+) {
+    let state = state.clone();
+    let case_root = case_root.to_path_buf();
+    let case_id = domain::CaseId(case.id.clone());
+    let restore = tauri::async_runtime::spawn_blocking(move || {
+        let connection = state.get_connection().map_err(|error| error.to_string())?;
+        let context = app_services::bitlocker_service::BitLockerRuntimeContext::new(
+            &state.preview_runtime,
+            &state.bitlocker_runtime,
+            state.bitlocker_key_store.as_ref(),
+        );
+        app_services::bitlocker_service::restore_enabled_bitlocker_volumes(
+            &connection,
+            &case_root,
+            &case_id,
+            context,
+        )
+        .map_err(|error| error.to_string())
+    });
+    match restore.await {
+        Ok(Ok(summary)) if summary.attempted > 0 => tracing::info!(
+            case_id = case.id,
+            attempted = summary.attempted,
+            restored = summary.restored,
+            failed = summary.failed,
+            disabled = summary.disabled,
+            "Completed persisted BitLocker volume restoration"
+        ),
+        Ok(Ok(_)) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(case_id = case.id, %error, "BitLocker volume restoration could not start")
+        }
+        Err(error) => {
+            tracing::warn!(case_id = case.id, %error, "BitLocker volume restoration worker failed")
+        }
+    }
 }
 
 async fn rollback_created_case(case_root: PathBuf) {
