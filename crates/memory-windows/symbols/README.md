@@ -15,15 +15,13 @@ normal; the GUID is the authoritative identity).
 
 ## Collection
 
-- `ntkrnlmp/` — 1077 per-build tables covering Windows 10 10240 through
-  Windows 11 28000, harvested from the winbindex metadata (PE
-  timestamp+size), each binary's RSDS record, and the matching Microsoft PDB
-  (~96% of indexed builds; the remainder is absent from the public symbol
-  server — either the binary itself or only its PDB). Each table carries the
-  two object-manager globals (`ObpRootDirectoryObject`,
-  `ObpInfoMaskToOffset`) and the object/driver/device/module layouts for that
-  build. The registry include is generated at
-  `src/keyring_recovery/symbol_registry_generated.rs`.
+- `ntkrnlmp/manifest.json` — the slim registry source: 1077 per-build rows
+  (Windows 10 10240 through Windows 11 28000, ~96% of indexed builds; the
+  remainder is absent from the public symbol server). Each row carries only
+  the per-build facts the recovery path needs: build label, PDB GUID/age,
+  and the two object-manager global RVAs (`ObpRootDirectoryObject`,
+  `ObpInfoMaskToOffset`). The runtime registry is the generated static table
+  at `src/keyring_recovery/symbol_registry_generated.rs`.
 - `fvevol/47808A31-...-3.json` — public PDB **stripped of type info** (driver
   PDBs carry no type records). Holds 60 BitLocker-relevant public symbols
   with RVAs (`FVE_KEYRING_*` request GUIDs, keyring/VMK functions) as
@@ -35,10 +33,13 @@ normal; the GUID is the authoritative identity).
 Every field offset the recovery path consumes (`_DEVICE_OBJECT`,
 `_DRIVER_OBJECT`, `_DRIVER_EXTENSION`, `_OBJECT_HEADER`,
 `_OBJECT_HEADER_NAME_INFO`, `_OBJECT_DIRECTORY(_ENTRY)`, `_UNICODE_STRING`,
-`_KLDR_DATA_TABLE_ENTRY`) was verified invariant across all extracted
-profiles, so those live in source as reviewed constants. Per-build data is
-only the two object-manager global RVAs, used by the object-directory fast
-path; unknown builds proceed through the version-free driver-object carve.
+`_KLDR_DATA_TABLE_ENTRY`) was verified invariant across all 1077 harvested
+profiles — only five trailing, never-consumed fields vary
+(`_OBJECT_DIRECTORY.{Flags,NamespaceEntry,SessionId,SessionObject}` and
+`_FSRTL_ADVANCED_FCB_HEADER.ReservedContext`). Those layouts therefore live
+in source as reviewed constants; per-build data is only the two global RVAs
+in the manifest, used by the object-directory fast path. Unknown builds
+proceed through the version-free driver-object carve.
 
 ## Regenerating / adding a build
 

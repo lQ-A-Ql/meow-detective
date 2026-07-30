@@ -1,0 +1,7545 @@
+{
+ "source": "winbindex metadata -> RSDS -> Microsoft public symbol server PDBs",
+ "note": "object-manager globals per ntoskrnl build; all consumed struct layouts are invariant and live in source",
+ "entries": [
+  {
+   "pdbGuid": "C68EE22F-DCF6-4778-95C5-4A862BE16567",
+   "build": "10240.16384",
+   "pdbAge": 2,
+   "obpRoot": 3286872,
+   "obpInfoMask": 3295392
+  },
+  {
+   "pdbGuid": "A3295589-A56D-4E6F-A832-B8B42E63CFD9",
+   "build": "10240.17071",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "0E8F31D5-D168-47F0-9766-2FDADD7B84FB",
+   "build": "10240.17113",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "653A11DC-3596-48AE-A704-1463C88C13D2",
+   "build": "10240.17146",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "6766A218-DBBB-4F85-BA47-6F5ABD0EAFB7",
+   "build": "10240.17184",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "4D1777BD-26BE-4DD6-A110-DF5829C8E3F5",
+   "build": "10240.17202",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "FBDF184F-6D17-402A-9261-0B2BCF59D99A",
+   "build": "10240.17319",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "2244930A-44E8-4B50-829B-E18083D4A53E",
+   "build": "10240.17320",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "30D698E1-1649-4C24-A484-09E2A73883CF",
+   "build": "10240.17354",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "3C77A203-82CE-4024-A425-C6A53F4B167F",
+   "build": "10240.17394",
+   "pdbAge": 2,
+   "obpRoot": 3287224,
+   "obpInfoMask": 3295712
+  },
+  {
+   "pdbGuid": "E33085C1-F742-4765-89EC-2796AC20992C",
+   "build": "10240.17443",
+   "pdbAge": 2,
+   "obpRoot": 3283128,
+   "obpInfoMask": 3291616
+  },
+  {
+   "pdbGuid": "4F83B5AC-1091-4602-8B86-E12902A1A879",
+   "build": "10240.17446",
+   "pdbAge": 2,
+   "obpRoot": 3283128,
+   "obpInfoMask": 3291616
+  },
+  {
+   "pdbGuid": "15CC02F8-93DD-498F-B964-8C8EEFFA68C8",
+   "build": "10240.17488",
+   "pdbAge": 2,
+   "obpRoot": 3283064,
+   "obpInfoMask": 3291552
+  },
+  {
+   "pdbGuid": "7E1C45B1-A760-4BC1-B7C3-5EE090FF0107",
+   "build": "10240.17533",
+   "pdbAge": 2,
+   "obpRoot": 3283064,
+   "obpInfoMask": 3291552
+  },
+  {
+   "pdbGuid": "877D9CB2-4011-430A-A7AE-2985186A0BF7",
+   "build": "10240.17609",
+   "pdbAge": 2,
+   "obpRoot": 3283064,
+   "obpInfoMask": 3291552
+  },
+  {
+   "pdbGuid": "69A3C6ED-1981-4DC7-B150-CF92D397F439",
+   "build": "10240.17643",
+   "pdbAge": 2,
+   "obpRoot": 3283064,
+   "obpInfoMask": 3291552
+  },
+  {
+   "pdbGuid": "7243DE0E-C12F-4170-9F41-9026028AA44E",
+   "build": "10240.17709",
+   "pdbAge": 2,
+   "obpRoot": 3283064,
+   "obpInfoMask": 3291552
+  },
+  {
+   "pdbGuid": "4CBB6EBE-3023-4405-BE02-28F47D53D792",
+   "build": "10240.17738",
+   "pdbAge": 2,
+   "obpRoot": 3324672,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "001C2507-8667-4BDE-9C75-9A89614EBB93",
+   "build": "10240.17741",
+   "pdbAge": 2,
+   "obpRoot": 3324672,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "13E98F63-A917-4179-A3C7-EB297138E3DB",
+   "build": "10240.17770",
+   "pdbAge": 2,
+   "obpRoot": 3324672,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "294C7057-63D8-42C9-BFD3-F658FCA31BA9",
+   "build": "10240.17797",
+   "pdbAge": 2,
+   "obpRoot": 3324672,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "63E8B0D1-453F-4546-84C5-6FC9B7C808EE",
+   "build": "10240.17831",
+   "pdbAge": 2,
+   "obpRoot": 3324672,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "222DDF1C-D530-4672-8A86-B91620C755D2",
+   "build": "10240.17889",
+   "pdbAge": 2,
+   "obpRoot": 3316448,
+   "obpInfoMask": 3324576
+  },
+  {
+   "pdbGuid": "E37DBCF1-160A-45AC-B467-94049F0B00E0",
+   "build": "10240.17914",
+   "pdbAge": 2,
+   "obpRoot": 3316448,
+   "obpInfoMask": 3324576
+  },
+  {
+   "pdbGuid": "05018747-D87B-413B-B1C8-88783AB9EF85",
+   "build": "10240.17918",
+   "pdbAge": 2,
+   "obpRoot": 3316448,
+   "obpInfoMask": 3324576
+  },
+  {
+   "pdbGuid": "968C4574-EFD0-4049-81C2-AB72847982F6",
+   "build": "10240.17946",
+   "pdbAge": 2,
+   "obpRoot": 3336928,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "8271F042-8903-4AA0-A29A-5C9C0A18702A",
+   "build": "10240.17976",
+   "pdbAge": 2,
+   "obpRoot": 3336928,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "2596FD70-0F06-4004-9A0D-A98C7FB55098",
+   "build": "10240.18005",
+   "pdbAge": 2,
+   "obpRoot": 3336928,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "1E3BACB7-1393-4622-B7D7-D80C514DA7AF",
+   "build": "10240.18036",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "F21A2B86-679D-46B8-8549-5E7DAA0E2E14",
+   "build": "10240.18063",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "9DB20F7A-CE32-4E80-88A7-862C394B43B5",
+   "build": "10240.18094",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "38B6E2B4-EE12-470B-9795-162BC8709E65",
+   "build": "10240.18132",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "E24FC53C-66CE-43F6-9102-ADA04D8B651B",
+   "build": "10240.18135",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "0FADE4AB-83D7-4744-BCB2-140F4FE52437",
+   "build": "10240.18158",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "3205D114-9FEE-4831-BFCC-0C1F7F0B20DB",
+   "build": "10240.18186",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "080A7332-5D83-4B96-94D7-01B3DC21F6A2",
+   "build": "10240.18187",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "9ADD89B1-0EF4-4E86-B0A4-098F75C2D1EF",
+   "build": "10240.18215",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "CBA956E0-E140-4B88-85B5-8FD469A076A7",
+   "build": "10240.18275",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "8020BC83-7181-4EED-B677-07CD13250164",
+   "build": "10240.18303",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "E4E02295-937A-43CE-B6B3-A79DAED9FA12",
+   "build": "10240.18333",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "88F49F20-ECDC-4471-893D-882C08A0403A",
+   "build": "10240.18366",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345088
+  },
+  {
+   "pdbGuid": "47FF494D-316A-4075-8C27-25B49158705D",
+   "build": "10240.18394",
+   "pdbAge": 2,
+   "obpRoot": 3328808,
+   "obpInfoMask": 3336928
+  },
+  {
+   "pdbGuid": "D3380AEE-3FD2-4CA0-AC17-31D67706B05F",
+   "build": "10240.18427",
+   "pdbAge": 2,
+   "obpRoot": 3328808,
+   "obpInfoMask": 3336928
+  },
+  {
+   "pdbGuid": "2A2C4860-05C5-4B85-9195-888DFCA75322",
+   "build": "10240.18452",
+   "pdbAge": 2,
+   "obpRoot": 3328808,
+   "obpInfoMask": 3336928
+  },
+  {
+   "pdbGuid": "52F0277E-430E-46D2-B9FF-55E6B24686C4",
+   "build": "10240.18485",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "B4CCBB5D-F3FC-47E2-846F-AF78C6458307",
+   "build": "10240.18519",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "F271F80C-57E1-4987-BFEB-AC344B4B7A67",
+   "build": "10240.18545",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "EEA04005-10CB-4E70-A0FE-9E9282110AAB",
+   "build": "10240.18575",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "EFEC2C2E-02C2-4C06-97AD-F01B73A69242",
+   "build": "10240.18608",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "C83BF932-080C-4312-8DC0-98BF0F3EDCE8",
+   "build": "10240.18609",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "ECFFDAB8-DDB1-46CD-AF65-790B9B5FD844",
+   "build": "10240.18638",
+   "pdbAge": 2,
+   "obpRoot": 3332840,
+   "obpInfoMask": 3340928
+  },
+  {
+   "pdbGuid": "88AB176B-540C-4299-802B-386651BEE5FA",
+   "build": "10240.18666",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "8132A6C3-2D2F-4F81-AD21-B004F40C1AFC",
+   "build": "10240.18696",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "D0234770-41E5-46B6-A1C2-4BC3E991D29D",
+   "build": "10240.18725",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "1947F72A-FD13-4E18-8B8C-1D17883E154F",
+   "build": "10240.18756",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "48A1F581-5530-46CC-95EA-017F2534F506",
+   "build": "10240.18782",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "4F1E947D-D47B-4831-9EA6-A94E08A770A1",
+   "build": "10240.18818",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "041B991E-DCDD-4865-A8A0-75C127168CA0",
+   "build": "10240.18841",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "1F065FE3-A35B-4B04-9EC8-00B99E7CD7DB",
+   "build": "10240.18875",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "D9AE1F66-69AA-4AC6-B859-5D286E8391DB",
+   "build": "10240.18906",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "CDD31A4F-0D25-4FDE-930B-5A6DD1138161",
+   "build": "10240.18932",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "5306B263-218B-45D8-8967-DB1BE9EEBCDA",
+   "build": "10240.18967",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "2CE03305-BB32-4C72-8E81-27C7A4D2F4B9",
+   "build": "10240.18969",
+   "pdbAge": 2,
+   "obpRoot": 3328840,
+   "obpInfoMask": 3336960
+  },
+  {
+   "pdbGuid": "5A68CF05-F49F-4971-8A4E-4527CE925B76",
+   "build": "10240.19003",
+   "pdbAge": 2,
+   "obpRoot": 3324584,
+   "obpInfoMask": 3332672
+  },
+  {
+   "pdbGuid": "6B5FCA2B-7A55-47AC-9D85-5D9C5F5FA686",
+   "build": "10240.19022",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "6D59C96C-80EA-447A-B3CF-91AD81F0AC37",
+   "build": "10240.19060",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "AC37F737-2351-4B05-BEFA-5C8CA49F7C73",
+   "build": "10240.19086",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "51FD81DA-D4B9-4CDA-BE36-8B9D201D135D",
+   "build": "10240.19119",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "6149ADF7-2518-4E25-A0BF-2AFD86439C47",
+   "build": "10240.19145",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "562D86F1-F06C-4DBF-9A78-38FC7D5F8DE7",
+   "build": "10240.19177",
+   "pdbAge": 2,
+   "obpRoot": 3324584,
+   "obpInfoMask": 3332672
+  },
+  {
+   "pdbGuid": "F9AE9E2B-87A8-4904-9E67-AF4895BA6B49",
+   "build": "10240.19179",
+   "pdbAge": 2,
+   "obpRoot": 3324584,
+   "obpInfoMask": 3332672
+  },
+  {
+   "pdbGuid": "C121F3FD-7A36-4119-93D4-0608483CE928",
+   "build": "10240.19204",
+   "pdbAge": 2,
+   "obpRoot": 3324584,
+   "obpInfoMask": 3332672
+  },
+  {
+   "pdbGuid": "2084418D-D03C-4A5C-A9C7-D93D1860F249",
+   "build": "10240.19235",
+   "pdbAge": 2,
+   "obpRoot": 3324648,
+   "obpInfoMask": 3332768
+  },
+  {
+   "pdbGuid": "1AECBC68-2A84-4DD8-8DC5-1AE7BE1D28C4",
+   "build": "10240.19265",
+   "pdbAge": 2,
+   "obpRoot": 3324648,
+   "obpInfoMask": 3332768
+  },
+  {
+   "pdbGuid": "F0CC42E2-D52C-46AD-B066-13E9A8A5966A",
+   "build": "10240.19297",
+   "pdbAge": 2,
+   "obpRoot": 3324648,
+   "obpInfoMask": 3332768
+  },
+  {
+   "pdbGuid": "0E1967E6-D450-43EC-95AD-7F726C8276F5",
+   "build": "10240.19325",
+   "pdbAge": 2,
+   "obpRoot": 3324648,
+   "obpInfoMask": 3332768
+  },
+  {
+   "pdbGuid": "FBD90BDC-C295-48C6-A490-AA574BD2D0A7",
+   "build": "10240.19360",
+   "pdbAge": 2,
+   "obpRoot": 3324648,
+   "obpInfoMask": 3332768
+  },
+  {
+   "pdbGuid": "82EF484C-EE1F-42AE-867F-CD843C77B2E8",
+   "build": "10240.19387",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "7B308894-1438-497C-A1DD-472C1FFCDAD9",
+   "build": "10240.19444",
+   "pdbAge": 2,
+   "obpRoot": 3324616,
+   "obpInfoMask": 3332704
+  },
+  {
+   "pdbGuid": "299B7C80-BEF3-42E7-A382-70E391AC5688",
+   "build": "10240.19507",
+   "pdbAge": 2,
+   "obpRoot": 3324712,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "5AA28F4B-22EA-47CE-9D82-983C580D006B",
+   "build": "10240.19509",
+   "pdbAge": 2,
+   "obpRoot": 3324712,
+   "obpInfoMask": 3332800
+  },
+  {
+   "pdbGuid": "BE920305-F203-44B8-BABE-5AF94E0A35B9",
+   "build": "10240.19567",
+   "pdbAge": 2,
+   "obpRoot": 3336904,
+   "obpInfoMask": 3344992
+  },
+  {
+   "pdbGuid": "FCA7EE12-A460-44F1-99ED-32BF476AFD05",
+   "build": "10240.19624",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345120
+  },
+  {
+   "pdbGuid": "C6A6E587-FB5F-4647-9870-6E1CB0CAA3B0",
+   "build": "10240.19685",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345120
+  },
+  {
+   "pdbGuid": "1D084C27-8914-4BC6-8F2D-F833F124E582",
+   "build": "10240.19747",
+   "pdbAge": 2,
+   "obpRoot": 3337000,
+   "obpInfoMask": 3345120
+  },
+  {
+   "pdbGuid": "9049DF33-7210-4F6C-AB26-B1051533863B",
+   "build": "10240.19805",
+   "pdbAge": 2,
+   "obpRoot": 3336904,
+   "obpInfoMask": 3344992
+  },
+  {
+   "pdbGuid": "31E3040A-2003-4382-97F6-522D92ABDA72",
+   "build": "10240.19869",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "8AD9F190-9398-4CD7-B4D9-DC84B21876C0",
+   "build": "10240.19926",
+   "pdbAge": 2,
+   "obpRoot": 3337064,
+   "obpInfoMask": 3345152
+  },
+  {
+   "pdbGuid": "53A20206-BD7F-4DA5-85BF-D3E2534B5C7C",
+   "build": "10240.19983",
+   "pdbAge": 2,
+   "obpRoot": 3337064,
+   "obpInfoMask": 3345152
+  },
+  {
+   "pdbGuid": "9D17AAF9-5221-46C9-825B-BBD8DB0C23C1",
+   "build": "10240.19986",
+   "pdbAge": 2,
+   "obpRoot": 3337064,
+   "obpInfoMask": 3345152
+  },
+  {
+   "pdbGuid": "5756F8D5-82C5-4B27-B642-4D42A9072CD6",
+   "build": "10240.20048",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "AF4FD3D7-AE5E-4343-89AC-5F78AECDE50D",
+   "build": "10240.20107",
+   "pdbAge": 2,
+   "obpRoot": 3337064,
+   "obpInfoMask": 3345184
+  },
+  {
+   "pdbGuid": "44F7DEC8-6DC0-42BC-9FC5-0083EAD23C10",
+   "build": "10240.20161",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "CA9C8B8B-C840-4B46-90F3-2FE2E7DC87AA",
+   "build": "10240.20232",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "B805CAED-5CCB-4FFD-85D9-68418D3266FF",
+   "build": "10240.20307",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "19129524-98A6-4E35-BFF1-FF91D242706F",
+   "build": "10240.20345",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "D7A784B0-FB11-467A-87C6-5939BFE74803",
+   "build": "10240.20401",
+   "pdbAge": 2,
+   "obpRoot": 3336968,
+   "obpInfoMask": 3345056
+  },
+  {
+   "pdbGuid": "BB252516-2ECC-40F5-BD85-090FAC2A5511",
+   "build": "10240.20466",
+   "pdbAge": 2,
+   "obpRoot": 3337064,
+   "obpInfoMask": 3345184
+  },
+  {
+   "pdbGuid": "174C26F7-5A3A-43FF-95C1-FD39F06EAE68",
+   "build": "10240.20526",
+   "pdbAge": 2,
+   "obpRoot": 3336904,
+   "obpInfoMask": 3345024
+  },
+  {
+   "pdbGuid": "ED0E0B9D-1545-438F-A315-E5470673EC47",
+   "build": "10240.20593",
+   "pdbAge": 2,
+   "obpRoot": 3341032,
+   "obpInfoMask": 3349152
+  },
+  {
+   "pdbGuid": "1217D7F9-2D61-4566-BE6C-E8415DA4B0B5",
+   "build": "10240.20651",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "EF5BBD0A-FC7F-4F36-A6BE-41222B6AA3D8",
+   "build": "10240.20680",
+   "pdbAge": 2,
+   "obpRoot": 3341128,
+   "obpInfoMask": 3349248
+  },
+  {
+   "pdbGuid": "7391320E-18F1-46FC-8461-D901369C2417",
+   "build": "10240.20708",
+   "pdbAge": 2,
+   "obpRoot": 3341096,
+   "obpInfoMask": 3349216
+  },
+  {
+   "pdbGuid": "3BBB1F00-4FCD-4153-A818-A93377D68C22",
+   "build": "10240.20747",
+   "pdbAge": 2,
+   "obpRoot": 3341096,
+   "obpInfoMask": 3349216
+  },
+  {
+   "pdbGuid": "E5F0B8FB-4112-4E72-B894-D62EC084302D",
+   "build": "10240.20761",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "DA98FA1A-5D43-4363-B336-136A3EAE51D8",
+   "build": "10240.20793",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "7D7379C5-2600-475A-A629-7F71ABFE7424",
+   "build": "10240.20822",
+   "pdbAge": 2,
+   "obpRoot": 3341096,
+   "obpInfoMask": 3349216
+  },
+  {
+   "pdbGuid": "497A7D5C-FE8B-43BE-A5FD-B3B064FA36F8",
+   "build": "10240.20852",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "B382C5C1-87FA-4F86-A291-75534DA5DEEE",
+   "build": "10240.20883",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "AA2F75A0-6A85-415F-8317-841EC3007582",
+   "build": "10240.20915",
+   "pdbAge": 2,
+   "obpRoot": 3341032,
+   "obpInfoMask": 3349152
+  },
+  {
+   "pdbGuid": "8DD91321-108A-4E02-BDBC-409FFEF25F3D",
+   "build": "10240.20940",
+   "pdbAge": 2,
+   "obpRoot": 3341032,
+   "obpInfoMask": 3349152
+  },
+  {
+   "pdbGuid": "D301368E-5FFF-4B46-B91E-D7C0215D9DEC",
+   "build": "10240.20973",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "05E5EA94-6182-4248-81A5-599F56A86F29",
+   "build": "10240.21002",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "240EF74E-930E-4318-9643-2584CB694615",
+   "build": "10240.21033",
+   "pdbAge": 2,
+   "obpRoot": 3341064,
+   "obpInfoMask": 3349184
+  },
+  {
+   "pdbGuid": "B6E4516C-9D3D-4653-ACD6-7CD60686FA29",
+   "build": "10240.21072",
+   "pdbAge": 2,
+   "obpRoot": 3341288,
+   "obpInfoMask": 3349408
+  },
+  {
+   "pdbGuid": "FDB171B3-F4AC-4454-AE76-962B21D67200",
+   "build": "10240.21100",
+   "pdbAge": 2,
+   "obpRoot": 3341288,
+   "obpInfoMask": 3349408
+  },
+  {
+   "pdbGuid": "CC6418AD-F216-4FBE-A6E1-A67C218B47C7",
+   "build": "10240.21128",
+   "pdbAge": 2,
+   "obpRoot": 3341288,
+   "obpInfoMask": 3349408
+  },
+  {
+   "pdbGuid": "876D84B9-50E4-4818-A4B4-9ACCFC12B54A",
+   "build": "10240.21161",
+   "pdbAge": 2,
+   "obpRoot": 3341288,
+   "obpInfoMask": 3349408
+  },
+  {
+   "pdbGuid": "0DE6DC23-8E19-4BB7-8608-D54B1E6FA379",
+   "build": "10586.0",
+   "pdbAge": 2,
+   "obpRoot": 3000320,
+   "obpInfoMask": 3007840
+  },
+  {
+   "pdbGuid": "584B3BEB-E2E2-4136-862A-E57143254C2B",
+   "build": "10586.1007",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "85581F44-6895-4BA2-8061-7DF7241D8E38",
+   "build": "10586.1045",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "8DB447CC-BFDB-4F4A-8257-A9F37D451BA6",
+   "build": "10586.1106",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "2A7E0B0C-61ED-4BB1-9563-24B5C2CC1CE1",
+   "build": "10586.1176",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "2A8E742E-80F2-4DDD-81B9-343E17870E15",
+   "build": "10586.1177",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "10B5BEE3-8BB7-44E6-82F7-2BE299589978",
+   "build": "10586.1295",
+   "pdbAge": 2,
+   "obpRoot": 2996160,
+   "obpInfoMask": 3003680
+  },
+  {
+   "pdbGuid": "B946860E-18AE-4683-98DC-DC60B0999662",
+   "build": "10586.1356",
+   "pdbAge": 2,
+   "obpRoot": 3012808,
+   "obpInfoMask": 3020320
+  },
+  {
+   "pdbGuid": "EBA0B6E5-7B07-40A3-89AF-D0A07111D481",
+   "build": "10586.1358",
+   "pdbAge": 2,
+   "obpRoot": 3012808,
+   "obpInfoMask": 3020320
+  },
+  {
+   "pdbGuid": "4E51C9F1-2DD2-45BF-9803-3AF404B1597D",
+   "build": "10586.1417",
+   "pdbAge": 2,
+   "obpRoot": 3012808,
+   "obpInfoMask": 3020320
+  },
+  {
+   "pdbGuid": "6D7AD2C0-27D3-44EE-B3C8-20182555DD2D",
+   "build": "10586.1478",
+   "pdbAge": 2,
+   "obpRoot": 3012808,
+   "obpInfoMask": 3020320
+  },
+  {
+   "pdbGuid": "239BE64D-6FAF-4A41-85B5-35657C829252",
+   "build": "10586.1540",
+   "pdbAge": 2,
+   "obpRoot": 3012936,
+   "obpInfoMask": 3020416
+  },
+  {
+   "pdbGuid": "29FFDD29-6DC8-4409-BF62-7658B0BBCF1F",
+   "build": "10586.494",
+   "pdbAge": 2,
+   "obpRoot": 2996320,
+   "obpInfoMask": 3003808
+  },
+  {
+   "pdbGuid": "DDA2B209-BF8B-4F46-9DD9-A61ABEF7DEA7",
+   "build": "10586.545",
+   "pdbAge": 2,
+   "obpRoot": 2996320,
+   "obpInfoMask": 3003808
+  },
+  {
+   "pdbGuid": "8265940F-5964-455D-B749-7EDC4B63E0BA",
+   "build": "10586.589",
+   "pdbAge": 2,
+   "obpRoot": 2996256,
+   "obpInfoMask": 3003776
+  },
+  {
+   "pdbGuid": "3B82E7BA-1E6F-49F6-834C-7FF7420393BF",
+   "build": "10586.633",
+   "pdbAge": 2,
+   "obpRoot": 2996256,
+   "obpInfoMask": 3003776
+  },
+  {
+   "pdbGuid": "C3B9B208-5FCD-4C78-9407-AB3A4E0D2481",
+   "build": "10586.672",
+   "pdbAge": 2,
+   "obpRoot": 2996256,
+   "obpInfoMask": 3003776
+  },
+  {
+   "pdbGuid": "77353BB1-1D16-417C-99EB-C382C18E0782",
+   "build": "10586.839",
+   "pdbAge": 2,
+   "obpRoot": 2996192,
+   "obpInfoMask": 3003712
+  },
+  {
+   "pdbGuid": "44E77725-AFD3-4680-A7B6-6227D7E654AB",
+   "build": "10586.842",
+   "pdbAge": 2,
+   "obpRoot": 2996192,
+   "obpInfoMask": 3003712
+  },
+  {
+   "pdbGuid": "98DD9BC3-434C-466A-B67E-C277581863E5",
+   "build": "10586.916",
+   "pdbAge": 2,
+   "obpRoot": 2996192,
+   "obpInfoMask": 3003712
+  },
+  {
+   "pdbGuid": "EF94732A-97BF-468C-BC7E-E58951BCCFEE",
+   "build": "10586.962",
+   "pdbAge": 2,
+   "obpRoot": 2996192,
+   "obpInfoMask": 3003712
+  },
+  {
+   "pdbGuid": "FA821927-1540-4409-A5D1-E977D1E47FD7",
+   "build": "10586.965",
+   "pdbAge": 2,
+   "obpRoot": 2996192,
+   "obpInfoMask": 3003712
+  },
+  {
+   "pdbGuid": "DD08DD42-692B-43F1-99A0-79D60E79D217",
+   "build": "14393.0",
+   "pdbAge": 2,
+   "obpRoot": 3157552,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "9C705005-D909-4C17-B8C3-8312438A4D85",
+   "build": "14393.103",
+   "pdbAge": 2,
+   "obpRoot": 3157544,
+   "obpInfoMask": 3164864
+  },
+  {
+   "pdbGuid": "56C5BA02-358C-4744-903C-F5F3EDEA9120",
+   "build": "14393.1066",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "0D18D0FD-87C0-4EB1-91F4-E363F3977A9A",
+   "build": "14393.1198",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "29AA1DBD-23C7-4A81-9889-52DAFF629907",
+   "build": "14393.1358",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "3F52AE27-7BF9-429A-A46F-8E93F346A8F9",
+   "build": "14393.1480",
+   "pdbAge": 2,
+   "obpRoot": 3132944,
+   "obpInfoMask": 3140192
+  },
+  {
+   "pdbGuid": "92A0C25E-C54A-4886-A26D-D7B630142458",
+   "build": "14393.1532",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "811D038B-781E-4D3F-97C9-81303C98B603",
+   "build": "14393.1537",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "0C2A1814-DB4E-46D1-909E-204A1DD6A161",
+   "build": "14393.1593",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "7C14F988-F3B9-429B-BB7C-CBFE5FFCF9CA",
+   "build": "14393.1613",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "7984B449-9D60-4CA2-86C6-E357A9000560",
+   "build": "14393.1670",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "3F2CE2B9-7E6B-45CB-8B54-039825558A38",
+   "build": "14393.1715",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "03F2C1BD-AC87-4538-B822-14F7E76F5934",
+   "build": "14393.1737",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "0CBB2B1D-C6DE-4284-BB54-F28DEE3E0FA8",
+   "build": "14393.1770",
+   "pdbAge": 3,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "35B4FD54-9B8D-4779-BEEF-22E3E2BF3984",
+   "build": "14393.1794",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "23DDCF02-4383-446C-93A6-6811BC3114D5",
+   "build": "14393.1797",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "3E147069-8B69-4782-ADAE-95555171FC1F",
+   "build": "14393.187",
+   "pdbAge": 2,
+   "obpRoot": 3153416,
+   "obpInfoMask": 3160736
+  },
+  {
+   "pdbGuid": "D7BE5F81-44FD-44B0-8822-86439700B69B",
+   "build": "14393.1914",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "5C802240-0BD6-4630-9404-511561035399",
+   "build": "14393.1944",
+   "pdbAge": 2,
+   "obpRoot": 3128848,
+   "obpInfoMask": 3136096
+  },
+  {
+   "pdbGuid": "7AB68ADC-AD1B-42EB-801E-2FA797886393",
+   "build": "14393.2007",
+   "pdbAge": 2,
+   "obpRoot": 3170096,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "6E9AB538-B5F6-4601-9F76-06CDB2EA683B",
+   "build": "14393.2035",
+   "pdbAge": 2,
+   "obpRoot": 3170096,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "D530E1D3-9E02-4EFF-82ED-B50767C75FBA",
+   "build": "14393.206",
+   "pdbAge": 2,
+   "obpRoot": 3153416,
+   "obpInfoMask": 3160736
+  },
+  {
+   "pdbGuid": "6AEA1FA2-57DF-43E8-A1CE-A4A5D25604F8",
+   "build": "14393.2068",
+   "pdbAge": 2,
+   "obpRoot": 3170096,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "EEC76791-BB2C-4650-8162-0487DA237FB0",
+   "build": "14393.2097",
+   "pdbAge": 2,
+   "obpRoot": 3170096,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "3141C585-95D5-45CF-94CB-BE6C0B4FC03F",
+   "build": "14393.2125",
+   "pdbAge": 2,
+   "obpRoot": 3170104,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "2AC15AA1-0FDA-4AAB-9C46-F03BF185227C",
+   "build": "14393.2155",
+   "pdbAge": 2,
+   "obpRoot": 3170104,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "31ED7B2D-821A-43A0-8A5F-1FCBC4E8BC33",
+   "build": "14393.2156",
+   "pdbAge": 2,
+   "obpRoot": 3170104,
+   "obpInfoMask": 3177408
+  },
+  {
+   "pdbGuid": "8881CBDD-786A-4FAC-8F16-0AFECD247605",
+   "build": "14393.2189",
+   "pdbAge": 2,
+   "obpRoot": 3170072,
+   "obpInfoMask": 3177312
+  },
+  {
+   "pdbGuid": "DA4A2FB4-BAD8-4D0F-95A1-A5B0FDE4F155",
+   "build": "14393.2214",
+   "pdbAge": 2,
+   "obpRoot": 3170072,
+   "obpInfoMask": 3177312
+  },
+  {
+   "pdbGuid": "6AEACBAA-CCDF-47E3-992E-D213F44B6D05",
+   "build": "14393.2248",
+   "pdbAge": 2,
+   "obpRoot": 3166000,
+   "obpInfoMask": 3173248
+  },
+  {
+   "pdbGuid": "7B05A505-1F76-40E9-8CA3-20A7DE3A1495",
+   "build": "14393.2273",
+   "pdbAge": 2,
+   "obpRoot": 3166000,
+   "obpInfoMask": 3173248
+  },
+  {
+   "pdbGuid": "4569C39E-0AA7-411E-8B74-FC42A55C1850",
+   "build": "14393.2312",
+   "pdbAge": 2,
+   "obpRoot": 3161808,
+   "obpInfoMask": 3169120
+  },
+  {
+   "pdbGuid": "15ED7408-7566-4EA9-A20C-F831ACE952F1",
+   "build": "14393.2339",
+   "pdbAge": 2,
+   "obpRoot": 3161808,
+   "obpInfoMask": 3169120
+  },
+  {
+   "pdbGuid": "D7576C82-518E-45D6-8475-1B704556AB45",
+   "build": "14393.2363",
+   "pdbAge": 2,
+   "obpRoot": 3161808,
+   "obpInfoMask": 3169120
+  },
+  {
+   "pdbGuid": "BEB7BEC6-51B5-4245-94CC-6E7226D67015",
+   "build": "14393.2368",
+   "pdbAge": 2,
+   "obpRoot": 3161808,
+   "obpInfoMask": 3169120
+  },
+  {
+   "pdbGuid": "C96EB23C-494A-460A-9BF4-D1921F85BD4B",
+   "build": "14393.2395",
+   "pdbAge": 2,
+   "obpRoot": 3157872,
+   "obpInfoMask": 3165184
+  },
+  {
+   "pdbGuid": "44FD596E-9CBE-4B2A-8514-5B060ADFB8E5",
+   "build": "14393.2430",
+   "pdbAge": 2,
+   "obpRoot": 3145624,
+   "obpInfoMask": 3152928
+  },
+  {
+   "pdbGuid": "2624A437-8F4A-423A-92FD-E8E3DB65DDB9",
+   "build": "14393.2457",
+   "pdbAge": 2,
+   "obpRoot": 3145624,
+   "obpInfoMask": 3152928
+  },
+  {
+   "pdbGuid": "8D78BDFC-1ABC-4863-B157-6B6DB8772D35",
+   "build": "14393.2485",
+   "pdbAge": 2,
+   "obpRoot": 3145520,
+   "obpInfoMask": 3152768
+  },
+  {
+   "pdbGuid": "03029354-5C72-4D90-BCB0-8D1DBFCA8D2A",
+   "build": "14393.2515",
+   "pdbAge": 2,
+   "obpRoot": 3145520,
+   "obpInfoMask": 3152768
+  },
+  {
+   "pdbGuid": "E0654931-0E92-4A32-A5F3-717D1AD129BE",
+   "build": "14393.2551",
+   "pdbAge": 2,
+   "obpRoot": 3145520,
+   "obpInfoMask": 3152768
+  },
+  {
+   "pdbGuid": "631365F0-BB90-4978-AA1C-AEC52B16A1F6",
+   "build": "14393.2580",
+   "pdbAge": 2,
+   "obpRoot": 3145520,
+   "obpInfoMask": 3152768
+  },
+  {
+   "pdbGuid": "A1C60496-01D8-494C-A38D-A9C94BCBDC41",
+   "build": "14393.2608",
+   "pdbAge": 2,
+   "obpRoot": 3145496,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "C5E218F6-FB82-4722-8635-06BDBAA982EB",
+   "build": "14393.2636",
+   "pdbAge": 2,
+   "obpRoot": 3145656,
+   "obpInfoMask": 3152960
+  },
+  {
+   "pdbGuid": "DFCF93DC-ABBA-41C0-9B72-3AEED1DD072B",
+   "build": "14393.2665",
+   "pdbAge": 2,
+   "obpRoot": 3145656,
+   "obpInfoMask": 3152960
+  },
+  {
+   "pdbGuid": "4A970267-CA73-449C-A5CF-EC656A137182",
+   "build": "14393.2724",
+   "pdbAge": 2,
+   "obpRoot": 3145656,
+   "obpInfoMask": 3152960
+  },
+  {
+   "pdbGuid": "A49E7F0A-6806-463B-AFE8-0C606367F540",
+   "build": "14393.2758",
+   "pdbAge": 2,
+   "obpRoot": 3145552,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "50C9F2EA-EDCD-4BC4-82B4-6A2C63491114",
+   "build": "14393.2791",
+   "pdbAge": 2,
+   "obpRoot": 3145552,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "499DA1D6-8F54-4943-B767-B7460E05802B",
+   "build": "14393.2828",
+   "pdbAge": 2,
+   "obpRoot": 3145560,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "37DF0071-3E72-4E1D-B3CC-98E7755C7757",
+   "build": "14393.2848",
+   "pdbAge": 2,
+   "obpRoot": 3145560,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "BEBFB438-DDA5-4371-BBDE-D4079F27767D",
+   "build": "14393.2879",
+   "pdbAge": 2,
+   "obpRoot": 3145560,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "7470CD35-AD39-426E-A3F5-767A511B9408",
+   "build": "14393.2906",
+   "pdbAge": 2,
+   "obpRoot": 3145560,
+   "obpInfoMask": 3152800
+  },
+  {
+   "pdbGuid": "9EDF31B6-F2C7-4AE7-B3BA-594039A527F4",
+   "build": "14393.2969",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "3F53EEF5-D889-4429-948C-0C3B8848DC07",
+   "build": "14393.2999",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "F1EAEDD9-EEFB-4B93-8A98-785FDA160A40",
+   "build": "14393.3053",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "7B904077-57B0-405E-9049-4A880EB650CC",
+   "build": "14393.3085",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "5579A659-51A3-437B-8198-5CCBFDF9999A",
+   "build": "14393.3115",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "42D92238-9ED6-4F92-ABC2-430A1F42A189",
+   "build": "14393.3143",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "94B6D343-A2B1-4C37-8052-8EAC6E3C9FBF",
+   "build": "14393.3179",
+   "pdbAge": 2,
+   "obpRoot": 3149336,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "7138607F-5B35-4CDC-9B74-AB464043C9BF",
+   "build": "14393.3204",
+   "pdbAge": 2,
+   "obpRoot": 3149296,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "B7488D51-28FB-431F-A5AA-8642A70458F0",
+   "build": "14393.321",
+   "pdbAge": 2,
+   "obpRoot": 3153416,
+   "obpInfoMask": 3160736
+  },
+  {
+   "pdbGuid": "24BBC1FE-3E5B-4F1F-B10F-A85AE37FBC3C",
+   "build": "14393.3241",
+   "pdbAge": 2,
+   "obpRoot": 3149328,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "CA08DAB7-2680-45CB-98C4-F51BD7576540",
+   "build": "14393.3269",
+   "pdbAge": 2,
+   "obpRoot": 3149328,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "96D8B517-65D0-4652-A77B-C1C3E5828D3D",
+   "build": "14393.3297",
+   "pdbAge": 2,
+   "obpRoot": 3149328,
+   "obpInfoMask": 3156576
+  },
+  {
+   "pdbGuid": "7C1FEE86-E348-40BF-929C-F870E5C28320",
+   "build": "14393.3321",
+   "pdbAge": 2,
+   "obpRoot": 3149296,
+   "obpInfoMask": 3156544
+  },
+  {
+   "pdbGuid": "3F45B442-9187-44FA-AAD6-75C41947CD1A",
+   "build": "14393.3383",
+   "pdbAge": 2,
+   "obpRoot": 3149296,
+   "obpInfoMask": 3156544
+  },
+  {
+   "pdbGuid": "559A44F5-5714-4A21-ABD1-BD0B478D9EA0",
+   "build": "14393.3442",
+   "pdbAge": 2,
+   "obpRoot": 3149296,
+   "obpInfoMask": 3156544
+  },
+  {
+   "pdbGuid": "16BE4EE7-B6C9-48D3-94EA-DD141B3C1B38",
+   "build": "14393.3471",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "60A208F2-70F9-414A-A442-EE2E14670C68",
+   "build": "14393.3503",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "1AD610AA-CAC1-45B7-8F71-C354D9C9DB43",
+   "build": "14393.351",
+   "pdbAge": 2,
+   "obpRoot": 3157392,
+   "obpInfoMask": 3164640
+  },
+  {
+   "pdbGuid": "3AB94C4A-67AE-4118-8427-C7ADE0D07EAB",
+   "build": "14393.3541",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "326B55BF-B40D-40CC-9CB6-363C45C90484",
+   "build": "14393.3564",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "A9DF625C-8C2D-4837-A2F2-7A201DB75036",
+   "build": "14393.3595",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "734A0A63-54E8-4788-AA53-A62A341D6CDB",
+   "build": "14393.3630",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "CE2DA1AC-204C-47DA-A989-7FBCC72BF13D",
+   "build": "14393.3659",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "C0D7E1AD-DCE0-4EDA-8000-091B47551CDC",
+   "build": "14393.3686",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "B88D21AB-1AD8-4547-AF5D-AA54583C4B7F",
+   "build": "14393.3750",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "10DE372D-C63C-4C7E-9E59-2C0C381F304E",
+   "build": "14393.3755",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "B11F9A38-A314-416B-A852-562ADB26159F",
+   "build": "14393.3808",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "4D9AB1ED-AF04-41BB-AEE3-C0DB53CC4DC8",
+   "build": "14393.3866",
+   "pdbAge": 2,
+   "obpRoot": 3153392,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "7B15ACBE-0840-4536-BFE3-A8C7BEBE5DDA",
+   "build": "14393.3930",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "D4DC584D-57CD-4EB9-B300-8F14E58EA5E5",
+   "build": "14393.3986",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "2519DA09-54FB-4DEB-9EDC-821D7F87BD18",
+   "build": "14393.4046",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "0EC67A74-42D3-4F1B-BED6-2C3E4991BCCD",
+   "build": "14393.4048",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "6B7BF617-D314-4C04-8527-4880FBBDD8FC",
+   "build": "14393.4104",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "9419EBE5-AC1A-4A50-AFDF-AB430BB202E6",
+   "build": "14393.4169",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "23352636-B7B2-4457-B819-9B86E9FA3C44",
+   "build": "14393.4225",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "C12E2E0B-B0DD-4969-829C-59178D7413D5",
+   "build": "14393.4283",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "7E87363A-85D8-460B-BCF1-94E4D3C18767",
+   "build": "14393.4288",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "D56F3229-4141-4753-A40F-5E259C286DB5",
+   "build": "14393.4350",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "A37FC06B-53C2-4A6B-98A5-71E4E60481F4",
+   "build": "14393.4402",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "AE31244F-F421-418E-96CF-E82B239CB81D",
+   "build": "14393.4467",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "4DAC3B58-2A91-47EC-AED2-644CB165222B",
+   "build": "14393.447",
+   "pdbAge": 2,
+   "obpRoot": 3157480,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "5DE28972-E27B-41C5-A1B1-21C589AEA22A",
+   "build": "14393.4470",
+   "pdbAge": 2,
+   "obpRoot": 3153528,
+   "obpInfoMask": 3160768
+  },
+  {
+   "pdbGuid": "2708E4CA-7325-4D47-92CC-9C8BC9BEC599",
+   "build": "14393.4530",
+   "pdbAge": 2,
+   "obpRoot": 3153392,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "77091938-7866-4014-9A60-CA10C79105EA",
+   "build": "14393.4532",
+   "pdbAge": 2,
+   "obpRoot": 3153392,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "517E128F-7B7C-4EA7-9491-DE6B9B9CE190",
+   "build": "14393.4583",
+   "pdbAge": 2,
+   "obpRoot": 3153392,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "E0572D33-3A64-4612-9E52-CBE9AE90897F",
+   "build": "14393.4651",
+   "pdbAge": 2,
+   "obpRoot": 3153392,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "A15830FE-2E91-41BA-8553-5AB16623CF6F",
+   "build": "14393.4704",
+   "pdbAge": 2,
+   "obpRoot": 3149304,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "03A098BC-85D0-4702-8437-D88E4C8BBC6B",
+   "build": "14393.4770",
+   "pdbAge": 2,
+   "obpRoot": 3149304,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "EAB253E7-81EF-455B-9B15-85C4CDDF5CA9",
+   "build": "14393.4771",
+   "pdbAge": 2,
+   "obpRoot": 3149304,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "0BAE2027-2BEC-40F1-AC6C-D5690033E52D",
+   "build": "14393.479",
+   "pdbAge": 2,
+   "obpRoot": 3157480,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "D23E3DA5-C95B-4433-B1D6-F1B4C4E2FD94",
+   "build": "14393.4825",
+   "pdbAge": 2,
+   "obpRoot": 3149304,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "52C1A7B2-2A3D-4BC7-BF2B-40C51715F228",
+   "build": "14393.4827",
+   "pdbAge": 2,
+   "obpRoot": 3149304,
+   "obpInfoMask": 3156608
+  },
+  {
+   "pdbGuid": "FEBDA73B-114E-41C2-B4C5-47DA347C0543",
+   "build": "14393.4886",
+   "pdbAge": 2,
+   "obpRoot": 3153240,
+   "obpInfoMask": 3160544
+  },
+  {
+   "pdbGuid": "369F16D4-758A-4AA6-B9C8-90B189AB79EC",
+   "build": "14393.4889",
+   "pdbAge": 2,
+   "obpRoot": 3153240,
+   "obpInfoMask": 3160544
+  },
+  {
+   "pdbGuid": "62D72006-78ED-4AA5-B4FF-890FE7E8ABA5",
+   "build": "14393.4946",
+   "pdbAge": 2,
+   "obpRoot": 3153240,
+   "obpInfoMask": 3160544
+  },
+  {
+   "pdbGuid": "2E6DEB6C-FD44-4100-AC0E-803337A56E8E",
+   "build": "14393.5006",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "A4DFE677-9CD0-4574-9648-51BE4A8912AC",
+   "build": "14393.5066",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "D9F2858D-146F-4F3F-B9B8-83996100A0B3",
+   "build": "14393.5125",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "7BC94E39-E0B7-4943-9E79-2A901252FD66",
+   "build": "14393.5127",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "7B38CB85-F440-4CBE-A34A-0C5A7D14EE1F",
+   "build": "14393.5192",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "EFD6056B-FF65-4444-9564-192E973D4B2E",
+   "build": "14393.5246",
+   "pdbAge": 2,
+   "obpRoot": 3153368,
+   "obpInfoMask": 3160672
+  },
+  {
+   "pdbGuid": "E68EBE92-58E7-4638-B1E2-C94F4EEA6B04",
+   "build": "14393.5291",
+   "pdbAge": 2,
+   "obpRoot": 3153456,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "925ACA3E-90BF-4CDF-83F0-46014B34B4FD",
+   "build": "14393.5356",
+   "pdbAge": 2,
+   "obpRoot": 3153456,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "6557CBAE-E717-4C33-8B86-DCE72E31429D",
+   "build": "14393.5427",
+   "pdbAge": 2,
+   "obpRoot": 3153456,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "CFCAC0B2-9209-42A5-A92B-0FF055ED82AB",
+   "build": "14393.5429",
+   "pdbAge": 2,
+   "obpRoot": 3153456,
+   "obpInfoMask": 3160704
+  },
+  {
+   "pdbGuid": "74A8630B-A8B8-4B1B-972E-72CF98536F2C",
+   "build": "14393.5501",
+   "pdbAge": 2,
+   "obpRoot": 3165584,
+   "obpInfoMask": 3172832
+  },
+  {
+   "pdbGuid": "408D673A-1B72-4243-9414-C5432E2C5329",
+   "build": "14393.5502",
+   "pdbAge": 2,
+   "obpRoot": 3165584,
+   "obpInfoMask": 3172832
+  },
+  {
+   "pdbGuid": "0CAACB71-2FFE-4D31-BDD7-2EE6BB55F193",
+   "build": "14393.5582",
+   "pdbAge": 2,
+   "obpRoot": 3165808,
+   "obpInfoMask": 3173056
+  },
+  {
+   "pdbGuid": "BDB4AB9F-65DC-419D-9ABA-01148060AF21",
+   "build": "14393.5648",
+   "pdbAge": 2,
+   "obpRoot": 3161712,
+   "obpInfoMask": 3168960
+  },
+  {
+   "pdbGuid": "61F0820E-D835-4C79-88DC-28124E144CFF",
+   "build": "14393.5717",
+   "pdbAge": 2,
+   "obpRoot": 3161712,
+   "obpInfoMask": 3168960
+  },
+  {
+   "pdbGuid": "68959EAB-C7A5-45B4-8BE9-020BA8E02039",
+   "build": "14393.576",
+   "pdbAge": 2,
+   "obpRoot": 3157480,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "5493F745-AD43-4B65-86C8-440E4242FB64",
+   "build": "14393.5786",
+   "pdbAge": 2,
+   "obpRoot": 3161488,
+   "obpInfoMask": 3168736
+  },
+  {
+   "pdbGuid": "29FC89FB-E55F-41E4-A95E-CEB0575E4C41",
+   "build": "14393.5850",
+   "pdbAge": 2,
+   "obpRoot": 3161776,
+   "obpInfoMask": 3169024
+  },
+  {
+   "pdbGuid": "A7449C87-5EBB-4212-836E-5D82F31221E8",
+   "build": "14393.5921",
+   "pdbAge": 2,
+   "obpRoot": 3161552,
+   "obpInfoMask": 3168800
+  },
+  {
+   "pdbGuid": "47D95342-C0AD-4BA4-A3C5-C3BC8894BF95",
+   "build": "14393.5996",
+   "pdbAge": 2,
+   "obpRoot": 3161808,
+   "obpInfoMask": 3169056
+  },
+  {
+   "pdbGuid": "5ECDAC88-5ECD-4835-AFB5-359804E1871E",
+   "build": "14393.6085",
+   "pdbAge": 2,
+   "obpRoot": 3161680,
+   "obpInfoMask": 3168928
+  },
+  {
+   "pdbGuid": "BC64114F-620F-4F4F-A7BC-F3F2F969C79E",
+   "build": "14393.6167",
+   "pdbAge": 2,
+   "obpRoot": 3161680,
+   "obpInfoMask": 3168928
+  },
+  {
+   "pdbGuid": "DBBC830E-3E9A-48FD-A25A-2144C146930E",
+   "build": "14393.6343",
+   "pdbAge": 2,
+   "obpRoot": 3161680,
+   "obpInfoMask": 3168928
+  },
+  {
+   "pdbGuid": "59525938-91B1-4CDF-9C73-F837C8E9100B",
+   "build": "14393.6451",
+   "pdbAge": 2,
+   "obpRoot": 3161744,
+   "obpInfoMask": 3168992
+  },
+  {
+   "pdbGuid": "307CC030-23AA-479F-9F37-8C22C5A34D13",
+   "build": "14393.6522",
+   "pdbAge": 2,
+   "obpRoot": 3161720,
+   "obpInfoMask": 3169024
+  },
+  {
+   "pdbGuid": "F31F90D1-CABB-43BB-A081-0FF706F5B29A",
+   "build": "14393.6611",
+   "pdbAge": 2,
+   "obpRoot": 3161720,
+   "obpInfoMask": 3169024
+  },
+  {
+   "pdbGuid": "81A19B2D-7888-4B93-951D-9F9BA16FEC7E",
+   "build": "14393.6707",
+   "pdbAge": 2,
+   "obpRoot": 3161688,
+   "obpInfoMask": 3168992
+  },
+  {
+   "pdbGuid": "2A7EF527-8C53-452A-A89A-910A0182F602",
+   "build": "14393.6795",
+   "pdbAge": 2,
+   "obpRoot": 3161432,
+   "obpInfoMask": 3168736
+  },
+  {
+   "pdbGuid": "6B0ED028-E017-4852-932C-6C7DECA08AB2",
+   "build": "14393.6897",
+   "pdbAge": 2,
+   "obpRoot": 3165944,
+   "obpInfoMask": 3173184
+  },
+  {
+   "pdbGuid": "3DFC5F72-2830-4C26-859E-55E481700385",
+   "build": "14393.693",
+   "pdbAge": 2,
+   "obpRoot": 3157480,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "FB34748C-E8FF-49A0-B37C-9B769E2C06F9",
+   "build": "14393.6981",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "8A487351-ED88-41D2-AB7C-2275D33C73AF",
+   "build": "14393.7070",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "BECA224D-EBF5-4681-8DB9-9CD942D692ED",
+   "build": "14393.7155",
+   "pdbAge": 2,
+   "obpRoot": 3165944,
+   "obpInfoMask": 3173184
+  },
+  {
+   "pdbGuid": "AF2A649B-5EA3-49D7-997B-F58C98DAC5E4",
+   "build": "14393.7254",
+   "pdbAge": 2,
+   "obpRoot": 3165976,
+   "obpInfoMask": 3173216
+  },
+  {
+   "pdbGuid": "FB5A08EE-E0F6-4A4B-B5A3-C07F0444BC84",
+   "build": "14393.726",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "30469DEA-22B9-41AA-AFC8-405A9A65FA63",
+   "build": "14393.729",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "E647FE35-CD0B-4694-A923-322DE21CB0D7",
+   "build": "14393.7330",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "13C2514E-5586-4DDB-9E8A-9E2228AF884B",
+   "build": "14393.7426",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "D5E3E35C-1C2D-48E9-906F-43C7C05FA3F0",
+   "build": "14393.7513",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "E8482085-1842-452B-9D32-112754E0A702",
+   "build": "14393.7604",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "4406A60E-C3EC-42C8-90FB-104DE74FF491",
+   "build": "14393.7693",
+   "pdbAge": 2,
+   "obpRoot": 3165944,
+   "obpInfoMask": 3173184
+  },
+  {
+   "pdbGuid": "E243B025-12BB-47A9-A739-2A6B20F9AE9D",
+   "build": "14393.7783",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "9D2F47BE-71DC-4594-BAEA-052BEB8E05EF",
+   "build": "14393.7870",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "BA167DAB-9365-4292-B713-417389E16473",
+   "build": "14393.7962",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "0F27B5B5-465B-422E-B5D8-010FAEADB9E6",
+   "build": "14393.7973",
+   "pdbAge": 2,
+   "obpRoot": 3165912,
+   "obpInfoMask": 3173152
+  },
+  {
+   "pdbGuid": "CBCF4356-6630-4F6C-8006-C0CC994E6600",
+   "build": "14393.8062",
+   "pdbAge": 2,
+   "obpRoot": 3165944,
+   "obpInfoMask": 3173184
+  },
+  {
+   "pdbGuid": "A4B02799-34D9-4867-B740-CFED2DFE577C",
+   "build": "14393.8146",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "43C9E232-FA9B-447A-9C08-E408045BDD11",
+   "build": "14393.82",
+   "pdbAge": 2,
+   "obpRoot": 3157552,
+   "obpInfoMask": 3164800
+  },
+  {
+   "pdbGuid": "39C00011-61C3-44BB-B759-8C13FD96BD9B",
+   "build": "14393.8246",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "CD646780-614C-4E5F-85A9-88A5925BB7AF",
+   "build": "14393.8330",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "6B2B38CB-94C0-4E73-AC05-4C92BD1E8854",
+   "build": "14393.8422",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "9D02FDD1-C024-4AB9-A573-1FA070E22DAF",
+   "build": "14393.8519",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "8FA7F59C-E053-4C97-81CC-5C907F114DC2",
+   "build": "14393.8592",
+   "pdbAge": 2,
+   "obpRoot": 3165776,
+   "obpInfoMask": 3173088
+  },
+  {
+   "pdbGuid": "C8EBD9A0-6144-4317-B2F5-4BF4A3466FCC",
+   "build": "14393.8688",
+   "pdbAge": 2,
+   "obpRoot": 3165976,
+   "obpInfoMask": 3173216
+  },
+  {
+   "pdbGuid": "4BDCFEC4-7919-4BF0-AC80-C84A25F78283",
+   "build": "14393.8692",
+   "pdbAge": 2,
+   "obpRoot": 3165976,
+   "obpInfoMask": 3173216
+  },
+  {
+   "pdbGuid": "034421E5-B5C5-49BE-A776-BBAEA20C983E",
+   "build": "14393.8781",
+   "pdbAge": 2,
+   "obpRoot": 3165944,
+   "obpInfoMask": 3173184
+  },
+  {
+   "pdbGuid": "D351A856-0EEC-4F6E-B409-948EBAE16C1B",
+   "build": "14393.8864",
+   "pdbAge": 2,
+   "obpRoot": 3166104,
+   "obpInfoMask": 3173344
+  },
+  {
+   "pdbGuid": "808DC946-F98B-47B0-B194-3969B99FAB6E",
+   "build": "14393.8957",
+   "pdbAge": 2,
+   "obpRoot": 3166136,
+   "obpInfoMask": 3173376
+  },
+  {
+   "pdbGuid": "D1E2C373-5F8E-4168-8C8D-8CF494CED31A",
+   "build": "14393.9060",
+   "pdbAge": 2,
+   "obpRoot": 3165976,
+   "obpInfoMask": 3173216
+  },
+  {
+   "pdbGuid": "C8FCB9D2-9084-4CFB-A93A-10575D392F71",
+   "build": "14393.9140",
+   "pdbAge": 2,
+   "obpRoot": 3166072,
+   "obpInfoMask": 3173312
+  },
+  {
+   "pdbGuid": "5C9D3E07-EB75-48AD-8126-277FFA5676FE",
+   "build": "14393.9234",
+   "pdbAge": 2,
+   "obpRoot": 3165976,
+   "obpInfoMask": 3173216
+  },
+  {
+   "pdbGuid": "47D04E34-73C0-4F6E-9CAB-7E446E227EE3",
+   "build": "14393.9339",
+   "pdbAge": 2,
+   "obpRoot": 3166200,
+   "obpInfoMask": 3173440
+  },
+  {
+   "pdbGuid": "99AAE855-6215-49CB-BAC5-5418AA9202B6",
+   "build": "14393.953",
+   "pdbAge": 2,
+   "obpRoot": 3132880,
+   "obpInfoMask": 3140128
+  },
+  {
+   "pdbGuid": "D788F72A-BE96-4EFC-ACAA-D0276DAAE6CB",
+   "build": "15063.0",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "D8C7FBDB-9272-4E57-A7D3-63F70EEA4339",
+   "build": "15063.1029",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "D9D329CB-28F1-4276-81D0-B9DD8CA2E14C",
+   "build": "15063.1058",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "0C9CC659-2100-46EC-8423-1597DADFDB3B",
+   "build": "15063.1088",
+   "pdbAge": 2,
+   "obpRoot": 3476592,
+   "obpInfoMask": 3485952
+  },
+  {
+   "pdbGuid": "B600AE53-2439-4C85-BDEA-0E7ED3ED8851",
+   "build": "15063.1112",
+   "pdbAge": 2,
+   "obpRoot": 3476592,
+   "obpInfoMask": 3485952
+  },
+  {
+   "pdbGuid": "FDB05FCC-88A6-4D33-83E6-E0907148A080",
+   "build": "15063.1155",
+   "pdbAge": 2,
+   "obpRoot": 3468368,
+   "obpInfoMask": 3477728
+  },
+  {
+   "pdbGuid": "E4A7688C-1323-4CD6-AEB5-989D109CCFDF",
+   "build": "15063.1182",
+   "pdbAge": 2,
+   "obpRoot": 3468368,
+   "obpInfoMask": 3477728
+  },
+  {
+   "pdbGuid": "4F8F8CCD-8A08-4219-A3A9-6827B39B2DED",
+   "build": "15063.1206",
+   "pdbAge": 2,
+   "obpRoot": 3468368,
+   "obpInfoMask": 3477728
+  },
+  {
+   "pdbGuid": "F6463BD0-9EA9-4088-855E-69F37226B7B2",
+   "build": "15063.1209",
+   "pdbAge": 2,
+   "obpRoot": 3468368,
+   "obpInfoMask": 3477728
+  },
+  {
+   "pdbGuid": "FB136112-30EA-48A5-842C-1447ACD674E6",
+   "build": "15063.1235",
+   "pdbAge": 2,
+   "obpRoot": 3468368,
+   "obpInfoMask": 3477728
+  },
+  {
+   "pdbGuid": "F6CD935B-4A7D-49C0-82FE-0012377B1429",
+   "build": "15063.1266",
+   "pdbAge": 2,
+   "obpRoot": 3455736,
+   "obpInfoMask": 3465248
+  },
+  {
+   "pdbGuid": "860CF9C4-87D8-4C2C-B4B0-7300241259CC",
+   "build": "15063.1292",
+   "pdbAge": 2,
+   "obpRoot": 3455736,
+   "obpInfoMask": 3465248
+  },
+  {
+   "pdbGuid": "854C2639-17E4-437F-8014-205806E2FBC0",
+   "build": "15063.13",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "834617E9-F3BD-479D-9D8C-82FC17F71050",
+   "build": "15063.1324",
+   "pdbAge": 2,
+   "obpRoot": 3460056,
+   "obpInfoMask": 3469568
+  },
+  {
+   "pdbGuid": "D7F79F38-527B-47F6-8878-806579509329",
+   "build": "15063.1356",
+   "pdbAge": 2,
+   "obpRoot": 3460024,
+   "obpInfoMask": 3469536
+  },
+  {
+   "pdbGuid": "6EFC00DD-C5A5-4F14-8CED-4662F4A27F8D",
+   "build": "15063.138",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "F931D04A-A047-4343-BD31-F0964EC9844E",
+   "build": "15063.1387",
+   "pdbAge": 2,
+   "obpRoot": 3460024,
+   "obpInfoMask": 3469536
+  },
+  {
+   "pdbGuid": "CDDE4953-0349-4004-A4B2-26DDEF44B396",
+   "build": "15063.1418",
+   "pdbAge": 2,
+   "obpRoot": 3460024,
+   "obpInfoMask": 3469536
+  },
+  {
+   "pdbGuid": "2C14E19E-FCFF-4577-AD42-D6A7592E1251",
+   "build": "15063.1446",
+   "pdbAge": 2,
+   "obpRoot": 3459992,
+   "obpInfoMask": 3469504
+  },
+  {
+   "pdbGuid": "6F307284-62F4-4C97-871C-D9FC56611289",
+   "build": "15063.1478",
+   "pdbAge": 2,
+   "obpRoot": 3459864,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "0BE3C385-892C-402F-B280-E9A1791A1437",
+   "build": "15063.1506",
+   "pdbAge": 2,
+   "obpRoot": 3459864,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "42AE5BCB-4EFE-49BE-9955-81C2A1A09729",
+   "build": "15063.1563",
+   "pdbAge": 2,
+   "obpRoot": 3459864,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "37769DCB-932C-4C9D-9152-8C22B4425403",
+   "build": "15063.1596",
+   "pdbAge": 2,
+   "obpRoot": 3459864,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "F0C59531-DDCD-4F0E-87C6-D74DB72B1663",
+   "build": "15063.1631",
+   "pdbAge": 2,
+   "obpRoot": 3459864,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "D5369DA2-4BD9-456D-B1B1-51CF4DF8B7EA",
+   "build": "15063.1659",
+   "pdbAge": 2,
+   "obpRoot": 3460088,
+   "obpInfoMask": 3469600
+  },
+  {
+   "pdbGuid": "13E972FF-AE3F-4509-AA77-4EA1025CC98A",
+   "build": "15063.1689",
+   "pdbAge": 2,
+   "obpRoot": 3460088,
+   "obpInfoMask": 3469600
+  },
+  {
+   "pdbGuid": "1F39A743-6EEE-4376-8C11-D7CCF7D21774",
+   "build": "15063.1716",
+   "pdbAge": 2,
+   "obpRoot": 3460088,
+   "obpInfoMask": 3469600
+  },
+  {
+   "pdbGuid": "67C15701-6533-419C-B8CB-A0847E008342",
+   "build": "15063.1746",
+   "pdbAge": 2,
+   "obpRoot": 3460088,
+   "obpInfoMask": 3469600
+  },
+  {
+   "pdbGuid": "3F11530E-48C6-4BCA-8C48-AAB6BB8530B0",
+   "build": "15063.1779",
+   "pdbAge": 2,
+   "obpRoot": 3460088,
+   "obpInfoMask": 3469600
+  },
+  {
+   "pdbGuid": "4E2D64EA-E671-4F78-AB79-C6B2CCE0DC6E",
+   "build": "15063.1805",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469248
+  },
+  {
+   "pdbGuid": "43352D87-A5EE-4194-95A5-1840C23EBDC7",
+   "build": "15063.1836",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469248
+  },
+  {
+   "pdbGuid": "7BB5E26D-9CEE-4871-9306-E6A0DF4E79DB",
+   "build": "15063.1868",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469248
+  },
+  {
+   "pdbGuid": "86B8E669-7642-4D95-BF6B-BAB2FEA765E5",
+   "build": "15063.1897",
+   "pdbAge": 2,
+   "obpRoot": 3459856,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "E1CE9921-9F70-4DD6-BF43-E502DFC24515",
+   "build": "15063.1928",
+   "pdbAge": 2,
+   "obpRoot": 3459856,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "5A26841E-BE90-4848-97EE-7918D41023E8",
+   "build": "15063.1955",
+   "pdbAge": 2,
+   "obpRoot": 3459856,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "6CD706AF-D902-49AD-8AFE-A30DEC199AEB",
+   "build": "15063.1987",
+   "pdbAge": 2,
+   "obpRoot": 3459856,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "0E8BE8A5-84A2-40CE-ABE3-14119692B2A6",
+   "build": "15063.2017",
+   "pdbAge": 2,
+   "obpRoot": 3459856,
+   "obpInfoMask": 3469376
+  },
+  {
+   "pdbGuid": "40866C4E-0FC9-4B49-B78B-729669907391",
+   "build": "15063.2045",
+   "pdbAge": 2,
+   "obpRoot": 3459696,
+   "obpInfoMask": 3469216
+  },
+  {
+   "pdbGuid": "30135685-3A2C-44D8-97FC-89D85B670846",
+   "build": "15063.2076",
+   "pdbAge": 2,
+   "obpRoot": 3459696,
+   "obpInfoMask": 3469216
+  },
+  {
+   "pdbGuid": "5054FD6A-CABB-4BD4-892E-AD7881561C5E",
+   "build": "15063.2106",
+   "pdbAge": 2,
+   "obpRoot": 3459696,
+   "obpInfoMask": 3469216
+  },
+  {
+   "pdbGuid": "47C9B3E3-086B-4BFD-9ADD-473EF83D217B",
+   "build": "15063.2161",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469280
+  },
+  {
+   "pdbGuid": "7B68D7EB-1E51-4A0D-8966-7C640B1E0A12",
+   "build": "15063.2223",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469280
+  },
+  {
+   "pdbGuid": "3C37D89E-6596-4F10-A8B1-1AEF20DA3999",
+   "build": "15063.2253",
+   "pdbAge": 2,
+   "obpRoot": 3459728,
+   "obpInfoMask": 3469280
+  },
+  {
+   "pdbGuid": "429D66AF-ED13-49E5-BA63-B0426D6B5DAE",
+   "build": "15063.2283",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "86D74852-1D27-4C1A-B340-9AB9F62E8BA7",
+   "build": "15063.2313",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "853EFC5E-77C5-4B5E-98EE-9252C062CCB2",
+   "build": "15063.2346",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "373568E4-3B45-4519-8F8E-C615E656B2A5",
+   "build": "15063.2375",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "573CB5E4-F02A-4A1A-A41F-9EE33C472BDF",
+   "build": "15063.2409",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "D4DF32B7-D83A-4EC1-87EA-1CA6325E6E58",
+   "build": "15063.2411",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "9B6BFC1C-BEFE-4F25-B8EB-B26B400B78A1",
+   "build": "15063.2439",
+   "pdbAge": 2,
+   "obpRoot": 3459792,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "19487723-DAA2-42C8-9559-DEDCDF0444C1",
+   "build": "15063.2467",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "713D9E24-9F5D-46BD-9946-A39C134D8F8F",
+   "build": "15063.250",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "A25B898E-64AA-4B82-8142-2396BAED42F1",
+   "build": "15063.2500",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "9375A095-8276-4323-A462-CBFCD41C1053",
+   "build": "15063.2525",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "9B31F3CD-9AD0-47E7-8DF1-B62A8EC6D10C",
+   "build": "15063.2554",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "558C8C78-6B80-41A1-8DB5-43E1333A940F",
+   "build": "15063.2584",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "3B325700-E2A2-40E1-A7EF-22FC8B6D68B6",
+   "build": "15063.2614",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "2C8E4DF5-E2D4-47EE-8EF0-681664111CDF",
+   "build": "15063.2642",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "42736CE0-5812-4FB5-90F3-52E403C113B7",
+   "build": "15063.2679",
+   "pdbAge": 2,
+   "obpRoot": 3459784,
+   "obpInfoMask": 3469344
+  },
+  {
+   "pdbGuid": "2E116260-AE57-4440-96BC-2FAF37A2F0C2",
+   "build": "15063.296",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "E83992B7-7804-4CB0-BB57-ECE0FA57AA6B",
+   "build": "15063.332",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "A0011F02-EE84-4274-9E83-E5180D8B19A6",
+   "build": "15063.413",
+   "pdbAge": 2,
+   "obpRoot": 3447552,
+   "obpInfoMask": 3456896
+  },
+  {
+   "pdbGuid": "393C63BC-1EAB-407D-A1D0-9B0735F405F9",
+   "build": "15063.447",
+   "pdbAge": 2,
+   "obpRoot": 3447648,
+   "obpInfoMask": 3456960
+  },
+  {
+   "pdbGuid": "DDA812F4-AC28-4269-AB80-73D8423801A4",
+   "build": "15063.483",
+   "pdbAge": 2,
+   "obpRoot": 3447648,
+   "obpInfoMask": 3456960
+  },
+  {
+   "pdbGuid": "EA587042-0D85-492E-AC11-A1A56C7A27A2",
+   "build": "15063.502",
+   "pdbAge": 2,
+   "obpRoot": 3447584,
+   "obpInfoMask": 3456928
+  },
+  {
+   "pdbGuid": "F6F48955-5489-4B24-B4DF-942361F0730D",
+   "build": "15063.540",
+   "pdbAge": 2,
+   "obpRoot": 3447584,
+   "obpInfoMask": 3456928
+  },
+  {
+   "pdbGuid": "7A5EBA3C-E5C1-40C1-AF2C-5DC6C7F75384",
+   "build": "15063.608",
+   "pdbAge": 2,
+   "obpRoot": 3447584,
+   "obpInfoMask": 3456928
+  },
+  {
+   "pdbGuid": "10F6DCB0-9D60-4445-B05C-70106B9824CB",
+   "build": "15063.674",
+   "pdbAge": 2,
+   "obpRoot": 3447584,
+   "obpInfoMask": 3456928
+  },
+  {
+   "pdbGuid": "7EA7D889-C646-44DA-8A57-DB9679D8D996",
+   "build": "15063.675",
+   "pdbAge": 2,
+   "obpRoot": 3447584,
+   "obpInfoMask": 3456928
+  },
+  {
+   "pdbGuid": "23CA40E7-8F5F-4BF9-A6B2-929BC6A5597D",
+   "build": "15063.726",
+   "pdbAge": 2,
+   "obpRoot": 3447744,
+   "obpInfoMask": 3457088
+  },
+  {
+   "pdbGuid": "8B247AE9-9D75-4C9F-B74A-94E89B2C232B",
+   "build": "15063.729",
+   "pdbAge": 2,
+   "obpRoot": 3447744,
+   "obpInfoMask": 3457088
+  },
+  {
+   "pdbGuid": "6BCBDE25-5020-47D3-9BB7-49E6F92291AE",
+   "build": "15063.786",
+   "pdbAge": 2,
+   "obpRoot": 3447744,
+   "obpInfoMask": 3457088
+  },
+  {
+   "pdbGuid": "2980EE56-6EE2-40BA-A4CC-403AB766D265",
+   "build": "15063.850",
+   "pdbAge": 2,
+   "obpRoot": 3476592,
+   "obpInfoMask": 3485952
+  },
+  {
+   "pdbGuid": "71935926-C868-4A23-95F3-BBE58FA587E6",
+   "build": "15063.877",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "B607E635-150D-4BC4-A704-5DAD53A7B76D",
+   "build": "15063.909",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "E2A41C6D-6E1F-4B47-974E-81A6946AB331",
+   "build": "15063.936",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "93478A34-93B7-4DD7-9ADF-CE1938841D77",
+   "build": "15063.966",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "87CF8DC3-7293-4009-9A19-16C326A90079",
+   "build": "15063.994",
+   "pdbAge": 2,
+   "obpRoot": 3476624,
+   "obpInfoMask": 3485984
+  },
+  {
+   "pdbGuid": "8CBD986F-DF11-4716-A7AC-A18815BE79CA",
+   "build": "16299.1004",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "E36430DD-BEB4-4D9A-AA28-39326ABB585F",
+   "build": "16299.1029",
+   "pdbAge": 2,
+   "obpRoot": 3567320,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "66E8DE00-9A49-49D0-B471-EC4B4830E3A0",
+   "build": "16299.1059",
+   "pdbAge": 2,
+   "obpRoot": 3567320,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "CB2D7652-01C3-48A8-B9FB-66294E6614F7",
+   "build": "16299.1087",
+   "pdbAge": 2,
+   "obpRoot": 3567320,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "6FADC1CF-9A6D-401F-B691-580D8C355032",
+   "build": "16299.1120",
+   "pdbAge": 2,
+   "obpRoot": 3567320,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "32DAEDA3-DD69-48EB-A970-D5CAAF5DC619",
+   "build": "16299.1146",
+   "pdbAge": 2,
+   "obpRoot": 3570864,
+   "obpInfoMask": 3578144
+  },
+  {
+   "pdbGuid": "98CC96BE-503C-4B71-B19A-63D6BFD9B8C6",
+   "build": "16299.1182",
+   "pdbAge": 2,
+   "obpRoot": 3570864,
+   "obpInfoMask": 3578144
+  },
+  {
+   "pdbGuid": "922E83A0-A4DF-4254-997B-59AC960BC892",
+   "build": "16299.1217",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "91FA87F3-836F-4417-8DEE-AF11532BA72C",
+   "build": "16299.1237",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "31C51B7D-1C25-45A8-8F69-E13FC73E6894",
+   "build": "16299.125",
+   "pdbAge": 2,
+   "obpRoot": 3538360,
+   "obpInfoMask": 3545632
+  },
+  {
+   "pdbGuid": "34993B17-2248-4D0F-9069-B71FD0348D39",
+   "build": "16299.1268",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "37C8E696-CB8E-435A-8829-DA959F8616DC",
+   "build": "16299.1296",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "1B560B15-CE06-4E20-93B5-4F865E5FD0EE",
+   "build": "16299.1331",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "0C41156C-7A7D-41A0-9A2B-7B8655FEA471",
+   "build": "16299.1364",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "BC1AC377-2627-4412-8764-E361524DCA77",
+   "build": "16299.1387",
+   "pdbAge": 2,
+   "obpRoot": 3571160,
+   "obpInfoMask": 3578432
+  },
+  {
+   "pdbGuid": "A4CC654E-1544-4A2A-A02E-09C4D82C7703",
+   "build": "16299.1419",
+   "pdbAge": 2,
+   "obpRoot": 3571096,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "E243651F-0282-4DEC-8957-AB4E985F70B6",
+   "build": "16299.1448",
+   "pdbAge": 2,
+   "obpRoot": 3571096,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "C017B63C-FC7E-4FBD-83D3-170F0EC9CEB4",
+   "build": "16299.1480",
+   "pdbAge": 2,
+   "obpRoot": 3571096,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "83DB4240-4EFD-4AB6-AFB6-FA864B700CB3",
+   "build": "16299.15",
+   "pdbAge": 2,
+   "obpRoot": 3538360,
+   "obpInfoMask": 3545600
+  },
+  {
+   "pdbGuid": "CA9770B0-D9F2-40D1-919C-6117D1136CC3",
+   "build": "16299.1504",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "10EE4200-7B8A-4B9F-AF3F-5E25618832A0",
+   "build": "16299.1565",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "98E427A3-669F-41CD-A71B-B51940C771D8",
+   "build": "16299.1622",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "79D2CF3A-C893-4516-B1AB-BDDE2101BED6",
+   "build": "16299.1653",
+   "pdbAge": 2,
+   "obpRoot": 3571088,
+   "obpInfoMask": 3578368
+  },
+  {
+   "pdbGuid": "E022A26B-438A-4C9A-92D6-ADEC8E2416B6",
+   "build": "16299.1685",
+   "pdbAge": 2,
+   "obpRoot": 3570992,
+   "obpInfoMask": 3578272
+  },
+  {
+   "pdbGuid": "A5D5F6EE-8695-46B5-8FB0-A44A0F17ABB5",
+   "build": "16299.1715",
+   "pdbAge": 2,
+   "obpRoot": 3570800,
+   "obpInfoMask": 3578080
+  },
+  {
+   "pdbGuid": "F7DF926F-10EF-48CE-8A13-BE705F0DEA8F",
+   "build": "16299.1747",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "CD15A22E-E196-4527-A6C7-2B1F2B0BE26A",
+   "build": "16299.1775",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "491B29F7-F374-425B-86CD-B5F123AB31BB",
+   "build": "16299.1776",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "134103E2-552F-4C89-8D1E-474F9364E787",
+   "build": "16299.1806",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "553EC6EE-2730-476C-BDAA-8A8ABB670790",
+   "build": "16299.1868",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "69655CA1-59E3-4511-BF7B-EB82660886E3",
+   "build": "16299.19",
+   "pdbAge": 2,
+   "obpRoot": 3538360,
+   "obpInfoMask": 3545600
+  },
+  {
+   "pdbGuid": "9378084E-8DBD-4AB1-A155-099BCE693E34",
+   "build": "16299.192",
+   "pdbAge": 2,
+   "obpRoot": 3558808,
+   "obpInfoMask": 3566080
+  },
+  {
+   "pdbGuid": "F8C9A87B-4454-487D-AFEA-3DA49DED29EF",
+   "build": "16299.1932",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "A9B0AAD9-55A1-4812-A442-EC3B21B7AF24",
+   "build": "16299.1937",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "F0F02E24-2685-41F7-8813-ECB8F86B021A",
+   "build": "16299.1992",
+   "pdbAge": 2,
+   "obpRoot": 3570832,
+   "obpInfoMask": 3578112
+  },
+  {
+   "pdbGuid": "BF22F92F-DDFD-4E2E-A809-2D1E0AE9478A",
+   "build": "16299.2045",
+   "pdbAge": 2,
+   "obpRoot": 3571288,
+   "obpInfoMask": 3578560
+  },
+  {
+   "pdbGuid": "F57873D8-519E-424C-BD25-45E8CA500536",
+   "build": "16299.2107",
+   "pdbAge": 2,
+   "obpRoot": 3571288,
+   "obpInfoMask": 3578560
+  },
+  {
+   "pdbGuid": "F60405AF-0013-4C03-8B52-F3AEC022EB79",
+   "build": "16299.214",
+   "pdbAge": 2,
+   "obpRoot": 3558808,
+   "obpInfoMask": 3566080
+  },
+  {
+   "pdbGuid": "F8E3518E-6146-4EFF-A402-30A3ED74EFDF",
+   "build": "16299.2166",
+   "pdbAge": 2,
+   "obpRoot": 3571288,
+   "obpInfoMask": 3578560
+  },
+  {
+   "pdbGuid": "7C6B3934-E36B-4ED8-9EA9-374957EDEAC4",
+   "build": "16299.248",
+   "pdbAge": 2,
+   "obpRoot": 3559128,
+   "obpInfoMask": 3566400
+  },
+  {
+   "pdbGuid": "61A5C7BB-DD95-48E6-A8B4-190DA6214F3E",
+   "build": "16299.251",
+   "pdbAge": 2,
+   "obpRoot": 3559128,
+   "obpInfoMask": 3566400
+  },
+  {
+   "pdbGuid": "481F0DAA-BA6C-4F02-B456-FAD74941C2A4",
+   "build": "16299.309",
+   "pdbAge": 2,
+   "obpRoot": 3559152,
+   "obpInfoMask": 3566432
+  },
+  {
+   "pdbGuid": "E44B0496-4CDB-44A0-9B62-73538822E78C",
+   "build": "16299.334",
+   "pdbAge": 2,
+   "obpRoot": 3559120,
+   "obpInfoMask": 3566400
+  },
+  {
+   "pdbGuid": "546B9E3A-368F-470A-BADE-EAFBEFFA1F4B",
+   "build": "16299.371",
+   "pdbAge": 2,
+   "obpRoot": 3554872,
+   "obpInfoMask": 3562144
+  },
+  {
+   "pdbGuid": "4ADCD3EB-3488-4CE5-90C8-4A8289CC4CFE",
+   "build": "16299.402",
+   "pdbAge": 2,
+   "obpRoot": 3555032,
+   "obpInfoMask": 3562304
+  },
+  {
+   "pdbGuid": "5A79162E-26EF-4F43-8948-99155CB05CCA",
+   "build": "16299.431",
+   "pdbAge": 2,
+   "obpRoot": 3554808,
+   "obpInfoMask": 3562080
+  },
+  {
+   "pdbGuid": "1466F69C-039B-4FBD-B6E2-1C7D15AD6539",
+   "build": "16299.461",
+   "pdbAge": 2,
+   "obpRoot": 3554936,
+   "obpInfoMask": 3562208
+  },
+  {
+   "pdbGuid": "977E5E03-5034-4C95-9803-8461E8F0454A",
+   "build": "16299.492",
+   "pdbAge": 2,
+   "obpRoot": 3546768,
+   "obpInfoMask": 3554048
+  },
+  {
+   "pdbGuid": "0AF5AC8F-8192-443E-9F0A-1FB3937B374C",
+   "build": "16299.522",
+   "pdbAge": 2,
+   "obpRoot": 3579640,
+   "obpInfoMask": 3586912
+  },
+  {
+   "pdbGuid": "72037CCA-CC96-492D-8CB3-66CAC90CE2BE",
+   "build": "16299.547",
+   "pdbAge": 2,
+   "obpRoot": 3579640,
+   "obpInfoMask": 3586912
+  },
+  {
+   "pdbGuid": "7F5F2BE1-B9B5-4E4C-87AF-E81163A357FB",
+   "build": "16299.551",
+   "pdbAge": 2,
+   "obpRoot": 3579640,
+   "obpInfoMask": 3586912
+  },
+  {
+   "pdbGuid": "D3EA66D7-5044-491F-A898-C58F8E71DDDF",
+   "build": "16299.579",
+   "pdbAge": 2,
+   "obpRoot": 3579640,
+   "obpInfoMask": 3586912
+  },
+  {
+   "pdbGuid": "61298F7B-9AA4-4AEF-AF06-46739619CECB",
+   "build": "16299.611",
+   "pdbAge": 2,
+   "obpRoot": 3567064,
+   "obpInfoMask": 3574336
+  },
+  {
+   "pdbGuid": "F313577F-30D6-4E23-A1E5-75635330B112",
+   "build": "16299.637",
+   "pdbAge": 2,
+   "obpRoot": 3567064,
+   "obpInfoMask": 3574336
+  },
+  {
+   "pdbGuid": "9830E2E8-0FBE-4576-B2F4-B86D1C4BCD95",
+   "build": "16299.64",
+   "pdbAge": 2,
+   "obpRoot": 3538296,
+   "obpInfoMask": 3545568
+  },
+  {
+   "pdbGuid": "037C56C6-4102-4D8E-842D-D2A1478D5AFE",
+   "build": "16299.665",
+   "pdbAge": 2,
+   "obpRoot": 3567312,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "9493015A-C138-4CCF-831E-A0C965FF665E",
+   "build": "16299.666",
+   "pdbAge": 2,
+   "obpRoot": 3567312,
+   "obpInfoMask": 3574592
+  },
+  {
+   "pdbGuid": "AE91442E-5AC8-4BE7-BF4B-35504AD31405",
+   "build": "16299.699",
+   "pdbAge": 2,
+   "obpRoot": 3567120,
+   "obpInfoMask": 3574400
+  },
+  {
+   "pdbGuid": "5FDBAC83-6285-4086-B3F7-A37A95A33F49",
+   "build": "16299.726",
+   "pdbAge": 2,
+   "obpRoot": 3567120,
+   "obpInfoMask": 3574400
+  },
+  {
+   "pdbGuid": "B6CB49CA-9567-4492-AE10-47B193D0A154",
+   "build": "16299.755",
+   "pdbAge": 2,
+   "obpRoot": 3567280,
+   "obpInfoMask": 3574560
+  },
+  {
+   "pdbGuid": "A9ED0DBE-C1D7-4C0C-B10B-65F6B933A45F",
+   "build": "16299.785",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "A1AD6B00-7CF5-4061-8E96-D0D3A5085C31",
+   "build": "16299.820",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "AE362EFD-7061-4AC5-9C28-236241CF61C7",
+   "build": "16299.846",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "1ED614A9-5ED7-4AD2-B237-9621CC1330A4",
+   "build": "16299.904",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "33F905E9-5313-4B89-B1D2-C5FD32730DB2",
+   "build": "16299.936",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "EF5CA612-2EC7-4977-9F2C-16ACF1285964",
+   "build": "16299.967",
+   "pdbAge": 2,
+   "obpRoot": 3567256,
+   "obpInfoMask": 3574528
+  },
+  {
+   "pdbGuid": "B0BCB185-445E-4032-A305-E5FB9AD6B077",
+   "build": "16299.98",
+   "pdbAge": 2,
+   "obpRoot": 3538392,
+   "obpInfoMask": 3545664
+  },
+  {
+   "pdbGuid": "039281E5-F80D-4711-8581-94C121C9D89D",
+   "build": "17134.1",
+   "pdbAge": 2,
+   "obpRoot": 3915720,
+   "obpInfoMask": 3919072
+  },
+  {
+   "pdbGuid": "DC6C8157-AB79-4B7F-B7BF-75CBB67656ED",
+   "build": "17134.1006",
+   "pdbAge": 2,
+   "obpRoot": 3849512,
+   "obpInfoMask": 3852896
+  },
+  {
+   "pdbGuid": "136D3171-3373-4191-98A5-11F1A349A0AC",
+   "build": "17134.1038",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853120
+  },
+  {
+   "pdbGuid": "72F34510-6324-4E03-9662-3745592D72DD",
+   "build": "17134.1067",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "FAE36688-644F-4E0A-B221-E07806DD11A2",
+   "build": "17134.1098",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "5B396742-883C-48D0-AB74-C7374DEEE916",
+   "build": "17134.112",
+   "pdbAge": 2,
+   "obpRoot": 3903176,
+   "obpInfoMask": 3906560
+  },
+  {
+   "pdbGuid": "C3CA8E28-7936-42EA-9DD0-B5FA64B2A0D0",
+   "build": "17134.1130",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853024
+  },
+  {
+   "pdbGuid": "A2386E1B-35F8-4EF2-A2A3-CE28F4197A1E",
+   "build": "17134.1184",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853024
+  },
+  {
+   "pdbGuid": "45F75A84-D33D-4728-B111-DF4533B10D1D",
+   "build": "17134.1246",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853024
+  },
+  {
+   "pdbGuid": "A17637B6-ACD5-4087-8BC5-356A1265253C",
+   "build": "17134.1276",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853024
+  },
+  {
+   "pdbGuid": "5088EF28-613B-4670-9D15-8A4DCA051B0B",
+   "build": "17134.1304",
+   "pdbAge": 2,
+   "obpRoot": 3849608,
+   "obpInfoMask": 3852992
+  },
+  {
+   "pdbGuid": "A7B1F7AC-AD1F-4D77-A141-BDCD0947B6D9",
+   "build": "17134.1345",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "FD037007-4E70-4926-8B18-E068C00BDE42",
+   "build": "17134.1365",
+   "pdbAge": 2,
+   "obpRoot": 3849960,
+   "obpInfoMask": 3853312
+  },
+  {
+   "pdbGuid": "BB70D67B-DBDD-4D04-974C-4946367DE734",
+   "build": "17134.137",
+   "pdbAge": 2,
+   "obpRoot": 3903176,
+   "obpInfoMask": 3906560
+  },
+  {
+   "pdbGuid": "86EFDDEF-1907-4AB0-9979-370185F51E62",
+   "build": "17134.1399",
+   "pdbAge": 2,
+   "obpRoot": 3849960,
+   "obpInfoMask": 3853312
+  },
+  {
+   "pdbGuid": "E2EB91BD-7726-4F7B-AD3B-92C68D4CB85C",
+   "build": "17134.1401",
+   "pdbAge": 2,
+   "obpRoot": 3849960,
+   "obpInfoMask": 3853312
+  },
+  {
+   "pdbGuid": "D464FF8E-50C2-4B97-9B87-2A1428C8F705",
+   "build": "17134.1425",
+   "pdbAge": 2,
+   "obpRoot": 3849960,
+   "obpInfoMask": 3853312
+  },
+  {
+   "pdbGuid": "204D4BA0-4016-4808-8C9C-A0F1C8CC2665",
+   "build": "17134.1456",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "5B31F153-3C75-49DC-B0C0-B83949E911C3",
+   "build": "17134.1488",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "07793FA1-A860-48AE-9049-24F6B1386272",
+   "build": "17134.1550",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "110E4944-AC79-4AE7-A326-F13975391DC6",
+   "build": "17134.1553",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "024E7224-33B6-49C7-BFE2-EB443205829F",
+   "build": "17134.1610",
+   "pdbAge": 2,
+   "obpRoot": 3849832,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "311A83B5-8111-4CD0-BEB2-1F065438BFAA",
+   "build": "17134.165",
+   "pdbAge": 2,
+   "obpRoot": 3903176,
+   "obpInfoMask": 3906560
+  },
+  {
+   "pdbGuid": "D668ADE3-1775-45C1-BA0B-03C3A4B87194",
+   "build": "17134.1667",
+   "pdbAge": 2,
+   "obpRoot": 3849736,
+   "obpInfoMask": 3853120
+  },
+  {
+   "pdbGuid": "60A0FCC3-A140-4D90-9A48-6F9A569D6FCA",
+   "build": "17134.167",
+   "pdbAge": 2,
+   "obpRoot": 3903176,
+   "obpInfoMask": 3906560
+  },
+  {
+   "pdbGuid": "D9DFFB11-927D-4C0E-A4B9-2DEAE4E3E389",
+   "build": "17134.1726",
+   "pdbAge": 2,
+   "obpRoot": 3849736,
+   "obpInfoMask": 3853120
+  },
+  {
+   "pdbGuid": "01C19DB1-01A5-4518-BF2F-1E62165399B9",
+   "build": "17134.1792",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "C8DC63E4-D8EA-4E97-97A6-5C644A803BC7",
+   "build": "17134.1845",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "EF5D1140-DE79-4144-9CAF-C9DB15618DC7",
+   "build": "17134.1902",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "1E158A60-4109-4205-BE17-F93E54DD5E51",
+   "build": "17134.191",
+   "pdbAge": 2,
+   "obpRoot": 3907272,
+   "obpInfoMask": 3910656
+  },
+  {
+   "pdbGuid": "114062E8-CC56-4C14-B90C-81FAAA3C5731",
+   "build": "17134.1967",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "8A7A0D1C-357E-43B8-BA29-9D28A8BBAC62",
+   "build": "17134.2026",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "C128E8B6-507F-4FBB-9FB5-6409C16A01EE",
+   "build": "17134.2087",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "8BC20006-7A76-457E-A0EA-0340A83548C5",
+   "build": "17134.2088",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "C32B8CC0-270A-4B28-BEA9-A2CD6F4131AA",
+   "build": "17134.2090",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "E3D8CA1F-A6EB-4B96-8CC2-BC26EEF09E01",
+   "build": "17134.2145",
+   "pdbAge": 2,
+   "obpRoot": 3849736,
+   "obpInfoMask": 3853120
+  },
+  {
+   "pdbGuid": "5DB21A03-E94E-48F9-8909-4568C3DB6155",
+   "build": "17134.2208",
+   "pdbAge": 2,
+   "obpRoot": 3849736,
+   "obpInfoMask": 3853120
+  },
+  {
+   "pdbGuid": "F297D5D8-1FD9-4FE3-B8E6-1806749DF5CC",
+   "build": "17134.228",
+   "pdbAge": 2,
+   "obpRoot": 3853904,
+   "obpInfoMask": 3857280
+  },
+  {
+   "pdbGuid": "F1A15B7F-6C9E-4AB8-9680-102908A9B21A",
+   "build": "17134.254",
+   "pdbAge": 2,
+   "obpRoot": 3853904,
+   "obpInfoMask": 3857280
+  },
+  {
+   "pdbGuid": "4CED0CB4-9C66-49E5-B90C-8DB6AA7E4A08",
+   "build": "17134.285",
+   "pdbAge": 2,
+   "obpRoot": 3854056,
+   "obpInfoMask": 3857440
+  },
+  {
+   "pdbGuid": "1668D4E4-16FE-47D2-993F-74BEC21D4E3B",
+   "build": "17134.286",
+   "pdbAge": 2,
+   "obpRoot": 3854056,
+   "obpInfoMask": 3857440
+  },
+  {
+   "pdbGuid": "B0DCBF4F-BD02-47DD-9F99-EF0A6595116B",
+   "build": "17134.320",
+   "pdbAge": 2,
+   "obpRoot": 3854248,
+   "obpInfoMask": 3857632
+  },
+  {
+   "pdbGuid": "DD0D1D20-22E0-401B-B955-1D9DD9ECDF58",
+   "build": "17134.345",
+   "pdbAge": 2,
+   "obpRoot": 3854184,
+   "obpInfoMask": 3857568
+  },
+  {
+   "pdbGuid": "E3220E28-94E4-404D-948B-9079137CCFD4",
+   "build": "17134.376",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "9927E859-6BAF-484F-A239-831C63E24F36",
+   "build": "17134.407",
+   "pdbAge": 2,
+   "obpRoot": 3853864,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "567CABBA-B170-4749-871A-90CA039F7C04",
+   "build": "17134.441",
+   "pdbAge": 2,
+   "obpRoot": 3853928,
+   "obpInfoMask": 3857280
+  },
+  {
+   "pdbGuid": "0A0121EE-9C79-4467-B99A-1356AEDAE8BE",
+   "build": "17134.471",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "B9E27947-758C-4572-A2D6-D8AC91E55AA8",
+   "build": "17134.472",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "1E2C949B-9282-4463-8C2A-7406B9F3824A",
+   "build": "17134.48",
+   "pdbAge": 2,
+   "obpRoot": 3915400,
+   "obpInfoMask": 3918784
+  },
+  {
+   "pdbGuid": "70E00AFD-D91A-4141-A2EB-D2A459533D65",
+   "build": "17134.523",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "BAE7CB15-9232-4A77-B70C-F6778869A46B",
+   "build": "17134.556",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "CF49BB63-D8A2-49D7-9D97-A5F33C8712B5",
+   "build": "17134.590",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "8BE45B2B-0BE2-431C-959B-0D00EBBF8DA4",
+   "build": "17134.619",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "D7D1AD92-569B-497A-82FA-84EF208B096C",
+   "build": "17134.648",
+   "pdbAge": 2,
+   "obpRoot": 3853896,
+   "obpInfoMask": 3857248
+  },
+  {
+   "pdbGuid": "A21B8DF3-ED27-4C58-9FC4-4BD443FDE675",
+   "build": "17134.677",
+   "pdbAge": 2,
+   "obpRoot": 3850120,
+   "obpInfoMask": 3853504
+  },
+  {
+   "pdbGuid": "C76519BF-A4E5-46A8-9109-C76B14106931",
+   "build": "17134.706",
+   "pdbAge": 2,
+   "obpRoot": 3850120,
+   "obpInfoMask": 3853504
+  },
+  {
+   "pdbGuid": "D8A753EE-46CD-4621-A119-4DB4EA85CA69",
+   "build": "17134.753",
+   "pdbAge": 2,
+   "obpRoot": 3850120,
+   "obpInfoMask": 3853504
+  },
+  {
+   "pdbGuid": "75F63307-EA3C-437D-A632-D2FCB4C89835",
+   "build": "17134.765",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "F32BA3EE-0F44-41CE-8B70-03DB9865283C",
+   "build": "17134.766",
+   "pdbAge": 2,
+   "obpRoot": 3849768,
+   "obpInfoMask": 3853152
+  },
+  {
+   "pdbGuid": "2E5D8824-EEE2-45A8-AA1F-DD1DEA93B623",
+   "build": "17134.799",
+   "pdbAge": 2,
+   "obpRoot": 3849800,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "E7F06500-3DA5-4131-AA39-8319CB1473F0",
+   "build": "17134.81",
+   "pdbAge": 2,
+   "obpRoot": 3915752,
+   "obpInfoMask": 3919104
+  },
+  {
+   "pdbGuid": "533D4312-A2F7-49D6-95FF-F579C1C08E04",
+   "build": "17134.829",
+   "pdbAge": 2,
+   "obpRoot": 3849800,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "53F21FC2-0DC2-438A-91BE-27F2172B14A3",
+   "build": "17134.83",
+   "pdbAge": 2,
+   "obpRoot": 3915752,
+   "obpInfoMask": 3919104
+  },
+  {
+   "pdbGuid": "4AA575D5-4F74-4653-9509-4B84073867BF",
+   "build": "17134.858",
+   "pdbAge": 2,
+   "obpRoot": 3849800,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "C34B1B2B-9CD3-404C-A2D6-8EAEEBF17242",
+   "build": "17134.885",
+   "pdbAge": 2,
+   "obpRoot": 3849800,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "7AF5DB80-668B-4DAE-8D92-3051EE8A32E7",
+   "build": "17134.915",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853056
+  },
+  {
+   "pdbGuid": "B59794AB-20DE-41B8-A843-3CD1B851CD89",
+   "build": "17134.950",
+   "pdbAge": 2,
+   "obpRoot": 3849680,
+   "obpInfoMask": 3853056
+  },
+  {
+   "pdbGuid": "33C4A217-A83D-4EE0-87C2-F3B66789FB01",
+   "build": "17134.982",
+   "pdbAge": 2,
+   "obpRoot": 3849800,
+   "obpInfoMask": 3853184
+  },
+  {
+   "pdbGuid": "46374829-64E3-14C9-DD66-7ACD603B043F",
+   "build": "17763.1",
+   "pdbAge": 2,
+   "obpRoot": 4318952,
+   "obpInfoMask": 4322304
+  },
+  {
+   "pdbGuid": "B0B94572-6F36-6BEE-46B9-BE8DCE44B374",
+   "build": "17763.1007",
+   "pdbAge": 2,
+   "obpRoot": 4296592,
+   "obpInfoMask": 4297696
+  },
+  {
+   "pdbGuid": "4BFA4DDB-90F9-E6F2-75A7-3C8438D81BE1",
+   "build": "17763.1039",
+   "pdbAge": 2,
+   "obpRoot": 4296856,
+   "obpInfoMask": 4297952
+  },
+  {
+   "pdbGuid": "69247313-0560-76BB-CB34-11FD96428714",
+   "build": "17763.107",
+   "pdbAge": 2,
+   "obpRoot": 4318856,
+   "obpInfoMask": 4322208
+  },
+  {
+   "pdbGuid": "DA1ED65E-6D57-F5D4-114D-F3407DD0EDFE",
+   "build": "17763.1075",
+   "pdbAge": 2,
+   "obpRoot": 4300952,
+   "obpInfoMask": 4302048
+  },
+  {
+   "pdbGuid": "5A53034F-E86D-EE79-853A-8E24B3903A93",
+   "build": "17763.1098",
+   "pdbAge": 2,
+   "obpRoot": 4300984,
+   "obpInfoMask": 4302080
+  },
+  {
+   "pdbGuid": "1BF88369-3459-EE31-296B-1A5BECACB5A0",
+   "build": "17763.1131",
+   "pdbAge": 2,
+   "obpRoot": 4300920,
+   "obpInfoMask": 4302016
+  },
+  {
+   "pdbGuid": "634CC5C9-627F-2BA6-E3DB-5B9E6E33C16E",
+   "build": "17763.1158",
+   "pdbAge": 2,
+   "obpRoot": 4300920,
+   "obpInfoMask": 4302016
+  },
+  {
+   "pdbGuid": "602D45ED-5BCC-5863-A311-B7A43ADDB321",
+   "build": "17763.1192",
+   "pdbAge": 2,
+   "obpRoot": 4300952,
+   "obpInfoMask": 4302048
+  },
+  {
+   "pdbGuid": "B9010434-4CA6-1DE5-ADD2-11803D300E69",
+   "build": "17763.1217",
+   "pdbAge": 2,
+   "obpRoot": 4300952,
+   "obpInfoMask": 4302048
+  },
+  {
+   "pdbGuid": "A641F14B-1133-5DF7-30C9-80BC383D2029",
+   "build": "17763.1282",
+   "pdbAge": 2,
+   "obpRoot": 4301016,
+   "obpInfoMask": 4302112
+  },
+  {
+   "pdbGuid": "D9F251F1-20AE-4295-5160-1E9A00924118",
+   "build": "17763.1294",
+   "pdbAge": 2,
+   "obpRoot": 4301016,
+   "obpInfoMask": 4302112
+  },
+  {
+   "pdbGuid": "B02B8B6B-1856-8873-0845-5D5FCCAC7A8B",
+   "build": "17763.1339",
+   "pdbAge": 2,
+   "obpRoot": 4301016,
+   "obpInfoMask": 4302112
+  },
+  {
+   "pdbGuid": "BCE32FB8-8EC2-2A4E-1D55-62A338E47727",
+   "build": "17763.134",
+   "pdbAge": 2,
+   "obpRoot": 4318824,
+   "obpInfoMask": 4322176
+  },
+  {
+   "pdbGuid": "ABD30BD0-9882-D562-4292-1495128A2958",
+   "build": "17763.1369",
+   "pdbAge": 2,
+   "obpRoot": 4301016,
+   "obpInfoMask": 4302112
+  },
+  {
+   "pdbGuid": "65B70373-5EC3-F751-C27A-7FC15E8C3CC7",
+   "build": "17763.1397",
+   "pdbAge": 2,
+   "obpRoot": 4300688,
+   "obpInfoMask": 4301760
+  },
+  {
+   "pdbGuid": "5A65886E-EEB0-E633-891E-E1E2DED4BF33",
+   "build": "17763.1432",
+   "pdbAge": 2,
+   "obpRoot": 4292760,
+   "obpInfoMask": 4293856
+  },
+  {
+   "pdbGuid": "86FD5E31-A980-FEB4-8CF0-9890BCDFA8FA",
+   "build": "17763.1457",
+   "pdbAge": 2,
+   "obpRoot": 4292760,
+   "obpInfoMask": 4293856
+  },
+  {
+   "pdbGuid": "315E3D63-31E2-7098-858C-C61CE3B0AB9E",
+   "build": "17763.1518",
+   "pdbAge": 2,
+   "obpRoot": 4284568,
+   "obpInfoMask": 4285664
+  },
+  {
+   "pdbGuid": "B8D82FFC-FBBD-62CB-9482-3DDD85806CD1",
+   "build": "17763.1554",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "CF19666C-BAC2-3B3F-2DF4-6BE6185C46A4",
+   "build": "17763.1577",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "68E63D66-2753-65F1-8B35-E54C68128B43",
+   "build": "17763.1613",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "43A07842-20B6-C7B3-B1D0-7F60ECB16159",
+   "build": "17763.1637",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "5A05D9EB-FFCA-4A5C-2B5E-9272FAEEA696",
+   "build": "17763.168",
+   "pdbAge": 2,
+   "obpRoot": 4302664,
+   "obpInfoMask": 4306016
+  },
+  {
+   "pdbGuid": "4A3529A2-4233-0C40-BA8B-A2A4F8292035",
+   "build": "17763.1697",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "5495E3E3-30F3-9DCB-1458-A1C162B67E27",
+   "build": "17763.1728",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "86504F78-EB83-5EC2-6ABB-BA84873A2F8C",
+   "build": "17763.1757",
+   "pdbAge": 2,
+   "obpRoot": 4284632,
+   "obpInfoMask": 4285728
+  },
+  {
+   "pdbGuid": "8241792A-0E1D-0D2A-111D-E8DA2367D8E3",
+   "build": "17763.1790",
+   "pdbAge": 2,
+   "obpRoot": 4284632,
+   "obpInfoMask": 4285728
+  },
+  {
+   "pdbGuid": "3FE403B0-1B05-6737-6A0A-22199A21343F",
+   "build": "17763.1817",
+   "pdbAge": 2,
+   "obpRoot": 4284632,
+   "obpInfoMask": 4285728
+  },
+  {
+   "pdbGuid": "94E2AE63-23B6-86F1-F4B2-5BA580582E04",
+   "build": "17763.1821",
+   "pdbAge": 2,
+   "obpRoot": 4284632,
+   "obpInfoMask": 4285728
+  },
+  {
+   "pdbGuid": "86AD2A62-3A3B-3958-A7D5-5E26861548E1",
+   "build": "17763.1823",
+   "pdbAge": 2,
+   "obpRoot": 4284632,
+   "obpInfoMask": 4285728
+  },
+  {
+   "pdbGuid": "F5A2D6FD-89C7-2E8E-BA6E-987298F885E2",
+   "build": "17763.1852",
+   "pdbAge": 2,
+   "obpRoot": 4284304,
+   "obpInfoMask": 4285376
+  },
+  {
+   "pdbGuid": "7C131E18-E159-B11A-8B15-A0E63C2BEA26",
+   "build": "17763.1879",
+   "pdbAge": 2,
+   "obpRoot": 4284304,
+   "obpInfoMask": 4285376
+  },
+  {
+   "pdbGuid": "96466D7D-3625-03DF-1D27-4635298752A7",
+   "build": "17763.1911",
+   "pdbAge": 2,
+   "obpRoot": 4287888,
+   "obpInfoMask": 4288960
+  },
+  {
+   "pdbGuid": "E84355FC-0268-21A4-AF27-0C87E549EDE2",
+   "build": "17763.1935",
+   "pdbAge": 2,
+   "obpRoot": 4287888,
+   "obpInfoMask": 4288960
+  },
+  {
+   "pdbGuid": "2CE52275-FB3E-9601-68AA-EF4FC5C91BE1",
+   "build": "17763.194",
+   "pdbAge": 2,
+   "obpRoot": 4298536,
+   "obpInfoMask": 4301888
+  },
+  {
+   "pdbGuid": "6B8312B0-4731-880E-3681-63339BF148B8",
+   "build": "17763.195",
+   "pdbAge": 2,
+   "obpRoot": 4298536,
+   "obpInfoMask": 4301888
+  },
+  {
+   "pdbGuid": "9FAB2C17-A844-6F0E-3B14-6A394614C267",
+   "build": "17763.1971",
+   "pdbAge": 2,
+   "obpRoot": 4288216,
+   "obpInfoMask": 4289312
+  },
+  {
+   "pdbGuid": "7FE07BB2-95CE-2072-06AA-244E72D01F5E",
+   "build": "17763.1999",
+   "pdbAge": 2,
+   "obpRoot": 4288216,
+   "obpInfoMask": 4289312
+  },
+  {
+   "pdbGuid": "0D11ED84-E72E-5E84-0AA9-8F6D4FC5D3D9",
+   "build": "17763.2028",
+   "pdbAge": 2,
+   "obpRoot": 4287768,
+   "obpInfoMask": 4288832
+  },
+  {
+   "pdbGuid": "C55D3C95-C98C-1095-6F6E-81DFC00A3D48",
+   "build": "17763.2029",
+   "pdbAge": 2,
+   "obpRoot": 4287768,
+   "obpInfoMask": 4288832
+  },
+  {
+   "pdbGuid": "2FE8934E-4E72-6982-842B-E46BE9CCB024",
+   "build": "17763.2061",
+   "pdbAge": 2,
+   "obpRoot": 4283888,
+   "obpInfoMask": 4284992
+  },
+  {
+   "pdbGuid": "C1007B9E-F6DF-D534-3354-41780D86828D",
+   "build": "17763.2090",
+   "pdbAge": 2,
+   "obpRoot": 4283952,
+   "obpInfoMask": 4285056
+  },
+  {
+   "pdbGuid": "A1E1C9A9-0091-DA98-05D0-EBA0470BEC85",
+   "build": "17763.2114",
+   "pdbAge": 2,
+   "obpRoot": 4283952,
+   "obpInfoMask": 4285056
+  },
+  {
+   "pdbGuid": "ED7BCFE7-FEF8-9503-3EB1-B72008AC68B9",
+   "build": "17763.2145",
+   "pdbAge": 2,
+   "obpRoot": 4288024,
+   "obpInfoMask": 4289120
+  },
+  {
+   "pdbGuid": "516FDC07-9C4E-093D-75F2-66192F75A52B",
+   "build": "17763.2183",
+   "pdbAge": 2,
+   "obpRoot": 4288024,
+   "obpInfoMask": 4289120
+  },
+  {
+   "pdbGuid": "669EFD5F-77C5-8A57-ECEE-8A3A4C16D77B",
+   "build": "17763.2213",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "DA773CF3-ACF6-D826-AED8-FF5AE17E6159",
+   "build": "17763.2237",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "E7E6FD36-0F60-5932-99AD-1BA02EE07D38",
+   "build": "17763.2268",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "8D8CF2E1-4D2D-1B21-CD88-604AC6FDE56D",
+   "build": "17763.2300",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "5B7B89FC-28EF-9F51-5E54-C7AC8C77215C",
+   "build": "17763.2305",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "5D11CCA2-5EDA-D395-C9F1-D75C31A619E7",
+   "build": "17763.2330",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "581F3FEB-F2BA-BA4D-2FF6-4FD74F694C37",
+   "build": "17763.2366",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "2B54F439-743B-C5A0-BC32-68EEB50EFEA9",
+   "build": "17763.2369",
+   "pdbAge": 2,
+   "obpRoot": 4284048,
+   "obpInfoMask": 4285120
+  },
+  {
+   "pdbGuid": "76133B7D-5E53-E8EF-3783-A68665142583",
+   "build": "17763.2452",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "DDB20DEB-CB36-3DE9-556D-3FECA36DABFA",
+   "build": "17763.2458",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "C288E82F-E2C3-22E9-F163-4927EBB80A90",
+   "build": "17763.2510",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "F2C39CCB-E477-FA99-A815-CE04EC327B06",
+   "build": "17763.253",
+   "pdbAge": 2,
+   "obpRoot": 4298536,
+   "obpInfoMask": 4301888
+  },
+  {
+   "pdbGuid": "4D1166A9-0BFA-1115-442F-0C6EC2DCD904",
+   "build": "17763.2565",
+   "pdbAge": 2,
+   "obpRoot": 4288144,
+   "obpInfoMask": 4289216
+  },
+  {
+   "pdbGuid": "9CA45284-FFBE-1067-2A2C-BE357E7454A3",
+   "build": "17763.2628",
+   "pdbAge": 2,
+   "obpRoot": 4288056,
+   "obpInfoMask": 4289152
+  },
+  {
+   "pdbGuid": "828E828A-DF1D-5B56-8372-D9F5D0227A54",
+   "build": "17763.2746",
+   "pdbAge": 2,
+   "obpRoot": 4288048,
+   "obpInfoMask": 4289120
+  },
+  {
+   "pdbGuid": "8B29D57F-94EA-B614-8B4D-185E2E35D351",
+   "build": "17763.2803",
+   "pdbAge": 2,
+   "obpRoot": 4288048,
+   "obpInfoMask": 4289120
+  },
+  {
+   "pdbGuid": "3A74F299-3FDF-5A66-2E3E-7EA0F939C34A",
+   "build": "17763.2867",
+   "pdbAge": 2,
+   "obpRoot": 4288080,
+   "obpInfoMask": 4289152
+  },
+  {
+   "pdbGuid": "C710248A-0CA3-CAB0-8015-A2B18AB495B4",
+   "build": "17763.292",
+   "pdbAge": 2,
+   "obpRoot": 4302672,
+   "obpInfoMask": 4306112
+  },
+  {
+   "pdbGuid": "E7F5FABB-ED95-709A-1F9B-C3ED165530D8",
+   "build": "17763.2928",
+   "pdbAge": 2,
+   "obpRoot": 4288080,
+   "obpInfoMask": 4289152
+  },
+  {
+   "pdbGuid": "D64C45C1-981A-2AF6-7ABF-52882503BB91",
+   "build": "17763.2931",
+   "pdbAge": 2,
+   "obpRoot": 4288080,
+   "obpInfoMask": 4289152
+  },
+  {
+   "pdbGuid": "E62E6ED7-AB80-4D90-4866-EAE2D10F5D1E",
+   "build": "17763.2989",
+   "pdbAge": 2,
+   "obpRoot": 4288048,
+   "obpInfoMask": 4289120
+  },
+  {
+   "pdbGuid": "CAB8D006-3638-09B6-D626-7BB6E5589F88",
+   "build": "17763.3046",
+   "pdbAge": 2,
+   "obpRoot": 4288016,
+   "obpInfoMask": 4289088
+  },
+  {
+   "pdbGuid": "76B0354B-FFCF-7929-4F03-9F39D1321C17",
+   "build": "17763.316",
+   "pdbAge": 2,
+   "obpRoot": 4302672,
+   "obpInfoMask": 4306112
+  },
+  {
+   "pdbGuid": "330EB97B-FF49-73E2-5B55-A8CB0DB099DE",
+   "build": "17763.3165",
+   "pdbAge": 2,
+   "obpRoot": 4288152,
+   "obpInfoMask": 4289248
+  },
+  {
+   "pdbGuid": "33C81FC0-423C-2AC4-E1C4-6801D681AACF",
+   "build": "17763.3232",
+   "pdbAge": 2,
+   "obpRoot": 4288152,
+   "obpInfoMask": 4289248
+  },
+  {
+   "pdbGuid": "34244668-48FC-568F-B899-930B88A0E444",
+   "build": "17763.3287",
+   "pdbAge": 2,
+   "obpRoot": 4287984,
+   "obpInfoMask": 4289056
+  },
+  {
+   "pdbGuid": "CF819ECA-B597-4951-0B36-FA69EFDC3ED0",
+   "build": "17763.3346",
+   "pdbAge": 2,
+   "obpRoot": 4288184,
+   "obpInfoMask": 4289280
+  },
+  {
+   "pdbGuid": "101DA307-6BFA-5910-D541-AD002E41BB12",
+   "build": "17763.3406",
+   "pdbAge": 2,
+   "obpRoot": 4288184,
+   "obpInfoMask": 4289280
+  },
+  {
+   "pdbGuid": "9470F909-2350-65FD-5A91-FCE1CC51B4A6",
+   "build": "17763.3469",
+   "pdbAge": 2,
+   "obpRoot": 4288152,
+   "obpInfoMask": 4289248
+  },
+  {
+   "pdbGuid": "99DE394F-5679-5BA4-DDAE-BA33444A9F1A",
+   "build": "17763.348",
+   "pdbAge": 2,
+   "obpRoot": 4302648,
+   "obpInfoMask": 4305792
+  },
+  {
+   "pdbGuid": "BF32B9F6-C843-C1AC-B8AD-7DFF56370AFE",
+   "build": "17763.3532",
+   "pdbAge": 2,
+   "obpRoot": 4287984,
+   "obpInfoMask": 4289056
+  },
+  {
+   "pdbGuid": "F883351C-DC98-AC00-4036-91D99BA41D6F",
+   "build": "17763.3534",
+   "pdbAge": 2,
+   "obpRoot": 4287984,
+   "obpInfoMask": 4289056
+  },
+  {
+   "pdbGuid": "EF9A48AF-A50F-F07C-6165-85BB01919536",
+   "build": "17763.3650",
+   "pdbAge": 2,
+   "obpRoot": 4296208,
+   "obpInfoMask": 4297312
+  },
+  {
+   "pdbGuid": "A3233794-6096-E366-0816-153439C95258",
+   "build": "17763.3772",
+   "pdbAge": 2,
+   "obpRoot": 4296184,
+   "obpInfoMask": 4297248
+  },
+  {
+   "pdbGuid": "8B11040A-5928-757B-1139-0AC78F6B6925",
+   "build": "17763.379",
+   "pdbAge": 2,
+   "obpRoot": 4302744,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "DEECD7D0-7009-464B-789C-1C31D66CE267",
+   "build": "17763.3887",
+   "pdbAge": 2,
+   "obpRoot": 4296184,
+   "obpInfoMask": 4297248
+  },
+  {
+   "pdbGuid": "423B4C75-72F2-C36B-4EAA-6DF3EDCD27EC",
+   "build": "17763.4010",
+   "pdbAge": 2,
+   "obpRoot": 4296208,
+   "obpInfoMask": 4297312
+  },
+  {
+   "pdbGuid": "D048F3C2-10D0-C2F0-64BB-3C48F3E6FF9E",
+   "build": "17763.404",
+   "pdbAge": 2,
+   "obpRoot": 4305200,
+   "obpInfoMask": 4306304
+  },
+  {
+   "pdbGuid": "06F33B5B-E23E-F96A-C9D9-3825124DAA16",
+   "build": "17763.4131",
+   "pdbAge": 2,
+   "obpRoot": 4292208,
+   "obpInfoMask": 4293312
+  },
+  {
+   "pdbGuid": "4555D0F2-5164-EF67-AD09-BD678C369927",
+   "build": "17763.4252",
+   "pdbAge": 2,
+   "obpRoot": 4296368,
+   "obpInfoMask": 4297472
+  },
+  {
+   "pdbGuid": "8CFB4942-8DC8-6A33-0CE2-57778E0C2F93",
+   "build": "17763.437",
+   "pdbAge": 2,
+   "obpRoot": 4305200,
+   "obpInfoMask": 4306304
+  },
+  {
+   "pdbGuid": "E687C28C-F664-02E5-C3EC-92A57C064C71",
+   "build": "17763.4377",
+   "pdbAge": 2,
+   "obpRoot": 4296368,
+   "obpInfoMask": 4297472
+  },
+  {
+   "pdbGuid": "95A0DF82-5041-B939-88C7-F67B17D72628",
+   "build": "17763.439",
+   "pdbAge": 2,
+   "obpRoot": 4305200,
+   "obpInfoMask": 4306304
+  },
+  {
+   "pdbGuid": "F469B121-8BBA-71E9-F523-244B538BBC55",
+   "build": "17763.4737",
+   "pdbAge": 2,
+   "obpRoot": 4296304,
+   "obpInfoMask": 4297408
+  },
+  {
+   "pdbGuid": "8E041AE2-8697-0FD6-DB27-C10EE83C819F",
+   "build": "17763.475",
+   "pdbAge": 2,
+   "obpRoot": 4305104,
+   "obpInfoMask": 4306208
+  },
+  {
+   "pdbGuid": "57CC5F08-BBDF-5423-52E6-6C6FD2D359A3",
+   "build": "17763.4851",
+   "pdbAge": 2,
+   "obpRoot": 4296400,
+   "obpInfoMask": 4297504
+  },
+  {
+   "pdbGuid": "50C8F994-0EA2-460D-DC87-22B1C47357DA",
+   "build": "17763.4974",
+   "pdbAge": 2,
+   "obpRoot": 4296344,
+   "obpInfoMask": 4297440
+  },
+  {
+   "pdbGuid": "20C711BB-D4C2-1AA5-C45B-C774BC7E0472",
+   "build": "17763.503",
+   "pdbAge": 2,
+   "obpRoot": 4304760,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "4537E1C0-6FC8-D20B-F2F4-D315925632E0",
+   "build": "17763.504",
+   "pdbAge": 2,
+   "obpRoot": 4304760,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "71C24E0B-AED9-3FAD-DB81-47CF876498E4",
+   "build": "17763.5122",
+   "pdbAge": 2,
+   "obpRoot": 4296376,
+   "obpInfoMask": 4297472
+  },
+  {
+   "pdbGuid": "AA44BDCC-E47E-33E9-B131-260A6B98E199",
+   "build": "17763.5202",
+   "pdbAge": 2,
+   "obpRoot": 4296376,
+   "obpInfoMask": 4297472
+  },
+  {
+   "pdbGuid": "94807C14-53BA-2DDC-9019-15574B244C01",
+   "build": "17763.529",
+   "pdbAge": 2,
+   "obpRoot": 4304760,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "1D409061-3BF9-7F9B-9529-992E20E93897",
+   "build": "17763.5328",
+   "pdbAge": 2,
+   "obpRoot": 4296216,
+   "obpInfoMask": 4297280
+  },
+  {
+   "pdbGuid": "52266E55-6DD1-F76C-FB47-5EFEC96D4ACB",
+   "build": "17763.5458",
+   "pdbAge": 2,
+   "obpRoot": 4296184,
+   "obpInfoMask": 4297248
+  },
+  {
+   "pdbGuid": "D6B4AE9D-7094-665F-9A53-40BA17DAD189",
+   "build": "17763.55",
+   "pdbAge": 2,
+   "obpRoot": 4319016,
+   "obpInfoMask": 4322368
+  },
+  {
+   "pdbGuid": "D3537F32-8D12-4099-1ED2-77D110ECE661",
+   "build": "17763.557",
+   "pdbAge": 2,
+   "obpRoot": 4304760,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "105E35CD-D9BB-308C-18A1-76AB5BB37CE3",
+   "build": "17763.5576",
+   "pdbAge": 2,
+   "obpRoot": 4300280,
+   "obpInfoMask": 4301344
+  },
+  {
+   "pdbGuid": "B909196D-5F6F-AEF7-6ADF-01B25BC23092",
+   "build": "17763.5696",
+   "pdbAge": 2,
+   "obpRoot": 4300272,
+   "obpInfoMask": 4301344
+  },
+  {
+   "pdbGuid": "2EA98876-FE20-9B61-9540-90E803113013",
+   "build": "17763.5820",
+   "pdbAge": 2,
+   "obpRoot": 4300272,
+   "obpInfoMask": 4301344
+  },
+  {
+   "pdbGuid": "4DB9D238-1098-6CD3-D83D-82684D31FDEC",
+   "build": "17763.5830",
+   "pdbAge": 2,
+   "obpRoot": 4300272,
+   "obpInfoMask": 4301344
+  },
+  {
+   "pdbGuid": "637740E1-3D63-AF51-CB7F-2CAED4EFFC5A",
+   "build": "17763.593",
+   "pdbAge": 2,
+   "obpRoot": 4304920,
+   "obpInfoMask": 4306016
+  },
+  {
+   "pdbGuid": "1806D020-A6E4-6538-D7AC-3325FAC114D8",
+   "build": "17763.5933",
+   "pdbAge": 2,
+   "obpRoot": 4300368,
+   "obpInfoMask": 4301472
+  },
+  {
+   "pdbGuid": "B1EBDC31-DBD0-4302-85B7-66083896BA18",
+   "build": "17763.6054",
+   "pdbAge": 2,
+   "obpRoot": 4300336,
+   "obpInfoMask": 4301440
+  },
+  {
+   "pdbGuid": "329FCB94-4499-5CC2-6116-9172F443AEB1",
+   "build": "17763.615",
+   "pdbAge": 2,
+   "obpRoot": 4304920,
+   "obpInfoMask": 4306016
+  },
+  {
+   "pdbGuid": "5D5E6D2D-80B9-8385-B284-D67D79BB07D4",
+   "build": "17763.6189",
+   "pdbAge": 2,
+   "obpRoot": 4300336,
+   "obpInfoMask": 4301440
+  },
+  {
+   "pdbGuid": "80A68472-D8B6-D177-86B0-E6177FD0A6B7",
+   "build": "17763.6292",
+   "pdbAge": 2,
+   "obpRoot": 4300368,
+   "obpInfoMask": 4301472
+  },
+  {
+   "pdbGuid": "9B1B9FDA-C66D-139D-31AA-906DEEB2D5BC",
+   "build": "17763.6414",
+   "pdbAge": 2,
+   "obpRoot": 4300432,
+   "obpInfoMask": 4301536
+  },
+  {
+   "pdbGuid": "E20A14CB-C92D-D047-6490-46761F77B722",
+   "build": "17763.652",
+   "pdbAge": 2,
+   "obpRoot": 4304824,
+   "obpInfoMask": 4305920
+  },
+  {
+   "pdbGuid": "FDC0BBCE-4D49-9F9F-2D80-B996AD25E7B8",
+   "build": "17763.6530",
+   "pdbAge": 2,
+   "obpRoot": 4300368,
+   "obpInfoMask": 4301472
+  },
+  {
+   "pdbGuid": "C2934D37-3CE0-F6D8-9ECB-78D2DA8053F8",
+   "build": "17763.6640",
+   "pdbAge": 2,
+   "obpRoot": 4300280,
+   "obpInfoMask": 4301344
+  },
+  {
+   "pdbGuid": "66D77FAB-A17A-91FE-BC88-18E7C18FEFC6",
+   "build": "17763.6766",
+   "pdbAge": 2,
+   "obpRoot": 4300248,
+   "obpInfoMask": 4301312
+  },
+  {
+   "pdbGuid": "9A729548-AB1A-93E9-0D0A-48528CE30B7A",
+   "build": "17763.678",
+   "pdbAge": 2,
+   "obpRoot": 4304856,
+   "obpInfoMask": 4305952
+  },
+  {
+   "pdbGuid": "413F53AD-3E40-77BA-A6A7-3C73769CDE11",
+   "build": "17763.7009",
+   "pdbAge": 2,
+   "obpRoot": 4300368,
+   "obpInfoMask": 4301472
+  },
+  {
+   "pdbGuid": "803382F7-F5DE-8484-FB77-3E1E564A4D32",
+   "build": "17763.7131",
+   "pdbAge": 2,
+   "obpRoot": 4300248,
+   "obpInfoMask": 4301312
+  },
+  {
+   "pdbGuid": "21F0CC60-B224-C9AE-81B8-679AE22C6756",
+   "build": "17763.719",
+   "pdbAge": 2,
+   "obpRoot": 4304880,
+   "obpInfoMask": 4305952
+  },
+  {
+   "pdbGuid": "11F78B9B-6B4F-1D52-5CF2-108EECA8CB20",
+   "build": "17763.7249",
+   "pdbAge": 2,
+   "obpRoot": 4300432,
+   "obpInfoMask": 4301536
+  },
+  {
+   "pdbGuid": "2098AD10-49B3-15FD-9031-E4A539DB5605",
+   "build": "17763.7309",
+   "pdbAge": 2,
+   "obpRoot": 4300432,
+   "obpInfoMask": 4301536
+  },
+  {
+   "pdbGuid": "45C12C29-4F73-9481-AC5E-8E014C068FB6",
+   "build": "17763.737",
+   "pdbAge": 2,
+   "obpRoot": 4304824,
+   "obpInfoMask": 4305920
+  },
+  {
+   "pdbGuid": "1FE643F0-7FA9-1AB0-EB84-3B5B41BC3AA4",
+   "build": "17763.7434",
+   "pdbAge": 2,
+   "obpRoot": 4300216,
+   "obpInfoMask": 4301280
+  },
+  {
+   "pdbGuid": "70EBB62A-5777-4A0C-01C2-B776107F4223",
+   "build": "17763.7558",
+   "pdbAge": 2,
+   "obpRoot": 4300600,
+   "obpInfoMask": 4301696
+  },
+  {
+   "pdbGuid": "C4C42156-D35A-DC5B-9699-4FD42A6EC7B6",
+   "build": "17763.7671",
+   "pdbAge": 2,
+   "obpRoot": 4304696,
+   "obpInfoMask": 4305792
+  },
+  {
+   "pdbGuid": "3AFE8AA2-32D5-8CFD-4F3D-995B420B578D",
+   "build": "17763.7786",
+   "pdbAge": 2,
+   "obpRoot": 4304760,
+   "obpInfoMask": 4305856
+  },
+  {
+   "pdbGuid": "24FCDACD-E084-66FD-90C1-6BD0EAD618B9",
+   "build": "17763.7919",
+   "pdbAge": 2,
+   "obpRoot": 4304728,
+   "obpInfoMask": 4305824
+  },
+  {
+   "pdbGuid": "3B5C345E-D253-8B4C-4A41-2409A0FDF435",
+   "build": "17763.802",
+   "pdbAge": 2,
+   "obpRoot": 4304976,
+   "obpInfoMask": 4306048
+  },
+  {
+   "pdbGuid": "E496E9AA-5E4D-5FF4-26EE-0BC5E414B793",
+   "build": "17763.8024",
+   "pdbAge": 2,
+   "obpRoot": 4300632,
+   "obpInfoMask": 4301728
+  },
+  {
+   "pdbGuid": "78F6495A-18DE-DB9A-0D9D-EFD2BB45C9BF",
+   "build": "17763.8146",
+   "pdbAge": 2,
+   "obpRoot": 4300624,
+   "obpInfoMask": 4301696
+  },
+  {
+   "pdbGuid": "6CB7D6C2-59EF-5216-E4F5-DAE5F057134A",
+   "build": "17763.8148",
+   "pdbAge": 2,
+   "obpRoot": 4300624,
+   "obpInfoMask": 4301696
+  },
+  {
+   "pdbGuid": "9C63FDAC-CBA4-EF87-50A1-69B22748DFD5",
+   "build": "17763.8276",
+   "pdbAge": 2,
+   "obpRoot": 4304752,
+   "obpInfoMask": 4305824
+  },
+  {
+   "pdbGuid": "54482DA7-946A-B561-BC5E-855B4C354026",
+   "build": "17763.8280",
+   "pdbAge": 2,
+   "obpRoot": 4304816,
+   "obpInfoMask": 4305888
+  },
+  {
+   "pdbGuid": "5AA8826F-4A82-6F28-CBB5-2664C309666A",
+   "build": "17763.831",
+   "pdbAge": 2,
+   "obpRoot": 4296688,
+   "obpInfoMask": 4297792
+  },
+  {
+   "pdbGuid": "A62EC3DD-4F02-E90C-1139-5728561D94F8",
+   "build": "17763.8385",
+   "pdbAge": 2,
+   "obpRoot": 4300592,
+   "obpInfoMask": 4301664
+  },
+  {
+   "pdbGuid": "D806581D-3F21-8C8F-1DF0-2BCCD5D2F8E6",
+   "build": "17763.864",
+   "pdbAge": 2,
+   "obpRoot": 4296912,
+   "obpInfoMask": 4297984
+  },
+  {
+   "pdbGuid": "85AF99F7-445C-58F3-118F-E7AB773CA074",
+   "build": "17763.8641",
+   "pdbAge": 2,
+   "obpRoot": 4300592,
+   "obpInfoMask": 4301664
+  },
+  {
+   "pdbGuid": "219A1DA1-9A42-18AB-4713-381ABCC6536D",
+   "build": "17763.8755",
+   "pdbAge": 2,
+   "obpRoot": 4300696,
+   "obpInfoMask": 4301792
+  },
+  {
+   "pdbGuid": "D7AA3EA4-1103-5658-322C-4E4434528E30",
+   "build": "17763.8880",
+   "pdbAge": 2,
+   "obpRoot": 4304792,
+   "obpInfoMask": 4305888
+  },
+  {
+   "pdbGuid": "AD8DD84B-CABF-2A1A-9EEE-7A5EC7EE7673",
+   "build": "17763.9020",
+   "pdbAge": 2,
+   "obpRoot": 4304856,
+   "obpInfoMask": 4305952
+  },
+  {
+   "pdbGuid": "3A795671-80CB-3E77-805B-759FD578D193",
+   "build": "17763.914",
+   "pdbAge": 2,
+   "obpRoot": 4296912,
+   "obpInfoMask": 4297984
+  },
+  {
+   "pdbGuid": "EABD9CF9-0408-7B46-A546-D4E4A7A51B95",
+   "build": "17763.973",
+   "pdbAge": 2,
+   "obpRoot": 4296912,
+   "obpInfoMask": 4297984
+  },
+  {
+   "pdbGuid": "512C583E-6362-70A8-A26A-461F4B383A09",
+   "build": "18362.1016",
+   "pdbAge": 2,
+   "obpRoot": 4487824,
+   "obpInfoMask": 4488928
+  },
+  {
+   "pdbGuid": "9097B918-BAF3-9535-678B-5F30E6FFC7C4",
+   "build": "18362.1049",
+   "pdbAge": 2,
+   "obpRoot": 4479704,
+   "obpInfoMask": 4480800
+  },
+  {
+   "pdbGuid": "37692615-609E-73CA-069E-65B06B532BB4",
+   "build": "18362.1082",
+   "pdbAge": 2,
+   "obpRoot": 4479640,
+   "obpInfoMask": 4480736
+  },
+  {
+   "pdbGuid": "79862788-DA3A-19B8-5928-C37837195FAE",
+   "build": "18362.1110",
+   "pdbAge": 2,
+   "obpRoot": 4479704,
+   "obpInfoMask": 4480800
+  },
+  {
+   "pdbGuid": "98FFA847-A530-B374-9C76-19DA64CD3D4C",
+   "build": "18362.1139",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "7BA3FC43-0798-749E-B506-F7834AE3BB81",
+   "build": "18362.116",
+   "pdbAge": 2,
+   "obpRoot": 4466808,
+   "obpInfoMask": 4467872
+  },
+  {
+   "pdbGuid": "DDFA5F33-C04F-2E8B-1C32-46EF6DB666A0",
+   "build": "18362.1171",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "91D8257B-DF3A-CE56-0DC0-2AF2C7FA1E89",
+   "build": "18362.1198",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "8591A827-1B01-2EE3-3A78-46A490F86150",
+   "build": "18362.1237",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "808491FF-D53A-33DD-E6F2-613F332E887D",
+   "build": "18362.1256",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "D4145BD6-1FA1-57B5-E565-B1DDC67186DF",
+   "build": "18362.1316",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "1F93F837-6585-07FC-65A4-210FB467C8B9",
+   "build": "18362.1350",
+   "pdbAge": 2,
+   "obpRoot": 4478992,
+   "obpInfoMask": 4480064
+  },
+  {
+   "pdbGuid": "49C4EE03-F685-9799-944A-D20C58909A11",
+   "build": "18362.1377",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "AFA3BF4E-7A36-6D44-864B-1214A856D6CA",
+   "build": "18362.1379",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "5928A95D-AC98-3A9D-C2D5-F20EFE74CCAC",
+   "build": "18362.1411",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "7DDC3581-3610-EF9F-6AE2-D398513CBAE4",
+   "build": "18362.1440",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "50608734-F280-CF9F-141F-9C866AA3A9C9",
+   "build": "18362.1441",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "BC13244A-CD60-4FCD-B004-13151C1F23CE",
+   "build": "18362.1443",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "970984A4-B1B0-1AA7-D84B-BF4B6BCD2BBB",
+   "build": "18362.145",
+   "pdbAge": 2,
+   "obpRoot": 4466768,
+   "obpInfoMask": 4467840
+  },
+  {
+   "pdbGuid": "A98D821B-ADB6-A49A-3E44-3EA0AEA0C41D",
+   "build": "18362.1474",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "BD8C7CDE-0D90-7F0F-5554-F160B99CA602",
+   "build": "18362.1500",
+   "pdbAge": 2,
+   "obpRoot": 4479024,
+   "obpInfoMask": 4480096
+  },
+  {
+   "pdbGuid": "758591DB-6359-BB2B-3EA3-E18A724530AB",
+   "build": "18362.1533",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "5DED8CD8-5CA4-94DB-F9B7-B7953660EDE9",
+   "build": "18362.1556",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "95B56D83-49BC-C38C-87CF-9E1FC464AC26",
+   "build": "18362.1593",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "2146E84F-70B6-09E5-7761-8A477DC70B54",
+   "build": "18362.1621",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "458B89A7-C202-30C2-E138-F0C793F6BD9A",
+   "build": "18362.1646",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "0A6C2468-4D05-BE9B-F025-0C47FB7E07E2",
+   "build": "18362.1679",
+   "pdbAge": 2,
+   "obpRoot": 4474896,
+   "obpInfoMask": 4475968
+  },
+  {
+   "pdbGuid": "F6C76D87-895E-29FE-8FFF-39A57B4707DB",
+   "build": "18362.1734",
+   "pdbAge": 2,
+   "obpRoot": 4479056,
+   "obpInfoMask": 4480128
+  },
+  {
+   "pdbGuid": "C671AAF6-E1CA-7AA5-E645-8B93D122B855",
+   "build": "18362.1801",
+   "pdbAge": 2,
+   "obpRoot": 4479312,
+   "obpInfoMask": 4480416
+  },
+  {
+   "pdbGuid": "56EF72E5-E01B-170C-4A43-AC432AE8497C",
+   "build": "18362.1854",
+   "pdbAge": 2,
+   "obpRoot": 4479128,
+   "obpInfoMask": 4480192
+  },
+  {
+   "pdbGuid": "E463CB93-CDB0-F683-57B8-F9CCCE4FA9DE",
+   "build": "18362.1916",
+   "pdbAge": 2,
+   "obpRoot": 4479096,
+   "obpInfoMask": 4480160
+  },
+  {
+   "pdbGuid": "A91F68EC-0D9C-012C-B455-879405BC3E1F",
+   "build": "18362.1977",
+   "pdbAge": 2,
+   "obpRoot": 4479096,
+   "obpInfoMask": 4480160
+  },
+  {
+   "pdbGuid": "4DD2047B-1305-22E9-E4E4-7EAC268CA95F",
+   "build": "18362.2037",
+   "pdbAge": 2,
+   "obpRoot": 4479160,
+   "obpInfoMask": 4480224
+  },
+  {
+   "pdbGuid": "05025494-3780-3CA5-C37D-387A44E1F556",
+   "build": "18362.207",
+   "pdbAge": 2,
+   "obpRoot": 4466832,
+   "obpInfoMask": 4467904
+  },
+  {
+   "pdbGuid": "BD0E0288-FAAD-3ADE-610C-3B92D8CE97FE",
+   "build": "18362.2094",
+   "pdbAge": 2,
+   "obpRoot": 4479160,
+   "obpInfoMask": 4480224
+  },
+  {
+   "pdbGuid": "BDE7B17B-9F42-1B97-BCA5-9E0BAA6A4F6F",
+   "build": "18362.2158",
+   "pdbAge": 2,
+   "obpRoot": 4479160,
+   "obpInfoMask": 4480224
+  },
+  {
+   "pdbGuid": "9D2C32DD-59A3-D072-1C36-951199FDD2CA",
+   "build": "18362.2212",
+   "pdbAge": 2,
+   "obpRoot": 4479160,
+   "obpInfoMask": 4480224
+  },
+  {
+   "pdbGuid": "B24D5ACD-B0C8-C9B9-5E57-D339F8410A4E",
+   "build": "18362.2274",
+   "pdbAge": 2,
+   "obpRoot": 4479160,
+   "obpInfoMask": 4480224
+  },
+  {
+   "pdbGuid": "8863D247-4828-D93C-2B99-380575254EFE",
+   "build": "18362.267",
+   "pdbAge": 2,
+   "obpRoot": 4479480,
+   "obpInfoMask": 4480544
+  },
+  {
+   "pdbGuid": "11BC9A51-3F11-40CA-359E-CDF50F0122C1",
+   "build": "18362.295",
+   "pdbAge": 2,
+   "obpRoot": 4479544,
+   "obpInfoMask": 4480608
+  },
+  {
+   "pdbGuid": "35A038B1-F6E2-E8CA-F642-111E6EC66F57",
+   "build": "18362.30",
+   "pdbAge": 2,
+   "obpRoot": 4466736,
+   "obpInfoMask": 4467808
+  },
+  {
+   "pdbGuid": "B2B8D346-8E7C-09AA-9566-499DFE95C7D7",
+   "build": "18362.329",
+   "pdbAge": 2,
+   "obpRoot": 4483888,
+   "obpInfoMask": 4484960
+  },
+  {
+   "pdbGuid": "CE7FFB00-C20B-8750-0211-456B3E905C47",
+   "build": "18362.356",
+   "pdbAge": 2,
+   "obpRoot": 4483960,
+   "obpInfoMask": 4484992
+  },
+  {
+   "pdbGuid": "36C8E235-3F4C-1D52-1F62-3D37C0E9F101",
+   "build": "18362.387",
+   "pdbAge": 2,
+   "obpRoot": 4487928,
+   "obpInfoMask": 4488992
+  },
+  {
+   "pdbGuid": "F37F2B46-58F0-2DEA-7B31-B9F683B54BDB",
+   "build": "18362.388",
+   "pdbAge": 2,
+   "obpRoot": 4487928,
+   "obpInfoMask": 4488992
+  },
+  {
+   "pdbGuid": "E0093F3A-EF15-D581-68B7-53C9488A4043",
+   "build": "18362.418",
+   "pdbAge": 2,
+   "obpRoot": 4488112,
+   "obpInfoMask": 4489216
+  },
+  {
+   "pdbGuid": "454A8A5F-B515-DC5E-A7D3-478C87564E4E",
+   "build": "18362.449",
+   "pdbAge": 2,
+   "obpRoot": 4487792,
+   "obpInfoMask": 4488864
+  },
+  {
+   "pdbGuid": "90F5E1C8-BBE1-FE1F-B8A7-14305EE06F36",
+   "build": "18362.476",
+   "pdbAge": 2,
+   "obpRoot": 4487952,
+   "obpInfoMask": 4489056
+  },
+  {
+   "pdbGuid": "616A94E3-3A48-27B4-51B0-E19C14C03792",
+   "build": "18362.535",
+   "pdbAge": 2,
+   "obpRoot": 4487888,
+   "obpInfoMask": 4488992
+  },
+  {
+   "pdbGuid": "4ADA4EB5-31B4-EA1D-E6B2-D0B6DB25EEC6",
+   "build": "18362.628",
+   "pdbAge": 2,
+   "obpRoot": 4487920,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "84924F60-6DCF-A4BE-F5C0-D97C2668CF18",
+   "build": "18362.657",
+   "pdbAge": 2,
+   "obpRoot": 4487992,
+   "obpInfoMask": 4489088
+  },
+  {
+   "pdbGuid": "BE51AD37-7D55-67DF-51F3-8063004F9C11",
+   "build": "18362.693",
+   "pdbAge": 2,
+   "obpRoot": 4487864,
+   "obpInfoMask": 4488960
+  },
+  {
+   "pdbGuid": "5A8A70EA-E299-39EF-A17C-9FC879FA0D90",
+   "build": "18362.719",
+   "pdbAge": 2,
+   "obpRoot": 4487928,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "2B5D086A-9591-C3A5-4729-282E8F43BD82",
+   "build": "18362.720",
+   "pdbAge": 2,
+   "obpRoot": 4487928,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "E7477A03-A707-8050-CB79-36455CE346B5",
+   "build": "18362.752",
+   "pdbAge": 2,
+   "obpRoot": 4487992,
+   "obpInfoMask": 4489056
+  },
+  {
+   "pdbGuid": "AED83BAC-DDE4-40A6-305C-0482FD694770",
+   "build": "18362.753",
+   "pdbAge": 2,
+   "obpRoot": 4487992,
+   "obpInfoMask": 4489056
+  },
+  {
+   "pdbGuid": "BE3E0FF9-2C7A-9343-3D4A-950A037EF656",
+   "build": "18362.778",
+   "pdbAge": 2,
+   "obpRoot": 4487960,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "C96C63D1-10ED-C5BE-180C-2291321BAAF2",
+   "build": "18362.815",
+   "pdbAge": 2,
+   "obpRoot": 4487960,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "DCA4AD4B-EEB4-746D-48F8-4C0125019E43",
+   "build": "18362.836",
+   "pdbAge": 2,
+   "obpRoot": 4487992,
+   "obpInfoMask": 4489056
+  },
+  {
+   "pdbGuid": "0A0AB369-CCAF-2C2B-44D3-7A82A8E6C16D",
+   "build": "18362.900",
+   "pdbAge": 2,
+   "obpRoot": 4488024,
+   "obpInfoMask": 4489088
+  },
+  {
+   "pdbGuid": "E8C38042-59A6-7D49-2607-3E9CEA77D787",
+   "build": "18362.904",
+   "pdbAge": 2,
+   "obpRoot": 4488024,
+   "obpInfoMask": 4489088
+  },
+  {
+   "pdbGuid": "0AFB69F5-FD26-4D54-6735-70E37B38A318",
+   "build": "18362.959",
+   "pdbAge": 2,
+   "obpRoot": 4488024,
+   "obpInfoMask": 4489088
+  },
+  {
+   "pdbGuid": "6D528AD2-2358-5946-A2C9-71CB0389FE66",
+   "build": "18362.997",
+   "pdbAge": 2,
+   "obpRoot": 4487960,
+   "obpInfoMask": 4489024
+  },
+  {
+   "pdbGuid": "121F238D-D43D-A32C-1476-AC846D4FEA74",
+   "build": "19041.1023",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "545B5FCB-CDA1-01F7-847E-4678146C2D4E",
+   "build": "19041.1055",
+   "pdbAge": 5,
+   "obpRoot": 12736984,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "3F2AAB01-49AB-6278-D915-DE1350D0FED9",
+   "build": "19041.1081",
+   "pdbAge": 5,
+   "obpRoot": 12734664,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "83F409AC-BA1D-5F0C-F7F3-2BAFD3125A5B",
+   "build": "19041.1082",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "223C6C66-06ED-3597-3A9A-D057262282DB",
+   "build": "19041.1083",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "F526DBB1-2142-5697-CBBF-4FB22502519F",
+   "build": "19041.1110",
+   "pdbAge": 5,
+   "obpRoot": 12734544,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "0EB7B7D0-FF04-183C-8B24-4A76CF76EE04",
+   "build": "19041.1151",
+   "pdbAge": 5,
+   "obpRoot": 12736760,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "47114209-A62F-3B99-30F6-B8998DFD4A99",
+   "build": "19041.1165",
+   "pdbAge": 5,
+   "obpRoot": 12736728,
+   "obpInfoMask": 12737824
+  },
+  {
+   "pdbGuid": "F7A65070-6A45-CBE2-B267-3DE5EE5111D1",
+   "build": "19041.1202",
+   "pdbAge": 5,
+   "obpRoot": 12736912,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "1B4A6F5E-0766-C552-C907-10C8ACC0295C",
+   "build": "19041.1237",
+   "pdbAge": 5,
+   "obpRoot": 12736912,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "51037E1C-9E0A-DDE8-F568-A286CC349A68",
+   "build": "19041.1266",
+   "pdbAge": 5,
+   "obpRoot": 12736984,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "CA8E2F01-B822-EDE6-3578-98BFBF862997",
+   "build": "19041.1288",
+   "pdbAge": 5,
+   "obpRoot": 12736984,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "54CB5C17-AA34-B147-E4A4-82A0DD6E5313",
+   "build": "19041.1320",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "1F9BB45B-28B8-06E4-D189-25C06E924B8C",
+   "build": "19041.1348",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "A5996466-3DEA-F34D-06A7-51ADCA4BC7AF",
+   "build": "19041.1387",
+   "pdbAge": 5,
+   "obpRoot": 12736728,
+   "obpInfoMask": 12737824
+  },
+  {
+   "pdbGuid": "3177D310-00BA-7590-DED3-35936C93E374",
+   "build": "19041.1415",
+   "pdbAge": 5,
+   "obpRoot": 12736760,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "733830EC-AFA1-A307-3FFA-9CC3A38FE93C",
+   "build": "19041.1466",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "89369DF2-49CF-7186-ED75-BC1532475C84",
+   "build": "19041.1469",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "3738E78C-2159-9823-9C90-5008E2B592BC",
+   "build": "19041.1503",
+   "pdbAge": 5,
+   "obpRoot": 12736824,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "9C00B19D-BDE0-03DB-FE4A-B4216993C843",
+   "build": "19041.1526",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "11801895-9D8D-7CA5-AAB4-5B75AED5A976",
+   "build": "19041.1586",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "F7CAAA94-CB0E-01AE-142B-BD2FC8634CD4",
+   "build": "19041.1620",
+   "pdbAge": 5,
+   "obpRoot": 12737072,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "F388BC13-CDC4-3B5A-6DC1-0FA275B7FDC3",
+   "build": "19041.1682",
+   "pdbAge": 5,
+   "obpRoot": 12737008,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "912042F0-FFDB-BAA3-8802-257E16746085",
+   "build": "19041.1708",
+   "pdbAge": 5,
+   "obpRoot": 12737008,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "A7DD074C-948F-81EC-F4D6-5E3609DF4839",
+   "build": "19041.1766",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "FD59498D-AA12-7466-5176-666507A8AC0E",
+   "build": "19041.1806",
+   "pdbAge": 5,
+   "obpRoot": 12737112,
+   "obpInfoMask": 12738208
+  },
+  {
+   "pdbGuid": "5D6312DA-6921-E3A4-E7F9-38B88330B077",
+   "build": "19041.1826",
+   "pdbAge": 5,
+   "obpRoot": 12736952,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "FAC23FDF-3327-8E92-7073-EF9A1F1AF2A2",
+   "build": "19041.1865",
+   "pdbAge": 5,
+   "obpRoot": 12734824,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "DCD0B977-2B46-C59F-F6E4-5DFBB3D1AE7B",
+   "build": "19041.1889",
+   "pdbAge": 5,
+   "obpRoot": 12734632,
+   "obpInfoMask": 12737952
+  },
+  {
+   "pdbGuid": "BC8654CC-3C61-04D8-08AD-5DA09D3179D1",
+   "build": "19041.1949",
+   "pdbAge": 5,
+   "obpRoot": 12734696,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "68A17FAF-3012-B784-6079-AEECDBE0A583",
+   "build": "19041.2006",
+   "pdbAge": 5,
+   "obpRoot": 12734664,
+   "obpInfoMask": 12738016
+  },
+  {
+   "pdbGuid": "E9A11A46-45EB-0399-20AC-31D9A7286297",
+   "build": "19041.2075",
+   "pdbAge": 5,
+   "obpRoot": 12734632,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "87A327C6-C356-B7E2-BAC1-D75E77970165",
+   "build": "19041.2130",
+   "pdbAge": 5,
+   "obpRoot": 12734632,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "9803C110-0D0C-BA38-FA39-73681EDC5C0C",
+   "build": "19041.2194",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "E1DBB1A5-9191-BC3A-F954-B63210F237F2",
+   "build": "19041.2251",
+   "pdbAge": 5,
+   "obpRoot": 12734696,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "568C591F-78BA-3CEC-89BB-8F722F3C4035",
+   "build": "19041.2311",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "E2BA44E0-E506-9685-38EA-272B1E5030C5",
+   "build": "19041.2486",
+   "pdbAge": 5,
+   "obpRoot": 12734696,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "317A67C8-65B1-8DBC-1E64-CBAAB9F971DD",
+   "build": "19041.2546",
+   "pdbAge": 5,
+   "obpRoot": 12734504,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "5F0CF5D5-32F3-8533-3A9B-4ABA25CA6596",
+   "build": "19041.2604",
+   "pdbAge": 5,
+   "obpRoot": 12734536,
+   "obpInfoMask": 12737888
+  },
+  {
+   "pdbGuid": "81BC5C37-7C52-5081-645F-9958F209C527",
+   "build": "19041.264",
+   "pdbAge": 5,
+   "obpRoot": 12734600,
+   "obpInfoMask": 12737984
+  },
+  {
+   "pdbGuid": "DD17F05B-E3BA-0CDE-4C8B-C117D56C6898",
+   "build": "19041.2673",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "3789767E-34B7-A48A-3FC8-0CE12DE18E65",
+   "build": "19041.2728",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "CBBB402D-5083-446D-495B-D0CCAF017C39",
+   "build": "19041.2788",
+   "pdbAge": 5,
+   "obpRoot": 12734704,
+   "obpInfoMask": 12738016
+  },
+  {
+   "pdbGuid": "B8FF01C1-6F76-A3FC-D2F1-8B47846F48D3",
+   "build": "19041.2846",
+   "pdbAge": 5,
+   "obpRoot": 12734768,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "AB93AED4-376C-081A-2618-0CE8F6D90D80",
+   "build": "19041.2913",
+   "pdbAge": 5,
+   "obpRoot": 12737016,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "89284D0C-A6AC-C827-4B9A-44BD5AF9290B",
+   "build": "19041.2965",
+   "pdbAge": 5,
+   "obpRoot": 12737016,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "40B8DB4F-CF8B-9D03-52BF-F2EF2903CB89",
+   "build": "19041.3031",
+   "pdbAge": 5,
+   "obpRoot": 12737040,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "822743A9-2D07-86AB-4FD5-41A4C8CBCAA9",
+   "build": "19041.3086",
+   "pdbAge": 5,
+   "obpRoot": 12737048,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "EB5C3D13-5DAC-868A-C00C-C6C10A71F238",
+   "build": "19041.3155",
+   "pdbAge": 5,
+   "obpRoot": 12734888,
+   "obpInfoMask": 12738208
+  },
+  {
+   "pdbGuid": "BBCA5182-65E9-D831-935C-4FC58E2542ED",
+   "build": "19041.3208",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "EF14E31B-7ECD-02F6-4768-1A5D30A05E12",
+   "build": "19041.3271",
+   "pdbAge": 5,
+   "obpRoot": 12737336,
+   "obpInfoMask": 12738400
+  },
+  {
+   "pdbGuid": "BBED7C29-55FB-E452-2AAA-23F4B8677AD9",
+   "build": "19041.329",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "931F8C8E-08BC-4E96-09ED-369A0D9911CE",
+   "build": "19041.331",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "06564D34-7782-2C7D-97F0-4852CBD5AFD6",
+   "build": "19041.3324",
+   "pdbAge": 5,
+   "obpRoot": 12737304,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "5A36A249-4445-156D-AECD-F401DB5F824B",
+   "build": "19041.3393",
+   "pdbAge": 5,
+   "obpRoot": 12736984,
+   "obpInfoMask": 12738016
+  },
+  {
+   "pdbGuid": "79BE8C36-8BEC-7DD9-677E-A9B355ACE784",
+   "build": "19041.3448",
+   "pdbAge": 5,
+   "obpRoot": 12737016,
+   "obpInfoMask": 12738048
+  },
+  {
+   "pdbGuid": "9AFB99E7-157C-D637-CBEE-0F56A01E9EC3",
+   "build": "19041.3516",
+   "pdbAge": 5,
+   "obpRoot": 12737176,
+   "obpInfoMask": 12738240
+  },
+  {
+   "pdbGuid": "606FF669-409B-00F7-FC8C-61A9C1670129",
+   "build": "19041.3570",
+   "pdbAge": 5,
+   "obpRoot": 12737304,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "C7DF30B2-2252-0785-25B4-14CC51B257D3",
+   "build": "19041.3693",
+   "pdbAge": 5,
+   "obpRoot": 12737016,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "D9424FC4-861E-47C1-0FAD-1B35DEC6DCC8",
+   "build": "19041.3803",
+   "pdbAge": 5,
+   "obpRoot": 12734952,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "110A2D89-ED7A-438F-EFFC-84F9CFDD6C00",
+   "build": "19041.388",
+   "pdbAge": 5,
+   "obpRoot": 12734824,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "D7ABE9B2-3BAD-5532-13DE-9BB10F1677B8",
+   "build": "19041.3930",
+   "pdbAge": 5,
+   "obpRoot": 12734984,
+   "obpInfoMask": 12738304
+  },
+  {
+   "pdbGuid": "E693C3FE-44B0-0D96-7957-D356826C6679",
+   "build": "19041.3996",
+   "pdbAge": 5,
+   "obpRoot": 12734888,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "4DBE1441-82FF-4156-845C-D3BD8B654E56",
+   "build": "19041.4046",
+   "pdbAge": 5,
+   "obpRoot": 12734856,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "0ACFEC17-EA3C-A579-B35C-3EDE599C3BFF",
+   "build": "19041.4123",
+   "pdbAge": 5,
+   "obpRoot": 12734832,
+   "obpInfoMask": 12738240
+  },
+  {
+   "pdbGuid": "3A3DF78E-73ED-8201-D671-C995F240BCDC",
+   "build": "19041.4170",
+   "pdbAge": 5,
+   "obpRoot": 12734856,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "7547E6D5-7137-CB58-07AB-690BF2698CA2",
+   "build": "19041.423",
+   "pdbAge": 5,
+   "obpRoot": 12734824,
+   "obpInfoMask": 12738208
+  },
+  {
+   "pdbGuid": "F7D7636E-8D71-DDDC-598F-8C9BA09EA49B",
+   "build": "19041.4239",
+   "pdbAge": 5,
+   "obpRoot": 12734728,
+   "obpInfoMask": 12738112
+  },
+  {
+   "pdbGuid": "F6650B47-E7E9-D54F-1FD4-BC090DDACDD2",
+   "build": "19041.4291",
+   "pdbAge": 5,
+   "obpRoot": 12734856,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "E39EE648-FA18-A5A3-B931-84B6D174E79D",
+   "build": "19041.4355",
+   "pdbAge": 5,
+   "obpRoot": 12734856,
+   "obpInfoMask": 12738240
+  },
+  {
+   "pdbGuid": "C262EA9B-2542-EB44-2CB3-9F538B6087D8",
+   "build": "19041.4412",
+   "pdbAge": 5,
+   "obpRoot": 12737272,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "A970BE3E-9F5B-B6D5-21F0-CA2A4B5B51AC",
+   "build": "19041.4474",
+   "pdbAge": 5,
+   "obpRoot": 12734952,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "ADCC367A-F84D-7286-86C5-7E76F105B791",
+   "build": "19041.4522",
+   "pdbAge": 5,
+   "obpRoot": 12734888,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "CE4A90A3-69EF-26CF-FAF2-4E077BA2BA92",
+   "build": "19041.4597",
+   "pdbAge": 5,
+   "obpRoot": 12734952,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "2F5ADEE1-06E3-41E8-FE05-39A8EEA780C1",
+   "build": "19041.4648",
+   "pdbAge": 5,
+   "obpRoot": 12737360,
+   "obpInfoMask": 12738464
+  },
+  {
+   "pdbGuid": "7E3B1EB9-FC3F-2CEE-33EB-0CF2663D9703",
+   "build": "19041.4717",
+   "pdbAge": 5,
+   "obpRoot": 12737496,
+   "obpInfoMask": 12738624
+  },
+  {
+   "pdbGuid": "E3FCDBEA-050F-A738-DB74-5C0BF2B77F3A",
+   "build": "19041.4780",
+   "pdbAge": 5,
+   "obpRoot": 12735080,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "C3E2F013-5D07-8865-8C7E-EFA07FCC8691",
+   "build": "19041.4842",
+   "pdbAge": 5,
+   "obpRoot": 12735024,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "9F65CD18-C2F3-6F88-B2D0-CE8A7BFE2BB7",
+   "build": "19041.4894",
+   "pdbAge": 5,
+   "obpRoot": 12737320,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "14CA315B-C79E-493D-38EE-CB55A315C515",
+   "build": "19041.4957",
+   "pdbAge": 5,
+   "obpRoot": 12736872,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "BFF14F60-7A99-30D2-FDA0-481A29685111",
+   "build": "19041.5007",
+   "pdbAge": 5,
+   "obpRoot": 12737224,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "C4C63161-F924-5B21-5129-7B59BE1BD6D7",
+   "build": "19041.5072",
+   "pdbAge": 5,
+   "obpRoot": 12737280,
+   "obpInfoMask": 12738624
+  },
+  {
+   "pdbGuid": "641F55C5-9220-1DCC-4F59-FACC72EA54DA",
+   "build": "19041.508",
+   "pdbAge": 5,
+   "obpRoot": 12734824,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "163F09EA-9CD1-E71D-F008-5AE77512CF0E",
+   "build": "19041.5129",
+   "pdbAge": 5,
+   "obpRoot": 12737520,
+   "obpInfoMask": 12738656
+  },
+  {
+   "pdbGuid": "8B9B2D94-085E-C480-7CB2-279BF82B0E81",
+   "build": "19041.5198",
+   "pdbAge": 5,
+   "obpRoot": 12734984,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "AA8FA4A7-4EFD-DFBC-0C94-E218EF60D1B7",
+   "build": "19041.5247",
+   "pdbAge": 5,
+   "obpRoot": 12737224,
+   "obpInfoMask": 12738368
+  },
+  {
+   "pdbGuid": "31034739-C38F-4813-0836-BEEC344E2953",
+   "build": "19041.5369",
+   "pdbAge": 5,
+   "obpRoot": 12735312,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "7DA14519-92C4-98EC-11CA-42EBB91CC02A",
+   "build": "19041.5440",
+   "pdbAge": 5,
+   "obpRoot": 12737000,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "5E26F5AB-E299-92E7-A1FD-D0DC3316048B",
+   "build": "19041.546",
+   "pdbAge": 5,
+   "obpRoot": 12734792,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "167FE94B-5641-C005-AC30-36212A01F8DC",
+   "build": "19041.5486",
+   "pdbAge": 5,
+   "obpRoot": 12737336,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "870061E2-78AA-CDA7-C963-1989B4B4D805",
+   "build": "19041.5553",
+   "pdbAge": 5,
+   "obpRoot": 12736768,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "0CB76B94-2C9D-3749-D72A-EE4731E11EC3",
+   "build": "19041.5607",
+   "pdbAge": 5,
+   "obpRoot": 12734984,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "F964C6AE-ED00-BF43-5F1A-3C883896FE68",
+   "build": "19041.5678",
+   "pdbAge": 5,
+   "obpRoot": 12736904,
+   "obpInfoMask": 12738240
+  },
+  {
+   "pdbGuid": "B1605372-4B46-5153-88FD-EA9D0470D02E",
+   "build": "19041.572",
+   "pdbAge": 5,
+   "obpRoot": 12734792,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "1026DAEB-B5D7-3E19-1F37-5C43DF91B319",
+   "build": "19041.5737",
+   "pdbAge": 5,
+   "obpRoot": 12737184,
+   "obpInfoMask": 12738272
+  },
+  {
+   "pdbGuid": "7A49711F-9BF9-37DF-3C52-C7A5B94C4DD7",
+   "build": "19041.5794",
+   "pdbAge": 5,
+   "obpRoot": 12737032,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "66BCC5C6-B532-F63C-8AB7-33951BA869B4",
+   "build": "19041.5848",
+   "pdbAge": 5,
+   "obpRoot": 12737096,
+   "obpInfoMask": 12738176
+  },
+  {
+   "pdbGuid": "0BF08B21-D35F-4F12-4EE2-742BEDDD7EE7",
+   "build": "19041.5915",
+   "pdbAge": 5,
+   "obpRoot": 12737000,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "10EFC228-8044-B448-D295-4F042A3396E0",
+   "build": "19041.5965",
+   "pdbAge": 5,
+   "obpRoot": 12737272,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "B02A5AEC-4BF3-2CBD-6F5D-31E5AC144E68",
+   "build": "19041.6033",
+   "pdbAge": 5,
+   "obpRoot": 12736936,
+   "obpInfoMask": 12738208
+  },
+  {
+   "pdbGuid": "495E3904-2A69-8337-8CBD-822FEB4E91ED",
+   "build": "19041.6093",
+   "pdbAge": 5,
+   "obpRoot": 12737336,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "030B757A-B631-5143-9866-794BAD755AE1",
+   "build": "19041.610",
+   "pdbAge": 5,
+   "obpRoot": 12734920,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "BE95F82E-6CB5-2C0A-B868-F08DAB9D8230",
+   "build": "19041.6157",
+   "pdbAge": 5,
+   "obpRoot": 12735312,
+   "obpInfoMask": 12738624
+  },
+  {
+   "pdbGuid": "B6121DA1-5DDC-F625-C8C7-273C0D85EB10",
+   "build": "19041.6216",
+   "pdbAge": 5,
+   "obpRoot": 12735048,
+   "obpInfoMask": 12738400
+  },
+  {
+   "pdbGuid": "AD3E95ED-F45C-C050-02FF-8F46C378F534",
+   "build": "19041.6218",
+   "pdbAge": 5,
+   "obpRoot": 12735048,
+   "obpInfoMask": 12738400
+  },
+  {
+   "pdbGuid": "1901E562-31EB-3DD3-C6BF-8E90DCC8F693",
+   "build": "19041.6280",
+   "pdbAge": 5,
+   "obpRoot": 12737024,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "15B12C74-F0E1-7758-1B6B-27DD4C5022C2",
+   "build": "19041.630",
+   "pdbAge": 5,
+   "obpRoot": 12734920,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "F923DA2D-238E-7C7C-E180-B962B19A3781",
+   "build": "19041.631",
+   "pdbAge": 5,
+   "obpRoot": 12734920,
+   "obpInfoMask": 12738336
+  },
+  {
+   "pdbGuid": "F388D1C4-59C2-DC9E-81F8-91D0760A56CD",
+   "build": "19041.6328",
+   "pdbAge": 5,
+   "obpRoot": 12737384,
+   "obpInfoMask": 12738720
+  },
+  {
+   "pdbGuid": "D726E83B-F2A1-3060-4492-4A60E7E971AE",
+   "build": "19041.6392",
+   "pdbAge": 5,
+   "obpRoot": 12737312,
+   "obpInfoMask": 12738624
+  },
+  {
+   "pdbGuid": "F57E740B-088E-5056-E8AF-0772F1CC5BEB",
+   "build": "19041.6456",
+   "pdbAge": 5,
+   "obpRoot": 12737488,
+   "obpInfoMask": 12738592
+  },
+  {
+   "pdbGuid": "9CFCF55C-D5DE-5D79-C345-41C03FFBFDA2",
+   "build": "19041.6575",
+   "pdbAge": 5,
+   "obpRoot": 12735272,
+   "obpInfoMask": 12738624
+  },
+  {
+   "pdbGuid": "28AB3EB2-28E8-6F23-FC3B-F91D8E3F7DEA",
+   "build": "19041.662",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "D77BCF89-B92E-26FD-E60A-E34C894DAE37",
+   "build": "19041.6691",
+   "pdbAge": 5,
+   "obpRoot": 12737720,
+   "obpInfoMask": 12738784
+  },
+  {
+   "pdbGuid": "366EF493-9F60-9DDD-C1AE-0267A7C9D173",
+   "build": "19041.6693",
+   "pdbAge": 5,
+   "obpRoot": 12737760,
+   "obpInfoMask": 12738848
+  },
+  {
+   "pdbGuid": "DFE5A00E-F3F2-E595-2C22-3D63ED6EEAB0",
+   "build": "19041.6807",
+   "pdbAge": 5,
+   "obpRoot": 12734952,
+   "obpInfoMask": 12738304
+  },
+  {
+   "pdbGuid": "80E4842D-9919-4818-40C9-192EE2B9202F",
+   "build": "19041.6811",
+   "pdbAge": 5,
+   "obpRoot": 12735080,
+   "obpInfoMask": 12738432
+  },
+  {
+   "pdbGuid": "4EF9A537-5F61-FE84-B7EA-EF54BF025C0E",
+   "build": "19041.685",
+   "pdbAge": 5,
+   "obpRoot": 12734760,
+   "obpInfoMask": 12738080
+  },
+  {
+   "pdbGuid": "63FBA354-7564-33CF-53C2-18587B589E3B",
+   "build": "19041.6926",
+   "pdbAge": 5,
+   "obpRoot": 12737552,
+   "obpInfoMask": 12738656
+  },
+  {
+   "pdbGuid": "B9E105C7-03F2-8FE8-B3BF-1877133D5CC2",
+   "build": "19041.7058",
+   "pdbAge": 5,
+   "obpRoot": 12735120,
+   "obpInfoMask": 12738464
+  },
+  {
+   "pdbGuid": "14543CB2-9750-93F0-248A-ADB430FA1E09",
+   "build": "19041.7181",
+   "pdbAge": 5,
+   "obpRoot": 12737488,
+   "obpInfoMask": 12738592
+  },
+  {
+   "pdbGuid": "14E11C99-232B-E1A1-2777-F79ABB80FBCB",
+   "build": "19041.7291",
+   "pdbAge": 5,
+   "obpRoot": 12735520,
+   "obpInfoMask": 12738688
+  },
+  {
+   "pdbGuid": "B193744D-61FB-474F-C941-CF54639C1688",
+   "build": "19041.7417",
+   "pdbAge": 5,
+   "obpRoot": 12735400,
+   "obpInfoMask": 12738784
+  },
+  {
+   "pdbGuid": "3D440078-4115-7188-18EF-C898413F36C4",
+   "build": "19041.746",
+   "pdbAge": 5,
+   "obpRoot": 12734824,
+   "obpInfoMask": 12738144
+  },
+  {
+   "pdbGuid": "DBDA63A2-1BCA-FAC0-DCD5-41D7E4C1833A",
+   "build": "19041.7548",
+   "pdbAge": 5,
+   "obpRoot": 12737216,
+   "obpInfoMask": 12738528
+  },
+  {
+   "pdbGuid": "A0A1C4DE-4B78-B294-F1AA-C1B063EB9108",
+   "build": "19041.789",
+   "pdbAge": 5,
+   "obpRoot": 12735208,
+   "obpInfoMask": 12738592
+  },
+  {
+   "pdbGuid": "8DB309D0-39CF-8B13-DEB9-6647058DF7BF",
+   "build": "19041.844",
+   "pdbAge": 5,
+   "obpRoot": 12735280,
+   "obpInfoMask": 12738688
+  },
+  {
+   "pdbGuid": "3FCC539F-F307-DD2D-9C50-9206D352B9AA",
+   "build": "19041.867",
+   "pdbAge": 5,
+   "obpRoot": 12735152,
+   "obpInfoMask": 12738560
+  },
+  {
+   "pdbGuid": "F292B481-6908-5BAB-DCB4-7A9742132239",
+   "build": "19041.868",
+   "pdbAge": 5,
+   "obpRoot": 12735152,
+   "obpInfoMask": 12738560
+  },
+  {
+   "pdbGuid": "27FB1171-F9CE-B561-883B-586400BCEDD2",
+   "build": "19041.870",
+   "pdbAge": 5,
+   "obpRoot": 12735152,
+   "obpInfoMask": 12738560
+  },
+  {
+   "pdbGuid": "13CD4A1D-BAD8-8FA1-DE90-FD59036911C0",
+   "build": "19041.906",
+   "pdbAge": 5,
+   "obpRoot": 12737528,
+   "obpInfoMask": 12738592
+  },
+  {
+   "pdbGuid": "21162BDF-AA4A-F6C7-3689-A910245CE0BB",
+   "build": "19041.964",
+   "pdbAge": 5,
+   "obpRoot": 12736664,
+   "obpInfoMask": 12737728
+  },
+  {
+   "pdbGuid": "992A9A48-F30E-C2C5-8B01-A5934DCE2D9C",
+   "build": "19041.985",
+   "pdbAge": 5,
+   "obpRoot": 12736792,
+   "obpInfoMask": 12737856
+  },
+  {
+   "pdbGuid": "FDCBA251-C28B-D593-5DB2-F7AEE341482A",
+   "build": "22000.1042",
+   "pdbAge": 5,
+   "obpRoot": 12731896,
+   "obpInfoMask": 12735296
+  },
+  {
+   "pdbGuid": "666A1F1C-DEE6-69FC-CBC9-135C82001220",
+   "build": "22000.1098",
+   "pdbAge": 5,
+   "obpRoot": 12731888,
+   "obpInfoMask": 12735328
+  },
+  {
+   "pdbGuid": "25281C17-E40E-21B9-EB7C-AF8536423931",
+   "build": "22000.1165",
+   "pdbAge": 5,
+   "obpRoot": 12734224,
+   "obpInfoMask": 12735296
+  },
+  {
+   "pdbGuid": "9AA35184-67E0-D28B-53CB-63E0A57118DE",
+   "build": "22000.1219",
+   "pdbAge": 5,
+   "obpRoot": 12733968,
+   "obpInfoMask": 12735104
+  },
+  {
+   "pdbGuid": "A954D2D9-50A4-C670-308A-68143DDD1707",
+   "build": "22000.1281",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735264
+  },
+  {
+   "pdbGuid": "3D494B8E-9FF6-FB28-9E3A-A55B3133EF37",
+   "build": "22000.1335",
+   "pdbAge": 5,
+   "obpRoot": 12731784,
+   "obpInfoMask": 12735136
+  },
+  {
+   "pdbGuid": "C224C641-D4E1-FDFA-0EEA-8DB742B93EF8",
+   "build": "22000.1455",
+   "pdbAge": 5,
+   "obpRoot": 12731496,
+   "obpInfoMask": 12734880
+  },
+  {
+   "pdbGuid": "0B0A8943-8BE7-729E-B33F-D00A7D6FA816",
+   "build": "22000.1516",
+   "pdbAge": 5,
+   "obpRoot": 12731984,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "1EB5E501-E4D0-1709-406E-5C02F37456F4",
+   "build": "22000.1574",
+   "pdbAge": 5,
+   "obpRoot": 12732048,
+   "obpInfoMask": 12735424
+  },
+  {
+   "pdbGuid": "44A4FD1C-6D5D-7507-3733-0277A4D2337D",
+   "build": "22000.1641",
+   "pdbAge": 5,
+   "obpRoot": 12731912,
+   "obpInfoMask": 12735328
+  },
+  {
+   "pdbGuid": "6E2B0FF4-4862-90D1-9F56-B2E4A3F7ABE8",
+   "build": "22000.1696",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "B5002BBE-3A4C-EA68-D1AA-E394EDB9202E",
+   "build": "22000.1761",
+   "pdbAge": 5,
+   "obpRoot": 12732040,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "4FFC77C8-63AF-BD22-6157-4A4F333247B4",
+   "build": "22000.1817",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "55DA1255-967E-40AB-C355-4E86144C7144",
+   "build": "22000.1880",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "EF84DCF2-B16B-B881-EBE4-BD7C8FE7AA8E",
+   "build": "22000.1936",
+   "pdbAge": 5,
+   "obpRoot": 12731880,
+   "obpInfoMask": 12735296
+  },
+  {
+   "pdbGuid": "55678BC3-84F0-99B6-ED05-E9E39046924A",
+   "build": "22000.194",
+   "pdbAge": 5,
+   "obpRoot": 12734128,
+   "obpInfoMask": 12735200
+  },
+  {
+   "pdbGuid": "32318DEB-EEE3-0179-183B-DB3E36813E44",
+   "build": "22000.2003",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "20A9DB03-D4E6-A9E1-ADE6-42E050E343D6",
+   "build": "22000.2057",
+   "pdbAge": 5,
+   "obpRoot": 12732168,
+   "obpInfoMask": 12735552
+  },
+  {
+   "pdbGuid": "E1DA10DA-FAE1-7AD0-59A1-FE51F355E032",
+   "build": "22000.2124",
+   "pdbAge": 5,
+   "obpRoot": 12731920,
+   "obpInfoMask": 12735264
+  },
+  {
+   "pdbGuid": "C5C7712F-C62F-7EBC-5818-41883742D71C",
+   "build": "22000.2176",
+   "pdbAge": 5,
+   "obpRoot": 12731920,
+   "obpInfoMask": 12735264
+  },
+  {
+   "pdbGuid": "7CE85C99-D778-C3BD-E613-B78933858CDE",
+   "build": "22000.2245",
+   "pdbAge": 5,
+   "obpRoot": 12732072,
+   "obpInfoMask": 12735520
+  },
+  {
+   "pdbGuid": "CDFB8207-972E-C09E-BC18-F99466456FD5",
+   "build": "22000.2295",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "48EA1338-C74F-3DC2-3C2B-033F0A3DEAF0",
+   "build": "22000.2360",
+   "pdbAge": 5,
+   "obpRoot": 12732136,
+   "obpInfoMask": 12735584
+  },
+  {
+   "pdbGuid": "61812AF0-E4ED-A5A4-F936-CF84B469AF5B",
+   "build": "22000.2416",
+   "pdbAge": 5,
+   "obpRoot": 12732200,
+   "obpInfoMask": 12735616
+  },
+  {
+   "pdbGuid": "A426BA5A-BEE5-E5BF-2ECF-16EEEE7E769C",
+   "build": "22000.2482",
+   "pdbAge": 5,
+   "obpRoot": 12732016,
+   "obpInfoMask": 12735488
+  },
+  {
+   "pdbGuid": "0CE4A95C-0CD7-82A7-596B-034D8648E585",
+   "build": "22000.2538",
+   "pdbAge": 5,
+   "obpRoot": 12732240,
+   "obpInfoMask": 12735712
+  },
+  {
+   "pdbGuid": "67CAF02E-081B-E9CB-6893-7D22531F99C0",
+   "build": "22000.258",
+   "pdbAge": 5,
+   "obpRoot": 12734128,
+   "obpInfoMask": 12735200
+  },
+  {
+   "pdbGuid": "41D213BA-20F2-B30E-8058-60DA43D5C9B7",
+   "build": "22000.2600",
+   "pdbAge": 5,
+   "obpRoot": 12732112,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "7DDC9C08-4CF2-4C41-C7E5-EAB11044F33A",
+   "build": "22000.2652",
+   "pdbAge": 5,
+   "obpRoot": 12732112,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "AD013FEC-40DD-10CD-3105-570508A21A4B",
+   "build": "22000.2713",
+   "pdbAge": 5,
+   "obpRoot": 12731984,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "90F663DC-BF0C-F4A5-0D8A-FA3102CDCA09",
+   "build": "22000.2777",
+   "pdbAge": 5,
+   "obpRoot": 12732312,
+   "obpInfoMask": 12735680
+  },
+  {
+   "pdbGuid": "AE2847B2-D722-D87E-214F-3A6894AF5396",
+   "build": "22000.282",
+   "pdbAge": 5,
+   "obpRoot": 12734040,
+   "obpInfoMask": 12735104
+  },
+  {
+   "pdbGuid": "50483041-38EF-D971-183A-CBC1BC49BD1C",
+   "build": "22000.2836",
+   "pdbAge": 5,
+   "obpRoot": 12732048,
+   "obpInfoMask": 12735488
+  },
+  {
+   "pdbGuid": "2737B7D8-E510-AC9D-9B45-E205537D0157",
+   "build": "22000.2899",
+   "pdbAge": 5,
+   "obpRoot": 12732112,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "6E213F02-B039-85D8-5950-A6342E6BF0EC",
+   "build": "22000.2960",
+   "pdbAge": 5,
+   "obpRoot": 12731984,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "7CCF81E5-04FA-3E04-C520-5874F5EA5E98",
+   "build": "22000.3019",
+   "pdbAge": 5,
+   "obpRoot": 12731952,
+   "obpInfoMask": 12735328
+  },
+  {
+   "pdbGuid": "4BF8D911-3CF3-10E0-CA02-B31245E6AB56",
+   "build": "22000.3079",
+   "pdbAge": 5,
+   "obpRoot": 12732184,
+   "obpInfoMask": 12735584
+  },
+  {
+   "pdbGuid": "53E38E44-B473-C5F3-AD7A-35D90A84AFB7",
+   "build": "22000.3147",
+   "pdbAge": 5,
+   "obpRoot": 12732144,
+   "obpInfoMask": 12735584
+  },
+  {
+   "pdbGuid": "32C1A669-D5FF-EFD4-1091-F636CFDB6E99",
+   "build": "22000.318",
+   "pdbAge": 5,
+   "obpRoot": 12734040,
+   "obpInfoMask": 12735104
+  },
+  {
+   "pdbGuid": "4CDC24B5-CE96-FB3F-524B-A193089D5312",
+   "build": "22000.3197",
+   "pdbAge": 5,
+   "obpRoot": 12732080,
+   "obpInfoMask": 12735520
+  },
+  {
+   "pdbGuid": "4692B687-3F82-11EF-BA90-8040CB76FA13",
+   "build": "22000.3260",
+   "pdbAge": 5,
+   "obpRoot": 12732112,
+   "obpInfoMask": 12735552
+  },
+  {
+   "pdbGuid": "27072505-E9A6-A497-FAF0-D5BA8D06EC06",
+   "build": "22000.348",
+   "pdbAge": 5,
+   "obpRoot": 12734200,
+   "obpInfoMask": 12735264
+  },
+  {
+   "pdbGuid": "F4ED78B3-1C19-2590-8274-B0A979AA418A",
+   "build": "22000.376",
+   "pdbAge": 5,
+   "obpRoot": 12734200,
+   "obpInfoMask": 12735264
+  },
+  {
+   "pdbGuid": "54D7D2CB-6077-8ADE-7A57-5354D318B1EC",
+   "build": "22000.434",
+   "pdbAge": 5,
+   "obpRoot": 12734040,
+   "obpInfoMask": 12735104
+  },
+  {
+   "pdbGuid": "DCA410B9-87D3-9798-7DF5-B150056D8B89",
+   "build": "22000.438",
+   "pdbAge": 5,
+   "obpRoot": 12734008,
+   "obpInfoMask": 12735072
+  },
+  {
+   "pdbGuid": "BF8CAE58-DB89-7A8B-8E09-080F577B7ECD",
+   "build": "22000.469",
+   "pdbAge": 5,
+   "obpRoot": 12732072,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "90279976-B103-9EAE-5F0F-A8A241209F5F",
+   "build": "22000.493",
+   "pdbAge": 5,
+   "obpRoot": 12732072,
+   "obpInfoMask": 12735456
+  },
+  {
+   "pdbGuid": "DCC3FFCB-E9C5-9B56-68C1-DE2BD6CBC6DF",
+   "build": "22000.556",
+   "pdbAge": 5,
+   "obpRoot": 12731912,
+   "obpInfoMask": 12735296
+  },
+  {
+   "pdbGuid": "FA11BFE9-618D-F010-A9F0-1F5DBE63C49A",
+   "build": "22000.593",
+   "pdbAge": 5,
+   "obpRoot": 12732168,
+   "obpInfoMask": 12735520
+  },
+  {
+   "pdbGuid": "9F0CD4DF-EF8D-0C8D-AD9E-DDDBB42B3470",
+   "build": "22000.652",
+   "pdbAge": 5,
+   "obpRoot": 12734216,
+   "obpInfoMask": 12735328
+  },
+  {
+   "pdbGuid": "1D9CD02E-9598-2257-EA62-A9E0F0E00AFD",
+   "build": "22000.675",
+   "pdbAge": 5,
+   "obpRoot": 12734224,
+   "obpInfoMask": 12735328
+  },
+  {
+   "pdbGuid": "B2F2E1A8-C72E-B199-85BF-9A2BE19605D4",
+   "build": "22000.739",
+   "pdbAge": 5,
+   "obpRoot": 12734000,
+   "obpInfoMask": 12735072
+  },
+  {
+   "pdbGuid": "5BF6877F-491D-BF79-2927-C6DCB3E02FB1",
+   "build": "22000.778",
+   "pdbAge": 5,
+   "obpRoot": 12733936,
+   "obpInfoMask": 12735008
+  },
+  {
+   "pdbGuid": "8E3373D6-124E-747F-0E72-EF8E02E676B3",
+   "build": "22000.795",
+   "pdbAge": 5,
+   "obpRoot": 12733936,
+   "obpInfoMask": 12735008
+  },
+  {
+   "pdbGuid": "BBB8D103-B4E3-2443-656F-0C6B3189D0C5",
+   "build": "22000.856",
+   "pdbAge": 5,
+   "obpRoot": 12734008,
+   "obpInfoMask": 12735104
+  },
+  {
+   "pdbGuid": "4F1E8150-6DE5-562C-5073-09AEEFAE7893",
+   "build": "22000.918",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "3A8B1DB8-3572-8BA8-FCE9-470C0A20BAD7",
+   "build": "22000.978",
+   "pdbAge": 5,
+   "obpRoot": 12731944,
+   "obpInfoMask": 12735360
+  },
+  {
+   "pdbGuid": "8F0F3D67-7778-3916-00F4-EB2301FFC7A5",
+   "build": "22621.1194",
+   "pdbAge": 5,
+   "obpRoot": 12842384,
+   "obpInfoMask": 12844928
+  },
+  {
+   "pdbGuid": "152D2E35-E673-E842-C282-B1EDB82FD060",
+   "build": "22621.1265",
+   "pdbAge": 5,
+   "obpRoot": 12842320,
+   "obpInfoMask": 12844864
+  },
+  {
+   "pdbGuid": "FB0913AF-0585-F234-BD64-A64A87C62DB1",
+   "build": "22621.1344",
+   "pdbAge": 5,
+   "obpRoot": 12844944,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "797E613D-B16D-B6C0-E577-95A0CB03F471",
+   "build": "22621.1413",
+   "pdbAge": 5,
+   "obpRoot": 12844944,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "6B8D28CE-ED9F-2DB6-25BE-38C2AFAEE7B5",
+   "build": "22621.1485",
+   "pdbAge": 5,
+   "obpRoot": 12845104,
+   "obpInfoMask": 12845376
+  },
+  {
+   "pdbGuid": "FB4F82B5-0468-6251-4BC0-05ADDB07B1F9",
+   "build": "22621.1555",
+   "pdbAge": 5,
+   "obpRoot": 12845200,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "9DC3FC69-B1CA-4B34-707E-BC57FD1D6126",
+   "build": "22621.1702",
+   "pdbAge": 5,
+   "obpRoot": 12845104,
+   "obpInfoMask": 12845376
+  },
+  {
+   "pdbGuid": "DB9E9EC8-49EB-856A-93EB-8F4736A05ABD",
+   "build": "22621.1778",
+   "pdbAge": 5,
+   "obpRoot": 12844944,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "124AFA5A-0ED9-0D94-63D8-0C1E6881B168",
+   "build": "22621.1848",
+   "pdbAge": 5,
+   "obpRoot": 12842776,
+   "obpInfoMask": 12845344
+  },
+  {
+   "pdbGuid": "FABDE7AF-7B73-F49D-6DC1-9EDE5F0342E5",
+   "build": "22621.1928",
+   "pdbAge": 5,
+   "obpRoot": 12843056,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "A4FD849F-9DB0-57DA-DB17-916E3C0529DE",
+   "build": "22621.1992",
+   "pdbAge": 5,
+   "obpRoot": 12842800,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "EF1D3612-0CE6-4733-9615-C9155601052A",
+   "build": "22621.2070",
+   "pdbAge": 5,
+   "obpRoot": 12845176,
+   "obpInfoMask": 12845440
+  },
+  {
+   "pdbGuid": "6DE4B1C1-DC23-B687-940A-233637EF56DC",
+   "build": "22621.2134",
+   "pdbAge": 5,
+   "obpRoot": 12845208,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "738ED8FF-966E-8502-EFE1-7095B9F1F548",
+   "build": "22621.2283",
+   "pdbAge": 5,
+   "obpRoot": 12845144,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "70335560-1A9D-B486-AA51-33ED68F97076",
+   "build": "22621.2361",
+   "pdbAge": 5,
+   "obpRoot": 12845008,
+   "obpInfoMask": 12845280
+  },
+  {
+   "pdbGuid": "CF32DE2E-4A33-4C7C-06FB-63FCB6FAFB5C",
+   "build": "22621.2428",
+   "pdbAge": 5,
+   "obpRoot": 12845200,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "AFA0F866-CF44-8CC4-D136-836F5E5FAFBC",
+   "build": "22621.2506",
+   "pdbAge": 5,
+   "obpRoot": 12842824,
+   "obpInfoMask": 12845312
+  },
+  {
+   "pdbGuid": "F9F31012-86B6-467C-DE2D-6C8304D7F43C",
+   "build": "22621.2715",
+   "pdbAge": 5,
+   "obpRoot": 12842808,
+   "obpInfoMask": 12845312
+  },
+  {
+   "pdbGuid": "83330EBC-3601-6C3B-D2B8-1C614EC8187C",
+   "build": "22621.2792",
+   "pdbAge": 5,
+   "obpRoot": 12843120,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "7FCF1ACE-660B-3812-3D43-4BB789D5A6E8",
+   "build": "22621.2861",
+   "pdbAge": 5,
+   "obpRoot": 12843120,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "FCB9AFC6-A352-F97B-17CF-5F981382C782",
+   "build": "22621.3007",
+   "pdbAge": 5,
+   "obpRoot": 12843120,
+   "obpInfoMask": 12845472
+  },
+  {
+   "pdbGuid": "4D39989F-39EB-0AC6-AFA4-CDD49DF5DD15",
+   "build": "22621.3085",
+   "pdbAge": 5,
+   "obpRoot": 12843000,
+   "obpInfoMask": 12845344
+  },
+  {
+   "pdbGuid": "2A832A68-8414-4D88-C39D-B4B4DB66D71C",
+   "build": "22621.3155",
+   "pdbAge": 5,
+   "obpRoot": 12842832,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "EFD6EBA3-3D24-2E2C-0E1C-C00663194FFE",
+   "build": "22621.3235",
+   "pdbAge": 5,
+   "obpRoot": 12843032,
+   "obpInfoMask": 12845376
+  },
+  {
+   "pdbGuid": "54C8C67B-D2A5-4FA5-BD82-F1BE21CF4A3A",
+   "build": "22621.3296",
+   "pdbAge": 5,
+   "obpRoot": 12843064,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "2FD54EC4-F140-2ED5-0E0D-A0DA7969126A",
+   "build": "22621.3374",
+   "pdbAge": 5,
+   "obpRoot": 12845272,
+   "obpInfoMask": 12845536
+  },
+  {
+   "pdbGuid": "7AF38CD7-6BBE-27EA-BD51-A523C93EEAAC",
+   "build": "22621.3447",
+   "pdbAge": 5,
+   "obpRoot": 12844952,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "29FABA7F-D35B-DB94-05E8-089A6D443DF5",
+   "build": "22621.3527",
+   "pdbAge": 5,
+   "obpRoot": 12845136,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "BC9E6755-4B22-8F3E-5C46-B0D1622B6E32",
+   "build": "22621.3672",
+   "pdbAge": 5,
+   "obpRoot": 12842824,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "36D4EAA4-8F7E-03C4-6A5F-0FDE2A8F7830",
+   "build": "22621.3733",
+   "pdbAge": 5,
+   "obpRoot": 12842840,
+   "obpInfoMask": 12845408
+  },
+  {
+   "pdbGuid": "EAF87AE7-340C-6B9B-334F-24CE36274F93",
+   "build": "22621.3810",
+   "pdbAge": 5,
+   "obpRoot": 12845016,
+   "obpInfoMask": 12845280
+  },
+  {
+   "pdbGuid": "EE6818EB-C82F-1F08-BA8E-BB2FD12196C0",
+   "build": "22621.382",
+   "pdbAge": 5,
+   "obpRoot": 12844888,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "EEFAC795-A46E-CB8E-8267-C6C0ABAF1CE9",
+   "build": "22621.3880",
+   "pdbAge": 5,
+   "obpRoot": 12845048,
+   "obpInfoMask": 12845312
+  },
+  {
+   "pdbGuid": "A3D0C792-ECC8-E515-A5F3-D90C9E8B3859",
+   "build": "22621.3958",
+   "pdbAge": 5,
+   "obpRoot": 12844920,
+   "obpInfoMask": 12845184
+  },
+  {
+   "pdbGuid": "C688AAF2-BB4D-E0FE-26E4-1A66F7E016D2",
+   "build": "22621.4169",
+   "pdbAge": 5,
+   "obpRoot": 12845176,
+   "obpInfoMask": 12845440
+  },
+  {
+   "pdbGuid": "3E6C4DE8-FAB1-2363-5B22-CA5957C83A0A",
+   "build": "22621.4249",
+   "pdbAge": 5,
+   "obpRoot": 12845032,
+   "obpInfoMask": 12845280
+  },
+  {
+   "pdbGuid": "9074FC2B-82ED-2B7E-1CB3-366B64BE62F9",
+   "build": "22621.4317",
+   "pdbAge": 5,
+   "obpRoot": 12845016,
+   "obpInfoMask": 12845280
+  },
+  {
+   "pdbGuid": "F2F2E6BC-9610-03D3-115A-D38C4A9FB42E",
+   "build": "22621.4391",
+   "pdbAge": 5,
+   "obpRoot": 12844856,
+   "obpInfoMask": 12845120
+  },
+  {
+   "pdbGuid": "D02CE8D8-DC7B-091B-9CEB-3F31A7F1ABAA",
+   "build": "22621.4455",
+   "pdbAge": 5,
+   "obpRoot": 12844976,
+   "obpInfoMask": 12845248
+  },
+  {
+   "pdbGuid": "7948CF97-E3FF-2C5D-3BA4-54E52BE9E95C",
+   "build": "22621.4541",
+   "pdbAge": 5,
+   "obpRoot": 12844976,
+   "obpInfoMask": 12845248
+  },
+  {
+   "pdbGuid": "C69901A0-80C5-1A3D-C5B0-956D4880730A",
+   "build": "22621.4601",
+   "pdbAge": 5,
+   "obpRoot": 12845072,
+   "obpInfoMask": 12845344
+  },
+  {
+   "pdbGuid": "8E015433-9DE8-EA44-AC65-562262A98495",
+   "build": "22621.4746",
+   "pdbAge": 5,
+   "obpRoot": 12845072,
+   "obpInfoMask": 12845344
+  },
+  {
+   "pdbGuid": "D812DB69-DA38-3EED-0208-D6833A25C1F8",
+   "build": "22621.4830",
+   "pdbAge": 5,
+   "obpRoot": 12845016,
+   "obpInfoMask": 12845280
+  },
+  {
+   "pdbGuid": "B50E9A38-E2FA-57AF-0D0A-FE3814602A44",
+   "build": "22621.4890",
+   "pdbAge": 5,
+   "obpRoot": 12845072,
+   "obpInfoMask": 12845312
+  },
+  {
+   "pdbGuid": "49BE727D-E974-030F-872D-A687B0055669",
+   "build": "22621.4974",
+   "pdbAge": 5,
+   "obpRoot": 12844896,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "C799F9AB-D331-0178-C832-8862555754DE",
+   "build": "22621.5124",
+   "pdbAge": 5,
+   "obpRoot": 12844824,
+   "obpInfoMask": 12845088
+  },
+  {
+   "pdbGuid": "605D66BD-7BA5-5EA7-0EB8-05DBCC029BC8",
+   "build": "22621.5185",
+   "pdbAge": 5,
+   "obpRoot": 12844896,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "3A24A3E1-E8DB-B584-6C9E-9698D3F6BF66",
+   "build": "22621.525",
+   "pdbAge": 5,
+   "obpRoot": 12844880,
+   "obpInfoMask": 12845152
+  },
+  {
+   "pdbGuid": "4C84CDD4-A961-8D3A-6791-846378778D78",
+   "build": "22621.5262",
+   "pdbAge": 5,
+   "obpRoot": 12845832,
+   "obpInfoMask": 12846080
+  },
+  {
+   "pdbGuid": "9A3533F8-CCC8-78F8-F791-BADD952A6EC8",
+   "build": "22621.5331",
+   "pdbAge": 5,
+   "obpRoot": 12845768,
+   "obpInfoMask": 12846016
+  },
+  {
+   "pdbGuid": "3E0EF2A1-E401-DE86-9660-736F91DC77BA",
+   "build": "22621.5413",
+   "pdbAge": 5,
+   "obpRoot": 12845848,
+   "obpInfoMask": 12846112
+  },
+  {
+   "pdbGuid": "E66520FD-06DE-09B7-D167-921F5968E2E3",
+   "build": "22621.5415",
+   "pdbAge": 5,
+   "obpRoot": 12845888,
+   "obpInfoMask": 12846144
+  },
+  {
+   "pdbGuid": "B9FA5F26-C22C-D725-0B80-25EE465D79B5",
+   "build": "22621.5471",
+   "pdbAge": 5,
+   "obpRoot": 12845888,
+   "obpInfoMask": 12846144
+  },
+  {
+   "pdbGuid": "76D055B1-4FCA-D8D2-33C7-D96FC7F52CBC",
+   "build": "22621.5547",
+   "pdbAge": 5,
+   "obpRoot": 12845560,
+   "obpInfoMask": 12845824
+  },
+  {
+   "pdbGuid": "6DFBCDD8-20A4-1870-655E-EA0B9EA2F41C",
+   "build": "22621.5624",
+   "pdbAge": 5,
+   "obpRoot": 12846080,
+   "obpInfoMask": 12846336
+  },
+  {
+   "pdbGuid": "95004182-1FDE-F16A-D603-C25FDD31FE51",
+   "build": "22621.5697",
+   "pdbAge": 5,
+   "obpRoot": 12846200,
+   "obpInfoMask": 12846464
+  },
+  {
+   "pdbGuid": "364F039B-4838-A8FB-CB31-F47E6E4BD4C7",
+   "build": "22621.5766",
+   "pdbAge": 5,
+   "obpRoot": 12846104,
+   "obpInfoMask": 12846368
+  },
+  {
+   "pdbGuid": "8BCFB2FE-5D14-1C69-F0A6-B529EFDF37CE",
+   "build": "22621.5771",
+   "pdbAge": 5,
+   "obpRoot": 12846104,
+   "obpInfoMask": 12846368
+  },
+  {
+   "pdbGuid": "E0B1FD29-1690-51BA-56A1-0979635A026A",
+   "build": "22621.5840",
+   "pdbAge": 5,
+   "obpRoot": 12846168,
+   "obpInfoMask": 12846432
+  },
+  {
+   "pdbGuid": "621801E9-DBEB-95A6-1772-6F00B9A76710",
+   "build": "22621.5909",
+   "pdbAge": 5,
+   "obpRoot": 12846312,
+   "obpInfoMask": 12846560
+  },
+  {
+   "pdbGuid": "32D8CFDF-D04C-BE46-300A-815F9ADD60FF",
+   "build": "22621.5983",
+   "pdbAge": 5,
+   "obpRoot": 12846152,
+   "obpInfoMask": 12846400
+  },
+  {
+   "pdbGuid": "33BAAFAE-D913-D5F0-180F-F18F58735716",
+   "build": "22621.6060",
+   "pdbAge": 5,
+   "obpRoot": 12846248,
+   "obpInfoMask": 12846496
+  },
+  {
+   "pdbGuid": "323FB94F-2067-B69B-3CA8-79EDC847E5BB",
+   "build": "22621.6133",
+   "pdbAge": 5,
+   "obpRoot": 12846280,
+   "obpInfoMask": 12846528
+  },
+  {
+   "pdbGuid": "7D91B8E8-78B8-A42A-1B9B-FAB4FDC727BD",
+   "build": "22621.6199",
+   "pdbAge": 5,
+   "obpRoot": 12846280,
+   "obpInfoMask": 12846528
+  },
+  {
+   "pdbGuid": "31D8CC4E-28A9-5F7F-2C81-1D5B0ABF5CBB",
+   "build": "22621.6274",
+   "pdbAge": 5,
+   "obpRoot": 12846256,
+   "obpInfoMask": 12846528
+  },
+  {
+   "pdbGuid": "22A56AB3-DB93-38CF-F9B2-EA3A02D98A76",
+   "build": "22621.6345",
+   "pdbAge": 5,
+   "obpRoot": 12846128,
+   "obpInfoMask": 12846368
+  },
+  {
+   "pdbGuid": "AF550CAA-73AF-B287-705C-C40079D786B4",
+   "build": "22621.6489",
+   "pdbAge": 5,
+   "obpRoot": 12846168,
+   "obpInfoMask": 12846432
+  },
+  {
+   "pdbGuid": "2D4E9261-984B-AD1A-C80F-D80C3A406DCD",
+   "build": "22621.6630",
+   "pdbAge": 5,
+   "obpRoot": 12846208,
+   "obpInfoMask": 12846464
+  },
+  {
+   "pdbGuid": "48529016-A13F-2DB7-30E0-C5FDFE04C32E",
+   "build": "22621.674",
+   "pdbAge": 5,
+   "obpRoot": 12844952,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "5736D3D9-B6E9-61B0-7ACF-003CC2499030",
+   "build": "22621.675",
+   "pdbAge": 5,
+   "obpRoot": 12844952,
+   "obpInfoMask": 12845216
+  },
+  {
+   "pdbGuid": "D7DDBE59-FF5D-DE53-E139-F5D80FEC1779",
+   "build": "22621.6783",
+   "pdbAge": 5,
+   "obpRoot": 12846096,
+   "obpInfoMask": 12846368
+  },
+  {
+   "pdbGuid": "13CB4746-D0DC-DEE4-82D2-D2FEAD3D04E0",
+   "build": "22621.6931",
+   "pdbAge": 5,
+   "obpRoot": 12845968,
+   "obpInfoMask": 12846240
+  },
+  {
+   "pdbGuid": "EE503386-2148-975F-DA2B-D05F77104E83",
+   "build": "22621.7079",
+   "pdbAge": 5,
+   "obpRoot": 12846104,
+   "obpInfoMask": 12846368
+  },
+  {
+   "pdbGuid": "51AC9241-F1FD-D077-E72C-834CCF41C6E7",
+   "build": "22621.7219",
+   "pdbAge": 5,
+   "obpRoot": 12846056,
+   "obpInfoMask": 12846304
+  },
+  {
+   "pdbGuid": "789BC886-970B-99DE-0A1C-3AE695F191E1",
+   "build": "22621.755",
+   "pdbAge": 5,
+   "obpRoot": 12842360,
+   "obpInfoMask": 12844896
+  },
+  {
+   "pdbGuid": "6E86DE11-6E79-2A4C-C244-7B8D88147AFB",
+   "build": "22621.819",
+   "pdbAge": 5,
+   "obpRoot": 12842640,
+   "obpInfoMask": 12845184
+  },
+  {
+   "pdbGuid": "D6EEF15C-FA90-46E1-F2DD-BFBEAFA9F2FC",
+   "build": "22621.900",
+   "pdbAge": 5,
+   "obpRoot": 12842536,
+   "obpInfoMask": 12845088
+  },
+  {
+   "pdbGuid": "7C85537A-944B-EF20-14AE-251FDEA1C590",
+   "build": "22621.963",
+   "pdbAge": 5,
+   "obpRoot": 12842408,
+   "obpInfoMask": 12844928
+  },
+  {
+   "pdbGuid": "B6CDAA3A-3EF1-3C3B-2799-115B0470342B",
+   "build": "26100.1",
+   "pdbAge": 6,
+   "obpRoot": 15785192,
+   "obpInfoMask": 15785472
+  },
+  {
+   "pdbGuid": "53AC4AD0-28A5-D199-B4CF-7D6B6E04C528",
+   "build": "26100.1000",
+   "pdbAge": 6,
+   "obpRoot": 15782960,
+   "obpInfoMask": 15785504
+  },
+  {
+   "pdbGuid": "7454B12D-6C53-BD66-7A5C-02994D1378CE",
+   "build": "26100.1150",
+   "pdbAge": 6,
+   "obpRoot": 15782992,
+   "obpInfoMask": 15785536
+  },
+  {
+   "pdbGuid": "C4CDAB75-804D-C83E-C41A-92A67D9164FA",
+   "build": "26100.1301",
+   "pdbAge": 6,
+   "obpRoot": 15785368,
+   "obpInfoMask": 15785632
+  },
+  {
+   "pdbGuid": "66C32BB7-CE0E-69E3-A8E2-D728DF7EB8EF",
+   "build": "26100.1455",
+   "pdbAge": 6,
+   "obpRoot": 15785432,
+   "obpInfoMask": 15785696
+  },
+  {
+   "pdbGuid": "1E5228DA-07AC-C5FA-4A17-0FAFDC57CF91",
+   "build": "26100.1591",
+   "pdbAge": 6,
+   "obpRoot": 15785712,
+   "obpInfoMask": 15785984
+  },
+  {
+   "pdbGuid": "953A8DE8-80B0-818C-32DA-2DEC1D79C2D9",
+   "build": "26100.1742",
+   "pdbAge": 6,
+   "obpRoot": 15785968,
+   "obpInfoMask": 15786240
+  },
+  {
+   "pdbGuid": "1E016E9D-3934-C930-8168-9B9F4977188D",
+   "build": "26100.2033",
+   "pdbAge": 6,
+   "obpRoot": 15785424,
+   "obpInfoMask": 15785696
+  },
+  {
+   "pdbGuid": "81D7D114-7DB3-3682-668A-4F6A4691490D",
+   "build": "26100.2161",
+   "pdbAge": 6,
+   "obpRoot": 15785912,
+   "obpInfoMask": 15786176
+  },
+  {
+   "pdbGuid": "F9533515-F98A-1E81-05A1-491384F2EFC1",
+   "build": "26100.2314",
+   "pdbAge": 6,
+   "obpRoot": 15785872,
+   "obpInfoMask": 15786144
+  },
+  {
+   "pdbGuid": "FC0778D6-13D5-C30B-8854-8940F765F660",
+   "build": "26100.2454",
+   "pdbAge": 6,
+   "obpRoot": 15786112,
+   "obpInfoMask": 15786400
+  },
+  {
+   "pdbGuid": "45B0BEEF-E03C-289F-032E-4EC96C787174",
+   "build": "26100.2605",
+   "pdbAge": 6,
+   "obpRoot": 15786040,
+   "obpInfoMask": 15786304
+  },
+  {
+   "pdbGuid": "8B0464B4-9E52-0F43-28DF-FFE68FF5B450",
+   "build": "26100.2894",
+   "pdbAge": 6,
+   "obpRoot": 15786168,
+   "obpInfoMask": 15786432
+  },
+  {
+   "pdbGuid": "C9D98B1D-00F4-632C-D61F-774772FF72D3",
+   "build": "26100.3037",
+   "pdbAge": 6,
+   "obpRoot": 15786192,
+   "obpInfoMask": 15786464
+  },
+  {
+   "pdbGuid": "EE7F3589-470B-E2A4-4AE3-8D55F7ABC10E",
+   "build": "26100.3194",
+   "pdbAge": 6,
+   "obpRoot": 15786032,
+   "obpInfoMask": 15786304
+  },
+  {
+   "pdbGuid": "5F5FBEEF-5EF1-4631-D29F-30AE73B74AF7",
+   "build": "26100.3323",
+   "pdbAge": 6,
+   "obpRoot": 15786200,
+   "obpInfoMask": 15786464
+  },
+  {
+   "pdbGuid": "88925BED-EE52-40F7-6187-626B3408A992",
+   "build": "26100.3476",
+   "pdbAge": 6,
+   "obpRoot": 15786104,
+   "obpInfoMask": 15786368
+  },
+  {
+   "pdbGuid": "DD81E20E-4246-87AE-6C82-B9776F034A1F",
+   "build": "26100.3624",
+   "pdbAge": 6,
+   "obpRoot": 15786648,
+   "obpInfoMask": 15786912
+  },
+  {
+   "pdbGuid": "9A559579-B64E-01DB-65CD-F3E6ECE43958",
+   "build": "26100.3775",
+   "pdbAge": 6,
+   "obpRoot": 15786872,
+   "obpInfoMask": 15787136
+  },
+  {
+   "pdbGuid": "D0FB0D8C-B72B-9731-2F1E-112EF5224B07",
+   "build": "26100.3912",
+   "pdbAge": 6,
+   "obpRoot": 15787072,
+   "obpInfoMask": 15787360
+  },
+  {
+   "pdbGuid": "D783DA3D-8CE8-C958-43A0-BA21F1DC2294",
+   "build": "26100.4061",
+   "pdbAge": 6,
+   "obpRoot": 15787104,
+   "obpInfoMask": 15787392
+  },
+  {
+   "pdbGuid": "9EF31611-480D-2516-B9D0-131E3F1D41BD",
+   "build": "26100.4202",
+   "pdbAge": 6,
+   "obpRoot": 15784944,
+   "obpInfoMask": 15787520
+  },
+  {
+   "pdbGuid": "1C2E5488-08E2-B5FC-F282-C1A51303392C",
+   "build": "26100.4343",
+   "pdbAge": 6,
+   "obpRoot": 15785040,
+   "obpInfoMask": 15787584
+  },
+  {
+   "pdbGuid": "F380D29A-07C0-4B69-E241-3DB634C6BBA6",
+   "build": "26100.4351",
+   "pdbAge": 6,
+   "obpRoot": 15784976,
+   "obpInfoMask": 15787520
+  },
+  {
+   "pdbGuid": "ECDC735E-7B90-585D-3ED7-3CFF1AA76003",
+   "build": "26100.4484",
+   "pdbAge": 6,
+   "obpRoot": 15785168,
+   "obpInfoMask": 15787712
+  },
+  {
+   "pdbGuid": "00D01401-874F-8CC3-F5F5-DA237013C16A",
+   "build": "26100.4652",
+   "pdbAge": 6,
+   "obpRoot": 15785648,
+   "obpInfoMask": 15788192
+  },
+  {
+   "pdbGuid": "9360F9C0-BD4B-7C6C-8762-74B99D8073E1",
+   "build": "26100.4656",
+   "pdbAge": 6,
+   "obpRoot": 15785648,
+   "obpInfoMask": 15788192
+  },
+  {
+   "pdbGuid": "37037C16-F29E-2343-ED6D-79A5C68F8722",
+   "build": "26100.4768",
+   "pdbAge": 6,
+   "obpRoot": 15788368,
+   "obpInfoMask": 15788640
+  },
+  {
+   "pdbGuid": "91F95759-B8A1-C35A-0A97-73FCA2A8A67E",
+   "build": "26100.4946",
+   "pdbAge": 6,
+   "obpRoot": 15788336,
+   "obpInfoMask": 15788608
+  },
+  {
+   "pdbGuid": "6765ABB4-477B-954A-2F53-7F8F741EC02E",
+   "build": "26100.5074",
+   "pdbAge": 6,
+   "obpRoot": 15785848,
+   "obpInfoMask": 15788384
+  },
+  {
+   "pdbGuid": "E6426A07-C26E-66F8-EB85-94621A7B273B",
+   "build": "26100.6584",
+   "pdbAge": 6,
+   "obpRoot": 15786152,
+   "obpInfoMask": 15788640
+  },
+  {
+   "pdbGuid": "153C10B0-9E28-FA79-1C94-09621A62D0C8",
+   "build": "26100.6725",
+   "pdbAge": 6,
+   "obpRoot": 15788856,
+   "obpInfoMask": 15789120
+  },
+  {
+   "pdbGuid": "0FF7A614-9800-4E86-73BA-2B7BE0019AD0",
+   "build": "26100.6899",
+   "pdbAge": 6,
+   "obpRoot": 15788728,
+   "obpInfoMask": 15788992
+  },
+  {
+   "pdbGuid": "1382803A-70C5-F276-2EF4-819130517487",
+   "build": "26100.6901",
+   "pdbAge": 6,
+   "obpRoot": 15788728,
+   "obpInfoMask": 15788992
+  },
+  {
+   "pdbGuid": "BEA4BE7B-19EE-F0C9-7610-A5ECE65CAE0C",
+   "build": "26100.7019",
+   "pdbAge": 6,
+   "obpRoot": 15787200,
+   "obpInfoMask": 15789696
+  },
+  {
+   "pdbGuid": "D6477C2E-E339-1555-525A-83E53C7895EB",
+   "build": "26100.7171",
+   "pdbAge": 6,
+   "obpRoot": 15787064,
+   "obpInfoMask": 15789568
+  },
+  {
+   "pdbGuid": "83E0CBB8-25CB-8C72-3052-E974BA46AC86",
+   "build": "26100.7309",
+   "pdbAge": 6,
+   "obpRoot": 15786928,
+   "obpInfoMask": 15789440
+  },
+  {
+   "pdbGuid": "0762CF42-EF7F-3E81-16EF-7329ADAA09A3",
+   "build": "26100.7462",
+   "pdbAge": 6,
+   "obpRoot": 15786832,
+   "obpInfoMask": 15789344
+  },
+  {
+   "pdbGuid": "0385A3E5-1169-BA7F-8471-6B1C792977F7",
+   "build": "26100.7623",
+   "pdbAge": 6,
+   "obpRoot": 15787056,
+   "obpInfoMask": 15789568
+  },
+  {
+   "pdbGuid": "87A00A45-7156-E256-8E5C-7F2E20A2429D",
+   "build": "26100.7627",
+   "pdbAge": 6,
+   "obpRoot": 15787088,
+   "obpInfoMask": 15789600
+  },
+  {
+   "pdbGuid": "35EE8DED-AFBD-2BD2-8644-D4D36BB8A4BD",
+   "build": "26100.7705",
+   "pdbAge": 6,
+   "obpRoot": 15787576,
+   "obpInfoMask": 15790144
+  },
+  {
+   "pdbGuid": "A1C414A4-88BC-6DE9-308B-5D3D7579D109",
+   "build": "26100.7824",
+   "pdbAge": 6,
+   "obpRoot": 15787448,
+   "obpInfoMask": 15789984
+  },
+  {
+   "pdbGuid": "2C8AEA6E-FDCA-390D-9055-97EE55B556FD",
+   "build": "26100.7920",
+   "pdbAge": 6,
+   "obpRoot": 15787912,
+   "obpInfoMask": 15790464
+  },
+  {
+   "pdbGuid": "24DE61DB-3A27-C5B3-83DF-F181CB51F7E1",
+   "build": "26100.8036",
+   "pdbAge": 6,
+   "obpRoot": 15787824,
+   "obpInfoMask": 15790400
+  },
+  {
+   "pdbGuid": "D7B73E18-C29A-0D87-9D85-2CADAA68F29F",
+   "build": "26100.8115",
+   "pdbAge": 6,
+   "obpRoot": 15789696,
+   "obpInfoMask": 15789952
+  },
+  {
+   "pdbGuid": "D7EC0538-D2BC-B5CE-1763-32F5893ACDC4",
+   "build": "26100.8117",
+   "pdbAge": 6,
+   "obpRoot": 15789696,
+   "obpInfoMask": 15789952
+  },
+  {
+   "pdbGuid": "04A313E5-C86A-0212-FB00-0E449E728D8C",
+   "build": "26100.8246",
+   "pdbAge": 6,
+   "obpRoot": 15789920,
+   "obpInfoMask": 15790176
+  },
+  {
+   "pdbGuid": "0D960CE1-0376-3A60-97E8-39406D8B369F",
+   "build": "26100.8328",
+   "pdbAge": 6,
+   "obpRoot": 15790400,
+   "obpInfoMask": 15790656
+  },
+  {
+   "pdbGuid": "7427DA99-C3D7-3720-2BFB-359C2B0E1A5E",
+   "build": "26100.8457",
+   "pdbAge": 6,
+   "obpRoot": 15790528,
+   "obpInfoMask": 15790784
+  },
+  {
+   "pdbGuid": "AD545A46-A851-6462-7976-D97280F483F2",
+   "build": "26100.8521",
+   "pdbAge": 6,
+   "obpRoot": 15790472,
+   "obpInfoMask": 15790752
+  },
+  {
+   "pdbGuid": "A96DF523-B753-10F0-7677-C6AE05A553F8",
+   "build": "26100.863",
+   "pdbAge": 6,
+   "obpRoot": 15783088,
+   "obpInfoMask": 15785632
+  },
+  {
+   "pdbGuid": "11D7FE79-CC24-5612-0555-03EE86BB0E3E",
+   "build": "26100.8655",
+   "pdbAge": 6,
+   "obpRoot": 15790440,
+   "obpInfoMask": 15790720
+  },
+  {
+   "pdbGuid": "1924BC23-5509-19F8-8B17-A384B944B543",
+   "build": "26100.8875",
+   "pdbAge": 6,
+   "obpRoot": 15790936,
+   "obpInfoMask": 15791200
+  },
+  {
+   "pdbGuid": "2A6E73CB-5CCE-9CCD-A64E-151FAC38D45C",
+   "build": "26100.8894",
+   "pdbAge": 6,
+   "obpRoot": 15790904,
+   "obpInfoMask": 15791168
+  },
+  {
+   "pdbGuid": "C8A7F11B-37FE-2822-7B6B-11412E3A0519",
+   "build": "26100.8972",
+   "pdbAge": 6,
+   "obpRoot": 15790848,
+   "obpInfoMask": 15791104
+  },
+  {
+   "pdbGuid": "D4EB637D-B41E-589E-BF1C-6E4DAD87C2A3",
+   "build": "28000.1575",
+   "pdbAge": 6,
+   "obpRoot": 15807328,
+   "obpInfoMask": 15809632
+  },
+  {
+   "pdbGuid": "C1301902-BC4D-6453-1F74-4B95C8745057",
+   "build": "28000.1719",
+   "pdbAge": 6,
+   "obpRoot": 15810040,
+   "obpInfoMask": 15810080
+  },
+  {
+   "pdbGuid": "2C6C368C-E9A0-1A04-675A-C27D9AF8D40A",
+   "build": "28000.1761",
+   "pdbAge": 6,
+   "obpRoot": 15807576,
+   "obpInfoMask": 15809920
+  },
+  {
+   "pdbGuid": "E1C95DFF-9367-07B1-8911-22040312642C",
+   "build": "28000.1830",
+   "pdbAge": 6,
+   "obpRoot": 15807736,
+   "obpInfoMask": 15810080
+  },
+  {
+   "pdbGuid": "7619DE80-1344-3574-088B-53EEE03E69BD",
+   "build": "28000.2113",
+   "pdbAge": 6,
+   "obpRoot": 15807992,
+   "obpInfoMask": 15810336
+  },
+  {
+   "pdbGuid": "C19063F9-222B-565E-70F8-CADDFD38C1F8",
+   "build": "28000.2269",
+   "pdbAge": 6,
+   "obpRoot": 15811248,
+   "obpInfoMask": 15811296
+  },
+  {
+   "pdbGuid": "FB597264-E8FA-15BD-BC39-E496A2F3D13F",
+   "build": "28000.2336",
+   "pdbAge": 6,
+   "obpRoot": 15808480,
+   "obpInfoMask": 15810784
+  },
+  {
+   "pdbGuid": "BC7235DA-3728-A7BA-5DC0-2351A9061615",
+   "build": "28000.2525",
+   "pdbAge": 6,
+   "obpRoot": 15808648,
+   "obpInfoMask": 15810944
+  },
+  {
+   "pdbGuid": "97484D98-2EE5-D22A-A8DB-B6719249A506",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4288152,
+   "obpInfoMask": 4289248
+  },
+  {
+   "pdbGuid": "11EAC3DF-DFF3-BCEB-C04D-DAFC2BC798E7",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4300920,
+   "obpInfoMask": 4302016
+  },
+  {
+   "pdbGuid": "ACDF4BCE-C683-2466-9FA6-8A3F77FF6AA1",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4283952,
+   "obpInfoMask": 4285056
+  },
+  {
+   "pdbGuid": "4D4D4D89-8CD2-628F-F4B2-23922F45D8F3",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4479312,
+   "obpInfoMask": 4480416
+  },
+  {
+   "pdbGuid": "6267407F-0DF1-C9ED-CE9E-04708E7D0862",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4296208,
+   "obpInfoMask": 4297312
+  },
+  {
+   "pdbGuid": "B5C61129-9857-5CAB-5D44-048791B00A98",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4284504,
+   "obpInfoMask": 4285600
+  },
+  {
+   "pdbGuid": "4E98EF97-3311-0D74-9F82-CAC50DBE3E31",
+   "build": "ts",
+   "pdbAge": 5,
+   "obpRoot": 12844768,
+   "obpInfoMask": 12845024
+  },
+  {
+   "pdbGuid": "0C4FDE9F-D272-42CD-4E8A-44DB3D0B2C29",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4474960,
+   "obpInfoMask": 4476032
+  },
+  {
+   "pdbGuid": "640916D4-0404-DDDC-90CA-36F3492BEA59",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4479128,
+   "obpInfoMask": 4480192
+  },
+  {
+   "pdbGuid": "EF4A4992-79AD-1369-6E3B-2691905B1981",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4304696,
+   "obpInfoMask": 4305792
+  },
+  {
+   "pdbGuid": "0AC8676C-C98B-D924-8FD6-4091EF49EE6C",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4479856,
+   "obpInfoMask": 4480928
+  },
+  {
+   "pdbGuid": "EA5CD30A-A118-73BE-7B0F-A1B6E62F33C5",
+   "build": "ts",
+   "pdbAge": 6,
+   "obpRoot": 15810104,
+   "obpInfoMask": 15810144
+  },
+  {
+   "pdbGuid": "F5ACFCDA-BDCA-8305-C789-EFB00F2DE570",
+   "build": "ts",
+   "pdbAge": 6,
+   "obpRoot": 15811120,
+   "obpInfoMask": 15811168
+  },
+  {
+   "pdbGuid": "A3B6EB4B-59EC-4367-A372-BDCBFF81AF3A",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4300432,
+   "obpInfoMask": 4301536
+  },
+  {
+   "pdbGuid": "848FD9C2-B7E8-3560-3D91-8813E1367BAC",
+   "build": "ts",
+   "pdbAge": 2,
+   "obpRoot": 4479192,
+   "obpInfoMask": 4480288
+  },
+  {
+   "pdbGuid": "C048C018-B71B-830A-B3D4-4AFCBC58466B",
+   "build": "ts",
+   "pdbAge": 6,
+   "obpRoot": 15808904,
+   "obpInfoMask": 15811200
+  }
+ ]
+}

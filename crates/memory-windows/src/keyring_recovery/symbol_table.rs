@@ -1,18 +1,20 @@
-//! Offline ntoskrnl symbol registry: reviewed per-build layouts resolved from
-//! whitelist JSON tables extracted from official Microsoft PDBs (see
-//! `crates/memory-windows/symbols/README.md`).
+//! Offline ntoskrnl symbol registry: per-build object-manager globals from
+//! the harvested PDB collection (see `crates/memory-windows/symbols/README.md`).
 //!
-//! Lookup keys on the CodeView (RSDS) GUID. A missing build fails closed; no
-//! layout is ever derived by guessing.
-
-use serde_json::Value;
+//! All struct layouts the recovery path consumes were verified invariant
+//! across every extracted profile (1077 builds, Windows 10 10240 through
+//! Windows 11 28000), so they live here as reviewed constants. The only
+//! per-build data is the object-manager global pair, held in the generated
+//! static table. Lookup keys on the CodeView (RSDS) GUID; a missing build
+//! fails closed, no layout is ever derived by guessing.
 
 use crate::targeted_kernel::LoadedModuleEntryLayout;
 
 use super::profile::{DeviceObjectLayout, DriverLayout, ObjectManagerLayout};
+use super::symbol_registry_generated::EMBEDDED_TABLES;
 
 /// NT object-manager bucket count. Stable across Windows x64 releases and not
-/// carried by the extractor's field-level JSON (array dimensions), so it
+/// carried by the extractor's field-level output (array dimensions), so it
 /// stays a reviewed constant.
 const DIRECTORY_BUCKET_COUNT: u16 = 37;
 /// `ObpInfoMaskToOffset` value meaning "object has a name-info header".
@@ -30,16 +32,43 @@ const CLIENT_NEXT_OFFSET: u16 = 0;
 const CLIENT_IDENTIFIER_OFFSET: u16 = 8;
 const CLIENT_BODY_OFFSET: u16 = 0x10;
 
-/// Per-build ntoskrnl layouts resolved from an embedded symbol table. Only
-/// the object-manager globals and the build label are consumed today; the
-/// remaining layout fields are resolved on demand through the same table.
+/// Per-build ntoskrnl layouts resolved from the registry.
 pub(crate) struct NtoskrnlLayouts {
     pub build_id: String,
     pub objects: ObjectManagerLayout,
     pub module_layout: LoadedModuleEntryLayout,
 }
 
-/// Version-stable layouts, verified invariant across 741 extracted PDB
+/// Resolves layouts for one ntoskrnl CodeView GUID, or `None` when the build
+/// is not in the embedded registry.
+pub(crate) fn resolve_ntoskrnl_layouts(pdb_guid: &str) -> Option<NtoskrnlLayouts> {
+    let table = EMBEDDED_TABLES
+        .iter()
+        .find(|table| table.pdb_guid.eq_ignore_ascii_case(pdb_guid))?;
+    Some(NtoskrnlLayouts {
+        build_id: table.build_id.to_string(),
+        objects: ObjectManagerLayout {
+            root_directory_object_rva: table.obp_root_rva,
+            info_mask_to_offset_rva: table.obp_info_mask_rva,
+            directory_bucket_count: DIRECTORY_BUCKET_COUNT,
+            // Verified invariant across all 1077 extracted profiles:
+            // _OBJECT_DIRECTORY_ENTRY.{ChainLink,Object}, _OBJECT_HEADER.{Body,InfoMask},
+            // _OBJECT_HEADER_NAME_INFO.Name, _UNICODE_STRING.{Length,MaximumLength,Buffer}.
+            directory_entry_chain_offset: 0,
+            directory_entry_object_offset: 8,
+            object_header_body_offset: 0x30,
+            object_header_info_mask_offset: 0x1A,
+            name_info_bit: NAME_INFO_BIT,
+            name_info_name_offset: 8,
+            unicode_length_offset: 0,
+            unicode_maximum_length_offset: 2,
+            unicode_buffer_offset: 8,
+        },
+        module_layout: default_module_layout(),
+    })
+}
+
+/// Version-stable layouts, verified invariant across all 1077 extracted PDB
 /// profiles (Windows 10 10240 through Windows 11 28000). Used when the
 /// build's PDB is not in the registry — these need no per-build data.
 pub(crate) fn default_driver_layout() -> DriverLayout {
@@ -77,77 +106,4 @@ pub(crate) fn default_device_layout() -> DeviceObjectLayout {
 pub(crate) fn default_module_layout() -> LoadedModuleEntryLayout {
     LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60)
         .expect("constant module entry layout is valid")
-}
-
-pub(crate) struct EmbeddedTable {
-    pub pdb_guid: &'static str,
-    pub json: &'static str,
-}
-
-use super::symbol_registry_generated::EMBEDDED_TABLES;
-
-/// Resolves layouts for one ntoskrnl CodeView GUID, or `None` when the build
-/// is not in the embedded registry.
-pub(crate) fn resolve_ntoskrnl_layouts(pdb_guid: &str) -> Option<NtoskrnlLayouts> {
-    let table = EMBEDDED_TABLES
-        .iter()
-        .find(|table| table.pdb_guid.eq_ignore_ascii_case(pdb_guid))?;
-    let root: Value = serde_json::from_str(table.json).ok()?;
-    layouts_from_table(root, table.pdb_guid)
-}
-
-fn layouts_from_table(root: Value, pdb_guid: &str) -> Option<NtoskrnlLayouts> {
-    let objects = ObjectManagerLayout {
-        root_directory_object_rva: global_rva(&root, "ObpRootDirectoryObject")?,
-        info_mask_to_offset_rva: global_rva(&root, "ObpInfoMaskToOffset")?,
-        directory_bucket_count: DIRECTORY_BUCKET_COUNT,
-        directory_entry_chain_offset: field_offset(&root, "_OBJECT_DIRECTORY_ENTRY", "ChainLink")?,
-        directory_entry_object_offset: field_offset(&root, "_OBJECT_DIRECTORY_ENTRY", "Object")?,
-        object_header_body_offset: field_offset(&root, "_OBJECT_HEADER", "Body")?,
-        object_header_info_mask_offset: field_offset(&root, "_OBJECT_HEADER", "InfoMask")?,
-        name_info_bit: NAME_INFO_BIT,
-        name_info_name_offset: field_offset(&root, "_OBJECT_HEADER_NAME_INFO", "Name")?,
-        unicode_length_offset: field_offset(&root, "_UNICODE_STRING", "Length")?,
-        unicode_maximum_length_offset: field_offset(&root, "_UNICODE_STRING", "MaximumLength")?,
-        unicode_buffer_offset: field_offset(&root, "_UNICODE_STRING", "Buffer")?,
-    };
-    let base_dll_name = field_offset(&root, "_KLDR_DATA_TABLE_ENTRY", "BaseDllName")?;
-    let module_layout = LoadedModuleEntryLayout::new(
-        0,
-        field_offset(&root, "_KLDR_DATA_TABLE_ENTRY", "InLoadOrderLinks")?,
-        field_offset(&root, "_KLDR_DATA_TABLE_ENTRY", "DllBase")?,
-        field_offset(&root, "_KLDR_DATA_TABLE_ENTRY", "SizeOfImage")?,
-        base_dll_name,
-        base_dll_name.checked_add(8)?,
-    )
-    .ok()?;
-    let build_id = root
-        .get("pdbAge")
-        .and_then(Value::as_u64)
-        .map(|age| format!("pdb-age-{age}"))
-        .unwrap_or_else(|| pdb_guid.to_string());
-    Some(NtoskrnlLayouts {
-        build_id,
-        objects,
-        module_layout,
-    })
-}
-
-fn global_rva(root: &Value, name: &str) -> Option<u32> {
-    let rva = root.get("globals")?.get(name)?.get("rva")?.as_u64()?;
-    u32::try_from(rva).ok()
-}
-
-fn field_offset(root: &Value, type_name: &str, field_name: &str) -> Option<u16> {
-    let fields = root
-        .get("types")?
-        .get(type_name)?
-        .get("fields")?
-        .as_array()?;
-    let offset = fields
-        .iter()
-        .find(|field| field.get("name").and_then(Value::as_str) == Some(field_name))?
-        .get("offset")?
-        .as_u64()?;
-    u16::try_from(offset).ok()
 }
