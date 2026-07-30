@@ -143,6 +143,16 @@ impl MetadataEntry {
         Self::parse_sequence(&self.data[start..])
     }
 
+    /// Parses nested entries and requires the entire nested region to be valid.
+    ///
+    /// Credential recovery uses this stricter form because accepting a valid
+    /// prefix before a corrupt tail could hide a duplicate or conflicting
+    /// authenticated datum.
+    pub(crate) fn nested_exact(&self, offset: usize) -> Option<Vec<Self>> {
+        let nested = self.data.get(offset..)?;
+        Self::parse_sequence_exact(nested)
+    }
+
     /// Whether this entry is a volume master key protector.
     #[must_use]
     pub fn is_vmk(&self) -> bool {

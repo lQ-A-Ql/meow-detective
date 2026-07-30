@@ -196,15 +196,17 @@ fn unlock_with(
             return Err(error.into());
         }
     };
-    complete_verified_unlock(&context, &source, &identities, verified, method)
+    complete_verified_unlock(&context, &source, &identities, verified, method, None)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn complete_verified_unlock(
     context: &UnlockContext<'_>,
     source: &super::source::BitLockerSource,
     identities: &[volume_bitlocker::VolumeIdentity],
     verified: VerifiedUnlock,
     method: UnlockMethod,
+    recovery_reveal: Option<transport::dto::RecoveryPasswordReconstructionDto>,
 ) -> Result<BitLockerVolumeStatusDto, BitLockerServiceError> {
     let fingerprint = MetadataFingerprint::from_metadata(&verified.identity().metadata);
     let persisted_blob = verified.persisted_key_blob();
@@ -274,7 +276,7 @@ pub(super) fn complete_verified_unlock(
         "success",
         None,
     );
-    Ok(build_status(
+    let mut status = build_status(
         &context.data_source_id.0,
         context.partition_index,
         &activated.identity,
@@ -282,7 +284,9 @@ pub(super) fn complete_verified_unlock(
         true,
         true,
         activated.plaintext_filesystem,
-    ))
+    );
+    status.recovery_password_reconstruction = recovery_reveal;
+    Ok(status)
 }
 
 fn status_identity<'a>(

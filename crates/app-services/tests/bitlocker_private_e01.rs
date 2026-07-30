@@ -5,9 +5,13 @@ use app_services::{
     file_service::PreviewRuntimeRegistry,
 };
 use domain::{DataSourceKind, DataSourcePlatform};
-use evidence_core::{EvidenceReader, FileSystemReader, PartitionWindowReader, ReaderInfo};
+use evidence_core::{EvidenceReader, PartitionWindowReader};
 use image_e01::E01Reader;
-use memory_windows::{scan_bitlocker_key_candidates, AesKeyBits, RawMemoryImage};
+use memory_windows::{
+    recover_vmks_structurally, BitLockerMemoryProfile, LoadedModuleEntryLayout,
+    TargetedCodeViewIdentity, TargetedKernelIdentity, TargetedKernelLayoutProfile,
+    TargetedKernelSearchLimits,
+};
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
     partition_repo::{DataSourcePartitionRecord, PartitionRepo},
@@ -18,11 +22,12 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use volume_bitlocker::{
-    build_memory_candidate_unlock, read_volume_identities, unlock_volume_with_recovery_password,
-    BitLockerReader, EncryptionMethod, MemoryCandidateUnlock, MetadataFingerprint, Passphrase,
-    PersistedKeyBlob,
+    read_volume_identities, recover_recovery_password, recovery_password_protectors,
+    unlock_volume_with_recovered_vmk, unlock_volume_with_recovery_password, BitLockerReader,
+    MetadataFingerprint, Passphrase, PersistedKeyBlob, RecoveredVmk,
 };
 
 #[derive(Default)]
@@ -49,29 +54,6 @@ impl BitLockerKeyStore for DiscardingKeyStore {
 
     fn delete(&self, _fingerprint: &MetadataFingerprint) -> Result<bool, BitLockerKeyStoreError> {
         Ok(false)
-    }
-}
-
-struct CandidateEvidenceReader {
-    inner: BitLockerReader<PartitionWindowReader>,
-    info: ReaderInfo,
-}
-
-impl Read for CandidateEvidenceReader {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buffer)
-    }
-}
-
-impl Seek for CandidateEvidenceReader {
-    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
-        self.inner.seek(position)
-    }
-}
-
-impl EvidenceReader for CandidateEvidenceReader {
-    fn info(&self) -> &ReaderInfo {
-        &self.info
     }
 }
 
@@ -172,10 +154,12 @@ fn private_liuyang_e01_recovery_password_unlocks_partition() {
 }
 
 #[test]
-#[ignore = "requires Liu Yang E01 and raw memory fixture; no credential is used"]
-fn private_liuyang_memory_image_recovers_an_ntfs_boot_sector() {
+#[ignore = "requires private Liu Yang E01, VMK, and recovery-password oracle"]
+fn private_liuyang_vmk_reconstructs_the_metadata_bound_recovery_password() {
     let e01_path = env_path("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_E01");
-    let memory_path = env_path("FORENSICS_LIUYANG_MEMORY_FIXTURE");
+    let vmk = decode_vmk_env("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_VMK_HEX");
+    let expected = std::env::var("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD")
+        .expect("set the private Liu Yang recovery-password oracle");
     let mut probe_reader = E01Reader::open(&e01_path).expect("open private E01 read-only");
     let probe = detect_image_filesystem(&mut probe_reader).expect("probe private E01");
     let partition = probe
@@ -183,45 +167,44 @@ fn private_liuyang_memory_image_recovers_an_ntfs_boot_sector() {
         .iter()
         .find(|partition| partition.index == 5)
         .expect("expected Liu Yang BitLocker partition");
-    let reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&e01_path).expect("reopen E01"));
+    let reader: Box<dyn EvidenceReader> =
+        Box::new(E01Reader::open(&e01_path).expect("reopen private E01 read-only"));
     let mut window = PartitionWindowReader::new(reader, partition.offset, Some(partition.length))
-        .expect("build bounded partition window");
-    let identity = read_volume_identities(&mut window)
-        .expect("read BitLocker metadata")
-        .into_iter()
-        .next()
-        .expect("metadata identity");
+        .expect("build bounded BitLocker partition window");
+    let identities = read_volume_identities(&mut window).expect("read BitLocker metadata copies");
+    let metadata = &identities
+        .first()
+        .expect("at least one valid metadata copy")
+        .metadata;
+    let protectors =
+        recovery_password_protectors(metadata).expect("read recovery-password protectors");
     assert_eq!(
-        identity.metadata.encryption_method,
-        EncryptionMethod::XtsAes128
+        protectors.len(),
+        1,
+        "private oracle must select one exact protector identity"
     );
+    let recovered = recover_recovery_password(metadata, protectors[0], &RecoveredVmk::new(vmk))
+        .expect("private VMK must authenticate the reverse recovery datum");
 
-    let mut memory = RawMemoryImage::open(&memory_path).expect("open raw memory read-only");
-    let candidates = scan_bitlocker_key_candidates(&mut memory, 8_192, 256)
-        .expect("scan bounded BitLocker key candidates");
-    for (left_index, left) in candidates.iter().enumerate() {
-        if left.bits() != AesKeyBits::Aes128 {
-            continue;
-        }
-        for (right_index, right) in candidates.iter().enumerate() {
-            if left_index == right_index
-                || right.bits() != AesKeyBits::Aes128
-                || left.pool_physical_address() != right.pool_physical_address()
-            {
-                continue;
-            }
-            let pending = build_memory_candidate_unlock(
-                identity.clone(),
-                left.recovered_key(),
-                Some(right.recovered_key()),
-            )
-            .expect("construct XTS-128 candidate reader");
-            if validates_independent_ntfs_oracles(&e01_path, partition, &pending) {
-                return;
-            }
-        }
+    assert_eq!(
+        recovered.password().expose_for_authorized_reveal(),
+        expected
+    );
+    assert_eq!(
+        recovered.provenance().metadata_fingerprint(),
+        MetadataFingerprint::from_metadata(metadata).as_str()
+    );
+}
+
+fn decode_vmk_env(name: &str) -> [u8; 32] {
+    let encoded = std::env::var(name).unwrap_or_else(|_| panic!("set {name} to the private VMK"));
+    assert_eq!(encoded.len(), 64, "private VMK must be 32-byte hex");
+    let mut vmk = [0u8; 32];
+    for (index, byte) in vmk.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&encoded[index * 2..index * 2 + 2], 16)
+            .expect("private VMK must contain only hexadecimal digits");
     }
-    panic!("no memory-recovered AES candidate decrypted the BitLocker volume as NTFS");
+    vmk
 }
 
 #[test]
@@ -278,6 +261,7 @@ fn private_liuyang_memory_image_completes_the_production_unlock_service() {
 
             let runtimes =
                 BitLockerRuntimeContext::new(&preview_runtime, &bitlocker_runtime, &key_store);
+            let started = Instant::now();
             let status = app_services::bitlocker_service::unlock_bitlocker_with_memory_image(
                 case_conn,
                 &active.case_root,
@@ -288,14 +272,93 @@ fn private_liuyang_memory_image_completes_the_production_unlock_service() {
                 runtimes,
             )
             .expect("recover and activate verified BitLocker volume");
+            let elapsed = started.elapsed();
 
             assert!(status.unlocked);
             assert!(status.stored_key_available);
             assert_eq!(status.plaintext_filesystem.as_deref(), Some("NTFS"));
             assert_eq!(key_store.stores.load(Ordering::Relaxed), 1);
+            assert!(elapsed <= Duration::from_secs(120));
             Ok(())
         })
         .expect("complete isolated service regression");
+}
+
+#[test]
+#[ignore = "requires Liu Yang E01 and raw memory fixture; no credential is used"]
+fn private_liuyang_structural_vmk_authentication_oracles() {
+    let e01_path = env_path("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_E01");
+    let memory_path = env_path("FORENSICS_LIUYANG_MEMORY_FIXTURE");
+    let mut probe_reader = E01Reader::open(&e01_path).expect("open private E01 read-only");
+    let probe = detect_image_filesystem(&mut probe_reader).expect("probe private E01");
+    let partition = probe
+        .partitions
+        .iter()
+        .find(|partition| partition.index == 5)
+        .expect("expected Liu Yang BitLocker partition");
+    let reader: Box<dyn EvidenceReader> =
+        Box::new(E01Reader::open(&e01_path).expect("reopen private E01 read-only"));
+    let mut window = PartitionWindowReader::new(reader, partition.offset, Some(partition.length))
+        .expect("open BitLocker partition window");
+    let identities = read_volume_identities(&mut window).expect("read BitLocker metadata");
+    let target = identities.first().expect("at least one metadata copy");
+
+    let module_layout =
+        LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60).expect("loader layout");
+    let kernel = TargetedKernelLayoutProfile::new(
+        "windows-11-26100-ntkrnlmp-953a8de8",
+        "26100",
+        TargetedKernelIdentity::new(0xD98D_B6A6, 0x0144_F000),
+        module_layout,
+    )
+    .expect("kernel profile")
+    .with_codeview_identity(
+        TargetedCodeViewIdentity::new("953A8DE8-80B0-818C-32DA-2DEC1D79C2D9", 1, "ntkrnlmp.pdb")
+            .expect("kernel CodeView identity"),
+    )
+    .with_fvevol_identity(TargetedKernelIdentity::new(0x5960_C289, 0x000E_1000))
+    .with_fvevol_codeview_identity(
+        TargetedCodeViewIdentity::new("47808A31-873E-98CF-7009-95E410CD0095", 1, "fvevol.pdb")
+            .expect("FVEVol CodeView identity"),
+    );
+    let profile = BitLockerMemoryProfile::windows_11_26100(kernel).expect("reviewed profile");
+    let recovery = recover_vmks_structurally(
+        &memory_path,
+        &profile,
+        target.metadata.volume_guid,
+        TargetedKernelSearchLimits::default(),
+    )
+    .expect("recover structural VMKs");
+
+    let mut fvek_authentications = 0usize;
+    let mut reverse_authentications = 0usize;
+    for vmk in recovery.into_vmks() {
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(E01Reader::open(&e01_path).expect("reopen private E01 read-only"));
+        let mut candidate_window =
+            PartitionWindowReader::new(reader, partition.offset, Some(partition.length))
+                .expect("open candidate partition window");
+        if unlock_volume_with_recovered_vmk(&mut candidate_window, &vmk).is_ok() {
+            fvek_authentications += 1;
+        }
+        if identities.iter().any(|identity| {
+            recovery_password_protectors(&identity.metadata).is_ok_and(|protectors| {
+                protectors.into_iter().any(|protector| {
+                    recover_recovery_password(&identity.metadata, protector, &vmk).is_ok()
+                })
+            })
+        }) {
+            reverse_authentications += 1;
+        }
+    }
+    eprintln!(
+        "structural VMK oracle counts fvek={fvek_authentications} reverse={reverse_authentications}"
+    );
+    assert_eq!(fvek_authentications, 1);
+    assert_eq!(
+        reverse_authentications, 0,
+        "the active device-context VMK unlocks the volume but is not the recovery-protector VMK"
+    );
 }
 
 fn bitlocker_partition_record(
@@ -321,50 +384,6 @@ fn bitlocker_partition_record(
         lvm_pv_offsets_json: None,
         lvm_pv_sources_json: None,
     }
-}
-
-fn validates_independent_ntfs_oracles(
-    e01_path: &std::path::Path,
-    partition: &PartitionRecord,
-    pending: &MemoryCandidateUnlock,
-) -> bool {
-    validate_ntfs_file(
-        e01_path,
-        partition,
-        pending,
-        "$UpCase",
-        Some(&[0, 0, 1, 0, 2, 0, 3, 0]),
-    ) && validate_ntfs_file(e01_path, partition, pending, "$Bitmap", None)
-}
-
-fn validate_ntfs_file(
-    e01_path: &std::path::Path,
-    partition: &PartitionRecord,
-    pending: &MemoryCandidateUnlock,
-    file_path: &str,
-    expected_prefix: Option<&[u8]>,
-) -> bool {
-    let reader: Box<dyn EvidenceReader> =
-        Box::new(E01Reader::open(e01_path).expect("reopen E01 for candidate"));
-    let window = PartitionWindowReader::new(reader, partition.offset, Some(partition.length))
-        .expect("rebuild bounded partition window");
-    let info = window.info().clone();
-    let inner = match pending.reader(window) {
-        Ok(reader) => reader,
-        Err(_) => return false,
-    };
-    let plaintext = CandidateEvidenceReader { inner, info };
-    let fs = match fs_ntfs::NtfsReader::open(Box::new(plaintext), 0) {
-        Ok(reader) => reader,
-        Err(_) => return false,
-    };
-    let mut file = match fs.open_file(file_path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let mut prefix = [0u8; 8];
-    file.read_exact(&mut prefix).is_ok()
-        && expected_prefix.is_none_or(|expected| prefix.starts_with(expected))
 }
 
 #[test]

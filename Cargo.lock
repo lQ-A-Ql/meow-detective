@@ -2865,7 +2865,6 @@ dependencies = [
 name = "memory-windows"
 version = "0.1.0"
 dependencies = [
- "memchr",
  "tempfile",
  "thiserror 2.0.18",
  "volume-bitlocker",

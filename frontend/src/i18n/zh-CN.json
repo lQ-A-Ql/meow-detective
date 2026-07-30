@@ -89,6 +89,10 @@
         "lock": "锁定运行时卷",
         "forget": "删除安全存储中的已验证密钥",
         "catalogSummary": "已导入 {{files}} 个文件、{{directories}} 个目录",
+        "reconstructionRecovered": "已从内存 VMK 重构恢复密码（瞬态显示，未持久化）",
+        "reconstructionUnavailable": "内存 VMK 无法重构恢复密码",
+        "copyRecoveryPassword": "复制恢复密码",
+        "recoveryPasswordCopied": "已复制",
         "error": "BitLocker 操作失败，请查看错误抽屉中的详细信息。"
       }
     }

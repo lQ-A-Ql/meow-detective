@@ -18,18 +18,71 @@ pub enum MemoryWindowsError {
     PageNotPresent { address: u64 },
     #[error("page-table entry for virtual address {address:#X} points outside the memory image")]
     InvalidPageFrame { address: u64 },
-    #[error("no valid KDBG candidate was found in the memory image")]
-    KdbgNotFound,
     #[error("no valid x64 processor start block was found in the low-memory region")]
     ProcessorStartBlockNotFound,
-    #[error("no kernel page-table root could be validated from the KDBG candidates")]
-    KernelAddressSpaceNotFound,
-    #[error("kernel page-table traversal exceeded the bounded table budget")]
-    PageTableBudgetExceeded,
     #[error("kernel module list is malformed or cyclic")]
     MalformedModuleList,
     #[error("kernel module PE headers are malformed")]
     MalformedPe,
+    #[error("targeted BitLocker scan limit is invalid: {reason}")]
+    InvalidTargetedScanLimit { reason: &'static str },
+    #[error("targeted BitLocker scan exceeded its {resource} limit of {limit}")]
+    TargetedScanBudgetExceeded { resource: &'static str, limit: u64 },
+    #[error("targeted kernel image was not found within the bounded virtual search")]
+    TargetedKernelImageNotFound,
+    #[error("targeted kernel discovery uses a different CR3 than the supplied address space")]
+    TargetedAddressSpaceMismatch,
+    #[error("targeted BitLocker scan did not find fvevol.sys in the trusted module list")]
+    TargetedFvevolNotFound,
+    #[error(
+        "targeted kernel identity does not match the selected layout profile: expected timestamp {expected_timestamp:#X}, image size {expected_size:#X}; actual timestamp {actual_timestamp:#X}, image size {actual_size:#X}"
+    )]
+    TargetedKernelIdentityMismatch {
+        expected_timestamp: u32,
+        expected_size: u32,
+        actual_timestamp: u32,
+        actual_size: u32,
+    },
+    #[error(
+        "fvevol module size {module_size:#X} does not match its mapped PE SizeOfImage {pe_size:#X}"
+    )]
+    TargetedModuleImageSizeMismatch { module_size: u32, pe_size: u32 },
+    #[error("targeted kernel CodeView identity does not match the selected layout profile")]
+    TargetedKernelCodeViewMismatch,
+    #[error("fvevol PE identity does not match the selected layout profile")]
+    TargetedFvevolIdentityMismatch,
+    #[error("fvevol CodeView identity does not match the selected layout profile")]
+    TargetedFvevolCodeViewMismatch,
+    #[error("the selected Windows build does not have a reviewed BitLocker memory profile")]
+    UnsupportedBitLockerMemoryProfile,
+    #[error("the Windows object directory is malformed or incomplete")]
+    MalformedObjectDirectory,
+    #[error("the named kernel object '{name}' was not found")]
+    NamedKernelObjectNotFound { name: &'static str },
+    #[error("the named kernel object '{name}' is ambiguous")]
+    AmbiguousNamedKernelObject { name: &'static str },
+    #[error("the FVEVol driver object does not match the reviewed profile")]
+    MalformedFvevolDriverObject,
+    #[error("the FVEVol driver client extension was not found")]
+    FvevolClientExtensionNotFound,
+    #[error("multiple FVEVol driver client extensions matched the reviewed identity")]
+    AmbiguousFvevolClientExtension,
+    #[error("the FVEVol BitLocker keyring was not found")]
+    BitLockerKeyringNotFound,
+    #[error("the FVEVol BitLocker keyring is malformed")]
+    MalformedBitLockerKeyring,
+    #[error("the BitLocker keyring does not contain the target volume dataset")]
+    BitLockerVolumeDatasetNotFound,
+    #[error("multiple BitLocker keyring datasets match the target volume")]
+    AmbiguousBitLockerVolumeDataset,
+    #[error("the target BitLocker keyring dataset does not contain an exact VMK datum")]
+    BitLockerVmkDatumNotFound,
+    #[error("the target BitLocker keyring dataset contains multiple VMK datums")]
+    AmbiguousBitLockerVmkDatum,
+    #[error("the FVEVol device-object chain does not match the reviewed profile")]
+    MalformedFvevolDeviceChain,
+    #[error("no exact VMK datum was present in the reviewed FVEVol volume contexts")]
+    BitLockerDeviceVmkNotFound,
 }
 
 pub type Result<T> = std::result::Result<T, MemoryWindowsError>;

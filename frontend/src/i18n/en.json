@@ -89,6 +89,10 @@
         "lock": "Lock runtime volume",
         "forget": "Delete verified key from secure storage",
         "catalogSummary": "Imported {{files}} files and {{directories}} directories",
+        "reconstructionRecovered": "Recovery password reconstructed from the in-memory VMK (transient, not persisted)",
+        "reconstructionUnavailable": "The in-memory VMK cannot reconstruct the recovery password",
+        "copyRecoveryPassword": "Copy recovery password",
+        "recoveryPasswordCopied": "Copied",
         "error": "BitLocker operation failed. See the error drawer for details."
       }
     }

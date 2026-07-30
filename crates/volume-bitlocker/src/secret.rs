@@ -33,6 +33,53 @@ pub struct Passphrase {
     inner: Zeroizing<String>,
 }
 
+/// A structurally recovered 256-bit BitLocker volume master key.
+///
+/// This type is an internal handoff between the Windows memory parser and the
+/// metadata authentication path. Construction does not by itself prove that the
+/// bytes belong to a volume; only a successful reverse-datum CCM tag does that.
+pub struct RecoveredVmk {
+    inner: Zeroizing<[u8; 32]>,
+}
+
+impl RecoveredVmk {
+    /// Moves an exact-size VMK into zeroizing storage.
+    #[must_use]
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self {
+            inner: Zeroizing::new(bytes),
+        }
+    }
+
+    pub(crate) fn expose_for_recovery(&self) -> &[u8; 32] {
+        &self.inner
+    }
+}
+
+/// A recovered 48-digit numerical recovery password.
+///
+/// The value is process-lifetime only. It must not be persisted, logged,
+/// reported, or placed in application state. The single authorized reveal
+/// boundary is the transient memory-unlock command response shown to the
+/// investigator; it must never reach logs, reports, exports, or storage.
+pub struct RecoveryPassword {
+    inner: Zeroizing<String>,
+}
+
+impl RecoveryPassword {
+    pub(crate) fn from_formatted(inner: String) -> Self {
+        Self {
+            inner: Zeroizing::new(inner),
+        }
+    }
+
+    /// Exposes the password only to an explicitly authorized reveal boundary.
+    #[must_use]
+    pub fn expose_for_authorized_reveal(&self) -> &str {
+        &self.inner
+    }
+}
+
 impl Passphrase {
     /// Takes ownership of a credential string.
     ///

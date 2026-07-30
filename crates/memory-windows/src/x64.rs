@@ -1,16 +1,22 @@
-use crate::{physical::PAGE_SIZE, MemoryWindowsError, RawMemoryImage, Result};
+use std::collections::HashMap;
+
+use crate::{
+    physical::{PhysicalReadStats, PAGE_SIZE},
+    MemoryWindowsError, RawMemoryImage, Result,
+};
 
 const PRESENT: u64 = 1;
 const LARGE_PAGE: u64 = 1 << 7;
 const PAGE_FRAME_MASK: u64 = 0x000F_FFFF_FFFF_F000;
 const ONE_GIB_PAGE_MASK: u64 = 0x000F_FFFF_C000_0000;
 const TWO_MIB_PAGE_MASK: u64 = 0x000F_FFFF_FFE0_0000;
-const MAX_PAGE_TABLE_WALK_PAGES: usize = 100_000;
+const MAX_PAGE_TABLE_CACHE_PAGES: usize = 4_096;
 
 /// A four-level x64 virtual address space backed by a raw physical image.
 pub struct X64AddressSpace {
     image: RawMemoryImage,
     directory_table_base: u64,
+    page_table_cache: HashMap<u64, [u8; PAGE_SIZE]>,
 }
 
 impl X64AddressSpace {
@@ -27,6 +33,7 @@ impl X64AddressSpace {
         Ok(Self {
             image,
             directory_table_base,
+            page_table_cache: HashMap::new(),
         })
     }
 
@@ -38,6 +45,11 @@ impl X64AddressSpace {
     #[must_use]
     pub fn image_len(&self) -> u64 {
         self.image.len()
+    }
+
+    #[must_use]
+    pub fn physical_read_stats(&self) -> PhysicalReadStats {
+        self.image.read_stats()
     }
 
     pub fn read_virtual_exact(&mut self, address: u64, buffer: &mut [u8]) -> Result<()> {
@@ -66,119 +78,75 @@ impl X64AddressSpace {
     }
 
     pub fn translate(&mut self, address: u64) -> Result<u64> {
-        translate_raw(&mut self.image, self.directory_table_base, address)
-    }
-
-    /// Finds virtual aliases for one physical byte by traversing only present
-    /// page-table entries. The traversal is depth- and allocation-bounded.
-    pub fn find_virtual_aliases(
-        &mut self,
-        physical_address: u64,
-        maximum_matches: usize,
-    ) -> Result<Vec<u64>> {
-        let mut state = AliasWalkState {
-            target_page: physical_address & PAGE_FRAME_MASK,
-            target_offset: physical_address & 0xFFF,
-            maximum_matches,
-            visited_count: 0,
-            matches: Vec::new(),
-        };
-        walk_table(&mut self.image, self.directory_table_base, 4, 0, &mut state)?;
-        Ok(state.matches)
+        translate_cached(
+            &mut self.image,
+            &mut self.page_table_cache,
+            self.directory_table_base,
+            address,
+        )
     }
 }
 
-struct AliasWalkState {
-    target_page: u64,
-    target_offset: u64,
-    maximum_matches: usize,
-    visited_count: usize,
-    matches: Vec<u64>,
-}
-
-fn walk_table(
+fn translate_cached(
     image: &mut RawMemoryImage,
-    table_physical: u64,
-    level: u8,
-    virtual_prefix: u64,
-    state: &mut AliasWalkState,
-) -> Result<()> {
-    if state.matches.len() >= state.maximum_matches || state.maximum_matches == 0 {
-        return Ok(());
+    cache: &mut HashMap<u64, [u8; PAGE_SIZE]>,
+    directory_table_base: u64,
+    address: u64,
+) -> Result<u64> {
+    if !is_canonical_address(address) {
+        return Err(MemoryWindowsError::NonCanonicalAddress { address });
     }
-    state.visited_count += 1;
-    if state.visited_count > MAX_PAGE_TABLE_WALK_PAGES {
-        return Err(MemoryWindowsError::PageTableBudgetExceeded);
+    let image_len = image.len();
+    let pml4_entry = cached_entry(
+        image,
+        cache,
+        directory_table_base,
+        index(address, 39),
+        address,
+    )?;
+    let pdpt_base = present_frame(pml4_entry, address, image_len)?;
+    let pdpt_entry = cached_entry(image, cache, pdpt_base, index(address, 30), address)?;
+    if pdpt_entry & LARGE_PAGE != 0 {
+        return large_page_address(pdpt_entry, address, ONE_GIB_PAGE_MASK, 30, image_len);
     }
-    let table = image.read_page(table_physical)?;
-    let shift = match level {
-        4 => 39,
-        3 => 30,
-        2 => 21,
-        1 => 12,
-        _ => return Err(MemoryWindowsError::PageTableBudgetExceeded),
-    };
-    for index in 0..512usize {
-        if state.matches.len() >= state.maximum_matches {
-            break;
-        }
-        let start = index * 8;
-        let entry = u64::from_le_bytes(table[start..start + 8].try_into().expect("u64 slice"));
-        if entry & PRESENT == 0 {
-            continue;
-        }
-        let next_prefix = virtual_prefix | ((index as u64) << shift);
-        if level == 1 {
-            if entry & PAGE_FRAME_MASK == state.target_page {
-                state
-                    .matches
-                    .push(canonicalize_48_bit(next_prefix | state.target_offset));
-            }
-            continue;
-        }
-        if entry & LARGE_PAGE != 0 {
-            if matches_large_page(entry, level, state.target_page) {
-                let (mask, page_shift) = if level == 3 {
-                    (ONE_GIB_PAGE_MASK, 30)
-                } else {
-                    (TWO_MIB_PAGE_MASK, 21)
-                };
-                let physical_base = entry & mask;
-                let relative = state.target_page - physical_base + state.target_offset;
-                state.matches.push(canonicalize_48_bit(
-                    next_prefix | (relative & ((1 << page_shift) - 1)),
-                ));
-            }
-            continue;
-        }
-        let child = entry & PAGE_FRAME_MASK;
-        if child
-            .checked_add(PAGE_SIZE as u64)
-            .is_some_and(|end| end <= image.len())
-        {
-            walk_table(image, child, level - 1, next_prefix, state)?;
-        }
+    let pd_base = present_frame(pdpt_entry, address, image_len)?;
+    let pd_entry = cached_entry(image, cache, pd_base, index(address, 21), address)?;
+    if pd_entry & LARGE_PAGE != 0 {
+        return large_page_address(pd_entry, address, TWO_MIB_PAGE_MASK, 21, image_len);
     }
-    Ok(())
+    let pt_base = present_frame(pd_entry, address, image_len)?;
+    let pt_entry = cached_entry(image, cache, pt_base, index(address, 12), address)?;
+    let page_base = present_frame(pt_entry, address, image_len)?;
+    Ok(page_base | (address & 0xFFF))
 }
 
-fn matches_large_page(entry: u64, level: u8, target_page: u64) -> bool {
-    let (base, size) = if level == 3 {
-        (entry & ONE_GIB_PAGE_MASK, 1_u64 << 30)
-    } else if level == 2 {
-        (entry & TWO_MIB_PAGE_MASK, 1_u64 << 21)
+fn cached_entry(
+    image: &mut RawMemoryImage,
+    cache: &mut HashMap<u64, [u8; PAGE_SIZE]>,
+    table: u64,
+    index: u64,
+    address: u64,
+) -> Result<u64> {
+    let table = table & PAGE_FRAME_MASK;
+    let page = if let Some(page) = cache.get(&table) {
+        *page
     } else {
-        return false;
+        let page = image.read_page(table)?;
+        if cache.len() < MAX_PAGE_TABLE_CACHE_PAGES {
+            cache.insert(table, page);
+        }
+        page
     };
-    target_page >= base && target_page < base + size
-}
-
-fn canonicalize_48_bit(address: u64) -> u64 {
-    if address & (1 << 47) != 0 {
-        address | 0xFFFF_0000_0000_0000
-    } else {
-        address
-    }
+    let start = usize::try_from(index)
+        .ok()
+        .and_then(|index| index.checked_mul(8))
+        .ok_or(MemoryWindowsError::InvalidPageFrame { address })?;
+    let bytes = page
+        .get(start..start + 8)
+        .ok_or(MemoryWindowsError::InvalidPageFrame { address })?;
+    Ok(u64::from_le_bytes(bytes.try_into().map_err(|_| {
+        MemoryWindowsError::InvalidPageFrame { address }
+    })?))
 }
 
 pub(crate) fn translate_raw(

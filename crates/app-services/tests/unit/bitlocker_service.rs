@@ -107,6 +107,26 @@ fn memory_candidate_failure_has_a_stable_secret_free_command_contract() {
         .contains("key bytes"));
 }
 
+#[test]
+fn unreviewed_memory_build_is_typed_unsupported() {
+    let error = BitLockerServiceError::MemoryImage(
+        memory_windows::MemoryWindowsError::TargetedKernelIdentityMismatch {
+            expected_timestamp: 1,
+            expected_size: 2,
+            actual_timestamp: 3,
+            actual_size: 4,
+        },
+    );
+
+    assert_eq!(error.code(), Some("BITLOCKER_MEMORY_PROFILE_UNSUPPORTED"));
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Unsupported
+    ));
+    assert_eq!(error.recoverable(), Some(false));
+    assert!(error.safe_details().is_none());
+}
+
 #[derive(Default)]
 struct TestKeyStore {
     blobs: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,

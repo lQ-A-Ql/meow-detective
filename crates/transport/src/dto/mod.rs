@@ -66,7 +66,10 @@ pub use android::{
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
-pub use bitlocker::{BitLockerCatalogImportDto, BitLockerProtectorDto, BitLockerVolumeStatusDto};
+pub use bitlocker::{
+    BitLockerCatalogImportDto, BitLockerProtectorDto, BitLockerVolumeStatusDto,
+    RecoveryPasswordReconstructionDto,
+};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,

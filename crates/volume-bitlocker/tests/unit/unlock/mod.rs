@@ -9,6 +9,8 @@ mod support;
 use std::io::Cursor;
 
 use super::*;
+use crate::secret::RecoveredVmk;
+use crate::unlock_vmk::unlock_volume_with_recovered_vmk;
 use crate::EncryptionMethod;
 use support::{build_volume, Credential, VolumeSpec, META_BLOCK_OFFSET, TEST_ITERATIONS};
 
@@ -81,6 +83,33 @@ fn reads_the_identity_of_a_synthetic_volume() {
         .metadata
         .protector_inventory()
         .has_unlockable_protector());
+}
+
+#[test]
+fn recovered_vmk_must_authenticate_the_wrapped_fvek() {
+    let volume = build_volume(&VolumeSpec {
+        method: 0x8002,
+        fvek_len: 16,
+        with_tweak: false,
+        protectors: &[Credential::Recovery(TEST_RECOVERY)],
+        inventory_only: &[],
+        with_fvek_entry: true,
+        with_block_signature: true,
+        iterations: TEST_ITERATIONS,
+        with_encrypted_content: false,
+    });
+    let mut reader = std::io::Cursor::new(volume.image.clone());
+    let unlock = unlock_volume_with_recovered_vmk(&mut reader, &RecoveredVmk::new([0x44; 32]))
+        .expect("the structurally recovered VMK must authenticate the FVEK");
+    assert_eq!(unlock.identity().metadata.encryption_method_code, 0x8002);
+
+    let mut reader = std::io::Cursor::new(volume.image);
+    let error = match unlock_volume_with_recovered_vmk(&mut reader, &RecoveredVmk::new([0x45; 32]))
+    {
+        Ok(_) => panic!("a wrong VMK must fail the FVEK CCM tag"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, BitLockerError::CredentialRejected));
 }
 
 #[test]

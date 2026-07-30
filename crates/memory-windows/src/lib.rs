@@ -1,34 +1,33 @@
 //! Bounded, read-only primitives for raw Windows x64 memory images.
 //!
-//! This crate deliberately provides only physical reads, page-table translation,
-//! kernel-module discovery, tagged pool inventory, and bounded BitLocker key
-//! candidate recognition. It has no Tauri or storage dependency, and it never
+//! This crate provides bounded physical reads, page-table translation, profiled
+//! kernel-module discovery, and exact BitLocker object traversal. It has no
+//! Tauri or storage dependency, performs no pool or AES-schedule scan, and never
 //! serializes secret-bearing data.
 
 #![forbid(unsafe_code)]
 
-mod aes_schedule;
-mod bitlocker;
 mod bootstrap;
 mod error;
-mod kernel;
+mod keyring_recovery;
 mod physical;
-mod pool;
+mod targeted_kernel;
 mod x64;
 
-pub use bitlocker::{
-    scan_bitlocker_key_candidates, AesKeyBits, BitLockerKeyCandidate, BitLockerPoolTag,
-};
 pub use bootstrap::{
     discover_directory_table_base, find_processor_start_blocks, ProcessorStartBlock,
 };
 pub use error::{MemoryWindowsError, Result};
-pub use kernel::{
-    discover_kernel, find_kdbg_candidates, KdbgCandidate, KernelDiscovery, KernelModule,
-    PeCodeViewIdentity,
+pub use keyring_recovery::{
+    recover_vmks_structurally, BitLockerMemoryProfile, BitLockerMemoryRecovery,
 };
-pub use physical::RawMemoryImage;
-pub use pool::{scan_pool_tag, PoolAllocation};
+pub use physical::{PhysicalReadStats, RawMemoryImage};
+pub use targeted_kernel::{
+    discover_kernel_from_entry, discover_kernel_from_processor_start_block,
+    LoadedModuleEntryLayout, TargetedCodeViewIdentity, TargetedKernelDiscovery,
+    TargetedKernelIdentity, TargetedKernelLayoutProfile, TargetedKernelPeImage,
+    TargetedKernelSearchLimits, TargetedKernelSearchReport,
+};
 pub use x64::{is_canonical_address, X64AddressSpace};
 
 #[cfg(test)]

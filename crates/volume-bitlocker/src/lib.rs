@@ -42,14 +42,15 @@ mod guid;
 mod header;
 mod kdf;
 mod layout;
-mod memory_candidate;
 mod metadata;
 mod method;
 mod persisted_key;
 mod protector;
 mod reader;
+mod recovery_password;
 mod secret;
 mod unlock;
+mod unlock_vmk;
 
 pub use cipher::SectorCipher;
 pub use error::{BitLockerError, Result};
@@ -58,14 +59,18 @@ pub use guid::format_guid;
 pub use header::{HeaderVariant, VolumeHeader};
 pub use kdf::RecoveryPasswordError;
 pub use layout::VolumeLayout;
-pub use memory_candidate::{build_memory_candidate_unlock, MemoryCandidateUnlock, RecoveredAesKey};
 pub use metadata::{FveMetadata, MetadataEntry};
 pub use method::EncryptionMethod;
 pub use protector::{ProtectorInventory, ProtectorKind};
 pub use reader::{BitLockerReader, UnlockedVolume};
-pub use secret::{Passphrase, PersistedKeyBlob};
+pub use recovery_password::{
+    recover_recovery_password, recovery_password_protectors, RecoveredRecoveryPassword,
+    RecoveryPasswordProtectorIdentity, RecoveryPasswordProvenance, RecoveryPasswordRecoveryError,
+};
+pub use secret::{Passphrase, PersistedKeyBlob, RecoveredVmk, RecoveryPassword};
 pub use unlock::{
     read_volume_identities, read_volume_identity, restore_volume_from_persisted_key,
     unlock_volume_with_password, unlock_volume_with_recovery_password, VerifiedUnlock,
     VolumeIdentity,
 };
+pub use unlock_vmk::unlock_volume_with_recovered_vmk;

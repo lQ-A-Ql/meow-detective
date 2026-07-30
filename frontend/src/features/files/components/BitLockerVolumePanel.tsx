@@ -1,4 +1,4 @@
-import { KeyRound, LockKeyhole, MemoryStick, RefreshCw, ShieldCheck, Unlock } from 'lucide-react';
+import { Copy, KeyRound, LockKeyhole, MemoryStick, RefreshCw, ShieldCheck, Unlock } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -17,13 +17,22 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
   const { t } = useTranslation();
   const [method, setMethod] = useState<BitLockerUnlockMethod>('password');
   const [credential, setCredential] = useState('');
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const status = model.status;
   const canSubmit = Boolean(credential) && !model.unlocking && !model.memoryUnlocking;
+  const reconstruction = status?.recoveryPasswordReconstruction;
 
   const submitCredential = () => {
     const submitted = credential;
     setCredential('');
     void model.unlock(method, submitted);
+  };
+
+  const copyRecoveredPassword = (password: string) => {
+    void navigator.clipboard?.writeText(password).then(() => {
+      setPasswordCopied(true);
+      window.setTimeout(() => setPasswordCopied(false), 1500);
+    });
   };
 
   return (
@@ -75,6 +84,43 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
               <span className="text-forensics-text">{status.plaintextFilesystem}</span>
             </>
           ) : null}
+        </div>
+      ) : null}
+
+      {reconstruction ? (
+        <div className="space-y-1 border-t border-forensics-border pt-2">
+          {reconstruction.status === 'recovered' && reconstruction.password ? (
+            <>
+              <div className="text-[10px] text-forensics-success">
+                {t('fileBrowser.inspector.bitlocker.reconstructionRecovered')}
+              </div>
+              <div className="flex items-center gap-1">
+                <code className="flex-1 select-all break-all font-mono text-[10px] leading-4 text-forensics-text">
+                  {reconstruction.password}
+                </code>
+                <Button
+                  type="button"
+                  variant="viewerControl"
+                  size="iconXs"
+                  onClick={() => copyRecoveredPassword(reconstruction.password ?? '')}
+                  aria-label={t('fileBrowser.inspector.bitlocker.copyRecoveryPassword')}
+                  title={t('fileBrowser.inspector.bitlocker.copyRecoveryPassword')}
+                >
+                  <Copy size={11} />
+                </Button>
+              </div>
+              {passwordCopied ? (
+                <div className="text-[10px] text-forensics-success">
+                  {t('fileBrowser.inspector.bitlocker.recoveryPasswordCopied')}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="text-[10px] leading-4 text-forensics-muted-light">
+              {t('fileBrowser.inspector.bitlocker.reconstructionUnavailable')}
+              {reconstruction.reason ? `：${reconstruction.reason}` : ''}
+            </div>
+          )}
         </div>
       ) : null}
 

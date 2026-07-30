@@ -37,6 +37,7 @@ pub(crate) fn build_status(
         stored_key_available,
         protectors,
         plaintext_filesystem,
+        recovery_password_reconstruction: None,
     }
 }
 

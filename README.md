@@ -4,7 +4,10 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 29 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`。
+
+当前工程事实快照：10 frontend pages、113 Tauri commands、28 source modules、migration scripts (71)、94 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+
 ## 功能简介
 
 ### 证据导入与文件浏览
@@ -163,18 +166,16 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    MEM["只读 Windows x64 内存镜像"] --> SCAN["有界物理页与 pool 扫描"]
+    MEM["只读 Windows x64 内存镜像"] --> BOOT["首 1 MiB 启动结构\nCR3 与内核入口"]
+    BOOT --> SCAN["fvevol 相关虚拟页\n有界定向扫描"]
     SCAN --> KEY["AES 扩展密钥候选"]
-    SCAN --> CRED["恢复密码/密码候选\n严格数量上限"]
     KEY --> VERIFY["卷级验证\nNTFS boot/MFT/$UpCase/$Bitmap"]
-    CRED --> AUTH["现有 BitLocker KDF + AES-CCM 认证"]
-    AUTH --> VERIFY
     VERIFY -->|"成功"| RUNTIME["只读运行时解锁注册表\n安全持久化已验证密钥包"]
     VERIFY -->|"失败"| REJECT["拒绝候选\n不记录密钥材料"]
     RUNTIME --> PREVIEW["文件树、预览与提取"]
 ```
 
-该链路不把 FVEK、VMK、AES schedule 或未验证候选写入日志、报告、案件数据库或前端。只有经过卷级认证的运行时解锁状态才可用于后续只读访问。
+该链路不把 FVEK、VMK、AES schedule 或未验证候选写入日志、报告、案件数据库或前端。只有经过卷级认证的运行时解锁状态才可用于后续只读访问；现有内存解锁 command 只返回卷状态，当前不提供恢复密码/用户密码恢复 command、DTO 或 UI。
 
 ## 开发模式运行
 
@@ -275,6 +276,8 @@ cargo tauri build
 - [解析器支持矩阵](docs/parser-support-matrix.md)
 - [MCP 安全模型](docs/mcp-security-model.md)
 - [导出与媒体安全](docs/export-and-media-safety.md)
+
+性能门禁的结构化事实源为 `testdata/governance/v2-benchmark-baseline.json`。
 
 ## 许可证
 

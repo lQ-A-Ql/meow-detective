@@ -27,6 +27,8 @@ pub enum BitLockerServiceError {
     KeyStore(#[from] super::BitLockerKeyStoreError),
     #[error("BitLocker plaintext filesystem is unsupported: {0}")]
     UnsupportedFilesystem(String),
+    #[error("BitLocker plaintext filesystem validation failed: {0}")]
+    PlaintextValidation(#[source] std::io::Error),
     #[error("BitLocker catalog root state is inconsistent: {0}")]
     CatalogState(String),
     #[error("BitLocker preview reads did not drain before the lock timeout")]
@@ -39,7 +41,7 @@ pub enum BitLockerServiceError {
     PreviewRuntime(#[from] crate::file_service::FileServiceError),
     #[error(transparent)]
     MemoryImage(#[from] memory_windows::MemoryWindowsError),
-    #[error("no memory-recovered BitLocker key candidate passed volume-bound validation")]
+    #[error("the structurally recovered BitLocker VMK did not pass volume-bound validation")]
     MemoryKeyNotValidated,
 }
 
@@ -53,6 +55,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
                 ErrorCategory::Unsupported
             }
             Self::InvalidWindow(_) | Self::EvidenceOpen(_) | Self::Database(_) => ErrorCategory::Io,
+            Self::PlaintextValidation(_) => ErrorCategory::Parser,
             Self::Volume(error) => volume_error_category(error),
             Self::KeyStore(super::BitLockerKeyStoreError::Unsupported) => {
                 ErrorCategory::Unsupported
@@ -72,6 +75,9 @@ impl ServiceErrorCategory for BitLockerServiceError {
             | Self::PreviewRuntime(_) => ErrorCategory::Internal,
             Self::MemoryImage(memory_windows::MemoryWindowsError::PhysicalRead { .. }) => {
                 ErrorCategory::Io
+            }
+            Self::MemoryImage(error) if is_unsupported_memory_profile(error) => {
+                ErrorCategory::Unsupported
             }
             Self::MemoryImage(_) => ErrorCategory::Parser,
             Self::MemoryKeyNotValidated => ErrorCategory::Security,
@@ -99,11 +105,15 @@ impl ServiceErrorCategory for BitLockerServiceError {
             }
             Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(error)) => Some(error.code()),
             Self::UnsupportedFilesystem(_) => Some("BITLOCKER_FILESYSTEM_UNSUPPORTED"),
+            Self::PlaintextValidation(_) => Some("BITLOCKER_PLAINTEXT_VALIDATION_FAILED"),
             Self::CatalogState(_) => Some("BITLOCKER_CATALOG_STATE_INVALID"),
             Self::DrainTimeout => Some("BITLOCKER_LOCK_TIMEOUT"),
             Self::StoredKeyNotFound => Some("BITLOCKER_STORED_KEY_NOT_FOUND"),
             Self::PersistedKeyFingerprintMismatch => {
                 Some("BITLOCKER_PERSISTED_KEY_FINGERPRINT_MISMATCH")
+            }
+            Self::MemoryImage(error) if is_unsupported_memory_profile(error) => {
+                Some("BITLOCKER_MEMORY_PROFILE_UNSUPPORTED")
             }
             Self::MemoryImage(_) => Some("BITLOCKER_MEMORY_IMAGE_INVALID"),
             Self::MemoryKeyNotValidated => Some("BITLOCKER_MEMORY_KEY_NOT_VALIDATED"),
@@ -133,8 +143,11 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::KeyStore(super::BitLockerKeyStoreError::Platform { .. }) => {
                 Some("Windows Credential Manager could not complete the BitLocker key operation")
             }
-            Self::MemoryKeyNotValidated => Some(
-                "No memory-recovered BitLocker key candidate could be validated against the volume",
+            Self::MemoryKeyNotValidated => {
+                Some("The memory-recovered BitLocker key could not be validated against the volume")
+            }
+            Self::MemoryImage(error) if is_unsupported_memory_profile(error) => Some(
+                "This Windows memory build does not have a reviewed BitLocker recovery profile",
             ),
             Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => {
                 Some("The stored BitLocker key package is invalid")
@@ -154,6 +167,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::KeyStore(super::BitLockerKeyStoreError::Unsupported)
             | Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => Some(false),
             Self::MemoryKeyNotValidated => Some(true),
+            Self::MemoryImage(error) if is_unsupported_memory_profile(error) => Some(false),
             _ => None,
         }
     }
@@ -166,6 +180,17 @@ impl ServiceErrorCategory for BitLockerServiceError {
             _ => None,
         }
     }
+}
+
+fn is_unsupported_memory_profile(error: &memory_windows::MemoryWindowsError) -> bool {
+    matches!(
+        error,
+        memory_windows::MemoryWindowsError::TargetedKernelIdentityMismatch { .. }
+            | memory_windows::MemoryWindowsError::TargetedKernelCodeViewMismatch
+            | memory_windows::MemoryWindowsError::TargetedFvevolIdentityMismatch
+            | memory_windows::MemoryWindowsError::TargetedFvevolCodeViewMismatch
+            | memory_windows::MemoryWindowsError::UnsupportedBitLockerMemoryProfile
+    )
 }
 
 fn volume_error_category(error: &volume_bitlocker::BitLockerError) -> ErrorCategory {

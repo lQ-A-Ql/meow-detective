@@ -97,4 +97,52 @@ describe('BitLockerVolumePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /从内存镜像恢复并验证/ }));
     expect(unlockFromMemoryImage).toHaveBeenCalledTimes(1);
   });
+
+  it('shows the reconstructed recovery password with a copy action', () => {
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({
+          status: {
+            ...model().status!,
+            unlocked: true,
+            recoveryPasswordReconstruction: {
+              status: 'recovered',
+              password: '111111-222222-333333-444444-555555-666666-777777-888888',
+              volumeGuid: '{VOLUME}',
+              protectorGuid: '{PROTECTOR}',
+              reverseDatumFingerprint: 'abcdef0123456789',
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/已从内存 VMK 重构恢复密码/)).toBeInTheDocument();
+    expect(
+      screen.getByText('111111-222222-333333-444444-555555-666666-777777-888888'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '复制恢复密码' })).toBeInTheDocument();
+  });
+
+  it('shows the explicit reason when reconstruction is unavailable', () => {
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({
+          status: {
+            ...model().status!,
+            unlocked: true,
+            recoveryPasswordReconstruction: {
+              status: 'unavailable',
+              reason: "the active VMK does not authenticate any recovery protector's reverse datum",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/内存 VMK 无法重构恢复密码/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '复制恢复密码' })).not.toBeInTheDocument();
+  });
 });

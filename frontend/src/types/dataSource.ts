@@ -84,6 +84,21 @@ export interface BitLockerVolumeStatus {
   supportsRecoveryPassword: boolean;
   storedKeyAvailable: boolean;
   plaintextFilesystem?: string;
+  recoveryPasswordReconstruction?: RecoveryPasswordReconstruction;
+}
+
+/**
+ * Transient reveal carried only by memory-image unlock responses. The
+ * password (when present) is a live secret shown to the investigator; it is
+ * never persisted or reported.
+ */
+export interface RecoveryPasswordReconstruction {
+  status: 'recovered' | 'unavailable';
+  password?: string;
+  volumeGuid?: string;
+  protectorGuid?: string;
+  reverseDatumFingerprint?: string;
+  reason?: string;
 }
 
 export interface BitLockerCatalogImport {

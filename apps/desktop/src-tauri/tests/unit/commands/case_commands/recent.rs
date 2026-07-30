@@ -1,5 +1,5 @@
 use super::super::{
-    lifecycle::meta_to_dto,
+    lifecycle_support::meta_to_dto,
     recent::{read_recent_cases, recent_cases_path, remember_recent_case, save_recent_cases},
 };
 use app_services::case_service;

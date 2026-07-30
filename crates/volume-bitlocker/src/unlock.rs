@@ -65,6 +65,13 @@ impl VerifiedUnlock {
         (self.identity, self.volume)
     }
 
+    /// Borrows the verified plaintext-volume capability for an additional
+    /// read-only validation reader without exposing raw key bytes.
+    #[must_use]
+    pub fn shared_unlocked_volume(&self) -> Arc<UnlockedVolume> {
+        Arc::clone(&self.volume)
+    }
+
     /// Exports the verified key material into the bounded v1 storage envelope.
     /// The raw FVEK remains inaccessible to application and transport layers.
     #[must_use]
@@ -239,7 +246,7 @@ fn unlock_volume_with_hash<R: Read + Seek>(
     )
 }
 
-fn retain_preferred_error(slot: &mut Option<BitLockerError>, candidate: BitLockerError) {
+pub(crate) fn retain_preferred_error(slot: &mut Option<BitLockerError>, candidate: BitLockerError) {
     let candidate_rank = unlock_error_rank(&candidate);
     let current_rank = slot.as_ref().map(unlock_error_rank).unwrap_or(0);
     if candidate_rank >= current_rank {
@@ -347,13 +354,22 @@ pub(crate) fn derive_key_package(
         aes_ccm_unwrap(&unwrap_key, &wrapped_vmk.data).ok_or(BitLockerError::CredentialRejected)?;
     let vmk_key = take_key::<32>(&vmk_container, 12, "volume master key")?;
 
+    derive_key_package_from_vmk_bytes(metadata, &vmk_key, fvek_len)
+}
+
+pub(crate) fn derive_key_package_from_vmk_bytes(
+    metadata: &FveMetadata,
+    vmk_key: &[u8; 32],
+    fvek_len: usize,
+) -> Result<VolumeKeyPackage> {
+    let method = metadata.encryption_method;
     let fvek_entry = metadata
         .fvek_entry()
         .ok_or_else(|| BitLockerError::MetadataUnreadable {
             reason: "metadata carries no FVEK entry".to_string(),
         })?;
     let fvek_container =
-        aes_ccm_unwrap(&vmk_key, &fvek_entry.data).ok_or(BitLockerError::CredentialRejected)?;
+        aes_ccm_unwrap(vmk_key, &fvek_entry.data).ok_or(BitLockerError::CredentialRejected)?;
 
     let fvek = take_key_slice(&fvek_container, 12, fvek_len, "FVEK")?;
     let tweak = if method.uses_diffuser_tweak() {

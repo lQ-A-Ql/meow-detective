@@ -17,6 +17,11 @@
        upstream commit, so a silent upstream refresh cannot pass.
     6. Transport DTOs must not contain password, recovery-password,
        credential, or passphrase fields.
+    7. The retired whole-image credential reconstruction command, scanner, DTO,
+       and frontend state must not return.
+    8. The production BitLocker service must use exact profiled object traversal.
+       Pool tags, AES schedules, pointer graphs, and whole-image byte scans are
+       prohibited production discovery mechanisms.
 
   Rule 1 is the one that matters most in practice: a single #[derive(Debug)] on a
   key type plus one tracing call is enough to write a volume key to disk.
@@ -37,7 +42,15 @@ $script:PinnedUpstreamCommit = '7c931d4be338a172de9799476eb744ba089e0867'
 
 # Types that hold credential or key material. Adding a secret type means adding
 # it here; the guard cannot infer secrecy from a name alone.
-$script:SecretTypeNames = @('Passphrase', 'VolumeKeyPackage', 'PersistedKeyBlob')
+$script:SecretTypeNames = @(
+  'Passphrase',
+  'VolumeKeyPackage',
+  'PersistedKeyBlob',
+  'RecoveredVmk',
+  'RecoveryPasswordMaterial',
+  'RecoveryPassword',
+  'RecoveredRecoveryPassword'
+)
 
 # Accessors that hand out secret bytes. Any of these appearing inside a logging
 # or formatting macro is a leak.
@@ -45,7 +58,10 @@ $script:SecretAccessors = @(
   'expose_for_derivation',
   'expose_fvek',
   'expose_tweak',
-  'expose_for_storage'
+  'expose_for_storage',
+  'expose_for_recovery',
+  'expose_for_formatting',
+  'expose_for_authorized_reveal'
 )
 
 function Read-Utf8Text {
@@ -250,6 +266,92 @@ function Find-SerializedSecretContractViolations {
   return $violations.ToArray()
 }
 
+function Find-RetiredMemoryCredentialRecoveryViolations {
+  param([Parameter(Mandatory = $true)][string]$Root)
+
+  $violations = New-Object System.Collections.Generic.List[string]
+  $retiredModule = Join-Path $Root 'crates/memory-windows/src/credential.rs'
+  if (Test-Path -LiteralPath $retiredModule -PathType Leaf) {
+    $violations.Add('[retired-memory-credential] crates/memory-windows/src/credential.rs must not return')
+  }
+
+  $pattern = 'recover_bitlocker_credential_from_memory|recoverBitLockerCredentialFromMemory|scan_bitlocker_memory_candidates|BitLockerCredentialCandidate|BitLockerRecoveredCredential|memoryCredentialRecovering|build_memory_candidate_unlock|MemoryCandidateUnlock|RecoveredAesKey'
+  foreach ($relativeRoot in @('crates', 'apps', 'frontend/src')) {
+    $path = Join-Path $Root $relativeRoot
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
+    foreach ($file in Get-ChildItem -LiteralPath $path -Recurse -File) {
+      if ($file.Extension -notin @('.rs', '.ts', '.tsx')) { continue }
+      if ($file.FullName -match '[\\/](tests?|test)[\\/]' -or $file.Name -match '\.(test|spec)\.') {
+        continue
+      }
+      $source = Read-Utf8Text -Path $file.FullName
+      if ($source -match $pattern) {
+        $relative = $file.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
+        $violations.Add("[retired-memory-credential] $relative references a retired recovery path")
+      }
+    }
+  }
+  return $violations.ToArray()
+}
+
+function Find-UnboundedMemoryScanViolations {
+  param([Parameter(Mandatory = $true)][string]$Root)
+
+  $violations = New-Object System.Collections.Generic.List[string]
+  $servicePath = Join-Path $Root 'crates/app-services/src/bitlocker_service/memory_recovery.rs'
+  if (-not (Test-Path -LiteralPath $servicePath -PathType Leaf)) {
+    return $violations.ToArray()
+  }
+
+  $source = Read-Utf8Text -Path $servicePath
+  if ($source -notmatch '(?<![A-Za-z0-9_])recover_vmks_structurally(?![A-Za-z0-9_])') {
+    $violations.Add(
+      '[structural-memory-recovery] app-services BitLocker recovery must use recover_vmks_structurally'
+    )
+  }
+  if ($source -match '(?<![A-Za-z0-9_])(scan_bitlocker_key_candidates|scan_bitlocker_memory_targeted|scan_bitlocker_memory_candidates)(?![A-Za-z0-9_])') {
+    $violations.Add(
+      '[unstructured-memory-scan] app-services BitLocker recovery references a prohibited candidate scanner'
+    )
+  }
+
+  $memorySource = Join-Path $Root 'crates/memory-windows/src'
+  if (-not (Test-Path -LiteralPath $memorySource -PathType Container)) {
+    return $violations.ToArray()
+  }
+  $retiredFiles = @('aes_schedule.rs', 'bitlocker.rs', 'pool.rs')
+  foreach ($name in $retiredFiles) {
+    if (Test-Path -LiteralPath (Join-Path $memorySource $name) -PathType Leaf) {
+      $violations.Add("[unstructured-memory-scan] crates/memory-windows/src/$name must not return")
+    }
+  }
+  $forbiddenIdentifiers = @(
+    'scan_bitlocker_key_candidates',
+    'scan_bitlocker_memory_targeted',
+    'scan_bitlocker_memory_candidates',
+    'scan_pool_tag',
+    'scan_pool_tags',
+    'scan_tag',
+    'scan_tags',
+    'scan_bytes',
+    'visit_pages',
+    'find_virtual_aliases',
+    'is_valid_aes_schedule'
+  )
+  $identifierPattern = '(?<![A-Za-z0-9_])(' + (($forbiddenIdentifiers | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')(?![A-Za-z0-9_])'
+  foreach ($file in Get-ChildItem -LiteralPath $memorySource -Recurse -File -Filter '*.rs') {
+    $memoryText = Read-Utf8Text -Path $file.FullName
+    foreach ($match in [regex]::Matches($memoryText, $identifierPattern)) {
+      $relative = $file.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
+      $line = Get-LineNumber -Text $memoryText -Index $match.Index
+      $violations.Add(
+        "[unstructured-memory-scan] ${relative}:$line references prohibited discovery API '$($match.Value)'"
+      )
+    }
+  }
+  return $violations.ToArray()
+}
+
 function Find-BitLockerCredentialViolations {
   param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -287,6 +389,12 @@ function Find-BitLockerCredentialViolations {
     $violations.Add($violation)
   }
   foreach ($violation in Find-SerializedSecretContractViolations -Root $Root) {
+    $violations.Add($violation)
+  }
+  foreach ($violation in Find-RetiredMemoryCredentialRecoveryViolations -Root $Root) {
+    $violations.Add($violation)
+  }
+  foreach ($violation in Find-UnboundedMemoryScanViolations -Root $Root) {
     $violations.Add($violation)
   }
   return $violations.ToArray()
@@ -505,6 +613,44 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     $secretDto = @(Find-BitLockerCredentialViolations -Root $temp)
     if (-not ($secretDto -match "field 'credential'") -or -not ($secretDto -match "field 'key_package'")) {
       throw 'Self-test did not reject a serializable BitLocker credential field'
+    }
+
+    New-SelfTestCrate -Root $temp -SecretSource $validSecret
+    $memorySource = Join-Path $temp 'crates/memory-windows/src'
+    [void](New-Item -ItemType Directory -Path $memorySource -Force)
+    [System.IO.File]::WriteAllText(
+      (Join-Path $memorySource 'credential.rs'),
+      "pub fn recover_bitlocker_credential_from_memory() {}`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $retired = @(Find-BitLockerCredentialViolations -Root $temp)
+    if (-not ($retired -match '^\[retired-memory-credential\]')) {
+      throw 'Self-test did not reject the retired memory credential recovery path'
+    }
+
+    New-SelfTestCrate -Root $temp -SecretSource $validSecret
+    $serviceRoot = Join-Path $temp 'crates/app-services/src/bitlocker_service'
+    [void](New-Item -ItemType Directory -Path $serviceRoot -Force)
+    [System.IO.File]::WriteAllText(
+      (Join-Path $serviceRoot 'memory_recovery.rs'),
+      "use memory_windows::scan_bitlocker_key_candidates;`npub fn recover() { scan_bitlocker_key_candidates(); }`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $unbounded = @(Find-BitLockerCredentialViolations -Root $temp)
+    if (-not ($unbounded -match '^\[structural-memory-recovery\]') -or -not ($unbounded -match '^\[unstructured-memory-scan\]')) {
+      throw 'Self-test did not reject a non-structural whole-image memory scan'
+    }
+
+    [System.IO.File]::WriteAllText(
+      (Join-Path $serviceRoot 'memory_recovery.rs'),
+      "use memory_windows::recover_vmks_structurally;`npub fn recover() { let _ = recover_vmks_structurally; }`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    Remove-Item -LiteralPath (Join-Path $memorySource 'credential.rs') -Force
+    Remove-Item -LiteralPath (Join-Path $dtoRoot 'bitlocker.rs') -Force
+    $structural = @(Find-BitLockerCredentialViolations -Root $temp)
+    if ($structural.Count -ne 0) {
+      throw "Self-test rejected the structural memory recovery boundary: $($structural -join '; ')"
     }
   } finally {
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue

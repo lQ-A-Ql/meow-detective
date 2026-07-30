@@ -31,11 +31,15 @@ Stage 7 补齐了案件重开恢复：控制库的 `bitlocker_restore_intents` �
 Credential Manager 恢复并复探测明文文件系统。单卷恢复失败只让该卷保持锁定；缺失、
 损坏或 fingerprint 不匹配的安全密钥会禁用 intent，暂时 I/O/平台故障保留为可重试失败。
 已存在的 source DB 文件树不会重新导入。2026-07-29 已落地受限的内存镜像恢复：
-`memory-windows` 只读顺序扫描 Windows x64 raw memory 中经过 pool header/长度约束的
-BitLocker tag allocation，并以 FIPS-197 AES schedule 作为预筛。候选保持 opaque、失败
-即 zeroize，且必须通过目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 多重 oracle，不能
-通过随机字节扫描直接解锁。验证成功后复用既有 runtime、Credential Manager、restore
-intent 和审计链路；任何 key/schedule/物理地址均不进入 transport、日志、报告或 SQLite。
+`memory-windows` 从首 1 MiB ProcessorStartBlock 建立 CR3/x64 虚拟地址空间，经受审计的
+PE/CodeView identity 和 `_KLDR_DATA_TABLE_ENTRY` profile 定位 `fvevol.sys`，只扫描其可写、
+不可执行 data section 指向的有界虚拟页图，并以 FIPS-197 AES schedule 作为预筛。生产服务
+不再调用全物理镜像 pool-tag scanner；逻辑扫描、页数、指针、候选以及包含页表放大的物理
+读取次数/字节均有独立硬上限。候选保持 opaque、失败即 zeroize，且必须通过目标卷 NTFS
+boot/MFT、`$UpCase`、`$Bitmap` 多重 oracle。验证成功后复用既有 runtime、Credential
+Manager、restore intent 和审计链路；任何 key/schedule/物理地址均不进入 transport、日志、
+报告或 SQLite。当前生产 profile 仅覆盖已验证的 Windows 11 build 26100 / fvevol identity，
+其他 build 返回 typed unsupported，不猜测私有结构偏移。
 
 Stage 5 已将真实解锁流程接入文件浏览器检查器。BitLocker 面板只在当前分区确认为
 BitLocker 时出现；密码和恢复密码仅存在于组件的瞬时输入状态，提交后立即清空，不进入
@@ -133,7 +137,7 @@ v1 解锁面 = {密码, 恢复密码} × {`0x8000`, `0x8002`, `0x8003`, `0x8004`
   取证上应当是一个显式的、被记录的调查员动作，不能是自动 fallback。
   留作 Stage 6+ 的独立决策。
 - 启动密钥 / TPM 解锁。
-- 密码破解、字典攻击、内存取密钥。
+- 密码破解、字典攻击、TPM 绕过；内存恢复只允许有界候选发现和卷级密码学验证。
 - 写回、挂载、生成明文卷文件。
 
 ### 2.3 密码算法
@@ -146,13 +150,13 @@ BitLocker 原生：UTF-16LE 编码 -> SHA-256 -> 迭代 stretch -> AES-CCM 解�
 
 | 事项 | 规则 |
 |------|------|
-| 密码 / 恢复密码落盘 | 禁止。不入 SQLite、job 参数、事件、日志、错误详情、报告、前端缓存 |
+| 密码 / 恢复密码落盘 | 禁止。不入 SQLite、job 参数、事件、日志、错误详情、报告、Zustand 或 TanStack Query |
 | Credential Manager | 只保存已验证的 FVEK/tweak 密钥包，绝不保存密码或恢复密码 |
 | Credential target | `Meow_Detective/BitLocker/v1/<metadataFingerprint>` |
 | 运行时注册键 | `caseId + dataSourceId + partitionIndex + metadataFingerprint` |
 | 密钥类型 | 禁止派生 `Debug` / `Clone` / `Serialize`；`Drop` 必须 zeroize |
 | Stage 3 传参 | 凭据作为独立 secret 参数进入，不进现有可 `Debug`/`Clone` 的导入请求 |
-| Stage 5 前端 | 密码不进 Zustand / TanStack Query；锁定与遗忘密钥是两个独立动作 |
+| Stage 5 前端 | 手工输入提交前清空；内存恢复只返回卷状态，不返回密码或恢复密码；锁定与遗忘密钥是两个独立动作 |
 | "锁定"语义 | 只清除读取密钥。已入库的文件名、artifact、索引属于案件派生数据，不自动清除 |
 
 ### 2.5 读路径形态

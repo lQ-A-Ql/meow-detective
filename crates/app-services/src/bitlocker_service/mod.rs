@@ -3,6 +3,7 @@ mod audit;
 mod catalog;
 mod error;
 mod key_store;
+mod memory_profile;
 mod memory_recovery;
 mod persistence;
 mod report;

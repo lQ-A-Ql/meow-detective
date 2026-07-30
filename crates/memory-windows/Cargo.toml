@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 thiserror.workspace = true
 zeroize.workspace = true
-memchr.workspace = true
 volume-bitlocker.workspace = true
 
 [dev-dependencies]
