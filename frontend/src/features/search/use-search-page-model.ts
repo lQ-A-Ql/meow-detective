@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router';
 import { useSelectionStore } from '@/stores/selection-store';
 
 export function useSearchSelection() {
@@ -8,15 +7,5 @@ export function useSearchSelection() {
   return {
     selectedSearchHitId,
     setSelectedSearchHitId,
-  };
-}
-
-export function useOpenSearchHitInFiles() {
-  const navigate = useNavigate();
-  const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
-
-  return (fileId: string) => {
-    setSelectedFileId(fileId);
-    navigate('/files');
   };
 }

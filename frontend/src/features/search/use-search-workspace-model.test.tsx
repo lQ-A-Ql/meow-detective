@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  openHit: vi.fn(),
+  openPreview: vi.fn(),
   search: vi.fn(),
   setSelected: vi.fn(),
 }));
@@ -29,10 +29,16 @@ vi.mock('@/features/search/hooks', () => ({
 }));
 
 vi.mock('@/features/search/use-search-page-model', () => ({
-  useOpenSearchHitInFiles: () => mocks.openHit,
   useSearchSelection: () => ({
     selectedSearchHitId: undefined,
     setSelectedSearchHitId: mocks.setSelected,
+  }),
+}));
+
+vi.mock('@/features/search/use-search-preview-model', () => ({
+  useSearchPreviewModel: () => ({
+    open: false,
+    openHit: mocks.openPreview,
   }),
 }));
 
@@ -110,5 +116,29 @@ describe('useSearchWorkspaceModel', () => {
 
     expect(result.current.extensionInput).toBe('.txt; log,');
     expect(result.current.options.extensions).toEqual(['txt', 'log']);
+  });
+
+  it('opens file content only after an explicit result-row click', () => {
+    const { result } = renderHook(() => useSearchWorkspaceModel(), {
+      wrapper: wrapper('/search?q=evidence'),
+    });
+    const hit = {
+      fileId: 'file-1',
+      dataSourceId: 'source-1',
+      dataSourceName: '检材2.E01',
+      name: 'report.txt',
+      path: 'Users/alice/report.txt',
+      entryType: 'file',
+      extension: 'txt',
+      deleted: false,
+      hidden: false,
+      system: false,
+      encrypted: false,
+    };
+
+    expect(mocks.openPreview).not.toHaveBeenCalled();
+    act(() => result.current.onHitRowClick(hit));
+    expect(mocks.setSelected).toHaveBeenCalledWith('file-1');
+    expect(mocks.openPreview).toHaveBeenCalledWith(hit);
   });
 });

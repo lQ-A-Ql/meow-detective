@@ -10,6 +10,7 @@ import {
 } from '@/app/components/ui/select';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { PageSubbar } from '@/components/layout/PageSubbar';
+import { SearchFilePreviewDialog } from '@/features/search/components/SearchFilePreviewDialog';
 import type { SearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
 import { formatBytes } from '@/lib/format-bytes';
 import type { SearchFileHit } from '@/types/search';
@@ -162,7 +163,6 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           getRowKey={(row) => row.fileId}
           selectedRowKey={model.selectedHit?.fileId}
           onRowClick={model.onHitRowClick}
-          onRowDoubleClick={model.openHitInFiles}
           emptyTitle={model.activeQuery ? '没有匹配的文件' : '输入文件名开始搜索'}
           emptyDescription={model.activeQuery ? '尝试修改文件名、路径或筛选条件。' : '搜索仅定位已导入数据源中的文件和目录。'}
           sortKey={model.sortKey}
@@ -179,6 +179,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           onRetryInitialLoad={model.retry}
         />
       </div>
+      <SearchFilePreviewDialog model={model.preview} />
     </div>
   );
 }

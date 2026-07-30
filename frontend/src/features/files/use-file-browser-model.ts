@@ -232,6 +232,8 @@ export function useFileBrowserModel() {
     imagePreview: preview.imagePreview,
     mediaUrl: preview.mediaUrl,
     documentPreview: preview.documentPreview,
+    previewError: preview.previewError,
+    onRetryPreview: preview.onRetryPreview,
     selectedFile,
     activePartition,
     bitLockerPartition: bitLockerTarget ? activePartition : undefined,

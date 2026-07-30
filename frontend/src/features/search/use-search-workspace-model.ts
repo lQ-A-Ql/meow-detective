@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDataSources } from '@/features/case/hooks';
 import { useInfiniteSearchResults } from '@/features/search/hooks';
-import { useOpenSearchHitInFiles, useSearchSelection } from '@/features/search/use-search-page-model';
+import { useSearchSelection } from '@/features/search/use-search-page-model';
+import { useSearchPreviewModel } from '@/features/search/use-search-preview-model';
 import type {
   SearchFileHit,
   SearchRequestOptions,
@@ -36,8 +37,9 @@ export function useSearchWorkspaceModel() {
   );
   const firstPage = searchQuery.data?.pages[0];
   const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
-  const openSearchHitInFiles = useOpenSearchHitInFiles();
-  const selectedHit = searchHits.find((hit) => hit.fileId === selectedSearchHitId) ?? searchHits[0];
+  const preview = useSearchPreviewModel();
+  const { openHit: openHitPreview } = preview;
+  const selectedHit = searchHits.find((hit) => hit.fileId === selectedSearchHitId);
 
   useEffect(() => {
     const nextQuery = urlQuery?.trim() || DEFAULT_QUERY;
@@ -62,11 +64,10 @@ export function useSearchWorkspaceModel() {
       .filter(Boolean);
     setOptions((current) => ({ ...current, extensions }));
   }, []);
-  const onHitRowClick = useCallback((hit: SearchFileHit) => setSelectedSearchHitId(hit.fileId), [setSelectedSearchHitId]);
-  const openHitInFiles = useCallback(
-    (hit: SearchFileHit) => openSearchHitInFiles(hit.fileId),
-    [openSearchHitInFiles],
-  );
+  const onHitRowClick = useCallback((hit: SearchFileHit) => {
+    setSelectedSearchHitId(hit.fileId);
+    openHitPreview(hit);
+  }, [openHitPreview, setSelectedSearchHitId]);
   const loadNextPage = useCallback(() => { void searchQuery.fetchNextPage(); }, [searchQuery]);
   const retry = useCallback(() => { void searchQuery.refetch(); }, [searchQuery]);
   const clearQuery = useCallback(() => setQueryInput(''), []);
@@ -92,8 +93,8 @@ export function useSearchWorkspaceModel() {
     loadNextPage,
     loadingMore: searchQuery.isFetchingNextPage,
     onHitRowClick,
-    openHitInFiles,
     options,
+    preview,
     queryInput,
     retry,
     searchHits,

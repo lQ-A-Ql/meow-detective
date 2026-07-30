@@ -4,29 +4,10 @@ import {
   useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
   useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
-import type { FileEntryRow } from '@/types/models';
-import type { FilePreviewKind } from '@/components/preview/FilePreviewTabs';
-
-const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico']);
-const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);
-const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg']);
-const DOCUMENT_EXTENSIONS = new Set([
-  'pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3',
-  // Legacy OLE Office formats are routed to the document chain so the
-  // backend's typed "not document-like" error is surfaced instead of a
-  // silent placeholder.
-  'doc', 'xls', 'ppt',
-]);
-
-function getPreviewKindFromExtension(ext?: string): FilePreviewKind | undefined {
-  const normalized = ext?.toLowerCase().replace(/^\./, '');
-  if (!normalized) return undefined;
-  if (IMAGE_EXTENSIONS.has(normalized)) return 'image';
-  if (VIDEO_EXTENSIONS.has(normalized)) return 'video';
-  if (AUDIO_EXTENSIONS.has(normalized)) return 'audio';
-  if (DOCUMENT_EXTENSIONS.has(normalized)) return 'document';
-  return undefined;
-}
+import type { ApiErrorDto, FileEntryRow } from '@/types/models';
+import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
+import { errorMessage, isApiErrorDto } from '@/lib/errors';
+import { getFilePreviewKind } from '@/features/files/preview-file-kind';
 
 function getPreviewKindFromMime(mime?: string): FilePreviewKind | undefined {
   const normalized = mime?.toLowerCase() ?? '';
@@ -38,8 +19,19 @@ function getPreviewKindFromMime(mime?: string): FilePreviewKind | undefined {
 
 interface UseFilePreviewOptions {
   selectedFile: FileEntryRow | undefined;
-  viewerTab: string;
+  viewerTab: PreviewViewerTab;
   setSelectedTimelineId: (id?: string) => void;
+}
+
+function normalizePreviewError(error: unknown): ApiErrorDto | null {
+  if (!error) return null;
+  if (isApiErrorDto(error)) return error;
+  return {
+    code: 'FILE_PREVIEW_FAILED',
+    message: errorMessage(error, '文件预览失败'),
+    category: 'internal',
+    recoverable: true,
+  };
 }
 
 export function useFilePreview({
@@ -49,19 +41,19 @@ export function useFilePreview({
 }: UseFilePreviewOptions) {
   const navigate = useNavigate();
   const selectedFilePreviewKind = useMemo(() => {
-    const ext = selectedFile?.ext ?? selectedFile?.name.split('.').pop();
-    return getPreviewKindFromExtension(ext);
-  }, [selectedFile?.ext, selectedFile?.name]);
+    return selectedFile ? getFilePreviewKind(selectedFile) : undefined;
+  }, [selectedFile]);
   const needsPreviewHandle =
     viewerTab === 'preview' &&
     Boolean(selectedFile?.id) &&
     selectedFilePreviewKind === undefined;
   const needsMetadataHandle =
     viewerTab === 'metadata' && Boolean(selectedFile?.id);
-  const { data: fileHandle } = useFileHandle(
+  const handleQuery = useFileHandle(
     selectedFile?.id,
     needsPreviewHandle || needsMetadataHandle
   );
+  const fileHandle = handleQuery.data;
   const previewKind =
     viewerTab === 'preview'
       ? selectedFilePreviewKind ?? getPreviewKindFromMime(fileHandle?.mime)
@@ -76,17 +68,34 @@ export function useFilePreview({
     Boolean(selectedFile?.id);
   const documentPreviewEnabled =
     viewerTab === 'preview' && previewKind === 'document' && Boolean(selectedFile?.id);
+  const viewerQuery = useFileViewer(selectedFile?.id, hexPreviewEnabled);
   const {
     data: viewer,
     setJumpOffsetInput,
     jumpToOffset,
     loadNextRange,
     loadPreviousRange,
-  } = useFileViewer(selectedFile?.id, hexPreviewEnabled);
-  const { data: textPreview } = useTextPreview(selectedFile?.id, textPreviewEnabled);
-  const { data: imagePreview } = useImagePreview(selectedFile?.id, imagePreviewEnabled);
-  const { data: mediaUrl } = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
-  const { data: documentPreview } = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
+  } = viewerQuery;
+  const textQuery = useTextPreview(selectedFile?.id, textPreviewEnabled);
+  const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled);
+  const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
+  const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
+  const activePreviewQuery =
+    viewerTab === 'hex'
+      ? viewerQuery
+      : viewerTab === 'text'
+        ? textQuery
+        : viewerTab === 'metadata' || (viewerTab === 'preview' && !previewKind)
+          ? handleQuery
+          : previewKind === 'image'
+            ? imageQuery
+            : previewKind === 'video' || previewKind === 'audio'
+              ? mediaQuery
+              : documentQuery;
+  const previewError = normalizePreviewError(activePreviewQuery.error);
+  const onRetryPreview = activePreviewQuery.isError
+    ? () => { void activePreviewQuery.refetch(); }
+    : undefined;
 
   const onViewTimeline = () => {
     if (selectedFile) {
@@ -104,10 +113,12 @@ export function useFilePreview({
     jumpToOffset,
     loadNextRange,
     loadPreviousRange,
-    textPreview,
-    imagePreview,
-    mediaUrl,
-    documentPreview,
+    textPreview: textQuery.data,
+    imagePreview: imageQuery.data,
+    mediaUrl: mediaQuery.data,
+    documentPreview: documentQuery.data,
+    previewError,
+    onRetryPreview,
     onViewTimeline,
   };
 }

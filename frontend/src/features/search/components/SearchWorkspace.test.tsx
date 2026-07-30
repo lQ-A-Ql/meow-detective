@@ -4,6 +4,12 @@ import { SearchWorkspace } from './SearchWorkspace';
 import type { SearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
 import type { SearchFileHit } from '@/types/search';
 
+vi.mock('./SearchFilePreviewDialog', () => ({
+  SearchFilePreviewDialog: ({ model }: { model: { open: boolean } }) => (
+    model.open ? <div>搜索文件预览</div> : null
+  ),
+}));
+
 const hit: SearchFileHit = {
   fileId: 'file-1',
   dataSourceId: 'source-1',
@@ -41,7 +47,6 @@ function createModel(overrides: Partial<SearchWorkspaceModel> = {}) {
     loadNextPage: vi.fn(),
     loadingMore: false,
     onHitRowClick: vi.fn(),
-    openHitInFiles: vi.fn(),
     options: {
       matchPath: false,
       entryType: 'any' as const,
@@ -51,6 +56,7 @@ function createModel(overrides: Partial<SearchWorkspaceModel> = {}) {
       sortDirection: 'asc' as const,
     },
     queryInput: 'report',
+    preview: { open: false },
     retry: vi.fn(),
     searchHits: [hit],
     searchQueryStateKey: 1,
@@ -79,14 +85,14 @@ describe('SearchWorkspace', () => {
     expect(screen.getByText(/索引覆盖不完整 80\/100/)).toBeInTheDocument();
   });
 
-  it('passes row double click to the open-file action', () => {
+  it('opens the preview from a single result-row click', () => {
     const model = createModel();
     render(<SearchWorkspace model={model} />);
 
     const row = screen.getByText('report.7z').closest('tr');
     expect(row).not.toBeNull();
-    fireEvent.doubleClick(row!);
-    expect(model.openHitInFiles).toHaveBeenCalledWith(hit);
+    fireEvent.click(row!);
+    expect(model.onHitRowClick).toHaveBeenCalledWith(hit);
   });
 
   it('passes sortable column clicks to the workspace model', () => {
