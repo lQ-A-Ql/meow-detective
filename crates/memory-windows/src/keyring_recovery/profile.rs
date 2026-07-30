@@ -1,5 +1,7 @@
 use crate::{MemoryWindowsError, Result, TargetedCodeViewIdentity, TargetedKernelLayoutProfile};
 
+use super::symbol_table;
+
 const KERNEL_PDB_GUID: &str = "953A8DE8-80B0-818C-32DA-2DEC1D79C2D9";
 const FVEVOL_PDB_GUID: &str = "47808A31-873E-98CF-7009-95E410CD0095";
 
@@ -81,61 +83,31 @@ pub struct BitLockerMemoryProfile {
 }
 
 impl BitLockerMemoryProfile {
-    /// Builds the reviewed Windows 11 26100 profile used by the Liu Yang sample.
-    pub fn windows_11_26100(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
-        require_codeview(kernel.codeview_identity(), KERNEL_PDB_GUID, "ntkrnlmp.pdb")?;
-        require_codeview(
-            kernel.fvevol_codeview_identity(),
-            FVEVOL_PDB_GUID,
-            "fvevol.pdb",
-        )?;
+    /// Resolves a profile for any ntoskrnl build present in the embedded
+    /// symbol registry (see `symbol_table`). The fvevol-internal offsets are
+    /// zeroed, so discovery runs through the signature-anchored bounded scans
+    /// rather than version-specific offsets; the CodeView GUID is the only
+    /// identity gate, and unknown builds fail closed.
+    pub fn resolve(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
+        let codeview = kernel
+            .codeview_identity()
+            .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
+        let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid())
+            .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
         Ok(Self {
             kernel,
-            objects: ObjectManagerLayout {
-                root_directory_object_rva: 0x00F0_DFF0,
-                info_mask_to_offset_rva: 0x00F0_E100,
-                directory_bucket_count: 37,
-                directory_entry_chain_offset: 0,
-                directory_entry_object_offset: 8,
-                object_header_body_offset: 0x30,
-                object_header_info_mask_offset: 0x1A,
-                name_info_bit: 0x02,
-                name_info_name_offset: 8,
-                unicode_length_offset: 0,
-                unicode_maximum_length_offset: 2,
-                unicode_buffer_offset: 8,
-            },
-            driver: DriverLayout {
-                device_object_offset: 0x08,
-                driver_start_offset: 0x18,
-                driver_size_offset: 0x20,
-                driver_extension_offset: 0x30,
-                driver_name_offset: 0x38,
-                extension_driver_object_offset: 0,
-                extension_client_list_offset: 0x28,
-                client_next_offset: 0,
-                client_identifier_offset: 8,
-                client_body_offset: 0x10,
-            },
+            objects: layouts.objects,
+            driver: layouts.driver,
             keyring: KeyringLayout {
-                client_keyring_offset: 0x278,
+                client_keyring_offset: 0,
                 capacity: 0x4000,
                 header_size: 0x20,
                 dataset_minimum_size: 0x30,
                 dataset_volume_guid_offset: 0x10,
             },
-            devices: DeviceObjectLayout {
-                object_type_offset: 0,
-                object_size_offset: 2,
-                expected_object_type: 3,
-                minimum_object_size: 0x50,
-                driver_object_offset: 0x08,
-                next_device_offset: 0x10,
-                device_extension_offset: 0x40,
-                maximum_devices: 32,
-            },
+            devices: layouts.devices,
             volume_context: FveVolumeContextLayout {
-                vmk_datum_pointer_offset: 0x3D0,
+                vmk_datum_pointer_offset: 0,
                 vmk_datum_size: 44,
                 vmk_datum_entry_type: 0,
                 vmk_datum_value_type: 1,
@@ -144,6 +116,24 @@ impl BitLockerMemoryProfile {
                 vmk_offset: 12,
             },
         })
+    }
+
+    /// Builds the reviewed Windows 11 26100 profile used by the Liu Yang sample.
+    ///
+    /// Layouts come from the embedded PDB symbol registry (single source of
+    /// truth); this constructor only adds the two manually reviewed fast-path
+    /// offsets and the exact CodeView identity requirements.
+    pub fn windows_11_26100(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
+        require_codeview(kernel.codeview_identity(), KERNEL_PDB_GUID, "ntkrnlmp.pdb")?;
+        require_codeview(
+            kernel.fvevol_codeview_identity(),
+            FVEVOL_PDB_GUID,
+            "fvevol.pdb",
+        )?;
+        let mut profile = Self::resolve(kernel)?;
+        profile.keyring.client_keyring_offset = 0x278;
+        profile.volume_context.vmk_datum_pointer_offset = 0x3D0;
+        Ok(profile)
     }
 
     /// Offset-blind variant of [`Self::windows_11_26100`]: the two

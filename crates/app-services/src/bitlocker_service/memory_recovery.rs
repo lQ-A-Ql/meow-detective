@@ -12,7 +12,7 @@ use volume_bitlocker::{
 
 use super::{
     audit::{self, BitLockerAudit},
-    memory_profile::reviewed_windows_11_26100_profile,
+    memory_profile::resolve_memory_profile,
     source::{open_partition_window, open_source_read_only, BitLockerSource},
     use_cases::{complete_verified_unlock, UnlockContext, UnlockMethod},
     BitLockerRuntimeContext, BitLockerServiceError,
@@ -58,7 +58,7 @@ pub fn unlock_bitlocker_with_memory_image(
     let target = identities
         .first()
         .ok_or(BitLockerServiceError::MemoryKeyNotValidated)?;
-    let profile = reviewed_windows_11_26100_profile()?;
+    let profile = resolve_memory_profile(memory_image_path)?;
     let recovery = recover_vmks_structurally(
         memory_image_path,
         &profile,

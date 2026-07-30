@@ -16,6 +16,7 @@ use super::{
     object_directory::{find_named_object, root_directory},
     profile::BitLockerMemoryProfile,
     report::BitLockerMemoryRecovery,
+    symbol_table,
     volume_context::read_device_context_vmks,
 };
 
@@ -110,6 +111,41 @@ pub fn recover_vmks_structurally(
     }
 }
 
+/// Resolves the recovery profile directly from the memory image: discovers
+/// the kernel, reads its CodeView identity, and resolves layouts from the
+/// embedded PDB symbol registry. The ntoskrnl CodeView GUID is the only
+/// identity gate; unknown builds fail closed with
+/// [`MemoryWindowsError::UnsupportedBitLockerMemoryProfile`]. The fvevol
+/// identity is not gated — it is anchored structurally by the driver object
+/// and the signature scans.
+pub fn resolve_profile_for_image(path: &Path) -> Result<BitLockerMemoryProfile> {
+    let mut image = RawMemoryImage::open(path)?;
+    image.set_read_budget(
+        MAXIMUM_PHYSICAL_READ_OPERATIONS,
+        MAXIMUM_PHYSICAL_READ_BYTES,
+    )?;
+    let processor = find_processor_start_blocks(&mut image)?
+        .into_iter()
+        .next()
+        .ok_or(MemoryWindowsError::ProcessorStartBlockNotFound)?;
+    let mut address_space = X64AddressSpace::new(image, processor.directory_table_base)?;
+    let limits = TargetedKernelSearchLimits::default();
+    let kernel = discover_kernel_from_processor_start_block(&mut address_space, processor, limits)?;
+    let mut scanned = 0;
+    let codeview = read_codeview_identity(&mut address_space, kernel.image, limits, &mut scanned)?
+        .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
+    let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid())
+        .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
+    let kernel_profile = crate::targeted_kernel::TargetedKernelLayoutProfile::new(
+        format!("ntoskrnl-{}", codeview.guid()),
+        layouts.build_id.clone(),
+        kernel.image.identity(),
+        layouts.module_layout,
+    )?
+    .with_codeview_identity(codeview);
+    BitLockerMemoryProfile::resolve(kernel_profile)
+}
+
 fn open_profiled_session(
     path: &Path,
     profile: &BitLockerMemoryProfile,
@@ -184,14 +220,27 @@ fn validate_fvevol_identity(
     profile: &BitLockerMemoryProfile,
     limits: TargetedKernelSearchLimits,
 ) -> Result<()> {
+    // fvevol identity checks are optional: profiles resolved from the symbol
+    // registry anchor the driver structurally (name, image base/size) and do
+    // not carry expected fvevol PE/PDB identities. The reviewed 26100 profile
+    // still enforces both.
+    if profile.kernel().fvevol_identity().is_none()
+        && profile.kernel().fvevol_codeview_identity().is_none()
+    {
+        return Ok(());
+    }
     let mut scanned = 0;
     let image = read_module_pe_image(address_space, fvevol, limits, &mut scanned)?;
-    if Some(image.identity()) != profile.kernel().fvevol_identity() {
-        return Err(MemoryWindowsError::TargetedFvevolIdentityMismatch);
+    if let Some(expected) = profile.kernel().fvevol_identity() {
+        if image.identity() != expected {
+            return Err(MemoryWindowsError::TargetedFvevolIdentityMismatch);
+        }
     }
-    let actual_codeview = read_codeview_identity(address_space, image, limits, &mut scanned)?;
-    if actual_codeview.as_ref() != profile.kernel().fvevol_codeview_identity() {
-        return Err(MemoryWindowsError::TargetedFvevolCodeViewMismatch);
+    if let Some(expected_codeview) = profile.kernel().fvevol_codeview_identity() {
+        let actual_codeview = read_codeview_identity(address_space, image, limits, &mut scanned)?;
+        if actual_codeview.as_ref() != Some(expected_codeview) {
+            return Err(MemoryWindowsError::TargetedFvevolCodeViewMismatch);
+        }
     }
     Ok(())
 }

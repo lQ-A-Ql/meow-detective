@@ -19,7 +19,8 @@ pub use bootstrap::{
 };
 pub use error::{MemoryWindowsError, Result};
 pub use keyring_recovery::{
-    recover_vmks_structurally, BitLockerMemoryProfile, BitLockerMemoryRecovery,
+    recover_vmks_structurally, resolve_profile_for_image, BitLockerMemoryProfile,
+    BitLockerMemoryRecovery,
 };
 pub use physical::{PhysicalReadStats, RawMemoryImage};
 pub use targeted_kernel::{

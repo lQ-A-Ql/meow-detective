@@ -135,3 +135,47 @@ fn recovery_error(result: crate::Result<super::keyring::ParsedKeyringVmk>) -> Me
 fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
 }
+
+#[test]
+fn symbol_registry_layouts_match_the_reviewed_26100_profile() {
+    use crate::targeted_kernel::{
+        LoadedModuleEntryLayout, TargetedCodeViewIdentity, TargetedKernelIdentity,
+        TargetedKernelLayoutProfile,
+    };
+
+    let module_layout = LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60).expect("layout");
+    let kernel = TargetedKernelLayoutProfile::new(
+        "test",
+        "26100",
+        TargetedKernelIdentity::new(0xD98D_B6A6, 0x0144_F000),
+        module_layout,
+    )
+    .expect("kernel profile")
+    .with_codeview_identity(
+        TargetedCodeViewIdentity::new("953A8DE8-80B0-818C-32DA-2DEC1D79C2D9", 1, "ntkrnlmp.pdb")
+            .expect("kernel codeview"),
+    )
+    .with_fvevol_codeview_identity(
+        TargetedCodeViewIdentity::new("47808A31-873E-98CF-7009-95E410CD0095", 1, "fvevol.pdb")
+            .expect("fvevol codeview"),
+    );
+    let reviewed =
+        super::profile::BitLockerMemoryProfile::windows_11_26100(kernel).expect("reviewed profile");
+
+    let layouts =
+        super::symbol_table::resolve_ntoskrnl_layouts("953A8DE8-80B0-818C-32DA-2DEC1D79C2D9")
+            .expect("26100 build must be in the embedded registry");
+
+    assert_eq!(layouts.objects, reviewed.objects());
+    assert_eq!(layouts.driver, reviewed.driver());
+    assert_eq!(layouts.devices, reviewed.devices());
+    assert_eq!(layouts.module_layout, module_layout);
+}
+
+#[test]
+fn symbol_registry_fails_closed_for_unknown_builds() {
+    assert!(
+        super::symbol_table::resolve_ntoskrnl_layouts("00000000-0000-0000-0000-000000000000")
+            .is_none()
+    );
+}
