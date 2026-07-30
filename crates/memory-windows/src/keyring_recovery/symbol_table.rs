@@ -36,7 +36,6 @@ const CLIENT_BODY_OFFSET: u16 = 0x10;
 pub(crate) struct NtoskrnlLayouts {
     pub build_id: String,
     pub objects: ObjectManagerLayout,
-    pub module_layout: LoadedModuleEntryLayout,
 }
 
 /// Resolves layouts for one ntoskrnl CodeView GUID, or `None` when the build
@@ -44,6 +43,7 @@ pub(crate) struct NtoskrnlLayouts {
 pub(crate) fn resolve_ntoskrnl_layouts(pdb_guid: &str) -> Option<NtoskrnlLayouts> {
     let table = EMBEDDED_TABLES
         .iter()
+        .flat_map(|part| part.iter())
         .find(|table| table.pdb_guid.eq_ignore_ascii_case(pdb_guid))?;
     Some(NtoskrnlLayouts {
         build_id: table.build_id.to_string(),
@@ -64,7 +64,6 @@ pub(crate) fn resolve_ntoskrnl_layouts(pdb_guid: &str) -> Option<NtoskrnlLayouts
             unicode_maximum_length_offset: 2,
             unicode_buffer_offset: 8,
         },
-        module_layout: default_module_layout(),
     })
 }
 

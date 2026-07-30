@@ -80,7 +80,6 @@ pub struct TargetedKernelSearchReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TargetedKernelPeImage {
     pub base: u64,
-    pub(crate) time_date_stamp: u32,
     pub size_of_image: u32,
     pub(crate) section_count: u16,
     pub(crate) section_table: u64,
@@ -91,19 +90,6 @@ pub struct TargetedKernelPeImage {
 }
 
 impl TargetedKernelPeImage {
-    #[must_use]
-    pub fn time_date_stamp(self) -> u32 {
-        self.time_date_stamp
-    }
-
-    #[must_use]
-    pub fn identity(self) -> TargetedKernelIdentity {
-        TargetedKernelIdentity {
-            time_date_stamp: self.time_date_stamp,
-            size_of_image: self.size_of_image,
-        }
-    }
-
     #[must_use]
     pub fn section_count(self) -> u16 {
         self.section_count
@@ -125,12 +111,6 @@ pub struct TargetedKernelDiscovery {
     pub image: TargetedKernelPeImage,
     pub ps_loaded_module_list: u64,
     pub report: TargetedKernelSearchReport,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TargetedKernelIdentity {
-    pub(crate) time_date_stamp: u32,
-    pub(crate) size_of_image: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,25 +155,6 @@ impl TargetedCodeViewIdentity {
     }
 }
 
-impl TargetedKernelIdentity {
-    pub fn new(time_date_stamp: u32, size_of_image: u32) -> Self {
-        Self {
-            time_date_stamp,
-            size_of_image,
-        }
-    }
-
-    #[must_use]
-    pub fn time_date_stamp(self) -> u32 {
-        self.time_date_stamp
-    }
-
-    #[must_use]
-    pub fn size_of_image(self) -> u32 {
-        self.size_of_image
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoadedModuleEntryLayout {
     pub link_to_entry: i32,
@@ -204,19 +165,16 @@ pub struct LoadedModuleEntryLayout {
     pub name_buffer_offset: u16,
 }
 
-/// Explicit build/profile binding for the private loader-entry layout.
+/// Explicit build/profile binding for the loaded-module list walk.
 ///
-/// Windows does not provide a stable public layout for `LDR_DATA_TABLE_ENTRY`.
-/// Production callers must therefore select a reviewed profile and carry its
-/// identity through the report; this crate never supplies a generic default.
+/// The CodeView identity is the only identity gate; the loaded-module entry
+/// layout itself is supplied by the caller (the registry default has been
+/// verified invariant across all harvested profiles).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetedKernelLayoutProfile {
     profile_id: String,
     build_id: String,
-    kernel_identity: TargetedKernelIdentity,
     codeview_identity: Option<TargetedCodeViewIdentity>,
-    fvevol_identity: Option<TargetedKernelIdentity>,
-    fvevol_codeview_identity: Option<TargetedCodeViewIdentity>,
     module_layout: LoadedModuleEntryLayout,
 }
 
@@ -224,7 +182,6 @@ impl TargetedKernelLayoutProfile {
     pub fn new(
         profile_id: impl Into<String>,
         build_id: impl Into<String>,
-        kernel_identity: TargetedKernelIdentity,
         module_layout: LoadedModuleEntryLayout,
     ) -> Result<Self> {
         let profile_id = profile_id.into();
@@ -240,10 +197,7 @@ impl TargetedKernelLayoutProfile {
         Ok(Self {
             profile_id,
             build_id,
-            kernel_identity,
             codeview_identity: None,
-            fvevol_identity: None,
-            fvevol_codeview_identity: None,
             module_layout,
         })
     }
@@ -267,26 +221,6 @@ impl TargetedKernelLayoutProfile {
     #[must_use]
     pub(crate) fn codeview_identity(&self) -> Option<&TargetedCodeViewIdentity> {
         self.codeview_identity.as_ref()
-    }
-
-    pub fn with_fvevol_identity(mut self, identity: TargetedKernelIdentity) -> Self {
-        self.fvevol_identity = Some(identity);
-        self
-    }
-
-    #[must_use]
-    pub(crate) fn fvevol_identity(&self) -> Option<TargetedKernelIdentity> {
-        self.fvevol_identity
-    }
-
-    pub fn with_fvevol_codeview_identity(mut self, identity: TargetedCodeViewIdentity) -> Self {
-        self.fvevol_codeview_identity = Some(identity);
-        self
-    }
-
-    #[must_use]
-    pub(crate) fn fvevol_codeview_identity(&self) -> Option<&TargetedCodeViewIdentity> {
-        self.fvevol_codeview_identity.as_ref()
     }
 
     #[must_use]

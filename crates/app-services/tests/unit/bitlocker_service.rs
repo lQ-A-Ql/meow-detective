@@ -110,12 +110,7 @@ fn memory_candidate_failure_has_a_stable_secret_free_command_contract() {
 #[test]
 fn unreviewed_memory_build_is_typed_unsupported() {
     let error = BitLockerServiceError::MemoryImage(
-        memory_windows::MemoryWindowsError::TargetedKernelIdentityMismatch {
-            expected_timestamp: 1,
-            expected_size: 2,
-            actual_timestamp: 3,
-            actual_size: 4,
-        },
+        memory_windows::MemoryWindowsError::UnsupportedBitLockerMemoryProfile,
     );
 
     assert_eq!(error.code(), Some("BITLOCKER_MEMORY_PROFILE_UNSUPPORTED"));

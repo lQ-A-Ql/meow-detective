@@ -21,11 +21,13 @@ use super::{
 
 const UPCASE_PREFIX: [u8; 8] = [0, 0, 1, 0, 2, 0, 3, 0];
 
-/// Recovers and volume-authenticates a VMK through the reviewed FVEVol layout.
+/// Recovers and volume-authenticates a VMK from a raw memory image.
 ///
-/// Runtime discovery follows exact kernel objects and a PDB-bound client
-/// extension. It never falls back to pool tags, writable-section roots, pointer
-/// graphs, AES schedules, or key pairing.
+/// Runtime discovery resolves the ntoskrnl CodeView GUID against the embedded
+/// PDB symbol registry (unknown builds fail closed), then follows exact kernel
+/// objects and a registry-bound FVEVol client extension. It never falls back
+/// to pool tags, writable-section roots, pointer graphs, AES schedules, or key
+/// pairing.
 #[allow(clippy::too_many_arguments)]
 pub fn unlock_bitlocker_with_memory_image(
     case_conn: &Connection,

@@ -157,10 +157,11 @@ fn symbol_registry_resolves_the_26100_layouts_from_pdb_facts() {
     assert_eq!(devices.device_extension_offset, 0x40);
     assert_eq!(devices.driver_object_offset, 0x08);
     assert_eq!(devices.next_device_offset, 0x10);
-    assert_eq!(layouts.module_layout.dll_base_offset, 0x30);
-    assert_eq!(layouts.module_layout.size_of_image_offset, 0x40);
-    assert_eq!(layouts.module_layout.name_length_offset, 0x58);
-    assert_eq!(layouts.module_layout.name_buffer_offset, 0x60);
+    let module = super::symbol_table::default_module_layout();
+    assert_eq!(module.dll_base_offset, 0x30);
+    assert_eq!(module.size_of_image_offset, 0x40);
+    assert_eq!(module.name_length_offset, 0x58);
+    assert_eq!(module.name_buffer_offset, 0x60);
 }
 
 #[test]

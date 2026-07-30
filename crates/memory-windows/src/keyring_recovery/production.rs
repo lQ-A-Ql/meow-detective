@@ -4,8 +4,7 @@ use crate::{
     bootstrap::find_processor_start_blocks,
     targeted_kernel::{
         discover_kernel_from_processor_start_block, enumerate_loaded_modules,
-        read_codeview_identity, read_module_pe_image, KernelModule, TargetedKernelDiscovery,
-        TargetedKernelSearchLimits,
+        read_codeview_identity, KernelModule, TargetedKernelDiscovery, TargetedKernelSearchLimits,
     },
     MemoryWindowsError, RawMemoryImage, Result, X64AddressSpace,
 };
@@ -160,18 +159,14 @@ pub fn resolve_profile_for_image(path: &Path) -> Result<BitLockerMemoryProfile> 
     let codeview = read_codeview_identity(&mut address_space, kernel.image, limits, &mut scanned)?
         .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
     let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid());
-    let (build_id, module_layout) = match &layouts {
-        Some(layouts) => (layouts.build_id.clone(), layouts.module_layout),
-        None => (
-            format!("unregistered-{}", codeview.guid()),
-            symbol_table::default_module_layout(),
-        ),
+    let build_id = match &layouts {
+        Some(layouts) => layouts.build_id.clone(),
+        None => format!("unregistered-{}", codeview.guid()),
     };
     let kernel_profile = crate::targeted_kernel::TargetedKernelLayoutProfile::new(
         format!("ntoskrnl-{}", codeview.guid()),
         build_id,
-        kernel.image.identity(),
-        module_layout,
+        symbol_table::default_module_layout(),
     )?
     .with_codeview_identity(codeview);
     BitLockerMemoryProfile::resolve(kernel_profile)
@@ -195,7 +190,6 @@ fn open_profiled_session(
     let kernel = discover_kernel_from_processor_start_block(&mut address_space, processor, limits)?;
     validate_kernel_identity(&mut address_space, &kernel, profile, limits)?;
     let fvevol = find_fvevol_module(&mut address_space, &kernel, profile, limits)?;
-    validate_fvevol_identity(&mut address_space, &fvevol, profile, limits)?;
     Ok(ProfiledMemorySession {
         address_space,
         kernel,
@@ -237,35 +231,4 @@ fn find_fvevol_module(
     .into_iter()
     .find(|module| module.name.eq_ignore_ascii_case("fvevol.sys"))
     .ok_or(MemoryWindowsError::TargetedFvevolNotFound)
-}
-
-fn validate_fvevol_identity(
-    address_space: &mut X64AddressSpace,
-    fvevol: &KernelModule,
-    profile: &BitLockerMemoryProfile,
-    limits: TargetedKernelSearchLimits,
-) -> Result<()> {
-    // fvevol identity checks are optional: profiles resolved from the symbol
-    // registry anchor the driver structurally (name, image base/size) and do
-    // not carry expected fvevol PE/PDB identities. The reviewed 26100 profile
-    // still enforces both.
-    if profile.kernel().fvevol_identity().is_none()
-        && profile.kernel().fvevol_codeview_identity().is_none()
-    {
-        return Ok(());
-    }
-    let mut scanned = 0;
-    let image = read_module_pe_image(address_space, fvevol, limits, &mut scanned)?;
-    if let Some(expected) = profile.kernel().fvevol_identity() {
-        if image.identity() != expected {
-            return Err(MemoryWindowsError::TargetedFvevolIdentityMismatch);
-        }
-    }
-    if let Some(expected_codeview) = profile.kernel().fvevol_codeview_identity() {
-        let actual_codeview = read_codeview_identity(address_space, image, limits, &mut scanned)?;
-        if actual_codeview.as_ref() != Some(expected_codeview) {
-            return Err(MemoryWindowsError::TargetedFvevolCodeViewMismatch);
-        }
-    }
-    Ok(())
 }

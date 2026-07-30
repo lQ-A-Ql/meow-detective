@@ -34,25 +34,8 @@ pub enum MemoryWindowsError {
     TargetedAddressSpaceMismatch,
     #[error("targeted BitLocker scan did not find fvevol.sys in the trusted module list")]
     TargetedFvevolNotFound,
-    #[error(
-        "targeted kernel identity does not match the selected layout profile: expected timestamp {expected_timestamp:#X}, image size {expected_size:#X}; actual timestamp {actual_timestamp:#X}, image size {actual_size:#X}"
-    )]
-    TargetedKernelIdentityMismatch {
-        expected_timestamp: u32,
-        expected_size: u32,
-        actual_timestamp: u32,
-        actual_size: u32,
-    },
-    #[error(
-        "fvevol module size {module_size:#X} does not match its mapped PE SizeOfImage {pe_size:#X}"
-    )]
-    TargetedModuleImageSizeMismatch { module_size: u32, pe_size: u32 },
     #[error("targeted kernel CodeView identity does not match the selected layout profile")]
     TargetedKernelCodeViewMismatch,
-    #[error("fvevol PE identity does not match the selected layout profile")]
-    TargetedFvevolIdentityMismatch,
-    #[error("fvevol CodeView identity does not match the selected layout profile")]
-    TargetedFvevolCodeViewMismatch,
     #[error("the selected Windows build does not have a reviewed BitLocker memory profile")]
     UnsupportedBitLockerMemoryProfile,
     #[error("the Windows object directory is malformed or incomplete")]

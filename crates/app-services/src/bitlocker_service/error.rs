@@ -185,10 +185,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
 fn is_unsupported_memory_profile(error: &memory_windows::MemoryWindowsError) -> bool {
     matches!(
         error,
-        memory_windows::MemoryWindowsError::TargetedKernelIdentityMismatch { .. }
-            | memory_windows::MemoryWindowsError::TargetedKernelCodeViewMismatch
-            | memory_windows::MemoryWindowsError::TargetedFvevolIdentityMismatch
-            | memory_windows::MemoryWindowsError::TargetedFvevolCodeViewMismatch
+        memory_windows::MemoryWindowsError::TargetedKernelCodeViewMismatch
             | memory_windows::MemoryWindowsError::UnsupportedBitLockerMemoryProfile
     )
 }

@@ -21,7 +21,8 @@ normal; the GUID is the authoritative identity).
   the per-build facts the recovery path needs: build label, PDB GUID/age,
   and the two object-manager global RVAs (`ObpRootDirectoryObject`,
   `ObpInfoMaskToOffset`). The runtime registry is the generated static table
-  at `src/keyring_recovery/symbol_registry_generated.rs`.
+  at `src/keyring_recovery/symbol_registry_generated/` (chunked part files
+  under the module-size guard's 500-line target, aggregated by `mod.rs`).
 - `fvevol/47808A31-...-3.json` — public PDB **stripped of type info** (driver
   PDBs carry no type records). Holds 60 BitLocker-relevant public symbols
   with RVAs (`FVE_KEYRING_*` request GUIDs, keyring/VMK functions) as
@@ -53,7 +54,7 @@ proceed through the version-free driver-object carve.
    ```
 
 3. Place the JSON as `<build>-<guid>.json` under `ntkrnlmp/` and regenerate
-   `symbol_registry_generated.rs` from the collection. Unknown builds keep
+   `symbol_registry_generated/` from the collection. Unknown builds keep
    working through the version-free fallback regardless.
 
 Only extracted facts (RVAs, field offsets) are stored. PDB files themselves

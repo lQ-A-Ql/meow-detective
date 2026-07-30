@@ -7,7 +7,6 @@ use super::{
         TargetedKernelSearchLimits, TargetedKernelSearchReport, MAX_CODEVIEW_BYTES, MAX_IMAGE_SIZE,
         MAX_PE_HEADER_BYTES, PE_EXPORT_DIRECTORY_LEN,
     },
-    modules::KernelModule,
     utils::{read_counted, reserve_bytes, rva_range_is_inside, u16_at, u32_at},
 };
 
@@ -270,7 +269,6 @@ fn build_pe_image(
     }
     Ok(Some(TargetedKernelPeImage {
         base,
-        time_date_stamp: u32_at(nt, 8).ok_or(MemoryWindowsError::MalformedPe)?,
         size_of_image,
         section_count: number_of_sections,
         section_table,
@@ -357,28 +355,4 @@ fn format_guid(bytes: &[u8]) -> String {
         "{data1:08X}-{data2:04X}-{data3:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
         bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
     )
-}
-
-pub(crate) fn read_module_pe_image(
-    address_space: &mut X64AddressSpace,
-    module: &KernelModule,
-    limits: TargetedKernelSearchLimits,
-    scanned_bytes: &mut u64,
-) -> Result<TargetedKernelPeImage> {
-    let image = read_pe_image_at(
-        address_space,
-        module.base,
-        Some(module.base),
-        false,
-        limits,
-        scanned_bytes,
-    )?
-    .ok_or(MemoryWindowsError::MalformedPe)?;
-    if image.size_of_image != module.size {
-        return Err(MemoryWindowsError::TargetedModuleImageSizeMismatch {
-            module_size: module.size,
-            pe_size: image.size_of_image,
-        });
-    }
-    Ok(image)
 }
