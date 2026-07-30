@@ -1,0 +1,309 @@
+{
+  "globals": {
+    "FVE_KEYRING_DEBUGGER_ENABLED": {
+      "code": false,
+      "rva": 176760,
+      "rvaHex": "0x2B278"
+    },
+    "FVE_KEYRING_DEVICE_LOCKEDOUT": {
+      "code": false,
+      "rva": 178696,
+      "rvaHex": "0x2BA08"
+    },
+    "FVE_KEYRING_DEVICE_LOCKOUT_MISMATCH": {
+      "code": false,
+      "rva": 177000,
+      "rvaHex": "0x2B368"
+    },
+    "FVE_KEYRING_ENH_PIN_INVALID": {
+      "code": false,
+      "rva": 178224,
+      "rvaHex": "0x2B830"
+    },
+    "FVE_KEYRING_GENERAL_TPM_FAILURE": {
+      "code": false,
+      "rva": 177848,
+      "rvaHex": "0x2B6B8"
+    },
+    "FVE_KEYRING_GOT_KEY": {
+      "code": false,
+      "rva": 177200,
+      "rvaHex": "0x2B430"
+    },
+    "FVE_KEYRING_INVALID_APPLICATION": {
+      "code": false,
+      "rva": 177744,
+      "rvaHex": "0x2B650"
+    },
+    "FVE_KEYRING_INVALID_CONFIG": {
+      "code": false,
+      "rva": 176536,
+      "rvaHex": "0x2B198"
+    },
+    "FVE_KEYRING_KEYFILE_CORRUPT": {
+      "code": false,
+      "rva": 176744,
+      "rvaHex": "0x2B268"
+    },
+    "FVE_KEYRING_KEYFILE_NOT_FOUND": {
+      "code": false,
+      "rva": 177056,
+      "rvaHex": "0x2B3A0"
+    },
+    "FVE_KEYRING_KEYFILE_NO_VMK": {
+      "code": false,
+      "rva": 178096,
+      "rvaHex": "0x2B7B0"
+    },
+    "FVE_KEYRING_KEY_OBTAINED": {
+      "code": false,
+      "rva": 177472,
+      "rvaHex": "0x2B540"
+    },
+    "FVE_KEYRING_KEY_UNAVAILABLE": {
+      "code": false,
+      "rva": 177944,
+      "rvaHex": "0x2B718"
+    },
+    "FVE_KEYRING_MATCHING_PCRS_TPM_FAILURE": {
+      "code": false,
+      "rva": 179128,
+      "rvaHex": "0x2BBB8"
+    },
+    "FVE_KEYRING_MISMATCHED_BINDING_EXPECTED_LABEL": {
+      "code": false,
+      "rva": 177800,
+      "rvaHex": "0x2B688"
+    },
+    "FVE_KEYRING_MISMATCHED_BINDING_EXPECTED_OBSERVED_LABELS": {
+      "code": false,
+      "rva": 178272,
+      "rvaHex": "0x2B860"
+    },
+    "FVE_KEYRING_MISMATCHED_BINDING_NOLABELS": {
+      "code": false,
+      "rva": 176376,
+      "rvaHex": "0x2B0F8"
+    },
+    "FVE_KEYRING_MISMATCHED_BINDING_OBSERVED_LABEL": {
+      "code": false,
+      "rva": 177568,
+      "rvaHex": "0x2B5A0"
+    },
+    "FVE_KEYRING_MOR_FAILED": {
+      "code": false,
+      "rva": 177664,
+      "rvaHex": "0x2B600"
+    },
+    "FVE_KEYRING_NKP_CREATE_REQUEST": {
+      "code": false,
+      "rva": 177552,
+      "rvaHex": "0x2B590"
+    },
+    "FVE_KEYRING_NKP_GET_PROTOCOL_HANDLE": {
+      "code": false,
+      "rva": 177072,
+      "rvaHex": "0x2B3B0"
+    },
+    "FVE_KEYRING_NKP_INVALID": {
+      "code": false,
+      "rva": 178616,
+      "rvaHex": "0x2B9B8"
+    },
+    "FVE_KEYRING_NKP_PARSE_RESPONSE": {
+      "code": false,
+      "rva": 178632,
+      "rvaHex": "0x2B9C8"
+    },
+    "FVE_KEYRING_NKP_REQUEST_IP_ADDRESS": {
+      "code": false,
+      "rva": 176424,
+      "rvaHex": "0x2B128"
+    },
+    "FVE_KEYRING_NKP_SEND_REQUEST": {
+      "code": false,
+      "rva": 178192,
+      "rvaHex": "0x2B810"
+    },
+    "FVE_KEYRING_NO_VMK_FROM_NBP": {
+      "code": false,
+      "rva": 178992,
+      "rvaHex": "0x2BB30"
+    },
+    "FVE_KEYRING_PASSPHRASE_INVALID": {
+      "code": false,
+      "rva": 177520,
+      "rvaHex": "0x2B570"
+    },
+    "FVE_KEYRING_PASSWORD_INVALID": {
+      "code": false,
+      "rva": 177440,
+      "rvaHex": "0x2B520"
+    },
+    "FVE_KEYRING_PASSWORD_USED": {
+      "code": false,
+      "rva": 176984,
+      "rvaHex": "0x2B358"
+    },
+    "FVE_KEYRING_PCR_UNSEAL_INFO": {
+      "code": false,
+      "rva": 176888,
+      "rvaHex": "0x2B2F8"
+    },
+    "FVE_KEYRING_PIN_INVALID": {
+      "code": false,
+      "rva": 178928,
+      "rvaHex": "0x2BAF0"
+    },
+    "FVE_KEYRING_RECOVERY_PASSWORD_USED": {
+      "code": false,
+      "rva": 177016,
+      "rvaHex": "0x2B378"
+    },
+    "FVE_KEYRING_SECUREBOOT_CONFIG_CHANGE": {
+      "code": false,
+      "rva": 178728,
+      "rvaHex": "0x2BA28"
+    },
+    "FVE_KEYRING_SECUREBOOT_DISABLED": {
+      "code": false,
+      "rva": 178784,
+      "rvaHex": "0x2BA60"
+    },
+    "FVE_KEYRING_TPMPV2_USED": {
+      "code": false,
+      "rva": 178832,
+      "rvaHex": "0x2BA90"
+    },
+    "FVE_KEYRING_TPM_DISABLED": {
+      "code": false,
+      "rva": 178456,
+      "rvaHex": "0x2B918"
+    },
+    "FVE_KEYRING_TPM_INVALID_PCR": {
+      "code": false,
+      "rva": 178816,
+      "rvaHex": "0x2BA80"
+    },
+    "FVE_KEYRING_TPM_INVALID_SRK": {
+      "code": false,
+      "rva": 177312,
+      "rvaHex": "0x2B4A0"
+    },
+    "FVE_KEYRING_TPM_NONEXISTENT": {
+      "code": false,
+      "rva": 176968,
+      "rvaHex": "0x2B348"
+    },
+    "FVE_KEYRING_TPM_NO_VMK": {
+      "code": false,
+      "rva": 176792,
+      "rvaHex": "0x2B298"
+    },
+    "FVE_KEYRING_UNEXPECTED": {
+      "code": false,
+      "rva": 177248,
+      "rvaHex": "0x2B460"
+    },
+    "FVE_KEYRING_UNSEAL_BY_TPM": {
+      "code": false,
+      "rva": 178864,
+      "rvaHex": "0x2BAB0"
+    },
+    "FveKeyringCacheVmk": {
+      "code": false,
+      "rva": 67060,
+      "rvaHex": "0x105F4"
+    },
+    "FveKeyringCompress": {
+      "code": false,
+      "rva": 67204,
+      "rvaHex": "0x10684"
+    },
+    "FveKeyringCreate": {
+      "code": false,
+      "rva": 67448,
+      "rvaHex": "0x10778"
+    },
+    "FveKeyringCreateDataset": {
+      "code": false,
+      "rva": 67548,
+      "rvaHex": "0x107DC"
+    },
+    "FveKeyringErase": {
+      "code": false,
+      "rva": 38548,
+      "rvaHex": "0x9694"
+    },
+    "FveKeyringEraseAll": {
+      "code": false,
+      "rva": 67744,
+      "rvaHex": "0x108A0"
+    },
+    "FveKeyringEraseDataset": {
+      "code": false,
+      "rva": 67880,
+      "rvaHex": "0x10928"
+    },
+    "FveKeyringGetCachedVmkFvek": {
+      "code": false,
+      "rva": 37040,
+      "rvaHex": "0x90B0"
+    },
+    "FveKeyringGetDataset": {
+      "code": false,
+      "rva": 42736,
+      "rvaHex": "0xA6F0"
+    },
+    "FveKeyringGetErrorDataset": {
+      "code": false,
+      "rva": 67968,
+      "rvaHex": "0x10980"
+    },
+    "FveKeyringGetNext": {
+      "code": false,
+      "rva": 37564,
+      "rvaHex": "0x92BC"
+    },
+    "FveKeyringIsValid": {
+      "code": false,
+      "rva": 68144,
+      "rvaHex": "0x10A30"
+    },
+    "FvepComputeKeyFromPassphrase": {
+      "code": false,
+      "rva": 84884,
+      "rvaHex": "0x14B94"
+    },
+    "FvepVmkInfoProcessStretchKey": {
+      "code": false,
+      "rva": 83224,
+      "rvaHex": "0x14518"
+    },
+    "GetKeyRing": {
+      "code": false,
+      "rva": 819320,
+      "rvaHex": "0xC8078"
+    },
+    "GetKeyRingFromKsr": {
+      "code": false,
+      "rva": 822772,
+      "rvaHex": "0xC8DF4"
+    },
+    "IoctlFveProvideVmk": {
+      "code": false,
+      "rva": 593780,
+      "rvaHex": "0x90F74"
+    },
+    "ReleaseKeyRing": {
+      "code": false,
+      "rva": 271768,
+      "rvaHex": "0x42598"
+    }
+  },
+  "module": "fvevol",
+  "pdbAge": 3,
+  "pdbGuid": "47808A31-873E-98CF-7009-95E410CD0095",
+  "source": "Microsoft public symbol server (msdl.microsoft.com/download/symbols)",
+  "types": {}
+}

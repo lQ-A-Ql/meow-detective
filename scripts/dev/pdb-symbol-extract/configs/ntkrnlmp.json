@@ -1,0 +1,17 @@
+{
+  "module": "ntkrnlmp",
+  "globals": ["ObpRootDirectoryObject", "ObpInfoMaskToOffset"],
+  "types": [
+    "_OBJECT_DIRECTORY",
+    "_OBJECT_DIRECTORY_ENTRY",
+    "_OBJECT_HEADER",
+    "_OBJECT_HEADER_NAME_INFO",
+    "_UNICODE_STRING",
+    "_DRIVER_OBJECT",
+    "_DEVICE_OBJECT",
+    "_KLDR_DATA_TABLE_ENTRY",
+    "_LIST_ENTRY",
+    "_DRIVER_EXTENSION",
+    "_FSRTL_ADVANCED_FCB_HEADER"
+  ]
+}

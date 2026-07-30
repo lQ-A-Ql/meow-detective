@@ -1,0 +1,10 @@
+{
+  "module": "fvevol",
+  "globals": [
+    "FvepComputeKeyFromPassphrase",
+    "FvepVmkInfoProcessStretchKey",
+    "IoctlFveProvideVmk"
+  ],
+  "globalPrefixes": ["FVE_KEYRING", "GetKeyRing", "ReleaseKeyRing", "FveKeyring"],
+  "types": []
+}
