@@ -1,5 +1,8 @@
 use super::error::ImportAnalysisError;
-use super::options::{AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats};
+use super::options::{
+    AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats, SearchIndexPhaseOptions,
+    SearchIndexPhaseStats,
+};
 use super::progress::{current_rss_mb, rows_per_sec};
 use super::worker_staging::clear_analysis_worker_rows;
 use crate::staging;
@@ -35,18 +38,19 @@ pub(super) fn merge_finished_analysis_staging(
         cb(84, "Merging analysis staging DBs...");
     }
     let merge_started = Instant::now();
+    let content_index_dir = crate::source_db::source_content_index_dir(&options.index_dir);
     let merge_stats = staging::merge_analysis_staging_to_main(
         &persistence_sqlite::open_existing_source(&options.db_path)?,
         &options.case_root,
         &options.data_source_id.0,
         worker_ids,
         &options.case_id,
-        &options.index_dir,
+        &content_index_dir,
         Some(&|completed, total| {
             if let Some(cb) = progress_cb {
-                let pct = 84 + ((completed as u32 * 10) / total.max(1) as u32);
+                let pct = 84 + ((completed as u32 * 7) / total.max(1) as u32);
                 cb(
-                    pct.min(94),
+                    pct.min(91),
                     &format!(
                         "Merged analysis staging {}/{}: phase=analysis-merge elapsedMs={} rssMb={}",
                         completed,
@@ -61,9 +65,49 @@ pub(super) fn merge_finished_analysis_staging(
     .map_err(|e| ImportAnalysisError::Staging(e.to_string()))?;
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
-    stats.indexed_count = merge_stats.indexed_count;
+    let search_stats = rebuild_file_metadata_index(options, progress_cb)?;
+    apply_search_stats(&mut stats, search_stats);
 
     Ok(stats)
+}
+
+pub(super) fn rebuild_file_metadata_index(
+    options: &ImportAnalysisOptions,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
+    if let Some(callback) = progress_cb {
+        callback(92, "Building complete file metadata search index...");
+    }
+    let stats = super::search_phase::run_search_index_phase(SearchIndexPhaseOptions {
+        db_path: options.db_path.clone(),
+        data_source_id: options.data_source_id.clone(),
+        platform: options.platform,
+        index_dir: options.index_dir.clone(),
+        cancel_token: options.cancel_token.clone(),
+    })?;
+    if let Some(callback) = progress_cb {
+        callback(
+            94,
+            &format!(
+                "File metadata search index ready: indexed={} eligible={} failed={}",
+                stats.indexed_count, stats.eligible_count, stats.failed_count
+            ),
+        );
+    }
+    Ok(stats)
+}
+
+pub(super) fn apply_search_stats(
+    stats: &mut ImportAnalysisStats,
+    search_stats: SearchIndexPhaseStats,
+) {
+    stats.indexed_count = search_stats.indexed_count;
+    stats.skipped_count = stats
+        .skipped_count
+        .saturating_add(search_stats.skipped_count.min(u32::MAX as u64) as u32);
+    stats.failed_count = stats
+        .failed_count
+        .saturating_add(search_stats.failed_count.min(u32::MAX as u64) as u32);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

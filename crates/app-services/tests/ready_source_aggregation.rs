@@ -112,9 +112,18 @@ fn case_aggregators_ignore_sources_until_import_is_ready() {
                 case_conn,
                 &active.case_root,
                 &active.meta.id,
-                "fixture",
-                0,
-                10,
+                &transport::commands::SearchFilesRequest {
+                    query: "fixture".to_string(),
+                    match_path: false,
+                    entry_type: Default::default(),
+                    extensions: Vec::new(),
+                    data_source_ids: Vec::new(),
+                    sort_key: Default::default(),
+                    sort_direction: Default::default(),
+                    offset: 0,
+                    limit: 10,
+                    cursor: None,
+                },
             )
             .map_err(service_error)?;
             assert_eq!(search.total, 0);

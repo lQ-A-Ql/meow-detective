@@ -3,8 +3,10 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use search::{extract_text, SearchIndex, SearchResult};
 use std::path::Path;
+use transport::commands::SearchFilesRequest;
 use transport::dto::{
-    PerformanceReportDto, SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto,
+    PerformanceReportDto, SearchFileResultPageDto, SearchHighlightDto, SearchHitDto,
+    SearchResultPageDto, SearchSnippetDto,
 };
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
@@ -29,6 +31,12 @@ pub struct InstrumentedIndexStats {
 #[derive(Debug, Clone)]
 pub struct InstrumentedSearchResult {
     pub page: SearchResultPageDto,
+    pub performance_report: PerformanceReportDto,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstrumentedFileSearchResult {
+    pub page: SearchFileResultPageDto,
     pub performance_report: PerformanceReportDto,
 }
 
@@ -121,7 +129,14 @@ pub fn search_files_real(
     offset: u64,
     limit: u32,
 ) -> Result<SearchResultPageDto, SearchError> {
-    let index = SearchIndex::open(index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
+    let content_index_dir = crate::source_db::source_content_index_dir(index_dir);
+    let active_index_dir = if content_index_dir.exists() {
+        content_index_dir.as_path()
+    } else {
+        index_dir
+    };
+    let index =
+        SearchIndex::open(active_index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
     if !index.supports_stable_paging() {
         return Err(SearchError::Unsupported(
             "Search index schema does not support deterministic pagination; rebuild the data source search index"
@@ -201,34 +216,28 @@ pub fn search_files_for_case(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    query: &str,
-    offset: u64,
-    limit: u32,
-) -> Result<SearchResultPageDto, SearchError> {
-    case_search::search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
+    request: &SearchFilesRequest,
+) -> Result<SearchFileResultPageDto, SearchError> {
+    case_search::search_files_for_case(case_conn, case_root, case_id, request)
 }
 
 pub fn search_files_for_case_cursor(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    query: &str,
-    cursor: Option<&str>,
-    limit: u32,
-) -> Result<SearchResultPageDto, SearchError> {
-    case_search::search_files_for_case_cursor(case_conn, case_root, case_id, query, cursor, limit)
+    request: &SearchFilesRequest,
+) -> Result<SearchFileResultPageDto, SearchError> {
+    case_search::search_files_for_case_cursor(case_conn, case_root, case_id, request)
 }
 
 pub fn search_files_for_case_instrumented(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    query: &str,
-    offset: u64,
-    limit: u32,
-) -> Result<InstrumentedSearchResult, SearchError> {
+    request: &SearchFilesRequest,
+) -> Result<InstrumentedFileSearchResult, SearchError> {
     let (page, sample) = measure_rows(0, || {
-        search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
+        search_files_for_case(case_conn, case_root, case_id, request)
     });
     let page = page?;
     let sample = PerfSample {
@@ -236,7 +245,7 @@ pub fn search_files_for_case_instrumented(
         rows: page.items.len() as u64,
     };
     let performance_report = search_query_report(sample, page.total);
-    Ok(InstrumentedSearchResult {
+    Ok(InstrumentedFileSearchResult {
         page,
         performance_report,
     })
@@ -246,12 +255,10 @@ pub fn search_files_for_case_cursor_instrumented(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    query: &str,
-    cursor: Option<&str>,
-    limit: u32,
-) -> Result<InstrumentedSearchResult, SearchError> {
+    request: &SearchFilesRequest,
+) -> Result<InstrumentedFileSearchResult, SearchError> {
     let (page, sample) = measure_rows(0, || {
-        search_files_for_case_cursor(case_conn, case_root, case_id, query, cursor, limit)
+        search_files_for_case_cursor(case_conn, case_root, case_id, request)
     });
     let page = page?;
     let sample = PerfSample {
@@ -259,7 +266,7 @@ pub fn search_files_for_case_cursor_instrumented(
         rows: page.items.len() as u64,
     };
     let performance_report = search_query_report(sample, page.total);
-    Ok(InstrumentedSearchResult {
+    Ok(InstrumentedFileSearchResult {
         page,
         performance_report,
     })

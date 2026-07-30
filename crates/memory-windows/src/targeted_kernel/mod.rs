@@ -9,7 +9,8 @@ pub use limits::{
     TargetedKernelIdentity, TargetedKernelLayoutProfile, TargetedKernelPeImage,
     TargetedKernelSearchLimits, TargetedKernelSearchReport,
 };
-pub(crate) use modules::{enumerate_loaded_modules, KernelModule};
-pub(crate) use search::read_codeview_identity;
+pub use modules::{enumerate_loaded_modules, KernelModule};
 pub(crate) use search::read_module_pe_image;
-pub use search::{discover_kernel_from_entry, discover_kernel_from_processor_start_block};
+pub use search::{
+    discover_kernel_from_entry, discover_kernel_from_processor_start_block, read_codeview_identity,
+};

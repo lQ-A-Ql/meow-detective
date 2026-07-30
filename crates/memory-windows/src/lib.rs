@@ -25,9 +25,10 @@ pub use keyring_recovery::{
 pub use physical::{PhysicalReadStats, RawMemoryImage};
 pub use targeted_kernel::{
     discover_kernel_from_entry, discover_kernel_from_processor_start_block,
-    LoadedModuleEntryLayout, TargetedCodeViewIdentity, TargetedKernelDiscovery,
-    TargetedKernelIdentity, TargetedKernelLayoutProfile, TargetedKernelPeImage,
-    TargetedKernelSearchLimits, TargetedKernelSearchReport,
+    enumerate_loaded_modules, read_codeview_identity, KernelModule, LoadedModuleEntryLayout,
+    TargetedCodeViewIdentity, TargetedKernelDiscovery, TargetedKernelIdentity,
+    TargetedKernelLayoutProfile, TargetedKernelPeImage, TargetedKernelSearchLimits,
+    TargetedKernelSearchReport,
 };
 pub use x64::{is_canonical_address, X64AddressSpace};
 

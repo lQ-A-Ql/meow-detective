@@ -259,10 +259,6 @@ impl TargetedKernelLayoutProfile {
     }
 
     #[must_use]
-    pub(crate) fn kernel_identity(&self) -> TargetedKernelIdentity {
-        self.kernel_identity
-    }
-
     pub fn with_codeview_identity(mut self, identity: TargetedCodeViewIdentity) -> Self {
         self.codeview_identity = Some(identity);
         self

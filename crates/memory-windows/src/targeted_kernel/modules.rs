@@ -12,7 +12,7 @@ use super::{
 
 /// One module from the profile-validated Windows loaded-module list.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct KernelModule {
+pub struct KernelModule {
     pub name: String,
     pub base: u64,
     pub size: u32,
@@ -21,7 +21,7 @@ pub(crate) struct KernelModule {
 /// Enumerates a module list only when its layout is supplied by a trusted,
 /// version-specific profile. This function deliberately has no Windows offset
 /// defaults, so an unknown build fails closed at the caller boundary.
-pub(crate) fn enumerate_loaded_modules(
+pub fn enumerate_loaded_modules(
     address_space: &mut X64AddressSpace,
     list_head: u64,
     layout: LoadedModuleEntryLayout,

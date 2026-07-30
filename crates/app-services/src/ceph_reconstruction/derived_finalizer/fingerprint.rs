@@ -112,7 +112,7 @@ fn phase_policy_version(phase: ProcessingPhase) -> &'static str {
         ProcessingPhase::Platform => "registered-platform-v1",
         ProcessingPhase::Artifacts => crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
         ProcessingPhase::Timeline => "macb-only-timeline-v2",
-        ProcessingPhase::Search => "budgeted-text-index-v2",
+        ProcessingPhase::Search => "complete-file-metadata-index-v3",
     }
 }
 

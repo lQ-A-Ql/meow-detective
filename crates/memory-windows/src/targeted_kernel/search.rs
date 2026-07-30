@@ -281,7 +281,7 @@ fn build_pe_image(
     }))
 }
 
-pub(crate) fn read_codeview_identity(
+pub fn read_codeview_identity(
     address_space: &mut X64AddressSpace,
     image: TargetedKernelPeImage,
     limits: TargetedKernelSearchLimits,

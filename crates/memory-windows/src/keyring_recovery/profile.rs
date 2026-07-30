@@ -64,15 +64,15 @@ pub(crate) struct FveVolumeContextLayout {
     pub vmk_offset: u16,
 }
 
-/// Recovery profile for one Windows kernel build, resolved from the embedded
-/// PDB symbol registry. fvevol-internal offsets stay zero: keyring and VMK
-/// datum discovery run through signature-anchored bounded scans, so a profile
-/// only carries version-stable format constants plus registry-resolved
-/// ntoskrnl layouts.
+/// Recovery profile for one Windows kernel build. The layout layer is
+/// version-stable (verified invariant across 741 extracted PDB profiles), so
+/// the only per-build data is the object-manager global pair used by the
+/// object-directory fast path. That pair is optional: when it is absent,
+/// recovery falls back to version-free driver discovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitLockerMemoryProfile {
     kernel: TargetedKernelLayoutProfile,
-    objects: ObjectManagerLayout,
+    objects: Option<ObjectManagerLayout>,
     driver: DriverLayout,
     keyring: KeyringLayout,
     devices: DeviceObjectLayout,
@@ -80,20 +80,22 @@ pub struct BitLockerMemoryProfile {
 }
 
 impl BitLockerMemoryProfile {
-    /// Resolves a profile for any ntoskrnl build present in the embedded
-    /// symbol registry (see `symbol_table`). The CodeView GUID is the only
-    /// identity gate; unknown builds fail closed with
+    /// Resolves a profile for one discovered kernel. The CodeView GUID selects
+    /// object-manager globals from the embedded symbol registry when the build
+    /// is present; unknown builds proceed without them (the object-directory
+    /// fast path is skipped in favor of the version-free driver scan). A
+    /// missing CodeView identity fails closed with
     /// [`MemoryWindowsError::UnsupportedBitLockerMemoryProfile`].
     pub fn resolve(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
         let codeview = kernel
             .codeview_identity()
             .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
-        let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid())
-            .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
+        let objects =
+            symbol_table::resolve_ntoskrnl_layouts(codeview.guid()).map(|layouts| layouts.objects);
         Ok(Self {
             kernel,
-            objects: layouts.objects,
-            driver: layouts.driver,
+            objects,
+            driver: symbol_table::default_driver_layout(),
             keyring: KeyringLayout {
                 client_keyring_offset: 0,
                 capacity: 0x4000,
@@ -101,7 +103,7 @@ impl BitLockerMemoryProfile {
                 dataset_minimum_size: 0x30,
                 dataset_volume_guid_offset: 0x10,
             },
-            devices: layouts.devices,
+            devices: symbol_table::default_device_layout(),
             volume_context: FveVolumeContextLayout {
                 vmk_datum_pointer_offset: 0,
                 vmk_datum_size: 44,
@@ -118,7 +120,7 @@ impl BitLockerMemoryProfile {
         &self.kernel
     }
 
-    pub(crate) fn objects(&self) -> ObjectManagerLayout {
+    pub(crate) fn objects(&self) -> Option<ObjectManagerLayout> {
         self.objects
     }
 

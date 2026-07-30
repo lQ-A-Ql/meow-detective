@@ -126,9 +126,7 @@ pub struct PostImportPipelineReport {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SearchIndexPhaseOptions {
-    pub(crate) case_root: PathBuf,
     pub(crate) db_path: PathBuf,
-    pub(crate) case_id: String,
     pub(crate) data_source_id: DataSourceId,
     pub(crate) platform: DataSourcePlatform,
     pub(crate) index_dir: PathBuf,

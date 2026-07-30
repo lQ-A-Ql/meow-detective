@@ -115,6 +115,15 @@ pub fn source_index_dir(case_root: &Path, data_source_id: &DataSourceId) -> Path
     source_dir(case_root, data_source_id).join(SOURCE_INDEX_DIR_NAME)
 }
 
+pub fn source_content_index_dir(file_index_dir: &Path) -> PathBuf {
+    let mut directory_name = file_index_dir
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new(SOURCE_INDEX_DIR_NAME))
+        .to_os_string();
+    directory_name.push("-content");
+    file_index_dir.with_file_name(directory_name)
+}
+
 pub fn source_staging_dir(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<PathBuf> {
     if !is_safe_data_source_id(&data_source_id.0) {
         return Err(DbError::System(format!(

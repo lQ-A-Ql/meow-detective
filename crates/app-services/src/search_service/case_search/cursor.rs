@@ -3,43 +3,48 @@ use std::path::Path;
 
 use domain::DataSourceId;
 use rusqlite::Connection;
-use search::{SearchAfterKey, SearchIndex, SearchQuerySession, SearchRankedHit};
+use search::{
+    FileSearchAfterKey, FileSearchQuerySession, FileSearchRankedHit, FileSearchSortDirection,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use transport::dto::SearchResultPageDto;
+use transport::commands::SearchFilesRequest;
+use transport::dto::SearchFileResultPageDto;
 use transport::paging::{decode_opaque_cursor, encode_opaque_cursor};
 
 use super::{
-    search_hit_to_dto, search_rank_order, source_scoped_search_hit, MAX_CASE_SEARCH_WINDOW,
+    current_sources, file_hit_to_dto, file_search_options, search_rank_order, SearchSource,
+    MAX_CASE_SEARCH_WINDOW,
 };
 use crate::search_service::SearchError;
-use crate::source_db::{
-    encode_source_scoped_id, registered_source_index_dir, safe_existing_case_path,
-};
+use crate::source_db::encode_source_scoped_id;
 
-const CURSOR_KIND: &str = "case-search-v2";
-const MAX_CURSOR_SOURCES: usize = 512;
+const CURSOR_KIND: &str = "case-file-search-v3";
+const MAX_CURSOR_SOURCES: usize = 128;
 const MAX_CURSOR_FILE_ID_BYTES: usize = 2048;
+const MAX_CURSOR_SORT_VALUE_BYTES: usize = 4096;
 const MAX_INDEX_GENERATION_BYTES: usize = 64;
 
 pub(super) fn search_files_for_case_cursor(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    query: &str,
-    cursor: Option<&str>,
-    limit: u32,
-) -> Result<SearchResultPageDto, SearchError> {
+    request: &SearchFilesRequest,
+) -> Result<SearchFileResultPageDto, SearchError> {
     let start = std::time::Instant::now();
-    let decoded = cursor
+    let decoded = request
+        .cursor
+        .as_deref()
         .map(decode_cursor)
         .transpose()?
-        .map(|payload| validate_cursor(payload, case_id, query))
+        .map(|payload| validate_cursor(payload, case_id, request))
         .transpose()?;
-    let sources = current_sources(case_conn, case_root, case_id)?;
-    validate_source_set(decoded.as_ref(), &sources)?;
-    let fetch_limit = usize::try_from(limit).unwrap_or(usize::MAX);
-    let mut sessions = open_source_sessions(sources, query, decoded.as_ref(), fetch_limit)?;
+    let source_set = current_sources(case_conn, case_root, case_id, request)?;
+    validate_source_set(decoded.as_ref(), &source_set.sources)?;
+    let options = file_search_options(request);
+    let fetch_limit = request.limit as usize;
+    let mut sessions =
+        open_source_sessions(source_set.sources, &options, decoded.as_ref(), fetch_limit)?;
     let total = sessions
         .iter()
         .map(|source| source.state.total_count)
@@ -47,23 +52,21 @@ pub(super) fn search_files_for_case_cursor(
     let available = total.min(MAX_CASE_SEARCH_WINDOW);
     let consumed = decoded.as_ref().map_or(0, |payload| payload.consumed);
     validate_window(decoded.as_ref(), total, available, consumed)?;
-
     let mut items = Vec::with_capacity(fetch_limit);
     while items.len() < fetch_limit && consumed.saturating_add(items.len() as u64) < available {
-        let Some(source_index) = next_source(&sessions) else {
+        let Some(source_index) = next_source(&sessions, options.sort_direction) else {
             return Err(SearchError::Index(
                 "search cursor exhausted before reaching its stable result count".to_string(),
             ));
         };
         items.push(sessions[source_index].pop_materialized()?);
     }
-
     let next_consumed = consumed.saturating_add(items.len() as u64);
     let next_cursor = if next_consumed < available {
         Some(encode_cursor(SearchCursorPayload {
             kind: CURSOR_KIND.to_string(),
             case_id: case_id.0.clone(),
-            query_hash: query_hash(query),
+            request_hash: request_hash(request),
             consumed: next_consumed,
             total,
             available,
@@ -72,13 +75,13 @@ pub(super) fn search_files_for_case_cursor(
     } else {
         None
     };
-
-    Ok(SearchResultPageDto {
+    Ok(SearchFileResultPageDto {
         total,
         available,
         truncated: available < total,
         took_ms: start.elapsed().as_millis() as u64,
         items,
+        coverage: source_set.coverage,
         next_cursor,
     })
 }
@@ -88,7 +91,7 @@ pub(super) fn search_files_for_case_cursor(
 struct SearchCursorPayload {
     kind: String,
     case_id: String,
-    query_hash: String,
+    request_hash: String,
     consumed: u64,
     total: u64,
     available: u64,
@@ -103,78 +106,52 @@ struct SearchSourceCursor {
     schema_version: u32,
     snapshot_opstamp: u64,
     total_count: u64,
-    after: Option<SearchAfterKey>,
+    after: Option<FileSearchAfterKey>,
 }
 
 struct SourceCursorSession {
     data_source_id: DataSourceId,
-    session: SearchQuerySession,
+    data_source_name: String,
+    session: FileSearchQuerySession,
     state: SearchSourceCursor,
     hits: VecDeque<RankedSearchHit>,
 }
 
 struct RankedSearchHit {
     scoped_file_id: String,
-    ranked: SearchRankedHit,
-}
-
-fn current_sources(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(DataSourceId, SearchIndex)>, SearchError> {
-    let mut sources = Vec::new();
-    for (source, _) in crate::source_db::ready_data_sources(case_conn, case_id)? {
-        let index_dir = registered_source_index_dir(case_conn, case_root, &source.id)?;
-        if !index_dir.exists() {
-            continue;
-        }
-        let safe_index_dir = safe_existing_case_path(case_root, &index_dir)?;
-        let index = SearchIndex::open(&safe_index_dir)
-            .map_err(|error| SearchError::Index(error.to_string()))?;
-        if !index.supports_stable_paging() {
-            return Err(SearchError::Unsupported(
-                "Search index schema does not support deterministic pagination; rebuild the data source search index"
-                    .to_string(),
-            ));
-        }
-        sources.push((source.id, index));
-    }
-    sources.sort_unstable_by(|left, right| left.0 .0.cmp(&right.0 .0));
-    Ok(sources)
+    ranked: FileSearchRankedHit,
 }
 
 fn open_source_sessions(
-    sources: Vec<(DataSourceId, SearchIndex)>,
-    query: &str,
+    sources: Vec<SearchSource>,
+    options: &search::FileSearchOptions,
     cursor: Option<&SearchCursorPayload>,
     limit: usize,
 ) -> Result<Vec<SourceCursorSession>, SearchError> {
     sources
         .into_iter()
         .enumerate()
-        .map(|(index, (data_source_id, search_index))| {
+        .map(|(index, source)| {
             let expected = cursor.map(|payload| &payload.sources[index]);
-            let session = search_index
-                .query_session(query)
-                .map_err(|error| SearchError::Index(error.to_string()))?;
+            let session = source
+                .index
+                .file_query_session(options)
+                .map_err(index_error)?;
             if expected.is_some_and(|state| {
                 state.index_generation != session.index_generation()
                     || state.schema_version != session.schema_version()
+                    || state.snapshot_opstamp != session.snapshot_opstamp()
             }) {
-                return Err(stale_cursor("a source search index generation changed"));
-            }
-            if expected.is_some_and(|state| state.snapshot_opstamp != session.snapshot_opstamp()) {
-                return Err(stale_cursor("a source search index changed"));
+                return Err(stale_cursor("a source file index changed"));
             }
             let page = session
                 .rank_after(expected.and_then(|state| state.after.as_ref()), limit)
-                .map_err(|error| SearchError::Index(error.to_string()))?;
+                .map_err(index_error)?;
             if expected.is_some_and(|state| state.total_count != page.total_count) {
                 return Err(stale_cursor("a source result count changed"));
             }
             let state = SearchSourceCursor {
-                data_source_id: data_source_id.0.clone(),
+                data_source_id: source.data_source_id.0.clone(),
                 index_generation: session.index_generation().to_string(),
                 schema_version: session.schema_version(),
                 snapshot_opstamp: session.snapshot_opstamp(),
@@ -185,12 +162,16 @@ fn open_source_sessions(
                 .hits
                 .into_iter()
                 .map(|ranked| RankedSearchHit {
-                    scoped_file_id: encode_source_scoped_id(&data_source_id, ranked.file_id()),
+                    scoped_file_id: encode_source_scoped_id(
+                        &source.data_source_id,
+                        ranked.file_id(),
+                    ),
                     ranked,
                 })
                 .collect();
             Ok(SourceCursorSession {
-                data_source_id,
+                data_source_id: source.data_source_id,
+                data_source_name: source.data_source_name,
                 session,
                 state,
                 hits,
@@ -200,13 +181,13 @@ fn open_source_sessions(
 }
 
 impl SourceCursorSession {
-    fn front_key(&self) -> Option<(f64, &str)> {
+    fn front_key(&self) -> Option<(&str, &str)> {
         self.hits
             .front()
-            .map(|hit| (hit.ranked.score(), hit.scoped_file_id.as_str()))
+            .map(|hit| (hit.ranked.sort_value(), hit.scoped_file_id.as_str()))
     }
 
-    fn pop_materialized(&mut self) -> Result<transport::dto::SearchHitDto, SearchError> {
+    fn pop_materialized(&mut self) -> Result<transport::dto::SearchFileHitDto, SearchError> {
         let ranked = self.hits.pop_front().ok_or_else(|| {
             SearchError::Index("search merge selected an empty source cursor".to_string())
         })?;
@@ -214,26 +195,37 @@ impl SourceCursorSession {
         let hit = self
             .session
             .materialize(ranked.ranked)
-            .map_err(|error| SearchError::Index(error.to_string()))?;
-        Ok(source_scoped_search_hit(
-            search_hit_to_dto(hit),
+            .map_err(index_error)?;
+        Ok(file_hit_to_dto(
+            hit,
             &self.data_source_id,
+            &self.data_source_name,
         ))
     }
 }
 
-fn next_source(sources: &[SourceCursorSession]) -> Option<usize> {
+fn next_source(
+    sources: &[SourceCursorSession],
+    direction: FileSearchSortDirection,
+) -> Option<usize> {
     let mut selected: Option<usize> = None;
     for (index, source) in sources.iter().enumerate() {
-        let Some((score, file_id)) = source.front_key() else {
+        let Some((sort_value, file_id)) = source.front_key() else {
             continue;
         };
-        let precedes_selected = selected
+        let precedes = selected
             .and_then(|current| sources[current].front_key())
-            .is_none_or(|(current_score, current_file_id)| {
-                search_rank_order(score, file_id, current_score, current_file_id).is_lt()
+            .is_none_or(|(current_sort, current_file_id)| {
+                search_rank_order(
+                    sort_value,
+                    file_id,
+                    current_sort,
+                    current_file_id,
+                    direction,
+                )
+                .is_lt()
             });
-        if precedes_selected {
+        if precedes {
             selected = Some(index);
         }
     }
@@ -243,11 +235,11 @@ fn next_source(sources: &[SourceCursorSession]) -> Option<usize> {
 fn validate_cursor(
     payload: SearchCursorPayload,
     case_id: &domain::CaseId,
-    query: &str,
+    request: &SearchFilesRequest,
 ) -> Result<SearchCursorPayload, SearchError> {
     if payload.kind != CURSOR_KIND
         || payload.case_id != case_id.0
-        || payload.query_hash != query_hash(query)
+        || payload.request_hash != request_hash(request)
     {
         return Err(stale_cursor(
             "the cursor does not match this search request",
@@ -262,7 +254,7 @@ fn validate_cursor(
                 || source.after.as_ref().is_some_and(|after| {
                     after.file_id.is_empty()
                         || after.file_id.len() > MAX_CURSOR_FILE_ID_BYTES
-                        || !f32::from_bits(after.score_bits).is_finite()
+                        || after.sort_value.len() > MAX_CURSOR_SORT_VALUE_BYTES
                 })
         })
     {
@@ -275,14 +267,14 @@ fn validate_cursor(
 
 fn validate_source_set(
     cursor: Option<&SearchCursorPayload>,
-    sources: &[(DataSourceId, SearchIndex)],
+    sources: &[SearchSource],
 ) -> Result<(), SearchError> {
     let Some(cursor) = cursor else {
         return Ok(());
     };
     let current_ids = sources
         .iter()
-        .map(|(source_id, _)| source_id.0.as_str())
+        .map(|source| source.data_source_id.0.as_str())
         .collect::<Vec<_>>();
     let cursor_ids = cursor
         .sources
@@ -309,6 +301,19 @@ fn validate_window(
     Ok(())
 }
 
+fn request_hash(request: &SearchFilesRequest) -> String {
+    let payload = serde_json::json!({
+        "query": request.query,
+        "matchPath": request.match_path,
+        "entryType": request.entry_type,
+        "extensions": request.extensions,
+        "dataSourceIds": request.data_source_ids,
+        "sortKey": request.sort_key,
+        "sortDirection": request.sort_direction,
+    });
+    hex::encode(Sha256::digest(payload.to_string().as_bytes()))
+}
+
 fn decode_cursor(cursor: &str) -> Result<SearchCursorPayload, SearchError> {
     decode_opaque_cursor(cursor)
         .map_err(|error| SearchError::InvalidInput(format!("invalid search cursor: {error}")))
@@ -319,8 +324,8 @@ fn encode_cursor(payload: SearchCursorPayload) -> Result<String, SearchError> {
         .map_err(|error| SearchError::Other(format!("failed to encode search cursor: {error}")))
 }
 
-fn query_hash(query: &str) -> String {
-    hex::encode(Sha256::digest(query.as_bytes()))
+fn index_error(error: search::indexer::tantivy_writer::IndexError) -> SearchError {
+    SearchError::Index(error.to_string())
 }
 
 fn stale_cursor(reason: &str) -> SearchError {

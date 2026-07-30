@@ -284,11 +284,12 @@ fn post_import_options(
 #[test]
 fn post_import_skip_uses_progress_sink_without_running_workers() {
     let tmp = TempDir::new().unwrap();
+    let (db_path, data_source_id) = setup_source_db(&tmp);
     let options = PostImportPipelineOptions {
         case_root: tmp.path().to_path_buf(),
-        db_path: tmp.path().join("app.db"),
+        db_path,
         case_id: "case-1".to_string(),
-        data_source_id: DataSourceId("ds-1".to_string()),
+        data_source_id,
         platform: domain::DataSourcePlatform::Windows,
         index_dir: tmp.path().join("indexes").join("tantivy"),
         max_analysis_workers: Some(1),
@@ -316,16 +317,20 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
     );
     assert_eq!(counts, JobOutcomeCounts::default());
     let events = events.lock().unwrap_or_else(|e| e.into_inner());
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 3);
     assert_eq!(events[0].0, 84);
-    assert!(events[0].1.contains("phase=post-import-skip"));
-    assert!(events[0].1.contains("scheduling=deferred"));
-    assert!(events[0].1.contains("workerBudget=1"));
+    assert!(events[0].1.contains("phase=search-index"));
+    assert!(events[0].1.contains("scheduling=running"));
+    assert!(events[0].1.contains("workerBudget=0"));
     assert!(events[0].1.contains("activeWorkers=0"));
     assert!(events[0].1.contains("queuedTasks=0"));
-    assert!(events[0].1.contains("pendingTasks=0"));
+    assert!(events[0].1.contains("pendingTasks=unknown"));
     assert!(events[0].1.contains("contentDeferred=true"));
     assert!(events[0].1.contains("textDeferred=true"));
+    assert_eq!(events[1].0, 92);
+    assert!(events[1].1.contains("complete file metadata"));
+    assert_eq!(events[2].0, 94);
+    assert!(events[2].1.contains("indexed=0"));
 }
 
 #[test]
@@ -355,7 +360,7 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
         .expect("post import success");
 
     assert!(message.starts_with("Timeline: 2 events"));
-    assert!(message.contains("Artifacts: 0. Index: 0 indexed"));
+    assert!(message.contains("Artifacts: 0. Index: 2 indexed"));
     assert_eq!(counts, JobOutcomeCounts::default());
     let events = events.lock().unwrap_or_else(|e| e.into_inner());
     let scheduled = events
@@ -854,7 +859,7 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
 
     assert_eq!(stats.processed_count, 1);
     assert_eq!(stats.artifact_count, 1);
-    assert_eq!(stats.indexed_count, 0);
+    assert_eq!(stats.indexed_count, 1);
     assert_eq!(stats.warning_count, 0);
 
     let main_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
@@ -939,7 +944,7 @@ fn disabled_import_content_reads_keep_analysis_bounded() {
     assert_eq!(stats.processed_count, 2);
     assert!(stats.timeline_count > 0);
     assert_eq!(stats.artifact_count, 0);
-    assert_eq!(stats.indexed_count, 0);
+    assert_eq!(stats.indexed_count, 2);
     assert_eq!(stats.warning_count, 0);
     assert_eq!(stats.skipped_count, 0);
 }

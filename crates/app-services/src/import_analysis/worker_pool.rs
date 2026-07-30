@@ -4,8 +4,9 @@ use super::budget::{
 use super::error::ImportAnalysisError;
 use super::extractor_policy::validate_analysis_platform;
 use super::finalize::{
-    collect_done_worker_stats, discover_analysis_worker_ids, merge_finished_analysis_staging,
-    prepare_analysis_staging_startup, AnalysisStartupAction,
+    apply_search_stats, collect_done_worker_stats, discover_analysis_worker_ids,
+    merge_finished_analysis_staging, prepare_analysis_staging_startup, rebuild_file_metadata_index,
+    AnalysisStartupAction,
 };
 use super::options::{
     AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats, JobOutcomeCounts,
@@ -35,7 +36,8 @@ pub fn run_post_import_pipeline_report(
     let mut counts = initial_counts_for_platform(options.platform)?;
     let tier_state = Arc::clone(&options.tier_state);
     if post_import_disabled(&options) {
-        return finish_disabled_post_import(&options, &tier_state, counts, progress_cb);
+        let analysis_options = import_analysis_options(options, Arc::clone(&tier_state));
+        return finish_disabled_post_import(&analysis_options, &tier_state, counts, progress_cb);
     }
 
     emit_post_import_scheduled(&options, progress_cb);
@@ -73,26 +75,32 @@ fn post_import_disabled(options: &PostImportPipelineOptions) -> bool {
 }
 
 fn finish_disabled_post_import(
-    options: &PostImportPipelineOptions,
+    options: &ImportAnalysisOptions,
     tier_state: &Arc<std::sync::Mutex<super::tier::TierStateMachine>>,
-    counts: JobOutcomeCounts,
+    mut counts: JobOutcomeCounts,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<PostImportPipelineReport, PostImportPipelineError> {
     if let Some(cb) = progress_cb {
         cb(
             84,
-            &format!(
-                "Post-import skipped: phase=post-import-skip scheduling=deferred workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks=0 timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
-                scheduled_worker_count(options.max_analysis_workers)
-            ),
+            "Post-import metadata indexing: phase=search-index scheduling=running workerBudget=0 activeWorkers=0 queuedTasks=0 pendingTasks=unknown timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
         );
     }
+    let search_stats = rebuild_file_metadata_index(options, progress_cb)
+        .map_err(|error| post_import_failure(error, counts.clone()))?;
+    let mut stats = ImportAnalysisStats::default();
+    apply_search_stats(&mut stats, search_stats);
+    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
+    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
     finish_post_import_tiers(tier_state, &counts)?;
+    let message = format!(
+        "Timeline: deferred until Timeline page. Artifacts: 0. Index: {} indexed",
+        stats.indexed_count
+    );
     Ok(PostImportPipelineReport {
-        message: "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
-            .to_string(),
+        message,
         counts,
-        stats: ImportAnalysisStats::default(),
+        stats,
     })
 }
 
@@ -320,9 +328,12 @@ fn finish_already_merged_analysis(
             "Analysis staging already merged; skipping analysis resume.",
         );
     }
-    finish_analysis_tiers(options)?;
     let worker_ids = discover_analysis_worker_ids(&options.case_root, &options.data_source_id.0)?;
-    collect_done_worker_stats(options, &worker_ids)
+    let mut stats = collect_done_worker_stats(options, &worker_ids)?;
+    let search_stats = rebuild_file_metadata_index(options, progress_cb)?;
+    apply_search_stats(&mut stats, search_stats);
+    finish_analysis_tiers(options)?;
+    Ok(stats)
 }
 
 fn ensure_analysis_memory_available(

@@ -827,6 +827,28 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             assert_eq!(results.total, 1);
             assert!(results.items[0].path.ends_with("notes.txt"));
 
+            let file_search = search_service::search_files_for_case(
+                conn,
+                &active.case_root,
+                &active.meta.id,
+                &transport::commands::SearchFilesRequest {
+                    query: "notes".to_string(),
+                    match_path: false,
+                    entry_type: transport::commands::SearchEntryTypeDto::Any,
+                    extensions: Vec::new(),
+                    data_source_ids: vec![data_source_id.0.clone()],
+                    sort_key: transport::commands::SearchSortKeyDto::Name,
+                    sort_direction: transport::commands::FileSortDirectionDto::Asc,
+                    offset: 0,
+                    limit: 10,
+                    cursor: None,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            assert_eq!(file_search.total, 1);
+            assert_eq!(file_search.items[0].name, "notes.txt");
+            assert!(file_search.coverage.complete);
+
             let artifact_repo = ArtifactRepo::new(&source_conn);
             assert!(artifact_repo.count()? > 0);
             let families = artifact_repo.families()?;
@@ -926,11 +948,11 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
             )?;
             conn.execute(
                 "INSERT INTO file_entries
-                 (id, data_source_id, path, name, entry_type, size, ext, deleted,
+                 (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted,
                   created_at, modified_at, accessed_at, changed_at)
                  VALUES
                  ('raw-file-1', ?1, '/Windows/System32/config/SYSTEM', 'SYSTEM', 'file', 4096,
-                  NULL, 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
+                  NULL, 0, 0, 0, 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
                   '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z')",
                 [&data_source_id.0],
             )?;
@@ -966,7 +988,7 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
 
             assert_eq!(
                 message,
-                "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
+                "Timeline: deferred until Timeline page. Artifacts: 0. Index: 1 indexed"
             );
             assert!(!counts.is_partial());
             let before_query: i64 =

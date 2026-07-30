@@ -392,11 +392,3 @@ pub(super) fn reserve_content_quota(
     }
     true
 }
-
-pub(super) fn release_content_quota(file: &FileEntry, shared: &SharedAnalysisState) {
-    let Some(size) = file.size else {
-        return;
-    };
-    shared.content_files_used.fetch_sub(1, Ordering::Relaxed);
-    shared.content_bytes_used.fetch_sub(size, Ordering::Relaxed);
-}

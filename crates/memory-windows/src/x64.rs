@@ -85,6 +85,123 @@ impl X64AddressSpace {
             address,
         )
     }
+
+    /// Raw physical read passthrough for signature-anchored carves that work
+    /// directly on physical offsets.
+    pub fn read_physical_exact(&mut self, physical_address: u64, buffer: &mut [u8]) -> Result<()> {
+        self.image.read_exact_at(physical_address, buffer)
+    }
+
+    /// Replaces the physical read budget. The structural default is meant for
+    /// object walks; a full-image carve needs a one-pass budget instead.
+    pub(crate) fn set_physical_read_budget(
+        &mut self,
+        maximum_operations: u64,
+        maximum_bytes: u64,
+    ) -> Result<()> {
+        self.image
+            .set_read_budget(maximum_operations, maximum_bytes)
+    }
+
+    /// Reverse page-table lookup: finds the virtual address mapping one
+    /// physical address, walking the kernel half of the four-level tables.
+    /// Used to lift a physically carved kernel object back into the virtual
+    /// address space. Returns `Ok(None)` when no mapping covers the address.
+    pub fn find_virtual_for_physical(&mut self, physical_address: u64) -> Result<Option<u64>> {
+        let image_len = self.image.len();
+        if physical_address >= image_len {
+            return Err(MemoryWindowsError::InvalidPageFrame {
+                address: physical_address,
+            });
+        }
+        for pml4_index in 256..512u64 {
+            let pml4_entry = entry(&mut self.image, self.directory_table_base, pml4_index, 0)?;
+            if pml4_entry & PRESENT == 0 {
+                continue;
+            }
+            let pdpt_base = pml4_entry & PAGE_FRAME_MASK;
+            for pdpt_index in 0..512u64 {
+                let pdpt_entry = entry(&mut self.image, pdpt_base, pdpt_index, 0)?;
+                if pdpt_entry & PRESENT == 0 {
+                    continue;
+                }
+                if pdpt_entry & LARGE_PAGE != 0 {
+                    let page_base = pdpt_entry & ONE_GIB_PAGE_MASK;
+                    if (page_base..page_base + (1 << 30)).contains(&physical_address) {
+                        let va = (pml4_index << 39)
+                            | (pdpt_index << 30)
+                            | (physical_address & ((1 << 30) - 1));
+                        return Ok(Some(va | 0xFFFF_0000_0000_0000));
+                    }
+                    continue;
+                }
+                let pd_base = pdpt_entry & PAGE_FRAME_MASK;
+                for pd_index in 0..512u64 {
+                    let pd_entry = entry(&mut self.image, pd_base, pd_index, 0)?;
+                    if pd_entry & PRESENT == 0 {
+                        continue;
+                    }
+                    if pd_entry & LARGE_PAGE != 0 {
+                        let page_base = pd_entry & TWO_MIB_PAGE_MASK;
+                        if (page_base..page_base + (1 << 21)).contains(&physical_address) {
+                            let va = (pml4_index << 39)
+                                | (pdpt_index << 30)
+                                | (pd_index << 21)
+                                | (physical_address & ((1 << 21) - 1));
+                            return Ok(Some(va | 0xFFFF_0000_0000_0000));
+                        }
+                        continue;
+                    }
+                    let pt_base = pd_entry & PAGE_FRAME_MASK;
+                    if let Some(va) = self.scan_page_table(
+                        pt_base,
+                        pml4_index,
+                        pdpt_index,
+                        pd_index,
+                        physical_address,
+                        image_len,
+                    )? {
+                        return Ok(Some(va));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn scan_page_table(
+        &mut self,
+        pt_base: u64,
+        pml4_index: u64,
+        pdpt_index: u64,
+        pd_index: u64,
+        physical_address: u64,
+        image_len: u64,
+    ) -> Result<Option<u64>> {
+        if pt_base
+            .checked_add(PAGE_SIZE as u64)
+            .is_none_or(|end| end > image_len)
+        {
+            return Ok(None);
+        }
+        let page = self.image.read_page(pt_base)?;
+        for (pt_index, chunk) in page.chunks_exact(8).enumerate() {
+            let pt_entry = u64::from_le_bytes(chunk.try_into().expect("8-byte chunk"));
+            if pt_entry & PRESENT == 0 {
+                continue;
+            }
+            let frame = pt_entry & PAGE_FRAME_MASK;
+            if (frame..frame + PAGE_SIZE as u64).contains(&physical_address) {
+                let va = (pml4_index << 39)
+                    | (pdpt_index << 30)
+                    | (pd_index << 21)
+                    | ((pt_index as u64) << 12)
+                    | (physical_address & 0xFFF);
+                return Ok(Some(va | 0xFFFF_0000_0000_0000));
+            }
+        }
+        Ok(None)
+    }
 }
 
 fn translate_cached(

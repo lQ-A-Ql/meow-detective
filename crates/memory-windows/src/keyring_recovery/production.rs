@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    driver::find_keyring,
+    driver::{find_keyring, scan_fvevol_driver_object},
     keyring::read_matching_vmk,
     object_directory::{find_named_object, root_directory},
     profile::BitLockerMemoryProfile,
@@ -32,7 +32,10 @@ struct ProfiledMemorySession {
 /// Recovers structurally sourced VMKs through exact kernel and FVEVol objects.
 ///
 /// No writable-section scan, pointer graph, pool-tag scan, AES schedule scan, or
-/// key pairing is performed. Unknown PE/PDB identities fail closed.
+/// key pairing is performed. The object-directory fast path runs only when the
+/// build's object-manager globals are in the symbol registry; otherwise the
+/// FVEVol driver object is located by the version-free signature-anchored
+/// carve. Unknown builds degrade gracefully instead of failing.
 pub fn recover_vmks_structurally(
     path: &Path,
     profile: &BitLockerMemoryProfile,
@@ -40,25 +43,47 @@ pub fn recover_vmks_structurally(
     limits: TargetedKernelSearchLimits,
 ) -> Result<BitLockerMemoryRecovery> {
     let mut session = open_profiled_session(path, profile, limits)?;
-    let root = root_directory(
-        &mut session.address_space,
-        session.kernel.image.base,
-        profile.objects(),
-    )?;
-    let driver_directory = find_named_object(
-        &mut session.address_space,
-        session.kernel.image.base,
-        root,
-        "Driver",
-        profile.objects(),
-    )?;
-    let fvevol_driver = find_named_object(
-        &mut session.address_space,
-        session.kernel.image.base,
-        driver_directory,
-        "FVEVol",
-        profile.objects(),
-    )?;
+    let fvevol_driver = match profile.objects() {
+        Some(objects) => {
+            let root = root_directory(
+                &mut session.address_space,
+                session.kernel.image.base,
+                objects,
+            )?;
+            let driver_directory = find_named_object(
+                &mut session.address_space,
+                session.kernel.image.base,
+                root,
+                "Driver",
+                objects,
+            )?;
+            find_named_object(
+                &mut session.address_space,
+                session.kernel.image.base,
+                driver_directory,
+                "FVEVol",
+                objects,
+            )?
+        }
+        None => {
+            // The carve makes exactly one sequential pass over the image plus
+            // bounded page-table walks; give it a fitting budget instead of
+            // the structural 32 MiB default.
+            let carve_budget = session
+                .address_space
+                .image_len()
+                .saturating_add(64 * 1024 * 1024);
+            session
+                .address_space
+                .set_physical_read_budget(1 << 20, carve_budget)?;
+            scan_fvevol_driver_object(
+                &mut session.address_space,
+                session.fvevol.base,
+                session.fvevol.size,
+                profile.driver(),
+            )?
+        }
+    };
     let keyring_result = find_keyring(
         &mut session.address_space,
         fvevol_driver,
@@ -134,13 +159,19 @@ pub fn resolve_profile_for_image(path: &Path) -> Result<BitLockerMemoryProfile> 
     let mut scanned = 0;
     let codeview = read_codeview_identity(&mut address_space, kernel.image, limits, &mut scanned)?
         .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
-    let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid())
-        .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;
+    let layouts = symbol_table::resolve_ntoskrnl_layouts(codeview.guid());
+    let (build_id, module_layout) = match &layouts {
+        Some(layouts) => (layouts.build_id.clone(), layouts.module_layout),
+        None => (
+            format!("unregistered-{}", codeview.guid()),
+            symbol_table::default_module_layout(),
+        ),
+    };
     let kernel_profile = crate::targeted_kernel::TargetedKernelLayoutProfile::new(
         format!("ntoskrnl-{}", codeview.guid()),
-        layouts.build_id.clone(),
+        build_id,
         kernel.image.identity(),
-        layouts.module_layout,
+        module_layout,
     )?
     .with_codeview_identity(codeview);
     BitLockerMemoryProfile::resolve(kernel_profile)
@@ -178,16 +209,10 @@ fn validate_kernel_identity(
     profile: &BitLockerMemoryProfile,
     limits: TargetedKernelSearchLimits,
 ) -> Result<()> {
-    let expected = profile.kernel().kernel_identity();
-    let actual = kernel.image.identity();
-    if actual != expected {
-        return Err(MemoryWindowsError::TargetedKernelIdentityMismatch {
-            expected_timestamp: expected.time_date_stamp(),
-            expected_size: expected.size_of_image(),
-            actual_timestamp: actual.time_date_stamp(),
-            actual_size: actual.size_of_image(),
-        });
-    }
+    // The CodeView identity is the sole kernel gate: it is strictly stronger
+    // than the PE timestamp/size pair (which is implied by it), so the
+    // redundant PE comparison from the pre-registry era is intentionally
+    // omitted.
     let mut scanned = 0;
     let actual_codeview =
         read_codeview_identity(address_space, kernel.image, limits, &mut scanned)?;

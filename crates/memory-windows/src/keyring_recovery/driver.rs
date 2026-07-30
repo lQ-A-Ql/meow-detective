@@ -16,6 +16,133 @@ const KEYRING_HEADER_PROBE_LEN: usize = 0x20;
 /// inside this window.
 const KEYRING_SCAN_WINDOW: u64 = 0x800;
 
+const DRIVER_OBJECT_PROBE_LEN: usize = 0x50;
+const FVEVOL_DRIVER_NAME: &[u16] = &[
+    0x005C, 0x0044, 0x0072, 0x0069, 0x0076, 0x0065, 0x0072, 0x005C, 0x0046, 0x0056, 0x0045, 0x0056,
+    0x006F, 0x006C,
+];
+const DRIVER_CARVE_CHUNK: u64 = 16 * 1024 * 1024;
+
+/// Version-free FVEVol driver discovery: carves the physical image for the
+/// driver-start pointer, validates the surrounding DRIVER_OBJECT struct, and
+/// lifts the candidate back into the virtual space through a reverse
+/// page-table lookup. No object-manager globals are required.
+pub(crate) fn scan_fvevol_driver_object(
+    address_space: &mut X64AddressSpace,
+    fvevol_base: u64,
+    fvevol_size: u32,
+    layout: DriverLayout,
+) -> Result<u64> {
+    let image_len = address_space.image_len();
+    let mut offset = 0u64;
+    let mut tail = [0u8; 8];
+    let mut tail_len = 0usize;
+    while offset < image_len {
+        let take = DRIVER_CARVE_CHUNK.min(image_len - offset) as usize;
+        let mut buffer = Vec::with_capacity(take + 8);
+        buffer.extend_from_slice(&tail[..tail_len]);
+        let chunk_start = offset - tail_len as u64;
+        buffer.resize(tail_len + take, 0);
+        address_space.read_physical_exact(offset, &mut buffer[tail_len..])?;
+        for (index, window) in buffer.windows(8).enumerate() {
+            if u64::from_le_bytes(window.try_into().expect("8-byte window")) != fvevol_base {
+                continue;
+            }
+            let hit = chunk_start + index as u64;
+            let Some(candidate) = hit.checked_sub(u64::from(layout.driver_start_offset)) else {
+                continue;
+            };
+            if !driver_object_matches_physical(
+                address_space,
+                candidate,
+                fvevol_base,
+                fvevol_size,
+                layout,
+            ) {
+                continue;
+            }
+            let Some(va) = address_space.find_virtual_for_physical(candidate)? else {
+                continue;
+            };
+            if driver_object_matches_virtual(address_space, va, fvevol_base, fvevol_size, layout)? {
+                return Ok(va);
+            }
+        }
+        tail_len = 8.min(buffer.len());
+        tail[..tail_len].copy_from_slice(&buffer[buffer.len() - tail_len..]);
+        offset += take as u64;
+    }
+    Err(MemoryWindowsError::TargetedFvevolNotFound)
+}
+
+fn driver_object_matches_physical(
+    address_space: &mut X64AddressSpace,
+    candidate: u64,
+    fvevol_base: u64,
+    fvevol_size: u32,
+    layout: DriverLayout,
+) -> bool {
+    let mut probe = [0u8; DRIVER_OBJECT_PROBE_LEN];
+    if address_space
+        .read_physical_exact(candidate, &mut probe)
+        .is_err()
+    {
+        return false;
+    }
+    let name_length = u16::from_le_bytes([
+        probe[layout.driver_name_offset as usize],
+        probe[layout.driver_name_offset as usize + 1],
+    ]);
+    let buffer_ptr = u64::from_le_bytes(
+        probe[layout.driver_name_offset as usize + 8..layout.driver_name_offset as usize + 16]
+            .try_into()
+            .expect("pointer field"),
+    );
+    let device = u64::from_le_bytes(
+        probe[layout.device_object_offset as usize..layout.device_object_offset as usize + 8]
+            .try_into()
+            .expect("pointer field"),
+    );
+    let extension = u64::from_le_bytes(
+        probe[layout.driver_extension_offset as usize..layout.driver_extension_offset as usize + 8]
+            .try_into()
+            .expect("pointer field"),
+    );
+    name_length as usize == FVEVOL_DRIVER_NAME.len() * 2
+        && is_canonical_address(buffer_ptr)
+        && buffer_ptr >> 63 == 1
+        && is_canonical_address(device)
+        && device != 0
+        && is_canonical_address(extension)
+        && extension != 0
+        && fvevol_size > 0
+        && u64::from_le_bytes(
+            probe[layout.driver_start_offset as usize..layout.driver_start_offset as usize + 8]
+                .try_into()
+                .expect("driver start"),
+        ) == fvevol_base
+}
+
+fn driver_object_matches_virtual(
+    address_space: &mut X64AddressSpace,
+    va: u64,
+    fvevol_base: u64,
+    fvevol_size: u32,
+    layout: DriverLayout,
+) -> Result<bool> {
+    let start = address_space
+        .read_virtual_u64(va + u64::from(layout.driver_start_offset))
+        .unwrap_or(0);
+    let size = address_space
+        .read_virtual_u64(va + u64::from(layout.driver_size_offset))
+        .unwrap_or(0) as u32;
+    if start != fvevol_base || size != fvevol_size {
+        return Ok(false);
+    }
+    let name = read_driver_name(address_space, va, layout)?;
+    Ok(name.eq_ignore_ascii_case("\\Driver\\FVEVol"))
+}
+
 pub(crate) fn find_keyring(
     address_space: &mut X64AddressSpace,
     driver_object: u64,

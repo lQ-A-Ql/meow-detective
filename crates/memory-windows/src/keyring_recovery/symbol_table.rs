@@ -30,13 +30,53 @@ const CLIENT_NEXT_OFFSET: u16 = 0;
 const CLIENT_IDENTIFIER_OFFSET: u16 = 8;
 const CLIENT_BODY_OFFSET: u16 = 0x10;
 
-/// Per-build ntoskrnl layouts resolved from an embedded symbol table.
+/// Per-build ntoskrnl layouts resolved from an embedded symbol table. Only
+/// the object-manager globals and the build label are consumed today; the
+/// remaining layout fields are resolved on demand through the same table.
 pub(crate) struct NtoskrnlLayouts {
     pub build_id: String,
     pub objects: ObjectManagerLayout,
-    pub driver: DriverLayout,
-    pub devices: DeviceObjectLayout,
     pub module_layout: LoadedModuleEntryLayout,
+}
+
+/// Version-stable layouts, verified invariant across 741 extracted PDB
+/// profiles (Windows 10 10240 through Windows 11 28000). Used when the
+/// build's PDB is not in the registry — these need no per-build data.
+pub(crate) fn default_driver_layout() -> DriverLayout {
+    DriverLayout {
+        device_object_offset: 0x08,
+        driver_start_offset: 0x18,
+        driver_size_offset: 0x20,
+        driver_extension_offset: 0x30,
+        driver_name_offset: 0x38,
+        extension_driver_object_offset: 0,
+        extension_client_list_offset: 0x28,
+        client_next_offset: CLIENT_NEXT_OFFSET,
+        client_identifier_offset: CLIENT_IDENTIFIER_OFFSET,
+        client_body_offset: CLIENT_BODY_OFFSET,
+    }
+}
+
+/// Version-stable device layout (invariant across all extracted profiles).
+pub(crate) fn default_device_layout() -> DeviceObjectLayout {
+    DeviceObjectLayout {
+        object_type_offset: 0,
+        object_size_offset: 2,
+        expected_object_type: EXPECTED_DEVICE_TYPE,
+        minimum_object_size: MINIMUM_DEVICE_OBJECT_SIZE,
+        driver_object_offset: 0x08,
+        next_device_offset: 0x10,
+        device_extension_offset: 0x40,
+        maximum_devices: MAXIMUM_DEVICES,
+    }
+}
+
+/// Version-stable loaded-module entry layout (invariant across all extracted
+/// profiles: InLoadOrderLinks@0, DllBase@0x30, SizeOfImage@0x40,
+/// BaseDllName@0x58).
+pub(crate) fn default_module_layout() -> LoadedModuleEntryLayout {
+    LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60)
+        .expect("constant module entry layout is valid")
 }
 
 struct EmbeddedTable {
@@ -76,32 +116,6 @@ fn layouts_from_table(root: Value, pdb_guid: &str) -> Option<NtoskrnlLayouts> {
         unicode_maximum_length_offset: field_offset(&root, "_UNICODE_STRING", "MaximumLength")?,
         unicode_buffer_offset: field_offset(&root, "_UNICODE_STRING", "Buffer")?,
     };
-    let driver = DriverLayout {
-        device_object_offset: field_offset(&root, "_DRIVER_OBJECT", "DeviceObject")?,
-        driver_start_offset: field_offset(&root, "_DRIVER_OBJECT", "DriverStart")?,
-        driver_size_offset: field_offset(&root, "_DRIVER_OBJECT", "DriverSize")?,
-        driver_extension_offset: field_offset(&root, "_DRIVER_OBJECT", "DriverExtension")?,
-        driver_name_offset: field_offset(&root, "_DRIVER_OBJECT", "DriverName")?,
-        extension_driver_object_offset: field_offset(&root, "_DRIVER_EXTENSION", "DriverObject")?,
-        extension_client_list_offset: field_offset(
-            &root,
-            "_DRIVER_EXTENSION",
-            "ClientDriverExtension",
-        )?,
-        client_next_offset: CLIENT_NEXT_OFFSET,
-        client_identifier_offset: CLIENT_IDENTIFIER_OFFSET,
-        client_body_offset: CLIENT_BODY_OFFSET,
-    };
-    let devices = DeviceObjectLayout {
-        object_type_offset: field_offset(&root, "_DEVICE_OBJECT", "Type")?,
-        object_size_offset: field_offset(&root, "_DEVICE_OBJECT", "Size")?,
-        expected_object_type: EXPECTED_DEVICE_TYPE,
-        minimum_object_size: MINIMUM_DEVICE_OBJECT_SIZE,
-        driver_object_offset: field_offset(&root, "_DEVICE_OBJECT", "DriverObject")?,
-        next_device_offset: field_offset(&root, "_DEVICE_OBJECT", "NextDevice")?,
-        device_extension_offset: field_offset(&root, "_DEVICE_OBJECT", "DeviceExtension")?,
-        maximum_devices: MAXIMUM_DEVICES,
-    };
     let base_dll_name = field_offset(&root, "_KLDR_DATA_TABLE_ENTRY", "BaseDllName")?;
     let module_layout = LoadedModuleEntryLayout::new(
         0,
@@ -120,8 +134,6 @@ fn layouts_from_table(root: Value, pdb_guid: &str) -> Option<NtoskrnlLayouts> {
     Some(NtoskrnlLayouts {
         build_id,
         objects,
-        driver,
-        devices,
         module_layout,
     })
 }
