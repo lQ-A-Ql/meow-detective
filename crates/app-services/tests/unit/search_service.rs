@@ -198,6 +198,60 @@ fn file_search_cursor_merges_sources_by_name_without_duplicates() {
 }
 
 #[test]
+fn file_search_cursor_keeps_descending_ties_stable_across_sources() {
+    let tmp = TempDir::new().unwrap();
+    let case_conn = setup_case(&tmp, &["ds-1", "ds-2"]);
+    insert_entries(
+        &tmp,
+        "ds-1",
+        &[
+            document("zeta", "zeta.txt", "/zeta.txt", "file"),
+            document("same", "same.txt", "/one/same.txt", "file"),
+        ],
+    );
+    insert_entries(
+        &tmp,
+        "ds-2",
+        &[
+            document("same", "same.txt", "/two/same.txt", "file"),
+            document("alpha", "alpha.txt", "/alpha.txt", "file"),
+        ],
+    );
+
+    let mut current = request("", 1);
+    current.sort_direction = FileSortDirectionDto::Desc;
+    let mut observed = Vec::new();
+    loop {
+        let page = search_files_for_case_cursor(
+            &case_conn,
+            tmp.path(),
+            &CaseId("case-1".to_string()),
+            &current,
+        )
+        .unwrap();
+        observed.extend(
+            page.items
+                .into_iter()
+                .map(|item| (item.name, item.data_source_id)),
+        );
+        let Some(cursor) = page.next_cursor else {
+            break;
+        };
+        current.cursor = Some(cursor);
+    }
+
+    assert_eq!(
+        observed,
+        vec![
+            ("zeta.txt".to_string(), "ds-1".to_string()),
+            ("same.txt".to_string(), "ds-1".to_string()),
+            ("same.txt".to_string(), "ds-2".to_string()),
+            ("alpha.txt".to_string(), "ds-2".to_string()),
+        ]
+    );
+}
+
+#[test]
 fn file_search_cursor_rejects_index_changes() {
     let tmp = TempDir::new().unwrap();
     let case_conn = setup_case(&tmp, &["ds-1"]);

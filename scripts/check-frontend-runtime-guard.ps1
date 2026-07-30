@@ -376,7 +376,10 @@ Assert-NoRawButtonsOutsideAllowedCases -Files $runtimeFiles
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/app/components/ui/table['""]" `
-  -AllowedRelativePaths @('frontend/src/components/tables/DenseDataTable.tsx') `
+  -AllowedRelativePaths @(
+    'frontend/src/components/tables/DenseDataTable.tsx',
+    'frontend/src/components/tables/DenseDataTableRow.tsx'
+  ) `
   -Message "Feature/page code must not import low-level Table primitives directly; use DenseDataTable or a semantic summary component"
 
 Assert-NoMatchesInRuntimeFiles `
@@ -392,10 +395,12 @@ Assert-NoMatchesInRuntimeFiles `
     # These timers coalesce real events or schedule one bounded retry; they do not fabricate data or progress.
     'frontend/src/components/tables/DenseDataTable.tsx',
     'frontend/src/features/analysis/use-analysis-workspace-model.ts',
+    'frontend/src/features/files/components/BitLockerVolumePanel.tsx',
     'frontend/src/features/gql/components/GqlResultView.tsx',
     'frontend/src/components/tree/TreeContextMenu.tsx',
     'frontend/src/components/tree/TreeSearch.tsx',
-    'frontend/src/features/cache-invalidation.ts'
+    'frontend/src/features/cache-invalidation.ts',
+    'frontend/src/features/search/use-search-workspace-model.ts'
   ) `
   -Message "Frontend runtime code must not fake business latency with setTimeout"
 

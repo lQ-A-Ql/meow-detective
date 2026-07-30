@@ -229,19 +229,30 @@ flowchart TB
 ## 9. 搜索索引与查询流程图
 
 ```mermaid
-flowchart LR
-  File["file_entries"]
-  Extract["text extract"]
-  Normalize["normalize"]
-  Index["tantivy index"]
-  Query["query"]
-  Search["searcher"]
-  Result["search DTO"]
+flowchart TB
+  File["source.db / file_entries"]
+  Page["主键游标分批读取元数据"]
+  Normalize["NFKC + 1/2/3-gram + 排序 fast fields"]
+  FileIndex["sources/{id}/index<br/>完整文件名与路径索引"]
+  Content["有界正文提取"]
+  ContentIndex["sources/{id}/index-content<br/>旧正文检索与步骤回放"]
+  Query["文件名 / 路径 / 扩展名 / 类型 / 数据源"]
+  Snapshot["每数据源固定 index generation + opstamp"]
+  Cursor["sort value + file id 稳定游标"]
+  Merge["跨数据源有序归并"]
+  Result["SearchFileResultPageDto + coverage"]
 
-  File --> Extract --> Normalize --> Index
-  Query --> Search --> Result
-  Index --> Search
+  File --> Page --> Normalize --> FileIndex
+  File --> Content --> ContentIndex
+  Query --> Snapshot
+  FileIndex --> Snapshot --> Cursor --> Merge --> Result
 ```
+
+主搜索页面采用 Everything 式元数据查询，不读取证据文件正文；目录、空文件、
+超大文件和加密文件均可进入文件索引。正文索引保留为独立兼容能力，不能覆盖或
+污染文件元数据索引。索引生成采用临时目录构建与原子发布，查询游标绑定数据源
+集合、查询参数、schema version、generation 和 opstamp；任一条件变化时拒绝旧
+游标并要求重新查询。
 
 ## 10. 时间线归一化与查询流程图
 

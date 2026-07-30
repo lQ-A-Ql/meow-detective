@@ -1,91 +1,183 @@
-import { ChevronRight, Filter, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, File, Folder, Search, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
-  InspectorPane,
-  InspectorSection,
-  InspectorValue,
-} from '@/components/layout/InspectorPane';
-import { PageSubbar } from '@/components/layout/PageSubbar';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { PageSubbar } from '@/components/layout/PageSubbar';
 import type { SearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
-import type { SearchHit } from '@/types/models';
-
-const SEARCH_HIT_COLUMNS: DenseColumn<SearchHit>[] = [
-  { key: 'path', title: '路径', className: 'w-[32%]', render: (row) => <span className="block truncate text-forensics-text-secondary">{row.path}</span> },
-  { key: 'score', title: '评分', className: 'w-24 text-forensics-muted', render: (row) => row.score.toFixed(2) },
-  { key: 'snippet', title: '内容预览', className: 'text-forensics-text-tertiary', render: (row) => <span className="line-clamp-2 text-sm leading-tight">{row.snippets[0]?.text ?? '-'}</span> },
-];
+import { formatBytes } from '@/lib/format-bytes';
+import type { SearchFileHit } from '@/types/search';
 
 interface SearchWorkspaceProps {
   model: SearchWorkspaceModel;
 }
 
-/** Pure search presentation surface. Search execution and persistence belong to the workspace model. */
+function formatModifiedAt(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function entryIcon(entryType: string) {
+  return entryType === 'directory'
+    ? <Folder size={13} className="text-forensics-sakura-500" />
+    : <File size={13} className="text-forensics-muted" />;
+}
+
+const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
+  {
+    key: 'name',
+    title: '名称',
+    sortable: true,
+    sortKey: 'name',
+    className: 'w-[27%]',
+    render: (row) => (
+      <span className="flex min-w-0 items-center gap-2 text-forensics-text">
+        {entryIcon(row.entryType)}
+        <span className="truncate">{row.name || row.path}</span>
+        {row.deleted ? <span className="text-[10px] text-forensics-error-text">已删除</span> : null}
+      </span>
+    ),
+  },
+  {
+    key: 'path',
+    title: '路径',
+    sortable: true,
+    sortKey: 'path',
+    className: 'w-[38%] text-forensics-text-secondary',
+    render: (row) => <span className="block truncate">{row.path}</span>,
+  },
+  {
+    key: 'size',
+    title: '大小',
+    sortable: true,
+    sortKey: 'size',
+    className: 'w-28 text-right text-forensics-muted',
+    render: (row) => row.size === undefined ? '-' : formatBytes(row.size),
+  },
+  {
+    key: 'modifiedAt',
+    title: '修改时间',
+    sortable: true,
+    sortKey: 'modifiedAt',
+    className: 'w-44 text-forensics-muted',
+    render: (row) => formatModifiedAt(row.modifiedAt),
+  },
+  {
+    key: 'source',
+    title: '数据源',
+    className: 'w-36 text-forensics-muted',
+    render: (row) => <span className="block truncate" title={row.dataSourceName}>{row.dataSourceName}</span>,
+  },
+];
+
 export function SearchWorkspace({ model }: SearchWorkspaceProps) {
+  const selectedSource = model.options.dataSourceIds[0] ?? '__all__';
+  const coverage = model.coverage;
+  const resultMeta = model.activeQuery
+    ? `已载入 ${model.searchHits.length}/${model.totalHits} 项`
+    : '输入文件名或路径开始搜索';
+
   return (
-    <div className="flex h-full w-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title="搜索控制台" meta={`已载入 ${model.searchHits.length}/${model.totalHits} 项命中 / 高置信 ${model.highScoreHits} 项`}>
-        <div className="flex shrink-0 flex-col gap-3 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex flex-1 items-center border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 transition-colors focus-within:border-forensics-text">
-              <span className="mr-2 shrink-0 font-mono text-[11px] text-forensics-muted-light">QUERY</span>
-              <Input type="text" variant="search" inputSize="compact" className="w-full font-mono text-[13px] text-forensics-text placeholder-forensics-500" value={model.queryInput} onChange={(event) => model.setQueryInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') model.submitQuery(); }} />
-              <Button type="button" variant="forensicsPrimary" size="compact" onClick={model.submitQuery} className="ml-2 shrink-0 font-light uppercase tracking-wider">执行</Button>
-            </div>
-            <div className="relative">
-              <Button type="button" variant="forensicsOutline" size="xs" onClick={model.toggleSavedQueries}><Filter size={12} /><span>已保存查询</span></Button>
-              {model.savedOpen ? (
-                <div className="absolute right-0 top-8 z-20 w-80 border border-forensics-border-strong bg-forensics-surface shadow-none">
-                  <div className="border-b border-forensics-border p-2">
-                    <Input value={model.savedName} onChange={(event) => model.setSavedName(event.target.value)} placeholder="查询名称" variant="mono" inputSize="compact" className="mb-2" />
-                    <Button type="button" variant="forensicsPrimary" size="xs" onClick={model.saveCurrentQuery} className="w-full"><Save size={12} />保存当前查询</Button>
-                  </div>
-                  <ScrollArea className="max-h-64">
-                    {model.savedQueries.length ? model.savedQueries.map((item) => (
-                      <div key={item.id} className="flex items-start gap-2 border-b border-forensics-border-light p-2 last:border-b-0">
-                        <Button type="button" variant="forensicsGhost" size="inline" onClick={() => model.runSavedQuery(item.query)} className="min-w-0 flex-1 flex-col items-start justify-start gap-0 text-left">
-                          <div className="truncate text-[12px] font-light text-forensics-text">{item.name}</div>
-                          <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-forensics-muted">{item.query}</div>
-                        </Button>
-                        <Button type="button" variant="forensicsDangerGhost" size="iconSm" onClick={() => model.removeSavedQuery(item.id)} title="删除保存的查询"><Trash2 size={12} /></Button>
-                      </div>
-                    )) : <div className="p-3 text-[11px] text-forensics-muted-light">暂无保存的查询。</div>}
-                  </ScrollArea>
-                </div>
-              ) : null}
-            </div>
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-forensics-surface">
+      <PageSubbar title="文件搜索" meta={resultMeta}>
+        <div className="flex min-w-0 flex-1 items-center gap-2 p-3">
+          <div className="flex min-w-0 flex-1 items-center border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 focus-within:border-forensics-sakura-500">
+            <Search size={14} className="mr-2 shrink-0 text-forensics-muted" />
+            <Input
+              autoFocus
+              value={model.queryInput}
+              onChange={(event) => model.setQueryInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') model.clearQuery();
+              }}
+              variant="search"
+              inputSize="compact"
+              className="w-full font-mono text-[13px] text-forensics-text"
+              placeholder="输入文件名、目录名或路径"
+              aria-label="文件名搜索"
+            />
+            {model.queryInput ? (
+              <Button type="button" variant="forensicsGhost" size="iconXs" onClick={model.clearQuery} title="清除搜索">
+                <X size={13} />
+              </Button>
+            ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-4 font-mono text-[11px] text-forensics-muted-light">
-            <div className="flex cursor-pointer items-center gap-1.5 hover:text-forensics-text"><span className="text-forensics-text">范围:</span> 全局</div>
-            <div className="flex cursor-pointer items-center gap-1.5 hover:text-forensics-text"><span className="text-forensics-text">模式:</span> Tantivy</div>
-            <div className="flex cursor-pointer items-center gap-1.5 hover:text-forensics-text"><span className="text-forensics-text">过滤:</span> 文档 / 表格 / 大文件</div>
-            <div className="ml-auto text-forensics-muted">找到 {model.totalHits} 个结果 ({model.searchTookMs}ms)</div>
-          </div>
+          <Button
+            type="button"
+            variant={model.options.matchPath ? 'forensicsPrimary' : 'forensicsOutline'}
+            size="compact"
+            onClick={() => model.setOption('matchPath', !model.options.matchPath)}
+          >
+            路径
+          </Button>
+          <Select value={model.options.entryType} onValueChange={(value) => model.setOption('entryType', value as SearchWorkspaceModel['options']['entryType'])}>
+            <SelectTrigger size="xs" variant="forensics" className="w-24"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">全部类型</SelectItem>
+              <SelectItem value="file">文件</SelectItem>
+              <SelectItem value="directory">目录</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            value={model.extensionInput}
+            onChange={(event) => model.setExtensionInput(event.target.value)}
+            variant="forensics"
+            inputSize="compact"
+            className="w-24 font-mono"
+            placeholder="扩展名"
+            aria-label="扩展名筛选"
+          />
+          <Select value={selectedSource} onValueChange={(value) => model.setOption('dataSourceIds', value === '__all__' ? [] : [value])}>
+            <SelectTrigger size="xs" variant="forensics" className="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">全部数据源</SelectItem>
+              {model.dataSources.map((source) => <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </PageSubbar>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 gap-2 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wider text-forensics-muted"><span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">高分命中 {model.highScoreHits}</span><span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">文档对象</span><span className="border border-forensics-350 bg-forensics-surface px-2 py-0.5">上下文已提取</span></div>
-          <div className="flex min-h-0 flex-[2] flex-col border-b border-forensics-border">
-            <DenseDataTable<SearchHit> rows={model.searchHits} getRowKey={(row) => row.fileId} selectedRowKey={model.selectedHit?.fileId} onRowClick={model.onHitRowClick} emptyTitle="无搜索命中" emptyDescription="请调整检索语句、范围或过滤条件。" columns={SEARCH_HIT_COLUMNS} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} />
-          </div>
-          <div className="flex min-h-[8rem] flex-1 shrink-0 flex-col bg-forensics-panel">
-            <div className="h-7 shrink-0 border-b border-forensics-border bg-forensics-panel px-4 text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">上下文预览</div>
-            <ScrollArea className="min-h-0 flex-1" viewportClassName="p-4 font-mono text-[11px] leading-[1.6] text-forensics-text-secondary"><div className="mb-2 text-forensics-muted-light">在偏移 0x00A145 处找到匹配项</div><div className="whitespace-pre-wrap border border-forensics-border bg-forensics-surface p-3 text-forensics-text-secondary">{model.selectedHit?.snippets[0]?.text ?? '无上下文预览'}</div></ScrollArea>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-3 border-b border-forensics-border bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
+          <span>{model.activeQuery ? `找到 ${model.totalHits} 个结果` : '等待输入'}</span>
+          {model.activeQuery ? <span>查询 {model.searchTookMs} ms</span> : null}
+          {coverage && !coverage.complete ? (
+            <span className="flex items-center gap-1 text-forensics-error-text" title={`未就绪数据源: ${coverage.missingSourceIds.join(', ')}`}>
+              <AlertTriangle size={12} />索引覆盖不完整 {coverage.indexedEntryCount}/{coverage.expectedEntryCount}
+            </span>
+          ) : coverage ? <span>索引覆盖 {coverage.indexedEntryCount} 项 / {coverage.readySourceCount} 个数据源</span> : null}
+          {model.truncated ? <span className="text-forensics-error-text">结果超过浏览上限，仅显示前 {model.searchHits.length > 0 ? model.searchHits.length : model.totalHits} 项窗口</span> : null}
         </div>
-        <InspectorPane title="匹配详情" subtitle={model.selectedHit ? `当前命中 ${model.selectedHit.fileId}` : '未选择命中项'} widthClassName="w-80">
-          <div className="space-y-5">
-            <InspectorSection title="对象定位"><InspectorValue value={model.selectedHit?.path.split('/').pop() ?? '-'} mono strong /></InspectorSection>
-            <InspectorSection title="完整路径"><InspectorValue value={model.selectedHit?.path ?? '-'} mono /></InspectorSection>
-            <InspectorSection title="命中字段"><div className="space-y-2 font-mono text-[10px] text-forensics-muted"><div className="flex items-center justify-between border border-forensics-border bg-forensics-surface p-2"><span>score</span><span className="text-forensics-text">{model.selectedHit?.score.toFixed(2) ?? '-'}</span></div><div className="flex items-center justify-between border border-forensics-border bg-forensics-surface p-2"><span>snippet_count</span><span className="text-forensics-text">{model.selectedHit?.snippets.length ?? 0}</span></div></div></InspectorSection>
-            <InspectorSection title="命中片段"><InspectorValue value={model.selectedHit?.snippets[0]?.text ?? '-'} mono /></InspectorSection>
-            <InspectorSection title="关联动作"><Button type="button" variant="forensicsSurface" size="xs" onClick={model.openSelectedHitInFiles} disabled={!model.selectedHit} className="w-full shadow-sm">在文件浏览中打开 <ChevronRight size={12} /></Button></InspectorSection>
-          </div>
-        </InspectorPane>
+
+        <DenseDataTable<SearchFileHit>
+          rows={model.searchHits}
+          columns={SEARCH_FILE_COLUMNS}
+          getRowKey={(row) => row.fileId}
+          selectedRowKey={model.selectedHit?.fileId}
+          onRowClick={model.onHitRowClick}
+          onRowDoubleClick={model.openHitInFiles}
+          emptyTitle={model.activeQuery ? '没有匹配的文件' : '输入文件名开始搜索'}
+          emptyDescription={model.activeQuery ? '尝试修改文件名、路径或筛选条件。' : '搜索仅定位已导入数据源中的文件和目录。'}
+          sortKey={model.sortKey}
+          sortDirection={model.sortDirection}
+          onSort={model.toggleSort}
+          loadContextKey={model.loadContextKey}
+          loadStateKey={model.searchQueryStateKey}
+          onReachEnd={model.loadNextPage}
+          onRetryLoadMore={model.retry}
+          hasMore={model.hasMore}
+          loadingMore={model.loadingMore}
+          loadMoreFailed={model.loadMoreFailed}
+          initialLoadFailed={model.initialLoadFailed}
+          onRetryInitialLoad={model.retry}
+        />
       </div>
     </div>
   );

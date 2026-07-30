@@ -22,7 +22,7 @@ pub use files::{
     ExportDeletedRecoveryRequest, ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto,
     GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,
     ListDeletedRecoveriesRequest, OpenFileHandleRequest, ReadDeletedRecoveryRangeRequest,
-    RunDeletedRecoveryRequest, SearchFilesRequest,
+    RunDeletedRecoveryRequest, SearchEntryTypeDto, SearchFilesRequest, SearchSortKeyDto,
 };
 pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;
@@ -34,6 +34,7 @@ pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
     JobSnapshotDto, RecentCaseDto, RecentObjectDto, ReportHistoryItemDto, ReportTemplateDto,
-    SearchResultPageDto, TimelineEventDto, TraceItemDto, V2GovernanceSnapshotDto, ViewerHandleDto,
-    ViewerRangeRequestDto, ViewerRangeResponseDto, WarningItemDto,
+    SearchFileResultPageDto, SearchResultPageDto, TimelineEventDto, TraceItemDto,
+    V2GovernanceSnapshotDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+    WarningItemDto,
 };

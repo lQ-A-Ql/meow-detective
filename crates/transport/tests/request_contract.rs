@@ -384,6 +384,12 @@ fn artifact_cursor_rejects_offset_and_oversized_values() {
 fn search_cursor_rejects_offset_and_oversized_values() {
     let mut with_offset = SearchFilesRequest {
         query: "evidence".to_string(),
+        match_path: false,
+        entry_type: Default::default(),
+        extensions: Vec::new(),
+        data_source_ids: Vec::new(),
+        sort_key: Default::default(),
+        sort_direction: Default::default(),
         offset: 1,
         limit: 50,
         cursor: Some("v1.payload.digest".to_string()),
@@ -392,6 +398,12 @@ fn search_cursor_rejects_offset_and_oversized_values() {
 
     let mut oversized = SearchFilesRequest {
         query: "evidence".to_string(),
+        match_path: false,
+        entry_type: Default::default(),
+        extensions: Vec::new(),
+        data_source_ids: Vec::new(),
+        sort_key: Default::default(),
+        sort_direction: Default::default(),
         offset: 0,
         limit: 50,
         cursor: Some("x".repeat(transport::paging::MAX_OPAQUE_CURSOR_LENGTH + 1)),

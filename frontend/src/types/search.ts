@@ -1,13 +1,39 @@
-export interface SearchSnippet {
-  text: string;
-  highlights: Array<{ start: number; end: number }>;
+export type SearchEntryType = 'any' | 'file' | 'directory';
+export type SearchSortKey = 'name' | 'path' | 'size' | 'modifiedAt';
+export type SearchSortDirection = 'asc' | 'desc';
+
+export interface SearchCoverage {
+  readySourceCount: number;
+  indexedSourceCount: number;
+  expectedEntryCount: number;
+  indexedEntryCount: number;
+  missingSourceIds: string[];
+  complete: boolean;
 }
 
-export interface SearchHit {
+export interface SearchFileHit {
   fileId: string;
+  dataSourceId: string;
+  dataSourceName: string;
+  name: string;
   path: string;
-  score: number;
-  snippets: SearchSnippet[];
+  entryType: string;
+  extension?: string;
+  size?: number;
+  modifiedAt?: string;
+  deleted: boolean;
+  hidden: boolean;
+  system: boolean;
+  encrypted: boolean;
+}
+
+export interface SearchRequestOptions {
+  matchPath: boolean;
+  entryType: SearchEntryType;
+  extensions: string[];
+  dataSourceIds: string[];
+  sortKey: SearchSortKey;
+  sortDirection: SearchSortDirection;
 }
 
 export interface SearchResultPage {
@@ -15,6 +41,7 @@ export interface SearchResultPage {
   available: number;
   truncated: boolean;
   tookMs: number;
-  items: SearchHit[];
+  items: SearchFileHit[];
+  coverage: SearchCoverage;
   nextCursor?: string;
 }

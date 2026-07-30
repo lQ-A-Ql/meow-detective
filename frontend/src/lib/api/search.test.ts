@@ -46,6 +46,32 @@ describe('search API', () => {
     });
   });
 
+  it('searchFiles forwards metadata filters and sort options', async () => {
+    requestMock.mockResolvedValueOnce({ items: [], total: 0 } as never);
+    await searchFiles('report', 0, 100, undefined, {
+      matchPath: true,
+      entryType: 'file',
+      extensions: ['txt', 'log'],
+      dataSourceIds: ['source-1'],
+      sortKey: 'modifiedAt',
+      sortDirection: 'desc',
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.search.SEARCH_FILES_REQUEST, {
+      request: {
+        query: 'report',
+        offset: 0,
+        limit: 100,
+        matchPath: true,
+        entryType: 'file',
+        extensions: ['txt', 'log'],
+        dataSourceIds: ['source-1'],
+        sortKey: 'modifiedAt',
+        sortDirection: 'desc',
+      },
+    });
+  });
+
   it('searchFiles sends empty string query', async () => {
     requestMock.mockResolvedValueOnce({ items: [], total: 0 } as never);
     await searchFiles('');

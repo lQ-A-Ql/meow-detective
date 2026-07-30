@@ -8,11 +8,13 @@ use tantivy::{
     },
     doc,
     query::QueryParser,
-    schema::{Schema, Value, FAST, STORED, STRING, TEXT},
+    schema::{Schema, Value},
     DocAddress, Index, IndexWriter, Order, ReloadPolicy, Score, TantivyDocument, Term,
 };
 use thiserror::Error;
 
+use super::file_query::normalize;
+use super::file_schema::{build_search_schema, register_file_tokenizers};
 use super::index_identity::SearchIndexIdentity;
 
 #[derive(Debug, Error)]
@@ -58,12 +60,7 @@ pub(super) type StableTopDocs = Vec<((Score, Option<String>), DocAddress)>;
 
 impl SearchIndex {
     pub fn create(path: &Path) -> Result<Self> {
-        let mut schema_builder = Schema::builder();
-        schema_builder.add_text_field("file_id", STRING | STORED | FAST);
-        schema_builder.add_text_field("path", TEXT | STORED);
-        schema_builder.add_text_field("content", TEXT | STORED);
-        schema_builder.add_text_field("name", TEXT | STORED);
-        let schema = schema_builder.build();
+        let schema = build_search_schema();
 
         std::fs::create_dir_all(path)?;
         let directory = tantivy::directory::MmapDirectory::open(path)
@@ -79,6 +76,7 @@ impl SearchIndex {
             let identity = SearchIndexIdentity::create(path)?;
             (index, identity)
         };
+        register_file_tokenizers(&index)?;
         let schema = index.schema();
 
         Ok(Self {
@@ -90,6 +88,7 @@ impl SearchIndex {
 
     pub fn open(path: &Path) -> Result<Self> {
         let index = Index::open_in_dir(path)?;
+        register_file_tokenizers(&index)?;
         let schema = index.schema();
         let identity = SearchIndexIdentity::load(path)?;
         Ok(Self {
@@ -151,6 +150,9 @@ impl SearchIndex {
                 path_field => path,
                 content_field => text.content.as_str(),
                 name_field => name,
+                self.schema.get_field("name_exact").map_err(|_| IndexError::Schema("missing name_exact field".into()))? => normalize(&name),
+                self.schema.get_field("sort_name").map_err(|_| IndexError::Schema("missing sort_name field".into()))? => normalize(&name),
+                self.schema.get_field("sort_path").map_err(|_| IndexError::Schema("missing sort_path field".into()))? => normalize(path),
             ))?;
             count += 1;
         }
@@ -261,11 +263,22 @@ impl SearchIndex {
         self.validate_text_field("file_id", true, true, true)?;
         self.validate_text_field("path", false, true, false)?;
         self.validate_text_field("content", true, true, false)?;
+        self.validate_text_field("sort_name", true, true, true)?;
+        self.validate_text_field("sort_path", true, true, true)?;
         Ok(())
     }
 
     pub fn snapshot_opstamp(&self) -> Result<u64> {
         Ok(self.index.load_metas()?.opstamp)
+    }
+
+    pub fn document_count(&self) -> Result<u64> {
+        let reader = self
+            .index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()?;
+        Ok(reader.searcher().num_docs())
     }
 
     pub fn generation(&self) -> &str {
@@ -276,7 +289,7 @@ impl SearchIndex {
         self.identity.schema_version()
     }
 
-    fn validate_text_field(
+    pub(super) fn validate_text_field(
         &self,
         name: &str,
         indexed: bool,

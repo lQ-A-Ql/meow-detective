@@ -25,10 +25,21 @@ function createWrapper() {
 describe('search hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.searchFiles.mockResolvedValue([
-      { id: 'f1', name: 'evidence.txt', path: '/data/evidence.txt', score: 0.95 },
-      { id: 'f2', name: 'log.txt', path: '/data/log.txt', score: 0.82 },
-    ]);
+    mocks.searchFiles.mockResolvedValue({
+      total: 2,
+      available: 2,
+      truncated: false,
+      tookMs: 1,
+      items: [],
+      coverage: {
+        readySourceCount: 1,
+        indexedSourceCount: 1,
+        expectedEntryCount: 0,
+        indexedEntryCount: 0,
+        missingSourceIds: [],
+        complete: true,
+      },
+    });
   });
 
   it('fetches search results for a given query', async () => {
@@ -38,7 +49,7 @@ describe('search hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.searchFiles).toHaveBeenCalledWith('evidence');
-    expect(result.current.data).toHaveLength(2);
+    expect(result.current.data?.items).toEqual([]);
   });
 
   it('passes query text to the search API', async () => {
@@ -51,14 +62,28 @@ describe('search hooks', () => {
   });
 
   it('returns empty results when query matches nothing', async () => {
-    mocks.searchFiles.mockResolvedValue([]);
+    mocks.searchFiles.mockResolvedValue({
+      total: 0,
+      available: 0,
+      truncated: false,
+      tookMs: 0,
+      items: [],
+      coverage: {
+        readySourceCount: 0,
+        indexedSourceCount: 0,
+        expectedEntryCount: 0,
+        indexedEntryCount: 0,
+        missingSourceIds: [],
+        complete: true,
+      },
+    });
 
     const { result } = renderHook(() => useSearchResults('nonexistent'), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual([]);
+    expect(result.current.data?.items).toEqual([]);
   });
 
   it('exposes error state when search fails', async () => {
@@ -89,14 +114,18 @@ describe('search hooks', () => {
         total: 3,
         available: 3,
         truncated: false,
-        items: [{ id: 'f1' }, { id: 'f2' }],
+        tookMs: 1,
+        items: [{ fileId: 'f1' }, { fileId: 'f2' }],
+        coverage: { complete: true },
         nextCursor: 'cursor-1',
       })
       .mockResolvedValueOnce({
         total: 3,
         available: 3,
         truncated: false,
-        items: [{ id: 'f3' }],
+        tookMs: 1,
+        items: [{ fileId: 'f3' }],
+        coverage: { complete: true },
       });
 
     const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
@@ -104,14 +133,28 @@ describe('search hooks', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.searchFiles).toHaveBeenNthCalledWith(1, 'evidence', 0, 2, undefined);
+    expect(mocks.searchFiles).toHaveBeenNthCalledWith(
+      1,
+      'evidence',
+      0,
+      2,
+      undefined,
+      expect.objectContaining({ sortKey: 'name', sortDirection: 'asc' }),
+    );
 
     let nextResult: Awaited<ReturnType<typeof result.current.fetchNextPage>> | undefined;
     await act(async () => {
       nextResult = await result.current.fetchNextPage();
     });
 
-    expect(mocks.searchFiles).toHaveBeenNthCalledWith(2, 'evidence', 0, 2, 'cursor-1');
+    expect(mocks.searchFiles).toHaveBeenNthCalledWith(
+      2,
+      'evidence',
+      0,
+      10,
+      'cursor-1',
+      expect.objectContaining({ sortKey: 'name', sortDirection: 'asc' }),
+    );
     expect(nextResult?.data?.pages.flatMap((page) => page.items)).toHaveLength(3);
     expect(nextResult?.hasNextPage).toBe(false);
   });
@@ -122,10 +165,19 @@ describe('search hooks', () => {
         total: 3,
         available: 3,
         truncated: false,
-        items: [{ id: 'f1' }, { id: 'f2' }],
+        tookMs: 1,
+        items: [{ fileId: 'f1' }, { fileId: 'f2' }],
+        coverage: { complete: true },
         nextCursor: 'cursor-1',
       })
-      .mockResolvedValueOnce({ total: 3, available: 3, truncated: false, items: [] });
+      .mockResolvedValueOnce({
+        total: 3,
+        available: 3,
+        truncated: false,
+        tookMs: 1,
+        items: [],
+        coverage: { complete: true },
+      });
     const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
       wrapper: createWrapper(),
     });
@@ -142,7 +194,9 @@ describe('search hooks', () => {
       total: 200_000,
       available: 2,
       truncated: true,
-      items: [{ id: 'f1' }, { id: 'f2' }],
+      tookMs: 1,
+      items: [{ fileId: 'f1' }, { fileId: 'f2' }],
+      coverage: { complete: true },
     });
     const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
       wrapper: createWrapper(),

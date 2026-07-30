@@ -1,5 +1,7 @@
 use super::*;
 use crate::extractor::ExtractedText;
+use crate::FileSearchOptions;
+use crate::SearchFileDocument;
 use tempfile::tempdir;
 
 fn sample_extracted_texts() -> Vec<ExtractedText> {
@@ -233,6 +235,38 @@ fn malformed_search_field_contracts_are_rejected() {
             Err(IndexError::Schema(_))
         ));
     }
+}
+
+#[test]
+fn metadata_search_preserves_overlapping_ngram_positions() {
+    let dir = tempfile::tempdir().unwrap();
+    let index = SearchIndex::create(dir.path()).unwrap();
+    let mut writer = index.metadata_writer().unwrap();
+    writer
+        .add_documents(&[SearchFileDocument {
+            file_id: "report".to_string(),
+            path: "/Downloads/report.txt".to_string(),
+            name: "report.txt".to_string(),
+            extension: "txt".to_string(),
+            entry_type: "file".to_string(),
+            size: Some(0),
+            modified_at: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+        }])
+        .unwrap();
+    writer.commit().unwrap();
+
+    let session = index
+        .file_query_session(&FileSearchOptions {
+            query: "report".to_string(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    assert_eq!(session.rank_after(None, 10).unwrap().total_count, 1);
 }
 
 #[test]

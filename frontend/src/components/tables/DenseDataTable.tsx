@@ -8,7 +8,6 @@
  */
 
 import {
-  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -27,7 +26,7 @@ import {
 } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
+import { DenseDataTableRow } from './DenseDataTableRow';
 import { SortIndicator } from './SortIndicator';
 
 export interface DenseColumn<T> {
@@ -47,6 +46,7 @@ interface DenseDataTableProps<T> {
   getRowKey: (row: T) => string;
   selectedRowKey?: string;
   onRowClick?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
   renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -78,77 +78,10 @@ interface DenseDataTableProps<T> {
   minColumnWidth?: number;
 }
 
-interface TableRowMemoProps<T> {
-  row: T;
-  columns: DenseColumn<T>[];
-  selected: boolean;
-  onRowClick?: (row: T) => void;
-  renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
-}
-
 const ROW_HEIGHT = 31;
 const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const AUTOMATIC_RETRY_DELAY_MS = 500;
-
-/**
- * 表格行组件 (使用 memo 优化)
- */
-function TableRowMemoBase<T>({
-  row,
-  columns,
-  selected,
-  onRowClick,
-  renderRowContextMenu,
-}: TableRowMemoProps<T>) {
-  const handleRowClick = () => {
-    if (typeof window !== 'undefined') {
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) {
-        return;
-      }
-    }
-    onRowClick?.(row);
-  };
-
-  const tableRow = (
-    <TableRow
-      data-state={selected ? 'selected' : undefined}
-      className={`h-[31px] cursor-pointer border-b ${
-        selected
-          ? 'bg-forensics-sakura-150 text-forensics-text'
-          : 'text-forensics-text-secondary hover:bg-forensics-hover'
-      }`}
-      onClick={handleRowClick}
-    >
-      {columns.map((column, index) => (
-        <TableCell
-          key={column.key}
-          className={`h-[31px] px-2 py-1.5 align-middle ${
-            index < columns.length - 1
-              ? 'border-r border-forensics-border-light'
-              : ''
-          } ${column.className ?? ''}`}
-        >
-          <HorizontalScroll
-            variant="cell"
-            revealOnHover
-            className="whitespace-nowrap text-inherit"
-          >
-            <div className="min-w-full w-max select-text pr-2">
-              {column.render(row)}
-            </div>
-          </HorizontalScroll>
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-  return renderRowContextMenu?.(row, tableRow) ?? tableRow;
-}
-
-const TableRowMemo = memo(TableRowMemoBase) as <T>(
-  props: TableRowMemoProps<T>
-) => ReactElement;
 
 export function DenseDataTable<T>({
   columns,
@@ -156,6 +89,7 @@ export function DenseDataTable<T>({
   getRowKey,
   selectedRowKey,
   onRowClick,
+  onRowDoubleClick,
   renderRowContextMenu,
   emptyTitle = '暂无记录',
   emptyDescription = '当前范围内没有可显示的数据。',
@@ -473,12 +407,13 @@ export function DenseDataTable<T>({
             const key = getRowKey(row);
             const selected = key === selectedRowKey;
             return (
-              <TableRowMemo
+              <DenseDataTableRow
                 key={key}
                 row={row}
                 columns={columns}
                 selected={selected}
                 onRowClick={onRowClick}
+                onRowDoubleClick={onRowDoubleClick}
                 renderRowContextMenu={renderRowContextMenu}
               />
             );

@@ -163,10 +163,42 @@ pub enum FileSortDirectionDto {
     Desc,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchEntryTypeDto {
+    #[default]
+    Any,
+    File,
+    Directory,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchSortKeyDto {
+    #[default]
+    Name,
+    Path,
+    Size,
+    ModifiedAt,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchFilesRequest {
+    #[serde(default)]
     pub query: String,
+    #[serde(default)]
+    pub match_path: bool,
+    #[serde(default)]
+    pub entry_type: SearchEntryTypeDto,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extensions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_source_ids: Vec<String>,
+    #[serde(default)]
+    pub sort_key: SearchSortKeyDto,
+    #[serde(default)]
+    pub sort_direction: FileSortDirectionDto,
     #[serde(default)]
     pub offset: u64,
     #[serde(default = "default_search_limit")]
@@ -252,8 +284,26 @@ impl ListDeletedRecoveriesRequest {
 
 impl SearchFilesRequest {
     pub fn validate(&mut self) -> Result<(), String> {
-        if self.query.trim().is_empty() {
-            return Err("query is required".to_string());
+        self.query = self.query.trim().to_string();
+        if self.query.chars().count() > 1000 {
+            return Err("query is too long".to_string());
+        }
+        if self.extensions.len() > 32 || self.data_source_ids.len() > 64 {
+            return Err("too many search filters".to_string());
+        }
+        for extension in &mut self.extensions {
+            *extension = extension.trim().trim_start_matches('.').to_string();
+            if extension.is_empty()
+                || extension.len() > 32
+                || !extension
+                    .chars()
+                    .all(|character| character.is_alphanumeric() || matches!(character, '-' | '_'))
+            {
+                return Err("invalid search extension filter".to_string());
+            }
+        }
+        for data_source_id in &self.data_source_ids {
+            validate_data_source_id(data_source_id)?;
         }
         if self.limit == 0 {
             self.limit = default_search_limit();

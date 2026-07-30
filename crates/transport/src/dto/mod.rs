@@ -122,7 +122,10 @@ pub use registry::{
 };
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
-pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
+pub use search::{
+    SearchCoverageDto, SearchFileHitDto, SearchFileResultPageDto, SearchHighlightDto, SearchHitDto,
+    SearchResultPageDto, SearchSnippetDto,
+};
 pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineStripeDto,
 };

@@ -1,6 +1,6 @@
 use app_services::step_recorder;
 use tauri::{AppHandle, State};
-use transport::{commands::SearchFilesRequest, dto::SearchResultPageDto, CommandError};
+use transport::{commands::SearchFilesRequest, dto::SearchFileResultPageDto, CommandError};
 
 use crate::events::event_bridge;
 use crate::state::AppState;
@@ -11,12 +11,18 @@ pub async fn search_files(
     state: State<'_, AppState>,
     app: AppHandle,
     query: String,
-) -> Result<SearchResultPageDto, CommandError> {
+) -> Result<SearchFileResultPageDto, CommandError> {
     search_files_request(
         state,
         app,
         SearchFilesRequest {
             query,
+            match_path: false,
+            entry_type: Default::default(),
+            extensions: Vec::new(),
+            data_source_ids: Vec::new(),
+            sort_key: Default::default(),
+            sort_direction: Default::default(),
             offset: 0,
             limit: infrastructure::constants::SEARCH_PAGE_SIZE as u32,
             cursor: None,
@@ -31,15 +37,8 @@ pub async fn search_files_request(
     state: State<'_, AppState>,
     app: AppHandle,
     mut request: SearchFilesRequest,
-) -> Result<SearchResultPageDto, CommandError> {
+) -> Result<SearchFileResultPageDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
-    // Validate query length
-    if request.query.len() > infrastructure::constants::MAX_QUERY_LENGTH {
-        return Err(CommandError::invalid_input(format!(
-            "Query too long (max {} characters)",
-            infrastructure::constants::MAX_QUERY_LENGTH
-        )));
-    }
     let query_for_step = request.query.clone();
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -72,18 +71,14 @@ pub async fn search_files_request(
                 &conn,
                 &case_root,
                 &domain::CaseId(case_id_string.clone()),
-                &request.query,
-                request.cursor.as_deref(),
-                request.limit,
+                &request,
             )
         } else {
             app_services::search_service::search_files_for_case_instrumented(
                 &conn,
                 &case_root,
                 &domain::CaseId(case_id_string.clone()),
-                &request.query,
-                request.offset,
-                request.limit,
+                &request,
             )
         }
         .map_err(CommandError::from_typed_service_error)?;
@@ -119,13 +114,14 @@ pub async fn search_files_request(
     .map_err(CommandError::from_join_error)?
 }
 
-fn empty_search_result_page() -> SearchResultPageDto {
-    SearchResultPageDto {
+fn empty_search_result_page() -> SearchFileResultPageDto {
+    SearchFileResultPageDto {
         total: 0,
         available: 0,
         truncated: false,
         took_ms: 0,
         items: vec![],
+        coverage: Default::default(),
         next_cursor: None,
     }
 }

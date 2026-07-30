@@ -1,41 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useDataSources } from '@/features/case/hooks';
 import { useInfiniteSearchResults } from '@/features/search/hooks';
 import { useOpenSearchHitInFiles, useSearchSelection } from '@/features/search/use-search-page-model';
-import {
-  readSavedSearchQueries,
-  removeSavedSearchQuery,
-  upsertSavedSearchQuery,
-  writeSavedSearchQueries,
-} from '@/lib/saved-queries';
-import type { SearchHit } from '@/types/models';
+import type {
+  SearchFileHit,
+  SearchRequestOptions,
+  SearchSortDirection,
+  SearchSortKey,
+} from '@/types/models';
 
-const DEFAULT_QUERY = 'content:password AND path:doc';
+const DEFAULT_QUERY = '';
+const DEFAULT_OPTIONS: SearchRequestOptions = {
+  matchPath: false,
+  entryType: 'any',
+  extensions: [],
+  dataSourceIds: [],
+  sortKey: 'name',
+  sortDirection: 'asc',
+};
 
-/** Owns search query state, persisted saved queries, selection, and navigation. */
 export function useSearchWorkspaceModel() {
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get('q');
   const initialQuery = urlQuery?.trim() || DEFAULT_QUERY;
   const [queryInput, setQueryInput] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
-  const [savedOpen, setSavedOpen] = useState(false);
-  const [savedName, setSavedName] = useState('');
-  const [savedQueries, setSavedQueries] = useState(() => readSavedSearchQueries());
-  const searchQuery = useInfiniteSearchResults(activeQuery);
+  const [extensionInput, setExtensionInputState] = useState('');
+  const [options, setOptions] = useState<SearchRequestOptions>(DEFAULT_OPTIONS);
+  const { data: dataSources } = useDataSources();
+  const searchQuery = useInfiniteSearchResults(activeQuery, 100, options);
   const searchHits = useMemo(
     () => searchQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [searchQuery.data],
   );
-  const totalHits = searchQuery.data?.pages[0]?.total ?? 0;
-  const searchTookMs = searchQuery.data?.pages.reduce(
-    (total, page) => total + page.tookMs,
-    0,
-  ) ?? 0;
-  const highScoreHits = useMemo(
-    () => searchHits.filter((hit) => hit.score >= 0.8).length,
-    [searchHits],
-  );
+  const firstPage = searchQuery.data?.pages[0];
   const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
   const openSearchHitInFiles = useOpenSearchHitInFiles();
   const selectedHit = searchHits.find((hit) => hit.fileId === selectedSearchHitId) ?? searchHits[0];
@@ -46,76 +45,69 @@ export function useSearchWorkspaceModel() {
     setActiveQuery(nextQuery);
   }, [urlQuery]);
 
-  const submitQuery = useCallback(() => {
-    setActiveQuery(queryInput);
-  }, [queryInput]);
-  const onHitRowClick = useCallback(
-    (hit: SearchHit) => setSelectedSearchHitId(hit.fileId),
-    [setSelectedSearchHitId],
+  useEffect(() => {
+    if (queryInput === activeQuery) return;
+    const timer = window.setTimeout(() => setActiveQuery(queryInput.trim()), 180);
+    return () => window.clearTimeout(timer);
+  }, [activeQuery, queryInput]);
+
+  const setOption = useCallback(<K extends keyof SearchRequestOptions>(key: K, value: SearchRequestOptions[K]) => {
+    setOptions((current) => ({ ...current, [key]: value }));
+  }, []);
+  const setExtensionInput = useCallback((value: string) => {
+    setExtensionInputState(value);
+    const extensions = value
+      .split(/[;,\s]+/)
+      .map((extension) => extension.trim().replace(/^\.+/, ''))
+      .filter(Boolean);
+    setOptions((current) => ({ ...current, extensions }));
+  }, []);
+  const onHitRowClick = useCallback((hit: SearchFileHit) => setSelectedSearchHitId(hit.fileId), [setSelectedSearchHitId]);
+  const openHitInFiles = useCallback(
+    (hit: SearchFileHit) => openSearchHitInFiles(hit.fileId),
+    [openSearchHitInFiles],
   );
-  const toggleSavedQueries = useCallback(() => {
-    setSavedOpen((open) => !open);
+  const loadNextPage = useCallback(() => { void searchQuery.fetchNextPage(); }, [searchQuery]);
+  const retry = useCallback(() => { void searchQuery.refetch(); }, [searchQuery]);
+  const clearQuery = useCallback(() => setQueryInput(''), []);
+  const toggleSort = useCallback((key: string) => {
+    const sortKey = key as SearchSortKey;
+    setOptions((current) => ({
+      ...current,
+      sortKey,
+      sortDirection: current.sortKey === sortKey && current.sortDirection === 'asc' ? 'desc' : 'asc',
+    }));
   }, []);
-  const saveCurrentQuery = useCallback(() => {
-    const name = savedName.trim() || queryInput.slice(0, 48);
-    const nextQueries = upsertSavedSearchQuery(savedQueries, name, queryInput);
-    setSavedQueries(nextQueries);
-    writeSavedSearchQueries(nextQueries);
-    setSavedName('');
-    setSavedOpen(true);
-  }, [queryInput, savedName, savedQueries]);
-  const runSavedQuery = useCallback((query: string) => {
-    setQueryInput(query);
-    setActiveQuery(query);
-    setSavedOpen(false);
-  }, []);
-  const removeSavedQuery = useCallback((id: string) => {
-    setSavedQueries((currentQueries) => {
-      const nextQueries = removeSavedSearchQuery(currentQueries, id);
-      writeSavedSearchQueries(nextQueries);
-      return nextQueries;
-    });
-  }, []);
-  const openSelectedHitInFiles = useCallback(() => {
-    if (selectedHit) {
-      openSearchHitInFiles(selectedHit.fileId);
-    }
-  }, [openSearchHitInFiles, selectedHit]);
-  const loadNextPage = useCallback(() => {
-    void searchQuery.fetchNextPage();
-  }, [searchQuery]);
-  const retry = useCallback(() => {
-    void searchQuery.refetch();
-  }, [searchQuery]);
 
   return {
     activeQuery,
-    highScoreHits,
+    clearQuery,
+    coverage: firstPage?.coverage,
+    dataSources: dataSources ?? [],
+    extensionInput,
     hasMore: searchQuery.hasNextPage,
     initialLoadFailed: searchQuery.isError && searchHits.length === 0,
-    loadContextKey: activeQuery,
+    loadContextKey: `${activeQuery}:${JSON.stringify(options)}`,
     loadMoreFailed: searchQuery.isFetchNextPageError,
     loadNextPage,
-    loadStateKey: searchQuery.dataUpdatedAt,
     loadingMore: searchQuery.isFetchingNextPage,
     onHitRowClick,
-    openSelectedHitInFiles,
+    openHitInFiles,
+    options,
     queryInput,
-    removeSavedQuery,
     retry,
-    runSavedQuery,
-    saveCurrentQuery,
-    savedName,
-    savedOpen,
-    savedQueries,
     searchHits,
-    searchTookMs,
+    searchQueryStateKey: searchQuery.dataUpdatedAt,
+    searchTookMs: searchQuery.data?.pages.reduce((total, page) => total + page.tookMs, 0) ?? 0,
     selectedHit,
+    setOption,
+    setExtensionInput,
     setQueryInput,
-    setSavedName,
-    submitQuery,
-    toggleSavedQueries,
-    totalHits,
+    sortDirection: options.sortDirection as SearchSortDirection,
+    sortKey: options.sortKey,
+    toggleSort,
+    totalHits: firstPage?.total ?? 0,
+    truncated: firstPage?.truncated ?? false,
   };
 }
 
