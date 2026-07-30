@@ -79,17 +79,12 @@ pub(crate) fn default_module_layout() -> LoadedModuleEntryLayout {
         .expect("constant module entry layout is valid")
 }
 
-struct EmbeddedTable {
-    pdb_guid: &'static str,
-    json: &'static str,
+pub(crate) struct EmbeddedTable {
+    pub pdb_guid: &'static str,
+    pub json: &'static str,
 }
 
-const EMBEDDED_TABLES: &[EmbeddedTable] = &[EmbeddedTable {
-    pdb_guid: "953A8DE8-80B0-818C-32DA-2DEC1D79C2D9",
-    json: include_str!(
-        "../../symbols/windows/ntkrnlmp/953A8DE8-80B0-818C-32DA-2DEC1D79C2D9-6.json"
-    ),
-}];
+use super::symbol_registry_generated::EMBEDDED_TABLES;
 
 /// Resolves layouts for one ntoskrnl CodeView GUID, or `None` when the build
 /// is not in the embedded registry.
