@@ -72,7 +72,9 @@ impl SearchMetadataWriter {
     }
 
     pub fn commit(mut self) -> Result<u64> {
-        Ok(self.writer.commit()?)
+        let opstamp = self.writer.commit()?;
+        self.writer.wait_merging_threads()?;
+        Ok(opstamp)
     }
 }
 

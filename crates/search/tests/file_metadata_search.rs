@@ -240,6 +240,40 @@ fn search_after_is_complete_and_stable_for_all_sorts_across_segments() {
         .any(|hit| hit.file_id == "id-08" && hit.modified_at.is_none()));
 }
 
+#[test]
+fn metadata_commit_releases_merge_handles_before_generation_rename() {
+    let directory = tempfile::tempdir().unwrap();
+    let next = directory.path().join("index.next");
+    let current = directory.path().join("index");
+    let index = SearchIndex::create(&next).unwrap();
+    let mut writer = index.metadata_writer().unwrap();
+
+    for batch_start in (0..12_000).step_by(1_000) {
+        let documents = (batch_start..batch_start + 1_000)
+            .map(|number| {
+                document(
+                    &format!("file-{number:05}"),
+                    &format!("evidence-report-{number:05}.txt"),
+                    &format!(
+                        "/Users/investigator/Documents/archive/evidence-report-{number:05}.txt"
+                    ),
+                    "file",
+                    Some(number as u64),
+                    Some(number as i64),
+                )
+            })
+            .collect::<Vec<_>>();
+        writer.add_documents(&documents).unwrap();
+    }
+
+    writer.commit().unwrap();
+    drop(index);
+    std::fs::rename(&next, &current).unwrap();
+
+    let published = SearchIndex::open(&current).unwrap();
+    assert_eq!(published.document_count().unwrap(), 12_000);
+}
+
 fn assert_complete_paging(
     index: &SearchIndex,
     field: FileSearchSortField,
