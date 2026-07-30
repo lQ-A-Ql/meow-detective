@@ -29,10 +29,22 @@ impl ReverseRecoveryDatum {
                 reason: "stretch-key nested datum sequence is truncated",
             },
         )?;
-        let reverse = exactly_one(&nested, VALUE_TYPE_AES_CCM, "reverse AES-CCM datum")?;
-        if reverse.data.len() != REVERSE_DATUM_LEN {
+        // The stretch key carries multiple AES-CCM entries: the VMK wrapped by
+        // the stretched credential (12|16|44 = 72 bytes) and the recovery
+        // material wrapped by the plaintext VMK (12|16|28 = 56 bytes). Select
+        // the reverse datum by its exact size, never by uniqueness.
+        let mut candidates = nested.iter().filter(|entry| {
+            entry.value_type == VALUE_TYPE_AES_CCM && entry.data.len() == REVERSE_DATUM_LEN
+        });
+        let reverse =
+            candidates
+                .next()
+                .ok_or(RecoveryPasswordRecoveryError::MalformedProtector {
+                    reason: "no 56-byte reverse AES-CCM datum under the stretch key",
+                })?;
+        if candidates.next().is_some() {
             return Err(RecoveryPasswordRecoveryError::MalformedProtector {
-                reason: "reverse AES-CCM datum must contain a 12-byte nonce, 16-byte tag, and 28-byte ciphertext",
+                reason: "multiple 56-byte reverse AES-CCM data under the stretch key",
             });
         }
         Ok(Self {

@@ -174,7 +174,7 @@ fn authenticated_plaintext_requires_the_exact_key_datum_header() {
 }
 
 #[test]
-fn reverse_datum_must_be_nested_inside_exactly_one_stretch_key() {
+fn duplicate_reverse_data_are_rejected() {
     let vmk = [0x77; 32];
     let reverse = encrypt_reverse_datum(&vmk, &key_datum([0x33; 16]));
     let aes = entry(0, VALUE_TYPE_AES_CCM, &reverse);
@@ -242,5 +242,37 @@ fn formatter_preserves_six_digit_group_width() {
     assert_eq!(
         password.expose_for_authorized_reveal(),
         "000000-000000-000000-000000-000000-000000-000000-000000"
+    );
+}
+
+#[test]
+fn reverse_datum_is_selected_by_size_among_multiple_aes_ccm_entries() {
+    // Real protectors nest two AES-CCM entries under the stretch key: the
+    // 72-byte VMK wrapped by the stretched credential and the 56-byte
+    // recovery material wrapped by the plaintext VMK. Recovery must select
+    // the 56-byte entry instead of failing on duplication.
+    let vmk = [0x77; 32];
+    let reverse = encrypt_reverse_datum(&vmk, &key_datum([0x33; 16]));
+    let wrapped_vmk = vec![0xAA; 72];
+    let mut stretch = vec![0u8; 20];
+    stretch.extend_from_slice(&entry(0, VALUE_TYPE_AES_CCM, &wrapped_vmk));
+    stretch.extend_from_slice(&entry(0, VALUE_TYPE_AES_CCM, &reverse));
+    let mut data = vec![0u8; 28];
+    data[0..16].copy_from_slice(&PROTECTOR_GUID);
+    data[26..28].copy_from_slice(&PROTECTION_RECOVERY.to_le_bytes());
+    data.extend_from_slice(&entry(0, VALUE_TYPE_STRETCH, &stretch));
+    let metadata = metadata_for(vec![MetadataEntry {
+        entry_type: ENTRY_TYPE_VMK,
+        value_type: VALUE_TYPE_VMK,
+        version: 1,
+        data,
+    }]);
+
+    let recovered = recover_recovery_password(&metadata, identity(), &RecoveredVmk::new(vmk))
+        .expect("the 56-byte reverse datum must be selected among multiple entries");
+    let material = RecoveryPasswordMaterial::parse(&key_datum([0x33; 16])).expect("key datum");
+    assert_eq!(
+        recovered.password().expose_for_authorized_reveal(),
+        format_material(&material).expose_for_authorized_reveal(),
     );
 }

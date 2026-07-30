@@ -2,7 +2,9 @@ use std::{io::Read, path::Path};
 
 use domain::{CaseId, DataSourceId};
 use evidence_core::{EvidenceReader, FileSystemReader};
-use memory_windows::{recover_vmks_structurally, TargetedKernelSearchLimits};
+use memory_windows::{
+    recover_vmks_structurally, resolve_profile_for_image, TargetedKernelSearchLimits,
+};
 use rusqlite::Connection;
 use transport::dto::{BitLockerVolumeStatusDto, RecoveryPasswordReconstructionDto};
 use volume_bitlocker::{
@@ -12,7 +14,6 @@ use volume_bitlocker::{
 
 use super::{
     audit::{self, BitLockerAudit},
-    memory_profile::resolve_memory_profile,
     source::{open_partition_window, open_source_read_only, BitLockerSource},
     use_cases::{complete_verified_unlock, UnlockContext, UnlockMethod},
     BitLockerRuntimeContext, BitLockerServiceError,
@@ -58,7 +59,7 @@ pub fn unlock_bitlocker_with_memory_image(
     let target = identities
         .first()
         .ok_or(BitLockerServiceError::MemoryKeyNotValidated)?;
-    let profile = resolve_memory_profile(memory_image_path)?;
+    let profile = resolve_profile_for_image(memory_image_path)?;
     let recovery = recover_vmks_structurally(
         memory_image_path,
         &profile,
@@ -77,9 +78,12 @@ pub fn unlock_bitlocker_with_memory_image(
         physical_bytes_read = reads.bytes_read,
         "completed structural BitLocker memory recovery"
     );
-    let (vmk, verified) = select_verified_unlock(&source, recovery.into_vmks())?;
-    let reveal = reconstruct_recovery_password(&verified.identity().metadata, &vmk);
-    drop(vmk);
+    let vmks = recovery.into_vmks();
+    // Try every recovered VMK generation for the recovery-password
+    // reconstruction: the VMK that wrapped the protector's reverse datum is
+    // not necessarily the active, volume-unlocking one.
+    let reveal = reconstruct_recovery_password_from_any(&identities, &vmks);
+    let verified = select_verified_unlock(&source, vmks)?;
     audit_reconstruction(
         &context,
         &verified.identity().metadata,
@@ -104,17 +108,45 @@ fn read_identities(source: &BitLockerSource) -> Result<Vec<VolumeIdentity>, BitL
 fn select_verified_unlock(
     source: &BitLockerSource,
     vmks: Vec<RecoveredVmk>,
-) -> Result<(RecoveredVmk, VerifiedUnlock), BitLockerServiceError> {
+) -> Result<VerifiedUnlock, BitLockerServiceError> {
     let mut matching = None;
     for vmk in vmks {
         let Ok(verified) = unlock_and_validate(source, &vmk) else {
             continue;
         };
-        if matching.replace((vmk, verified)).is_some() {
+        if matching.replace(verified).is_some() {
             return Err(BitLockerServiceError::MemoryKeyNotValidated);
         }
     }
     matching.ok_or(BitLockerServiceError::MemoryKeyNotValidated)
+}
+
+/// Attempts the recovery-password reconstruction with every recovered VMK
+/// across every metadata copy; the first authenticated VMK wins. Falls back
+/// to the canonical `unavailable` result when none authenticates.
+fn reconstruct_recovery_password_from_any(
+    identities: &[VolumeIdentity],
+    vmks: &[RecoveredVmk],
+) -> RecoveryPasswordReconstructionDto {
+    for identity in identities {
+        for vmk in vmks {
+            let reveal = reconstruct_recovery_password(&identity.metadata, vmk);
+            if reveal.status == "recovered" {
+                return reveal;
+            }
+        }
+    }
+    match (identities.first(), vmks.first()) {
+        (Some(identity), Some(vmk)) => reconstruct_recovery_password(&identity.metadata, vmk),
+        _ => RecoveryPasswordReconstructionDto {
+            status: "unavailable".to_string(),
+            password: None,
+            volume_guid: None,
+            protector_guid: None,
+            reverse_datum_fingerprint: None,
+            reason: Some("no VMK was recovered from the memory image".to_string()),
+        },
+    }
 }
 
 /// Reconstructs the numerical recovery password from the volume-authenticated

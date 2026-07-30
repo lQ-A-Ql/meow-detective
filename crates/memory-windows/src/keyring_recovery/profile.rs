@@ -1,9 +1,6 @@
-use crate::{MemoryWindowsError, Result, TargetedCodeViewIdentity, TargetedKernelLayoutProfile};
+use crate::{MemoryWindowsError, Result, TargetedKernelLayoutProfile};
 
 use super::symbol_table;
-
-const KERNEL_PDB_GUID: &str = "953A8DE8-80B0-818C-32DA-2DEC1D79C2D9";
-const FVEVOL_PDB_GUID: &str = "47808A31-873E-98CF-7009-95E410CD0095";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ObjectManagerLayout {
@@ -67,11 +64,11 @@ pub(crate) struct FveVolumeContextLayout {
     pub vmk_offset: u16,
 }
 
-/// Exact, reviewed profile for one Windows kernel/fvevol symbol identity.
-///
-/// The layout is sourced from Microsoft PDBs outside the evidence hot path.
-/// Runtime recovery only consumes this local profile after both PE and CodeView
-/// identities have matched.
+/// Recovery profile for one Windows kernel build, resolved from the embedded
+/// PDB symbol registry. fvevol-internal offsets stay zero: keyring and VMK
+/// datum discovery run through signature-anchored bounded scans, so a profile
+/// only carries version-stable format constants plus registry-resolved
+/// ntoskrnl layouts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitLockerMemoryProfile {
     kernel: TargetedKernelLayoutProfile,
@@ -84,10 +81,9 @@ pub struct BitLockerMemoryProfile {
 
 impl BitLockerMemoryProfile {
     /// Resolves a profile for any ntoskrnl build present in the embedded
-    /// symbol registry (see `symbol_table`). The fvevol-internal offsets are
-    /// zeroed, so discovery runs through the signature-anchored bounded scans
-    /// rather than version-specific offsets; the CodeView GUID is the only
-    /// identity gate, and unknown builds fail closed.
+    /// symbol registry (see `symbol_table`). The CodeView GUID is the only
+    /// identity gate; unknown builds fail closed with
+    /// [`MemoryWindowsError::UnsupportedBitLockerMemoryProfile`].
     pub fn resolve(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
         let codeview = kernel
             .codeview_identity()
@@ -118,38 +114,6 @@ impl BitLockerMemoryProfile {
         })
     }
 
-    /// Builds the reviewed Windows 11 26100 profile used by the Liu Yang sample.
-    ///
-    /// Layouts come from the embedded PDB symbol registry (single source of
-    /// truth); this constructor only adds the two manually reviewed fast-path
-    /// offsets and the exact CodeView identity requirements.
-    pub fn windows_11_26100(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
-        require_codeview(kernel.codeview_identity(), KERNEL_PDB_GUID, "ntkrnlmp.pdb")?;
-        require_codeview(
-            kernel.fvevol_codeview_identity(),
-            FVEVOL_PDB_GUID,
-            "fvevol.pdb",
-        )?;
-        let mut profile = Self::resolve(kernel)?;
-        profile.keyring.client_keyring_offset = 0x278;
-        profile.volume_context.vmk_datum_pointer_offset = 0x3D0;
-        Ok(profile)
-    }
-
-    /// Offset-blind variant of [`Self::windows_11_26100`]: the two
-    /// fvevol-internal offsets (keyring pointer, VMK datum pointer) are zeroed,
-    /// forcing discovery onto the signature-anchored bounded scans. This is the
-    /// shape multi-version profiles take when fvevol layout offsets are unknown
-    /// (public driver PDBs carry no type info), and it doubles as the
-    /// regression proving the scans find the same objects as the reviewed
-    /// offsets.
-    pub fn windows_11_26100_offset_blind(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
-        let mut profile = Self::windows_11_26100(kernel)?;
-        profile.keyring.client_keyring_offset = 0;
-        profile.volume_context.vmk_datum_pointer_offset = 0;
-        Ok(profile)
-    }
-
     pub(crate) fn kernel(&self) -> &TargetedKernelLayoutProfile {
         &self.kernel
     }
@@ -172,22 +136,5 @@ impl BitLockerMemoryProfile {
 
     pub(crate) fn volume_context(&self) -> FveVolumeContextLayout {
         self.volume_context
-    }
-}
-
-fn require_codeview(
-    actual: Option<&TargetedCodeViewIdentity>,
-    expected_guid: &str,
-    expected_name: &str,
-) -> Result<()> {
-    let matches = actual.is_some_and(|identity| {
-        identity.guid() == expected_guid
-            && identity.age() == 1
-            && identity.pdb_name().eq_ignore_ascii_case(expected_name)
-    });
-    if matches {
-        Ok(())
-    } else {
-        Err(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)
     }
 }

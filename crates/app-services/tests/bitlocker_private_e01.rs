@@ -7,11 +7,7 @@ use app_services::{
 use domain::{DataSourceKind, DataSourcePlatform};
 use evidence_core::{EvidenceReader, PartitionWindowReader};
 use image_e01::E01Reader;
-use memory_windows::{
-    recover_vmks_structurally, BitLockerMemoryProfile, LoadedModuleEntryLayout,
-    TargetedCodeViewIdentity, TargetedKernelIdentity, TargetedKernelLayoutProfile,
-    TargetedKernelSearchLimits,
-};
+use memory_windows::{recover_vmks_structurally, TargetedKernelSearchLimits};
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
     partition_repo::{DataSourcePartitionRecord, PartitionRepo},
@@ -303,25 +299,8 @@ fn private_liuyang_structural_vmk_authentication_oracles() {
     let identities = read_volume_identities(&mut window).expect("read BitLocker metadata");
     let target = identities.first().expect("at least one metadata copy");
 
-    let module_layout =
-        LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60).expect("loader layout");
-    let kernel = TargetedKernelLayoutProfile::new(
-        "windows-11-26100-ntkrnlmp-953a8de8",
-        "26100",
-        TargetedKernelIdentity::new(0xD98D_B6A6, 0x0144_F000),
-        module_layout,
-    )
-    .expect("kernel profile")
-    .with_codeview_identity(
-        TargetedCodeViewIdentity::new("953A8DE8-80B0-818C-32DA-2DEC1D79C2D9", 1, "ntkrnlmp.pdb")
-            .expect("kernel CodeView identity"),
-    )
-    .with_fvevol_identity(TargetedKernelIdentity::new(0x5960_C289, 0x000E_1000))
-    .with_fvevol_codeview_identity(
-        TargetedCodeViewIdentity::new("47808A31-873E-98CF-7009-95E410CD0095", 1, "fvevol.pdb")
-            .expect("FVEVol CodeView identity"),
-    );
-    let profile = BitLockerMemoryProfile::windows_11_26100(kernel).expect("reviewed profile");
+    let profile = memory_windows::resolve_profile_for_image(&memory_path)
+        .expect("resolve recovery profile from the memory image");
     let recovery = recover_vmks_structurally(
         &memory_path,
         &profile,
@@ -356,8 +335,8 @@ fn private_liuyang_structural_vmk_authentication_oracles() {
     );
     assert_eq!(fvek_authentications, 1);
     assert_eq!(
-        reverse_authentications, 0,
-        "the active device-context VMK unlocks the volume but is not the recovery-protector VMK"
+        reverse_authentications, 1,
+        "the active device-context VMK both unlocks the volume and authenticates the recovery protector's reverse datum"
     );
 }
 
@@ -390,4 +369,82 @@ fn bitlocker_partition_record(
 #[ignore = "requires private JC2 BitLocker E01 path and recovery password"]
 fn private_jc2_e01_recovery_password_unlocks_partition() {
     assert_private_sample(&PRIVATE_SAMPLES[1]);
+}
+
+#[test]
+#[ignore = "requires Liu Yang E01, raw memory fixture, and the recovery-password oracle"]
+fn private_liuyang_memory_unlock_reconstructs_the_expected_recovery_password() {
+    let e01_path = env_path("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_E01");
+    let memory_path = env_path("FORENSICS_LIUYANG_MEMORY_FIXTURE");
+    let expected = std::env::var("FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD")
+        .expect("set FORENSICS_BITLOCKER_PRIVATE_LIUYANG_RECOVERY_PASSWORD to the 48-digit oracle");
+    let mut probe_reader = E01Reader::open(&e01_path).expect("open private E01 read-only");
+    let probe = detect_image_filesystem(&mut probe_reader).expect("probe private E01");
+    let partition = probe
+        .partitions
+        .iter()
+        .find(|partition| partition.index == 5)
+        .expect("expected Liu Yang BitLocker partition");
+
+    let temp = TempDir::new().expect("temporary isolated case root");
+    let active = app_services::case_service::create_case(
+        &temp.path().join("cases"),
+        "bitlocker-memory-recovery-password",
+        Some("private opt-in recovery-password regression"),
+    )
+    .expect("create isolated case");
+    let case_id = active.meta.id.clone();
+    let preview_runtime = Arc::new(PreviewRuntimeRegistry::default());
+    let bitlocker_runtime = Arc::new(BitLockerUnlockRegistry::default());
+    let key_store = DiscardingKeyStore::default();
+
+    active
+        .with_conn(|case_conn| {
+            let source = app_services::datasource_service::attach_data_source(
+                case_conn,
+                &case_id,
+                "liuyang-memory-recovery-password",
+                &e01_path,
+                DataSourceKind::E01,
+                DataSourcePlatform::Windows,
+            )
+            .expect("attach private E01");
+            let source_conn =
+                app_services::source_db::open_source_db(&active.case_root, &source.id)
+                    .expect("open isolated source DB");
+            DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(&case_id, &source)
+                .expect("persist source-local metadata");
+            PartitionRepo::new(&source_conn)
+                .replace_for_data_source(
+                    &source.id.0,
+                    &[bitlocker_partition_record(&source.id.0, partition)],
+                )
+                .expect("persist BitLocker partition metadata");
+            DataSourceRepo::new(case_conn)
+                .update_import_state(&source.id, "ready", None)
+                .expect("mark source ready");
+
+            let runtimes =
+                BitLockerRuntimeContext::new(&preview_runtime, &bitlocker_runtime, &key_store);
+            let status = app_services::bitlocker_service::unlock_bitlocker_with_memory_image(
+                case_conn,
+                &active.case_root,
+                &case_id,
+                &source.id,
+                partition.index as u32,
+                &memory_path,
+                runtimes,
+            )
+            .expect("recover and activate verified BitLocker volume");
+
+            assert!(status.unlocked);
+            let reconstruction = status
+                .recovery_password_reconstruction
+                .expect("memory unlock must carry a reconstruction outcome");
+            assert_eq!(reconstruction.status, "recovered");
+            assert_eq!(reconstruction.password.as_deref(), Some(expected.as_str()));
+            Ok(())
+        })
+        .expect("complete recovery-password regression");
 }
