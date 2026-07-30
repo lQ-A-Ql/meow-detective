@@ -96,6 +96,26 @@ fn confirms_liuyang_fvevol_keyring_is_structurally_valid_and_empty() {
     assert_eq!(matching_keyring, Some((0x20, 0x20)));
 }
 
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_MEMORY_FIXTURE"]
+fn offset_blind_scan_recovers_the_same_liuyang_vmk_as_reviewed_offsets() {
+    let path = fixture_path();
+    let recovery = recover_vmks_structurally(
+        &path,
+        &BitLockerMemoryProfile::windows_11_26100_offset_blind(liuyang_kernel_profile())
+            .expect("offset-blind profile"),
+        LIUYANG_VOLUME_GUID,
+        TargetedKernelSearchLimits::default(),
+    )
+    .expect("recover via signature-anchored scans");
+
+    assert_eq!(recovery.recovered_vmk_count(), 1);
+    assert!(recovery.devices_examined() > 0);
+    assert!(recovery.datum_pointers_examined() > 0);
+    assert!(recovery.physical_reads().operations <= 65_536);
+    assert!(recovery.physical_reads().bytes_read <= 64 * 1024 * 1024);
+}
+
 fn fixture_path() -> PathBuf {
     PathBuf::from(
         std::env::var("FORENSICS_LIUYANG_MEMORY_FIXTURE")
@@ -104,9 +124,13 @@ fn fixture_path() -> PathBuf {
 }
 
 fn liuyang_profile() -> BitLockerMemoryProfile {
+    BitLockerMemoryProfile::windows_11_26100(liuyang_kernel_profile()).expect("reviewed profile")
+}
+
+fn liuyang_kernel_profile() -> TargetedKernelLayoutProfile {
     let module_layout =
         LoadedModuleEntryLayout::new(0, 0, 0x30, 0x40, 0x58, 0x60).expect("loader layout");
-    let kernel = TargetedKernelLayoutProfile::new(
+    TargetedKernelLayoutProfile::new(
         "windows-11-26100-ntkrnlmp-953a8de8",
         "26100",
         TargetedKernelIdentity::new(0xD98D_B6A6, 0x0144_F000),
@@ -121,6 +145,5 @@ fn liuyang_profile() -> BitLockerMemoryProfile {
     .with_fvevol_codeview_identity(
         TargetedCodeViewIdentity::new("47808A31-873E-98CF-7009-95E410CD0095", 1, "fvevol.pdb")
             .expect("FVEVol CodeView identity"),
-    );
-    BitLockerMemoryProfile::windows_11_26100(kernel).expect("reviewed profile")
+    )
 }

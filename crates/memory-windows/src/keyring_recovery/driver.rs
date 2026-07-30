@@ -1,14 +1,20 @@
 use std::collections::HashSet;
 
-use crate::{MemoryWindowsError, Result, X64AddressSpace};
+use crate::{is_canonical_address, MemoryWindowsError, Result, X64AddressSpace};
 
 use super::{
+    keyring::is_valid_keyring_header,
     object_directory::read_pointer_field,
     profile::{DriverLayout, KeyringLayout},
 };
 
 const MAXIMUM_CLIENT_EXTENSIONS: usize = 64;
 const MAXIMUM_DRIVER_NAME_BYTES: usize = 512;
+const KEYRING_HEADER_PROBE_LEN: usize = 0x20;
+/// Bounded window scanned for the keyring pointer when the version-specific
+/// offset is unknown (0). The reviewed 26100 layout keeps it at 0x278, well
+/// inside this window.
+const KEYRING_SCAN_WINDOW: u64 = 0x800;
 
 pub(crate) fn find_keyring(
     address_space: &mut X64AddressSpace,
@@ -40,11 +46,50 @@ pub(crate) fn find_keyring(
     let body = client
         .checked_add(u64::from(driver.client_body_offset))
         .ok_or(MemoryWindowsError::MalformedFvevolDriverObject)?;
-    let keyring_pointer = read_pointer_field(address_space, body, keyring.client_keyring_offset)?;
-    if keyring_pointer == 0 {
-        return Err(MemoryWindowsError::BitLockerKeyringNotFound);
+    if keyring.client_keyring_offset != 0 {
+        let keyring_pointer =
+            read_pointer_field(address_space, body, keyring.client_keyring_offset)?;
+        if keyring_pointer != 0 && keyring_header_matches(address_space, keyring_pointer, keyring) {
+            return Ok(keyring_pointer);
+        }
     }
-    Ok(keyring_pointer)
+    scan_for_keyring(address_space, body, keyring)
+}
+
+/// Validates the header of one candidate keyring address.
+fn keyring_header_matches(
+    address_space: &mut X64AddressSpace,
+    keyring_address: u64,
+    layout: KeyringLayout,
+) -> bool {
+    let mut header = [0u8; KEYRING_HEADER_PROBE_LEN];
+    address_space
+        .read_virtual_exact(keyring_address, &mut header)
+        .is_ok_and(|()| is_valid_keyring_header(&header, layout))
+}
+
+/// Offset-blind discovery: scans the validated client-extension body for a
+/// pointer to a buffer that fully parses as an "-FVE-FS-" keyring header.
+/// Exactly one candidate must exist; ambiguity fails closed.
+fn scan_for_keyring(
+    address_space: &mut X64AddressSpace,
+    body: u64,
+    layout: KeyringLayout,
+) -> Result<u64> {
+    let mut matching = None;
+    for step in (0..KEYRING_SCAN_WINDOW).step_by(8) {
+        let pointer = address_space.read_virtual_u64(body + step).unwrap_or(0);
+        if pointer == 0 || !is_canonical_address(pointer) || pointer >> 63 != 1 {
+            continue;
+        }
+        if !keyring_header_matches(address_space, pointer, layout) {
+            continue;
+        }
+        if matching.replace(pointer).is_some() {
+            return Err(MemoryWindowsError::MalformedFvevolDriverObject);
+        }
+    }
+    matching.ok_or(MemoryWindowsError::BitLockerKeyringNotFound)
 }
 
 fn validate_driver(

@@ -63,6 +63,30 @@ pub(crate) fn parse_matching_vmk(
     })
 }
 
+/// Signature-and-layout check for one candidate keyring buffer, used by the
+/// offset-blind bounded scan that locates the keyring without version-specific
+/// fvevol offsets. Only the leading header is required here; the full dataset
+/// walk still runs through `parse_matching_vmk` afterwards.
+pub(crate) fn is_valid_keyring_header(header: &[u8], layout: KeyringLayout) -> bool {
+    let Some(raw) = header.get(..24) else {
+        return false;
+    };
+    if raw[..8] != KEYRING_SIGNATURE[..] {
+        return false;
+    }
+    let capacity = u32::from_le_bytes(raw[8..12].try_into().unwrap());
+    let version = u32::from_le_bytes(raw[12..16].try_into().unwrap());
+    let first = u32::from_le_bytes(raw[16..20].try_into().unwrap());
+    let end = u32::from_le_bytes(raw[20..24].try_into().unwrap());
+    capacity == layout.capacity
+        && version == KEYRING_VERSION
+        && first == layout.header_size
+        && end >= first
+        && end <= capacity
+        && first.is_multiple_of(16)
+        && end.is_multiple_of(16)
+}
+
 struct Dataset<'a> {
     bytes: &'a [u8],
     total_length: usize,

@@ -9,6 +9,10 @@ use super::profile::{DeviceObjectLayout, DriverLayout, FveVolumeContextLayout};
 
 const VMK_DATUM_SIZE: usize = 44;
 const VMK_LENGTH: usize = 32;
+/// Bounded device-extension window scanned for VMK datum pointers when the
+/// version-specific offset is unknown (0). The reviewed 26100 layout keeps
+/// the pointer at 0x3D0, well inside this window.
+const DATUM_SCAN_WINDOW: u64 = 0x800;
 
 pub(crate) struct DeviceContextVmks {
     pub vmks: Vec<RecoveredVmk>,
@@ -35,7 +39,17 @@ pub(crate) fn read_device_context_vmks(
         validate_device_object(address_space, device, driver_object, devices)?;
         let extension =
             read_required_pointer(address_space, device, devices.device_extension_offset)?;
-        let datum = read_pointer(address_space, extension, context.vmk_datum_pointer_offset)?;
+        let mut datum = if context.vmk_datum_pointer_offset != 0 {
+            read_pointer(address_space, extension, context.vmk_datum_pointer_offset)?
+        } else {
+            0
+        };
+        if datum != 0 && !datum_parses(address_space, datum, context) {
+            datum = 0;
+        }
+        if datum == 0 {
+            datum = scan_for_vmk_datum(address_space, extension, context);
+        }
         if datum != 0 {
             datum_pointers_examined += 1;
             let mut bytes = Zeroizing::new([0u8; VMK_DATUM_SIZE]);
@@ -55,6 +69,39 @@ pub(crate) fn read_device_context_vmks(
         devices_examined: seen.len(),
         datum_pointers_examined,
     })
+}
+
+fn datum_parses(
+    address_space: &mut X64AddressSpace,
+    datum: u64,
+    context: FveVolumeContextLayout,
+) -> bool {
+    let mut bytes = Zeroizing::new([0u8; VMK_DATUM_SIZE]);
+    address_space
+        .read_virtual_exact(datum, &mut bytes[..])
+        .is_ok_and(|()| parse_profiled_vmk_datum(&bytes[..], context).is_some())
+}
+
+/// Offset-blind discovery: scans the validated device extension for a pointer
+/// to a buffer that parses exactly as a VMK key datum. The first match wins;
+/// the volume-bound CCM oracle downstream remains the final arbiter.
+fn scan_for_vmk_datum(
+    address_space: &mut X64AddressSpace,
+    extension: u64,
+    context: FveVolumeContextLayout,
+) -> u64 {
+    for step in (0..DATUM_SCAN_WINDOW).step_by(8) {
+        let pointer = address_space
+            .read_virtual_u64(extension + step)
+            .unwrap_or(0);
+        if pointer == 0 || !is_canonical_address(pointer) || pointer >> 63 != 1 {
+            continue;
+        }
+        if datum_parses(address_space, pointer, context) {
+            return pointer;
+        }
+    }
+    0
 }
 
 pub(crate) fn parse_profiled_vmk_datum(

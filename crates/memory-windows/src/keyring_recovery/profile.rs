@@ -146,6 +146,20 @@ impl BitLockerMemoryProfile {
         })
     }
 
+    /// Offset-blind variant of [`Self::windows_11_26100`]: the two
+    /// fvevol-internal offsets (keyring pointer, VMK datum pointer) are zeroed,
+    /// forcing discovery onto the signature-anchored bounded scans. This is the
+    /// shape multi-version profiles take when fvevol layout offsets are unknown
+    /// (public driver PDBs carry no type info), and it doubles as the
+    /// regression proving the scans find the same objects as the reviewed
+    /// offsets.
+    pub fn windows_11_26100_offset_blind(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
+        let mut profile = Self::windows_11_26100(kernel)?;
+        profile.keyring.client_keyring_offset = 0;
+        profile.volume_context.vmk_datum_pointer_offset = 0;
+        Ok(profile)
+    }
+
     pub(crate) fn kernel(&self) -> &TargetedKernelLayoutProfile {
         &self.kernel
     }
