@@ -23,7 +23,7 @@ V2 长期计划与能力评级请同时参考：
 | FAT / exFAT | committed fixture | 缺失 | 无 fixture 文件。expected.json 待建 |
 | BitLocker | TPM / TPM+PIN / 启动密钥 / clear-key 解锁 | 不支持 | 当前仅清点 protector inventory；不会自动使用 clear key，也不处理 TPM-sealed 或 `.BEK` 密钥 |
 | BitLocker | AES-256-CBC + Elephant Diffuser (`0x8001`) | 仅识别 | 缺少可信 oracle，拒绝产生可能看似合理但错误的明文 |
-| BitLocker | 已验证密钥包持久化与调查员 UI | 已实现（公开支持等级仍为 Experimental） | Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；内存恢复从首 1 MiB CR3 bootstrap 经受审计的 PE/CodeView profile 定位 `fvevol.sys`，只读取 data roots 和有界虚拟指针图，以 FIPS-197 AES schedule 预筛，并要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` oracle 全部通过。生产服务不调用全物理 pool-tag scanner，且物理读取有独立硬预算。当前只验证 Windows 11 build 26100 的一个 profile；未知 build typed unsupported。密钥、schedule 和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental |
+| BitLocker | 已验证密钥包持久化与调查员 UI | 已实现（公开支持等级仍为 Experimental） | Stage 4-6 已完成真实密钥包持久化、restore/forget、文件浏览器解锁面板、非秘密报告 inventory 与恢复性能回归；内存恢复从首 1 MiB CR3 bootstrap 读取 ntoskrnl CodeView GUID，命中内嵌的 1077 build 符号注册表（Windows 10 10240 → Windows 11 28000，约 96% 已索引 build），经 Object Manager / Driver 对象链定位 FVEVol keyring / device context 恢复 VMK datum；注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底。卷级 oracle 要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 全部通过，物理读取有独立硬预算。密钥和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental |
 | Registry | transaction log 完整重放 | 部分支持 | `.LOG1/.LOG2` dirty-page bitmap、page recovery 与 hive 合并已实现并有测试；不承诺全部损坏组合、已删除 cell 恢复或任意历史版本的完整重放 |
 | Registry | private-real 回归 E01 | 部分完成 | liuyang_pc.E01 已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取；E01 镜像本身未提交至仓库 |
 | Registry | 已删除 cell 恢复 | 不承诺 | 当前不解析 hive bin 中未分配 cell。恢复已删除键值需要 cell 分配图与 txlog 交叉引用 |

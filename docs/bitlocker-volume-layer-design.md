@@ -30,16 +30,17 @@ Stage 7 补齐了案件重开恢复：控制库的 `bitlocker_restore_intents` �
 或凭据。案件打开后按已启用 intent 逐卷重新读取元数据，严格比较 fingerprint，再从
 Credential Manager 恢复并复探测明文文件系统。单卷恢复失败只让该卷保持锁定；缺失、
 损坏或 fingerprint 不匹配的安全密钥会禁用 intent，暂时 I/O/平台故障保留为可重试失败。
-已存在的 source DB 文件树不会重新导入。2026-07-29 已落地受限的内存镜像恢复：
-`memory-windows` 从首 1 MiB ProcessorStartBlock 建立 CR3/x64 虚拟地址空间，经受审计的
-PE/CodeView identity 和 `_KLDR_DATA_TABLE_ENTRY` profile 定位 `fvevol.sys`，只扫描其可写、
-不可执行 data section 指向的有界虚拟页图，并以 FIPS-197 AES schedule 作为预筛。生产服务
-不再调用全物理镜像 pool-tag scanner；逻辑扫描、页数、指针、候选以及包含页表放大的物理
-读取次数/字节均有独立硬上限。候选保持 opaque、失败即 zeroize，且必须通过目标卷 NTFS
-boot/MFT、`$UpCase`、`$Bitmap` 多重 oracle。验证成功后复用既有 runtime、Credential
-Manager、restore intent 和审计链路；任何 key/schedule/物理地址均不进入 transport、日志、
-报告或 SQLite。当前生产 profile 仅覆盖已验证的 Windows 11 build 26100 / fvevol identity，
-其他 build 返回 typed unsupported，不猜测私有结构偏移。
+已存在的 source DB 文件树不会重新导入。内存镜像恢复链路为：
+`memory-windows` 从首 1 MiB ProcessorStartBlock 建立 CR3/x64 虚拟地址空间，读取 ntoskrnl
+CodeView (RSDS) GUID 并命中内嵌的 1077 build 符号注册表（Windows 10 10240 →
+Windows 11 28000，约 96% 已索引 build；每 build 仅含两个对象管理器全局 RVA，其余布局为
+全集合验证不变的源码常量），再经 Object Manager / Driver 对象链定位 `\Driver\FVEVol`、
+FVEVol keyring / device context 并恢复目标卷的 VMK datum。CodeView GUID 是唯一身份门；
+注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底，不猜测私有结构偏移。fvevol 身份
+不做门控，由 driver object 与签名扫描结构锚定。候选保持 opaque、失败即 zeroize，且必须
+通过目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 多重 oracle。验证成功后复用既有 runtime、
+Credential Manager、restore intent 和审计链路；任何 key/物理地址均不进入 transport、日志、
+报告或 SQLite。
 
 Stage 5 已将真实解锁流程接入文件浏览器检查器。BitLocker 面板只在当前分区确认为
 BitLocker 时出现；密码和恢复密码仅存在于组件的瞬时输入状态，提交后立即清空，不进入

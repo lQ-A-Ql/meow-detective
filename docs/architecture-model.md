@@ -152,7 +152,7 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 | **fs-btrfs** | Btrfs | reader 能力存在，公开 fixture 未补齐 |
 | **fs-lvm** | Linux LVM | direct linear/striped、基础 dm-thin 只读映射 |
 | **volume-bitlocker** | BitLocker (BDE) 卷解密层 | 元数据/保护器识别、密码/恢复密码解锁、五种已验证 cipher、明文 `Read + Seek`（128 KiB 有界缓存、合并 I/O）；应用层已接入预览、inspect/unlock/lock、密钥包持久化/恢复/删除和 source-local catalog 导入 |
-| **memory-windows** | Windows x64 物理内存只读适配层 | 首 1 MiB 启动结构、四级页表翻译、有界 kernel/module 与目标虚拟页发现、BitLocker AES schedule 候选识别；禁止把完整内存读入进程，候选密钥保持 opaque 且只允许经目标卷 NTFS oracle 验证后提升 |
+| **memory-windows** | Windows x64 物理内存只读适配层 | 首 1 MiB 启动结构、四级页表翻译、有界 kernel/module 发现；ntoskrnl CodeView GUID 命中内嵌 1077 build 符号注册表（生成物分块入源码），经 Object Manager / Driver 对象链定位 FVEVol keyring / device context 恢复 VMK datum，未知 build 走版本无关雕刻兜底；禁止把完整内存读入进程，候选密钥保持 opaque 且只允许经目标卷 NTFS oracle 验证后提升 |
 
 ### 分布式存储重建层
 

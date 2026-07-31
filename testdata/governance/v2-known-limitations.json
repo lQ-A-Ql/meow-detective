@@ -68,7 +68,7 @@
       "category": "BitLocker",
       "item": "已验证密钥包持久化与调查员 UI",
       "status": "partial",
-        "summary": "当前只验证 Windows 11 build 26100 的一个 profile；未知 build typed unsupported。密钥、schedule 和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental",
+        "summary": "注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底。卷级 oracle 要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 全部通过，物理读取有独立硬预算。密钥和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental",
       "affectedChains": [
         "BitLocker"
       ],

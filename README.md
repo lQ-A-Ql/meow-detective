@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 29 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`。
 
-当前工程事实快照：10 frontend pages、113 Tauri commands、28 source modules、migration scripts (71)、96 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：10 frontend pages、113 Tauri commands、28 source modules、migration scripts (73)、98 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 ## 功能简介
 
@@ -25,7 +25,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 事件日志：EVTX 解析、开关机、登录、进程、账户与应用事件分类。
 - 用户行为：Prefetch、LNK、Jump List、Recycle Bin、SRU、Thumbcache、浏览器历史/下载/会话等。
 - 浏览器与凭据：Chrome、Edge、Firefox 浏览器数据提取；离线 DPAPI 相关链路按前置材料与支持边界处理。
-- BitLocker：卷元数据检查、密码/恢复密码解锁、已验证密钥安全存储及重开案件恢复；匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证。
+- BitLocker：卷元数据检查、密码/恢复密码解锁、已验证密钥安全存储及重开案件恢复；匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证，定位链路经内嵌的 1077 build 内核符号注册表（Windows 10 10240 → Windows 11 28000），不绑定单一 Windows 版本。
 
 ### Linux 与 PVE 分析
 
@@ -167,15 +167,19 @@ flowchart LR
 ```mermaid
 flowchart TD
     MEM["只读 Windows x64 内存镜像"] --> BOOT["首 1 MiB 启动结构\nCR3 与内核入口"]
-    BOOT --> SCAN["fvevol 相关虚拟页\n有界定向扫描"]
-    SCAN --> KEY["AES 扩展密钥候选"]
+    BOOT --> GUID["ntoskrnl CodeView GUID"]
+    GUID --> REG["内嵌符号注册表\n1077 build（10240 → 28000）"]
+    GUID -->|"未知 build"| CARVE["版本无关 driver-object 雕刻"]
+    REG --> OBJ["Object Manager / Driver 对象链"]
+    CARVE --> OBJ
+    OBJ --> KEY["FVEVol keyring / device context\nVMK datum"]
     KEY --> VERIFY["卷级验证\nNTFS boot/MFT/$UpCase/$Bitmap"]
     VERIFY -->|"成功"| RUNTIME["只读运行时解锁注册表\n安全持久化已验证密钥包"]
     VERIFY -->|"失败"| REJECT["拒绝候选\n不记录密钥材料"]
     RUNTIME --> PREVIEW["文件树、预览与提取"]
 ```
 
-该链路不把 FVEK、VMK、AES schedule 或未验证候选写入日志、报告、案件数据库或前端。只有经过卷级认证的运行时解锁状态才可用于后续只读访问；现有内存解锁 command 只返回卷状态，当前不提供恢复密码/用户密码恢复 command、DTO 或 UI。
+该链路不把 FVEK、VMK 或未验证候选写入日志、报告、案件数据库或前端。只有经过卷级认证的运行时解锁状态才可用于后续只读访问；内存解锁 command 只返回卷状态。恢复密码反推在反向 datum 与内存 VMK 同代时成立并以 recovered 呈现，不同代时显式报 unavailable，不提供用户密码恢复 command、DTO 或 UI。
 
 ## 开发模式运行
 
