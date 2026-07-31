@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 29 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`。
 
-当前工程事实快照：10 frontend pages、113 Tauri commands、28 source modules、migration scripts (73)、98 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：10 frontend pages、114 Tauri commands、28 source modules、migration scripts (73)、98 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 ## 功能简介
 
@@ -286,3 +286,18 @@ cargo tauri build
 ## 许可证
 
 本项目采用 [MIT License](LICENSE)；如仓库未包含独立许可证文件，以根目录 `Cargo.toml` 中的 `license = "MIT"` 声明为准。
+
+## 致谢与第三方版权声明
+
+本项目在设计与实现过程中借鉴或学习了以下开源项目，特此致谢。各项目的许可证文本归其原作者所有；本项目对它们的使用仅限于设计思想参考、受控适配或许可证允许的代码复用。
+
+| 项目 | 许可证 | 借鉴/使用方式 |
+|---|---|---|
+| [Autopsy](https://github.com/sleuthkit/autopsy) | Apache-2.0 | 数字取证工作台的能力分层与工作流闭环（案件 → 数据源 → 文件浏览 → 工件提取 → 检索 → 时间线 → 报告）的产品与架构思想参考，详见根目录 `autopsy-borrowings.md`；未复用其源码 |
+| [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit) | IPL-1.0 / CPL-1.0 | BitLocker 卷侧 `metadata -> VMK -> FVEK -> sector reader` 处理顺序与元数据冗余策略的正确性参照（见 `docs/bitlocker-memory-key-recovery-design.md`）；未复用其源码 |
+| [omerbenamram/EVTX](https://github.com/omerbenamram/EVTX) | MIT OR Apache-2.0 | `crates/evtx-patched` 为其本地补丁分支（去除失维护依赖），上游许可证文本保留于 `crates/evtx-patched/LICENSE-APACHE` 与 `crates/evtx-patched/LICENSE-MIT` |
+| [SecurityRonin/bitlocker-forensic](https://github.com/SecurityRonin/bitlocker-forensic)（含 [elephant-diffuser](https://github.com/SecurityRonin/elephant-diffuser)） | Apache-2.0 | `crates/volume-bitlocker` 派生自 bitlocker-core 0.3.5 与 elephant-diffuser（Albert Hui 著）。上游许可证文本保留于 `crates/volume-bitlocker/LICENSE-APACHE-2.0-UPSTREAM`，修改声明（Apache-2.0 §4(b)）与逐文件来源校验见 `crates/volume-bitlocker/NOTICE` 和 `docs/bitlocker-dependency-decision.md` |
+| [shadcn/ui](https://ui.shadcn.com/) | MIT | 前端 `frontend/src/app/components/ui/` 的 UI 原语组件集（Radix Slot + cva + `cn()` 结构，已按本项目主题改写），见 `frontend/ATTRIBUTIONS.md` |
+| [winbindex](https://github.com/m417z/winbindex) | GPL-3.0 | ntoskrnl 各 build 元数据索引，作为内嵌内核符号注册表的采集入口（配合微软公共符号服务器 PDB），见 `crates/memory-windows/symbols/README.md`；仅消费其公开索引数据，未复用其源码 |
+
+此外，DPAPI / TBAL 离线恢复链路参考了公开研究（[TBAL: an (accidental?) DPAPI Backdoor for local users](https://vztekoverflow.com/2018/07/31/tbal-dpapi-backdoor/) 与 [pypykatz](https://github.com/skelsec/pypykatz) 的算法说明），仅作算法对照，未复用其代码。
