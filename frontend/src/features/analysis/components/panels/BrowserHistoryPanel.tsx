@@ -7,8 +7,8 @@ import type {
   BrowserVisit,
 } from '@/types/models';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import {
-  DenseTableFrame,
   ExtractionTableSection,
   formatSize,
   TableBlock,
@@ -119,7 +119,7 @@ export function BrowserHistoryPanel({
       <div className="space-y-4">
         <TableBlock title="访问历史">
           {info.visits.length === 0 ? (
-            <DenseTableFrame>
+            <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={visitColumns}
@@ -127,13 +127,16 @@ export function BrowserHistoryPanel({
                 emptyTitle="暂无浏览历史"
                 emptyDescription="支持 Chrome、Edge History 与 Firefox places.sqlite。"
               />
-            </DenseTableFrame>
+            </DenseDataTableFrame>
           ) : (
             Object.entries(visitGroups)
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
-                <DenseTableFrame key={`visits-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
+                <DenseDataTableFrame
+                  key={`visits-${browser}`}
+                  rowCount={rows.length}
+                  header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}
+                >
                   <DenseDataTable
                     rows={rows}
                     columns={visitColumns}
@@ -141,14 +144,14 @@ export function BrowserHistoryPanel({
                     emptyTitle="暂无浏览历史"
                     emptyDescription=""
                   />
-                </DenseTableFrame>
+                </DenseDataTableFrame>
               ))
           )}
         </TableBlock>
 
         <TableBlock title="下载记录">
           {info.downloads.length === 0 ? (
-            <DenseTableFrame>
+            <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={downloadColumns}
@@ -156,13 +159,16 @@ export function BrowserHistoryPanel({
                 emptyTitle="暂无下载记录"
                 emptyDescription="发现下载记录后会显示 URL、目标路径与大小。"
               />
-            </DenseTableFrame>
+            </DenseDataTableFrame>
           ) : (
             Object.entries(downloadGroups)
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
-                <DenseTableFrame key={`downloads-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
+                <DenseDataTableFrame
+                  key={`downloads-${browser}`}
+                  rowCount={rows.length}
+                  header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}
+                >
                   <DenseDataTable
                     rows={rows}
                     columns={downloadColumns}
@@ -170,14 +176,14 @@ export function BrowserHistoryPanel({
                     emptyTitle="暂无下载记录"
                     emptyDescription=""
                   />
-                </DenseTableFrame>
+                </DenseDataTableFrame>
               ))
           )}
         </TableBlock>
 
         <TableBlock title="Cookies">
           {info.cookies.length === 0 ? (
-            <DenseTableFrame>
+            <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={cookieColumns}
@@ -185,13 +191,16 @@ export function BrowserHistoryPanel({
                 emptyTitle="暂无 Cookie 记录"
                 emptyDescription="发现 cookies 数据库后会显示域名、名称与过期时间。"
               />
-            </DenseTableFrame>
+            </DenseDataTableFrame>
           ) : (
             Object.entries(cookieGroups)
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
-                <DenseTableFrame key={`cookies-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
+                <DenseDataTableFrame
+                  key={`cookies-${browser}`}
+                  rowCount={rows.length}
+                  header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}
+                >
                   <DenseDataTable
                     rows={rows}
                     columns={cookieColumns}
@@ -199,14 +208,14 @@ export function BrowserHistoryPanel({
                     emptyTitle="暂无 Cookie 记录"
                     emptyDescription=""
                   />
-                </DenseTableFrame>
+                </DenseDataTableFrame>
               ))
           )}
         </TableBlock>
 
         <TableBlock title="会话 / 标签页">
           {info.sessions.length === 0 ? (
-            <DenseTableFrame>
+            <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={sessionColumns}
@@ -214,13 +223,16 @@ export function BrowserHistoryPanel({
                 emptyTitle="暂无会话记录"
                 emptyDescription="发现 Session/Session Restore 文件后会显示标签页 URL。"
               />
-            </DenseTableFrame>
+            </DenseDataTableFrame>
           ) : (
             Object.entries(sessionGroups)
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
-                <DenseTableFrame key={`sessions-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
+                <DenseDataTableFrame
+                  key={`sessions-${browser}`}
+                  rowCount={rows.length}
+                  header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}
+                >
                   <DenseDataTable
                     rows={rows}
                     columns={sessionColumns}
@@ -228,14 +240,14 @@ export function BrowserHistoryPanel({
                     emptyTitle="暂无会话记录"
                     emptyDescription=""
                   />
-                </DenseTableFrame>
+                </DenseDataTableFrame>
               ))
           )}
         </TableBlock>
 
         <TableBlock title="保存的密码">
           {info.passwords.length === 0 ? (
-            <DenseTableFrame>
+            <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={passwordColumns}
@@ -243,13 +255,16 @@ export function BrowserHistoryPanel({
                 emptyTitle="暂无密码记录"
                 emptyDescription="发现 login data / logins.json 后仅展示 URL、用户名等元数据。"
               />
-            </DenseTableFrame>
+            </DenseDataTableFrame>
           ) : (
             Object.entries(passwordGroups)
               .sort(([a], [b]) => browserOrder(a, b))
               .map(([browser, rows]) => (
-                <DenseTableFrame key={`passwords-${browser}`}>
-                  <div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>
+                <DenseDataTableFrame
+                  key={`passwords-${browser}`}
+                  rowCount={rows.length}
+                  header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}
+                >
                   <DenseDataTable
                     rows={rows}
                     columns={passwordColumns}
@@ -257,7 +272,7 @@ export function BrowserHistoryPanel({
                     emptyTitle="暂无密码记录"
                     emptyDescription=""
                   />
-                </DenseTableFrame>
+                </DenseDataTableFrame>
               ))
           )}
         </TableBlock>

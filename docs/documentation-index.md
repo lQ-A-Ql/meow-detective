@@ -71,13 +71,13 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 | app-services source modules | 28 |
 | SQLite repositories | 42 logical repositories |
 | SQLite migration scripts | 73 |
-| frontend test files | 98 |
+| frontend test files | 101 |
 | Mermaid 图块 | 15 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 10 |
-| `frontend/src/**/*.test.ts(x)` | 98 |
+| `frontend/src/**/*.test.ts(x)` | 101 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 114 |
 
 治理事实源：

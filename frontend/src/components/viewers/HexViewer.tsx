@@ -1,4 +1,12 @@
-import { memo, useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { HexByteRow } from '@/components/viewers/HexByteRow';
+import {
+  BYTES_PER_ROW,
+  formatByteWindowLine,
+  formatOffset,
+  parseHexLine,
+  type HexParsedLine,
+} from '@/components/viewers/hex-viewer-model';
 import type { HexByteWindowLines, HexLoadedRange } from '@/types/models';
 
 interface HexViewerProps {
@@ -14,57 +22,30 @@ interface HexViewerProps {
 
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const OVERSCAN_ROWS = 5;
-const BYTES_PER_ROW = 16;
-
-interface ParsedLine {
-  offset: string;
-  hex: string;
-  ascii: string;
-}
 
 interface VisibleRange {
   startIndex: number;
   endIndex: number;
 }
 
-function formatOffset(offset: number) {
-  return offset.toString(16).toUpperCase().padStart(8, '0');
+interface ByteSelection {
+  anchor: number;
+  focus: number;
 }
 
-function formatByte(byte: number) {
-  return byte.toString(16).toUpperCase().padStart(2, '0');
+function byteOffsetFromTarget(target: EventTarget | null): number | undefined {
+  if (!(target instanceof Element)) return undefined;
+  const cell = target.closest<HTMLElement>('[data-byte-offset]');
+  if (!cell) return undefined;
+  const offset = Number(cell.dataset.byteOffset);
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : undefined;
 }
 
-function formatAsciiByte(byte: number) {
-  return byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.';
-}
-
-function formatByteWindowLine(rawBytes: number[], rowIndex: number, baseOffset: number): ParsedLine {
-  const rowStart = rowIndex * BYTES_PER_ROW;
-  const rowBytes = rawBytes.slice(rowStart, rowStart + BYTES_PER_ROW);
-  const bytes = rowBytes.map(formatByte);
-  return {
-    offset: formatOffset(baseOffset + rowStart),
-    hex: bytes.join(' '),
-    ascii: rowBytes.map(formatAsciiByte).join(''),
-  };
-}
-
-function parseHexLine(line: string): ParsedLine {
-  const parts = line.split(/\s{2,}/);
-  if (parts.length >= 2) {
-    const offset = parts[0];
-    const hex = parts[1];
-    const bytes = hex.split(' ').filter((h) => h.length === 2);
-    const ascii = bytes
-      .map((h) => {
-        const code = parseInt(h, 16);
-        return code >= 32 && code <= 126 ? String.fromCharCode(code) : '.';
-      })
-      .join('');
-    return { offset, hex, ascii };
-  }
-  return { offset: '', hex: line, ascii: '' };
+function byteOffsetFromPointer(event: React.PointerEvent<HTMLDivElement>): number | undefined {
+  const directOffset = byteOffsetFromTarget(event.target);
+  if (directOffset !== undefined) return directOffset;
+  if (typeof document.elementFromPoint !== 'function') return undefined;
+  return byteOffsetFromTarget(document.elementFromPoint(event.clientX, event.clientY));
 }
 
 function visibleRangeFor(
@@ -82,39 +63,6 @@ function visibleRangeFor(
   };
 }
 
-const HexRow = memo(function HexRow({
-  line,
-  lineIndex,
-  lineHeight,
-  offsetWidth,
-}: {
-  line: ParsedLine;
-  lineIndex: number;
-  lineHeight: number;
-  offsetWidth: number;
-}) {
-  return (
-    <div
-      data-row-index={lineIndex}
-      className="flex hover:bg-forensics-panel-strong"
-      style={{ height: lineHeight }}
-    >
-      <div
-        className="shrink-0 border-r border-forensics-border-light bg-forensics-panel pr-2 text-right text-forensics-muted-lighter select-none"
-        style={{ width: offsetWidth }}
-      >
-        {line.offset}
-      </div>
-      <div className="min-w-0 flex-1 whitespace-pre px-3 tracking-wider text-forensics-text-secondary">
-        {line.hex}
-      </div>
-      <div className="w-[8rem] shrink-0 whitespace-pre border-l border-forensics-border-light pl-2 text-forensics-muted">
-        {line.ascii}
-      </div>
-    </div>
-  );
-});
-
 export function HexViewer({
   lines,
   rawBytes,
@@ -126,7 +74,11 @@ export function HexViewer({
   onNeedMoreRange,
 }: HexViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragAnchorRef = useRef<number>();
+  const draggingRef = useRef(false);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
+  const [hoveredOffset, setHoveredOffset] = useState<number>();
+  const [selection, setSelection] = useState<ByteSelection>();
 
   const byteWindow = useMemo(() => {
     const metadata = lines as HexByteWindowLines;
@@ -141,6 +93,30 @@ export function HexViewer({
   const rowCount = byteWindow.rawBytes
     ? Math.ceil(byteWindow.rawBytes.length / BYTES_PER_ROW)
     : lines.length;
+
+  const selectableRange = useMemo(() => {
+    if (byteWindow.rawBytes?.length) {
+      return {
+        start: byteWindow.baseOffset,
+        end: byteWindow.baseOffset + byteWindow.rawBytes.length - 1,
+      };
+    }
+    let first: HexParsedLine | undefined;
+    let last: HexParsedLine | undefined;
+    for (let index = 0; index < lines.length && !first; index += 1) {
+      const parsed = parseHexLine(lines[index]);
+      if (parsed.bytes.length > 0) first = parsed;
+    }
+    for (let index = lines.length - 1; index >= 0 && !last; index -= 1) {
+      const parsed = parseHexLine(lines[index]);
+      if (parsed.bytes.length > 0) last = parsed;
+    }
+    if (!first || !last) return undefined;
+    return {
+      start: first.offsetValue,
+      end: last.offsetValue + last.bytes.length - 1,
+    };
+  }, [byteWindow.baseOffset, byteWindow.rawBytes, lines]);
 
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
     visibleRangeFor(0, DEFAULT_CONTAINER_HEIGHT, lineHeight, rowCount),
@@ -242,6 +218,119 @@ export function HexViewer({
     }
   }, [byteWindow, lineHeight, onNeedMoreRange, updateVisibleRange]);
 
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const offset = byteOffsetFromPointer(event);
+    if (offset === undefined) return;
+    if (draggingRef.current && dragAnchorRef.current !== undefined) {
+      event.preventDefault();
+      setSelection({ anchor: dragAnchorRef.current, focus: offset });
+      return;
+    }
+    setHoveredOffset((current) => (current === offset ? current : offset));
+  }, []);
+
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button > 0) return;
+    const offset = byteOffsetFromTarget(event.target);
+    if (offset === undefined) return;
+    event.preventDefault();
+    event.currentTarget.focus();
+    const anchor = event.shiftKey && selection ? selection.anchor : offset;
+    dragAnchorRef.current = anchor;
+    draggingRef.current = true;
+    setHoveredOffset(undefined);
+    setSelection({ anchor, focus: offset });
+  }, [selection]);
+
+  const finishPointerSelection = useCallback(() => {
+    draggingRef.current = false;
+    dragAnchorRef.current = undefined;
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('pointerup', finishPointerSelection);
+    window.addEventListener('pointercancel', finishPointerSelection);
+    window.addEventListener('blur', finishPointerSelection);
+    return () => {
+      window.removeEventListener('pointerup', finishPointerSelection);
+      window.removeEventListener('pointercancel', finishPointerSelection);
+      window.removeEventListener('blur', finishPointerSelection);
+    };
+  }, [finishPointerSelection]);
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!selectableRange) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSelection(undefined);
+      return;
+    }
+    const current = selection?.focus
+      ?? (activeOffset !== undefined
+        && activeOffset >= selectableRange.start
+        && activeOffset <= selectableRange.end
+        ? activeOffset
+        : selectableRange.start);
+    let next = current;
+    switch (event.key) {
+      case 'ArrowLeft':
+        next -= 1;
+        break;
+      case 'ArrowRight':
+        next += 1;
+        break;
+      case 'ArrowUp':
+        next -= BYTES_PER_ROW;
+        break;
+      case 'ArrowDown':
+        next += BYTES_PER_ROW;
+        break;
+      case 'Home':
+        next = current - ((current - selectableRange.start) % BYTES_PER_ROW);
+        break;
+      case 'End':
+        next = current + (BYTES_PER_ROW - 1 - ((current - selectableRange.start) % BYTES_PER_ROW));
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    next = Math.min(selectableRange.end, Math.max(selectableRange.start, next));
+    setHoveredOffset(undefined);
+    setSelection({
+      anchor: event.shiftKey ? selection?.anchor ?? current : next,
+      focus: next,
+    });
+
+    const container = containerRef.current;
+    if (!container) return;
+    const rowIndex = Math.floor((next - selectableRange.start) / BYTES_PER_ROW);
+    const rowTop = rowIndex * lineHeight;
+    const rowBottom = rowTop + lineHeight;
+    let nextScrollTop = container.scrollTop;
+    if (rowTop < container.scrollTop) {
+      nextScrollTop = rowTop;
+    } else if (rowBottom > container.scrollTop + container.clientHeight) {
+      nextScrollTop = rowBottom - container.clientHeight;
+    }
+    if (nextScrollTop !== container.scrollTop) {
+      container.scrollTop = nextScrollTop;
+      updateVisibleRange(nextScrollTop, container.clientHeight || containerHeight);
+    }
+  }, [activeOffset, containerHeight, lineHeight, selectableRange, selection, updateVisibleRange]);
+
+  // In byte-window mode `lines` is only a compatibility wrapper and may be
+  // recreated by unrelated view-model state changes. The bytes identify the
+  // actual window whose selection must be retained.
+  const selectionWindowSource = byteWindow.rawBytes ?? lines;
+
+  useEffect(() => {
+    draggingRef.current = false;
+    dragAnchorRef.current = undefined;
+    setHoveredOffset(undefined);
+    setSelection(undefined);
+  }, [byteWindow.baseOffset, selectionWindowSource]);
+
   useEffect(() => {
     if (activeOffset === undefined || !containerRef.current) {
       return;
@@ -271,12 +360,26 @@ export function HexViewer({
     return Math.max(80, lastOffset.length * 10 + 16);
   }, [byteWindow, lines, rowCount]);
 
+  const selectionStart = selection ? Math.min(selection.anchor, selection.focus) : undefined;
+  const selectionEnd = selection ? Math.max(selection.anchor, selection.focus) : undefined;
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[11px]">
       <div
         ref={containerRef}
         data-testid="hex-scroll-container"
-        className="min-h-0 flex-1 overflow-auto"
+        className="min-h-0 flex-1 touch-pan-y select-none overflow-auto"
+        role="grid"
+        tabIndex={rowCount > 0 ? 0 : -1}
+        aria-label="Hex 与 ASCII 字节预览"
+        onKeyDown={handleKeyDown}
+        onPointerCancel={finishPointerSelection}
+        onPointerDown={handlePointerDown}
+        onPointerLeave={() => {
+          if (!draggingRef.current) setHoveredOffset(undefined);
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishPointerSelection}
         onScroll={handleScroll}
       >
         <div style={{ height: rowCount * lineHeight, position: 'relative' }}>
@@ -289,12 +392,16 @@ export function HexViewer({
             }}
           >
             {visibleLines.map(({ parsed: line, lineIndex }) => (
-              <HexRow
+              <HexByteRow
                 key={lineIndex}
                 line={line}
                 lineIndex={lineIndex}
                 lineHeight={lineHeight}
                 offsetWidth={offsetWidth}
+                highlightedOffset={hoveredOffset}
+                selectionStart={selectionStart}
+                selectionEnd={selectionEnd}
+                selectionFocus={selection?.focus}
               />
             ))}
           </div>

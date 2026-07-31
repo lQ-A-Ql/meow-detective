@@ -27,6 +27,24 @@ interface ForceGraphProps {
   running?: boolean;
 }
 
+function capturePointer(target: Element, pointerId: number) {
+  try {
+    target.setPointerCapture(pointerId);
+  } catch {
+    // Older WebViews can reject capture while the pointer is transitioning.
+  }
+}
+
+function releasePointer(target: Element, pointerId: number) {
+  try {
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // Capture may already have been released by the host WebView.
+  }
+}
+
 export function ForceGraph({
   nodes,
   edges,
@@ -47,6 +65,21 @@ export function ForceGraph({
   const dragNodeIdRef = useRef<string | null>(null);
   const isPanningRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const clearPointerInteraction = () => {
+      dragNodeIdRef.current = null;
+      isPanningRef.current = false;
+    };
+    window.addEventListener('pointerup', clearPointerInteraction);
+    window.addEventListener('pointercancel', clearPointerInteraction);
+    window.addEventListener('blur', clearPointerInteraction);
+    return () => {
+      window.removeEventListener('pointerup', clearPointerInteraction);
+      window.removeEventListener('pointercancel', clearPointerInteraction);
+      window.removeEventListener('blur', clearPointerInteraction);
+    };
+  }, []);
 
   const degrees = degreeMap(nodes, edges);
 
@@ -130,7 +163,7 @@ export function ForceGraph({
     if (event.button !== 0) return;
     isPanningRef.current = true;
     lastPointerRef.current = { x: event.clientX, y: event.clientY };
-    (event.currentTarget as SVGSVGElement).setPointerCapture(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
@@ -162,11 +195,7 @@ export function ForceGraph({
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
     dragNodeIdRef.current = null;
     isPanningRef.current = false;
-    try {
-      (event.currentTarget as SVGSVGElement).releasePointerCapture(event.pointerId);
-    } catch {
-      // capture may already be released
-    }
+    releasePointer(event.currentTarget, event.pointerId);
   }
 
   function handleWheel(event: React.WheelEvent<SVGSVGElement>) {
@@ -182,17 +211,13 @@ export function ForceGraph({
     event.stopPropagation();
     dragNodeIdRef.current = node.id;
     lastPointerRef.current = { x: event.clientX, y: event.clientY };
-    (event.currentTarget as SVGCircleElement).setPointerCapture(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
     onNodeClick?.(node);
   }
 
   function handleNodePointerUp(event: React.PointerEvent<SVGCircleElement>) {
     dragNodeIdRef.current = null;
-    try {
-      (event.currentTarget as SVGCircleElement).releasePointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
+    releasePointer(event.currentTarget, event.pointerId);
   }
 
   const showAllLabels = nodes.length <= 40;
@@ -204,7 +229,11 @@ export function ForceGraph({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onLostPointerCapture={() => {
+        dragNodeIdRef.current = null;
+        isPanningRef.current = false;
+      }}
       onWheel={handleWheel}
       onClick={onBackgroundClick}
       role="img"

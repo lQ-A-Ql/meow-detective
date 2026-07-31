@@ -11,8 +11,8 @@ import { Button } from '@/app/components/ui/button';
 import { KeyValueField } from '@/components/data-display';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import {
-  DenseTableFrame,
   ExtractionTableSection,
   formatSize,
 } from './helpers';
@@ -132,7 +132,7 @@ export function EmailExtractionPanel({
         ],
       ]}
     >
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.messages.length}>
         <DenseDataTable
           rows={info.messages}
           columns={columns}
@@ -142,7 +142,7 @@ export function EmailExtractionPanel({
           emptyTitle="暂无邮件信息"
           emptyDescription="支持 EML/EMLX/MBOX/PST/OST 邮件解析：头字段、正文、附件、Cc/Bcc、Message-ID、References、容器路径与文件夹路径。"
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
       {selectedMessage ? (
         <EmailDetailCard
           message={selectedMessage}

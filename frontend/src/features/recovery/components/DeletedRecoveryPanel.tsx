@@ -18,6 +18,7 @@ import {
 } from '@/app/components/ui/select';
 import { EmptyState, KeyValueField, SectionHeader } from '@/components/data-display';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { HexViewer } from '@/components/viewers/HexViewer';
 import type { DeletedFileRecovery, RecoveryProvenanceRange } from '@/types/models';
 import type { DeletedRecoveryViewModel } from '../types';
@@ -258,7 +259,8 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
       ) : model.state === 'ready' ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden border border-forensics-border">
           <div className="flex min-h-0 min-w-0 flex-col border-r border-forensics-border">
-            <DenseDataTable
+            <DenseDataTableFrame layout="fill" variant="plain">
+              <DenseDataTable
               columns={columns}
               rows={model.recoveries}
               getRowKey={(row) => row.id}
@@ -266,7 +268,8 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               onRowClick={handleRowClick}
               emptyTitle="没有删除恢复候选"
               emptyDescription="当前扫描未重建出可报告的删除记录。"
-            />
+              />
+            </DenseDataTableFrame>
             <div className="flex shrink-0 items-center justify-between border-t border-forensics-border px-2 py-1 text-[10px] text-forensics-muted">
               <span>显示 {model.page?.offset ?? 0}-{(model.page?.offset ?? 0) + model.recoveries.length} / {model.total}</span>
               <div className="flex gap-1">

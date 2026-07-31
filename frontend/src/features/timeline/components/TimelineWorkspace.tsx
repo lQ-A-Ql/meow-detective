@@ -15,6 +15,7 @@ import {
 } from '@/components/layout/InspectorPane';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { TimelineHistogram } from '@/features/timeline/components/TimelineHistogram';
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
@@ -92,7 +93,8 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
           data-testid="timeline-table-pane"
           className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-forensics-border"
         >
-          <DenseDataTable<TimelineEvent>
+          <DenseDataTableFrame layout="fill" variant="plain">
+            <DenseDataTable<TimelineEvent>
             rows={model.tableEvents}
             getRowKey={(row) => row.id}
             selectedRowKey={model.selectedEvent?.id}
@@ -109,7 +111,8 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             loadMoreFailed={model.loadMoreFailed}
             initialLoadFailed={model.initialLoadFailed}
             onRetryInitialLoad={model.retry}
-          />
+            />
+          </DenseDataTableFrame>
         </div>
         <InspectorPane title="事件检查器" subtitle={model.selectedEvent ? `当前事件 ${model.selectedEvent.id}` : '未选择事件'} widthClassName="w-80">
           <div className="space-y-5">

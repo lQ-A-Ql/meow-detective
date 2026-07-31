@@ -17,13 +17,19 @@ describe('RegistryExtractionPanel', () => {
   });
 
   it('renders empty state for users tab when no data', () => {
-    render(createElement(RegistryExtractionPanel, {}));
+    const { container } = render(createElement(RegistryExtractionPanel, {}));
     expect(screen.getByText('暂无用户账户数据')).toBeDefined();
+
+    const activeContent = container.querySelector(
+      '[data-slot="tabs-content"][data-state="active"]',
+    );
+    expect(activeContent?.className).toContain('flex-col');
+    expect(activeContent?.className).toContain('overflow-hidden');
   });
 
   it('switches tabs when tab buttons are clicked', () => {
     render(createElement(RegistryExtractionPanel, {}));
-    fireEvent.click(screen.getByRole('tab', { name: '原始键值' }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '原始键值' }), { button: 0 });
     expect(screen.getByText('暂无原始键值数据')).toBeDefined();
   });
 
@@ -79,8 +85,8 @@ describe('RegistryExtractionPanel', () => {
     expect(screen.getByText('Administrator')).toBeDefined();
   });
 
-  it('renders physical adapters separately from network profiles', () => {
-    render(createElement(RegistryExtractionPanel, {
+  it('renders physical adapters separately with row-sized table viewports', () => {
+    const { container } = render(createElement(RegistryExtractionPanel, {
       structured: {
         hiveOverviews: [], samUsers: [], userAssistEntries: [], installedSoftware: [],
         usbDevices: [], mountedDevices: [], systemServices: [], shutdownTimes: [],
@@ -101,10 +107,13 @@ describe('RegistryExtractionPanel', () => {
         }],
       },
     }));
-    fireEvent.click(screen.getByRole('tab', { name: '网络配置' }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '网络配置' }), { button: 0 });
     expect(screen.getByText('网络适配器（物理与虚拟）')).toBeDefined();
     expect(screen.getByText('Intel Ethernet Controller')).toBeDefined();
     expect(screen.getByText('网络配置文件与连接历史')).toBeDefined();
     expect(screen.getByText('Office Network')).toBeDefined();
+    expect(container.innerHTML).not.toContain('min-h-[220px]');
+    const tableFrames = Array.from(container.querySelectorAll<HTMLElement>('[style*="height: min"]'));
+    expect(tableFrames.filter((frame) => frame.style.height.includes('61px'))).toHaveLength(2);
   });
 });

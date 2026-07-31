@@ -9,10 +9,8 @@ import type {
 } from '@/types/models';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
-import {
-  DenseTableFrame,
-  ExtractionTableSection,
-} from './helpers';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
+import { ExtractionTableSection } from './helpers';
 
 type EventLogTabKey = 'boot' | 'logon' | 'process' | 'account' | 'application';
 
@@ -152,7 +150,7 @@ export function EventLogPanel({
 
   const tabContent: Record<EventLogTabKey, React.ReactNode> = {
     boot: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.bootEvents.length}>
         <DenseDataTable
           rows={info.bootEvents}
           columns={bootColumns}
@@ -167,10 +165,10 @@ export function EventLogPanel({
           onReachEnd={onLoadMore}
           onRetryLoadMore={onRetryLoadMore}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     logon: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={logonEvents.length}>
         <DenseDataTable
           rows={logonEvents}
           columns={logonColumns}
@@ -185,10 +183,10 @@ export function EventLogPanel({
           onReachEnd={onLoadMore}
           onRetryLoadMore={onRetryLoadMore}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     process: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={processEvents.length}>
         <DenseDataTable
           rows={processEvents}
           columns={processColumns}
@@ -203,10 +201,10 @@ export function EventLogPanel({
           onReachEnd={onLoadMore}
           onRetryLoadMore={onRetryLoadMore}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     account: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={accountEvents.length}>
         <DenseDataTable
           rows={accountEvents}
           columns={accountColumns}
@@ -221,10 +219,10 @@ export function EventLogPanel({
           onReachEnd={onLoadMore}
           onRetryLoadMore={onRetryLoadMore}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     application: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.applicationEvents.length}>
         <DenseDataTable
           rows={info.applicationEvents}
           columns={appColumns}
@@ -239,7 +237,7 @@ export function EventLogPanel({
           onReachEnd={onLoadMore}
           onRetryLoadMore={onRetryLoadMore}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
   };
 
@@ -261,13 +259,13 @@ export function EventLogPanel({
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as EventLogTabKey)}
         tabs={TABS.map((tab) => ({ value: tab, label: t(`eventLog.tabs.${tab}`) }))}
-        className="h-[min(70vh,720px)] min-h-[420px] overflow-hidden"
+        className="overflow-hidden"
       >
         {TABS.map((tab) => (
           <TabsContent
             key={tab}
             value={tab}
-            className="flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            className="flex min-h-0 flex-col overflow-hidden data-[state=inactive]:hidden"
           >
             {tabContent[tab]}
           </TabsContent>

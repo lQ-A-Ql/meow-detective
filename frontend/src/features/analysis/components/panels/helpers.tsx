@@ -14,6 +14,7 @@ import {
 import { Progress } from '@/app/components/ui/progress';
 import { EmptyState, MetricCard, StatGrid } from '@/components/data-display';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import {
   AnalysisFieldProvenance,
   AnalysisProvenance,
@@ -250,17 +251,6 @@ export function TableBlock({ title, children }: { title: string; children: React
   );
 }
 
-export function DenseTableFrame({ children }: { children: React.ReactNode }) {
-  return (
-    // The max height is what lets DenseDataTable's row windowing engage:
-    // without a bounded container the table sizes to its content and every
-    // row (and per-cell HorizontalScroll) mounts at once.
-    <div className="flex flex-1 flex-col min-h-0 max-h-[min(70vh,720px)] overflow-hidden rounded-none border border-forensics-border bg-forensics-surface">
-      {children}
-    </div>
-  );
-}
-
 export function ProvenancePanel({
   title,
   provenance,
@@ -342,17 +332,15 @@ export function FieldProvenancePanel({ fieldProvenance }: { fieldProvenance: Ana
         字段级来源
       </h3>
       {fieldProvenance.length > 0 ? (
-        <div className="h-[360px] min-h-0">
-          <DenseTableFrame>
-            <DenseDataTable
-              rows={fieldProvenance}
-              columns={FIELD_PROVENANCE_COLUMNS}
-              getRowKey={(item) => `${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
-              emptyTitle="暂无字段级来源"
-              emptyDescription="字段级 Registry provenance 暂不可用。"
-            />
-          </DenseTableFrame>
-        </div>
+        <DenseDataTableFrame rowCount={fieldProvenance.length}>
+          <DenseDataTable
+            rows={fieldProvenance}
+            columns={FIELD_PROVENANCE_COLUMNS}
+            getRowKey={(item) => `${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
+            emptyTitle="暂无字段级来源"
+            emptyDescription="字段级 Registry provenance 暂不可用。"
+          />
+        </DenseDataTableFrame>
       ) : (
         <EmptyLine text="字段级 Registry provenance 暂不可用。" />
       )}

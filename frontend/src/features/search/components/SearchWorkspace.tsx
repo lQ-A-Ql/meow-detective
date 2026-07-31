@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { SearchFilePreviewDialog } from '@/features/search/components/SearchFilePreviewDialog';
 import type { SearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
@@ -157,7 +158,8 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           {model.truncated ? <span className="text-forensics-error-text">结果超过浏览上限，仅显示前 {model.searchHits.length > 0 ? model.searchHits.length : model.totalHits} 项窗口</span> : null}
         </div>
 
-        <DenseDataTable<SearchFileHit>
+        <DenseDataTableFrame layout="fill" variant="plain">
+          <DenseDataTable<SearchFileHit>
           rows={model.searchHits}
           columns={SEARCH_FILE_COLUMNS}
           getRowKey={(row) => row.fileId}
@@ -177,7 +179,8 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           loadMoreFailed={model.loadMoreFailed}
           initialLoadFailed={model.initialLoadFailed}
           onRetryInitialLoad={model.retry}
-        />
+          />
+        </DenseDataTableFrame>
       </div>
       <SearchFilePreviewDialog model={model.preview} />
     </div>

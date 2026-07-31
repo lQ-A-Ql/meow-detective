@@ -18,11 +18,8 @@ import type {
   LinuxWebSite,
 } from '@/types/models';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
-import {
-  DenseTableFrame,
-  EmptyLine,
-  ExtractionTableSection,
-} from './helpers';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
+import { EmptyLine, ExtractionTableSection } from './helpers';
 
 export type LinuxArtifactTabKey =
   | 'overview'
@@ -60,7 +57,7 @@ export function LinuxArtifactsPanel({
 }) {
   const { t } = useTranslation();
 
-  const info = summary ?? {
+  const fallbackInfo = {
     status: 'unavailable' as const,
     journalCount: 0,
     loginCount: 0,
@@ -96,6 +93,25 @@ export function LinuxArtifactsPanel({
     warnings: [t('linuxArtifacts.fallbackWarning')],
     generatedAt: '',
   };
+  const info = summary
+    ? {
+        ...summary,
+        journalEntries: summary.journalEntries ?? [],
+        loginRecords: summary.loginRecords ?? [],
+        bashCommands: summary.bashCommands ?? [],
+        aptEvents: summary.aptEvents ?? [],
+        cronJobs: summary.cronJobs ?? [],
+        sudoEvents: summary.sudoEvents ?? [],
+        systemConfigs: summary.systemConfigs ?? [],
+        webSites: summary.webSites ?? [],
+        webAccessLogs: summary.webAccessLogs ?? [],
+        webErrorLogs: summary.webErrorLogs ?? [],
+        webFindings: summary.webFindings ?? [],
+        mysqlConfigs: summary.mysqlConfigs ?? [],
+        mysqlLogs: summary.mysqlLogs ?? [],
+        mysqlFindings: summary.mysqlFindings ?? [],
+      }
+    : fallbackInfo;
 
   // Column titles are translated, so all column arrays are memoized on `t`
   // instead of being rebuilt on every render.
@@ -232,7 +248,7 @@ export function LinuxArtifactsPanel({
   const tabContent: Record<LinuxArtifactTabKey, React.ReactNode> = {
     overview: info.totalCount === 0 ? <EmptyLine text={t('linuxArtifacts.empty.overview.description')} /> : null,
     journal: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.journalEntries.length}>
         <DenseDataTable
           rows={info.journalEntries}
           columns={columns.journal}
@@ -240,10 +256,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.journal.title')}
           emptyDescription={t('linuxArtifacts.empty.journal.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     login: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.loginRecords.length}>
         <DenseDataTable
           rows={info.loginRecords}
           columns={columns.login}
@@ -251,10 +267,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.login.title')}
           emptyDescription={t('linuxArtifacts.empty.login.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     commands: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.bashCommands.length}>
         <DenseDataTable
           rows={info.bashCommands}
           columns={columns.command}
@@ -262,10 +278,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.commands.title')}
           emptyDescription={t('linuxArtifacts.empty.commands.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     packages: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.aptEvents.length}>
         <DenseDataTable
           rows={info.aptEvents}
           columns={columns.package}
@@ -273,10 +289,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.packages.title')}
           emptyDescription={t('linuxArtifacts.empty.packages.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     cron: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.cronJobs.length}>
         <DenseDataTable
           rows={info.cronJobs}
           columns={columns.cron}
@@ -284,10 +300,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.cron.title')}
           emptyDescription={t('linuxArtifacts.empty.cron.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     sudo: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.sudoEvents.length}>
         <DenseDataTable
           rows={info.sudoEvents}
           columns={columns.sudo}
@@ -295,10 +311,10 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.sudo.title')}
           emptyDescription={t('linuxArtifacts.empty.sudo.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     systemConfig: (
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={info.systemConfigs.length}>
         <DenseDataTable
           rows={info.systemConfigs}
           columns={columns.systemConfig}
@@ -306,11 +322,11 @@ export function LinuxArtifactsPanel({
           emptyTitle={t('linuxArtifacts.empty.systemConfig.title')}
           emptyDescription={t('linuxArtifacts.empty.systemConfig.description')}
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     ),
     webServices: (
       <div className="space-y-3">
-        <DenseTableFrame>
+        <DenseDataTableFrame rowCount={info.webFindings.length}>
           <DenseDataTable
             rows={info.webFindings}
             columns={columns.webFinding}
@@ -318,8 +334,8 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.webFindings.title')}
             emptyDescription={t('linuxArtifacts.empty.webFindings.description')}
           />
-        </DenseTableFrame>
-        <DenseTableFrame>
+        </DenseDataTableFrame>
+        <DenseDataTableFrame rowCount={info.webSites.length}>
           <DenseDataTable
             rows={info.webSites}
             columns={columns.webSite}
@@ -327,8 +343,8 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.webSites.title')}
             emptyDescription={t('linuxArtifacts.empty.webSites.description')}
           />
-        </DenseTableFrame>
-        <DenseTableFrame>
+        </DenseDataTableFrame>
+        <DenseDataTableFrame rowCount={info.webAccessLogs.length}>
           <DenseDataTable
             rows={info.webAccessLogs}
             columns={columns.webAccess}
@@ -336,8 +352,8 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.webAccess.title')}
             emptyDescription={t('linuxArtifacts.empty.webAccess.description')}
           />
-        </DenseTableFrame>
-        <DenseTableFrame>
+        </DenseDataTableFrame>
+        <DenseDataTableFrame rowCount={info.webErrorLogs.length}>
           <DenseDataTable
             rows={info.webErrorLogs}
             columns={columns.webError}
@@ -345,13 +361,13 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.webError.title')}
             emptyDescription={t('linuxArtifacts.empty.webError.description')}
           />
-        </DenseTableFrame>
+        </DenseDataTableFrame>
       </div>
     ),
 
     mysqlServices: (
       <div className="space-y-3">
-        <DenseTableFrame>
+        <DenseDataTableFrame rowCount={info.mysqlFindings.length}>
           <DenseDataTable
             rows={info.mysqlFindings}
             columns={columns.mysqlFinding}
@@ -359,8 +375,8 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.mysqlFindings.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlFindings.description')}
           />
-        </DenseTableFrame>
-        <DenseTableFrame>
+        </DenseDataTableFrame>
+        <DenseDataTableFrame rowCount={info.mysqlConfigs.length}>
           <DenseDataTable
             rows={info.mysqlConfigs}
             columns={columns.mysqlConfig}
@@ -368,8 +384,8 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.mysqlConfigs.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlConfigs.description')}
           />
-        </DenseTableFrame>
-        <DenseTableFrame>
+        </DenseDataTableFrame>
+        <DenseDataTableFrame rowCount={info.mysqlLogs.length}>
           <DenseDataTable
             rows={info.mysqlLogs}
             columns={columns.mysqlLog}
@@ -377,7 +393,7 @@ export function LinuxArtifactsPanel({
             emptyTitle={t('linuxArtifacts.empty.mysqlLogs.title')}
             emptyDescription={t('linuxArtifacts.empty.mysqlLogs.description')}
           />
-        </DenseTableFrame>
+        </DenseDataTableFrame>
       </div>
     ),
   };

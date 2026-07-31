@@ -7,6 +7,7 @@ import {
 } from '@/components/layout/InspectorPane';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { ArtifactField } from '@/features/artifacts/components/ArtifactField';
 import type { ArtifactsWorkspaceModel } from '@/features/artifacts/use-artifacts-workspace-model';
 import type { ArtifactRow } from '@/types/models';
@@ -39,8 +40,10 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
         </div>
       </PageSubbar>
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 border-r border-forensics-border">
-          <DenseDataTable<ArtifactRow> rows={model.tableRows} getRowKey={(row) => row.id} selectedRowKey={model.selectedArtifact?.id} onRowClick={model.onArtifactRowClick} emptyTitle="当前痕迹家族无记录" emptyDescription="请切换 family 或等待解析任务完成。" columns={columns} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-forensics-border">
+          <DenseDataTableFrame layout="fill" variant="plain">
+            <DenseDataTable<ArtifactRow> rows={model.tableRows} getRowKey={(row) => row.id} selectedRowKey={model.selectedArtifact?.id} onRowClick={model.onArtifactRowClick} emptyTitle="当前痕迹家族无记录" emptyDescription="请切换 family 或等待解析任务完成。" columns={columns} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} />
+          </DenseDataTableFrame>
         </div>
         <InspectorPane title="痕迹属性" subtitle={model.selectedArtifact ? `${model.selectedArtifact.artifactType} / ${model.selectedArtifact.id}` : '未选择痕迹'} widthClassName="w-80">
           <div className="space-y-5">

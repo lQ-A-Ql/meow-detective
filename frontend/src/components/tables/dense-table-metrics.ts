@@ -1,0 +1,2 @@
+export const DENSE_TABLE_HEADER_HEIGHT = 28;
+export const DENSE_TABLE_ROW_HEIGHT = 31;

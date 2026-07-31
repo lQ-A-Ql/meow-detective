@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { ViewerTabs } from '@/components/viewers/ViewerTabs';
+import { ViewerTabFrame } from '@/components/tabs/ViewerTabFrame';
 import { HexViewer } from '@/components/viewers/HexViewer';
 import { TextViewer } from '@/components/viewers/TextViewer';
 import { ImageViewer } from '@/components/viewers/ImageViewer';
@@ -11,6 +11,7 @@ import { VideoViewer } from '@/components/viewers/VideoViewer';
 import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { ViewerError } from '@/components/viewers/ViewerError';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { BrandWatermark } from '@/components/brand';
 import type {
   ApiErrorDto,
@@ -207,7 +208,11 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
 
   if (table) {
     return (
-      <div className="flex max-h-[min(60vh,560px)] min-h-0 flex-col overflow-hidden">
+      <DenseDataTableFrame
+        rowCount={table.rows.length}
+        maxHeight="compact"
+        variant="plain"
+      >
         <DenseDataTable
           rows={table.rows}
           columns={table.columns}
@@ -217,7 +222,7 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
           emptyTitle="空表格"
           emptyDescription="该段没有可展示的数据行。"
         />
-      </div>
+      </DenseDataTableFrame>
     );
   }
   return (
@@ -414,7 +419,7 @@ export function FilePreviewTabs({
         </div>
       ) : null}
       <div className="min-h-0 flex-1">
-        <ViewerTabs
+        <ViewerTabFrame
           value={viewerTab}
           onValueChange={(value) => setViewerTab(value as PreviewViewerTab)}
           tabs={[

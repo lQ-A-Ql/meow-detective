@@ -45,7 +45,6 @@ export function PanelTabs<T extends string = string>({
           <TabsTrigger
             key={value}
             value={value}
-            onClick={() => onValueChange?.(value)}
             className={cn(
               isUnderline
                 ? 'h-auto flex-none whitespace-nowrap rounded-none border-b border-transparent px-4 py-2 text-[11px] font-light text-forensics-muted data-[state=active]:border-forensics-sakura-500 data-[state=active]:text-forensics-text'

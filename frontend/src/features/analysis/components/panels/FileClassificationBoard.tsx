@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { FilePreviewDialog } from '@/components/preview/FilePreviewDialog';
 import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
@@ -21,7 +22,6 @@ import type {
 import {
   CATEGORY_COLORS,
   CATEGORY_ICONS,
-  DenseTableFrame,
   EmptyLine,
   formatSize,
   StatusPill,
@@ -289,7 +289,7 @@ function SubcategoryTable({
           {sub.truncated ? ` · 抽样 ${sub.files.length} 个` : ''}
         </span>
       </div>
-      <DenseTableFrame>
+      <DenseDataTableFrame rowCount={sub.files.length}>
         <DenseDataTable
           rows={sub.files}
           columns={CLASSIFICATION_COLUMNS}
@@ -299,7 +299,7 @@ function SubcategoryTable({
           emptyTitle="暂无文件"
           emptyDescription="该子分类当前没有可展示的抽样文件。"
         />
-      </DenseTableFrame>
+      </DenseDataTableFrame>
     </div>
   );
 }

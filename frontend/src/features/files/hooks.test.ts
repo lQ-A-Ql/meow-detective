@@ -464,7 +464,12 @@ describe('files hooks', () => {
       );
 
       expect(screen.getByText('00000000')).toBeDefined();
-      expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A 00 FF');
+      expect([
+        screen.getByTestId('hex-byte-0').textContent,
+        screen.getByTestId('hex-byte-1').textContent,
+        screen.getByTestId('hex-byte-2').textContent,
+        screen.getByTestId('hex-byte-3').textContent,
+      ]).toEqual(['4D', '5A', '00', 'FF']);
     });
 
     it('deduplicates overlapping range loads before React publishes loading state', async () => {

@@ -45,6 +45,10 @@ It complements `AGENTS.md`, `docs/design-constraints.md`, and
 - Repeated label + control + hint/error layout must use the shared `Field` family.
 - Data row/column datasets must use `DenseDataTable`; the low-level `Table` primitive is only
   for `DenseDataTable` internals.
+- Every runtime `DenseDataTable` must be placed in the shared `DenseDataTableFrame`. Embedded
+  tables pass their real `rowCount` so sparse data does not reserve empty space; full-screen
+  workspaces use `layout="fill"` only when their parent establishes a bounded flex height chain.
+  Feature-local table viewport wrappers are forbidden.
 - Page and panel tabs must use `Tabs`, `TabsList`, `TabsTrigger`, and `TabsContent`; do not
   emulate tabs with groups of `Button`.
 - Repeated viewer tabs should use `ViewerTabFrame`; repeated analysis/detail tabs should use

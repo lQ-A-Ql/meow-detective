@@ -3,6 +3,7 @@ import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import { FileEntryContextMenu } from '@/features/files/components/FileEntryContextMenu';
 import type { FileEntryRow } from '@/types/models';
@@ -146,7 +147,8 @@ export function FileListPanel({
           {t('fileBrowser.parentDirectory')}
         </Button>
       </div>
-      <DenseDataTable<FileEntryRow>
+      <DenseDataTableFrame layout="fill" variant="plain">
+        <DenseDataTable<FileEntryRow>
         rows={sortedRows}
         getRowKey={(row) => row.id}
         selectedRowKey={selectedFile?.id}
@@ -162,7 +164,8 @@ export function FileListPanel({
         sortDirection={fileSortDirection}
         onSort={handleSort}
         columns={FILE_LIST_COLUMNS}
-      />
+        />
+      </DenseDataTableFrame>
       {rowsPage && viewerTab !== 'hex' ? (
         <div className="flex items-center justify-between border-t border-forensics-border bg-forensics-panel px-3 py-2 text-[11px] text-forensics-muted">
           <span>

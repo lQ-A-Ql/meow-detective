@@ -5,6 +5,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import type { BatchJob, BatchJobStatus, BatchPhaseState } from '@/types/models';
 
 interface BatchHistoryProps {
@@ -131,18 +132,20 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
         <CardTitle className="text-[14px] font-light">Batch Job History</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-0">
-        <DenseDataTable
-          columns={columns}
-          rows={sortedJobs}
-          getRowKey={(row) => row.id}
-          selectedRowKey={expandedJobId ?? undefined}
-          onRowClick={handleRowClick}
-          emptyTitle="No batch jobs"
-          emptyDescription="Create a new batch job to get started."
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-        />
+        <DenseDataTableFrame rowCount={sortedJobs.length} variant="plain">
+          <DenseDataTable
+            columns={columns}
+            rows={sortedJobs}
+            getRowKey={(row) => row.id}
+            selectedRowKey={expandedJobId ?? undefined}
+            onRowClick={handleRowClick}
+            emptyTitle="No batch jobs"
+            emptyDescription="Create a new batch job to get started."
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+          />
+        </DenseDataTableFrame>
 
         {/* Expanded phase details */}
         {expandedJob && (

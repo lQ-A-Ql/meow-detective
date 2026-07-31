@@ -19,13 +19,10 @@ import type {
   UsbDeviceHistory,
   UserAssistEntry,
 } from '@/types/models';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { PanelTabs, TabsContent } from '@/components/tabs/PanelTabs';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
-import {
-  DenseTableFrame,
-  ExtractionTableSection,
-} from './helpers';
+import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
+import { ExtractionTableSection } from './helpers';
 
 // Module-level column definitions: stable references keep DenseDataTable row
 // memoization intact across tab switches and panel re-renders.
@@ -151,6 +148,9 @@ const rawColumns: DenseColumn<RegistryValue>[] = [
   { key: 'parser', title: 'Parser', className: 'w-[150px]', render: (row) => row.parser || '-' },
 ];
 
+const TABLE_CONTENT_CLASS =
+  'm-0 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden';
+
 export function RegistryExtractionPanel({
   summary,
   structured,
@@ -178,7 +178,6 @@ export function RegistryExtractionPanel({
   const hiveSummaryStats: Array<[string, string]> = hiveOverviews.map(
     (h) => [h.hiveName, `${h.keyValueCount} 条${h.txlogMerged ? ' · txlog✓' : ''}${h.deletedKeysFound > 0 ? ` · ⚠${h.deletedKeysFound}已删` : ''}`],
   );
-
   return (
     <ExtractionTableSection
       title="注册表提取"
@@ -196,8 +195,8 @@ export function RegistryExtractionPanel({
         tabs={TABS.map(({ key, label, icon }) => ({ value: key, label, icon }))}
         variant="underline"
       >
-        <DenseTableFrame>
-          <TabsContent value="users" className="min-h-0">
+        <TabsContent value="users" className={TABLE_CONTENT_CLASS}>
+          <DenseDataTableFrame rowCount={s?.samUsers.length ?? 0}>
             <DenseDataTable
               rows={s?.samUsers ?? []}
               columns={samColumns}
@@ -205,8 +204,10 @@ export function RegistryExtractionPanel({
               emptyTitle="暂无用户账户数据"
               emptyDescription="运行提取后将显示 SAM 账户信息。"
             />
-          </TabsContent>
-          <TabsContent value="activity" className="min-h-0">
+          </DenseDataTableFrame>
+        </TabsContent>
+        <TabsContent value="activity" className={TABLE_CONTENT_CLASS}>
+          <DenseDataTableFrame rowCount={s?.userAssistEntries.length ?? 0}>
             <DenseDataTable
               rows={s?.userAssistEntries ?? []}
               columns={userAssistColumns}
@@ -214,36 +215,38 @@ export function RegistryExtractionPanel({
               emptyTitle="暂无 UserAssist 数据"
               emptyDescription="从 NTUSER.DAT 提取程序执行记录。"
             />
-          </TabsContent>
-          <TabsContent value="network" className="min-h-0">
-            <ScrollArea className="min-h-0 flex-1" viewportClassName="flex min-h-full flex-col gap-3 p-3">
-              <section className="flex min-h-[220px] flex-1 flex-col">
-                <div className="mb-2 text-[12px] font-light text-forensics-text">网络适配器（物理与虚拟）</div>
-                <div className="flex min-h-0 flex-1 overflow-hidden border border-forensics-border">
-                  <DenseDataTable
-                    rows={s?.networkAdapters ?? []}
-                    columns={adapterColumns}
-                    getRowKey={(row) => row.guid}
-                    emptyTitle="暂无物理网卡信息"
-                    emptyDescription="从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。"
-                  />
-                </div>
-              </section>
-              <section className="flex min-h-[220px] flex-1 flex-col">
-                <div className="mb-2 text-[12px] font-light text-forensics-text">网络配置文件与连接历史</div>
-                <div className="flex min-h-0 flex-1 overflow-hidden border border-forensics-border">
-                  <DenseDataTable
-                    rows={s?.networkProfiles ?? []}
-                    columns={networkColumns}
-                    getRowKey={(row) => row.profileGuid}
-                    emptyTitle="暂无网络配置文件"
+          </DenseDataTableFrame>
+        </TabsContent>
+        <TabsContent value="network" className={TABLE_CONTENT_CLASS}>
+          <div className="space-y-3">
+            <section>
+              <div className="mb-2 text-[12px] font-light text-forensics-text">网络适配器（物理与虚拟）</div>
+              <DenseDataTableFrame rowCount={s?.networkAdapters.length ?? 0}>
+                <DenseDataTable
+                  rows={s?.networkAdapters ?? []}
+                  columns={adapterColumns}
+                  getRowKey={(row) => row.guid}
+                  emptyTitle="暂无物理网卡信息"
+                  emptyDescription="从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。"
+                />
+              </DenseDataTableFrame>
+            </section>
+            <section>
+              <div className="mb-2 text-[12px] font-light text-forensics-text">网络配置文件与连接历史</div>
+              <DenseDataTableFrame rowCount={s?.networkProfiles.length ?? 0}>
+                <DenseDataTable
+                  rows={s?.networkProfiles ?? []}
+                  columns={networkColumns}
+                  getRowKey={(row) => row.profileGuid}
+                  emptyTitle="暂无网络配置文件"
                     emptyDescription="从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取。"
-                  />
-                </div>
-              </section>
-            </ScrollArea>
-          </TabsContent>
-          <TabsContent value="software" className="min-h-0">
+                />
+              </DenseDataTableFrame>
+            </section>
+          </div>
+        </TabsContent>
+        <TabsContent value="software" className={TABLE_CONTENT_CLASS}>
+          <DenseDataTableFrame rowCount={s?.installedSoftware.length ?? 0}>
             <DenseDataTable
               rows={s?.installedSoftware ?? []}
               columns={softwareColumns}
@@ -251,8 +254,10 @@ export function RegistryExtractionPanel({
               emptyTitle="暂无已安装软件数据"
               emptyDescription="从 SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall 提取。"
             />
-          </TabsContent>
-          <TabsContent value="usb" className="min-h-0">
+          </DenseDataTableFrame>
+        </TabsContent>
+        <TabsContent value="usb" className={TABLE_CONTENT_CLASS}>
+          <DenseDataTableFrame rowCount={s?.usbDevices.length ?? 0}>
             <DenseDataTable
               rows={s?.usbDevices ?? []}
               columns={usbColumns}
@@ -260,8 +265,10 @@ export function RegistryExtractionPanel({
               emptyTitle="暂无 USB 设备历史"
               emptyDescription="从 SYSTEM hive USBSTOR 提取连接记录。"
             />
-          </TabsContent>
-          <TabsContent value="raw" className="min-h-0">
+          </DenseDataTableFrame>
+        </TabsContent>
+        <TabsContent value="raw" className={TABLE_CONTENT_CLASS}>
+          <DenseDataTableFrame rowCount={info.values.length}>
             <DenseDataTable
               rows={info.values}
               columns={rawColumns}
@@ -269,8 +276,8 @@ export function RegistryExtractionPanel({
               emptyTitle="暂无原始键值数据"
               emptyDescription="运行提取后会显示关键 hive 的 key/value 摘要。"
             />
-          </TabsContent>
-        </DenseTableFrame>
+          </DenseDataTableFrame>
+        </TabsContent>
       </PanelTabs>
     </ExtractionTableSection>
   );

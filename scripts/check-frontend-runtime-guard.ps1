@@ -149,6 +149,33 @@ function Assert-NoRawButtonsOutsideAllowedCases {
   }
 }
 
+function Assert-DenseDataTableViewportFrames {
+  param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
+
+  $violations = @()
+  foreach ($file in $Files) {
+    $relative = Get-RelativePath $file.FullName
+    if ($relative -eq 'frontend/src/components/tables/DenseDataTable.tsx') {
+      continue
+    }
+
+    $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    if (
+      $content -match '<\s*DenseDataTable(?:\s|<)' -and
+      $content -notmatch "from\s+['""]@/components/tables/DenseDataTableFrame['""]"
+    ) {
+      $violations += "{0}: DenseDataTable requires DenseDataTableFrame to establish an explicit virtual-scroll viewport" -f $relative
+    }
+    if ($content -match '\bDenseTableFrame\b') {
+      $violations += "{0}: private DenseTableFrame wrappers are forbidden; use the shared DenseDataTableFrame" -f $relative
+    }
+  }
+
+  if ($violations.Count -gt 0) {
+    throw "DenseDataTable viewport ownership must remain centralized`n$($violations -join "`n")"
+  }
+}
+
 function Assert-Matches {
   param(
     [Parameter(Mandatory = $true)][string]$Content,
@@ -372,6 +399,7 @@ Assert-NoMatchesInRuntimeFiles `
 
 Assert-NoRawControlsOutsideAllowedCases -Files $runtimeFiles
 Assert-NoRawButtonsOutsideAllowedCases -Files $runtimeFiles
+Assert-DenseDataTableViewportFrames -Files $runtimeFiles
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `

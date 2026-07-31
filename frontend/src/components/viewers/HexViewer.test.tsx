@@ -21,7 +21,9 @@ describe('HexViewer', () => {
 
     expect(screen.getByText('00000000')).toBeDefined();
     expect(screen.getByText('00000010')).toBeDefined();
-    expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A');
+    expect(screen.getByTestId('hex-byte-0')).toHaveTextContent('4D');
+    expect(screen.getByTestId('hex-byte-15')).toHaveTextContent('00');
+    expect(screen.getByTestId('ascii-byte-0')).toHaveTextContent('M');
   });
 
   it('shows empty state when no data', () => {
@@ -40,7 +42,7 @@ describe('HexViewer', () => {
     );
 
     expect(screen.getByText('00000000')).toBeDefined();
-    expect(screen.getByTestId('hex-visible-window').textContent).toContain('4D 5A');
+    expect(screen.getByTestId('hex-byte-0')).toHaveTextContent('4D');
   });
 
   it('renders only the visible window for large hex datasets', () => {
@@ -130,5 +132,140 @@ describe('HexViewer', () => {
     });
 
     expect(onNeedMoreRange).toHaveBeenCalledWith('previous');
+  });
+
+  it('links Hex and ASCII highlighting by absolute byte offset', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={[0x41, 0x42, 0x00]}
+        baseOffset={32}
+        fileSize={35}
+      />,
+    );
+
+    const hex = screen.getByTestId('hex-byte-33');
+    const ascii = screen.getByTestId('ascii-byte-33');
+    fireEvent.pointerMove(hex);
+
+    expect(hex).toHaveAttribute('data-highlighted', 'true');
+    expect(ascii).toHaveAttribute('data-highlighted', 'true');
+    expect(ascii).toHaveTextContent('B');
+
+    fireEvent.pointerMove(screen.getByTestId('ascii-byte-34'));
+    expect(screen.getByTestId('hex-byte-34')).toHaveAttribute('data-highlighted', 'true');
+    expect(screen.getByTestId('ascii-byte-34')).toHaveTextContent('.');
+    expect(hex).not.toHaveAttribute('data-highlighted');
+  });
+
+  it('locks linked highlighting on pointer selection and supports keyboard byte navigation', () => {
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43]} baseOffset={16} />);
+
+    const container = screen.getByTestId('hex-scroll-container');
+    fireEvent.pointerDown(screen.getByTestId('ascii-byte-16'), { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(screen.getByTestId('ascii-byte-16'), { pointerId: 1 });
+    fireEvent.pointerLeave(container);
+
+    expect(screen.getByTestId('hex-byte-16')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('ascii-byte-16')).toHaveAttribute('data-selected', 'true');
+
+    fireEvent.keyDown(container, { key: 'ArrowRight' });
+    expect(screen.getByTestId('hex-byte-17')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('ascii-byte-17')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('hex-byte-16')).not.toHaveAttribute('data-selected');
+  });
+
+  it('does not jump highlighting to the active first byte over cell gaps', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={[0x41, 0x42, 0x43]}
+        baseOffset={64}
+        activeOffset={64}
+      />,
+    );
+
+    const container = screen.getByTestId('hex-scroll-container');
+    fireEvent.pointerMove(screen.getByTestId('hex-byte-66'));
+    fireEvent.pointerMove(container);
+
+    expect(screen.getByTestId('hex-byte-66')).toHaveAttribute('data-highlighted', 'true');
+    expect(screen.getByTestId('ascii-byte-66')).toHaveAttribute('data-highlighted', 'true');
+    expect(screen.getByTestId('hex-byte-64')).not.toHaveAttribute('data-highlighted');
+
+    fireEvent.pointerLeave(container);
+    expect(screen.getByTestId('hex-byte-66')).not.toHaveAttribute('data-highlighted');
+    expect(screen.getByTestId('hex-byte-64')).not.toHaveAttribute('data-highlighted');
+  });
+
+  it('selects a linked Hex and ASCII byte range by plain pointer drag', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={[0x41, 0x42, 0x43, 0x44, 0x45, 0x46]}
+        baseOffset={16}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-17'), { button: 0, pointerId: 2 });
+    fireEvent.pointerMove(screen.getByTestId('ascii-byte-20'), { buttons: 1, pointerId: 2 });
+    fireEvent.pointerUp(screen.getByTestId('ascii-byte-20'), { pointerId: 2 });
+
+    for (const offset of [17, 18, 19, 20]) {
+      expect(screen.getByTestId(`hex-byte-${offset}`)).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId(`ascii-byte-${offset}`)).toHaveAttribute('data-selected', 'true');
+    }
+    expect(screen.getByTestId('hex-byte-16')).not.toHaveAttribute('data-selected');
+    expect(screen.getByTestId('ascii-byte-21')).not.toHaveAttribute('data-selected');
+  });
+
+  it('ends plain pointer selection when the pointer is released outside the viewer', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={[0x41, 0x42, 0x43, 0x44]}
+        baseOffset={32}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-32'), { button: 0, pointerId: 3 });
+    fireEvent.pointerMove(screen.getByTestId('hex-byte-34'), { buttons: 1, pointerId: 3 });
+    fireEvent.pointerUp(window, { pointerId: 3 });
+    fireEvent.pointerMove(screen.getByTestId('hex-byte-35'), { buttons: 0, pointerId: 3 });
+
+    expect(screen.getByTestId('hex-byte-34')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('hex-byte-35')).not.toHaveAttribute('data-selected');
+  });
+
+  it('ends plain pointer selection when the window loses focus', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={[0x41, 0x42, 0x43, 0x44]}
+        baseOffset={48}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-48'), { button: 0, pointerId: 4 });
+    fireEvent.pointerMove(screen.getByTestId('hex-byte-50'), { buttons: 1, pointerId: 4 });
+    fireEvent.blur(window);
+    fireEvent.pointerMove(screen.getByTestId('hex-byte-51'), { buttons: 0, pointerId: 4 });
+
+    expect(screen.getByTestId('hex-byte-50')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('hex-byte-51')).not.toHaveAttribute('data-selected');
+  });
+
+  it('preserves selection when only the compatibility lines wrapper changes', () => {
+    const rawBytes = [0x41, 0x42, 0x43];
+    const { rerender } = render(
+      <HexViewer lines={['first wrapper']} rawBytes={rawBytes} baseOffset={80} />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-81'), { button: 0, pointerId: 5 });
+    fireEvent.pointerUp(window, { pointerId: 5 });
+    rerender(<HexViewer lines={['recreated wrapper']} rawBytes={rawBytes} baseOffset={80} />);
+
+    expect(screen.getByTestId('hex-byte-81')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('ascii-byte-81')).toHaveAttribute('data-selected', 'true');
   });
 });

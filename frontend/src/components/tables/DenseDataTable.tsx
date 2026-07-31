@@ -30,6 +30,7 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTableRow } from './DenseDataTableRow';
+import { DENSE_TABLE_ROW_HEIGHT } from './dense-table-metrics';
 import { SortIndicator } from './SortIndicator';
 
 export interface DenseColumn<T> {
@@ -81,7 +82,6 @@ interface DenseDataTableProps<T> {
   minColumnWidth?: number;
 }
 
-const ROW_HEIGHT = 31;
 const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const AUTOMATIC_RETRY_DELAY_MS = 500;
@@ -148,7 +148,7 @@ export function DenseDataTable<T>({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => containerRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => DENSE_TABLE_ROW_HEIGHT,
     overscan: OVERSCAN_ROWS,
     initialRect: { width: 0, height: DEFAULT_CONTAINER_HEIGHT },
     observeElementRect: observeTableViewport,
@@ -278,7 +278,7 @@ export function DenseDataTable<T>({
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (remaining <= ROW_HEIGHT * OVERSCAN_ROWS) {
+    if (remaining <= DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) {
       requestMore();
     }
   }, [requestMore]);
@@ -289,7 +289,7 @@ export function DenseDataTable<T>({
     if (container.clientHeight <= 0) return;
 
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (remaining > ROW_HEIGHT * OVERSCAN_ROWS) return;
+    if (remaining > DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) return;
     requestMore();
   }, [
     hasMore,

@@ -19,7 +19,7 @@ describe('EventLogPanel', () => {
 
   it('switches to application tab when clicked', () => {
     render(createElement(EventLogPanel, {}));
-    fireEvent.click(screen.getByRole('tab', { name: '应用程序事件' }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '应用程序事件' }), { button: 0 });
     expect(screen.getByText('暂无应用程序事件')).toBeDefined();
   });
 
@@ -71,7 +71,7 @@ describe('EventLogPanel', () => {
     const onActiveViewChange = vi.fn();
     render(createElement(EventLogPanel, { onActiveViewChange }));
 
-    fireEvent.click(screen.getByRole('tab', { name: '进程创建' }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '进程创建' }), { button: 0 });
 
     expect(onActiveViewChange).toHaveBeenCalledWith('process');
   });
