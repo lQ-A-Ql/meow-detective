@@ -158,6 +158,43 @@ describe('Timeline page', () => {
     expect(tablePane).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
   });
 
+  it('filters the event table when a timeline bucket is selected', () => {
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
+    mocks.timelineFacets.mockReturnValue(queryState({
+      data: {
+        totalEvents: 2,
+        startTs: '2026-06-01T10:00:00Z',
+        endTs: '2026-06-01T12:00:00Z',
+        eventTypes: [],
+        dataSources: [{ value: 'source-1', count: 2 }],
+        histogram: [
+          {
+            startTs: '2026-06-01T10:00:00Z',
+            endTs: '2026-06-01T11:00:00Z',
+            count: 1,
+          },
+          {
+            startTs: '2026-06-01T11:00:00Z',
+            endTs: '2026-06-01T12:00:00Z',
+            count: 1,
+          },
+        ],
+      },
+    }));
+
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: '筛选该时间区间，共 1 条事件' })[0]);
+
+    expect(mocks.infiniteTimelineEvents).toHaveBeenLastCalledWith({
+      timeStart: '2026-06-01T10:00:00.000Z',
+      timeEnd: '2026-06-01T11:00:00.000Z',
+      eventType: undefined,
+    });
+    expect(mocks.selectionState.setSelectedTimelineId).toHaveBeenCalledWith(undefined);
+    expect((screen.getByLabelText('起始') as HTMLInputElement).value).not.toBe('');
+    expect((screen.getByLabelText('结束') as HTMLInputElement).value).not.toBe('');
+  });
+
   it('shows inspector pane for selected event', () => {
     mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
     Object.assign(mocks.selectionState, { selectedTimelineId: 'evt-1' });

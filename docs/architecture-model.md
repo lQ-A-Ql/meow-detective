@@ -174,7 +174,7 @@ RBD head reader → 派生 VM source DB。全部只由私有 opt-in 真实样本
 | **artifacts-linux** | Linux 工件 | systemd journal、wtmp、bash history、apt/dpkg、cron、sudo |
 | **containers-pst** | 邮件容器 | PST（Unicode 32/64）、OST、mbox（RFC 4155 四变体） |
 | **search** | 全文索引与查询 | tantivy |
-| **timeline** | 时间线投影 | Registry 结构化时间戳 + 非系统/非只读文件修改时间 |
+| **timeline** | 时间线投影 | Registry 结构化时间戳 + 文件创建、修改、访问、运行和删除活动 |
 | **reports** | 报告生成 | HTML、CSV、JSON、证据包 |
 | **mcp-client** | MCP 客户端 | SSE、Stdio |
 | **evtx-patched** | vendored EVTX parser | 作为 `evtx` 依赖消费 |
@@ -182,13 +182,17 @@ RBD head reader → 派生 VM source DB。全部只由私有 opt-in 真实样本
 
 时间线采用显式事件白名单，不再投影完整 MACB，也不把 EVTX、浏览器、Prefetch
 等工件事件写入 `timeline_events`。当前只持久化
-`REGISTRY_HIVE_LAST_WRITE`、`REGISTRY_USER_ASSIST_LAST_RUN`、
-`REGISTRY_SAM_LAST_LOGIN`、`REGISTRY_SAM_PASSWORD_LAST_SET`、
-`REGISTRY_SYSTEM_SHUTDOWN` 和 `FILE_MODIFIED`。Windows 文件投影排除原生
+`REGISTRY_HIVE_LAST_WRITE`、`REGISTRY_SAM_LAST_LOGIN`、
+`REGISTRY_SAM_PASSWORD_LAST_SET`、`REGISTRY_SYSTEM_SHUTDOWN`，以及
+`FILE_CREATED`、`FILE_MODIFIED`、`FILE_ACCESSED`、`FILE_EXECUTED` 和
+`FILE_DELETED`。`FILE_EXECUTED` 当前只来源于 NTUSER UserAssist 的结构化运行证据；
+文件访问时间只表示文件系统访问，不推断为程序运行。删除文件使用已删除记录的
+metadata change 时间，作为近似删除时间并降低置信度。Windows 文件投影排除原生
 system 标记、NTFS `$*` 元数据和 Windows/Program Files/ProgramData 等系统根；
-Linux 不按路径排除系统目录，只排除只读普通文件。文件修改事件在导入收尾阶段
-物化，查询和 facets 聚合均以只读连接访问各数据源 `source.db`；全局总数、类型、
-数据源分布和直方图由后端按 Unix epoch 聚合，前端不从当前分页推导案件事实。
+Linux 不按路径排除系统目录，只排除只读普通文件。文件活动事件在导入收尾阶段
+批量物化，查询和 facets 聚合均以只读连接访问各数据源 `source.db`；全局总数、类型、
+数据源分布和直方图由后端按 Unix epoch 聚合，前端仅提交后端返回时间桶的范围，
+不从当前分页推导案件事实。
 
 Registry 子模块结构：`registry/lookup/{mod,types,reader,txlog_util,utf16,system,software,ntuser,sam}`，
 覆盖 SYSTEM、SOFTWARE、NTUSER、SAM 与 `.LOG1/.LOG2` 事务日志脏页合并。

@@ -1,6 +1,6 @@
 use app_services::timeline_service::{
     get_timeline_event_by_id_for_case, get_timeline_facets_for_case,
-    materialize_file_modified_unknown, project_and_store_file_modified, query_timeline,
+    materialize_file_activity_unknown, project_and_store_file_activity, query_timeline,
     query_timeline_aggregated, query_timeline_filtered_for_case,
     query_timeline_filtered_instrumented, query_timeline_for_case, query_timeline_instrumented,
     TimelineQuery, TimelineServiceError,
@@ -186,15 +186,32 @@ fn timeline_event(id: &str, timestamp: chrono::DateTime<Utc>) -> domain::Timelin
 }
 
 #[test]
-fn timeline_file_modified_projection_inserts_expected_events_and_handles_empty_input() {
+fn timeline_file_activity_projection_inserts_expected_events_and_handles_empty_input() {
     let conn = in_memory_db_with_timeline();
     let files = vec![
         make_file("a.txt", "/a.txt", true, true),
         make_file("b.txt", "/b.txt", true, false),
     ];
-    assert_eq!(project_and_store_file_modified(&conn, &files).unwrap(), 1);
-    assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 1);
-    assert_eq!(project_and_store_file_modified(&conn, &[]).unwrap(), 0);
+    assert_eq!(project_and_store_file_activity(&conn, &files).unwrap(), 5);
+    assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 5);
+    let event_types = conn
+        .prepare("SELECT event_type FROM timeline_events ORDER BY event_type")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        event_types,
+        vec![
+            "FILE_ACCESSED",
+            "FILE_ACCESSED",
+            "FILE_CREATED",
+            "FILE_CREATED",
+            "FILE_MODIFIED",
+        ]
+    );
+    assert_eq!(project_and_store_file_activity(&conn, &[]).unwrap(), 0);
 }
 
 #[test]
@@ -283,6 +300,15 @@ fn timeline_facets_aggregate_ready_source_databases_with_epoch_filters() {
                     .sum::<u64>(),
                 3
             );
+            for adjacent in facets.histogram.windows(2) {
+                let previous_end = chrono::DateTime::parse_from_rfc3339(&adjacent[0].end_ts)
+                    .unwrap()
+                    .timestamp();
+                let next_start = chrono::DateTime::parse_from_rfc3339(&adjacent[1].start_ts)
+                    .unwrap()
+                    .timestamp();
+                assert_eq!(previous_end + 1, next_start);
+            }
 
             let filtered = get_timeline_facets_for_case(
                 case_conn,
@@ -304,6 +330,57 @@ fn timeline_facets_aggregate_ready_source_databases_with_epoch_filters() {
                     .collect::<Vec<_>>(),
                 vec!["FILE_CREATED", "REGISTRY_HIVE_LAST_WRITE"]
             );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn timeline_facets_limit_buckets_to_short_epoch_ranges() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "timeline-short-facets",
+        Some("tester"),
+    )
+    .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let source =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let first = Utc.with_ymd_and_hms(2026, 2, 3, 4, 5, 6).unwrap();
+            TimelineRepo::new(&source).insert_batch_with_case(
+                &[
+                    timeline_event("a-1", first),
+                    timeline_event("a-2", first + chrono::Duration::seconds(1)),
+                ],
+                &active.meta.id.0,
+            )?;
+            drop(source);
+
+            let facets = get_timeline_facets_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                None,
+                None,
+                None,
+                20,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+
+            assert_eq!(facets.histogram.len(), 2);
+            assert_eq!(
+                facets
+                    .histogram
+                    .iter()
+                    .map(|bucket| bucket.count)
+                    .sum::<u64>(),
+                2
+            );
+            assert_eq!(facets.histogram[0].start_ts, facets.histogram[0].end_ts);
+            assert_eq!(facets.histogram[1].start_ts, facets.histogram[1].end_ts);
+            assert_ne!(facets.histogram[0].start_ts, facets.histogram[1].start_ts);
             Ok(())
         })
         .unwrap();
@@ -952,7 +1029,7 @@ fn timeline_large_aggregation_remains_bounded() {
 }
 
 #[test]
-fn timeline_file_modified_materialization_is_idempotent() {
+fn timeline_file_activity_materialization_is_idempotent() {
     let conn = in_memory_db_with_timeline();
     conn.execute_batch(
         "INSERT INTO data_sources (id, case_id, name, kind, source_path)
@@ -964,17 +1041,20 @@ fn timeline_file_modified_materialization_is_idempotent() {
     )
     .unwrap();
 
-    let first = materialize_file_modified_unknown(&conn).unwrap();
-    assert_eq!(first.inserted_count, 1);
+    let first = materialize_file_activity_unknown(&conn).unwrap();
+    assert_eq!(first.inserted_count, 3);
     assert!(!first.already_projected);
-    let second = materialize_file_modified_unknown(&conn).unwrap();
+    let second = materialize_file_activity_unknown(&conn).unwrap();
     assert_eq!(second.inserted_count, 0);
     assert!(second.already_projected);
 
     let page = query_timeline(&conn, 0, 100).unwrap();
-    assert_eq!(page.total, 1);
-    assert!(page
-        .items
-        .iter()
-        .any(|event| event.id == "file-modified:file-1"));
+    assert_eq!(page.total, 3);
+    assert_eq!(
+        page.items
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["FILE_ACCESSED", "FILE_MODIFIED", "FILE_CREATED"]
+    );
 }

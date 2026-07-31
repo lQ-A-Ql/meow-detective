@@ -15,6 +15,7 @@ import {
 } from '@/components/layout/InspectorPane';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
+import { TimelineHistogram } from '@/features/timeline/components/TimelineHistogram';
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
 
@@ -50,11 +51,11 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <div className="h-4 border-l border-forensics-border" />
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               起始
-              <Input type="datetime-local" value={model.draftTimeStart} onChange={(event) => model.setDraftTimeStart(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
+              <Input type="datetime-local" step={1} value={model.draftTimeStart} onChange={(event) => model.setDraftTimeStart(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
             </label>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               结束
-              <Input type="datetime-local" value={model.draftTimeEnd} onChange={(event) => model.setDraftTimeEnd(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
+              <Input type="datetime-local" step={1} value={model.draftTimeEnd} onChange={(event) => model.setDraftTimeEnd(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
             </label>
             {!model.draftDatesValid ? <span className="text-[11px] text-forensics-error-text">日期无效</span> : null}
             <Button type="button" variant="forensicsOutline" size="compact" onClick={model.applyDateRange} disabled={!model.draftDatesValid}>应用</Button>
@@ -78,9 +79,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
       </PageSubbar>
 
       <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-border bg-forensics-panel p-2">
-        <div className="flex flex-1 items-end gap-[1px] px-2">
-          {model.bars.map((bar, index) => <div key={index} className={`min-h-[1px] flex-1 transition-colors ${bar.count > 0 ? 'bg-forensics-text' : 'bg-forensics-250'}`} style={{ height: `${bar.height}%` }} title={`${bar.count} 条事件`} />)}
-        </div>
+        <TimelineHistogram bars={model.bars} onSelectRange={model.selectTimeBucket} />
         <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-forensics-muted-light">
           <span>{model.timeRange.start}</span>
           <span className="font-light text-forensics-text-secondary">{model.middleTimestamp}</span>

@@ -97,7 +97,13 @@ fn build_histogram(
     max_epoch: i64,
     bucket_count: u32,
 ) -> Result<Vec<TimelineHistogramBucketDto>, TimelineServiceError> {
-    let mut counts = vec![0u64; bucket_count as usize];
+    let range_seconds = max_epoch.saturating_sub(min_epoch);
+    let effective_bucket_count = bucket_count.max(1).min(
+        u32::try_from(range_seconds.saturating_add(1))
+            .unwrap_or(u32::MAX)
+            .max(1),
+    );
+    let mut counts = vec![0u64; effective_bucket_count as usize];
     for (_, connection, _) in sources {
         for (bucket, count) in TimelineFacetsRepo::new(connection).bucket_counts(
             time_start,
@@ -105,23 +111,21 @@ fn build_histogram(
             event_type,
             min_epoch,
             max_epoch,
-            bucket_count,
+            effective_bucket_count,
         )? {
             if let Some(slot) = counts.get_mut(bucket as usize) {
                 *slot = slot.saturating_add(count);
             }
         }
     }
-    let range = i128::from(max_epoch) - i128::from(min_epoch);
-    (0..bucket_count)
+    let inclusive_span = i128::from(range_seconds) + 1;
+    (0..effective_bucket_count)
         .map(|index| {
-            let start =
-                i128::from(min_epoch) + range * i128::from(index) / i128::from(bucket_count);
-            let end = if index + 1 == bucket_count {
-                i128::from(max_epoch)
-            } else {
-                i128::from(min_epoch) + range * i128::from(index + 1) / i128::from(bucket_count)
-            };
+            let start = i128::from(min_epoch)
+                + inclusive_span * i128::from(index) / i128::from(effective_bucket_count);
+            let next_start = i128::from(min_epoch)
+                + inclusive_span * i128::from(index + 1) / i128::from(effective_bucket_count);
+            let end = next_start.saturating_sub(1).min(i128::from(max_epoch));
             Ok(TimelineHistogramBucketDto {
                 start_ts: format_epoch(i64::try_from(start).map_err(|_| {
                     TimelineServiceError::Other("timeline histogram start overflow".to_string())

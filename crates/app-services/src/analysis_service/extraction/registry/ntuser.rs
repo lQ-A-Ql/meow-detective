@@ -57,13 +57,21 @@ pub(super) fn user_assist_artifacts(
             "parser".to_string(),
             Value::String("registry.ntuser".to_string()),
         );
+        attrs.insert(
+            "executionEvidence".to_string(),
+            Value::String("registry.user_assist".to_string()),
+        );
+        attrs.insert(
+            "timestampSemantics".to_string(),
+            Value::String("UserAssist last execution timestamp".to_string()),
+        );
 
         if let Some(ts_str) = entry.last_run.as_ref().filter(|s| !s.is_empty()) {
             if let Ok(ts) = DateTime::parse_from_rfc3339(ts_str) {
                 let ts_utc = ts.with_timezone(&Utc);
                 outcome.timeline_events.push(make_timeline_event(
                     &candidate.file_id,
-                    "REGISTRY_USER_ASSIST_LAST_RUN",
+                    "FILE_EXECUTED",
                     ts_utc,
                     format!("UserAssist execution: {}", entry.executable_path),
                     format!(

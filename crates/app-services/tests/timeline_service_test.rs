@@ -61,7 +61,7 @@ fn project_and_query_timeline() {
             assert!(!all_files.is_empty(), "Expected files");
 
             // Project timeline
-            let tl_count = timeline_service::project_and_store_file_modified(conn, &all_files)
+            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
@@ -123,7 +123,7 @@ fn timeline_pagination() {
                 }
             }
 
-            let tl_count = timeline_service::project_and_store_file_modified(conn, &all_files)
+            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query with limit
@@ -181,7 +181,7 @@ fn timeline_filtered_by_event_type() {
                 }
             }
 
-            timeline_service::project_and_store_file_modified(conn, &all_files)
+            timeline_service::project_and_store_file_activity(conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query all events

@@ -464,7 +464,7 @@ fn e01_timeline_projection() {
             }
 
             // Project timeline
-            let tl_count = timeline_service::project_and_store_file_modified(conn, &all_files)
+            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query and verify pagination

@@ -363,7 +363,7 @@ fn projection_retry_only_reruns_the_failed_timeline_action() {
 }
 
 #[test]
-fn timeline_counts_include_only_file_modified_and_registry_events() {
+fn timeline_counts_include_file_activity_and_analysis_events() {
     let conn = setup_case_db();
     conn.execute_batch(
         "INSERT INTO timeline_events
@@ -371,8 +371,12 @@ fn timeline_counts_include_only_file_modified_and_registry_events() {
          VALUES
          ('file-1', 'case-1', 'file-1', 'FILE_MODIFIED', '2026-01-01T00:00:00Z',
           'modified', '', 'timeline.file_modified', '{}'),
+         ('file-2', 'case-1', 'file-2', 'FILE_ACCESSED', '2026-01-01T00:00:00Z',
+          'accessed', '', 'timeline.file_accessed', '{}'),
          ('registry-1', 'case-1', 'file-1', 'REGISTRY_HIVE_LAST_WRITE', '2026-01-01T00:00:01Z',
           'registry', '', 'registry.hive.v1', '{}'),
+         ('execution-1', 'case-1', 'file-1', 'FILE_EXECUTED', '2026-01-01T00:00:01Z',
+          'executed', '', 'registry.ntuser.v1', '{}'),
          ('unsupported-1', 'case-1', 'file-2', 'SHELL_HISTORY', '2026-01-01T00:00:02Z',
           'history', '', NULL, '{}');",
     )
@@ -380,7 +384,7 @@ fn timeline_counts_include_only_file_modified_and_registry_events() {
 
     assert_eq!(
         super::projections::timeline_event_counts(&conn).expect("count timeline events"),
-        (1, 1)
+        (2, 2)
     );
 }
 

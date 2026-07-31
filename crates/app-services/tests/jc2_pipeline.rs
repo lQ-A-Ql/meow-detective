@@ -290,7 +290,7 @@ fn jc2_full_pipeline() {
 
             // Phase 5: Timeline projection + filter
             let t_tl = Instant::now();
-            timeline_service::materialize_file_modified_unknown(conn).ok();
+            timeline_service::materialize_file_activity_unknown(conn).ok();
             let tl = timeline_service::query_timeline(conn, 0, 100).unwrap();
             let tl_ms = t_tl.elapsed().as_millis();
             println!(
@@ -1075,7 +1075,7 @@ fn jc2_artifact_extraction() {
 
             // ── Timeline ──────────────────────────────────────────────────
             let t_tl = Instant::now();
-            timeline_service::materialize_file_modified_unknown(conn).ok();
+            timeline_service::materialize_file_activity_unknown(conn).ok();
             let tl = timeline_service::query_timeline(conn, 0, 100).unwrap();
             println!(
                 "Timeline: {} items in {}ms",

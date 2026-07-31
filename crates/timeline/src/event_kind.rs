@@ -1,31 +1,40 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimelineEventKind {
     RegistryHiveLastWrite,
-    RegistryUserAssistLastRun,
     RegistrySamLastLogin,
     RegistrySamPasswordLastSet,
     RegistrySystemShutdown,
+    FileCreated,
     FileModified,
+    FileAccessed,
+    FileExecuted,
+    FileDeleted,
 }
 
 impl TimelineEventKind {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 9] = [
         Self::RegistryHiveLastWrite,
-        Self::RegistryUserAssistLastRun,
         Self::RegistrySamLastLogin,
         Self::RegistrySamPasswordLastSet,
         Self::RegistrySystemShutdown,
+        Self::FileCreated,
         Self::FileModified,
+        Self::FileAccessed,
+        Self::FileExecuted,
+        Self::FileDeleted,
     ];
 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RegistryHiveLastWrite => "REGISTRY_HIVE_LAST_WRITE",
-            Self::RegistryUserAssistLastRun => "REGISTRY_USER_ASSIST_LAST_RUN",
             Self::RegistrySamLastLogin => "REGISTRY_SAM_LAST_LOGIN",
             Self::RegistrySamPasswordLastSet => "REGISTRY_SAM_PASSWORD_LAST_SET",
             Self::RegistrySystemShutdown => "REGISTRY_SYSTEM_SHUTDOWN",
+            Self::FileCreated => "FILE_CREATED",
             Self::FileModified => "FILE_MODIFIED",
+            Self::FileAccessed => "FILE_ACCESSED",
+            Self::FileExecuted => "FILE_EXECUTED",
+            Self::FileDeleted => "FILE_DELETED",
         }
     }
 
@@ -36,7 +45,17 @@ impl TimelineEventKind {
     }
 
     pub const fn is_registry(self) -> bool {
-        !matches!(self, Self::FileModified)
+        matches!(
+            self,
+            Self::RegistryHiveLastWrite
+                | Self::RegistrySamLastLogin
+                | Self::RegistrySamPasswordLastSet
+                | Self::RegistrySystemShutdown
+        )
+    }
+
+    pub const fn is_analysis_event(self) -> bool {
+        self.is_registry() || matches!(self, Self::FileExecuted)
     }
 }
 

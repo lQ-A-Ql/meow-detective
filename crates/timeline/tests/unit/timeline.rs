@@ -26,36 +26,73 @@ fn file(modified_at: Option<chrono::DateTime<Utc>>) -> FileEntry {
 }
 
 #[test]
-fn file_projection_emits_only_modified_timestamp() {
+fn file_projection_emits_created_modified_and_accessed_timestamps() {
     let modified_at = Utc.with_ymd_and_hms(2024, 1, 2, 1, 0, 0).single();
-    let event = project_file_modified(&file(modified_at)).expect("modified event");
+    let events = project_file_activity(&file(modified_at));
 
-    assert_eq!(event.id.0, "file-modified:file-1");
-    assert_eq!(event.event_type, "FILE_MODIFIED");
-    assert_eq!(event.timestamp, modified_at.expect("timestamp"));
-    assert_eq!(event.parser_id.as_deref(), Some("timeline.file_modified"));
-    assert!(project_file_modified(&file(modified_at)).is_some());
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].event_type, "FILE_CREATED");
+    assert_eq!(events[1].id.0, "file-modified:file-1");
+    assert_eq!(events[1].event_type, "FILE_MODIFIED");
+    assert_eq!(events[1].timestamp, modified_at.expect("timestamp"));
+    assert_eq!(events[2].event_type, "FILE_ACCESSED");
+    assert_eq!(
+        events[2].attrs["timestampSemantics"],
+        "filesystem access timestamp; does not prove execution"
+    );
 }
 
 #[test]
 fn file_projection_rejects_missing_epoch_and_directory_timestamps() {
-    assert!(project_file_modified(&file(None)).is_none());
-    assert!(project_file_modified(&file(Some(chrono::DateTime::UNIX_EPOCH))).is_none());
+    let mut without_timestamps = file(None);
+    without_timestamps.created_at = None;
+    without_timestamps.accessed_at = None;
+    without_timestamps.changed_at = None;
+    assert!(project_file_activity(&without_timestamps).is_empty());
+
+    let mut epoch_only = without_timestamps.clone();
+    epoch_only.modified_at = Some(chrono::DateTime::UNIX_EPOCH);
+    assert!(project_file_activity(&epoch_only).is_empty());
 
     let mut directory = file(Utc.with_ymd_and_hms(2024, 1, 2, 1, 0, 0).single());
     directory.entry_type = EntryType::Directory;
-    assert!(project_file_modified(&directory).is_none());
+    assert!(project_file_activity(&directory).is_empty());
+}
+
+#[test]
+fn deleted_file_projection_uses_changed_timestamp_with_qualified_confidence() {
+    let mut deleted = file(None);
+    deleted.created_at = None;
+    deleted.accessed_at = None;
+    deleted.deleted = true;
+
+    let events = project_file_activity(&deleted);
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, "FILE_DELETED");
+    assert_eq!(
+        events[0].parser_id.as_deref(),
+        Some("timeline.file_deleted")
+    );
+    assert_eq!(events[0].confidence, Some(0.65));
+    assert!(events[0].attrs["timestampSemantics"]
+        .as_str()
+        .expect("timestamp semantics")
+        .contains("approximate"));
 }
 
 #[test]
 fn event_kind_allowlist_is_explicit() {
-    assert_eq!(TimelineEventKind::ALL.len(), 6);
+    assert_eq!(TimelineEventKind::ALL.len(), 9);
     assert_eq!(
         TimelineEventKind::parse("REGISTRY_SAM_LAST_LOGIN"),
         Some(TimelineEventKind::RegistrySamLastLogin)
     );
     assert!(TimelineEventKind::RegistrySamLastLogin.is_registry());
     assert!(!TimelineEventKind::FileModified.is_registry());
+    assert!(!TimelineEventKind::FileDeleted.is_registry());
+    assert!(TimelineEventKind::FileExecuted.is_analysis_event());
+    assert!(TimelineEventKind::parse("REGISTRY_USER_ASSIST_LAST_RUN").is_none());
     assert!(TimelineEventKind::parse("EVTX_EVENT").is_none());
     assert!(TimelineEventKind::parse("REGISTRY_UNKNOWN").is_none());
 }

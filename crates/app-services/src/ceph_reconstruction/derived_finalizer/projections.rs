@@ -81,7 +81,7 @@ fn run_timeline_projection(
         .map_err(|error| format!("Open registered source database for Timeline phase: {error}"))?;
     let platform = source.platform;
     let connection = source.connection;
-    let projection = timeline_service::materialize_file_modified_with_identity(
+    let projection = timeline_service::materialize_file_activity_with_identity(
         &connection,
         platform,
         cancel_token,
@@ -91,7 +91,7 @@ fn run_timeline_projection(
     if !projection.graph_complete {
         return Err("Timeline graph projection remains incomplete".to_string());
     }
-    let (file_modified_count, registry_event_count) = timeline_event_counts(&connection)?;
+    let (file_activity_count, analysis_event_count) = timeline_event_counts(&connection)?;
     source_db::checkpoint_source_db(&connection).map_err(|error| error.to_string())?;
     let warning_details = projection
         .warnings
@@ -101,9 +101,9 @@ fn run_timeline_projection(
         .collect::<Vec<_>>();
 
     Ok(json!({
-        "fileModifiedInsertedCount": projection.inserted_count,
-        "fileModifiedCount": file_modified_count,
-        "registryEventCount": registry_event_count,
+        "fileActivityInsertedCount": projection.inserted_count,
+        "fileActivityCount": file_activity_count,
+        "analysisEventCount": analysis_event_count,
         "alreadyProjected": projection.already_projected,
         "warningCount": projection.warnings.len(),
         "warningDetails": warning_details,
@@ -157,13 +157,18 @@ pub(super) fn timeline_event_counts(
     connection
         .query_row(
             "SELECT
-                COALESCE(SUM(CASE WHEN event_type = 'FILE_MODIFIED' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN event_type IN (
+                    'FILE_CREATED',
+                    'FILE_MODIFIED',
+                    'FILE_ACCESSED',
+                    'FILE_DELETED'
+                ) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN event_type IN (
                     'REGISTRY_HIVE_LAST_WRITE',
-                    'REGISTRY_USER_ASSIST_LAST_RUN',
                     'REGISTRY_SAM_LAST_LOGIN',
                     'REGISTRY_SAM_PASSWORD_LAST_SET',
-                    'REGISTRY_SYSTEM_SHUTDOWN'
+                    'REGISTRY_SYSTEM_SHUTDOWN',
+                    'FILE_EXECUTED'
                 ) THEN 1 ELSE 0 END), 0)
              FROM timeline_events",
             [],

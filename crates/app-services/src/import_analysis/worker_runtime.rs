@@ -201,7 +201,7 @@ impl AnalysisWorkerRuntime {
                         }
                     }
                     self.stats.artifact_count += sink.artifacts.len() as u64;
-                    crate::timeline_service::retain_registry_events(&mut sink.timeline_events);
+                    crate::timeline_service::retain_analysis_events(&mut sink.timeline_events);
                     self.stats.timeline_count += sink.timeline_events.len() as u64;
                     self.artifacts.extend(sink.artifacts);
                     self.timeline_events.extend(sink.timeline_events);

@@ -233,7 +233,7 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
                 );
             }
 
-            timeline_service::materialize_file_modified_unknown(conn).ok();
+            timeline_service::materialize_file_activity_unknown(conn).ok();
 
             // ── Run correlation and assert per-family leads ─────────────
             let corr_start = Instant::now();

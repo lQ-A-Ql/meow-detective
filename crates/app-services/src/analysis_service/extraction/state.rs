@@ -133,7 +133,7 @@ impl ExtractionState {
         candidate: &EvidenceCandidate,
         mut outcome: ExtractionOutcome,
     ) {
-        crate::timeline_service::retain_registry_events(&mut outcome.timeline_events);
+        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
         self.replacements.push(AnalysisOutputReplacement {
             source_object_id: candidate.file_id.0.clone(),
             producer_prefix: capability.producer_prefix(),
@@ -292,7 +292,7 @@ impl ExtractionState {
         capability: AnalysisCapability,
         mut outcome: ExtractionOutcome,
     ) {
-        crate::timeline_service::retain_registry_events(&mut outcome.timeline_events);
+        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
         self.scanned_count += 1;
         self.timeline_event_count += outcome.timeline_events.len() as u64;
         self.sections

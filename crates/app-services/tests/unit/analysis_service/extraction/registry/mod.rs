@@ -111,9 +111,10 @@ fn ntuser_user_assist_derives_subject_username_and_emits_timeline() {
         Some(&Value::String("alice".to_string()))
     );
     assert_eq!(outcome.timeline_events.len(), 1);
+    assert_eq!(outcome.timeline_events[0].event_type, "FILE_EXECUTED");
     assert_eq!(
-        outcome.timeline_events[0].event_type,
-        "REGISTRY_USER_ASSIST_LAST_RUN"
+        outcome.timeline_events[0].attrs.get("executionEvidence"),
+        Some(&Value::String("registry.user_assist".to_string()))
     );
 }
 

@@ -13,15 +13,20 @@ const BUCKET_STEP = 20;
 const DEFAULT_BUCKET_COUNT = 60;
 
 function buildTimelineBars(
-  histogram: Array<{ count: number }>,
+  histogram: Array<{ count: number; startTs: string; endTs: string }>,
   bucketCount: number,
-): Array<{ height: number; count: number }> {
+): Array<{ height: number; count: number; startTs?: string; endTs?: string }> {
   if (histogram.length === 0) {
     return Array.from({ length: bucketCount }, () => ({ height: 0, count: 0 }));
   }
   const counts = histogram.map((bucket) => bucket.count);
   const maxCount = Math.max(...counts, 1);
-  return counts.map((count) => ({ height: (count / maxCount) * 100, count }));
+  return histogram.map((bucket) => ({
+    height: (bucket.count / maxCount) * 100,
+    count: bucket.count,
+    startTs: bucket.startTs,
+    endTs: bucket.endTs,
+  }));
 }
 
 function formatTimestamp(timestamp: string): string {
@@ -43,6 +48,13 @@ function isValidDateInput(value: string): boolean {
 
 function toIsoOrUndefined(value: string): string | undefined {
   return value && isValidDateInput(value) ? new Date(value).toISOString() : undefined;
+}
+
+function toDateTimeLocal(timestamp: string): string | undefined {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 19);
 }
 
 /** Owns timeline query, selection, filter state, and navigation orchestration. */
@@ -121,16 +133,18 @@ export function useTimelineWorkspaceModel() {
     if (!draftDatesValid) {
       return;
     }
+    setSelectedTimelineId(undefined);
     setTimeStart(draftTimeStart);
     setTimeEnd(draftTimeEnd);
-  }, [draftDatesValid, draftTimeEnd, draftTimeStart]);
+  }, [draftDatesValid, draftTimeEnd, draftTimeStart, setSelectedTimelineId]);
   const clearFilters = useCallback(() => {
+    setSelectedTimelineId(undefined);
     setDraftTimeStart('');
     setDraftTimeEnd('');
     setTimeStart('');
     setTimeEnd('');
     setEventType('');
-  }, []);
+  }, [setSelectedTimelineId]);
   const zoomIn = useCallback(() => {
     setBucketCount((current) => Math.min(MAX_BUCKET_COUNT, current + BUCKET_STEP));
   }, []);
@@ -141,9 +155,27 @@ export function useTimelineWorkspaceModel() {
     (event: TimelineEvent) => setSelectedTimelineId(event.id),
     [setSelectedTimelineId],
   );
-  const selectEventType = useCallback((value: string) => {
-    setEventType(value === '__all__' ? '' : value);
-  }, []);
+  const selectEventType = useCallback(
+    (value: string) => {
+      setSelectedTimelineId(undefined);
+      setEventType(value === '__all__' ? '' : value);
+    },
+    [setSelectedTimelineId],
+  );
+  const selectTimeBucket = useCallback(
+    (bar: { startTs?: string; endTs?: string }) => {
+      if (!bar.startTs || !bar.endTs) return;
+      const start = toDateTimeLocal(bar.startTs);
+      const end = toDateTimeLocal(bar.endTs);
+      if (!start || !end) return;
+      setSelectedTimelineId(undefined);
+      setDraftTimeStart(start);
+      setDraftTimeEnd(end);
+      setTimeStart(start);
+      setTimeEnd(end);
+    },
+    [setSelectedTimelineId],
+  );
   const loadNextPage = useCallback(() => {
     void timelineQuery.fetchNextPage();
   }, [timelineQuery]);
@@ -176,6 +208,7 @@ export function useTimelineWorkspaceModel() {
     setDraftTimeEnd,
     setDraftTimeStart,
     selectEventType,
+    selectTimeBucket,
     sourceCount,
     middleTimestamp: facetsQuery.data?.histogram.length
       ? formatTimestamp(facetsQuery.data.histogram[Math.floor(facetsQuery.data.histogram.length / 2)].startTs)

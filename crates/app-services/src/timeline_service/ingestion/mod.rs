@@ -1,3 +1,3 @@
 mod policy;
 
-pub(crate) use policy::retain_registry_events;
+pub(crate) use policy::retain_analysis_events;

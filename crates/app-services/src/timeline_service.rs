@@ -17,10 +17,10 @@ pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
 };
 pub use projection::{
-    materialize_file_modified, materialize_file_modified_unknown,
-    materialize_file_modified_unknown_with_cancel,
-    materialize_file_modified_unknown_with_cancel_and_identity,
-    materialize_file_modified_with_identity, project_and_store_file_modified,
+    materialize_file_activity, materialize_file_activity_unknown,
+    materialize_file_activity_unknown_with_cancel,
+    materialize_file_activity_unknown_with_cancel_and_identity,
+    materialize_file_activity_with_identity, project_and_store_file_activity,
     TimelineProjectionStats,
 };
 pub use query::{
@@ -28,4 +28,4 @@ pub use query::{
     query_timeline_filtered, TimelineQuery,
 };
 
-pub(crate) use ingestion::retain_registry_events;
+pub(crate) use ingestion::retain_analysis_events;

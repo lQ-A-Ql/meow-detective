@@ -999,20 +999,30 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             assert_eq!(page.total, 0);
             assert!(page.items.is_empty());
 
-            let first = crate::timeline_service::materialize_file_modified(
+            let first = crate::timeline_service::materialize_file_activity(
                 conn,
                 domain::DataSourcePlatform::Windows,
                 cancel.as_ref(),
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            assert_eq!(first.inserted_count, 1);
+            assert_eq!(first.inserted_count, 3);
 
             let page = crate::timeline_service::query_timeline(conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            assert_eq!(page.total, 1);
-            assert_eq!(page.items[0].id, "file-modified:raw-file-1");
+            assert_eq!(page.total, 3);
+            assert_eq!(
+                page.items
+                    .iter()
+                    .map(|event| event.id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>(),
+                std::collections::BTreeSet::from([
+                    "file-accessed:raw-file-1",
+                    "file-created:raw-file-1",
+                    "file-modified:raw-file-1",
+                ])
+            );
 
-            let second = crate::timeline_service::materialize_file_modified(
+            let second = crate::timeline_service::materialize_file_activity(
                 conn,
                 domain::DataSourcePlatform::Windows,
                 cancel.as_ref(),

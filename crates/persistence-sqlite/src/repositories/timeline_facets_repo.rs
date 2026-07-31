@@ -70,18 +70,18 @@ impl<'a> TimelineFacetsRepo<'a> {
         max_epoch: i64,
         bucket_count: u32,
     ) -> DbResult<Vec<(u32, u64)>> {
-        let range = max_epoch.saturating_sub(min_epoch).max(1);
+        let inclusive_span = max_epoch.saturating_sub(min_epoch).saturating_add(1).max(1);
         let (where_clause, mut values) = filtered_clause(time_start, time_end, event_type);
         let min_param = values.len() + 1;
         let bucket_param = values.len() + 2;
-        let range_param = values.len() + 3;
+        let span_param = values.len() + 3;
         values.push(Value::Integer(min_epoch));
         values.push(Value::Integer(i64::from(bucket_count)));
-        values.push(Value::Integer(range));
+        values.push(Value::Integer(inclusive_span));
         let bucket_expression = format!(
             "MIN(?{bucket_param} - 1,
                  CAST(((unixepoch(ts) - ?{min_param}) * 1.0 * ?{bucket_param})
-                      / ?{range_param} AS INTEGER))"
+                      / ?{span_param} AS INTEGER))"
         );
         let sql = format!(
             "SELECT {bucket_expression} AS bucket, COUNT(*)

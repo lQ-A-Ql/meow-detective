@@ -12,8 +12,8 @@ use std::{
 
 use super::TimelineServiceError;
 
-const FILE_MODIFIED_PROJECTION_KEY: &str = "file_modified_v1";
-const TIMELINE_GRAPH_PROJECTION_KEY: &str = "timeline_graph_v2";
+const FILE_ACTIVITY_PROJECTION_KEY: &str = "file_activity_v2";
+const TIMELINE_GRAPH_PROJECTION_KEY: &str = "timeline_graph_v3";
 const SOURCE_BATCH_SIZE: u32 = 10_000;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -25,13 +25,13 @@ pub struct TimelineProjectionStats {
     pub warnings: Vec<String>,
 }
 
-pub fn project_and_store_file_modified(
+pub fn project_and_store_file_activity(
     conn: &Connection,
     files: &[FileEntry],
 ) -> Result<u64, TimelineServiceError> {
     let events = files
         .par_iter()
-        .filter_map(timeline::project_file_modified)
+        .flat_map_iter(timeline::project_file_activity)
         .collect::<Vec<_>>();
     let count = events.len() as u64;
     if !events.is_empty() {
@@ -40,16 +40,16 @@ pub fn project_and_store_file_modified(
     Ok(count)
 }
 
-pub fn materialize_file_modified(
+pub fn materialize_file_activity(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
     let identity = projection_identity(conn, platform)?;
-    materialize_file_modified_with_identity(conn, platform, cancel_token, &identity)
+    materialize_file_activity_with_identity(conn, platform, cancel_token, &identity)
 }
 
-pub fn materialize_file_modified_with_identity(
+pub fn materialize_file_activity_with_identity(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
@@ -65,7 +65,7 @@ pub fn materialize_file_modified_with_identity(
         return Ok(already_projected_stats());
     }
     ensure_projection_meta_table(conn)?;
-    let file_events_done = is_projection_done(conn, FILE_MODIFIED_PROJECTION_KEY, input_identity)?;
+    let file_events_done = is_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, input_identity)?;
     let graph_supported = timeline_graph_tables_present(conn)?;
     let graph_done = !graph_supported
         || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
@@ -77,8 +77,8 @@ pub fn materialize_file_modified_with_identity(
     let inserted_count = if file_events_done {
         0
     } else {
-        let inserted = replace_file_modified_events(conn, platform, cancel_token)?;
-        mark_projection_done(conn, FILE_MODIFIED_PROJECTION_KEY, inserted, input_identity)?;
+        let inserted = replace_file_activity_events(conn, platform, cancel_token)?;
+        mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
         inserted
     };
     let warnings = if graph_done {
@@ -97,25 +97,25 @@ pub fn materialize_file_modified_with_identity(
     })
 }
 
-fn replace_file_modified_events(
+fn replace_file_activity_events(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
 ) -> Result<u64, TimelineServiceError> {
     let transaction = conn.unchecked_transaction().map_err(|error| {
-        TimelineServiceError::Other(format!("begin file timeline replacement: {error}"))
+        TimelineServiceError::Other(format!("begin file activity replacement: {error}"))
     })?;
     clear_previous_file_projection(&transaction)?;
-    let inserted = insert_file_modified_batched(&transaction, platform, cancel_token)?;
+    let inserted = insert_file_activity_batched(&transaction, platform, cancel_token)?;
     ensure_not_cancelled(cancel_token)?;
     SourceMetaRepo::new(&transaction).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
     transaction.commit().map_err(|error| {
-        TimelineServiceError::Other(format!("commit file timeline replacement: {error}"))
+        TimelineServiceError::Other(format!("commit file activity replacement: {error}"))
     })?;
     Ok(inserted)
 }
 
-fn insert_file_modified_batched(
+fn insert_file_activity_batched(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
@@ -137,7 +137,10 @@ fn next_source_cursor(
 ) -> Result<Option<String>, TimelineServiceError> {
     let mut statement = conn.prepare(
         "SELECT id FROM file_entries
-         WHERE modified_at IS NOT NULL
+         WHERE (created_at IS NOT NULL
+                OR modified_at IS NOT NULL
+                OR accessed_at IS NOT NULL
+                OR (deleted = 1 AND changed_at IS NOT NULL))
            AND LOWER(entry_type) = 'file'
            AND id > ?1
          ORDER BY id ASC
@@ -159,39 +162,79 @@ fn insert_source_range(
 ) -> Result<u64, TimelineServiceError> {
     let policy = file_policy_sql(conn, platform)?;
     let sql = format!(
-        "INSERT OR IGNORE INTO timeline_events
+        "WITH activity(
+            id_prefix, event_type, timestamp_field, title_prefix,
+            description_suffix, parser_id, confidence, timestamp_semantics,
+            requires_deleted
+         ) AS (
+            VALUES
+              ('file-created:', 'FILE_CREATED', 'createdAt', 'File created: ',
+               ' created', 'timeline.file_created', 1.0,
+               'filesystem creation or birth timestamp', 0),
+              ('file-modified:', 'FILE_MODIFIED', 'modifiedAt', 'File modified: ',
+               ' modified', 'timeline.file_modified', 1.0,
+               'filesystem content modification timestamp', 0),
+              ('file-accessed:', 'FILE_ACCESSED', 'accessedAt', 'File accessed: ',
+               ' accessed', 'timeline.file_accessed', 1.0,
+               'filesystem access timestamp; does not prove execution', 0),
+              ('file-deleted:', 'FILE_DELETED', 'changedAt', 'Deleted file record: ',
+               ' is marked deleted', 'timeline.file_deleted', 0.65,
+               'metadata change timestamp on a deleted record; deletion time is approximate', 1)
+         )
+         INSERT OR IGNORE INTO timeline_events
          (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
          SELECT
-            'file-modified:' || fe.id,
+            activity.id_prefix || fe.id,
             ds.case_id,
             fe.id,
-            'FILE_MODIFIED',
-            fe.modified_at,
-            'File modified: ' || fe.name,
-            fe.path || ' modified',
-            'timeline.file_modified',
-            '1',
-            1.0,
-            'FILE_MODIFIED',
-            '{{\"platform\":\"{}\",\"timestampField\":\"modifiedAt\"}}'
+            activity.event_type,
+            CASE activity.timestamp_field
+              WHEN 'createdAt' THEN fe.created_at
+              WHEN 'modifiedAt' THEN fe.modified_at
+              WHEN 'accessedAt' THEN fe.accessed_at
+              WHEN 'changedAt' THEN fe.changed_at
+            END,
+            activity.title_prefix || fe.name,
+            fe.path || activity.description_suffix,
+            activity.parser_id,
+            '2',
+            activity.confidence,
+            activity.event_type,
+            printf(
+              '{{\"platform\":\"{}\",\"timestampField\":\"%s\",\"timestampSemantics\":\"%s\"}}',
+              activity.timestamp_field,
+              activity.timestamp_semantics
+            )
          FROM file_entries fe
          JOIN data_sources ds ON ds.id = fe.data_source_id
-         WHERE fe.modified_at IS NOT NULL
+         CROSS JOIN activity
+         WHERE CASE activity.timestamp_field
+              WHEN 'createdAt' THEN fe.created_at
+              WHEN 'modifiedAt' THEN fe.modified_at
+              WHEN 'accessedAt' THEN fe.accessed_at
+              WHEN 'changedAt' THEN fe.changed_at
+            END IS NOT NULL
            AND LOWER(fe.entry_type) = 'file'
            AND fe.id > ?1
            AND fe.id <= ?2
-           AND fe.modified_at NOT IN (
+           AND CASE activity.timestamp_field
+              WHEN 'createdAt' THEN fe.created_at
+              WHEN 'modifiedAt' THEN fe.modified_at
+              WHEN 'accessedAt' THEN fe.accessed_at
+              WHEN 'changedAt' THEN fe.changed_at
+            END NOT IN (
                '1970-01-01T00:00:00+00:00',
                '1970-01-01T00:00:00Z',
                '1970-01-01 00:00:00'
            )
+           AND (activity.requires_deleted = 0 OR fe.deleted = 1)
            AND ({policy})",
         platform.as_storage_str(),
     );
     conn.execute(&sql, params![after_id, through_id])
         .map(|count| count as u64)
         .map_err(|error| {
-            TimelineServiceError::Other(format!("insert FILE_MODIFIED timeline events: {error}"))
+            TimelineServiceError::Other(format!("insert file activity timeline events: {error}"))
         })
 }
 
@@ -243,18 +286,27 @@ fn clear_previous_file_projection(conn: &Connection) -> Result<(), TimelineServi
             "DELETE FROM graph_edges
              WHERE source_id IN (
                  SELECT id FROM timeline_events
-                 WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')
+                 WHERE parser_id IN (
+                    'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
+                    'timeline.file_accessed', 'timeline.file_deleted'
+                 )
              );
              DELETE FROM graph_nodes
              WHERE id IN (
                  SELECT id FROM timeline_events
-                 WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')
+                 WHERE parser_id IN (
+                    'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
+                    'timeline.file_accessed', 'timeline.file_deleted'
+                 )
              );",
         )?;
     }
     conn.execute(
         "DELETE FROM timeline_events
-         WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')",
+         WHERE parser_id IN (
+            'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
+            'timeline.file_accessed', 'timeline.file_deleted'
+         )",
         [],
     )?;
     Ok(())
@@ -264,14 +316,34 @@ fn projection_identity(
     conn: &Connection,
     platform: DataSourcePlatform,
 ) -> Result<String, TimelineServiceError> {
-    let (count, max_id, max_modified): (u64, String, String) = conn.query_row(
-        "SELECT COUNT(*), COALESCE(MAX(id), ''), COALESCE(MAX(modified_at), '')
+    let (count, max_id, max_created, max_modified, max_accessed, max_changed, deleted_count): (
+        u64,
+        String,
+        String,
+        String,
+        String,
+        String,
+        u64,
+    ) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(MAX(id), ''), COALESCE(MAX(created_at), ''),
+                COALESCE(MAX(modified_at), ''), COALESCE(MAX(accessed_at), ''),
+                COALESCE(MAX(changed_at), ''), COALESCE(SUM(deleted), 0)
          FROM file_entries",
         [],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        },
     )?;
     Ok(format!(
-        "file-modified-v1:{}:{count}:{max_id}:{max_modified}",
+        "file-activity-v2:{}:{count}:{max_id}:{max_created}:{max_modified}:{max_accessed}:{max_changed}:{deleted_count}",
         platform.as_storage_str()
     ))
 }
@@ -382,26 +454,26 @@ fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), TimelineService
     }
 }
 
-pub fn materialize_file_modified_unknown(
+pub fn materialize_file_activity_unknown(
     conn: &Connection,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
     let cancel_token = AtomicBool::new(false);
-    materialize_file_modified(conn, DataSourcePlatform::Unknown, &cancel_token)
+    materialize_file_activity(conn, DataSourcePlatform::Unknown, &cancel_token)
 }
 
-pub fn materialize_file_modified_unknown_with_cancel(
+pub fn materialize_file_activity_unknown_with_cancel(
     conn: &Connection,
     cancel_token: &AtomicBool,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
-    materialize_file_modified(conn, DataSourcePlatform::Unknown, cancel_token)
+    materialize_file_activity(conn, DataSourcePlatform::Unknown, cancel_token)
 }
 
-pub fn materialize_file_modified_unknown_with_cancel_and_identity(
+pub fn materialize_file_activity_unknown_with_cancel_and_identity(
     conn: &Connection,
     cancel_token: &AtomicBool,
     input_identity: &str,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
-    materialize_file_modified_with_identity(
+    materialize_file_activity_with_identity(
         conn,
         DataSourcePlatform::Unknown,
         cancel_token,

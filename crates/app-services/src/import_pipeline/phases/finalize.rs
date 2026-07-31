@@ -60,7 +60,7 @@ fn materialize_timeline(
 ) -> Result<u64, CommandError> {
     let source_conn = ctx.source_connection()?;
     ctx.report_job_progress(94, "Materializing timeline...")?;
-    let projection = timeline_service::materialize_file_modified(
+    let projection = timeline_service::materialize_file_activity(
         source_conn,
         ctx.import_config.platform,
         ctx.options.cancel_token.as_ref(),

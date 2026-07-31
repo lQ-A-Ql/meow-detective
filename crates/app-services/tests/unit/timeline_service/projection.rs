@@ -26,6 +26,7 @@ fn projection_connection() -> Connection {
             path TEXT NOT NULL,
             name TEXT NOT NULL,
             entry_type TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
             system INTEGER NOT NULL DEFAULT 0,
             read_only INTEGER NOT NULL DEFAULT 0,
             created_at TEXT,
@@ -163,7 +164,7 @@ fn linux_projection_excludes_only_read_only_regular_files() {
     )
     .expect("insert Linux file policy fixtures");
 
-    let projection = materialize_file_modified_with_identity(
+    let projection = materialize_file_activity_with_identity(
         &conn,
         DataSourcePlatform::Linux,
         &AtomicBool::new(false),
@@ -198,7 +199,7 @@ fn windows_projection_excludes_system_files_and_system_roots() {
     )
     .expect("insert Windows file policy fixtures");
 
-    let projection = materialize_file_modified_with_identity(
+    let projection = materialize_file_activity_with_identity(
         &conn,
         DataSourcePlatform::Windows,
         &AtomicBool::new(false),
@@ -219,6 +220,56 @@ fn windows_projection_excludes_system_files_and_system_roots() {
 }
 
 #[test]
+fn projection_materializes_file_lifecycle_without_treating_access_as_execution() {
+    let conn = projection_connection();
+    conn.execute_batch(
+        "INSERT INTO file_entries
+         (id, data_source_id, path, name, entry_type, deleted,
+          created_at, modified_at, accessed_at, changed_at)
+         VALUES
+         ('deleted-file', 'ds-1', '/home/user/tool.bin', 'tool.bin', 'file', 1,
+          '2026-07-18T00:00:00Z', '2026-07-18T01:00:00Z',
+          '2026-07-18T02:00:00Z', '2026-07-18T03:00:00Z');",
+    )
+    .expect("insert file lifecycle fixture");
+
+    let projection = materialize_file_activity_unknown(&conn).expect("materialize file activity");
+    let mut statement = conn
+        .prepare(
+            "SELECT event_type, parser_id, confidence, attrs
+             FROM timeline_events
+             ORDER BY ts ASC",
+        )
+        .expect("prepare file activity query");
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f32>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .expect("query file activity")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect file activity");
+
+    assert_eq!(projection.inserted_count, 4);
+    assert_eq!(
+        rows.iter().map(|row| row.0.as_str()).collect::<Vec<_>>(),
+        vec![
+            "FILE_CREATED",
+            "FILE_MODIFIED",
+            "FILE_ACCESSED",
+            "FILE_DELETED"
+        ]
+    );
+    assert!(rows[2].3.contains("does not prove execution"));
+    assert_eq!(rows[3].1, "timeline.file_deleted");
+    assert_eq!(rows[3].2, 0.65);
+}
+
+#[test]
 fn projection_without_graph_schema_reports_graph_as_not_applicable() {
     let conn = projection_connection();
     conn.execute_batch(
@@ -230,8 +281,8 @@ fn projection_without_graph_schema_reports_graph_as_not_applicable() {
     )
     .expect("create projection-only schema");
 
-    let first = materialize_file_modified_unknown(&conn).expect("materialize file timeline");
-    let second = materialize_file_modified_unknown(&conn).expect("reuse file timeline");
+    let first = materialize_file_activity_unknown(&conn).expect("materialize file timeline");
+    let second = materialize_file_activity_unknown(&conn).expect("reuse file timeline");
 
     assert!(first.graph_complete);
     assert!(second.graph_complete);
@@ -259,8 +310,8 @@ fn missing_source_graph_node_keeps_projection_retryable() {
     )
     .expect("insert file without graph projection");
 
-    let first = materialize_file_modified_unknown(&conn).expect("project file timeline");
-    let second = materialize_file_modified_unknown(&conn).expect("observe completed projection");
+    let first = materialize_file_activity_unknown(&conn).expect("project file timeline");
+    let second = materialize_file_activity_unknown(&conn).expect("observe completed projection");
 
     assert_eq!(first.inserted_count, 1);
     assert!(!first.graph_complete);
@@ -293,7 +344,7 @@ fn missing_source_graph_node_keeps_projection_retryable() {
         [],
     )
     .expect("materialize source graph node");
-    let completed = materialize_file_modified_unknown(&conn).expect("retry graph projection");
+    let completed = materialize_file_activity_unknown(&conn).expect("retry graph projection");
     assert!(completed.graph_complete);
     assert!(completed.warnings.is_empty());
     assert_eq!(
@@ -316,7 +367,7 @@ fn changed_projection_identity_replaces_stale_file_events() {
     )
     .expect("insert file");
 
-    materialize_file_modified_unknown_with_cancel_and_identity(
+    materialize_file_activity_unknown_with_cancel_and_identity(
         &conn,
         &AtomicBool::new(false),
         "catalog-artifact-v1",
@@ -329,7 +380,7 @@ fn changed_projection_identity_replaces_stale_file_events() {
         [],
     )
     .expect("change source timestamp");
-    let second = materialize_file_modified_unknown_with_cancel_and_identity(
+    let second = materialize_file_activity_unknown_with_cancel_and_identity(
         &conn,
         &AtomicBool::new(false),
         "catalog-artifact-v2",
@@ -350,7 +401,7 @@ fn changed_projection_identity_replaces_stale_file_events() {
         conn.query_row(
             "SELECT input_identity
              FROM timeline_projection_meta
-             WHERE projection_key = 'file_modified_v1'",
+             WHERE projection_key = 'file_activity_v2'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -374,7 +425,7 @@ fn graph_write_failure_is_non_fatal_to_file_projection() {
     )
     .expect("create graph failure fixture");
 
-    let projection = materialize_file_modified_unknown(&conn).expect("project file timeline");
+    let projection = materialize_file_activity_unknown(&conn).expect("project file timeline");
 
     assert_eq!(projection.inserted_count, 1);
     assert!(!projection.graph_complete);
@@ -403,7 +454,7 @@ fn graph_write_failure_is_non_fatal_to_file_projection() {
     );
     assert_eq!(
         conn.query_row(
-            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'file_modified_v1'",
+            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'file_activity_v2'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -413,7 +464,7 @@ fn graph_write_failure_is_non_fatal_to_file_projection() {
     assert_eq!(
         conn.query_row(
             "SELECT COUNT(*) FROM timeline_projection_meta
-             WHERE projection_key = 'timeline_graph_v2'",
+             WHERE projection_key = 'timeline_graph_v3'",
             [],
             |row| row.get::<_, u64>(0)
         )
@@ -423,7 +474,7 @@ fn graph_write_failure_is_non_fatal_to_file_projection() {
 
     conn.execute_batch("DROP TRIGGER reject_timeline_graph_edge")
         .expect("remove graph failure fixture");
-    let retry = materialize_file_modified_unknown(&conn).expect("retry graph projection");
+    let retry = materialize_file_activity_unknown(&conn).expect("retry graph projection");
 
     assert!(!retry.already_projected);
     assert!(retry.graph_complete);
@@ -444,7 +495,7 @@ fn graph_write_failure_is_non_fatal_to_file_projection() {
     );
     assert_eq!(
         conn.query_row(
-            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'timeline_graph_v2'",
+            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'timeline_graph_v3'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -521,7 +572,7 @@ fn cancelled_timeline_projection_does_not_claim_completion() {
     .expect("insert file");
     let cancel_token = AtomicBool::new(true);
 
-    let error = materialize_file_modified_unknown_with_cancel(&conn, &cancel_token)
+    let error = materialize_file_activity_unknown_with_cancel(&conn, &cancel_token)
         .expect_err("cancelled projection should stop");
 
     assert!(matches!(error, TimelineServiceError::Cancelled));
