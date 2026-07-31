@@ -568,7 +568,7 @@ fn source_019_is_latest_and_reapplication_is_idempotent() {
     let (conn, _) = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_027_artifact_keyset_indexes"
+        "source_028_file_entry_read_only"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     for table in [

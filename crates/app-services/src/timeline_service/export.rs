@@ -104,6 +104,7 @@ fn timeline_query_report(sample: PerfSample, total: u64) -> PerformanceReportDto
 pub(super) fn timeline_event_to_dto(event: domain::TimelineEvent) -> TimelineEventDto {
     TimelineEventDto {
         id: event.id.0,
+        data_source_id: None,
         source_object_id: event.source_object_id,
         event_type: event.event_type,
         ts: event.timestamp.to_rfc3339(),
@@ -123,6 +124,7 @@ pub(super) fn timeline_event_to_source_dto(
 ) -> TimelineEventDto {
     let mut dto = timeline_event_to_dto(event);
     dto.id = encode_source_scoped_id(data_source_id, &dto.id);
+    dto.data_source_id = Some(data_source_id.0.clone());
     if !dto.source_object_id.is_empty() {
         dto.source_object_id = encode_source_scoped_id(data_source_id, &dto.source_object_id);
     }

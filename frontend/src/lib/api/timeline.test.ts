@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './client';
 import { COMMANDS } from './commands';
-import { getTimelineEventById, getTimelineEvents } from './timeline';
+import { getTimelineEventById, getTimelineEvents, getTimelineFacets } from './timeline';
 
 vi.mock('./client', () => ({
   apiClient: {
@@ -81,5 +81,23 @@ describe('timeline API', () => {
       request: { eventId: 'evt-1' },
     });
     expect(result).toEqual({ id: 'evt-1' });
+  });
+
+  it('getTimelineFacets forwards filters and the histogram bucket count', async () => {
+    requestMock.mockResolvedValueOnce({ totalEvents: 0, histogram: [] } as never);
+    await getTimelineFacets({
+      timeStart: '2026-01-01T00:00:00Z',
+      eventType: 'FILE_MODIFIED',
+      bucketCount: 80,
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.timeline.GET_TIMELINE_FACETS, {
+      request: {
+        timeStart: '2026-01-01T00:00:00Z',
+        timeEnd: undefined,
+        eventType: 'FILE_MODIFIED',
+        bucketCount: 80,
+      },
+    });
   });
 });

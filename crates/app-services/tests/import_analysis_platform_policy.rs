@@ -52,7 +52,6 @@ fn unknown_platform_fails_before_database_or_staging_access() {
             index_dir: tmp.path().join("index-must-not-be-created"),
             max_analysis_workers: Some(1),
             cancel_token: Arc::new(AtomicBool::new(false)),
-            enable_timeline_projection: true,
             enable_content_extraction: true,
             enable_text_indexing: true,
             analysis_mode: mode,

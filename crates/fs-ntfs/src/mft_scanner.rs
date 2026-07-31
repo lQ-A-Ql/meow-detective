@@ -3,6 +3,7 @@ use evidence_core::filesystem::invalid_fs_data;
 use std::io;
 
 const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
+const FILE_ATTRIBUTE_READ_ONLY: u32 = 0x0000_0001;
 const ATTRIBUTE_FLAG_ENCRYPTED: u16 = 0x4000;
 const ATTRIBUTE_HEADER_FLAGS_OFFSET: usize = 0x0C;
 const STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET: usize = 0x20;
@@ -22,6 +23,7 @@ pub struct MftRecord {
     pub changed_at: Option<DateTime<Utc>>,
     pub hidden: bool,
     pub system: bool,
+    pub read_only: bool,
     pub encrypted: bool,
     pub deleted: bool,
     pub is_valid: bool,
@@ -193,8 +195,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
     let final_accessed = accessed_at.or(fn_accessed);
     let final_changed = changed_at.or(fn_changed);
 
-    let is_valid = record_name_is_valid(deleted, &name, record_number);
-    if !is_valid {
+    if !record_name_is_valid(deleted, &name, record_number) {
         return None;
     }
 
@@ -217,16 +218,22 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         changed_at: final_changed,
         hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
         system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
+        read_only: file_is_read_only(si_flags, fn_flags),
         encrypted: si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || unnamed_data_encrypted,
         deleted,
-        is_valid,
+        is_valid: true,
     })
 }
 
 fn record_name_is_valid(deleted: bool, name: &str, record_number: u64) -> bool {
     !name.is_empty() || (!deleted && record_number < 24)
+}
+
+fn file_is_read_only(si_flags: Option<u32>, fn_flags: Option<u32>) -> bool {
+    si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
+        || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
 }
 
 fn read_u32_at(bytes: &[u8], offset: usize) -> Option<u32> {

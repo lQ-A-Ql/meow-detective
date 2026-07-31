@@ -107,7 +107,10 @@ fn insert_timeline_events(
         .map_err(|error| {
             ImportAnalysisError::Staging(format!("Prepare timeline staging insert: {error}"))
         })?;
-    for event in timeline_events {
+    for event in timeline_events.iter().filter(|event| {
+        timeline::TimelineEventKind::parse(&event.event_type)
+            .is_some_and(timeline::TimelineEventKind::is_registry)
+    }) {
         statement
             .execute(params![
                 event.id.0,

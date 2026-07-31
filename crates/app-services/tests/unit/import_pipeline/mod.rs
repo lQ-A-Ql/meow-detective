@@ -927,7 +927,7 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
 }
 
 #[test]
-fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
+fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(
         &tmp.path().join("cases"),
@@ -951,7 +951,7 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
                  (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted,
                   created_at, modified_at, accessed_at, changed_at)
                  VALUES
-                 ('raw-file-1', ?1, '/Windows/System32/config/SYSTEM', 'SYSTEM', 'file', 4096,
+                 ('raw-file-1', ?1, '/Users/Alice/note.txt', 'note.txt', 'file', 4096,
                   NULL, 0, 0, 0, 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
                   '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z')",
                 [&data_source_id.0],
@@ -974,7 +974,6 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
                     index_dir: index_dir.clone(),
                     max_analysis_workers: Some(1),
                     cancel_token: Arc::clone(&cancel),
-                    enable_timeline_projection: false,
                     enable_content_extraction: false,
                     enable_text_indexing: false,
                     analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
@@ -988,7 +987,7 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
 
             assert_eq!(
                 message,
-                "Timeline: deferred until Timeline page. Artifacts: 0. Index: 1 indexed"
+                "Timeline: scheduled for import finalization. Artifacts: 0. Index: 1 indexed"
             );
             assert!(!counts.is_partial());
             let before_query: i64 =
@@ -997,14 +996,27 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
 
             let page = crate::timeline_service::query_timeline(conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            assert_eq!(page.total, 4);
-            assert_eq!(page.items.len(), 4);
-            assert!(page
-                .items
-                .iter()
-                .any(|event| event.id == "macb:raw-file-1:FILE_CREATED"));
+            assert_eq!(page.total, 0);
+            assert!(page.items.is_empty());
 
-            let second = crate::timeline_service::ensure_macb_timeline_projected(conn)
+            let first = crate::timeline_service::materialize_file_modified(
+                conn,
+                domain::DataSourcePlatform::Windows,
+                cancel.as_ref(),
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            assert_eq!(first.inserted_count, 1);
+
+            let page = crate::timeline_service::query_timeline(conn, 0, 10)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            assert_eq!(page.total, 1);
+            assert_eq!(page.items[0].id, "file-modified:raw-file-1");
+
+            let second = crate::timeline_service::materialize_file_modified(
+                conn,
+                domain::DataSourcePlatform::Windows,
+                cancel.as_ref(),
+            )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(second.already_projected);
             assert_eq!(second.inserted_count, 0);

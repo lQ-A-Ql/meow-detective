@@ -406,6 +406,13 @@ fn zero_time_returns_none() {
 }
 
 #[test]
+fn read_only_attribute_is_merged_from_standard_information_and_file_name() {
+    assert!(file_is_read_only(Some(0x01), Some(0)));
+    assert!(file_is_read_only(Some(0), Some(0x01)));
+    assert!(!file_is_read_only(Some(0), Some(0)));
+}
+
+#[test]
 fn active_and_inactive_records_keep_the_same_mft_sequence_identity() {
     let mut parser = MftRecordParser::new(1024, 512);
     let active = parser

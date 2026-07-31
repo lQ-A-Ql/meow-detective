@@ -151,11 +151,6 @@ impl AnalysisWorkerRuntime {
         let file = task.to_file_entry();
         self.stats.processed_count += 1;
         shared.processed_total.fetch_add(1, Ordering::Relaxed);
-        if options.enable_timeline_projection {
-            let events = timeline::project_file_macb(&file);
-            self.stats.timeline_count += events.len() as u64;
-            self.timeline_events.extend(events);
-        }
         self.extract_artifacts(&file, options, shared);
         self.index_text(&file, options, shared);
         self.flush_if_needed()
@@ -206,6 +201,7 @@ impl AnalysisWorkerRuntime {
                         }
                     }
                     self.stats.artifact_count += sink.artifacts.len() as u64;
+                    crate::timeline_service::retain_registry_events(&mut sink.timeline_events);
                     self.stats.timeline_count += sink.timeline_events.len() as u64;
                     self.artifacts.extend(sink.artifacts);
                     self.timeline_events.extend(sink.timeline_events);

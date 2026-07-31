@@ -20,7 +20,7 @@ import type { TimelineEvent } from '@/types/models';
 
 const TIMELINE_COLUMNS: DenseColumn<TimelineEvent>[] = [
   { key: 'ts', title: '时间戳', className: 'w-36 text-forensics-muted', render: (row) => row.ts },
-  { key: 'source', title: '数据源', className: 'w-28 text-forensics-muted-light', render: (row) => String(row.attrs.source ?? '-') },
+  { key: 'source', title: '数据源', className: 'w-28 text-forensics-muted-light', render: (row) => row.dataSourceId ?? '-' },
   { key: 'eventType', title: '类型', className: 'w-28 text-forensics-muted', render: (row) => row.eventType },
   { key: 'title', title: '描述', className: 'text-forensics-text-secondary', render: (row) => row.title },
 ];
@@ -89,7 +89,10 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 border-r border-forensics-border">
+        <div
+          data-testid="timeline-table-pane"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-forensics-border"
+        >
           <DenseDataTable<TimelineEvent>
             rows={model.tableEvents}
             getRowKey={(row) => row.id}
@@ -115,7 +118,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <InspectorSection title="事件类型"><InspectorValue value={model.selectedEvent?.eventType ?? '-'} /></InspectorSection>
             <InspectorSection title="源活动"><InspectorValue value={model.selectedEvent?.description ?? '-'} /></InspectorSection>
             <InspectorSection title="来源对象"><InspectorValue value={model.selectedEvent?.title ?? '-'} mono /></InspectorSection>
-            <InspectorSection title="时间上下文"><div className="space-y-1 font-mono text-[10px] text-forensics-muted"><div className="max-w-full truncate">source: {String(model.selectedEvent?.attrs.source ?? '-')}</div><div className="max-w-full truncate">window: {model.selectedEvent?.ts ?? '-'} +/- 10m</div></div></InspectorSection>
+            <InspectorSection title="时间上下文"><div className="space-y-1 font-mono text-[10px] text-forensics-muted"><div className="max-w-full truncate">source: {model.selectedEvent?.dataSourceId ?? '-'}</div><div className="max-w-full truncate">window: {model.selectedEvent?.ts ?? '-'} +/- 10m</div></div></InspectorSection>
             <InspectorSection title="关联动作"><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.jumpToSource(model.selectedEvent)} disabled={!model.selectedEvent} className="w-full justify-between font-mono text-forensics-text-tertiary"><span className="font-light">跳转到来源对象</span><ChevronRight size={12} className="text-forensics-muted-light" /></Button></InspectorSection>
           </div>
         </InspectorPane>

@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use transport::CommandError;
 
-use crate::{file_service, import_analysis, source_db, step_recorder};
+use crate::{file_service, import_analysis, source_db, step_recorder, timeline_service};
 
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile};
@@ -15,7 +15,8 @@ pub(crate) fn run_finalize_phase(
     import_started: Instant,
 ) -> Result<String, CommandError> {
     if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
-        emit_projection_ready_events(ctx, stats);
+        let timeline_count = materialize_timeline(ctx, data_source)?;
+        emit_projection_ready_events(ctx, timeline_count);
     }
     ctx.report_job_progress(95, "Finalizing...")?;
     emit_phase_profile(
@@ -44,19 +45,35 @@ pub(crate) fn run_finalize_phase(
     })
 }
 
-fn emit_projection_ready_events(
-    ctx: &ImportJobContext<'_>,
-    stats: &file_service::EnumerationStats,
-) {
-    crate::import_pipeline::emit::emit_timeline_updated(
-        ctx.event_sink(),
-        stats.file_count + stats.dir_count,
-    );
+fn emit_projection_ready_events(ctx: &ImportJobContext<'_>, timeline_count: u64) {
+    crate::import_pipeline::emit::emit_timeline_updated(ctx.event_sink(), timeline_count);
     crate::import_pipeline::emit::emit_search_index_progress(
         ctx.event_sink(),
         100,
         "Post-import indexing completed",
     );
+}
+
+fn materialize_timeline(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+) -> Result<u64, CommandError> {
+    let source_conn = ctx.source_connection()?;
+    ctx.report_job_progress(94, "Materializing timeline...")?;
+    let projection = timeline_service::materialize_file_modified(
+        source_conn,
+        ctx.import_config.platform,
+        ctx.options.cancel_token.as_ref(),
+    )
+    .map_err(CommandError::from_service_error)?;
+    for warning in &projection.warnings {
+        tracing::warn!(
+            data_source_id = %data_source.id.0,
+            warning,
+            "Timeline graph materialization warning"
+        );
+    }
+    Ok(projection.inserted_count)
 }
 
 pub(crate) fn emit_data_source_ready(

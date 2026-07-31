@@ -1,5 +1,7 @@
 mod error;
 mod export;
+mod facets;
+mod ingestion;
 mod pagination;
 mod projection;
 mod projection_graph;
@@ -10,15 +12,20 @@ pub use export::{
     query_timeline_filtered_for_case_instrumented, query_timeline_filtered_instrumented,
     query_timeline_for_case_instrumented, query_timeline_instrumented, InstrumentedPage,
 };
+pub use facets::get_timeline_facets_for_case;
 pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
 };
 pub use projection::{
-    ensure_macb_timeline_projected, ensure_macb_timeline_projected_with_cancel,
-    ensure_macb_timeline_projected_with_cancel_and_identity, project_and_store_macb,
+    materialize_file_modified, materialize_file_modified_unknown,
+    materialize_file_modified_unknown_with_cancel,
+    materialize_file_modified_unknown_with_cancel_and_identity,
+    materialize_file_modified_with_identity, project_and_store_file_modified,
     TimelineProjectionStats,
 };
 pub use query::{
     get_timeline_event_by_id, get_timeline_event_by_id_for_case, query_timeline,
     query_timeline_filtered, TimelineQuery,
 };
+
+pub(crate) use ingestion::retain_registry_events;

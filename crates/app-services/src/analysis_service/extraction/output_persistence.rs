@@ -25,7 +25,8 @@ pub(super) fn persist_outputs(
     state: &mut ExtractionState,
 ) -> Result<(), AnalysisServiceError> {
     let artifacts = std::mem::take(&mut state.artifacts);
-    let events = std::mem::take(&mut state.events);
+    let mut events = std::mem::take(&mut state.events);
+    crate::timeline_service::retain_registry_events(&mut events);
     let replacements = std::mem::take(&mut state.replacements);
     let clean_scans = std::mem::take(&mut state.clean_scans);
     let diagnostic_scans = std::mem::take(&mut state.diagnostic_scans);

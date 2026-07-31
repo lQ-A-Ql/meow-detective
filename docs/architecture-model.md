@@ -174,11 +174,21 @@ RBD head reader → 派生 VM source DB。全部只由私有 opt-in 真实样本
 | **artifacts-linux** | Linux 工件 | systemd journal、wtmp、bash history、apt/dpkg、cron、sudo |
 | **containers-pst** | 邮件容器 | PST（Unicode 32/64）、OST、mbox（RFC 4155 四变体） |
 | **search** | 全文索引与查询 | tantivy |
-| **timeline** | 时间线投影 | MACB + 工件事件 |
+| **timeline** | 时间线投影 | Registry 结构化时间戳 + 非系统/非只读文件修改时间 |
 | **reports** | 报告生成 | HTML、CSV、JSON、证据包 |
 | **mcp-client** | MCP 客户端 | SSE、Stdio |
 | **evtx-patched** | vendored EVTX parser | 作为 `evtx` 依赖消费 |
 | **testing** | 共享测试工具 | 与 `testdata/` 配合 |
+
+时间线采用显式事件白名单，不再投影完整 MACB，也不把 EVTX、浏览器、Prefetch
+等工件事件写入 `timeline_events`。当前只持久化
+`REGISTRY_HIVE_LAST_WRITE`、`REGISTRY_USER_ASSIST_LAST_RUN`、
+`REGISTRY_SAM_LAST_LOGIN`、`REGISTRY_SAM_PASSWORD_LAST_SET`、
+`REGISTRY_SYSTEM_SHUTDOWN` 和 `FILE_MODIFIED`。Windows 文件投影排除原生
+system 标记、NTFS `$*` 元数据和 Windows/Program Files/ProgramData 等系统根；
+Linux 不按路径排除系统目录，只排除只读普通文件。文件修改事件在导入收尾阶段
+物化，查询和 facets 聚合均以只读连接访问各数据源 `source.db`；全局总数、类型、
+数据源分布和直方图由后端按 Unix epoch 聚合，前端不从当前分页推导案件事实。
 
 Registry 子模块结构：`registry/lookup/{mod,types,reader,txlog_util,utf16,system,software,ntuser,sam}`，
 覆盖 SYSTEM、SOFTWARE、NTUSER、SAM 与 `.LOG1/.LOG2` 事务日志脏页合并。
@@ -531,9 +541,9 @@ baseline 只允许减少：
 | Rust 源文件 / 行 | 1,719 / ~296,000 |
 | TypeScript 源文件 / 行（不含测试） | 256 / ~28,900 |
 | workspace 成员 | 29（28 crate + Tauri host package） |
-| Tauri 已注册 commands / 命令文件 | 112 / 71 |
+| Tauri 已注册 commands / 命令文件 | 114 / 71 |
 | transport DTO 文件 | 33 |
-| SQLite 逻辑 repository / 迁移脚本 | 40 / 70 |
+| SQLite 逻辑 repository / 迁移脚本 | 42 / 73 |
 | 前端页面 / feature / UI 基元 | 10 / 17 / 23 |
 | Rust 测试函数 | 以 `cargo test --workspace -- --list` 为准 |
 | 前端测试文件 | 94 |

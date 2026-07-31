@@ -1,11 +1,10 @@
-use domain::FileEntry;
+use domain::{DataSourcePlatform, FileEntry};
 use persistence_sqlite::repositories::{
     source_meta_repo::{SourceMetaRepo, TIMELINE_CURSOR_REVISION_KEY},
     timeline_repo::TimelineRepo,
 };
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
-use sha2::{Digest, Sha256};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
@@ -13,9 +12,9 @@ use std::{
 
 use super::TimelineServiceError;
 
-const MACB_PROJECTION_KEY: &str = "macb";
-const TIMELINE_GRAPH_PROJECTION_KEY: &str = "macb_graph";
-const MACB_SOURCE_BATCH_SIZE: u32 = 10_000;
+const FILE_MODIFIED_PROJECTION_KEY: &str = "file_modified_v1";
+const TIMELINE_GRAPH_PROJECTION_KEY: &str = "timeline_graph_v2";
+const SOURCE_BATCH_SIZE: u32 = 10_000;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimelineProjectionStats {
@@ -26,14 +25,14 @@ pub struct TimelineProjectionStats {
     pub warnings: Vec<String>,
 }
 
-pub fn project_and_store_macb(
+pub fn project_and_store_file_modified(
     conn: &Connection,
     files: &[FileEntry],
 ) -> Result<u64, TimelineServiceError> {
-    let events: Vec<domain::TimelineEvent> = files
+    let events = files
         .par_iter()
-        .flat_map_iter(timeline::project_file_macb)
-        .collect();
+        .filter_map(timeline::project_file_modified)
+        .collect::<Vec<_>>();
     let count = events.len() as u64;
     if !events.is_empty() {
         TimelineRepo::new(conn).insert_batch(&events)?;
@@ -41,23 +40,18 @@ pub fn project_and_store_macb(
     Ok(count)
 }
 
-pub fn ensure_macb_timeline_projected(
+pub fn materialize_file_modified(
     conn: &Connection,
-) -> Result<TimelineProjectionStats, TimelineServiceError> {
-    let cancel_token = AtomicBool::new(false);
-    ensure_macb_timeline_projected_with_cancel(conn, &cancel_token)
-}
-
-pub fn ensure_macb_timeline_projected_with_cancel(
-    conn: &Connection,
+    platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
-    let input_identity = implicit_projection_identity(conn)?;
-    ensure_macb_timeline_projected_with_cancel_and_identity(conn, cancel_token, &input_identity)
+    let identity = projection_identity(conn, platform)?;
+    materialize_file_modified_with_identity(conn, platform, cancel_token, &identity)
 }
 
-pub fn ensure_macb_timeline_projected_with_cancel_and_identity(
+pub fn materialize_file_modified_with_identity(
     conn: &Connection,
+    platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
     input_identity: &str,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
@@ -67,35 +61,35 @@ pub fn ensure_macb_timeline_projected_with_cancel_and_identity(
             "timeline projection input identity must not be empty".to_string(),
         ));
     }
-    if !timeline_projection_source_tables_present(conn)? {
+    if !projection_source_tables_present(conn)? {
         return Ok(already_projected_stats());
     }
     ensure_projection_meta_table(conn)?;
-    let macb_already_projected = is_projection_done(conn, MACB_PROJECTION_KEY, input_identity)?;
+    let file_events_done = is_projection_done(conn, FILE_MODIFIED_PROJECTION_KEY, input_identity)?;
     let graph_supported = timeline_graph_tables_present(conn)?;
-    let graph_already_projected = !graph_supported
+    let graph_done = !graph_supported
         || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
-    if macb_already_projected && graph_already_projected {
+    if file_events_done && graph_done {
         return Ok(already_projected_stats());
     }
 
     let started = Instant::now();
-    let inserted = if macb_already_projected {
+    let inserted_count = if file_events_done {
         0
     } else {
-        let inserted = replace_macb_timeline_sql(conn, cancel_token)?;
-        mark_projection_done(conn, MACB_PROJECTION_KEY, inserted, input_identity)?;
+        let inserted = replace_file_modified_events(conn, platform, cancel_token)?;
+        mark_projection_done(conn, FILE_MODIFIED_PROJECTION_KEY, inserted, input_identity)?;
         inserted
     };
-    let warnings = if graph_already_projected {
+    let warnings = if graph_done {
         Vec::new()
     } else {
         populate_graph_non_fatal(conn, cancel_token, input_identity)?
     };
-    let graph_complete = is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
-
+    let graph_complete = !graph_supported
+        || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
     Ok(TimelineProjectionStats {
-        inserted_count: inserted,
+        inserted_count,
         elapsed_ms: started.elapsed().as_millis(),
         already_projected: false,
         graph_complete,
@@ -103,38 +97,186 @@ pub fn ensure_macb_timeline_projected_with_cancel_and_identity(
     })
 }
 
-fn already_projected_stats() -> TimelineProjectionStats {
-    TimelineProjectionStats {
-        already_projected: true,
-        graph_complete: true,
-        ..TimelineProjectionStats::default()
-    }
-}
-
-fn populate_graph_non_fatal(
+fn replace_file_modified_events(
     conn: &Connection,
+    platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
-    input_identity: &str,
-) -> Result<Vec<String>, TimelineServiceError> {
-    match super::projection_graph::populate_timeline_event_graph(conn, cancel_token) {
-        Ok(warnings) => {
-            if warnings.is_empty() {
-                mark_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, 0, input_identity)?;
-            }
-            Ok(warnings)
-        }
-        Err(TimelineServiceError::Cancelled) => Err(TimelineServiceError::Cancelled),
-        Err(error) => {
-            let message = format!("Timeline graph population failed: {error}");
-            tracing::warn!("{message}");
-            Ok(vec![message])
-        }
+) -> Result<u64, TimelineServiceError> {
+    let transaction = conn.unchecked_transaction().map_err(|error| {
+        TimelineServiceError::Other(format!("begin file timeline replacement: {error}"))
+    })?;
+    clear_previous_file_projection(&transaction)?;
+    let inserted = insert_file_modified_batched(&transaction, platform, cancel_token)?;
+    ensure_not_cancelled(cancel_token)?;
+    SourceMetaRepo::new(&transaction).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
+    transaction.commit().map_err(|error| {
+        TimelineServiceError::Other(format!("commit file timeline replacement: {error}"))
+    })?;
+    Ok(inserted)
+}
+
+fn insert_file_modified_batched(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    cancel_token: &AtomicBool,
+) -> Result<u64, TimelineServiceError> {
+    let mut cursor = String::new();
+    let mut inserted = 0;
+    while let Some(next_cursor) = next_source_cursor(conn, &cursor, SOURCE_BATCH_SIZE)? {
+        ensure_not_cancelled(cancel_token)?;
+        inserted += insert_source_range(conn, platform, &cursor, &next_cursor)?;
+        cursor = next_cursor;
+    }
+    Ok(inserted)
+}
+
+fn next_source_cursor(
+    conn: &Connection,
+    after_id: &str,
+    batch_size: u32,
+) -> Result<Option<String>, TimelineServiceError> {
+    let mut statement = conn.prepare(
+        "SELECT id FROM file_entries
+         WHERE modified_at IS NOT NULL
+           AND LOWER(entry_type) = 'file'
+           AND id > ?1
+         ORDER BY id ASC
+         LIMIT ?2",
+    )?;
+    let mut rows = statement.query(params![after_id, batch_size])?;
+    let mut last_id = None;
+    while let Some(row) = rows.next()? {
+        last_id = Some(row.get(0)?);
+    }
+    Ok(last_id)
+}
+
+fn insert_source_range(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    after_id: &str,
+    through_id: &str,
+) -> Result<u64, TimelineServiceError> {
+    let policy = file_policy_sql(conn, platform)?;
+    let sql = format!(
+        "INSERT OR IGNORE INTO timeline_events
+         (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
+         SELECT
+            'file-modified:' || fe.id,
+            ds.case_id,
+            fe.id,
+            'FILE_MODIFIED',
+            fe.modified_at,
+            'File modified: ' || fe.name,
+            fe.path || ' modified',
+            'timeline.file_modified',
+            '1',
+            1.0,
+            'FILE_MODIFIED',
+            '{{\"platform\":\"{}\",\"timestampField\":\"modifiedAt\"}}'
+         FROM file_entries fe
+         JOIN data_sources ds ON ds.id = fe.data_source_id
+         WHERE fe.modified_at IS NOT NULL
+           AND LOWER(fe.entry_type) = 'file'
+           AND fe.id > ?1
+           AND fe.id <= ?2
+           AND fe.modified_at NOT IN (
+               '1970-01-01T00:00:00+00:00',
+               '1970-01-01T00:00:00Z',
+               '1970-01-01 00:00:00'
+           )
+           AND ({policy})",
+        platform.as_storage_str(),
+    );
+    conn.execute(&sql, params![after_id, through_id])
+        .map(|count| count as u64)
+        .map_err(|error| {
+            TimelineServiceError::Other(format!("insert FILE_MODIFIED timeline events: {error}"))
+        })
+}
+
+fn file_policy_sql(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+) -> Result<String, TimelineServiceError> {
+    let has_read_only = table_has_column(conn, "file_entries", "read_only")?;
+    let read_only_policy = if has_read_only {
+        "fe.read_only = 0"
+    } else {
+        "1 = 1"
+    };
+    match platform {
+        DataSourcePlatform::Linux => Ok(read_only_policy.to_string()),
+        DataSourcePlatform::Windows => Ok("COALESCE(fe.system, 0) = 0
+             AND fe.name NOT LIKE '$%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'windows/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE '[p%]/windows/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'program files/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE '[p%]/program files/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'program files (x86)/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE '[p%]/program files (x86)/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'programdata/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE '[p%]/programdata/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'system volume information/%'
+             AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE '[p%]/system volume information/%'"
+            .to_string()),
+        DataSourcePlatform::Unknown => Ok(read_only_policy.to_string()),
     }
 }
 
-fn timeline_projection_source_tables_present(
+fn table_has_column(
     conn: &Connection,
+    table: &str,
+    column: &str,
 ) -> Result<bool, TimelineServiceError> {
+    let count: i64 = conn.query_row(
+        &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"),
+        [column],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+fn clear_previous_file_projection(conn: &Connection) -> Result<(), TimelineServiceError> {
+    if timeline_graph_tables_present(conn)? {
+        conn.execute_batch(
+            "DELETE FROM graph_edges
+             WHERE source_id IN (
+                 SELECT id FROM timeline_events
+                 WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')
+             );
+             DELETE FROM graph_nodes
+             WHERE id IN (
+                 SELECT id FROM timeline_events
+                 WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')
+             );",
+        )?;
+    }
+    conn.execute(
+        "DELETE FROM timeline_events
+         WHERE parser_id IN ('timeline.macb', 'timeline.file_modified')",
+        [],
+    )?;
+    Ok(())
+}
+
+fn projection_identity(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+) -> Result<String, TimelineServiceError> {
+    let (count, max_id, max_modified): (u64, String, String) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(MAX(id), ''), COALESCE(MAX(modified_at), '')
+         FROM file_entries",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    Ok(format!(
+        "file-modified-v1:{}:{count}:{max_id}:{max_modified}",
+        platform.as_storage_str()
+    ))
+}
+
+fn projection_source_tables_present(conn: &Connection) -> Result<bool, TimelineServiceError> {
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master
          WHERE type='table' AND name IN ('file_entries', 'data_sources')",
@@ -146,8 +288,7 @@ fn timeline_projection_source_tables_present(
 
 fn timeline_graph_tables_present(conn: &Connection) -> Result<bool, TimelineServiceError> {
     let count: u64 = conn.query_row(
-        "SELECT COUNT(*)
-         FROM sqlite_master
+        "SELECT COUNT(*) FROM sqlite_master
          WHERE type = 'table' AND name IN ('graph_nodes', 'graph_edges')",
         [],
         |row| row.get(0),
@@ -173,18 +314,15 @@ fn is_projection_done(
     key: &str,
     input_identity: &str,
 ) -> Result<bool, TimelineServiceError> {
-    let status: Option<(String, String)> = conn
+    let status = conn
         .query_row(
-            "SELECT status, input_identity
-             FROM timeline_projection_meta
+            "SELECT status, input_identity FROM timeline_projection_meta
              WHERE projection_key = ?1",
-            params![key],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            [key],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()?;
-    Ok(status.as_ref().is_some_and(|(status, stored_identity)| {
-        status == "done" && stored_identity == input_identity
-    }))
+    Ok(status.is_some_and(|(status, identity)| status == "done" && identity == input_identity))
 }
 
 fn mark_projection_done(
@@ -207,183 +345,33 @@ fn mark_projection_done(
     Ok(())
 }
 
-fn replace_macb_timeline_sql(
+fn populate_graph_non_fatal(
     conn: &Connection,
     cancel_token: &AtomicBool,
-) -> Result<u64, TimelineServiceError> {
-    let transaction = conn.unchecked_transaction().map_err(|error| {
-        TimelineServiceError::Other(format!("begin MACB timeline replacement: {error}"))
-    })?;
-    clear_previous_macb_projection(&transaction)?;
-    let inserted = project_macb_timeline_sql(&transaction, cancel_token)?;
-    ensure_not_cancelled(cancel_token)?;
-    SourceMetaRepo::new(&transaction).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
-    transaction.commit().map_err(|error| {
-        TimelineServiceError::Other(format!("commit MACB timeline replacement: {error}"))
-    })?;
-    Ok(inserted)
-}
-
-fn clear_previous_macb_projection(conn: &Connection) -> Result<(), TimelineServiceError> {
-    if timeline_graph_tables_present(conn)? {
-        conn.execute_batch(
-            "DELETE FROM graph_edges
-             WHERE source_id IN (
-                 SELECT id FROM timeline_events WHERE parser_id = 'timeline.macb'
-             );
-             DELETE FROM graph_nodes
-             WHERE id IN (
-                 SELECT id FROM timeline_events WHERE parser_id = 'timeline.macb'
-             );",
-        )?;
+    input_identity: &str,
+) -> Result<Vec<String>, TimelineServiceError> {
+    match super::projection_graph::populate_timeline_event_graph(conn, cancel_token) {
+        Ok(warnings) => {
+            if warnings.is_empty() {
+                mark_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, 0, input_identity)?;
+            }
+            Ok(warnings)
+        }
+        Err(TimelineServiceError::Cancelled) => Err(TimelineServiceError::Cancelled),
+        Err(error) => {
+            let message = format!("Timeline graph population failed: {error}");
+            tracing::warn!("{message}");
+            Ok(vec![message])
+        }
     }
-    conn.execute(
-        "DELETE FROM timeline_events WHERE parser_id = 'timeline.macb'",
-        [],
-    )?;
-    Ok(())
 }
 
-fn project_macb_timeline_sql(
-    conn: &Connection,
-    cancel_token: &AtomicBool,
-) -> Result<u64, TimelineServiceError> {
-    let kinds = [
-        ("created_at", "FILE_CREATED", "File created: ", " created"),
-        (
-            "modified_at",
-            "FILE_MODIFIED",
-            "File modified: ",
-            " modified",
-        ),
-        (
-            "accessed_at",
-            "FILE_ACCESSED",
-            "File accessed: ",
-            " accessed",
-        ),
-        (
-            "changed_at",
-            "FILE_METADATA_CHANGED",
-            "File metadata changed: ",
-            " metadata changed",
-        ),
-    ];
-    let mut inserted = 0;
-    for (column, event_type, title_prefix, description_suffix) in kinds {
-        ensure_not_cancelled(cancel_token)?;
-        inserted += insert_macb_kind_batched(
-            conn,
-            column,
-            event_type,
-            title_prefix,
-            description_suffix,
-            cancel_token,
-        )?;
+fn already_projected_stats() -> TimelineProjectionStats {
+    TimelineProjectionStats {
+        already_projected: true,
+        graph_complete: true,
+        ..TimelineProjectionStats::default()
     }
-    Ok(inserted)
-}
-
-fn insert_macb_kind_batched(
-    conn: &Connection,
-    timestamp_column: &str,
-    event_type: &str,
-    title_prefix: &str,
-    description_suffix: &str,
-    cancel_token: &AtomicBool,
-) -> Result<u64, TimelineServiceError> {
-    let mut cursor = String::new();
-    let mut inserted = 0;
-    loop {
-        ensure_not_cancelled(cancel_token)?;
-        let Some(next_cursor) =
-            next_macb_source_cursor(conn, timestamp_column, &cursor, MACB_SOURCE_BATCH_SIZE)?
-        else {
-            break;
-        };
-        inserted += insert_macb_source_range(
-            conn,
-            timestamp_column,
-            event_type,
-            title_prefix,
-            description_suffix,
-            &cursor,
-            &next_cursor,
-        )?;
-        cursor = next_cursor;
-    }
-    Ok(inserted)
-}
-
-fn next_macb_source_cursor(
-    conn: &Connection,
-    timestamp_column: &str,
-    after_id: &str,
-    batch_size: u32,
-) -> Result<Option<String>, TimelineServiceError> {
-    let sql = format!(
-        "SELECT id
-         FROM file_entries
-         WHERE {timestamp_column} IS NOT NULL
-           AND LOWER(entry_type) = 'file'
-           AND id > ?1
-         ORDER BY id ASC
-         LIMIT ?2"
-    );
-    let mut statement = conn.prepare(&sql)?;
-    let mut rows = statement.query(params![after_id, batch_size])?;
-    let mut last_id = None;
-    while let Some(row) = rows.next()? {
-        last_id = Some(row.get(0)?);
-    }
-    Ok(last_id)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn insert_macb_source_range(
-    conn: &Connection,
-    timestamp_column: &str,
-    event_type: &str,
-    title_prefix: &str,
-    description_suffix: &str,
-    after_id: &str,
-    through_id: &str,
-) -> Result<u64, TimelineServiceError> {
-    let sql = format!(
-        "INSERT OR IGNORE INTO timeline_events
-         (id, case_id, source_object_id, event_type, ts, title, description, parser_id, source_attribution, attrs)
-         SELECT
-            'macb:' || fe.id || ':{event_type}',
-            ds.case_id,
-            fe.id,
-            '{event_type}',
-            fe.{timestamp_column},
-            ?1 || fe.name,
-            fe.path || ?2,
-            'timeline.macb',
-            '{event_type}',
-            '{{}}'
-         FROM file_entries fe
-         JOIN data_sources ds ON ds.id = fe.data_source_id
-         WHERE fe.{timestamp_column} IS NOT NULL
-           AND LOWER(fe.entry_type) = 'file'
-           AND fe.id > ?3
-           AND fe.id <= ?4
-           AND NOT EXISTS (
-               SELECT 1 FROM timeline_events existing
-               WHERE existing.source_object_id = fe.id
-                 AND existing.event_type = '{event_type}'
-                 AND existing.ts = fe.{timestamp_column}
-           )"
-    );
-    conn.execute(
-        &sql,
-        params![title_prefix, description_suffix, after_id, through_id],
-    )
-    .map(|count| count as u64)
-    .map_err(|error| {
-        TimelineServiceError::Other(format!("Insert {event_type} timeline projection: {error}"))
-    })
 }
 
 fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), TimelineServiceError> {
@@ -394,43 +382,31 @@ fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), TimelineService
     }
 }
 
-fn implicit_projection_identity(conn: &Connection) -> Result<String, TimelineServiceError> {
-    let mut hasher = Sha256::new();
-    hasher.update(b"timeline-projection-input-v1");
-    hash_projection_rows(
-        conn,
-        "SELECT id, created_at, modified_at, accessed_at, changed_at
-         FROM file_entries
-         ORDER BY id ASC",
-        &mut hasher,
-    )?;
-    hash_projection_rows(
-        conn,
-        "SELECT id, source_object_id, ts, parser_id, parser_version
-         FROM timeline_events
-         WHERE COALESCE(parser_id, '') <> 'timeline.macb'
-         ORDER BY id ASC",
-        &mut hasher,
-    )?;
-    Ok(hex::encode(hasher.finalize()))
+pub fn materialize_file_modified_unknown(
+    conn: &Connection,
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    let cancel_token = AtomicBool::new(false);
+    materialize_file_modified(conn, DataSourcePlatform::Unknown, &cancel_token)
 }
 
-fn hash_projection_rows(
+pub fn materialize_file_modified_unknown_with_cancel(
     conn: &Connection,
-    sql: &str,
-    hasher: &mut Sha256,
-) -> Result<(), TimelineServiceError> {
-    let mut statement = conn.prepare(sql)?;
-    let column_count = statement.column_count();
-    let mut rows = statement.query([])?;
-    while let Some(row) = rows.next()? {
-        for column in 0..column_count {
-            let value = row.get::<_, Option<String>>(column)?.unwrap_or_default();
-            hasher.update((value.len() as u64).to_le_bytes());
-            hasher.update(value.as_bytes());
-        }
-    }
-    Ok(())
+    cancel_token: &AtomicBool,
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    materialize_file_modified(conn, DataSourcePlatform::Unknown, cancel_token)
+}
+
+pub fn materialize_file_modified_unknown_with_cancel_and_identity(
+    conn: &Connection,
+    cancel_token: &AtomicBool,
+    input_identity: &str,
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    materialize_file_modified_with_identity(
+        conn,
+        DataSourcePlatform::Unknown,
+        cancel_token,
+        input_identity,
+    )
 }
 
 #[cfg(test)]

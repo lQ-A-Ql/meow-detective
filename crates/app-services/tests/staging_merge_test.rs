@@ -90,8 +90,8 @@ fn staging_merge_preserves_encrypted_file_flag() {
     staging
         .execute(
             "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, encrypted)
-             VALUES ('efs-file', ?1, '/secret.txt', 'secret.txt', 'file', 1)",
+             (id, data_source_id, path, name, entry_type, read_only, encrypted)
+             VALUES ('efs-file', ?1, '/secret.txt', 'secret.txt', 'file', 1, 1)",
             [ds_id],
         )
         .unwrap();
@@ -101,13 +101,15 @@ fn staging_merge_preserves_encrypted_file_flag() {
 
     merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap();
 
-    let encrypted: bool = main
+    let (read_only, encrypted): (bool, bool) = main
         .query_row(
-            "SELECT encrypted <> 0 FROM file_entries WHERE id = 'efs-file'",
+            "SELECT read_only <> 0, encrypted <> 0
+             FROM file_entries WHERE id = 'efs-file'",
             [],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
+    assert!(read_only);
     assert!(encrypted);
 }
 

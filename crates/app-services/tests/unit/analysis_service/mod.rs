@@ -954,7 +954,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     assert!(run.warnings.is_empty());
     assert_eq!(run.scanned_count, 6);
     assert_eq!(run.artifact_count, 16);
-    assert_eq!(run.timeline_event_count, 6);
+    assert_eq!(run.timeline_event_count, 0);
 
     let mut stmt = conn
         .prepare(
@@ -984,7 +984,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(timeline_case_count, 6);
+    assert_eq!(timeline_case_count, 0);
 
     let registry = get_registry_extraction_summary(&conn, 0, 20).unwrap();
     assert_eq!(registry.total, 10);
@@ -1071,7 +1071,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
         .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
         .unwrap();
     assert_eq!(artifact_count, 16);
-    assert_eq!(timeline_count, 6);
+    assert_eq!(timeline_count, 0);
 }
 
 #[test]
@@ -1120,10 +1120,7 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
         )
         .unwrap();
     assert!(artifact_count > 0, "expected EVTX artifacts");
-    assert_eq!(
-        artifact_count, timeline_count,
-        "each EVTX boot/shutdown event should produce one artifact and one timeline event"
-    );
+    assert_eq!(timeline_count, 0, "EVTX events must not enter Timeline");
 }
 
 #[test]

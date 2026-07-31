@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getTimelineEvents: vi.fn(),
   getTimelineEventById: vi.fn(),
+  getTimelineFacets: vi.fn(),
 }));
 
 vi.mock('@/lib/api/timeline', () => ({
   getTimelineEvents: mocks.getTimelineEvents,
   getTimelineEventById: mocks.getTimelineEventById,
+  getTimelineFacets: mocks.getTimelineFacets,
 }));
 
 vi.mock('@/features/cache-invalidation', async (importOriginal) => {
@@ -35,6 +37,19 @@ vi.mock('@/features/cache-invalidation', async (importOriginal) => {
         request?.timeEnd ?? null,
         request?.eventType ?? null,
       ],
+      facets: (request?: {
+        timeStart?: string;
+        timeEnd?: string;
+        eventType?: string;
+        bucketCount?: number;
+      }) => [
+        'timeline',
+        'facets',
+        request?.timeStart ?? null,
+        request?.timeEnd ?? null,
+        request?.eventType ?? null,
+        request?.bucketCount ?? 60,
+      ],
     },
   };
 });
@@ -43,6 +58,7 @@ import {
   useInfiniteTimelineEvents,
   useTimelineEvents,
   useTimelineEventById,
+  useTimelineFacets,
 } from './hooks';
 
 function createWrapper() {
@@ -180,6 +196,27 @@ describe('timeline hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(event);
       expect(mocks.getTimelineEventById).toHaveBeenCalledWith('evt-42');
+    });
+  });
+
+  describe('useTimelineFacets', () => {
+    it('fetches server-side timeline facets', async () => {
+      const facets = {
+        totalEvents: 3,
+        eventTypes: [{ value: 'FILE_MODIFIED', count: 3 }],
+        dataSources: [{ value: 'source-1', count: 3 }],
+        histogram: [],
+      };
+      mocks.getTimelineFacets.mockResolvedValue(facets);
+
+      const { result } = renderHook(
+        () => useTimelineFacets({ bucketCount: 60 }),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual(facets);
+      expect(mocks.getTimelineFacets).toHaveBeenCalledWith({ bucketCount: 60 });
     });
   });
 });

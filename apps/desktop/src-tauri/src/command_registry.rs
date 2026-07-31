@@ -54,5 +54,5 @@ pub(crate) use crate::commands::{
     rule_pack_commands::{list_loaded_rule_packs, load_rule_pack, validate_rule_pack},
     search_commands::{search_files, search_files_request},
     settings_commands::{get_app_settings, save_app_settings},
-    timeline_commands::{get_timeline_event_by_id, get_timeline_events},
+    timeline_commands::{get_timeline_event_by_id, get_timeline_events, get_timeline_facets},
 };

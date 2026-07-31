@@ -147,6 +147,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0043_bitlocker_restore_intents",
         include_str!("scripts/0043_bitlocker_restore_intents.sql"),
     ),
+    (
+        "0044_file_entry_read_only",
+        include_str!("scripts/0044_file_entry_read_only.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
@@ -255,6 +259,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_027_artifact_keyset_indexes",
         include_str!("scripts/source_027_artifact_keyset_indexes.sql"),
     ),
+    (
+        "source_028_file_entry_read_only",
+        include_str!("scripts/source_028_file_entry_read_only.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -340,7 +348,7 @@ fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u3
             ) {
                 add_file_partition_index_and_backfill(conn, sql)
             } else if *name == "source_017_timeline_projection_identity" {
-                add_timeline_projection_identity(conn, sql)
+                super::timeline_projection_identity::add_timeline_projection_identity(conn, sql)
             } else if *name == "source_024_ntfs_deleted_recovery" {
                 super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
             } else {
@@ -474,24 +482,6 @@ fn add_file_partition_index_and_backfill(conn: &Connection, sql: &str) -> DbResu
         conn.execute_batch("ALTER TABLE file_entries ADD COLUMN partition_index INTEGER")?;
     }
     conn.execute_batch(sql)?;
-    Ok(())
-}
-
-fn add_timeline_projection_identity(conn: &Connection, sql: &str) -> DbResult<()> {
-    conn.execute_batch(sql)?;
-    let column_exists: bool = conn.query_row(
-        "SELECT COUNT(*) > 0
-         FROM pragma_table_info('timeline_projection_meta')
-         WHERE name = 'input_identity'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !column_exists {
-        conn.execute_batch(
-            "ALTER TABLE timeline_projection_meta
-             ADD COLUMN input_identity TEXT NOT NULL DEFAULT ''",
-        )?;
-    }
     Ok(())
 }
 

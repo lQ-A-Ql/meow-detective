@@ -250,14 +250,28 @@ impl BtrfsReader {
             };
 
             let is_dir = file_type == FT_DIR;
+            let metadata = self
+                .get_inode_metadata(tree_root_bytenr, inode_obj)
+                .ok()
+                .flatten();
             let size = if !is_dir {
-                self.get_inode_size(tree_root_bytenr, inode_obj)
-                    .unwrap_or(0)
+                metadata.map(|value| value.size).unwrap_or_default()
             } else {
                 0
             };
 
-            let mut node = fs_node(name.clone(), is_dir, size, None, None, None);
+            let mut node = fs_node(
+                name.clone(),
+                is_dir,
+                size,
+                metadata.and_then(|value| value.created_at),
+                metadata.and_then(|value| value.modified_at),
+                metadata.and_then(|value| value.accessed_at),
+            );
+            if let Some(metadata) = metadata {
+                node.read_only = metadata.read_only;
+                node.changed_at = metadata.changed_at;
+            }
             node.path = child_path.clone();
             nodes.push(node);
 

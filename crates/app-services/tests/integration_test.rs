@@ -64,7 +64,7 @@ fn full_case_lifecycle() {
             assert!(!all_files.is_empty());
 
             // Timeline
-            let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
+            let tl_count = timeline_service::project_and_store_file_modified(conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 

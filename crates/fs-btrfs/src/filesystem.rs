@@ -42,13 +42,28 @@ impl FileSystemReader for BtrfsReader {
                 continue;
             }
             let child_is_dir = file_type == FT_DIR;
+            let metadata = self
+                .get_inode_metadata(subvolume.tree_root_bytenr, child_objectid)
+                .ok()
+                .flatten();
             let size = if child_is_dir {
                 0
             } else {
-                self.get_inode_size(subvolume.tree_root_bytenr, child_objectid)
-                    .unwrap_or(0)
+                metadata.map(|value| value.size).unwrap_or_default()
             };
-            nodes.push(fs_node(name, child_is_dir, size, None, None, None));
+            let mut node = fs_node(
+                name,
+                child_is_dir,
+                size,
+                metadata.and_then(|value| value.created_at),
+                metadata.and_then(|value| value.modified_at),
+                metadata.and_then(|value| value.accessed_at),
+            );
+            if let Some(metadata) = metadata {
+                node.read_only = metadata.read_only;
+                node.changed_at = metadata.changed_at;
+            }
+            nodes.push(node);
         }
         Ok(child_nodes_with_parent_path(nodes, path))
     }

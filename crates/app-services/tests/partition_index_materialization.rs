@@ -47,6 +47,7 @@ fn node(name: &str, path: &str, is_dir: bool) -> FsNode {
         size: if is_dir { 0 } else { 5 },
         hidden: false,
         system: false,
+        read_only: false,
         encrypted: false,
         created_at: None,
         modified_at: None,

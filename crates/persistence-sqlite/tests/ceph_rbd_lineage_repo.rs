@@ -84,7 +84,7 @@ fn aggregate() -> CephRbdLineageAggregate {
 #[test]
 fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0043_bitlocker_restore_intents");
+    assert_eq!(runner::latest_version(), "0044_file_entry_read_only");
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();
     repo.insert_aggregate(&original).expect("insert lineage");

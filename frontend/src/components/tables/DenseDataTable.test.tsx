@@ -348,6 +348,7 @@ describe('DenseDataTable', () => {
     );
 
     expect(scrollContainer.scrollTop).toBe(0);
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 0 } });
     expect(container.textContent).toContain('Second 0');
     expect(container.textContent).not.toContain('Second 9999');
   });

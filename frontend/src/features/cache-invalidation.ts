@@ -31,6 +31,19 @@ export const timelineQueryKeys = {
     request?.timeEnd ?? null,
     request?.eventType ?? null,
   ] as const,
+  facets: (request?: {
+    timeStart?: string;
+    timeEnd?: string;
+    eventType?: string;
+    bucketCount?: number;
+  }) => [
+    'timeline',
+    'facets',
+    request?.timeStart ?? null,
+    request?.timeEnd ?? null,
+    request?.eventType ?? null,
+    request?.bucketCount ?? 60,
+  ] as const,
 };
 
 export const projectionQueryKeys = {

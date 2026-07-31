@@ -34,7 +34,7 @@ fn setup_case_db() -> rusqlite::Connection {
 #[test]
 fn restore_intent_is_case_scoped_without_storing_key_material() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0043_bitlocker_restore_intents");
+    assert_eq!(runner::latest_version(), "0044_file_entry_read_only");
     let repo = BitLockerRestoreIntentRepo::new(&conn);
     let source_id = DataSourceId(SOURCE_ID.to_string());
     let other_source_id = DataSourceId(OTHER_SOURCE_ID.to_string());

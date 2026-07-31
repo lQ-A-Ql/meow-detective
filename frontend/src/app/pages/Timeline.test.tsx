@@ -9,6 +9,7 @@ import { Timeline } from './Timeline';
 const mocks = vi.hoisted(() => ({
   infiniteTimelineEvents: vi.fn(),
   timelineEventById: vi.fn(),
+  timelineFacets: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
     selectedTimelineId: undefined as string | undefined,
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/timeline/hooks', () => ({
   useTimelineEventById: mocks.timelineEventById,
   useInfiniteTimelineEvents: mocks.infiniteTimelineEvents,
+  useTimelineFacets: mocks.timelineFacets,
 }));
 
 vi.mock('@/stores/selection-store', () => ({
@@ -68,6 +70,12 @@ function renderPage() {
 }
 
 const emptyTimelineResult: PagedResponse<TimelineEvent> = { items: [], total: 0 };
+const emptyTimelineFacets = {
+  totalEvents: 0,
+  eventTypes: [],
+  dataSources: [],
+  histogram: [],
+};
 const populatedTimelineResult: PagedResponse<TimelineEvent> = {
   items: [
     {
@@ -101,6 +109,7 @@ describe('Timeline page', () => {
       selectedArtifactId: undefined,
     });
     mocks.timelineEventById.mockReturnValue(queryState({ data: null }));
+    mocks.timelineFacets.mockReturnValue(queryState({ data: emptyTimelineFacets }));
   });
 
   it('renders empty state when no events', () => {
@@ -115,6 +124,20 @@ describe('Timeline page', () => {
 
   it('renders event list when data is available', () => {
     mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
+    mocks.timelineFacets.mockReturnValue(queryState({
+      data: {
+        totalEvents: 2,
+        eventTypes: [
+          { value: 'FileAccess', count: 1 },
+          { value: 'RegistryModified', count: 1 },
+        ],
+        dataSources: [
+          { value: 'source-1', count: 1 },
+          { value: 'source-2', count: 1 },
+        ],
+        histogram: [],
+      },
+    }));
 
     renderPage();
 
@@ -124,6 +147,15 @@ describe('Timeline page', () => {
     expect(screen.getAllByText('RegistryModified').length).toBeGreaterThan(0);
     expect(screen.getByText(/事件 2\/2 条/)).toBeDefined();
     expect(screen.getByText(/数据源 2 个/)).toBeDefined();
+  });
+
+  it('keeps the event table inside a bounded vertical flex viewport', () => {
+    mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
+
+    renderPage();
+
+    const tablePane = screen.getByTestId('timeline-table-pane');
+    expect(tablePane).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
   });
 
   it('shows inspector pane for selected event', () => {

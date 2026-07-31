@@ -147,9 +147,9 @@ fn prepare_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {
     conn.prepare_cached(
         "INSERT INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          size, ext, deleted, hidden, system, read_only, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
           partition_index)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
     )
     .map_err(|error| format!("Prepare error: {error}"))
 }
@@ -176,11 +176,12 @@ fn insert_node(
             0i32,
             hidden as i32,
             system as i32,
+            node.read_only as i32,
             node.encrypted as i32,
             node.created_at.as_ref().map(|value| value.to_rfc3339()),
             node.modified_at.as_ref().map(|value| value.to_rfc3339()),
             node.accessed_at.as_ref().map(|value| value.to_rfc3339()),
-            None::<String>,
+            node.changed_at.as_ref().map(|value| value.to_rfc3339()),
             None::<String>,
             partition_index as i64,
         ])
@@ -237,9 +238,9 @@ pub(super) fn prepare_mft_insert(conn: &Connection) -> rusqlite::Result<CachedSt
     conn.prepare_cached(
         "INSERT OR IGNORE INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          size, ext, deleted, hidden, system, read_only, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
           partition_index)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, NULL, ?16)",
+         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL, ?17)",
     )
 }
 
@@ -271,6 +272,7 @@ pub(super) fn stage_mft_record(
             record.deleted as i32,
             hidden as i32,
             system as i32,
+            record.read_only as i32,
             record.encrypted as i32,
             record.created_at.as_ref().map(|value| value.to_rfc3339()),
             record.modified_at.as_ref().map(|value| value.to_rfc3339()),
@@ -286,9 +288,9 @@ pub(super) fn prepare_ntfs_index_insert(conn: &Connection) -> Result<CachedState
     conn.prepare_cached(
         "INSERT OR IGNORE INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+          size, ext, deleted, hidden, system, read_only, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
           partition_index)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, NULL, NULL, NULL, NULL, NULL, ?11)",
+         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11, NULL, NULL, NULL, NULL, NULL, ?12)",
     )
     .map_err(|error| format!("Prepare NTFS directory index backfill: {error}"))
 }
@@ -305,6 +307,7 @@ pub(super) fn insert_ntfs_index_entry(
     size: u64,
     hidden: bool,
     system: bool,
+    read_only: bool,
     encrypted: bool,
 ) -> Result<usize, String> {
     let (hidden, system) = visibility_flags_for_name(name, hidden, system);
@@ -319,6 +322,7 @@ pub(super) fn insert_ntfs_index_entry(
             (!is_dir).then(|| extension_from_name(name)).flatten(),
             hidden as i32,
             system as i32,
+            read_only as i32,
             encrypted as i32,
             partition_index as i64,
         ])

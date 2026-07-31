@@ -477,6 +477,7 @@ fn public_report_exports_preserve_unsupported_platform_category() {
 fn report_identity_accepts_source_level_timeline_events_without_a_file_reference() {
     let event = TimelineEventDto {
         id: "ds:windows-report:timeline-source-level".to_string(),
+        data_source_id: Some("windows-report".to_string()),
         source_object_id: String::new(),
         event_type: "SYSTEM".to_string(),
         ts: "2026-07-11T00:00:00Z".to_string(),
@@ -499,6 +500,7 @@ fn report_identity_accepts_source_level_timeline_events_without_a_file_reference
 fn report_identity_rejects_cross_source_timeline_references() {
     let event = TimelineEventDto {
         id: "ds:windows-report:timeline-cross-source".to_string(),
+        data_source_id: Some("windows-report".to_string()),
         source_object_id: "ds:linux-report:file-1".to_string(),
         event_type: "FILE_MODIFIED".to_string(),
         ts: "2026-07-11T00:00:00Z".to_string(),

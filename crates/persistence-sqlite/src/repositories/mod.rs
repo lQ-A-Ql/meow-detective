@@ -38,6 +38,7 @@ pub mod processing_phase_repo;
 pub mod report_repo;
 pub mod source_meta_repo;
 pub mod staging_repo;
+pub mod timeline_facets_repo;
 pub mod timeline_repo;
 
 pub use staging_repo::StagingRepo;

@@ -321,7 +321,7 @@ pub(super) fn shutdown_time_artifacts(
         if let Ok(ts) = DateTime::parse_from_rfc3339(&entry.shutdown_time) {
             outcome.timeline_events.push(make_timeline_event(
                 &candidate.file_id,
-                "REGISTRY_SHUTDOWN",
+                "REGISTRY_SYSTEM_SHUTDOWN",
                 ts.with_timezone(&Utc),
                 format!("System shutdown: {}", entry.shutdown_time),
                 format!(

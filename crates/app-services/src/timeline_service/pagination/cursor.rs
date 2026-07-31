@@ -11,10 +11,7 @@ use transport::{
     paging::{decode_opaque_cursor, encode_opaque_cursor, PageResponse},
 };
 
-use super::super::{
-    export::timeline_event_to_source_dto, projection::ensure_macb_timeline_projected,
-    TimelineQuery, TimelineServiceError,
-};
+use super::super::{export::timeline_event_to_source_dto, TimelineQuery, TimelineServiceError};
 use crate::source_db;
 
 const CURSOR_PAYLOAD_VERSION: u8 = 2;
@@ -155,12 +152,12 @@ fn capture_cursor(
     case_id: &CaseId,
     context: TimelineCursorContext,
 ) -> Result<(TimelinePageCursor, Vec<TimelineSourcePage>), TimelineServiceError> {
-    let mut connections = source_db::open_ready_source_connections(case_conn, case_root, case_id)?;
+    let mut connections =
+        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?;
     connections.sort_by(|left, right| left.0 .0.cmp(&right.0 .0));
     let mut total = 0u64;
     let mut sources = Vec::with_capacity(connections.len());
     for (source_id, connection) in connections {
-        ensure_macb_timeline_projected(&connection)?;
         let repo = TimelineRepo::new(&connection);
         let revision = repo.cursor_revision()?;
         let snapshot_high_water = repo.snapshot_high_water()?;

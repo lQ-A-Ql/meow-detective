@@ -28,7 +28,7 @@ pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;
 pub use report::ExportScopeDto;
 pub use settings::AppSettingsDto;
-pub use timeline::{GetTimelineEventByIdRequest, GetTimelineRequest};
+pub use timeline::{GetTimelineEventByIdRequest, GetTimelineFacetsRequest, GetTimelineRequest};
 
 pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,

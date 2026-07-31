@@ -79,9 +79,11 @@ fn run_timeline_projection(
 ) -> Result<String, String> {
     let source = source_db::open_ready_source_by_id(case_conn, case_root, case_id, data_source_id)
         .map_err(|error| format!("Open registered source database for Timeline phase: {error}"))?;
+    let platform = source.platform;
     let connection = source.connection;
-    let projection = timeline_service::ensure_macb_timeline_projected_with_cancel_and_identity(
+    let projection = timeline_service::materialize_file_modified_with_identity(
         &connection,
+        platform,
         cancel_token,
         timeline_identity,
     )
@@ -89,7 +91,7 @@ fn run_timeline_projection(
     if !projection.graph_complete {
         return Err("Timeline graph projection remains incomplete".to_string());
     }
-    let (macb_total_count, artifact_generated_event_count) = timeline_event_counts(&connection)?;
+    let (file_modified_count, registry_event_count) = timeline_event_counts(&connection)?;
     source_db::checkpoint_source_db(&connection).map_err(|error| error.to_string())?;
     let warning_details = projection
         .warnings
@@ -99,9 +101,9 @@ fn run_timeline_projection(
         .collect::<Vec<_>>();
 
     Ok(json!({
-        "macbInsertedCount": projection.inserted_count,
-        "macbTotalCount": macb_total_count,
-        "artifactGeneratedEventCount": artifact_generated_event_count,
+        "fileModifiedInsertedCount": projection.inserted_count,
+        "fileModifiedCount": file_modified_count,
+        "registryEventCount": registry_event_count,
         "alreadyProjected": projection.already_projected,
         "warningCount": projection.warnings.len(),
         "warningDetails": warning_details,
@@ -155,8 +157,14 @@ pub(super) fn timeline_event_counts(
     connection
         .query_row(
             "SELECT
-                COALESCE(SUM(CASE WHEN parser_id = 'timeline.macb' THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN parser_id = 'timeline.macb' THEN 0 ELSE 1 END), 0)
+                COALESCE(SUM(CASE WHEN event_type = 'FILE_MODIFIED' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN event_type IN (
+                    'REGISTRY_HIVE_LAST_WRITE',
+                    'REGISTRY_USER_ASSIST_LAST_RUN',
+                    'REGISTRY_SAM_LAST_LOGIN',
+                    'REGISTRY_SAM_PASSWORD_LAST_SET',
+                    'REGISTRY_SYSTEM_SHUTDOWN'
+                ) THEN 1 ELSE 0 END), 0)
              FROM timeline_events",
             [],
             |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),

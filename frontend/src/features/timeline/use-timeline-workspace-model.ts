@@ -1,5 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useInfiniteTimelineEvents, useTimelineEventById } from '@/features/timeline/hooks';
+import {
+  useInfiniteTimelineEvents,
+  useTimelineEventById,
+  useTimelineFacets,
+} from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import type { TimelineEvent } from '@/types/models';
 
@@ -9,30 +13,13 @@ const BUCKET_STEP = 20;
 const DEFAULT_BUCKET_COUNT = 60;
 
 function buildTimelineBars(
-  events: TimelineEvent[],
+  histogram: Array<{ count: number }>,
   bucketCount: number,
 ): Array<{ height: number; count: number }> {
-  if (events.length === 0) {
+  if (histogram.length === 0) {
     return Array.from({ length: bucketCount }, () => ({ height: 0, count: 0 }));
   }
-
-  const timestamps = events.map((event) => Date.parse(event.ts)).filter(Number.isFinite);
-  if (timestamps.length === 0) {
-    return Array.from({ length: bucketCount }, () => ({ height: 0, count: 0 }));
-  }
-
-  const min = Math.min(...timestamps);
-  const max = Math.max(...timestamps);
-  const range = max - min || 1;
-  const counts = Array<number>(bucketCount).fill(0);
-  for (const timestamp of timestamps) {
-    const index = Math.min(
-      Math.floor(((timestamp - min) / range) * bucketCount),
-      bucketCount - 1,
-    );
-    counts[index] += 1;
-  }
-
+  const counts = histogram.map((bucket) => bucket.count);
   const maxCount = Math.max(...counts, 1);
   return counts.map((count) => ({ height: (count / maxCount) * 100, count }));
 }
@@ -74,6 +61,12 @@ export function useTimelineWorkspaceModel() {
     timeEnd: normalizedTimeEnd,
     eventType: eventType || undefined,
   });
+  const facetsQuery = useTimelineFacets({
+    timeStart: normalizedTimeStart,
+    timeEnd: normalizedTimeEnd,
+    eventType: eventType || undefined,
+    bucketCount,
+  });
   const loadContextKey = JSON.stringify([
     normalizedTimeStart ?? null,
     normalizedTimeEnd ?? null,
@@ -83,7 +76,7 @@ export function useTimelineWorkspaceModel() {
     () => timelineQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [timelineQuery.data],
   );
-  const totalEvents = timelineQuery.data?.pages[0]?.total ?? 0;
+  const totalEvents = facetsQuery.data?.totalEvents ?? 0;
   const {
     eventLookupId,
     jumpToSource,
@@ -106,24 +99,23 @@ export function useTimelineWorkspaceModel() {
     return [selectedTimelineEvent.data, ...events];
   }, [events, selectedTimelineEvent.data]);
   const eventTypes = useMemo(
-    () => Array.from(new Set(events.map((event) => event.eventType))).sort(),
-    [events],
+    () => (facetsQuery.data?.eventTypes ?? []).map((entry) => entry.value),
+    [facetsQuery.data?.eventTypes],
   );
-  const sourceCount = useMemo(
-    () => new Set(events.map((event) => String(event.attrs.source ?? '-'))).size,
-    [events],
+  const sourceCount = facetsQuery.data?.dataSources.length ?? 0;
+  const bars = useMemo(
+    () => buildTimelineBars(facetsQuery.data?.histogram ?? [], bucketCount),
+    [bucketCount, facetsQuery.data?.histogram],
   );
-  const bars = useMemo(() => buildTimelineBars(events, bucketCount), [bucketCount, events]);
   const timeRange = useMemo(() => {
-    const timestamps = events.map((event) => Date.parse(event.ts)).filter(Number.isFinite);
-    if (timestamps.length === 0) {
+    if (!facetsQuery.data?.startTs || !facetsQuery.data.endTs) {
       return { start: '-', end: '-' };
     }
     return {
-      start: formatTimestamp(new Date(Math.min(...timestamps)).toISOString()),
-      end: formatTimestamp(new Date(Math.max(...timestamps)).toISOString()),
+      start: formatTimestamp(facetsQuery.data.startTs),
+      end: formatTimestamp(facetsQuery.data.endTs),
     };
-  }, [events]);
+  }, [facetsQuery.data?.endTs, facetsQuery.data?.startTs]);
 
   const applyDateRange = useCallback(() => {
     if (!draftDatesValid) {
@@ -157,7 +149,8 @@ export function useTimelineWorkspaceModel() {
   }, [timelineQuery]);
   const retry = useCallback(() => {
     void timelineQuery.refetch();
-  }, [timelineQuery]);
+    void facetsQuery.refetch();
+  }, [facetsQuery, timelineQuery]);
 
   return {
     bars,
@@ -175,7 +168,7 @@ export function useTimelineWorkspaceModel() {
     loadingMore: timelineQuery.isFetchingNextPage,
     loadMoreFailed: timelineQuery.isFetchNextPageError,
     hasMore: timelineQuery.hasNextPage,
-    initialLoadFailed: timelineQuery.isError && events.length === 0,
+    initialLoadFailed: (timelineQuery.isError || facetsQuery.isError) && events.length === 0,
     onEventRowClick,
     applyDateRange,
     retry,
@@ -184,8 +177,8 @@ export function useTimelineWorkspaceModel() {
     setDraftTimeStart,
     selectEventType,
     sourceCount,
-    middleTimestamp: events.length > 0
-      ? formatTimestamp(events[Math.floor(events.length / 2)].ts)
+    middleTimestamp: facetsQuery.data?.histogram.length
+      ? formatTimestamp(facetsQuery.data.histogram[Math.floor(facetsQuery.data.histogram.length / 2)].startTs)
       : '',
     tableEvents,
     timeRange,

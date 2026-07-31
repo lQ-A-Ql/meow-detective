@@ -358,6 +358,7 @@ impl NtfsReader {
                 mft_ref: entry.mft_ref,
                 hidden: entry.node.hidden,
                 system: entry.node.system,
+                read_only: entry.node.read_only,
                 encrypted: entry.node.encrypted,
             })
             .collect())

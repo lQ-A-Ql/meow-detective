@@ -15,7 +15,7 @@ pub(super) fn sam_user_artifacts(
             attrs.insert("lastLogin".to_string(), Value::String(ts.to_rfc3339()));
             outcome.timeline_events.push(make_timeline_event(
                 &candidate.file_id,
-                "REGISTRY_LAST_LOGIN",
+                "REGISTRY_SAM_LAST_LOGIN",
                 ts,
                 format!("SAM last login: {}", user.username),
                 format!("User {} (RID {}) last logged in", user.username, user.rid),
@@ -24,14 +24,17 @@ pub(super) fn sam_user_artifacts(
             ));
         }
         if let Some(ts) = user.password_last_set {
-            attrs.insert("accountCreated".to_string(), Value::String(ts.to_rfc3339()));
+            attrs.insert(
+                "passwordLastSet".to_string(),
+                Value::String(ts.to_rfc3339()),
+            );
             outcome.timeline_events.push(make_timeline_event(
                 &candidate.file_id,
-                "REGISTRY_ACCOUNT_CREATED",
+                "REGISTRY_SAM_PASSWORD_LAST_SET",
                 ts,
-                format!("SAM account created: {}", user.username),
+                format!("SAM password last set: {}", user.username),
                 format!(
-                    "User {} (RID {}) account created/password set",
+                    "User {} (RID {}) password last set",
                     user.username, user.rid
                 ),
                 attrs.clone(),

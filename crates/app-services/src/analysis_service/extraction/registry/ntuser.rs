@@ -63,7 +63,7 @@ pub(super) fn user_assist_artifacts(
                 let ts_utc = ts.with_timezone(&Utc);
                 outcome.timeline_events.push(make_timeline_event(
                     &candidate.file_id,
-                    "REGISTRY_USER_ASSIST_EXEC",
+                    "REGISTRY_USER_ASSIST_LAST_RUN",
                     ts_utc,
                     format!("UserAssist execution: {}", entry.executable_path),
                     format!(

@@ -1,6 +1,7 @@
 use app_services::timeline_service::{
-    ensure_macb_timeline_projected, get_timeline_event_by_id_for_case, project_and_store_macb,
-    query_timeline, query_timeline_aggregated, query_timeline_filtered_for_case,
+    get_timeline_event_by_id_for_case, get_timeline_facets_for_case,
+    materialize_file_modified_unknown, project_and_store_file_modified, query_timeline,
+    query_timeline_aggregated, query_timeline_filtered_for_case,
     query_timeline_filtered_instrumented, query_timeline_for_case, query_timeline_instrumented,
     TimelineQuery, TimelineServiceError,
 };
@@ -185,15 +186,15 @@ fn timeline_event(id: &str, timestamp: chrono::DateTime<Utc>) -> domain::Timelin
 }
 
 #[test]
-fn timeline_macb_projection_inserts_expected_events_and_handles_empty_input() {
+fn timeline_file_modified_projection_inserts_expected_events_and_handles_empty_input() {
     let conn = in_memory_db_with_timeline();
     let files = vec![
         make_file("a.txt", "/a.txt", true, true),
         make_file("b.txt", "/b.txt", true, false),
     ];
-    assert_eq!(project_and_store_macb(&conn, &files).unwrap(), 5);
-    assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 5);
-    assert_eq!(project_and_store_macb(&conn, &[]).unwrap(), 0);
+    assert_eq!(project_and_store_file_modified(&conn, &files).unwrap(), 1);
+    assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 1);
+    assert_eq!(project_and_store_file_modified(&conn, &[]).unwrap(), 0);
 }
 
 #[test]
@@ -230,6 +231,82 @@ fn timeline_source_database_query_wraps_event_and_source_object_ids() {
             .unwrap()
             .unwrap();
     assert_eq!(event.event_type, "FILE_CREATED");
+}
+
+#[test]
+fn timeline_facets_aggregate_ready_source_databases_with_epoch_filters() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active =
+        app_services::case_service::create_case(temp.path(), "timeline-facets", Some("tester"))
+            .unwrap();
+    active
+        .with_conn(|case_conn| {
+            let source_a =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-a")?;
+            let source_b =
+                register_ready_source(case_conn, &active.case_root, &active.meta.id, "source-b")?;
+            let first = Utc.with_ymd_and_hms(2026, 2, 3, 4, 5, 6).unwrap();
+            let second = first + chrono::Duration::hours(2);
+            TimelineRepo::new(&source_a).insert_batch_with_case(
+                &[timeline_event("a-1", first), timeline_event("a-2", second)],
+                &active.meta.id.0,
+            )?;
+            let mut other = timeline_event("b-1", first + chrono::Duration::hours(1));
+            other.event_type = "REGISTRY_HIVE_LAST_WRITE".to_string();
+            TimelineRepo::new(&source_b).insert_batch_with_case(&[other], &active.meta.id.0)?;
+            drop(source_a);
+            drop(source_b);
+
+            let facets = get_timeline_facets_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                None,
+                None,
+                None,
+                20,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(facets.total_events, 3);
+            assert_eq!(
+                facets.start_ts.as_deref(),
+                Some("2026-02-03T04:05:06+00:00")
+            );
+            assert_eq!(facets.end_ts.as_deref(), Some("2026-02-03T06:05:06+00:00"));
+            assert_eq!(facets.data_sources.len(), 2);
+            assert_eq!(facets.event_types.len(), 2);
+            assert_eq!(
+                facets
+                    .histogram
+                    .iter()
+                    .map(|bucket| bucket.count)
+                    .sum::<u64>(),
+                3
+            );
+
+            let filtered = get_timeline_facets_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                Some("2026-02-03T05:00:00Z"),
+                None,
+                Some("FILE_CREATED"),
+                20,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(filtered.total_events, 1);
+            assert_eq!(filtered.data_sources[0].value, "source-a");
+            assert_eq!(
+                filtered
+                    .event_types
+                    .iter()
+                    .map(|facet| facet.value.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["FILE_CREATED", "REGISTRY_HIVE_LAST_WRITE"]
+            );
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]
@@ -875,7 +952,7 @@ fn timeline_large_aggregation_remains_bounded() {
 }
 
 #[test]
-fn timeline_lazy_macb_projection_is_idempotent() {
+fn timeline_file_modified_materialization_is_idempotent() {
     let conn = in_memory_db_with_timeline();
     conn.execute_batch(
         "INSERT INTO data_sources (id, case_id, name, kind, source_path)
@@ -887,17 +964,17 @@ fn timeline_lazy_macb_projection_is_idempotent() {
     )
     .unwrap();
 
-    let first = ensure_macb_timeline_projected(&conn).unwrap();
-    assert_eq!(first.inserted_count, 3);
+    let first = materialize_file_modified_unknown(&conn).unwrap();
+    assert_eq!(first.inserted_count, 1);
     assert!(!first.already_projected);
-    let second = ensure_macb_timeline_projected(&conn).unwrap();
+    let second = materialize_file_modified_unknown(&conn).unwrap();
     assert_eq!(second.inserted_count, 0);
     assert!(second.already_projected);
 
     let page = query_timeline(&conn, 0, 100).unwrap();
-    assert_eq!(page.total, 3);
+    assert_eq!(page.total, 1);
     assert!(page
         .items
         .iter()
-        .any(|event| event.id == "macb:file-1:FILE_CREATED"));
+        .any(|event| event.id == "file-modified:file-1"));
 }

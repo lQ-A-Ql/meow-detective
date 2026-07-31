@@ -127,7 +127,8 @@ pub use search::{
     SearchResultPageDto, SearchSnippetDto,
 };
 pub use timeline::{
-    TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineStripeDto,
+    TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineFacetCountDto,
+    TimelineFacetsDto, TimelineHistogramBucketDto, TimelineStripeDto,
 };
 pub use v3_governance::{
     BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,

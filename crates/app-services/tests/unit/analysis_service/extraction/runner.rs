@@ -157,7 +157,7 @@ fn event(id: &str, source_id: &str, parser_id: &str, version: &str) -> TimelineE
     TimelineEvent {
         id: TimelineEventId(id.to_string()),
         source_object_id: source_id.to_string(),
-        event_type: "linux.web".to_string(),
+        event_type: "REGISTRY_HIVE_LAST_WRITE".to_string(),
         timestamp: Utc::now(),
         title: id.to_string(),
         description: "description".to_string(),
@@ -793,7 +793,7 @@ fn seekable_evtx_persists_atomically_and_replays_complete_checkpoint() {
 
     assert_eq!(first.dto.scanned_count, 1);
     assert!(first.dto.artifact_count > 0);
-    assert!(first.dto.timeline_event_count > 0);
+    assert_eq!(first.dto.timeline_event_count, 0);
     let mut provider_calls = 0usize;
     let second = run_analysis_extraction_with_source(
         &connection,

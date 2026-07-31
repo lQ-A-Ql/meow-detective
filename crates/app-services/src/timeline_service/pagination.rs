@@ -10,7 +10,6 @@ use transport::{
 };
 
 use super::export::timeline_event_to_source_dto;
-use super::projection::ensure_macb_timeline_projected;
 use super::{TimelineQuery, TimelineServiceError};
 use crate::source_db;
 
@@ -69,9 +68,8 @@ fn query_timeline_offset_page(
     let mut sources = Vec::new();
 
     for (source_id, source_conn) in
-        source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
-        ensure_macb_timeline_projected(&source_conn)?;
         let repo = TimelineRepo::new(&source_conn);
         total = total.saturating_add(repo.count_filtered(
             query.time_start,
@@ -201,7 +199,6 @@ pub fn query_timeline_aggregated(
     offset: u64,
     limit: u32,
 ) -> Result<TimelineAggregatedDto, TimelineServiceError> {
-    ensure_macb_timeline_projected(conn)?;
     let rows = query_cluster_rows(conn, offset, limit)?;
     let event_types = distinct_event_types(&rows);
     let totals = query_totals_by_type(conn, &event_types)?;

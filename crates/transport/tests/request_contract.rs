@@ -3,9 +3,9 @@ use transport::commands::{
     ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto, GetArtifactByIdRequest,
     GetArtifactRowsRequest, GetEvtxEventSummaryRequest, GetFileChildrenRequest,
     GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest,
-    GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
-    ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest, RunDeletedRecoveryRequest,
-    SearchFilesRequest,
+    GetTimelineFacetsRequest, GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto,
+    ImportTargetPlatformDto, ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
+    RunDeletedRecoveryRequest, SearchFilesRequest,
 };
 use transport::dto::EvtxEventViewDto;
 
@@ -160,6 +160,33 @@ fn timeline_request_rejects_reversed_time_range() {
     };
 
     assert!(request.validate().is_err());
+}
+
+#[test]
+fn timeline_requests_normalize_rfc3339_boundaries_and_bound_facets() {
+    let mut request = GetTimelineRequest {
+        time_start: Some("2026-02-02T08:00:00+08:00".to_string()),
+        time_end: Some("2026-02-02T01:00:00Z".to_string()),
+        ..Default::default()
+    };
+    request.validate().unwrap();
+    assert_eq!(
+        request.time_start.as_deref(),
+        Some("2026-02-02T00:00:00+00:00")
+    );
+    assert_eq!(
+        request.time_end.as_deref(),
+        Some("2026-02-02T01:00:00+00:00")
+    );
+
+    let mut facets = GetTimelineFacetsRequest {
+        time_start: Some("2026-02-02T00:00:00Z".to_string()),
+        time_end: None,
+        event_type: None,
+        bucket_count: 1,
+    };
+    facets.validate().unwrap();
+    assert_eq!(facets.bucket_count, 20);
 }
 
 #[test]

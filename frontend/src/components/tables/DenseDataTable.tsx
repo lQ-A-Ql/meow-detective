@@ -10,12 +10,15 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
-  useState,
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {
+  useVirtualizer,
+  type Rect,
+  type Virtualizer,
+} from '@tanstack/react-virtual';
 import {
   Table,
   TableBody,
@@ -83,6 +86,30 @@ const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const AUTOMATIC_RETRY_DELAY_MS = 500;
 
+function observeTableViewport(
+  instance: Virtualizer<HTMLDivElement, Element>,
+  onRectChange: (rect: Rect) => void,
+) {
+  const viewport = instance.scrollElement;
+  if (!viewport) return undefined;
+
+  const emitRect = () => {
+    onRectChange({
+      width: viewport.offsetWidth,
+      height: viewport.offsetHeight || DEFAULT_CONTAINER_HEIGHT,
+    });
+  };
+
+  emitRect();
+
+  const ResizeObserverImpl = instance.targetWindow?.ResizeObserver;
+  if (!ResizeObserverImpl) return undefined;
+
+  const observer = new ResizeObserverImpl(emitRect);
+  observer.observe(viewport);
+  return () => observer.disconnect();
+}
+
 export function DenseDataTable<T>({
   columns,
   rows,
@@ -118,8 +145,14 @@ export function DenseDataTable<T>({
   const automaticRetryTimerRef = useRef<number | undefined>(undefined);
   const retryInFlightRef = useRef(false);
   const wasLoadingMoreRef = useRef(false);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: OVERSCAN_ROWS,
+    initialRect: { width: 0, height: DEFAULT_CONTAINER_HEIGHT },
+    observeElementRect: observeTableViewport,
+  });
 
   const handleSort = useCallback(
     (key: string) => {
@@ -178,29 +211,6 @@ export function DenseDataTable<T>({
   }, [runLoadMoreRecovery]);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateContainerHeight = () => {
-      const nextHeight = container.clientHeight;
-      if (nextHeight > 0) {
-        setContainerHeight(nextHeight);
-      }
-    };
-
-    updateContainerHeight();
-
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const observer = new ResizeObserver(() => {
-      updateContainerHeight();
-    });
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     requestedRowCountRef.current = undefined;
     automaticRetryKeyRef.current = undefined;
     retryInFlightRef.current = false;
@@ -208,12 +218,11 @@ export function DenseDataTable<T>({
       window.clearTimeout(automaticRetryTimerRef.current);
       automaticRetryTimerRef.current = undefined;
     }
-    setScrollTop(0);
-
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-  }, [loadContextKey]);
+    rowVirtualizer.scrollToOffset(0);
+  }, [loadContextKey, rowVirtualizer]);
 
   useEffect(() => {
     requestedRowCountRef.current = undefined;
@@ -268,7 +277,6 @@ export function DenseDataTable<T>({
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
-    setScrollTop(container.scrollTop);
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (remaining <= ROW_HEIGHT * OVERSCAN_ROWS) {
       requestMore();
@@ -284,7 +292,6 @@ export function DenseDataTable<T>({
     if (remaining > ROW_HEIGHT * OVERSCAN_ROWS) return;
     requestMore();
   }, [
-    containerHeight,
     hasMore,
     loadContextKey,
     loadMoreFailed,
@@ -294,23 +301,11 @@ export function DenseDataTable<T>({
     rows.length,
   ]);
 
-  const visibleRange = useMemo(() => {
-    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
-    const visibleRowCount = Math.ceil(containerHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2;
-    const endIndex = Math.min(rows.length, startIndex + visibleRowCount);
-
-    return { startIndex, endIndex };
-  }, [containerHeight, rows.length, scrollTop]);
-
-  const visibleRows = useMemo(
-    () => rows.slice(visibleRange.startIndex, visibleRange.endIndex),
-    [rows, visibleRange.endIndex, visibleRange.startIndex]
-  );
-
-  const topSpacerHeight = visibleRange.startIndex * ROW_HEIGHT;
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const topSpacerHeight = virtualRows[0]?.start ?? 0;
   const bottomSpacerHeight = Math.max(
     0,
-    (rows.length - visibleRange.endIndex) * ROW_HEIGHT
+    rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0),
   );
   const tableStyle = horizontalScroll
     ? {
@@ -321,10 +316,10 @@ export function DenseDataTable<T>({
 
   return (
     <ScrollArea
-      className="min-h-0 flex-1 bg-transparent font-mono text-[11px]"
+      className="min-h-0 flex-1 overflow-hidden bg-transparent font-mono text-[11px]"
       viewportRef={containerRef}
       viewportClassName={horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'}
-      viewportProps={{ onScroll: handleScroll }}
+      viewportProps={{ onScroll: handleScroll, style: { contain: 'strict' } }}
       showHorizontalScrollbar={horizontalScroll}
     >
       <Table
@@ -403,7 +398,9 @@ export function DenseDataTable<T>({
               />
             </TableRow>
           ) : null}
-          {visibleRows.map((row) => {
+          {virtualRows.map((virtualRow) => {
+            const row = rows[virtualRow.index];
+            if (!row) return null;
             const key = getRowKey(row);
             const selected = key === selectedRowKey;
             return (

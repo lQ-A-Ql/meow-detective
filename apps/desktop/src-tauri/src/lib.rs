@@ -62,6 +62,7 @@ macro_rules! desktop_command_handler {
             save_app_settings,
             get_timeline_events,
             get_timeline_event_by_id,
+            get_timeline_facets,
             get_artifact_families,
             get_artifact_rows,
             get_artifact_rows_request,

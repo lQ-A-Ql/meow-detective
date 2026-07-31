@@ -178,13 +178,19 @@ fn legacy_timeline_rows(
         .map(|artifact| html::format_artifact_report_row(&artifact))
         .collect::<Vec<_>>();
     rows.push(format!("{} timeline events", timeline_count));
-    rows.extend(
-        TimelineRepo::new(conn)
-            .query(0, 500)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|event| html::format_timeline_report_row(&event)),
-    );
+    let repo = TimelineRepo::new(conn);
+    let mut offset = 0u64;
+    while offset < timeline_count {
+        let page = repo.query(offset, 500).unwrap_or_default();
+        if page.is_empty() {
+            break;
+        }
+        offset = offset.saturating_add(page.len() as u64);
+        rows.extend(
+            page.into_iter()
+                .map(|event| html::format_timeline_report_row(&event)),
+        );
+    }
     rows
 }
 
@@ -205,8 +211,7 @@ fn source_timeline_rows(
             .collect::<Result<Vec<_>, _>>()?;
     rows.push(format!("{} timeline events", timeline_count));
     rows.extend(
-        crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)?
-            .items
+        super::load_full_timeline_for_case(conn, case_root, &case.id)?
             .iter()
             .map(html::format_timeline_dto_report_row)
             .collect::<Result<Vec<_>, _>>()?,

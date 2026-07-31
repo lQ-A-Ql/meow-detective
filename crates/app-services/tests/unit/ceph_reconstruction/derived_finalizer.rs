@@ -363,24 +363,24 @@ fn projection_retry_only_reruns_the_failed_timeline_action() {
 }
 
 #[test]
-fn timeline_counts_keep_macb_and_artifact_generated_events_separate() {
+fn timeline_counts_include_only_file_modified_and_registry_events() {
     let conn = setup_case_db();
     conn.execute_batch(
         "INSERT INTO timeline_events
          (id, case_id, source_object_id, event_type, ts, title, description, parser_id, attrs)
          VALUES
-         ('macb-1', 'case-1', 'file-1', 'FILE_MODIFIED', '2026-01-01T00:00:00Z',
-          'modified', '', 'timeline.macb', '{}'),
-         ('artifact-1', 'case-1', 'file-1', 'LOGIN', '2026-01-01T00:00:01Z',
-          'login', '', 'linux.wtmp', '{}'),
-         ('artifact-2', 'case-1', 'file-2', 'SHELL_HISTORY', '2026-01-01T00:00:02Z',
+         ('file-1', 'case-1', 'file-1', 'FILE_MODIFIED', '2026-01-01T00:00:00Z',
+          'modified', '', 'timeline.file_modified', '{}'),
+         ('registry-1', 'case-1', 'file-1', 'REGISTRY_HIVE_LAST_WRITE', '2026-01-01T00:00:01Z',
+          'registry', '', 'registry.hive.v1', '{}'),
+         ('unsupported-1', 'case-1', 'file-2', 'SHELL_HISTORY', '2026-01-01T00:00:02Z',
           'history', '', NULL, '{}');",
     )
     .expect("insert timeline fixtures");
 
     assert_eq!(
         super::projections::timeline_event_counts(&conn).expect("count timeline events"),
-        (1, 2)
+        (1, 1)
     );
 }
 
@@ -417,7 +417,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
 
     assert_eq!(
         persistence_sqlite::runner::latest_source_version(),
-        "source_027_artifact_keyset_indexes"
+        "source_028_file_entry_read_only"
     );
     assert_eq!(
         super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),

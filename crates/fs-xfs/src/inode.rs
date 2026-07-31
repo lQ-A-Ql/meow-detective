@@ -16,6 +16,7 @@ const XFS_BIGTIME_TIME_MAX: u64 = (u64::MAX / NSEC_PER_SEC) & !3;
 pub(crate) struct XfsInodeMetadata {
     pub(crate) is_dir: bool,
     pub(crate) size: u64,
+    pub(crate) read_only: bool,
     pub(crate) created_at: Option<FsTimestamp>,
     pub(crate) modified_at: Option<FsTimestamp>,
     pub(crate) accessed_at: Option<FsTimestamp>,
@@ -68,6 +69,7 @@ impl XfsReader {
         Ok(XfsInodeMetadata {
             is_dir: Self::inode_is_dir(inode),
             size: read_be_u64(inode, di_off::SIZE, "di_size")?,
+            read_only: read_be_u16(inode, di_off::MODE, "di_mode")? & 0o222 == 0,
             created_at,
             modified_at: Some(modified_at),
             accessed_at: Some(accessed_at),
@@ -140,6 +142,7 @@ impl XfsReader {
         Ok(XfsInodeMetadata {
             is_dir: Self::inode_is_dir(inode),
             size: read_be_u64(inode, di_off::SIZE, "di_size")?,
+            read_only: read_be_u16(inode, di_off::MODE, "di_mode")? & 0o222 == 0,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -199,6 +202,11 @@ fn read_be_i32(inode: &[u8], offset: usize, field: &str) -> io::Result<i32> {
 fn read_be_u32(inode: &[u8], offset: usize, field: &str) -> io::Result<u32> {
     let bytes = field_bytes(inode, offset, 4, field)?;
     Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn read_be_u16(inode: &[u8], offset: usize, field: &str) -> io::Result<u16> {
+    let bytes = field_bytes(inode, offset, 2, field)?;
+    Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
 }
 
 fn read_be_u64(inode: &[u8], offset: usize, field: &str) -> io::Result<u64> {

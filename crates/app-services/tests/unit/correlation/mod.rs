@@ -987,7 +987,7 @@ fn correlation_groups_registry_sam_and_timeline_into_registry_family() {
             &[TimelineEvent {
                 id: TimelineEventId("timeline-sam-login".to_string()),
                 source_object_id: "file-sam".to_string(),
-                event_type: "REGISTRY_LAST_LOGIN".to_string(),
+                event_type: "REGISTRY_SAM_LAST_LOGIN".to_string(),
                 timestamp: Utc::now(),
                 title: "SAM last login".to_string(),
                 description: "alice logged in".to_string(),

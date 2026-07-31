@@ -1342,7 +1342,7 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
             }
 
             // Step 4: Build timeline from MACB
-            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            timeline_service::materialize_file_modified_unknown(conn).ok();
             let tl_items = timeline_service::query_timeline(conn, 0, 100)
                 .map(|r| r.items.len())
                 .unwrap_or(0);
@@ -1526,7 +1526,7 @@ fn liuyang_e01_lnk_extraction_and_correlation() {
             eprintln!("Stored {} LNK artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            timeline_service::materialize_file_modified_unknown(conn).ok();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -1827,7 +1827,7 @@ fn liuyang_e01_browser_history_extraction() {
             eprintln!("Stored {} BrowserHistory artifacts", all_artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            timeline_service::materialize_file_modified_unknown(conn).ok();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -2029,7 +2029,7 @@ fn liuyang_e01_prefetch_extraction() {
             eprintln!("Stored {} Prefetch artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            timeline_service::materialize_file_modified_unknown(conn).ok();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -2249,7 +2249,7 @@ fn liuyang_e01_recycle_bin_extraction() {
             eprintln!("Stored {} RecycleBin artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            timeline_service::materialize_file_modified_unknown(conn).ok();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();

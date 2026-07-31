@@ -13,6 +13,7 @@ mod output;
 mod snapshot;
 mod source_analysis;
 mod source_identity;
+mod timeline_rows;
 mod types;
 mod warnings;
 
@@ -36,6 +37,7 @@ pub(crate) use snapshot::{
     open_ready_source_connections,
 };
 pub(crate) use source_analysis::{current_analysis_for_case, ReportAnalysis, ReportSourceAnalysis};
+pub(crate) use timeline_rows::load_full_timeline_for_case;
 pub use types::BitLockerReportContext;
 pub(crate) use types::{RawExportBundle, ReportCorrelation, ReportGovernance};
 pub(crate) use warnings::{evidence_hash_warnings, report_scope_warnings, report_warnings};

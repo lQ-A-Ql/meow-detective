@@ -26,6 +26,8 @@ fn projection_connection() -> Connection {
             path TEXT NOT NULL,
             name TEXT NOT NULL,
             entry_type TEXT NOT NULL,
+            system INTEGER NOT NULL DEFAULT 0,
+            read_only INTEGER NOT NULL DEFAULT 0,
             created_at TEXT,
             modified_at TEXT,
             accessed_at TEXT,
@@ -149,6 +151,94 @@ fn timeline_graph_keyset_uses_strict_cursor_boundary() {
 }
 
 #[test]
+fn linux_projection_excludes_only_read_only_regular_files() {
+    let conn = projection_connection();
+    conn.execute_batch(
+        "INSERT INTO file_entries
+         (id, data_source_id, path, name, entry_type, system, read_only, modified_at)
+         VALUES
+         ('writable-system-path', 'ds-1', '/etc/ssh/sshd_config', 'sshd_config', 'file', 1, 0, '2026-07-18T00:00:00Z'),
+         ('read-only-user-path', 'ds-1', '/home/user/notes.txt', 'notes.txt', 'file', 0, 1, '2026-07-18T00:00:00Z'),
+         ('directory', 'ds-1', '/var/log', 'log', 'directory', 0, 0, '2026-07-18T00:00:00Z');",
+    )
+    .expect("insert Linux file policy fixtures");
+
+    let projection = materialize_file_modified_with_identity(
+        &conn,
+        DataSourcePlatform::Linux,
+        &AtomicBool::new(false),
+        "linux-policy-v1",
+    )
+    .expect("materialize Linux timeline");
+
+    assert_eq!(projection.inserted_count, 1);
+    assert_eq!(
+        conn.query_row(
+            "SELECT source_object_id FROM timeline_events WHERE event_type = 'FILE_MODIFIED'",
+            [],
+            |row| row.get::<_, String>(0)
+        )
+        .expect("read Linux timeline event"),
+        "writable-system-path"
+    );
+}
+
+#[test]
+fn windows_projection_excludes_system_files_and_system_roots() {
+    let conn = projection_connection();
+    conn.execute_batch(
+        "INSERT INTO file_entries
+         (id, data_source_id, path, name, entry_type, system, read_only, modified_at)
+         VALUES
+         ('user-file', 'ds-1', 'Users/Alice/readonly.txt', 'readonly.txt', 'file', 0, 1, '2026-07-18T00:00:00Z'),
+         ('native-system', 'ds-1', 'Users/Alice/system.dat', 'system.dat', 'file', 1, 0, '2026-07-18T00:00:00Z'),
+         ('windows-root', 'ds-1', '[P3]/Windows/System32/kernel.dll', 'kernel.dll', 'file', 0, 0, '2026-07-18T00:00:00Z'),
+         ('program-data', 'ds-1', '[P3]\\ProgramData\\service.db', 'service.db', 'file', 0, 0, '2026-07-18T00:00:00Z'),
+         ('ntfs-metadata', 'ds-1', '$MFT', '$MFT', 'file', 0, 0, '2026-07-18T00:00:00Z');",
+    )
+    .expect("insert Windows file policy fixtures");
+
+    let projection = materialize_file_modified_with_identity(
+        &conn,
+        DataSourcePlatform::Windows,
+        &AtomicBool::new(false),
+        "windows-policy-v1",
+    )
+    .expect("materialize Windows timeline");
+
+    assert_eq!(projection.inserted_count, 1);
+    assert_eq!(
+        conn.query_row(
+            "SELECT source_object_id FROM timeline_events WHERE event_type = 'FILE_MODIFIED'",
+            [],
+            |row| row.get::<_, String>(0)
+        )
+        .expect("read Windows timeline event"),
+        "user-file"
+    );
+}
+
+#[test]
+fn projection_without_graph_schema_reports_graph_as_not_applicable() {
+    let conn = projection_connection();
+    conn.execute_batch(
+        "DROP TABLE graph_edges;
+         DROP TABLE graph_nodes;
+         INSERT INTO file_entries
+         (id, data_source_id, path, name, entry_type, modified_at)
+         VALUES ('file-1', 'ds-1', '/file-1', 'file-1', 'file', '2026-07-18T00:00:00Z');",
+    )
+    .expect("create projection-only schema");
+
+    let first = materialize_file_modified_unknown(&conn).expect("materialize file timeline");
+    let second = materialize_file_modified_unknown(&conn).expect("reuse file timeline");
+
+    assert!(first.graph_complete);
+    assert!(second.graph_complete);
+    assert!(second.already_projected);
+}
+
+#[test]
 fn missing_source_graph_node_keeps_projection_retryable() {
     let conn = persistence_sqlite::connection::open_in_memory().expect("open application database");
     persistence_sqlite::runner::run_all(&conn).expect("run application migrations");
@@ -163,14 +253,14 @@ fn missing_source_graph_node_keeps_projection_retryable() {
     .expect("insert application case and source");
     conn.execute(
         "INSERT INTO file_entries
-         (id, data_source_id, path, name, entry_type, created_at)
+         (id, data_source_id, path, name, entry_type, modified_at)
          VALUES ('file-1', 'ds-1', '/file-1', 'file-1', 'file', '2026-07-18T00:00:00Z')",
         [],
     )
     .expect("insert file without graph projection");
 
-    let first = ensure_macb_timeline_projected(&conn).expect("project MACB timeline");
-    let second = ensure_macb_timeline_projected(&conn).expect("observe completed projection");
+    let first = materialize_file_modified_unknown(&conn).expect("project file timeline");
+    let second = materialize_file_modified_unknown(&conn).expect("observe completed projection");
 
     assert_eq!(first.inserted_count, 1);
     assert!(!first.graph_complete);
@@ -203,7 +293,7 @@ fn missing_source_graph_node_keeps_projection_retryable() {
         [],
     )
     .expect("materialize source graph node");
-    let completed = ensure_macb_timeline_projected(&conn).expect("retry graph projection");
+    let completed = materialize_file_modified_unknown(&conn).expect("retry graph projection");
     assert!(completed.graph_complete);
     assert!(completed.warnings.is_empty());
     assert_eq!(
@@ -216,17 +306,17 @@ fn missing_source_graph_node_keeps_projection_retryable() {
 }
 
 #[test]
-fn changed_projection_identity_replaces_stale_macb_events() {
+fn changed_projection_identity_replaces_stale_file_events() {
     let conn = projection_connection();
     conn.execute(
         "INSERT INTO file_entries
-         (id, data_source_id, path, name, entry_type, created_at)
+         (id, data_source_id, path, name, entry_type, modified_at)
          VALUES ('file-1', 'ds-1', '/file-1', 'file-1', 'file', '2026-07-18T00:00:00Z')",
         [],
     )
     .expect("insert file");
 
-    ensure_macb_timeline_projected_with_cancel_and_identity(
+    materialize_file_modified_unknown_with_cancel_and_identity(
         &conn,
         &AtomicBool::new(false),
         "catalog-artifact-v1",
@@ -234,12 +324,12 @@ fn changed_projection_identity_replaces_stale_macb_events() {
     .expect("project first identity");
     conn.execute(
         "UPDATE file_entries
-         SET created_at = '2026-07-18T01:00:00Z'
+         SET modified_at = '2026-07-18T01:00:00Z'
          WHERE id = 'file-1'",
         [],
     )
     .expect("change source timestamp");
-    let second = ensure_macb_timeline_projected_with_cancel_and_identity(
+    let second = materialize_file_modified_unknown_with_cancel_and_identity(
         &conn,
         &AtomicBool::new(false),
         "catalog-artifact-v2",
@@ -249,7 +339,7 @@ fn changed_projection_identity_replaces_stale_macb_events() {
     assert!(!second.already_projected);
     assert_eq!(
         conn.query_row(
-            "SELECT ts FROM timeline_events WHERE parser_id = 'timeline.macb'",
+            "SELECT ts FROM timeline_events WHERE parser_id = 'timeline.file_modified'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -260,7 +350,7 @@ fn changed_projection_identity_replaces_stale_macb_events() {
         conn.query_row(
             "SELECT input_identity
              FROM timeline_projection_meta
-             WHERE projection_key = 'macb'",
+             WHERE projection_key = 'file_modified_v1'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -270,11 +360,11 @@ fn changed_projection_identity_replaces_stale_macb_events() {
 }
 
 #[test]
-fn graph_write_failure_is_non_fatal_to_macb_projection() {
+fn graph_write_failure_is_non_fatal_to_file_projection() {
     let conn = projection_connection();
     conn.execute_batch(
         "INSERT INTO file_entries
-         (id, data_source_id, path, name, entry_type, created_at)
+         (id, data_source_id, path, name, entry_type, modified_at)
          VALUES ('file-1', 'ds-1', '/file-1', 'file-1', 'file', '2026-07-18T00:00:00Z');
          CREATE TRIGGER reject_timeline_graph_edge
          BEFORE INSERT ON graph_edges
@@ -284,7 +374,7 @@ fn graph_write_failure_is_non_fatal_to_macb_projection() {
     )
     .expect("create graph failure fixture");
 
-    let projection = ensure_macb_timeline_projected(&conn).expect("project MACB timeline");
+    let projection = materialize_file_modified_unknown(&conn).expect("project file timeline");
 
     assert_eq!(projection.inserted_count, 1);
     assert!(!projection.graph_complete);
@@ -313,7 +403,7 @@ fn graph_write_failure_is_non_fatal_to_macb_projection() {
     );
     assert_eq!(
         conn.query_row(
-            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'macb'",
+            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'file_modified_v1'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -323,7 +413,7 @@ fn graph_write_failure_is_non_fatal_to_macb_projection() {
     assert_eq!(
         conn.query_row(
             "SELECT COUNT(*) FROM timeline_projection_meta
-             WHERE projection_key = 'macb_graph'",
+             WHERE projection_key = 'timeline_graph_v2'",
             [],
             |row| row.get::<_, u64>(0)
         )
@@ -333,7 +423,7 @@ fn graph_write_failure_is_non_fatal_to_macb_projection() {
 
     conn.execute_batch("DROP TRIGGER reject_timeline_graph_edge")
         .expect("remove graph failure fixture");
-    let retry = ensure_macb_timeline_projected(&conn).expect("retry graph projection");
+    let retry = materialize_file_modified_unknown(&conn).expect("retry graph projection");
 
     assert!(!retry.already_projected);
     assert!(retry.graph_complete);
@@ -354,7 +444,7 @@ fn graph_write_failure_is_non_fatal_to_macb_projection() {
     );
     assert_eq!(
         conn.query_row(
-            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'macb_graph'",
+            "SELECT status FROM timeline_projection_meta WHERE projection_key = 'timeline_graph_v2'",
             [],
             |row| row.get::<_, String>(0)
         )
@@ -431,7 +521,7 @@ fn cancelled_timeline_projection_does_not_claim_completion() {
     .expect("insert file");
     let cancel_token = AtomicBool::new(true);
 
-    let error = ensure_macb_timeline_projected_with_cancel(&conn, &cancel_token)
+    let error = materialize_file_modified_unknown_with_cancel(&conn, &cancel_token)
         .expect_err("cancelled projection should stop");
 
     assert!(matches!(error, TimelineServiceError::Cancelled));

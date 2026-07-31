@@ -70,7 +70,6 @@ fn build_analysis_options(
     data_source: &domain::DataSource,
     analysis_mode: import_analysis::ImportAnalysisMode,
 ) -> import_analysis::PostImportPipelineOptions {
-    let image_backed = ctx.import_config.is_image_backed();
     import_analysis::PostImportPipelineOptions {
         case_root: ctx.case_root.to_path_buf(),
         db_path: source_db::source_db_path(ctx.case_root, &data_source.id),
@@ -80,7 +79,6 @@ fn build_analysis_options(
         index_dir: source_db::source_index_dir(ctx.case_root, &data_source.id),
         max_analysis_workers: ctx.options.max_analysis_workers,
         cancel_token: Arc::clone(ctx.options.cancel_token),
-        enable_timeline_projection: !image_backed,
         enable_content_extraction: analysis_mode.allows_content(),
         enable_text_indexing: analysis_mode.allows_content(),
         analysis_mode,

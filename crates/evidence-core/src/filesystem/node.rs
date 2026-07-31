@@ -10,6 +10,8 @@ pub struct FsNode {
     pub size: u64,
     pub hidden: bool,
     pub system: bool,
+    /// True when the filesystem metadata exposes no write permission.
+    pub read_only: bool,
     /// True when the file is encrypted via NTFS Encrypting File System (EFS).
     pub encrypted: bool,
     pub created_at: Option<FsTimestamp>,
@@ -74,6 +76,7 @@ pub fn fs_node_with_attributes(
         size,
         hidden,
         system,
+        read_only: false,
         encrypted,
         created_at,
         modified_at,

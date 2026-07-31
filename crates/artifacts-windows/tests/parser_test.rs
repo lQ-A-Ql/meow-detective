@@ -235,7 +235,7 @@ fn registry_hive_fixture_parses_name() {
     );
     assert!(
         !sink.timeline_events.is_empty(),
-        "Expected REGISTRY_MODIFIED event"
+        "Expected REGISTRY_HIVE_LAST_WRITE event"
     );
 }
 

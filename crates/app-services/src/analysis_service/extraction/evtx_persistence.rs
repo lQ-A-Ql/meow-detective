@@ -177,11 +177,10 @@ impl EvtxOutputBatch {
             self.artifacts.push(artifact);
             self.artifact_count = self.artifact_count.saturating_add(1);
         }
-        for event in outcome.timeline_events {
-            self.digest.record_timeline_event(&event);
-            self.timeline_events.push(event);
-            self.timeline_event_count = self.timeline_event_count.saturating_add(1);
-        }
+        debug_assert!(outcome.timeline_events.iter().all(|event| {
+            timeline::TimelineEventKind::parse(&event.event_type)
+                .is_none_or(|kind| !kind.is_registry())
+        }));
     }
 
     fn pending_artifact_count(&self) -> usize {

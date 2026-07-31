@@ -60,6 +60,7 @@ export const COMMANDS = {
   timeline: {
     GET_TIMELINE_EVENTS: 'get_timeline_events',
     GET_TIMELINE_EVENT_BY_ID: 'get_timeline_event_by_id',
+    GET_TIMELINE_FACETS: 'get_timeline_facets',
   },
   search: {
     SEARCH_FILES_REQUEST: 'search_files_request',

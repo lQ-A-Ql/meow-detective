@@ -1,7 +1,7 @@
 use crate::block_cache::BlockCache;
 use crate::format::{inode_table_block_from_descriptor, EXT4_METADATA_CACHE_BYTES, I_BLOCK_SIZE};
 use crate::superblock::Ext4Superblock;
-use evidence_core::filesystem::invalid_fs_data;
+use evidence_core::filesystem::{invalid_fs_data, FsTimestamp};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -196,9 +196,46 @@ impl Ext4Reader {
         }
     }
 
+    pub(crate) fn inode_created_at(inode: &[u8]) -> Option<FsTimestamp> {
+        inode_timestamp(inode, 0x90, Some(0x94))
+    }
+
+    pub(crate) fn inode_modified_at(inode: &[u8]) -> Option<FsTimestamp> {
+        inode_timestamp(inode, 0x10, Some(0x88))
+    }
+
+    pub(crate) fn inode_accessed_at(inode: &[u8]) -> Option<FsTimestamp> {
+        inode_timestamp(inode, 0x08, Some(0x8C))
+    }
+
+    pub(crate) fn inode_changed_at(inode: &[u8]) -> Option<FsTimestamp> {
+        inode_timestamp(inode, 0x0C, Some(0x84))
+    }
+
     pub fn inode_i_block(inode: &[u8]) -> &[u8] {
         let start = 0x28;
         let end = (start + I_BLOCK_SIZE).min(inode.len());
         &inode[start..end]
     }
+}
+
+fn inode_timestamp(
+    inode: &[u8],
+    seconds_offset: usize,
+    extra_offset: Option<usize>,
+) -> Option<FsTimestamp> {
+    let seconds_bytes = inode.get(seconds_offset..seconds_offset.checked_add(4)?)?;
+    let raw_seconds = u32::from_le_bytes(seconds_bytes.try_into().ok()?);
+    if raw_seconds == 0 {
+        return None;
+    }
+
+    let extra = extra_offset
+        .and_then(|offset| inode.get(offset..offset.checked_add(4)?))
+        .and_then(|bytes| bytes.try_into().ok())
+        .map(u32::from_le_bytes)
+        .unwrap_or(0);
+    let seconds = i64::from(raw_seconds as i32) + (i64::from(extra & 0x3) << 32);
+    let nanoseconds = extra >> 2;
+    FsTimestamp::from_timestamp(seconds, nanoseconds)
 }

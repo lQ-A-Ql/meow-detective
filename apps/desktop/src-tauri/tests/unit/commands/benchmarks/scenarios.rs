@@ -74,7 +74,7 @@ fn file_paginate(connection: &rusqlite::Connection) -> serde_json::Value {
 }
 
 fn timeline_filter(connection: &rusqlite::Connection) -> serde_json::Value {
-    let _ = timeline_service::ensure_macb_timeline_projected(connection);
+    let _ = timeline_service::materialize_file_modified_unknown(connection);
     for _ in 0..WARMUP_RUNS {
         let _ = timeline_service::query_timeline(connection, 0, 20);
     }

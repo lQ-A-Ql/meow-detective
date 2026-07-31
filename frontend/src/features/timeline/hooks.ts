@@ -1,5 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { getTimelineEventById, getTimelineEvents, TimelineRequest } from '@/lib/api/timeline';
+import {
+  getTimelineEventById,
+  getTimelineEvents,
+  getTimelineFacets,
+  TimelineRequest,
+} from '@/lib/api/timeline';
+import type { TimelineFacetsRequest } from '@/types/timeline';
 import { timelineQueryKeys } from '@/features/cache-invalidation';
 
 export function useTimelineEvents(request?: TimelineRequest) {
@@ -31,5 +37,12 @@ export function useTimelineEventById(eventId?: string) {
     queryFn: () => getTimelineEventById(eventId!),
     enabled: Boolean(eventId),
     retry: false,
+  });
+}
+
+export function useTimelineFacets(request?: TimelineFacetsRequest) {
+  return useQuery({
+    queryKey: timelineQueryKeys.facets(request),
+    queryFn: () => getTimelineFacets(request),
   });
 }

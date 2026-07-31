@@ -497,7 +497,7 @@ fn ceph_bluestore_semantic_schema_is_normalized_and_raw_free() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_027_artifact_keyset_indexes"
+        "source_028_file_entry_read_only"
     );
     let tables = [
         "ceph_bluestore_semantic_scans",

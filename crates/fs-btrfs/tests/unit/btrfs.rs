@@ -201,6 +201,7 @@ mod cases {
             d[16..24].copy_from_slice(&size.to_le_bytes());
             d[40..44].copy_from_slice(&nlink.to_le_bytes());
             d[52..56].copy_from_slice(&mode.to_le_bytes());
+            d[136..144].copy_from_slice(&1_700_000_000i64.to_le_bytes());
             d
         }
 
@@ -233,7 +234,7 @@ mod cases {
             256,
             INODE_ITEM_KEY,
             0,
-            &make_inode(S_IFDIR, 0, 3),
+            &make_inode(S_IFDIR | 0o755, 0, 3),
             &mut fs_doff,
         );
 
@@ -266,7 +267,7 @@ mod cases {
             257,
             INODE_ITEM_KEY,
             0,
-            &make_inode(S_IFREG, file_content.len() as u64, 1),
+            &make_inode(S_IFREG | 0o644, file_content.len() as u64, 1),
             &mut fs_doff,
         );
 
@@ -292,7 +293,7 @@ mod cases {
             258,
             INODE_ITEM_KEY,
             0,
-            &make_inode(S_IFDIR, 0, 2),
+            &make_inode(S_IFDIR | 0o755, 0, 2),
             &mut fs_doff,
         );
 
@@ -316,7 +317,7 @@ mod cases {
             259,
             INODE_ITEM_KEY,
             0,
-            &make_inode(S_IFREG, nested_content.len() as u64, 1),
+            &make_inode(S_IFREG | 0o444, nested_content.len() as u64, 1),
             &mut fs_doff,
         );
 
@@ -531,9 +532,23 @@ mod cases {
         let file = sv.iter().find(|n| n.name == "file.txt").unwrap();
         assert!(!file.is_dir);
         assert_eq!(file.size, 17);
+        assert!(!file.read_only);
+        assert_eq!(
+            file.modified_at.expect("modified timestamp").timestamp(),
+            1_700_000_000
+        );
 
         let dir = sv.iter().find(|n| n.name == "subdir").unwrap();
         assert!(dir.is_dir);
+
+        let nested = btrfs.list_children("default/subdir").unwrap();
+        assert!(
+            nested
+                .iter()
+                .find(|node| node.name == "nested.dat")
+                .expect("nested file")
+                .read_only
+        );
     }
 
     // -------------------------------------------------------------------

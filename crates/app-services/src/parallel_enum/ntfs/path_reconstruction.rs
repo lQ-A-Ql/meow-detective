@@ -136,6 +136,7 @@ impl MftCatalog {
             action.size,
             action.hidden,
             action.system,
+            action.read_only,
             action.encrypted,
         )
         .map_err(ParallelEnumError::MftParams)?;
@@ -158,6 +159,7 @@ pub(in crate::parallel_enum) struct MftDirectoryIndexBackfillAction {
     pub(in crate::parallel_enum) mft_ref: u64,
     pub(in crate::parallel_enum) hidden: bool,
     pub(in crate::parallel_enum) system: bool,
+    pub(in crate::parallel_enum) read_only: bool,
     pub(in crate::parallel_enum) encrypted: bool,
 }
 
@@ -191,6 +193,7 @@ pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions(
             mft_ref: entry.mft_ref,
             hidden: entry.hidden,
             system: entry.system,
+            read_only: entry.read_only,
             encrypted: entry.encrypted,
         });
     }

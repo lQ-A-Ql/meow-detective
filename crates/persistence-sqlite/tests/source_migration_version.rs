@@ -47,7 +47,7 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_025_file_entry_encrypted"
     ));
     assert!(runner::source_version_is_at_least(
-        "source_027_artifact_keyset_indexes",
+        "source_028_file_entry_read_only",
         "source_026_timeline_keyset_indexes"
     ));
 }
@@ -69,7 +69,7 @@ fn source_version_order_rejects_older_and_unknown_versions() {
 }
 
 #[test]
-fn source_024_through_027_upgrade_preserves_rows_and_adds_query_indexes() {
+fn source_024_through_028_upgrade_preserves_rows_and_adds_query_indexes() {
     let connection = persistence_sqlite::open_in_memory().unwrap();
     connection
         .execute_batch(
@@ -158,7 +158,7 @@ fn source_024_through_027_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 4);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 5);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(

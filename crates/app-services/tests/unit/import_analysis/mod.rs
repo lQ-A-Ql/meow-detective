@@ -218,7 +218,6 @@ fn analysis_options(
         index_dir: tmp.path().join("indexes").join("tantivy"),
         max_analysis_workers: Some(1),
         cancel_token: Arc::new(AtomicBool::new(false)),
-        enable_timeline_projection: true,
         enable_content_extraction: mode.allows_content(),
         enable_text_indexing: mode.allows_content(),
         analysis_mode: mode,
@@ -273,7 +272,6 @@ fn post_import_options(
         index_dir: tmp.path().join("indexes").join("tantivy"),
         max_analysis_workers: Some(1),
         cancel_token: Arc::new(AtomicBool::new(false)),
-        enable_timeline_projection: true,
         enable_content_extraction: mode.allows_content(),
         enable_text_indexing: mode.allows_content(),
         analysis_mode: mode,
@@ -294,7 +292,6 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
         index_dir: tmp.path().join("indexes").join("tantivy"),
         max_analysis_workers: Some(1),
         cancel_token: Arc::new(AtomicBool::new(false)),
-        enable_timeline_projection: false,
         enable_content_extraction: false,
         enable_text_indexing: false,
         analysis_mode: ImportAnalysisMode::MetadataOnly,
@@ -313,7 +310,7 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
 
     assert_eq!(
         message,
-        "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
+        "Timeline: scheduled for import finalization. Artifacts: 0. Index: 0 indexed"
     );
     assert_eq!(counts, JobOutcomeCounts::default());
     let events = events.lock().unwrap_or_else(|e| e.into_inner());
@@ -359,35 +356,25 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
     let (message, counts) = run_post_import_pipeline_with_counts(options, Some(&progress))
         .expect("post import success");
 
-    assert!(message.starts_with("Timeline: 2 events"));
-    assert!(message.contains("Artifacts: 0. Index: 2 indexed"));
+    assert_eq!(
+        message,
+        "Timeline: scheduled for import finalization. Artifacts: 0. Index: 2 indexed"
+    );
     assert_eq!(counts, JobOutcomeCounts::default());
     let events = events.lock().unwrap_or_else(|e| e.into_inner());
-    let scheduled = events
-        .iter()
-        .find(|(_, detail)| detail.contains("Post-import analysis scheduled"))
-        .expect("scheduled progress");
-    assert!(scheduled.1.contains("scheduling=queued"));
-    assert!(scheduled.1.contains("workerBudget=1"));
-    assert!(scheduled.1.contains("contentDeferred=true"));
-    assert!(scheduled.1.contains("textDeferred=true"));
-    let started = events
-        .iter()
-        .find(|(_, detail)| detail.contains("Analysis staging:"))
-        .expect("analysis start progress");
-    assert!(started.1.contains("scheduling=queued"));
-    assert!(started.1.contains("queueBound=256"));
-    assert!(started.1.contains("pendingTasks=2"));
     assert!(events
         .iter()
-        .any(|(_, detail)| detail.contains("Analysis workers complete")
-            && detail.contains("workerBudget=1")
-            && detail.contains("pendingTasks=0")));
+        .any(|(_, detail)| detail.contains("phase=search-index")
+            && detail.contains("workerBudget=0")
+            && detail.contains("timeline=finalize")));
+    assert!(events
+        .iter()
+        .all(|(_, detail)| !detail.contains("Analysis staging:")));
     let source_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     let timeline_count: i64 = source_conn
         .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(timeline_count, 2);
+    assert_eq!(timeline_count, 0);
 }
 
 #[test]
@@ -612,7 +599,7 @@ fn analysis_pool_respects_worker_limit_and_writes_temp_db() {
     assert_eq!(stats.processed_count, 2);
     let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
     let (_artifacts, timeline, index) = staging::analysis_staging_counts(&worker_conn).unwrap();
-    assert!(timeline > 0);
+    assert_eq!(timeline, 0);
     assert!(index > 0);
     assert_eq!(
         staging::get_worker_meta(&worker_conn, "merged")
@@ -678,7 +665,7 @@ fn analysis_tasks_include_title_case_file_entry_type() {
     )
     .unwrap();
     assert_eq!(stats.processed_count, 1);
-    assert!(stats.timeline_count > 0);
+    assert_eq!(stats.timeline_count, 0);
 }
 
 #[test]
@@ -752,7 +739,6 @@ fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
         ds_id.clone(),
         ImportAnalysisMode::BudgetedContent,
     );
-    options.enable_timeline_projection = false;
     options.enable_content_extraction = false;
     options.enable_text_indexing = true;
 
@@ -803,7 +789,6 @@ fn analysis_worker_uses_bounded_content_reads_for_each_consumer() {
         ds_id.clone(),
         ImportAnalysisMode::BudgetedContent,
     );
-    options.enable_timeline_projection = false;
     options.enable_content_extraction = true;
     options.enable_text_indexing = true;
 
@@ -851,7 +836,6 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
         ds_id.clone(),
         ImportAnalysisMode::FullContent,
     );
-    options.enable_timeline_projection = false;
     options.enable_content_extraction = true;
     options.enable_text_indexing = false;
 
@@ -942,7 +926,7 @@ fn disabled_import_content_reads_keep_analysis_bounded() {
     .unwrap();
 
     assert_eq!(stats.processed_count, 2);
-    assert!(stats.timeline_count > 0);
+    assert_eq!(stats.timeline_count, 0);
     assert_eq!(stats.artifact_count, 0);
     assert_eq!(stats.indexed_count, 2);
     assert_eq!(stats.warning_count, 0);

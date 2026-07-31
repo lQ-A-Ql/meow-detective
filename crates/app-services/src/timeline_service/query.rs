@@ -4,7 +4,6 @@ use std::path::Path;
 use transport::{dto::TimelineEventDto, paging::PageResponse};
 
 use super::export::{timeline_event_to_dto, timeline_event_to_source_dto};
-use super::projection::ensure_macb_timeline_projected;
 use super::TimelineServiceError;
 use crate::source_db;
 
@@ -47,7 +46,6 @@ pub fn query_timeline_filtered(
     time_end: Option<&str>,
     event_type: Option<&str>,
 ) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
-    ensure_macb_timeline_projected(conn)?;
     let repo = TimelineRepo::new(conn);
     let total = repo.count_filtered(time_start, time_end, event_type)?;
     let items = repo
@@ -66,7 +64,6 @@ pub fn get_timeline_event_by_id(
     conn: &Connection,
     event_id: &str,
 ) -> Result<Option<TimelineEventDto>, TimelineServiceError> {
-    ensure_macb_timeline_projected(conn)?;
     Ok(TimelineRepo::new(conn)
         .find_by_id(event_id)?
         .map(timeline_event_to_dto))
@@ -84,9 +81,12 @@ pub fn get_timeline_event_by_id_for_case(
                 "{error}; source database timeline events require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source =
-        source_db::open_ready_source_by_id(case_conn, case_root, case_id, &data_source_id)?;
-    ensure_macb_timeline_projected(&source.connection)?;
+    let source = source_db::open_ready_source_read_only_by_id(
+        case_conn,
+        case_root,
+        case_id,
+        &data_source_id,
+    )?;
     Ok(TimelineRepo::new(&source.connection)
         .find_by_id(&local_id)?
         .map(|event| timeline_event_to_source_dto(event, &data_source_id)))

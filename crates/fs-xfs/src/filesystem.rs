@@ -20,6 +20,7 @@ impl FileSystemReader for XfsReader {
         root.modified_at = metadata.modified_at;
         root.accessed_at = metadata.accessed_at;
         root.changed_at = metadata.changed_at;
+        root.read_only = metadata.read_only;
         Ok(root)
     }
 
@@ -59,6 +60,7 @@ impl FileSystemReader for XfsReader {
                     },
                     hidden: false,
                     system: false,
+                    read_only: metadata.map(|value| value.read_only).unwrap_or(false),
                     encrypted: false,
                     created_at: metadata.and_then(|value| value.created_at),
                     modified_at: metadata.and_then(|value| value.modified_at),

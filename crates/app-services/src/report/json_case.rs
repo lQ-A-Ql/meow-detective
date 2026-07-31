@@ -48,7 +48,7 @@ fn generate_json_export_for_case_with_context(
     bitlocker_context: Option<BitLockerReportContext<'_>>,
 ) -> Result<String, ReportError> {
     let events = if scope.full_timeline {
-        crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)?.items
+        super::load_full_timeline_for_case(conn, case_root, &case.id)?
     } else {
         Vec::new()
     };

@@ -248,7 +248,7 @@ fn write_graph_rows(
                 row.id,
                 row.source_object_id,
                 row.confidence,
-                format!("timeline.macb:{}", row.event_type),
+                format!("timeline:{}", row.event_type),
                 created_at
             ])
             .map_err(|error| {

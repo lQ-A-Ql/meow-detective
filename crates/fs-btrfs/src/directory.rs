@@ -1,8 +1,18 @@
 use crate::format::{DIR_INDEX_KEY, DIR_ITEM_KEY, FT_DIR, INODE_ITEM_KEY};
 use crate::types::BtrfsKey;
 use crate::BtrfsReader;
-use evidence_core::filesystem::{invalid_fs_data, path_components};
+use evidence_core::filesystem::{invalid_fs_data, path_components, FsTimestamp};
 use std::io;
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BtrfsInodeMetadata {
+    pub(crate) size: u64,
+    pub(crate) read_only: bool,
+    pub(crate) created_at: Option<FsTimestamp>,
+    pub(crate) modified_at: Option<FsTimestamp>,
+    pub(crate) accessed_at: Option<FsTimestamp>,
+    pub(crate) changed_at: Option<FsTimestamp>,
+}
 
 impl BtrfsReader {
     fn parse_dir_entry(data: &[u8]) -> io::Result<Option<(String, u64, u8)>> {
@@ -71,6 +81,17 @@ impl BtrfsReader {
         tree_root_bytenr: u64,
         inode_objectid: u64,
     ) -> io::Result<u64> {
+        Ok(self
+            .get_inode_metadata(tree_root_bytenr, inode_objectid)?
+            .map(|metadata| metadata.size)
+            .unwrap_or_default())
+    }
+
+    pub(crate) fn get_inode_metadata(
+        &self,
+        tree_root_bytenr: u64,
+        inode_objectid: u64,
+    ) -> io::Result<Option<BtrfsInodeMetadata>> {
         let key = BtrfsKey {
             objectid: inode_objectid,
             ty: INODE_ITEM_KEY,
@@ -79,15 +100,28 @@ impl BtrfsReader {
         let (leaf_data, items) = self.walk_to_leaf(tree_root_bytenr, &key)?;
         if let Ok(index) = items.binary_search_by(|item| item.key.cmp(&key)) {
             let data = Self::get_item_data(&leaf_data, &items[index]);
-            if data.len() >= 24 {
-                return Ok(u64::from_le_bytes(
+            if data.len() >= 160 {
+                let size = u64::from_le_bytes(
                     data[16..24]
                         .try_into()
                         .map_err(|_| invalid_fs_data("disk parse error"))?,
-                ));
+                );
+                let mode = u32::from_le_bytes(
+                    data[52..56]
+                        .try_into()
+                        .map_err(|_| invalid_fs_data("disk parse error"))?,
+                );
+                return Ok(Some(BtrfsInodeMetadata {
+                    size,
+                    read_only: mode & 0o222 == 0,
+                    created_at: parse_inode_timestamp(data, 148),
+                    modified_at: parse_inode_timestamp(data, 136),
+                    accessed_at: parse_inode_timestamp(data, 112),
+                    changed_at: parse_inode_timestamp(data, 124),
+                }));
             }
         }
-        Ok(0)
+        Ok(None)
     }
 
     pub(crate) fn resolve_path_in_tree(
@@ -122,4 +156,14 @@ impl BtrfsReader {
         }
         Ok(None)
     }
+}
+
+fn parse_inode_timestamp(data: &[u8], offset: usize) -> Option<FsTimestamp> {
+    let seconds = i64::from_le_bytes(data.get(offset..offset.checked_add(8)?)?.try_into().ok()?);
+    let nanoseconds = u32::from_le_bytes(
+        data.get(offset.checked_add(8)?..offset.checked_add(12)?)?
+            .try_into()
+            .ok()?,
+    );
+    FsTimestamp::from_timestamp(seconds, nanoseconds)
 }

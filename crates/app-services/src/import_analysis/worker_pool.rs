@@ -69,9 +69,7 @@ pub fn run_post_import_pipeline_report(
 }
 
 fn post_import_disabled(options: &PostImportPipelineOptions) -> bool {
-    !options.enable_timeline_projection
-        && !options.enable_content_extraction
-        && !options.enable_text_indexing
+    !options.enable_content_extraction && !options.enable_text_indexing
 }
 
 fn finish_disabled_post_import(
@@ -83,7 +81,7 @@ fn finish_disabled_post_import(
     if let Some(cb) = progress_cb {
         cb(
             84,
-            "Post-import metadata indexing: phase=search-index scheduling=running workerBudget=0 activeWorkers=0 queuedTasks=0 pendingTasks=unknown timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
+            "Post-import metadata indexing: phase=search-index scheduling=running workerBudget=0 activeWorkers=0 queuedTasks=0 pendingTasks=unknown timeline=finalize content=disabled text=disabled contentDeferred=true textDeferred=true",
         );
     }
     let search_stats = rebuild_file_metadata_index(options, progress_cb)
@@ -94,7 +92,7 @@ fn finish_disabled_post_import(
     counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
     finish_post_import_tiers(tier_state, &counts)?;
     let message = format!(
-        "Timeline: deferred until Timeline page. Artifacts: 0. Index: {} indexed",
+        "Timeline: scheduled for import finalization. Artifacts: 0. Index: {} indexed",
         stats.indexed_count
     );
     Ok(PostImportPipelineReport {
@@ -139,7 +137,6 @@ fn import_analysis_options(
         index_dir: options.index_dir,
         max_analysis_workers: options.max_analysis_workers,
         cancel_token: options.cancel_token,
-        enable_timeline_projection: options.enable_timeline_projection,
         enable_content_extraction: options.enable_content_extraction,
         enable_text_indexing: options.enable_text_indexing,
         analysis_mode: options.analysis_mode,

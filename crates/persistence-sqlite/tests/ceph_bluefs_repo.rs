@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_027_artifact_keyset_indexes"
+        "source_028_file_entry_read_only"
     );
     for table in [
         "ceph_bluefs_superblocks",

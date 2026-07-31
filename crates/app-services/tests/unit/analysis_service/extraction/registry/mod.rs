@@ -72,11 +72,11 @@ fn sam_user_artifact_carries_subject_attribution() {
     assert!(outcome
         .timeline_events
         .iter()
-        .any(|e| e.event_type == "REGISTRY_LAST_LOGIN"));
+        .any(|e| e.event_type == "REGISTRY_SAM_LAST_LOGIN"));
     assert!(outcome
         .timeline_events
         .iter()
-        .any(|e| e.event_type == "REGISTRY_ACCOUNT_CREATED"));
+        .any(|e| e.event_type == "REGISTRY_SAM_PASSWORD_LAST_SET"));
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn ntuser_user_assist_derives_subject_username_and_emits_timeline() {
     assert_eq!(outcome.timeline_events.len(), 1);
     assert_eq!(
         outcome.timeline_events[0].event_type,
-        "REGISTRY_USER_ASSIST_EXEC"
+        "REGISTRY_USER_ASSIST_LAST_RUN"
     );
 }
 
@@ -127,7 +127,10 @@ fn system_shutdown_emits_timeline_event() {
     assert_eq!(outcome.artifacts.len(), 1);
     assert_eq!(outcome.artifacts[0].family, "RegistryShutdownTime");
     assert_eq!(outcome.timeline_events.len(), 1);
-    assert_eq!(outcome.timeline_events[0].event_type, "REGISTRY_SHUTDOWN");
+    assert_eq!(
+        outcome.timeline_events[0].event_type,
+        "REGISTRY_SYSTEM_SHUTDOWN"
+    );
 }
 
 #[test]

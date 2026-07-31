@@ -17,6 +17,7 @@ pub struct NtfsDirectoryEntry {
     pub mft_ref: u64,
     pub hidden: bool,
     pub system: bool,
+    pub read_only: bool,
     pub encrypted: bool,
 }
 
@@ -57,12 +58,11 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             } else {
                 u64::from_le_bytes(data[off + 0x40..off + 0x48].try_into().unwrap_or([0; 8]))
             };
-            entries.push(DirEntry {
-                node: fs_node_with_attributes(
-                    name, is_dir, size, hidden, system, encrypted, None, None, None,
-                ),
-                mft_ref,
-            });
+            let mut node = fs_node_with_attributes(
+                name, is_dir, size, hidden, system, encrypted, None, None, None,
+            );
+            node.read_only = flags & 0x01 != 0;
+            entries.push(DirEntry { node, mft_ref });
         }
         off += entry_size;
     }

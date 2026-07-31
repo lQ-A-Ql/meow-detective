@@ -180,7 +180,7 @@ impl ArtifactExtractor for RegistryExtractor {
                 );
                 let ev = new_timeline_event(
                     &ctx.file_id,
-                    "REGISTRY_MODIFIED",
+                    "REGISTRY_HIVE_LAST_WRITE",
                     dt,
                     format!("Registry hive modified: {}", name),
                     format!("Hive last written at {}", dt.to_rfc3339()),

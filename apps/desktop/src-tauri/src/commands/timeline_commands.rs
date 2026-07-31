@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 use transport::{
-    commands::{GetTimelineEventByIdRequest, GetTimelineRequest},
-    dto::TimelineEventDto,
+    commands::{GetTimelineEventByIdRequest, GetTimelineFacetsRequest, GetTimelineRequest},
+    dto::{TimelineEventDto, TimelineFacetsDto},
     paging::PageResponse,
     CommandError,
 };
@@ -48,6 +48,48 @@ pub async fn get_timeline_events(
         .map_err(CommandError::from_typed_service_error)?;
         event_bridge::emit_performance_report_ready(&app, &result.performance_report);
         Ok(result.page)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Return server-side timeline totals, distributions, and histogram buckets.
+#[tauri::command]
+pub async fn get_timeline_facets(
+    state: State<'_, AppState>,
+    request: Option<GetTimelineFacetsRequest>,
+) -> Result<TimelineFacetsDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or(GetTimelineFacetsRequest {
+        time_start: None,
+        time_end: None,
+        event_type: None,
+        bucket_count: 60,
+    });
+    req.validate().map_err(CommandError::invalid_input)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(TimelineFacetsDto {
+                total_events: 0,
+                start_ts: None,
+                end_ts: None,
+                event_types: Vec::new(),
+                data_sources: Vec::new(),
+                histogram: Vec::new(),
+            });
+        }
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::timeline_service::get_timeline_facets_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+            req.time_start.as_deref(),
+            req.time_end.as_deref(),
+            req.event_type.as_deref(),
+            req.bucket_count,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

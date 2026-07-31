@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 #[serde(rename_all = "camelCase")]
 pub struct TimelineEventDto {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source_id: Option<String>,
     pub source_object_id: String,
     pub event_type: String,
     pub ts: String,
@@ -20,6 +22,34 @@ pub struct TimelineEventDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_attribution: Option<String>,
     pub attrs: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineFacetCountDto {
+    pub value: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineHistogramBucketDto {
+    pub start_ts: String,
+    pub end_ts: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineFacetsDto {
+    pub total_events: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_ts: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_ts: Option<String>,
+    pub event_types: Vec<TimelineFacetCountDto>,
+    pub data_sources: Vec<TimelineFacetCountDto>,
+    pub histogram: Vec<TimelineHistogramBucketDto>,
 }
 
 /// A cluster of timeline events sharing the same `event_type` and `description`.
