@@ -1,8 +1,15 @@
 use crate::connection::DbResult;
 use crate::sql_builder::{placeholders, ClauseBuilder};
-use domain::{EntryStatus, EvidenceCitation, NodeType, NotebookEntry, NotebookEntryType};
+use domain::{EntryStatus, EvidenceCitation, NotebookEntry, NotebookEntryType};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
+
+mod mapping;
+
+use mapping::{
+    entry_status_str, entry_type_str, node_type_str, row_to_citation, row_to_notebook_entry,
+    row_to_step,
+};
 
 /// A recorded investigation step for provenance tracking.
 #[derive(Debug, Clone, PartialEq)]
@@ -409,118 +416,6 @@ impl<'a> NotebookRepo<'a> {
         Ok(steps)
     }
 }
-
-// ── Serialization helpers ──
-
-fn entry_type_str(et: &NotebookEntryType) -> &'static str {
-    match et {
-        NotebookEntryType::Observation => "observation",
-        NotebookEntryType::Hypothesis => "hypothesis",
-        NotebookEntryType::Finding => "finding",
-        NotebookEntryType::ActionItem => "action_item",
-        NotebookEntryType::Conclusion => "conclusion",
-    }
-}
-
-fn parse_entry_type(s: &str) -> NotebookEntryType {
-    match s {
-        "observation" => NotebookEntryType::Observation,
-        "hypothesis" => NotebookEntryType::Hypothesis,
-        "finding" => NotebookEntryType::Finding,
-        "action_item" => NotebookEntryType::ActionItem,
-        "conclusion" => NotebookEntryType::Conclusion,
-        _ => NotebookEntryType::Observation,
-    }
-}
-
-fn entry_status_str(status: &EntryStatus) -> &'static str {
-    match status {
-        EntryStatus::Draft => "draft",
-        EntryStatus::Reviewed => "reviewed",
-        EntryStatus::Final => "final",
-    }
-}
-
-fn parse_entry_status(s: &str) -> EntryStatus {
-    match s {
-        "draft" => EntryStatus::Draft,
-        "reviewed" => EntryStatus::Reviewed,
-        "final" => EntryStatus::Final,
-        "deleted" => EntryStatus::Draft, // soft-deleted entries: treat as Draft
-        _ => EntryStatus::Draft,
-    }
-}
-
-fn node_type_str(nt: &NodeType) -> &'static str {
-    match nt {
-        NodeType::File => "file",
-        NodeType::Artifact => "artifact",
-        NodeType::TimelineEvent => "timeline_event",
-        NodeType::Entity => "entity",
-        NodeType::Lead => "lead",
-        NodeType::NotebookEntry => "notebook_entry",
-    }
-}
-
-fn parse_node_type(s: &str) -> NodeType {
-    match s {
-        "file" => NodeType::File,
-        "artifact" => NodeType::Artifact,
-        "timeline_event" => NodeType::TimelineEvent,
-        "entity" => NodeType::Entity,
-        "lead" => NodeType::Lead,
-        "notebook_entry" => NodeType::NotebookEntry,
-        _ => NodeType::Entity,
-    }
-}
-
-// ── Row mappers ──
-
-fn row_to_notebook_entry(row: &rusqlite::Row) -> rusqlite::Result<NotebookEntry> {
-    let tags_str: String = row.get(7)?;
-    let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
-    Ok(NotebookEntry {
-        id: row.get(0)?,
-        case_id: row.get(1)?,
-        parent_id: row.get(2)?,
-        author: row.get(3)?,
-        entry_type: parse_entry_type(&row.get::<_, String>(4)?),
-        title: row.get(5)?,
-        body_markdown: row.get(6)?,
-        tags,
-        status: parse_entry_status(&row.get::<_, String>(8)?),
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
-    })
-}
-
-fn row_to_citation(row: &rusqlite::Row) -> rusqlite::Result<EvidenceCitation> {
-    Ok(EvidenceCitation {
-        id: row.get(0)?,
-        entry_id: row.get(1)?,
-        target_node_type: parse_node_type(&row.get::<_, String>(2)?),
-        target_node_id: row.get(3)?,
-        display_label: row.get(4)?,
-        snippet: row.get(5)?,
-        cited_at: row.get(6)?,
-    })
-}
-
-fn row_to_step(row: &rusqlite::Row) -> rusqlite::Result<InvestigationStep> {
-    Ok(InvestigationStep {
-        id: row.get(0)?,
-        case_id: row.get(1)?,
-        step_kind: row.get(2)?,
-        params_json: row.get(3)?,
-        timestamp: row.get(4)?,
-        duration_ms: row.get(5)?,
-        case_state_hash: row.get(6)?,
-        success: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
-        error_code: row.get(8)?,
-    })
-}
-
-// ── Tests ──
 
 #[cfg(test)]
 #[path = "../../tests/unit/repositories/notebook_repo.rs"]

@@ -1,5 +1,1 @@
 path,owner,reason,expires
-crates/fs-ntfs/src/reader.rs,filesystem,NTFS reader state and trait implementation remain tightly coupled pending a reader-context extraction,2026-09-30
-crates/persistence-sqlite/src/repositories/file_repo.rs,persistence,File repository query surface requires a transaction-safe capability split,2026-09-30
-crates/persistence-sqlite/src/repositories/graph_repo.rs,persistence,Graph repository query and write surfaces require a transaction-safe capability split,2026-09-30
-crates/persistence-sqlite/src/repositories/notebook_repo.rs,persistence,Notebook repository is one line above target and awaits the repository family split,2026-09-30

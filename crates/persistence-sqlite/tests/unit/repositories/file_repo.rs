@@ -1,6 +1,9 @@
 use super::*;
 use crate::{open_in_memory, open_or_create, runner};
-use domain::{DataSourceKind, EntryType, FileEncryptionStatus};
+use domain::{
+    DataSourceId, DataSourceKind, EntryType, FileEncryptionStatus, FileEntry, FileEntryId,
+};
+use rusqlite::{params, Connection};
 use tempfile::TempDir;
 
 fn insert_data_source(conn: &Connection, id: &DataSourceId) {

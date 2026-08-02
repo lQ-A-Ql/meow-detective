@@ -1,5 +1,6 @@
 use super::*;
 use crate::{connection::open_in_memory, runner};
+use domain::NodeType;
 
 fn setup() -> (&'static Connection, NotebookRepo<'static>) {
     let conn = Box::new(open_in_memory().unwrap());
