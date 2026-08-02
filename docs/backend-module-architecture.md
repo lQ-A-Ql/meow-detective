@@ -123,6 +123,42 @@ Line budgets:
 - `mod.rs` and `lib.rs` hard ceiling for new debt: 200 lines.
 - Function target: 100 lines; 150-line hard ceiling for new debt.
 
+The current formal module-exception inventory is zero. The exception CSV is
+header-only. The final reviewed splits completed on 2026-08-03 are:
+
+| Former module | Capability modules |
+|---|---|
+| `persistence-sqlite/repositories/file_repo.rs` | browse, lookup, row mapping, writes |
+| `persistence-sqlite/repositories/graph_repo.rs` | nodes, edges, neighbors, traversal, snapshot, writes, row mapping |
+| `persistence-sqlite/repositories/notebook_repo.rs` | notebook use cases and row/enum mapping |
+| `fs-ntfs/reader.rs` | attribute reads, data runs, compression, extent collection, file/range reads |
+
+Repository and reader facades retain stable constructors and public methods;
+SQL ordering, transaction scope, evidence-read bounds, sparse-run behavior, and
+compressed-data behavior remain owned by their capability modules.
+
+### Cross-service dependency direction
+
+Ceph-derived source handling is an explicit acyclic orchestration boundary:
+
+```text
+derived_source_service
+  -> analysis_service
+  -> file_service -> ceph_reconstruction
+  -> ceph_reconstruction
+
+analysis_service -> ceph_reconstruction
+```
+
+`derived_source_service` owns registration, materialization, catalog
+finalization, artifact dispatch, and graph projection for derived sources.
+`ceph_reconstruction` owns lower-level read-only Ceph/RBD/CephFS capabilities
+and must not import `analysis_service`, `file_service`, or
+`derived_source_service`. Analysis and file services may consume neutral Ceph
+reader/metrics types, but neither may depend on derived-source orchestration.
+`scripts/check-stage4-service-boundary.ps1` lexically enforces these forbidden
+reverse edges and ignores comments and strings.
+
 The executable Stage 3 and Stage 4 split plan is maintained in
 `docs/backend-stage3-stage4-design.md`. It defines transport request domains,
 the thin Tauri command boundary, application-service target modules, review
@@ -289,6 +325,10 @@ The scripts intentionally do not write baseline files.
 ## Exceptions
 
 Exceptions are narrow and temporary:
+
+- There are currently no formal normal-module exceptions. The header-only
+  `scripts/baselines/rust-module-size-exceptions.csv` is the authoritative
+  inventory; adding a row requires architecture review.
 
 - Third-party or vendored `crates/evtx-patched` source is not scanned or recorded
   in migration baselines.

@@ -52,6 +52,38 @@ function Test-ForbiddenTauriDependency([string]$Name) {
   return $Name -match '^tauri(?:$|-)|^tauri-runtime(?:$|-)|^tauri-plugin-'
 }
 
+function Test-ModuleToken(
+  [string]$MaskedContent,
+  [string]$ModuleName
+) {
+  return [regex]::IsMatch(
+    $MaskedContent,
+    "\b$([regex]::Escape($ModuleName))\b"
+  )
+}
+
+function Assert-NoModuleReferencesUnder(
+  [string]$RelativeRoot,
+  [string[]]$ForbiddenModules,
+  [string]$BoundaryMessage
+) {
+  $absoluteRoot = Join-Path $repoRoot $RelativeRoot
+  if (-not (Test-Path -LiteralPath $absoluteRoot -PathType Container)) {
+    $errors.Add("missing Stage 4 module boundary root: $RelativeRoot")
+    return
+  }
+
+  foreach ($file in Get-ChildItem -LiteralPath $absoluteRoot -Recurse -File -Filter '*.rs') {
+    $masked = Get-MaskedRust (Read-StrictUtf8 $file.FullName)
+    foreach ($moduleName in $ForbiddenModules) {
+      if (Test-ModuleToken $masked $moduleName) {
+        $relative = Get-RustGuardRelativePath -RepoRoot $repoRoot -Path $file.FullName
+        $errors.Add("${BoundaryMessage}: $relative references $moduleName")
+      }
+    }
+  }
+}
+
 function Assert-MaskedPattern(
   [string]$RelativePath,
   [string]$Pattern,
@@ -101,6 +133,19 @@ let marker = "GlobalFileId::parse(value)";
       -not (Test-ForbiddenTauriDependency 'tauri-runtime') -or
       (Test-ForbiddenTauriDependency 'transport')) {
     throw 'Stage 4 self-test failed: Tauri dependency classification is incorrect'
+  }
+
+  $groupedImport = Get-MaskedRust 'use crate::{analysis_service, source_db};'
+  if (-not (Test-ModuleToken $groupedImport 'analysis_service')) {
+    throw 'Stage 4 self-test failed: grouped module imports are not detected'
+  }
+  $maskedModuleText = Get-MaskedRust @'
+// file_service
+let text = "derived_source_service";
+'@
+  if ((Test-ModuleToken $maskedModuleText 'file_service') -or
+      (Test-ModuleToken $maskedModuleText 'derived_source_service')) {
+    throw 'Stage 4 self-test failed: comments or strings trigger module boundaries'
   }
 
   Write-Host 'Stage 4 service boundary self-test passed'
@@ -269,6 +314,32 @@ $serviceMaskedSources = (
 if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b') {
   $errors.Add('app-services must remain independent from the Tauri runtime')
 }
+
+Assert-NoModuleReferencesUnder `
+  'crates/app-services/src/ceph_reconstruction' `
+  @('analysis_service', 'file_service', 'derived_source_service') `
+  'Ceph reconstruction is a lower-level capability and must not depend on higher-level orchestration'
+Assert-NoModuleReferencesUnder `
+  'crates/app-services/src/analysis_service' `
+  @('derived_source_service') `
+  'Analysis must not depend on derived-source orchestration'
+Assert-NoModuleReferencesUnder `
+  'crates/app-services/src/file_service' `
+  @('derived_source_service') `
+  'File services must not depend on derived-source orchestration'
+
+Assert-MaskedPattern `
+  'crates/app-services/src/derived_source_service.rs' `
+  '\bceph_reconstruction\b' `
+  'derived_source_service must remain the owner of Ceph-derived source orchestration'
+Assert-MaskedPattern `
+  'crates/app-services/src/derived_source_service/finalizer/artifacts.rs' `
+  '\banalysis_service\b' `
+  'derived-source artifact finalization must delegate through analysis_service'
+Assert-MaskedPattern `
+  'crates/app-services/src/derived_source_service/finalizer/graph.rs' `
+  '\bfile_service\b' `
+  'derived-source graph finalization must delegate through file_service'
 
 $moduleBaseline = Read-StrictUtf8 (
   Join-Path $repoRoot 'scripts/baselines/rust-module-size-baseline.csv'

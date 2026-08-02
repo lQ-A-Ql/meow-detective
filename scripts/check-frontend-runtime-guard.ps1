@@ -234,6 +234,36 @@ function Assert-PageShellComposition {
   }
 }
 
+function Assert-NoRuntimeImportsMatching {
+  param(
+    [Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files,
+    [Parameter(Mandatory = $true)][string]$ModulePattern,
+    [Parameter(Mandatory = $true)][string]$Message
+  )
+
+  $violations = @()
+  $importPattern = [regex]'(?ms)^\s*import\s+(?<typeOnly>type\s+)?(?:(?<bindings>.*?)\s+from\s+)?[''"](?<module>[^''"]+)[''"]\s*;?'
+  foreach ($file in $Files) {
+    $relative = Get-RelativePath $file.FullName
+    $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    foreach ($match in $importPattern.Matches($content)) {
+      if ($match.Groups['typeOnly'].Success) {
+        continue
+      }
+      if ($match.Groups['module'].Value -notmatch $ModulePattern) {
+        continue
+      }
+      $lineNumber = ($content.Substring(0, $match.Index) -split "`n").Count
+      $line = ($content -split "`n")[$lineNumber - 1].Trim()
+      $violations += "{0}:{1}: {2}" -f $relative, $lineNumber, $line
+    }
+  }
+
+  if ($violations.Count -gt 0) {
+    throw "$Message`n$($violations -join "`n")"
+  }
+}
+
 $runtimeFiles = @(Get-ChildItem -LiteralPath $frontendSrc -Recurse -File -Include *.ts,*.tsx |
   Where-Object { -not (Is-TestOrFixtureFile $_) })
 
@@ -264,6 +294,17 @@ $featureComponentRuntimeFiles = @(Get-ChildItem -LiteralPath (Join-Path $fronten
   Where-Object {
     -not (Is-TestOrFixtureFile $_) -and
       (Get-RelativePath $_.FullName) -match '^frontend/src/features/[^/]+/components/'
+  })
+
+$featureModelRuntimeFiles = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "features") -Recurse -File -Include *.ts,*.tsx |
+  Where-Object {
+    if (Is-TestOrFixtureFile $_) {
+      return $false
+    }
+    $relative = Get-RelativePath $_.FullName
+    return $relative -match '^frontend/src/features/[^/]+/hooks\.ts$' -or
+      $relative -match '^frontend/src/features/[^/]+/hooks/' -or
+      $relative -match '^frontend/src/features/[^/]+/use-[^/]+-model\.tsx?$'
   })
 
 $storeRuntimeRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "stores") -Recurse -File -Include *.ts,*.tsx |
@@ -396,6 +437,16 @@ Assert-NoMatchesInRuntimeFiles `
   -Files $featureComponentRuntimeFiles `
   -Pattern "from\s+['""]@/(?:lib/api|lib/platform|stores)/|from\s+['""]@tauri-apps/" `
   -Message "Feature components must be pure views; move API, platform, store, and Tauri access into feature hooks, models, or containers"
+
+Assert-NoRuntimeImportsMatching `
+  -Files $featureComponentRuntimeFiles `
+  -ModulePattern '^(?:@/features/[^/]+/(?:hooks(?:/.*)?|use-[^/]+-model)|(?:\.\.?/)+(?:[^/]+/)*(?:hooks(?:/.*)?|use-[^/]+-model))$' `
+  -Message "Feature components must not execute feature hooks or page models; containers own runtime orchestration and components may use type-only contracts"
+
+Assert-NoRuntimeImportsMatching `
+  -Files $featureModelRuntimeFiles `
+  -ModulePattern '^(?:@/(?:app/components|components)/|(?:\.\.?/)+(?:[^/]+/)*components/)' `
+  -Message "Feature hooks and page models must not depend on runtime UI modules; move rendering into components and keep only type-only contracts"
 
 Assert-NoRawControlsOutsideAllowedCases -Files $runtimeFiles
 Assert-NoRawButtonsOutsideAllowedCases -Files $runtimeFiles

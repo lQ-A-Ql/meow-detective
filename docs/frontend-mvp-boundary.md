@@ -25,7 +25,9 @@ It complements `AGENTS.md`, `docs/design-constraints.md`, and
 - Cross-domain UI primitives belong in `frontend/src/components/*`.
 - Domain-specific components belong in `frontend/src/features/<domain>/components/*`, even when currently used by one route.
 - Components under `features/<domain>/components/*` are pure views: they receive DTO-shaped data and callbacks only. They must not import API modules, stores, platform adapters, Tauri packages, or router/store navigation actions.
+- Components may import feature model or hook types with `import type`, but must not execute feature hooks or page models. Runtime orchestration stays in `containers/*` and `use-*-model.ts`.
 - Components that need API/store/platform/event access must be split so the container/model sits in `features/<domain>/containers/*` or `use-*-model.ts` and the component receives props/callbacks.
+- Feature hooks and page models must not import runtime UI modules. A type-only presentation contract is tolerated when needed to describe an injected view state; rendering dependencies remain one-way from components to props.
 - Layout shell components are the only shared component exception allowed to read `ui-store`.
 
 ## Shared UI Primitives
@@ -101,6 +103,7 @@ Any new exception must be documented here and added narrowly to the guard whitel
   feature container, which prevents page-local presentation logic from returning.
 - Shared components do not import stores, API modules, platform adapters, or Tauri packages, except layout shell whitelist.
 - Feature components do not import stores, API modules, platform adapters, or Tauri packages; only feature hooks, `use-*-model.ts` files, and `containers/*` may do so.
+- Feature components cannot runtime-import feature hooks or page models, and feature hooks/models cannot runtime-import UI modules. Type-only contracts do not create runtime ownership.
 - Domain directories no longer live under shared `components/analysis`, `components/dashboard`, `components/import`, or `components/mcp`.
 - Production source contains no mock/demo/example presentation residue.
 - Runtime code does not hand-write raw `<input>`, `<textarea>`, `<select>`, or `<table>` outside

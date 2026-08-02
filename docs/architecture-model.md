@@ -134,8 +134,8 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 
 | Crate | 职责 | 备注 |
 |-------|------|------|
-| **app-services** | 跨 crate 用例编排 | 28 个根能力目录；模块与函数结构债务 baseline 均为 0 |
-| **persistence-sqlite** | 连接、迁移、仓库 | 40 个逻辑 repository；70 个迁移脚本（主库 42 + source 27 + staging 1） |
+| **app-services** | 跨 crate 用例编排 | 32 个根源码模块；模块与函数结构债务 baseline 均为 0 |
+| **persistence-sqlite** | 连接、迁移、仓库 | 43 个逻辑 repository；75 个迁移脚本（主库 44 + source 29 + case graph 1 + staging 1） |
 | **infrastructure** | 日志、哈希、fs 工具、文本、时钟、配置 | 跨切面工具 |
 | **runtime-cache** | 运行时临时缓存 | 只被 Tauri host 消费；不得成为事实源 |
 
@@ -482,7 +482,7 @@ baseline 只允许减少：
 `run-liuyang-artifact-test`、`run-webview2-media-smoke`、
 `generate-tiny-fixtures`、`generate_medium_email_fixtures.py`。
 
-当前结构债务：模块 baseline 0 行、正式临时例外 4 行、函数 baseline 8 行
+当前结构债务：模块 baseline 0 行、正式临时例外 0 行、函数 baseline 7 行
 （历史硬债务 0，新代码函数硬上限 150 行）、test-layout baseline 0 行；
 `app-services` 模块与函数 baseline 均为 0。
 
