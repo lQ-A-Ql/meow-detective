@@ -12,14 +12,11 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
-import {
-  useNotebookEntry,
-  useUpdateNotebookEntry,
-  useAddEvidenceCitation,
-} from '@/features/notebook/hooks';
 import type {
+  NotebookEntry,
   NotebookEntryListItem,
   GraphNode,
+  UpdateEntryRequest,
 } from '@/types/models';
 import {
   ENTRY_TYPE_BADGE,
@@ -31,16 +28,31 @@ import {
 } from './helpers';
 import { CitationPicker } from './NotebookEntryForm';
 
-export function EntryDetailView({ entryId }: { entryId: string }) {
-  const { data: thread, isLoading, isError } = useNotebookEntry(entryId);
-  const updateMutation = useUpdateNotebookEntry();
-  const addCitationMutation = useAddEvidenceCitation();
+export interface EntryDetailViewProps {
+  entry?: NotebookEntry;
+  loading: boolean;
+  error: boolean;
+  updatePending: boolean;
+  citationNodes: GraphNode[];
+  citationNodesLoading: boolean;
+  onUpdate: (request: UpdateEntryRequest, onSuccess: () => void) => void;
+  onAddCitations: (entryId: string, nodes: GraphNode[]) => void;
+}
+
+export function EntryDetailView({
+  entry,
+  loading,
+  error,
+  updatePending,
+  citationNodes,
+  citationNodesLoading,
+  onUpdate,
+  onAddCitations,
+}: EntryDetailViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBodyMarkdown, setEditBodyMarkdown] = useState('');
   const [citationPickerOpen, setCitationPickerOpen] = useState(false);
-
-  const entry = thread?.[0];
 
   const startEdit = useCallback(() => {
     if (entry) {
@@ -52,35 +64,25 @@ export function EntryDetailView({ entryId }: { entryId: string }) {
 
   const saveEdit = useCallback(() => {
     if (!entry) return;
-    updateMutation.mutate(
+    onUpdate(
       {
         entryId: entry.id,
         title: editTitle.trim(),
         bodyMarkdown: editBodyMarkdown.trim(),
       },
-      {
-        onSuccess: () => setIsEditing(false),
-      },
+      () => setIsEditing(false),
     );
-  }, [entry, editTitle, editBodyMarkdown, updateMutation]);
+  }, [editBodyMarkdown, editTitle, entry, onUpdate]);
 
   const handleAddCitations = useCallback(
     (nodes: GraphNode[]) => {
       if (!entry) return;
-      for (const node of nodes) {
-        addCitationMutation.mutate({
-          entryId: entry.id,
-          targetNodeType: node.nodeType,
-          targetNodeId: node.id,
-          displayLabel: node.label,
-          snippet: node.summary,
-        });
-      }
+      onAddCitations(entry.id, nodes);
     },
-    [entry, addCitationMutation],
+    [entry, onAddCitations],
   );
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex h-40 items-center justify-center text-forensics-muted-lighter">
         <Loader2 size={20} className="mr-2 opacity-70" />
@@ -89,7 +91,7 @@ export function EntryDetailView({ entryId }: { entryId: string }) {
     );
   }
 
-  if (isError || !entry) {
+  if (error || !entry) {
     return (
       <div className="flex h-40 flex-col items-center justify-center gap-2">
         <BookOpen size={24} className="text-forensics-muted-lighter" />
@@ -144,10 +146,10 @@ export function EntryDetailView({ entryId }: { entryId: string }) {
               <Button
                 type="button"
                 onClick={saveEdit}
-                disabled={updateMutation.isPending}
+                disabled={updatePending}
                 className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
               >
-                {updateMutation.isPending ? <Loader2 size={12} className="opacity-70" /> : '保存'}
+                {updatePending ? <Loader2 size={12} className="opacity-70" /> : '保存'}
               </Button>
             </>
           ) : (
@@ -222,10 +224,11 @@ export function EntryDetailView({ entryId }: { entryId: string }) {
       </div>
 
       <CitationPicker
-        caseId={entry.caseId}
         open={citationPickerOpen}
         onOpenChange={setCitationPickerOpen}
         selectedNodeIds={citationNodeIds}
+        nodes={citationNodes}
+        loading={citationNodesLoading}
         onConfirm={handleAddCitations}
       />
     </div>

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BottomDrawer } from './BottomDrawer';
+import { BottomDrawerContainer as BottomDrawer } from './BottomDrawerContainer';
 
 const mocks = vi.hoisted(() => ({
   jobs: vi.fn(),

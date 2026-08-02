@@ -1,6 +1,6 @@
 import { Activity, BarChart3, GitBranch, Layers, Shield } from 'lucide-react';
-import { GraphVisualizationSection } from '@/features/graph/components/GraphVisualizationSection';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { GraphVisualizationContainer } from '@/features/graph/containers/GraphVisualizationContainer';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { GraphSnapshot } from '@/types/models';
 
 export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined }) {
@@ -10,15 +10,16 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {data ? (
           <>
-            <StatCard title="节点总数" value={data.totalNodes} icon={GitBranch} />
-            <StatCard title="边总数" value={data.totalEdges} icon={Activity} />
-            <StatCard title="密度" value={data.density} icon={Layers} />
-            <StatCard
-              title="最大联通分量"
+            <MetricCard label="节点总数" value={data.totalNodes} icon={GitBranch} size="lg" />
+            <MetricCard label="边总数" value={data.totalEdges} icon={Activity} size="lg" />
+            <MetricCard label="密度" value={data.density} icon={Layers} size="lg" />
+            <MetricCard
+              label="最大联通分量"
               value={data.largestComponentSize || '未计算'}
               icon={BarChart3}
+              size="lg"
             />
-            <StatCard title="节点类型数" value={Object.keys(data.nodeCountByType).length} icon={Shield} />
+            <MetricCard label="节点类型数" value={Object.keys(data.nodeCountByType).length} icon={Shield} size="lg" />
           </>
         ) : null}
       </div>
@@ -50,7 +51,7 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
       ) : null}
 
       <div className="mt-3">
-        <GraphVisualizationSection />
+      <GraphVisualizationContainer />
       </div>
     </section>
   );

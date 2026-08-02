@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TopBar } from './TopBar';
+import { TopBarContainer as TopBar } from './TopBarContainer';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),

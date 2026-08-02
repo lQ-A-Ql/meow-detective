@@ -1,6 +1,6 @@
 import { GitBranch, Layers } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { DataSourceSummary } from '@/types/models';
 
 export function DataSourceCoverageSection({
@@ -19,10 +19,10 @@ export function DataSourceCoverageSection({
       <SectionHeader icon={Layers} title="数据源覆盖" subtitle="导入来源及分区" />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={dataSources !== undefined}>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard title="数据源数量" value={dataSources?.length ?? 0} icon={Layers} />
-        <StatCard title="分区总数" value={dataSources?.reduce((sum, ds) => sum + (ds.partitions?.length ?? 0), 0) ?? 0} icon={GitBranch} />
-        <StatCard title="E01 源" value={dataSources?.filter((ds) => ds.kind === 'e01').length ?? 0} subtitle="EWF 格式" />
-        <StatCard title="RAW 源" value={dataSources?.filter((ds) => ds.kind === 'raw').length ?? 0} subtitle="原始镜像" />
+        <MetricCard label="数据源数量" value={dataSources?.length ?? 0} icon={Layers} size="lg" />
+        <MetricCard label="分区总数" value={dataSources?.reduce((sum, ds) => sum + (ds.partitions?.length ?? 0), 0) ?? 0} icon={GitBranch} size="lg" />
+        <MetricCard label="E01 源" value={dataSources?.filter((ds) => ds.kind === 'e01').length ?? 0} subtitle="EWF 格式" size="lg" />
+        <MetricCard label="RAW 源" value={dataSources?.filter((ds) => ds.kind === 'raw').length ?? 0} subtitle="原始镜像" size="lg" />
       </div>
       {dataSources && dataSources.length > 0 ? (
         <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">

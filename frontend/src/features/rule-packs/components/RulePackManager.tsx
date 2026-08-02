@@ -13,8 +13,8 @@ import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
-import { Progress } from '@/app/components/ui/progress';
-import { useLoadedRulePacks, useLoadRulePack, useValidateRulePack } from '@/features/rule-packs/hooks';
+import { RulePackCoveragePanel } from '@/features/rule-packs/components/RulePackCoveragePanel';
+import type { RulePackManagerModel } from '@/features/rule-packs/use-rule-pack-manager-model';
 import type { RulePackSummary } from '@/types/models';
 
 const STATUS_CONFIG: Record<RulePackSummary['status'], { label: string; icon: typeof Shield; tone: string }> = {
@@ -22,24 +22,6 @@ const STATUS_CONFIG: Record<RulePackSummary['status'], { label: string; icon: ty
   validating: { label: '校验中', icon: Loader2, tone: 'bg-forensics-warning-bg border-forensics-warning-border text-forensics-warning-text' },
   error: { label: '错误', icon: XCircle, tone: 'bg-forensics-error-bg border-forensics-error-border text-forensics-error-text' },
 };
-
-const ALL_KNOWN_FAMILIES = [
-  'Prefetch',
-  'LNK',
-  'JumpList',
-  'Registry',
-  'EventLog',
-  'BrowserHistory',
-  'UserAssist',
-  'RecycleBin',
-  'Thumbcache',
-  'SRU',
-  'Amcache',
-  'BAM',
-  'MFT',
-  'FileSystem',
-  'NetworkArtifacts',
-];
 
 function formatTimestamp(iso: string) {
   try {
@@ -50,35 +32,22 @@ function formatTimestamp(iso: string) {
   }
 }
 
-export function RulePackManager() {
-  const { data: packs = [], isLoading, isError, refetch } = useLoadedRulePacks();
-  const loadMutation = useLoadRulePack();
-  const validateMutation = useValidateRulePack();
+export function RulePackManager({ model }: { model: RulePackManagerModel }) {
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [loadPath, setLoadPath] = useState('');
-
-  const totalRules = packs.reduce((sum, p) => sum + p.ruleCount, 0);
-  const totalCovered = new Set<string>();
-  packs.forEach((p) => p.coveredFamilies.forEach((f) => totalCovered.add(f)));
-  const coveragePercent =
-    ALL_KNOWN_FAMILIES.length > 0
-      ? Math.round((totalCovered.size / ALL_KNOWN_FAMILIES.length) * 100)
-      : 0;
 
   const handleLoad = () => {
     const path = loadPath.trim();
     if (path) {
-      loadMutation.mutate(path, {
-        onSuccess: () => setLoadPath(''),
-      });
+      model.load(path, () => setLoadPath(''));
     }
   };
 
   const handleValidate = (packId: string) => {
-    validateMutation.mutate(packId);
+    model.validate(packId);
   };
 
-  if (isLoading) {
+  if (model.loading) {
     return (
       <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
         <Loader2 size={24} className="mr-2 opacity-70" />
@@ -87,7 +56,7 @@ export function RulePackManager() {
     );
   }
 
-  if (isError) {
+  if (model.error) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <XCircle size={32} className="text-forensics-error-text" />
@@ -95,7 +64,7 @@ export function RulePackManager() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => refetch()}
+          onClick={model.retry}
           className="h-8 rounded-none border-forensics-border bg-forensics-surface px-4 text-[12px] hover:bg-forensics-panel-strong"
         >
           重试
@@ -119,11 +88,11 @@ export function RulePackManager() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => refetch()}
-              disabled={isLoading}
+              onClick={model.retry}
+              disabled={model.loading}
               className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
             >
-              <RefreshCw size={14} className={isLoading ? 'opacity-70' : ''} />
+              <RefreshCw size={14} className={model.loading ? 'opacity-70' : ''} />
               刷新
             </Button>
           </div>
@@ -132,15 +101,15 @@ export function RulePackManager() {
         {/* Summary strip */}
         <div className="mt-4 grid grid-cols-3 gap-4">
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
-            <div className="text-2xl font-light text-forensics-text">{packs.length}</div>
+            <div className="text-2xl font-light text-forensics-text">{model.packs.length}</div>
             <div className="mt-1 text-[11px] text-forensics-muted">规则包</div>
           </div>
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
-            <div className="text-2xl font-light text-forensics-text">{totalRules}</div>
+            <div className="text-2xl font-light text-forensics-text">{model.totalRules}</div>
             <div className="mt-1 text-[11px] text-forensics-muted">规则总数</div>
           </div>
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
-            <div className="text-2xl font-light text-forensics-text">{coveragePercent}%</div>
+            <div className="text-2xl font-light text-forensics-text">{model.coveragePercent}%</div>
             <div className="mt-1 text-[11px] text-forensics-muted">覆盖率</div>
           </div>
         </div>
@@ -171,10 +140,10 @@ export function RulePackManager() {
             <Button
               type="button"
               onClick={handleLoad}
-              disabled={!loadPath.trim() || loadMutation.isPending}
+              disabled={!loadPath.trim() || model.loadPending}
               className="h-8 rounded-none border border-forensics-text bg-forensics-text px-4 text-[12px] text-white hover:bg-forensics-text-secondary"
             >
-              {loadMutation.isPending ? (
+              {model.loadPending ? (
                 <Loader2 size={14} className="opacity-70" />
               ) : (
                 <PackageOpen size={14} />
@@ -182,9 +151,9 @@ export function RulePackManager() {
               加载
             </Button>
           </div>
-          {loadMutation.isError && (
+          {model.loadError && (
             <div className="mt-2 rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[11px] text-forensics-error-text">
-              {(loadMutation.error as Error)?.message ?? '加载失败'}
+              {model.loadError}
             </div>
           )}
         </CardContent>
@@ -192,7 +161,7 @@ export function RulePackManager() {
 
       {/* Pack list */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {packs.map((pack) => {
+        {model.packs.map((pack) => {
           const config = STATUS_CONFIG[pack.status] ?? STATUS_CONFIG.loaded;
           const StatusIcon = config.icon;
           const isSelected = selectedPackId === pack.id;
@@ -297,10 +266,10 @@ export function RulePackManager() {
                       e.stopPropagation();
                       handleValidate(pack.id);
                     }}
-                    disabled={validateMutation.isPending}
+                    disabled={model.validatePending}
                     className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
                   >
-                    {validateMutation.isPending && validateMutation.variables === pack.id ? (
+                    {model.validatePending && model.validatingPackId === pack.id ? (
                       <Loader2 size={12} className="opacity-70" />
                     ) : (
                       <Shield size={12} />
@@ -314,7 +283,7 @@ export function RulePackManager() {
         })}
       </div>
 
-      {packs.length === 0 && (
+      {model.packs.length === 0 && (
         <div className="flex h-40 flex-col items-center justify-center rounded-none border border-dashed border-forensics-border-strong bg-forensics-surface">
           <PackageOpen size={32} className="text-forensics-muted-lighter" />
           <div className="mt-3 text-[13px] text-forensics-muted">暂未加载任何规则包</div>
@@ -323,87 +292,11 @@ export function RulePackManager() {
       )}
 
       {/* Coverage panel */}
-      <CoveragePanel
-        covered={Array.from(totalCovered)}
-        allFamilies={ALL_KNOWN_FAMILIES}
-        coveragePercent={coveragePercent}
+      <RulePackCoveragePanel
+        covered={model.coveredFamilies}
+        uncovered={model.uncoveredFamilies}
+        coveragePercent={model.coveragePercent}
       />
     </div>
-  );
-}
-
-function CoveragePanel({
-  covered,
-  allFamilies,
-  coveragePercent,
-}: {
-  covered: string[];
-  allFamilies: string[];
-  coveragePercent: number;
-}) {
-  const coveredSet = new Set(covered);
-  const uncovered = allFamilies.filter((f) => !coveredSet.has(f));
-
-  return (
-    <Card className="border-forensics-border bg-forensics-surface">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-[14px]">
-          <Shield size={16} />
-          覆盖范围摘要
-        </CardTitle>
-        <CardDescription className="text-[11px]">
-          所有已加载规则包的合并覆盖范围
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-4">
-          <div className="mb-1 flex items-center justify-between text-[11px]">
-            <span className="text-forensics-muted">整体覆盖率</span>
-            <span className="font-mono font-light text-forensics-text">{coveragePercent}%</span>
-          </div>
-          <Progress value={coveragePercent} className="h-1.5 rounded-none bg-forensics-panel-strong" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-light text-forensics-success-text">
-              <CheckCircle size={12} />
-              已覆盖 ({covered.length})
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {covered.map((f) => (
-                <Badge key={f} className="bg-forensics-success-bg text-[10px] text-forensics-success-text hover:bg-forensics-success-bg">
-                  {f}
-                </Badge>
-              ))}
-              {covered.length === 0 && (
-                <span className="text-[10px] text-forensics-muted-lighter">无</span>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-light text-forensics-error-text">
-              <AlertTriangle size={12} />
-              未覆盖 ({uncovered.length})
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {uncovered.map((f) => (
-                <Badge
-                  key={f}
-                  variant="outline"
-                  className="border-forensics-warning-border bg-forensics-warning-bg text-[10px] text-forensics-warning-text"
-                >
-                  {f}
-                </Badge>
-              ))}
-              {uncovered.length === 0 && (
-                <span className="text-[10px] text-forensics-muted-lighter">无</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

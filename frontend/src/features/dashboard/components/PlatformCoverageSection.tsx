@@ -1,6 +1,6 @@
 import { Globe, Layers, Monitor, Server } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { PlatformCoverage } from '@/types/models';
 
 export function PlatformCoverageSection({ data, isLoading, isError, error }: { data: PlatformCoverage | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -11,10 +11,10 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
       {data ? (
         <>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatCard title="Windows" value={data.windowsArtifactFamilies} subtitle="个家族" icon={Monitor} />
-            <StatCard title="Linux" value={data.linuxArtifactFamilies} subtitle="个家族" icon={Server} />
-            <StatCard title="跨平台" value={data.crossPlatformArtifactFamilies} subtitle="个家族" icon={Globe} />
-            <StatCard title="未分类" value={data.unknownArtifactFamilies} subtitle="个家族" icon={Layers} />
+            <MetricCard label="Windows" value={data.windowsArtifactFamilies} subtitle="个家族" icon={Monitor} size="lg" />
+            <MetricCard label="Linux" value={data.linuxArtifactFamilies} subtitle="个家族" icon={Server} size="lg" />
+            <MetricCard label="跨平台" value={data.crossPlatformArtifactFamilies} subtitle="个家族" icon={Globe} size="lg" />
+            <MetricCard label="未分类" value={data.unknownArtifactFamilies} subtitle="个家族" icon={Layers} size="lg" />
           </div>
           <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
             <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">家族明细</div>

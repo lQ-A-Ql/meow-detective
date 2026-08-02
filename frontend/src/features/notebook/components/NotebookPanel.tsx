@@ -1,4 +1,3 @@
-import { useState, useMemo } from 'react';
 import {
   BookOpen,
   Loader2,
@@ -15,10 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import {
-  useNotebookEntries,
-} from '@/features/notebook/hooks';
-import { useCurrentCase } from '@/features/case/hooks';
+import type { NotebookPanelModel } from '@/features/notebook/model/notebook-panel-model';
 import type {
   NotebookEntryType,
   NotebookEntryStatus,
@@ -34,55 +30,21 @@ import { EntryDetailView, RepliesSection } from './NotebookEntryDetail';
 const ALL_TYPES_FILTER = '__all_types__';
 const ALL_STATUS_FILTER = '__all_status__';
 
-export function NotebookPanel() {
-  const currentCase = useCurrentCase();
-  const caseId = currentCase.data?.id;
+export function NotebookPanel({ model }: { model: NotebookPanelModel }) {
   const {
-    data: entries = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useNotebookEntries();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showNewEntry, setShowNewEntry] = useState(false);
-  const [showNewReply, setShowNewReply] = useState(false);
-  const [filterType, setFilterType] = useState<NotebookEntryType | ''>('');
-  const [filterStatus, setFilterStatus] = useState<NotebookEntryStatus | ''>('');
-  const [filterDate, setFilterDate] = useState<'all' | 'today' | 'week'>('all');
+    entries,
+    rootEntries,
+    typeCounts,
+    selectedId,
+    selectedEntry,
+    showNewEntry,
+    showNewReply,
+    filterType,
+    filterStatus,
+    filterDate,
+  } = model;
 
-  const rootEntries = useMemo(() => {
-    let filtered = entries.filter((e) => !e.parentId);
-
-    if (filterType) {
-      filtered = filtered.filter((e) => e.entryType === filterType);
-    }
-    if (filterStatus) {
-      filtered = filtered.filter((e) => e.status === filterStatus);
-    }
-    if (filterDate === 'today') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      filtered = filtered.filter((e) => new Date(e.createdAt) >= today);
-    } else if (filterDate === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      filtered = filtered.filter((e) => new Date(e.createdAt) >= weekAgo);
-    }
-
-    return filtered.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }, [entries, filterType, filterStatus, filterDate]);
-
-  const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    rootEntries.forEach((e) => {
-      counts[e.entryType] = (counts[e.entryType] ?? 0) + 1;
-    });
-    return counts;
-  }, [rootEntries]);
-
-  if (currentCase.isLoading) {
+  if (model.caseLoading) {
     return (
       <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
         <Loader2 size={24} className="mr-2 opacity-70" />
@@ -91,7 +53,7 @@ export function NotebookPanel() {
     );
   }
 
-  if (!caseId) {
+  if (!model.hasActiveCase) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <BookOpen size={32} className="text-forensics-muted-lighter" />
@@ -100,7 +62,7 @@ export function NotebookPanel() {
     );
   }
 
-  if (isLoading) {
+  if (model.entriesLoading) {
     return (
       <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
         <Loader2 size={24} className="mr-2 opacity-70" />
@@ -109,7 +71,7 @@ export function NotebookPanel() {
     );
   }
 
-  if (isError) {
+  if (model.entriesError) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <BookOpen size={32} className="text-forensics-muted-lighter" />
@@ -117,7 +79,7 @@ export function NotebookPanel() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => refetch()}
+          onClick={model.retryEntries}
           className="h-8 rounded-none border-forensics-border bg-forensics-surface px-4 text-[12px] hover:bg-forensics-panel-strong"
         >
           重试
@@ -136,7 +98,7 @@ export function NotebookPanel() {
             <div className="font-serif text-[15px] tracking-tight text-forensics-text">笔记面板</div>
             <Button
               type="button"
-              onClick={() => setShowNewEntry(true)}
+              onClick={() => model.setShowNewEntry(true)}
               className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
             >
               <Plus size={12} />
@@ -150,7 +112,7 @@ export function NotebookPanel() {
               <Select
                 value={filterType || ALL_TYPES_FILTER}
                 onValueChange={(value) =>
-                  setFilterType(value === ALL_TYPES_FILTER ? '' : (value as NotebookEntryType))
+                  model.setFilterType(value === ALL_TYPES_FILTER ? '' : (value as NotebookEntryType))
                 }
               >
                 <SelectTrigger size="xs" variant="forensics" className="flex-1">
@@ -168,7 +130,7 @@ export function NotebookPanel() {
               <Select
                 value={filterStatus || ALL_STATUS_FILTER}
                 onValueChange={(value) =>
-                  setFilterStatus(value === ALL_STATUS_FILTER ? '' : (value as NotebookEntryStatus))
+                  model.setFilterStatus(value === ALL_STATUS_FILTER ? '' : (value as NotebookEntryStatus))
                 }
               >
                 <SelectTrigger size="xs" variant="forensics" className="flex-1">
@@ -186,7 +148,7 @@ export function NotebookPanel() {
             </div>
             <Select
               value={filterDate}
-              onValueChange={(value) => setFilterDate(value as 'all' | 'today' | 'week')}
+              onValueChange={(value) => model.setFilterDate(value as 'all' | 'today' | 'week')}
             >
               <SelectTrigger size="xs" variant="forensics">
                 <SelectValue />
@@ -221,10 +183,13 @@ export function NotebookPanel() {
           {showNewEntry && (
             <div className="border-b border-forensics-border p-3">
               <EntryEditor
+                pending={model.createPending}
+                error={model.createError}
+                onCreate={model.createEntry}
                 onSaved={() => {
-                  setShowNewEntry(false);
+                  model.setShowNewEntry(false);
                 }}
-                onCancel={() => setShowNewEntry(false)}
+                onCancel={() => model.setShowNewEntry(false)}
               />
             </div>
           )}
@@ -241,7 +206,7 @@ export function NotebookPanel() {
                 item={item}
                 allItems={entries}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={model.selectEntry}
               />
             ))
           )}
@@ -257,18 +222,17 @@ export function NotebookPanel() {
               <div className="text-[11px] text-forensics-muted-light">
                 笔记详情
                 {(() => {
-                  const entry = entries.find((e) => e.id === selectedId);
-                  if (!entry) return null;
+                  if (!selectedEntry) return null;
                   return (
                     <span className="ml-2 font-mono text-forensics-muted-lighter">
-                      #{entry.id}
+                      #{selectedEntry.id}
                     </span>
                   );
                 })()}
               </div>
               <Button
                 type="button"
-                onClick={() => setShowNewReply(true)}
+                onClick={() => model.setShowNewReply(true)}
                 className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
               >
                 <MessageSquare size={12} />
@@ -282,20 +246,32 @@ export function NotebookPanel() {
                 {showNewReply && (
                   <EntryEditor
                     parentId={selectedId}
+                    pending={model.createPending}
+                    error={model.createError}
+                    onCreate={model.createEntry}
                     onSaved={() => {
-                      setShowNewReply(false);
+                      model.setShowNewReply(false);
                     }}
-                    onCancel={() => setShowNewReply(false)}
+                    onCancel={() => model.setShowNewReply(false)}
                   />
                 )}
-                <EntryDetailView entryId={selectedId} />
+                <EntryDetailView
+                  entry={model.detail}
+                  loading={model.detailLoading}
+                  error={model.detailError}
+                  updatePending={model.updatePending}
+                  citationNodes={model.citationNodes}
+                  citationNodesLoading={model.citationNodesLoading}
+                  onUpdate={model.updateEntry}
+                  onAddCitations={model.addCitations}
+                />
 
                 {/* Threaded replies */}
                 <RepliesSection
                   parentId={selectedId}
                   allEntries={entries}
                   selectedId={selectedId}
-                  onSelect={setSelectedId}
+                  onSelect={model.selectEntry}
                 />
               </div>
             </ScrollArea>

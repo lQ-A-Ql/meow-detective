@@ -1,6 +1,6 @@
 import { Activity, BarChart3, Shield } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { RulePackStatus } from '@/types/models';
 
 export function RulePackStatusSection({ data, isLoading, isError, error }: { data: RulePackStatus | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -11,10 +11,10 @@ export function RulePackStatusSection({ data, isLoading, isError, error }: { dat
       {data ? (
         <>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatCard title="已加载规则包" value={data.loadedPacks.length} icon={Shield} />
-            <StatCard title="规则总数" value={data.totalRuleCount} icon={BarChart3} />
-            <StatCard title="定义状态" value={data.loadStatus} icon={Activity} />
-            <StatCard title="本案执行" value={data.executionStatus} icon={Activity} />
+            <MetricCard label="已加载规则包" value={data.loadedPacks.length} icon={Shield} size="lg" />
+            <MetricCard label="规则总数" value={data.totalRuleCount} icon={BarChart3} size="lg" />
+            <MetricCard label="定义状态" value={data.loadStatus} icon={Activity} size="lg" />
+            <MetricCard label="本案执行" value={data.executionStatus} icon={Activity} size="lg" />
           </div>
           {data.loadedPacks.length > 0 && (
             <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">

@@ -178,48 +178,49 @@ function EmailDetailCard({
             {message.subject || '(no subject)'}
           </div>
           <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-[11px] text-forensics-text-tertiary md:grid-cols-2">
-            <Field label="From" value={message.from} />
-            <Field label="To" value={joinAddresses(message.to)} />
+            <KeyValueField layout="inline" label="From" value={message.from} />
+            <KeyValueField layout="inline" label="To" value={joinAddresses(message.to)} />
             {message.cc.length > 0 ? (
-              <Field label="Cc" value={joinAddresses(message.cc)} />
+              <KeyValueField layout="inline" label="Cc" value={joinAddresses(message.cc)} />
             ) : null}
             {message.bcc.length > 0 ? (
-              <Field label="Bcc" value={joinAddresses(message.bcc)} />
+              <KeyValueField layout="inline" label="Bcc" value={joinAddresses(message.bcc)} />
             ) : null}
-            {message.replyTo ? <Field label="Reply-To" value={message.replyTo} /> : null}
+            {message.replyTo ? <KeyValueField layout="inline" label="Reply-To" value={message.replyTo} /> : null}
             {message.returnPath ? (
-              <Field label="Return-Path" value={message.returnPath} />
+              <KeyValueField layout="inline" label="Return-Path" value={message.returnPath} />
             ) : null}
-            {message.sentAt ? <Field label="Sent" value={message.sentAt} /> : null}
+            {message.sentAt ? <KeyValueField layout="inline" label="Sent" value={message.sentAt} /> : null}
             {message.receivedAt ? (
-              <Field label="Received" value={message.receivedAt} />
+              <KeyValueField layout="inline" label="Received" value={message.receivedAt} />
             ) : null}
             {message.containerPath ? (
-              <Field label="Container" value={message.containerPath} />
+              <KeyValueField layout="inline" label="Container" value={message.containerPath} />
             ) : null}
             {message.messageClass ? (
-              <Field label="Message Class" value={message.messageClass} />
+              <KeyValueField layout="inline" label="Message Class" value={message.messageClass} />
             ) : null}
             {message.isDeleted ? (
-              <Field label="Deleted" value="是" />
+              <KeyValueField layout="inline" label="Deleted" value="是" />
             ) : null}
             {message.messageId ? (
-              <Field label="Message-ID" value={message.messageId} monospace />
+              <KeyValueField layout="inline" label="Message-ID" value={message.messageId} mono />
             ) : null}
             {message.inReplyTo ? (
-              <Field label="In-Reply-To" value={message.inReplyTo} monospace />
+              <KeyValueField layout="inline" label="In-Reply-To" value={message.inReplyTo} mono />
             ) : null}
             {message.references.length > 0 ? (
-              <Field
+              <KeyValueField
+                layout="inline"
                 label="References"
                 value={message.references.join(', ')}
-                monospace
+                mono
                 className="md:col-span-2"
               />
             ) : null}
-            {message.xMailer ? <Field label="X-Mailer" value={message.xMailer} /> : null}
+            {message.xMailer ? <KeyValueField layout="inline" label="X-Mailer" value={message.xMailer} /> : null}
             {message.xOriginatingIp ? (
-              <Field label="X-Originating-IP" value={message.xOriginatingIp} />
+              <KeyValueField layout="inline" label="X-Originating-IP" value={message.xOriginatingIp} />
             ) : null}
           </div>
         </div>
@@ -284,20 +285,6 @@ function EmailDetailCard({
       ) : null}
     </div>
   );
-}
-
-function Field({
-  label,
-  value,
-  monospace,
-  className,
-}: {
-  label: string;
-  value: string;
-  monospace?: boolean;
-  className?: string;
-}) {
-  return <KeyValueField label={label} value={value} mono={monospace} layout="inline" className={className} />;
 }
 
 function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {

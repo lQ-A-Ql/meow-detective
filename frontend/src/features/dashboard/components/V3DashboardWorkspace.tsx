@@ -10,7 +10,7 @@ import { GraphStatsSection } from '@/features/dashboard/components/GraphStatsSec
 import { PlatformCoverageSection } from '@/features/dashboard/components/PlatformCoverageSection';
 import { RulePackStatusSection } from '@/features/dashboard/components/RulePackStatusSection';
 import { TimelineOverviewSection } from '@/features/dashboard/components/TimelineOverviewSection';
-import { errorMessage } from '@/features/dashboard/components/V3ScoreCards';
+import { errorMessage } from '@/lib/errors';
 import type { V3DashboardModel } from '@/features/dashboard/use-v3-dashboard-model';
 
 interface V3DashboardWorkspaceProps {

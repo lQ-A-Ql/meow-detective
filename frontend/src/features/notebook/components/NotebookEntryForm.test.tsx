@@ -2,18 +2,6 @@ import { createElement } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const hoisted = vi.hoisted(() => ({
-  useCreateNotebookEntry: vi.fn(),
-}));
-
-vi.mock('@/features/notebook/hooks', () => ({
-  useCreateNotebookEntry: hoisted.useCreateNotebookEntry,
-}));
-
-vi.mock('@/features/graph/hooks', () => ({
-  useGraphCitationNodes: vi.fn(() => ({ data: [], isLoading: false })),
-}));
-
 import { EntryEditor, EntryTreeItem } from './NotebookEntryForm';
 import type { NotebookEntryListItem } from '@/types/models';
 
@@ -30,8 +18,12 @@ const mockItem: NotebookEntryListItem = {
 
 describe('EntryEditor', () => {
   it('renders form fields and save button', () => {
-    hoisted.useCreateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false, error: null });
-    render(createElement(EntryEditor, { onSaved: vi.fn(), onCancel: vi.fn() }));
+    render(createElement(EntryEditor, {
+      onSaved: vi.fn(),
+      onCancel: vi.fn(),
+      pending: false,
+      onCreate: vi.fn(),
+    }));
     expect(screen.getByText('新建笔记')).toBeDefined();
     expect(screen.getByPlaceholderText('笔记标题')).toBeDefined();
     expect(screen.getByPlaceholderText('使用 Markdown 格式记录分析笔记...')).toBeDefined();
@@ -39,15 +31,23 @@ describe('EntryEditor', () => {
 
   it('calls onCancel when cancel button is clicked', () => {
     const onCancel = vi.fn();
-    hoisted.useCreateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false, error: null });
-    render(createElement(EntryEditor, { onSaved: vi.fn(), onCancel }));
+    render(createElement(EntryEditor, {
+      onSaved: vi.fn(),
+      onCancel,
+      pending: false,
+      onCreate: vi.fn(),
+    }));
     fireEvent.click(screen.getByText('取消'));
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
   it('disables save when title is empty', () => {
-    hoisted.useCreateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false, error: null });
-    render(createElement(EntryEditor, { onSaved: vi.fn(), onCancel: vi.fn() }));
+    render(createElement(EntryEditor, {
+      onSaved: vi.fn(),
+      onCancel: vi.fn(),
+      pending: false,
+      onCreate: vi.fn(),
+    }));
     // The save button has text "保存" and a Plus icon; use getByRole to find it
     const buttons = screen.getAllByRole('button');
     const saveBtn = buttons.find((b) => b.textContent?.includes('保存'));

@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router';
 import {
   useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
   useTextPreview, useDocumentPreview,
@@ -20,7 +19,6 @@ function getPreviewKindFromMime(mime?: string): FilePreviewKind | undefined {
 interface UseFilePreviewOptions {
   selectedFile: FileEntryRow | undefined;
   viewerTab: PreviewViewerTab;
-  setSelectedTimelineId: (id?: string) => void;
 }
 
 function normalizePreviewError(error: unknown): ApiErrorDto | null {
@@ -37,9 +35,7 @@ function normalizePreviewError(error: unknown): ApiErrorDto | null {
 export function useFilePreview({
   selectedFile,
   viewerTab,
-  setSelectedTimelineId,
 }: UseFilePreviewOptions) {
-  const navigate = useNavigate();
   const selectedFilePreviewKind = useMemo(() => {
     return selectedFile ? getFilePreviewKind(selectedFile) : undefined;
   }, [selectedFile]);
@@ -97,13 +93,6 @@ export function useFilePreview({
     ? () => { void activePreviewQuery.refetch(); }
     : undefined;
 
-  const onViewTimeline = () => {
-    if (selectedFile) {
-      setSelectedTimelineId(selectedFile.id);
-      navigate('/timeline');
-    }
-  };
-
   return {
     fileHandle,
     previewKind,
@@ -119,6 +108,5 @@ export function useFilePreview({
     documentPreview: documentQuery.data,
     previewError,
     onRetryPreview,
-    onViewTimeline,
   };
 }

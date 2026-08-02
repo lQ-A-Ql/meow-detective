@@ -4,13 +4,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ImportDataSourceDialog } from './ImportDataSourceDialog';
 
 const mocks = vi.hoisted(() => ({
-  openDialog: vi.fn(),
-  singleDialogPath: vi.fn(),
-}));
-
-vi.mock('@/lib/platform/dialog', () => ({
-  openDialog: mocks.openDialog,
-  singleDialogPath: mocks.singleDialogPath,
+  pickSourcePath: vi.fn(),
+  pickDirectoryPath: vi.fn(),
 }));
 
 describe('ImportDataSourceDialog', () => {
@@ -19,11 +14,14 @@ describe('ImportDataSourceDialog', () => {
     onOpenChange: vi.fn(),
     onImport: vi.fn(),
     importPending: false,
+    pickSourcePath: mocks.pickSourcePath,
+    pickDirectoryPath: mocks.pickDirectoryPath,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.singleDialogPath.mockReturnValue(undefined);
+    mocks.pickSourcePath.mockResolvedValue(undefined);
+    mocks.pickDirectoryPath.mockResolvedValue(undefined);
   });
 
   function advanceToForm() {
@@ -163,7 +161,7 @@ describe('ImportDataSourceDialog', () => {
     advanceToForm();
     fireEvent.click(screen.getByRole('button', { name: '文件' }));
 
-    expect(mocks.openDialog).toHaveBeenCalledWith(expect.objectContaining({ directory: false }));
+    expect(mocks.pickSourcePath).toHaveBeenCalledWith('数据源');
   });
 
   it('calls native directory picker when directory button is clicked', () => {
@@ -172,7 +170,7 @@ describe('ImportDataSourceDialog', () => {
     advanceToForm();
     fireEvent.click(screen.getByRole('button', { name: '目录' }));
 
-    expect(mocks.openDialog).toHaveBeenCalledWith(expect.objectContaining({ directory: true }));
+    expect(mocks.pickDirectoryPath).toHaveBeenCalledOnce();
   });
 
   it('shows linux cluster folder picker for linux imports', () => {

@@ -16,6 +16,7 @@ import {
 import { useImportDataSource } from '@/features/files/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { useAppSettings } from '@/features/settings/hooks';
+import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 import { readLocalSettings } from '@/lib/settings';
 import type { ImportDataSourceRequest } from '@/types/models';
 
@@ -41,6 +42,7 @@ export function useCaseHomeModel() {
   const deleteCaseMutation = useDeleteCase();
   const deleteDataSourceMutation = useDeleteDataSource();
   const removeCaseFromListMutation = useRemoveCaseFromList();
+  const importDialog = useImportDataSourceDialogModel();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
@@ -110,6 +112,8 @@ export function useCaseHomeModel() {
     importDataSource,
     importDialogOpen,
     importPending: importMutation.isPending,
+    pickImportDirectoryPath: importDialog.pickDirectoryPath,
+    pickImportSourcePath: importDialog.pickSourcePath,
     importButtonLabel: t('importDataSource.openButton'),
     metrics: caseMetricsQuery.data,
     openCase,

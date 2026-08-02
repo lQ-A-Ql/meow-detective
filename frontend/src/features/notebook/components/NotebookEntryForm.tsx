@@ -31,8 +31,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
-import { useCreateNotebookEntry } from '@/features/notebook/hooks';
-import { useGraphCitationNodes, useGraphNodes } from '@/features/graph/hooks';
+import type { NotebookEntryDraft } from '@/features/notebook/model/notebook-panel-model';
 import type {
   NotebookEntryListItem,
   NotebookEntryType,
@@ -50,27 +49,28 @@ import {
 const ALL_TYPES_FILTER = '__all_types__';
 
 export interface CitationPickerProps {
-  caseId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedNodeIds: string[];
+  nodes: GraphNode[];
+  loading: boolean;
   onConfirm: (nodes: GraphNode[]) => void;
 }
 
-export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, onConfirm }: CitationPickerProps) {
+export function CitationPicker({
+  open,
+  onOpenChange,
+  selectedNodeIds,
+  nodes,
+  loading,
+  onConfirm,
+}: CitationPickerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedNodeIds));
 
-  const seedNodeIds = useMemo(() => selectedNodeIds.filter(Boolean), [selectedNodeIds]);
-  const graphNodes = useGraphNodes(caseId, 100, 0);
-  const { data: neighborhood, isLoading } = useGraphCitationNodes(caseId, seedNodeIds);
-
-  const allNodes = seedNodeIds.length > 0 ? (neighborhood ?? []) : (graphNodes.data ?? []);
-  const loadingNodes = seedNodeIds.length > 0 ? isLoading : graphNodes.isLoading;
-
   const filteredNodes = useMemo(() => {
-    return allNodes.filter((node) => {
+    return nodes.filter((node) => {
       if (typeFilter && node.nodeType !== typeFilter) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -82,7 +82,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
       }
       return true;
     });
-  }, [allNodes, typeFilter, searchTerm]);
+  }, [nodes, typeFilter, searchTerm]);
 
   const toggleNode = (nodeId: string) => {
     setTempSelected((prev) => {
@@ -97,12 +97,12 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
   };
 
   const nodeTypes = useMemo(() => {
-    const types = new Set(allNodes.map((n) => n.nodeType));
+    const types = new Set(nodes.map((node) => node.nodeType));
     return Array.from(types);
-  }, [allNodes]);
+  }, [nodes]);
 
   const handleConfirm = () => {
-    const selectedNodes = allNodes.filter((n) => tempSelected.has(n.id));
+    const selectedNodes = nodes.filter((node) => tempSelected.has(node.id));
     onConfirm(selectedNodes);
     onOpenChange(false);
   };
@@ -158,7 +158,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
 
         {/* Node list */}
         <ScrollArea className="flex-1 min-h-[240px] max-h-[400px] border border-forensics-border rounded-none">
-          {loadingNodes ? (
+          {loading ? (
             <div className="flex h-32 items-center justify-center">
               <Loader2 size={20} className="opacity-70 text-forensics-muted-lighter" />
             </div>
@@ -242,20 +242,28 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
   );
 }
 
-interface EntryEditorProps {
+export interface EntryEditorProps {
   parentId?: string;
   onSaved: () => void;
   onCancel: () => void;
+  pending: boolean;
+  error?: string;
+  onCreate: (request: NotebookEntryDraft, onSuccess: () => void) => void;
 }
 
-export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
+export function EntryEditor({
+  parentId,
+  onSaved,
+  onCancel,
+  pending,
+  error,
+  onCreate,
+}: EntryEditorProps) {
   const [title, setTitle] = useState('');
   const [bodyMarkdown, setBodyMarkdown] = useState('');
   const [entryType, setEntryType] = useState<NotebookEntryType>('observation');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-
-  const createMutation = useCreateNotebookEntry();
 
   const handleAddTag = () => {
     const tag = tagInput.trim().toLowerCase();
@@ -271,7 +279,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
 
   const handleSave = () => {
     if (!title.trim()) return;
-    createMutation.mutate(
+    onCreate(
       {
         title: title.trim(),
         bodyMarkdown: bodyMarkdown.trim(),
@@ -279,11 +287,7 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
         tags,
         parentId,
       },
-      {
-        onSuccess: () => {
-          onSaved();
-        },
-      },
+      onSaved,
     );
   };
 
@@ -376,9 +380,9 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
           )}
         </div>
 
-        {createMutation.isError && (
+        {error && (
           <div className="rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[11px] text-forensics-error-text">
-            {(createMutation.error as Error)?.message ?? '保存失败'}
+            {error}
           </div>
         )}
 
@@ -394,10 +398,10 @@ export function EntryEditor({ parentId, onSaved, onCancel }: EntryEditorProps) {
           <Button
             type="button"
             onClick={handleSave}
-            disabled={!title.trim() || createMutation.isPending}
+            disabled={!title.trim() || pending}
             className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
           >
-            {createMutation.isPending ? (
+            {pending ? (
               <Loader2 size={12} className="opacity-70" />
             ) : (
               <Plus size={12} />

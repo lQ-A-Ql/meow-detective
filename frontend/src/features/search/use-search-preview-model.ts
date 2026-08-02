@@ -4,8 +4,6 @@ import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { getDefaultFilePreviewTab } from '@/features/files/preview-file-kind';
 import type { FileEntryRow, SearchFileHit } from '@/types/models';
 
-const ignoreTimelineSelection = () => undefined;
-
 function toFileEntryRow(hit: SearchFileHit): FileEntryRow {
   return {
     id: hit.fileId,
@@ -33,7 +31,6 @@ export function useSearchPreviewModel() {
   const preview = useFilePreview({
     selectedFile: previewableFile,
     viewerTab,
-    setSelectedTimelineId: ignoreTimelineSelection,
   });
 
   const openHit = useCallback((hit: SearchFileHit) => {

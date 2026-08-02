@@ -2,46 +2,43 @@ import { createElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const hoisted = vi.hoisted(() => ({
-  useNotebookEntry: vi.fn(),
-  useUpdateNotebookEntry: vi.fn(),
-  useAddEvidenceCitation: vi.fn(),
-}));
-
-vi.mock('@/features/notebook/hooks', () => ({
-  useNotebookEntry: hoisted.useNotebookEntry,
-  useUpdateNotebookEntry: hoisted.useUpdateNotebookEntry,
-  useAddEvidenceCitation: hoisted.useAddEvidenceCitation,
-}));
-
 // Mock the CitationPicker to avoid QueryClient dependency
 vi.mock('./NotebookEntryForm', () => ({
   CitationPicker: () => null,
 }));
 
 import { EntryDetailView, RepliesSection } from './NotebookEntryDetail';
-import type { NotebookEntryListItem } from '@/types/models';
+import type { NotebookEntry, NotebookEntryListItem } from '@/types/models';
+
+const detailActions = {
+  updatePending: false,
+  citationNodes: [],
+  citationNodesLoading: false,
+  onUpdate: vi.fn(),
+  onAddCitations: vi.fn(),
+};
 
 describe('EntryDetailView', () => {
   it('renders loading state', () => {
-    hoisted.useNotebookEntry.mockReturnValue({ data: undefined, isLoading: true, isError: false });
-    hoisted.useUpdateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false });
-    hoisted.useAddEvidenceCitation.mockReturnValue({ mutate: vi.fn() });
-    render(createElement(EntryDetailView, { entryId: 'e1' }));
+    render(createElement(EntryDetailView, {
+      ...detailActions,
+      loading: true,
+      error: false,
+    }));
     expect(screen.getByText('加载笔记...')).toBeDefined();
   });
 
   it('renders error state when entry not found', () => {
-    hoisted.useNotebookEntry.mockReturnValue({ data: undefined, isLoading: false, isError: true });
-    hoisted.useUpdateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false });
-    hoisted.useAddEvidenceCitation.mockReturnValue({ mutate: vi.fn() });
-    render(createElement(EntryDetailView, { entryId: 'e1' }));
+    render(createElement(EntryDetailView, {
+      ...detailActions,
+      loading: false,
+      error: true,
+    }));
     expect(screen.getByText('笔记加载失败')).toBeDefined();
   });
 
   it('renders entry title and tags when loaded', () => {
-    hoisted.useNotebookEntry.mockReturnValue({
-      data: [{
+    const entry: NotebookEntry = {
         id: 'e1',
         caseId: 'c1',
         author: 'analyst',
@@ -52,13 +49,13 @@ describe('EntryDetailView', () => {
         tags: ['important'],
         createdAt: '2026-06-01T10:00:00Z',
         updatedAt: '2026-06-01T11:00:00Z',
-      }],
-      isLoading: false,
-      isError: false,
-    });
-    hoisted.useUpdateNotebookEntry.mockReturnValue({ mutate: vi.fn(), isPending: false });
-    hoisted.useAddEvidenceCitation.mockReturnValue({ mutate: vi.fn() });
-    render(createElement(EntryDetailView, { entryId: 'e1' }));
+      };
+    render(createElement(EntryDetailView, {
+      ...detailActions,
+      entry,
+      loading: false,
+      error: false,
+    }));
     expect(screen.getByText('Test Note')).toBeDefined();
     expect(screen.getByText('important')).toBeDefined();
   });

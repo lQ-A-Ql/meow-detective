@@ -59,7 +59,14 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
           </div>
         </div>
       </div>
-      <ImportDataSourceDialog open={model.importDialogOpen} onOpenChange={model.setImportDialogOpen} onImport={model.importDataSource} importPending={model.importPending} />
+      <ImportDataSourceDialog
+        open={model.importDialogOpen}
+        onOpenChange={model.setImportDialogOpen}
+        onImport={model.importDataSource}
+        importPending={model.importPending}
+        pickSourcePath={model.pickImportSourcePath}
+        pickDirectoryPath={model.pickImportDirectoryPath}
+      />
       <CaseMetricsStrip dataSourceCount={model.metrics?.dataSourceCount ?? 0} indexedFileCount={model.metrics?.indexedFileCount ?? 0} timelineEventCount={model.metrics?.timelineEventCount ?? 0} artifactCount={model.metrics?.artifactCount ?? 0} />
       <div className="flex min-h-0 flex-1">
         <RecentTasksPanel runningJob={model.runningJob} completedJobs={model.completedJobs} partialJobCount={model.partialJobCount} />

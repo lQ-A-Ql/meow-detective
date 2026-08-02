@@ -15,7 +15,7 @@ import type {
 
 export type EvidenceHashStatus = 'pending' | 'ready' | 'failed' | 'unavailable' | 'deferred';
 
-type ImportSignalSnapshot = {
+export type ImportSignalSnapshot = {
   activeJobId?: string;
   latestPhase?: ImportPhaseProgress;
   latestCancellation?: JobCancellation;

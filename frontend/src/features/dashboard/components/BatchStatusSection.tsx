@@ -1,6 +1,6 @@
 import { Activity, BarChart3, GitBranch, Layers, Shield } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { BatchStatus } from '@/types/models';
 
 export function BatchStatusSection({ data, isLoading, isError, error }: { data: BatchStatus | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -10,11 +10,11 @@ export function BatchStatusSection({ data, isLoading, isError, error }: { data: 
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       {data ? (
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
-          <StatCard title="进行中" value={data.activeJobs} icon={Activity} />
-          <StatCard title="已完成" value={data.completedJobs} icon={Shield} />
-          <StatCard title="失败" value={data.failedJobs} icon={BarChart3} />
-          <StatCard title="排队中" value={data.queuedJobs} icon={Layers} />
-          <StatCard title="总计" value={data.totalJobs} icon={GitBranch} />
+          <MetricCard label="进行中" value={data.activeJobs} icon={Activity} size="lg" />
+          <MetricCard label="已完成" value={data.completedJobs} icon={Shield} size="lg" />
+          <MetricCard label="失败" value={data.failedJobs} icon={BarChart3} size="lg" />
+          <MetricCard label="排队中" value={data.queuedJobs} icon={Layers} size="lg" />
+          <MetricCard label="总计" value={data.totalJobs} icon={GitBranch} size="lg" />
         </div>
       ) : <div className="mt-3 rounded-none border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">暂无批处理作业。</div>}
       </DashboardQueryState>

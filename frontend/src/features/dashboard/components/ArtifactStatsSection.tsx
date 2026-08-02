@@ -1,6 +1,6 @@
 import { BarChart3, Shield } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { FamilyCount } from '@/types/models';
 
 export function ArtifactStatsSection({
@@ -19,8 +19,8 @@ export function ArtifactStatsSection({
       <SectionHeader icon={Shield} title="痕迹统计" subtitle="按痕迹家族汇总" />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard title="家族数量" value={data?.length ?? 0} icon={Shield} />
-          <StatCard title="记录总量" value={data?.reduce((sum, a) => sum + a.count, 0) ?? 0} icon={BarChart3} />
+          <MetricCard label="家族数量" value={data?.length ?? 0} icon={Shield} size="lg" />
+          <MetricCard label="记录总量" value={data?.reduce((sum, a) => sum + a.count, 0) ?? 0} icon={BarChart3} size="lg" />
         </div>
         {data && data.length > 0 ? (
           <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">

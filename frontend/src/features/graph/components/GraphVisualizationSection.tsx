@@ -1,164 +1,29 @@
 import { GitBranch, Pause, Play, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ForceGraph } from './ForceGraph';
-import {
-  ALL_EDGE_TYPES,
-  buildEdgeMap,
-  buildNodeMap,
-  edgeTypeColor,
-  EDGE_LABELS,
-  NODE_LABELS,
-} from './graph-utils';
-import { SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
-import { useCurrentCase } from '@/features/case/hooks';
-import {
-  useGraphQuery,
-  useGraphSnapshot,
-  useNodeNeighborhood,
-  useProvenanceChain,
-} from '@/features/graph/hooks';
-import type { EdgeType, GraphEdge, GraphNode, GraphProvenanceEntry, NodeType } from '@/types/models';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { SectionHeader } from '@/components/data-display';
+import { ForceGraph } from '@/features/graph/components/ForceGraph';
+import { GraphEdgeDetails } from '@/features/graph/components/GraphEdgeDetails';
+import { GraphNodeDetails } from '@/features/graph/components/GraphNodeDetails';
+import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_LABELS } from '@/features/graph/components/graph-utils';
+import type { GraphVisualizationModel } from '@/features/graph/use-graph-visualization-model';
 
-const MAX_SEEDS = 6;
-
-export function GraphVisualizationSection() {
-  const currentCase = useCurrentCase();
-  const caseId = currentCase.data?.id ?? '';
-  const snapshot = useGraphSnapshot(caseId);
-
-  const [seedIds, setSeedIds] = useState<string[]>([]);
-  const [maxDepth, setMaxDepth] = useState(2);
-  const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<EdgeType[]>([...ALL_EDGE_TYPES]);
-  const [running, setRunning] = useState(true);
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({
-    nodes: [],
-    edges: [],
-  });
-  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
-  const [expandTarget, setExpandTarget] = useState<{ nodeId: string; depth: number } | undefined>();
-
+export function GraphVisualizationSection({ model }: { model: GraphVisualizationModel }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    const el = canvasRef.current;
-    const ro = new ResizeObserver((entries) => {
-      const cr = entries[0].contentRect;
-      setCanvasSize({ width: cr.width, height: cr.height });
+    const element = canvasRef.current;
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
-    ro.observe(el);
-    return () => ro.disconnect();
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    setSeedIds([]);
-    setGraphData({ nodes: [], edges: [] });
-    setSelectedNodeId(undefined);
-    setSelectedEdgeId(undefined);
-  }, [caseId]);
-
-  useEffect(() => {
-    setSeedIds(snapshot.data?.seedIds.slice(0, MAX_SEEDS) ?? []);
-  }, [snapshot.data?.seedIds]);
-
-  const hasSelectedEdgeTypes = selectedEdgeTypes.length > 0;
-  const initialQuery = useGraphQuery({
-    startIds: hasSelectedEdgeTypes ? seedIds : [],
-    edgeTypes: selectedEdgeTypes,
-    maxDepth,
-    limit: 150,
-    edgeLimit: 600,
-  });
-
-  useEffect(() => {
-    if (hasSelectedEdgeTypes) return;
-    setGraphData({ nodes: [], edges: [] });
-    setSelectedNodeId(undefined);
-    setSelectedEdgeId(undefined);
-  }, [hasSelectedEdgeTypes]);
-
-  useEffect(() => {
-    if (initialQuery.data) {
-      setGraphData({ nodes: initialQuery.data.nodes, edges: initialQuery.data.edges });
-      setSelectedNodeId(undefined);
-      setSelectedEdgeId(undefined);
-    }
-  }, [initialQuery.data]);
-
-  const neighborhood = useNodeNeighborhood(expandTarget?.nodeId ?? '', expandTarget?.depth ?? 1);
-
-  useEffect(() => {
-    if (neighborhood.data && expandTarget) {
-      mergeGraph(neighborhood.data.nodes, neighborhood.data.edges);
-      setExpandTarget(undefined);
-    }
-  }, [neighborhood.data, expandTarget]);
-
-  const provenance = useProvenanceChain(selectedEdgeId);
-
-  const nodeMap = useMemo(() => buildNodeMap(graphData.nodes), [graphData.nodes]);
-  const edgeMap = useMemo(() => buildEdgeMap(graphData.edges), [graphData.edges]);
-
-  const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) : undefined;
-  const selectedEdge = selectedEdgeId ? edgeMap.get(selectedEdgeId) : undefined;
-
-  function mergeGraph(newNodes: GraphNode[], newEdges: GraphEdge[]) {
-    setGraphData((prev) => {
-      const nodesMap = buildNodeMap(prev.nodes);
-      const edgesMap = buildEdgeMap(prev.edges);
-      const nodes = [...prev.nodes];
-      const edges = [...prev.edges];
-      for (const node of newNodes) {
-        if (!nodesMap.has(node.id)) {
-          nodesMap.set(node.id, node);
-          nodes.push(node);
-        }
-      }
-      for (const edge of newEdges) {
-        if (!edgesMap.has(edge.id)) {
-          edgesMap.set(edge.id, edge);
-          edges.push(edge);
-        }
-      }
-      return { nodes, edges };
-    });
-  }
-
-  function expandNode(nodeId: string, depth: number) {
-    setExpandTarget({ nodeId, depth });
-  }
-
-  function toggleEdgeType(type: EdgeType) {
-    setSelectedEdgeTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
-    );
-  }
-
-  function selectAllEdgeTypes(selected: boolean) {
-    setSelectedEdgeTypes(selected ? [...ALL_EDGE_TYPES] : []);
-  }
-
-  async function refresh() {
-    await snapshot.refetch();
-    if (hasSelectedEdgeTypes && seedIds.length > 0) {
-      await initialQuery.refetch();
-    }
-  }
-
-  const hasNodes = graphData.nodes.length > 0;
-  const isLoadingGraph = snapshot.isLoading || (hasSelectedEdgeTypes && initialQuery.isLoading);
 
   return (
     <section>
@@ -167,10 +32,8 @@ export function GraphVisualizationSection() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="text-forensics-muted">深度</span>
-            <Select value={String(maxDepth)} onValueChange={(value) => setMaxDepth(Number(value))}>
-              <SelectTrigger size="xs" variant="forensics" className="w-16">
-                <SelectValue />
-              </SelectTrigger>
+            <Select value={String(model.maxDepth)} onValueChange={(value) => model.setMaxDepth(Number(value))}>
+              <SelectTrigger size="xs" variant="forensics" className="w-16"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="1">1</SelectItem>
                 <SelectItem value="2">2</SelectItem>
@@ -181,22 +44,21 @@ export function GraphVisualizationSection() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setRunning((r) => !r)}
-            disabled={!hasNodes}
+            onClick={model.toggleRunning}
+            disabled={!model.hasNodes}
             className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
-            {running ? <Pause size={12} className="mr-1" /> : <Play size={12} className="mr-1" />}
-            {running ? '暂停' : '继续'}
+            {model.running ? <Pause size={12} className="mr-1" /> : <Play size={12} className="mr-1" />}
+            {model.running ? '暂停' : '继续'}
           </Button>
           <Button
             type="button"
             variant="outline"
-            onClick={refresh}
-            disabled={isLoadingGraph}
+            onClick={model.refresh}
+            disabled={model.isLoadingGraph}
             className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
-            <RefreshCw size={12} className={isLoadingGraph ? 'mr-1 opacity-70' : 'mr-1'} />
-            刷新
+            <RefreshCw size={12} className="mr-1 opacity-70" />刷新
           </Button>
         </div>
       </div>
@@ -207,26 +69,20 @@ export function GraphVisualizationSection() {
           type="button"
           variant="forensicsGhost"
           size="compact"
-          onClick={() => selectAllEdgeTypes(selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
+          onClick={() => model.selectAllEdgeTypes(model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
           className="text-[10px]"
         >
-          {selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? '全选' : '清空'}
+          {model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? '全选' : '清空'}
         </Button>
         {ALL_EDGE_TYPES.map((type) => (
-          <label
-            key={type}
-            className="flex cursor-pointer items-center gap-1 rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] hover:bg-forensics-panel-strong"
-          >
+          <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
             <Checkbox
-              checked={selectedEdgeTypes.includes(type)}
-              onCheckedChange={() => toggleEdgeType(type)}
+              checked={model.selectedEdgeTypes.includes(type)}
+              onCheckedChange={() => model.toggleEdgeType(type)}
               variant="forensics"
               checkboxSize="compact"
             />
-            <span
-              className="inline-block h-2 w-2 rounded-none"
-              style={{ backgroundColor: edgeTypeColor(type) }}
-            />
+            <span className="inline-block h-2 w-2 rounded-none" style={{ backgroundColor: edgeTypeColor(type) }} />
             <span>{EDGE_LABELS[type]}</span>
           </label>
         ))}
@@ -234,97 +90,53 @@ export function GraphVisualizationSection() {
 
       <div className="mt-3 flex h-[420px] overflow-hidden rounded-none border border-forensics-border bg-forensics-panel">
         <div ref={canvasRef} className="relative flex-1">
-          {!hasNodes && !isLoadingGraph ? (
+          {!model.hasNodes && !model.isLoadingGraph ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-forensics-muted">
               <div>暂无确定性的跨数据源实体关联。</div>
               <div className="mt-1">完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。</div>
             </div>
           ) : (
             <ForceGraph
-              nodes={graphData.nodes}
-              edges={graphData.edges}
-              selectedNodeId={selectedNodeId}
-              selectedEdgeId={selectedEdgeId}
-              onNodeClick={(node) => {
-                setSelectedNodeId(node.id);
-                setSelectedEdgeId(undefined);
-              }}
-              onNodeDoubleClick={(node) => expandNode(node.id, 1)}
-              onEdgeClick={(edge) => {
-                setSelectedEdgeId(edge.id);
-                setSelectedNodeId(undefined);
-              }}
-              onBackgroundClick={() => {
-                setSelectedNodeId(undefined);
-                setSelectedEdgeId(undefined);
-              }}
+              nodes={model.graphData.nodes}
+              edges={model.graphData.edges}
+              selectedNodeId={model.selectedNodeId}
+              selectedEdgeId={model.selectedEdgeId}
+              onNodeClick={(node) => model.selectNode(node.id)}
+              onNodeDoubleClick={(node) => model.expandNode(node.id, 1)}
+              onEdgeClick={(edge) => model.selectEdge(edge.id)}
+              onBackgroundClick={model.clearSelection}
               width={canvasSize.width}
               height={canvasSize.height}
-              running={running}
+              running={model.running}
             />
           )}
-          {isLoadingGraph ? (
+          {model.isLoadingGraph ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
               <div className="flex items-center gap-2 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] shadow-sm">
-                <RefreshCw size={12} className="opacity-70" />
-                加载图数据...
+                <RefreshCw size={12} className="opacity-70" />加载图数据...
               </div>
             </div>
           ) : null}
         </div>
 
         <ScrollArea className="min-h-0 w-64 shrink-0 border-l border-forensics-border bg-forensics-surface" viewportClassName="p-3">
-          {selectedNode ? (
-            <NodeMiniDetails
-              node={selectedNode}
-              edges={graphData.edges}
-              onExpand={(depth) => expandNode(selectedNode.id, depth)}
-              onClose={() => setSelectedNodeId(undefined)}
+          {model.selectedNode ? (
+            <GraphNodeDetails
+              node={model.selectedNode}
+              edges={model.graphData.edges}
+              onExpand={(depth) => model.expandNode(model.selectedNode!.id, depth)}
+              onClose={() => model.selectNode()}
             />
-          ) : selectedEdge ? (
-            <EdgeMiniDetails
-              edge={selectedEdge}
-              nodeMap={nodeMap}
-              provenance={provenance.data}
-              provenanceLoading={provenance.isLoading}
-              onClose={() => setSelectedEdgeId(undefined)}
+          ) : model.selectedEdge ? (
+            <GraphEdgeDetails
+              edge={model.selectedEdge}
+              nodeMap={model.nodeMap}
+              provenance={model.provenance}
+              provenanceLoading={model.provenanceLoading}
+              onClose={() => model.selectEdge()}
             />
           ) : (
-            <div className="space-y-3 text-[11px] text-forensics-muted">
-              <p>单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。</p>
-              <p>拖拽节点调整位置，拖拽空白处平移，滚轮缩放。</p>
-              {snapshot.data ? (
-                <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
-                  <div className="flex justify-between">
-                    <span>数据源</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.dataSourceCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>跨源实体</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.crossSourceEntityCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>跨源关系</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.crossSourceEdgeCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>节点</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.totalNodes}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>边</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.totalEdges}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>密度</span>
-                    <span className="font-mono text-forensics-text">{snapshot.data.density}</span>
-                  </div>
-                </div>
-              ) : null}
-              {initialQuery.data?.truncated ? (
-                <p className="text-forensics-warning">当前图窗口已达到节点或关系预算，请缩小深度或关系类型。</p>
-              ) : null}
-            </div>
+            <GraphSummary model={model} />
           )}
         </ScrollArea>
       </div>
@@ -332,113 +144,28 @@ export function GraphVisualizationSection() {
   );
 }
 
-function NodeMiniDetails({
-  node,
-  edges,
-  onExpand,
-  onClose,
-}: {
-  node: GraphNode;
-  edges: GraphEdge[];
-  onExpand: (depth: number) => void;
-  onClose: () => void;
-}) {
-  const degree = edges.filter((e) => e.sourceId === node.id || e.targetId === node.id).length;
+function GraphSummary({ model }: { model: GraphVisualizationModel }) {
   return (
-    <div className="space-y-3 text-[11px]">
-      <div className="font-light text-forensics-text">{node.label || '(无标签)'}</div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
-          <div className="text-[10px] text-forensics-muted">类型</div>
-          <div className="font-light text-forensics-text">
-            {NODE_LABELS[node.nodeType as NodeType] ?? node.nodeType}
-          </div>
+    <div className="space-y-3 text-[11px] text-forensics-muted">
+      <p>单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。</p>
+      <p>拖拽节点调整位置，拖拽空白处平移，滚轮缩放。</p>
+      {model.snapshot ? (
+        <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
+          {[
+            ['数据源', model.snapshot.dataSourceCount],
+            ['跨源实体', model.snapshot.crossSourceEntityCount],
+            ['跨源关系', model.snapshot.crossSourceEdgeCount],
+            ['节点', model.snapshot.totalNodes],
+            ['边', model.snapshot.totalEdges],
+            ['密度', model.snapshot.density],
+          ].map(([label, value]) => (
+            <div key={label} className="flex justify-between">
+              <span>{label}</span><span className="font-mono text-forensics-text">{value}</span>
+            </div>
+          ))}
         </div>
-        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
-          <div className="text-[10px] text-forensics-muted">度</div>
-          <div className="font-light text-forensics-text">{degree}</div>
-        </div>
-      </div>
-      <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-2 font-mono text-[10px] text-forensics-text-secondary">
-        {node.id}
-      </div>
-      <div className="break-words rounded-none border border-forensics-border bg-forensics-surface p-2 text-forensics-text-secondary">
-        {node.summary || '(无摘要)'}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Button type="button" size="sm" variant="outline" onClick={() => onExpand(1)} className="h-6 text-[10px]">
-          展开 1 层
-        </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => onExpand(2)} className="h-6 text-[10px]">
-          展开 2 层
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose} className="h-6 text-[10px]">
-          关闭
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function EdgeMiniDetails({
-  edge,
-  nodeMap,
-  provenance,
-  provenanceLoading,
-  onClose,
-}: {
-  edge: GraphEdge;
-  nodeMap: Map<string, GraphNode>;
-  provenance?: GraphProvenanceEntry[];
-  provenanceLoading: boolean;
-  onClose: () => void;
-}) {
-  const source = nodeMap.get(edge.sourceId);
-  const target = nodeMap.get(edge.targetId);
-  return (
-    <div className="space-y-3 text-[11px]">
-      <div className="font-light text-forensics-text">{EDGE_LABELS[edge.edgeType]}</div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-none border border-forensics-border bg-forensics-surface p-1.5 text-center">
-          <div className="text-[10px] text-forensics-muted">置信度</div>
-          <div className="font-light text-forensics-text">
-            {edge.confidence !== undefined ? edge.confidence : '-'}
-          </div>
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="text-[10px] text-forensics-muted">源</div>
-        <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
-          {source?.label ?? edge.sourceId}
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="text-[10px] text-forensics-muted">目标</div>
-        <div className="break-all rounded-none border border-forensics-border bg-forensics-surface p-1.5 font-mono text-[10px]">
-          {target?.label ?? edge.targetId}
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="text-[10px] text-forensics-muted">来源追溯</div>
-        {provenanceLoading ? (
-          <div className="text-forensics-muted">加载中...</div>
-        ) : provenance && provenance.length > 0 ? (
-          <div className="space-y-1">
-            {provenance.map((entry, i) => (
-              <div key={`${entry.edgeId}-${i}`} className="rounded-none border border-forensics-border bg-forensics-surface p-1.5">
-                {entry.sourceParser ? <div>解析器: {entry.sourceParser}</div> : null}
-                {entry.sourceRuleId ? <div>规则: {entry.sourceRuleId}</div> : null}
-                {entry.parserVersion ? <div>版本: {entry.parserVersion}</div> : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-forensics-muted">无追溯记录</div>
-        )}
-      </div>
-      <Button type="button" size="sm" variant="ghost" onClick={onClose} className="h-6 text-[10px]">
-        关闭
-      </Button>
+      ) : null}
+      {model.truncated ? <p className="text-forensics-warning">当前图窗口已达到节点或关系预算，请缩小深度或关系类型。</p> : null}
     </div>
   );
 }

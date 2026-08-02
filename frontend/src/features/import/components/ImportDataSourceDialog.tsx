@@ -17,7 +17,6 @@ import {
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
 import type { ImportDataSourceRequest, ImportTargetPlatform } from '@/types/models';
-import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 import { BrandWatermark } from '@/components/brand';
 
 type SourceKind = 'auto' | 'linuxCluster';
@@ -27,6 +26,8 @@ export interface ImportDataSourceDialogProps {
   onOpenChange: (open: boolean) => void;
   onImport: (request: ImportDataSourceRequest) => void;
   importPending: boolean;
+  pickSourcePath: (filterName: string) => Promise<string | undefined>;
+  pickDirectoryPath: () => Promise<string | undefined>;
 }
 
 export function ImportDataSourceDialog({
@@ -34,6 +35,8 @@ export function ImportDataSourceDialog({
   onOpenChange,
   onImport,
   importPending,
+  pickSourcePath,
+  pickDirectoryPath,
 }: ImportDataSourceDialogProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<'platform' | 'form'>('platform');
@@ -42,8 +45,6 @@ export function ImportDataSourceDialog({
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
   const [error, setError] = useState('');
-  const { pickDirectoryPath, pickSourcePath } = useImportDataSourceDialogModel();
-
   const reset = useCallback(() => {
     setStep('platform');
     setPlatform('windows');

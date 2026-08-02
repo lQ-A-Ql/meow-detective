@@ -9,10 +9,10 @@ import {
   EmailExtractionPanel,
   EventLogPanel,
   EvidenceClassificationPanel,
-  FileClassificationBoard,
   RegistryExtractionPanel,
   SystemInfoPanel,
 } from '@/features/analysis/components/AnalysisPanels';
+import { FileClassificationBoardContainer } from '@/features/analysis/containers/FileClassificationBoardContainer';
 import type {
   FileClassificationBoard as FileClassificationBoardData,
   AnalysisSystemInfo,
@@ -179,7 +179,7 @@ export function WindowsAnalysisView({
               {classificationBoard.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.files')} />
               ) : (
-                <FileClassificationBoard board={classificationBoard.data} />
+                <FileClassificationBoardContainer board={classificationBoard.data} />
               )}
             </TabsContent>
 

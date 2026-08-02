@@ -1,21 +1,6 @@
 import { createElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/features/files/hooks', () => ({
-  useFileHandle: () => ({ data: undefined }),
-  useFileViewer: () => ({
-    data: undefined,
-    setJumpOffsetInput: vi.fn(),
-    jumpToOffset: vi.fn(),
-    loadNextRange: vi.fn(),
-    loadPreviousRange: vi.fn(),
-  }),
-  useTextPreview: () => ({ data: null }),
-  useImagePreview: () => ({ data: null }),
-  useMediaUrl: () => ({ data: null }),
-  useDocumentPreview: () => ({ data: null }),
-}));
 import {
   SystemInfoPanel,
   BrowserHistoryPanel,
@@ -123,12 +108,13 @@ describe('AnalysisPanels sub-components', () => {
 
   describe('FileClassificationBoard', () => {
     it('renders empty state when no board data', () => {
-      render(createElement(FileClassificationBoard, { board: undefined }));
+      render(createElement(FileClassificationBoard, { board: undefined, onSelect: vi.fn() }));
       expect(screen.getByText('文件分类数据暂不可用。')).toBeDefined();
     });
 
     it('renders groups and subcategory rows', () => {
       render(createElement(FileClassificationBoard, {
+        onSelect: vi.fn(),
         board: {
           status: 'parsed',
           generatedAt: '2026-07-24T00:00:00Z',

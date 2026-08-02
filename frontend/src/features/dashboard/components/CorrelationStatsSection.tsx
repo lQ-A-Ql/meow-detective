@@ -1,6 +1,6 @@
 import { Activity, BarChart3, GitBranch, Shield } from 'lucide-react';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
+import { MetricCard, SectionHeader } from '@/components/data-display';
 import type { CorrelationOverview } from '@/types/models';
 
 export function CorrelationStatsSection({ data, isLoading, isError, error }: { data: CorrelationOverview | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -9,10 +9,10 @@ export function CorrelationStatsSection({ data, isLoading, isError, error }: { d
       <SectionHeader icon={BarChart3} title="关联统计" subtitle="关联分析快照" />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard title="关联节点" value={data?.nodeCount ?? 0} icon={GitBranch} />
-        <StatCard title="关联边" value={data?.edgeCount ?? 0} icon={Activity} />
-        <StatCard title="聚合簇" value={data?.clusterCount ?? 0} icon={Shield} />
-        <StatCard title="线索数" value={data?.leadCount ?? 0} icon={Shield} />
+        <MetricCard label="关联节点" value={data?.nodeCount ?? 0} icon={GitBranch} size="lg" />
+        <MetricCard label="关联边" value={data?.edgeCount ?? 0} icon={Activity} size="lg" />
+        <MetricCard label="聚合簇" value={data?.clusterCount ?? 0} icon={Shield} size="lg" />
+        <MetricCard label="线索数" value={data?.leadCount ?? 0} icon={Shield} size="lg" />
       </div>
       {data?.familyCoverage && data.familyCoverage.length > 0 ? (
         <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">

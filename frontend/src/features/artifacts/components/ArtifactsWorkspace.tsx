@@ -8,7 +8,7 @@ import {
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
-import { ArtifactField } from '@/features/artifacts/components/ArtifactField';
+import { KeyValueField } from '@/components/data-display';
 import type { ArtifactsWorkspaceModel } from '@/features/artifacts/use-artifacts-workspace-model';
 import type { ArtifactRow } from '@/types/models';
 
@@ -48,7 +48,7 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
         <InspectorPane title="痕迹属性" subtitle={model.selectedArtifact ? `${model.selectedArtifact.artifactType} / ${model.selectedArtifact.id}` : '未选择痕迹'} widthClassName="w-80">
           <div className="space-y-5">
             <InspectorSection title="目标路径"><InspectorValue value={String(model.selectedArtifact?.attrs.targetPath ?? '-')} mono strong /></InspectorSection>
-            <InspectorSection title="属性字段"><div className="space-y-2 font-mono text-[10px]"><ArtifactField label="驱动器类型" value={String(model.selectedArtifact?.attrs.driveType ?? '-')} /><ArtifactField label="卷序列号" value={String(model.selectedArtifact?.attrs.volumeSerial ?? '-')} /><ArtifactField label="机器 ID" value={String(model.selectedArtifact?.attrs.machineId ?? '-')} /></div></InspectorSection>
+            <InspectorSection title="属性字段"><div className="space-y-2 font-mono text-[10px]"><KeyValueField label="驱动器类型" value={String(model.selectedArtifact?.attrs.driveType ?? '-')} /><KeyValueField label="卷序列号" value={String(model.selectedArtifact?.attrs.volumeSerial ?? '-')} /><KeyValueField label="机器 ID" value={String(model.selectedArtifact?.attrs.machineId ?? '-')} /></div></InspectorSection>
             <InspectorSection title="来源上下文"><InspectorValue value={model.selectedArtifact?.title ?? '-'} mono /></InspectorSection>
             <InspectorSection title="关联动作"><div className="space-y-2"><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.openArtifactSource(model.selectedArtifact)} disabled={!model.selectedArtifact?.sourceObjectId} className="w-full font-light">在文件浏览中定位目标</Button><Button type="button" variant="forensicsLink" size="xs" onClick={() => model.openArtifactTimeline(model.selectedArtifact)} disabled={!model.selectedArtifact} className="w-full">查看关联时间线事件</Button></div></InspectorSection>
           </div>

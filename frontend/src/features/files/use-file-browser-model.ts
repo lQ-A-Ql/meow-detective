@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useFileJumpContext } from '@/features/files/hooks';
 import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
@@ -33,6 +34,7 @@ function findActivePartitionNode(
 }
 
 export function useFileBrowserModel() {
+  const navigate = useNavigate();
   const { data: currentCase } = useCurrentCase();
   const { data: dataSources } = useDataSources();
   const viewerTab = useUiStore((s) => s.viewerTab);
@@ -181,8 +183,13 @@ export function useFileBrowserModel() {
   const preview = useFilePreview({
     selectedFile,
     viewerTab,
-    setSelectedTimelineId,
   });
+
+  const onViewTimeline = () => {
+    if (!selectedFile) return;
+    setSelectedTimelineId(selectedFile.id);
+    navigate('/timeline');
+  };
 
   return {
     currentCase,
@@ -245,7 +252,7 @@ export function useFileBrowserModel() {
     activeRootNode: tree.activeRootNode,
     executableCount: pagination.executableCount,
     fileExtraction,
-    onViewTimeline: preview.onViewTimeline,
+    onViewTimeline,
     dataSources,
   };
 }
