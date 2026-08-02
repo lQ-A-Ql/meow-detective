@@ -36,7 +36,7 @@ export interface SearchRequestOptions {
   sortDirection: SearchSortDirection;
 }
 
-export interface SearchResultPage {
+export interface SearchFileResultPage {
   total: number;
   available: number;
   truncated: boolean;

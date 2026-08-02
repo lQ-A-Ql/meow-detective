@@ -1,6 +1,6 @@
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
-import type { SearchRequestOptions, SearchResultPage } from '@/types/models';
+import type { SearchFileResultPage, SearchRequestOptions } from '@/types/models';
 
 export interface SearchRequest {
   query: string;
@@ -21,7 +21,7 @@ export async function searchFiles(
   limit: number = 50,
   cursor?: string,
   options?: Partial<SearchRequestOptions>,
-): Promise<SearchResultPage> {
+): Promise<SearchFileResultPage> {
   const request: SearchRequest = { query, offset, limit };
   if (cursor) request.cursor = cursor;
   if (options?.matchPath) request.matchPath = true;

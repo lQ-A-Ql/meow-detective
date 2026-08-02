@@ -4,7 +4,9 @@
   Enforce the BitLocker credential boundary and upstream provenance record.
 .DESCRIPTION
   The BitLocker volume layer handles passwords and recovery passwords that must
-  never reach persistent storage, logs, events, reports, or the frontend. This
+  never reach persistent storage, logs, events, or reports. The sole frontend
+  exception is the explicitly authorized, transient recovery-password reveal
+  returned by memory-image unlock. This
   guard enforces the rules from docs/bitlocker-volume-layer-design.md section 2.4
   structurally, so a leak fails CI rather than a review:
 
@@ -16,7 +18,8 @@
     5. docs/bitlocker-dependency-decision.md must keep naming the pinned
        upstream commit, so a silent upstream refresh cannot pass.
     6. Transport DTOs must not contain password, recovery-password,
-       credential, or passphrase fields.
+       credential, or passphrase fields, except the exact optional reveal field
+       on RecoveryPasswordReconstructionDto.
     7. The retired whole-image credential reconstruction command, scanner, DTO,
        and frontend state must not return.
     8. The production BitLocker service must use exact profiled object traversal.
@@ -257,6 +260,17 @@ function Find-SerializedSecretContractViolations {
     $relative = $file.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
     $source = Read-Utf8Text -Path $file.FullName
     foreach ($match in [regex]::Matches($source, $fieldPattern)) {
+      $prefix = $source.Substring(0, $match.Index)
+      $lineEnd = $source.IndexOf("`n", $match.Index)
+      if ($lineEnd -lt 0) { $lineEnd = $source.Length }
+      $fieldLine = $source.Substring($match.Index, $lineEnd - $match.Index)
+      $authorizedReveal = $relative -eq 'crates/transport/src/dto/bitlocker.rs' -and
+        $match.Groups['field'].Value -eq 'password' -and
+        $prefix -match '(?ms)pub\s+struct\s+RecoveryPasswordReconstructionDto\s*\{(?:(?!^\}).)*$' -and
+        $fieldLine -match '^\s*pub\s+password\s*:\s*Option<String>\s*,'
+      if ($authorizedReveal) {
+        continue
+      }
       $line = Get-LineNumber -Text $source -Index $match.Index
       $violations.Add(
         "[secret-dto] ${relative}:$line transport DTO field '$($match.Groups['field'].Value)' cannot carry a BitLocker credential"
@@ -613,6 +627,26 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     $secretDto = @(Find-BitLockerCredentialViolations -Root $temp)
     if (-not ($secretDto -match "field 'credential'") -or -not ($secretDto -match "field 'key_package'")) {
       throw 'Self-test did not reject a serializable BitLocker credential field'
+    }
+
+    [System.IO.File]::WriteAllText(
+      (Join-Path $dtoRoot 'bitlocker.rs'),
+      "pub struct RecoveryPasswordReconstructionDto {`n    pub password: Option<String>,`n}`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $authorizedReveal = @(Find-BitLockerCredentialViolations -Root $temp)
+    if ($authorizedReveal -match '^\[secret-dto\]') {
+      throw 'Self-test rejected the exact transient recovery-password reveal DTO exception'
+    }
+
+    [System.IO.File]::WriteAllText(
+      (Join-Path $dtoRoot 'bitlocker.rs'),
+      "pub struct RecoveryPasswordReconstructionDto {`n    pub password: String,`n}`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $unboundedReveal = @(Find-BitLockerCredentialViolations -Root $temp)
+    if (-not ($unboundedReveal -match "field 'password'")) {
+      throw 'Self-test did not reject a non-optional recovery-password reveal field'
     }
 
     New-SelfTestCrate -Root $temp -SecretSource $validSecret

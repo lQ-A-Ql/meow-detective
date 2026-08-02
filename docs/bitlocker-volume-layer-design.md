@@ -260,7 +260,10 @@ AES key schedule 不会在 drop 时擦除(FVEK 字节会)。升到 `aes 0.9` 能
 - 凭据不定义 transport request DTO；command 收到独立字符串后立即转为不可
   `Debug/Clone/Serialize` 的 `Passphrase`，KDF 返回后不进入目录枚举作用域。
 - inspect 响应只包含加密方法、protector inventory、metadata fingerprint、解锁状态
-  与明文文件系统，不包含凭据或密钥材料。
+  与明文文件系统，不包含凭据或密钥材料。内存镜像解锁是唯一例外：当结构化 VMK
+  恢复能够反推 numerical recovery password 时，命令响应可通过
+  `RecoveryPasswordReconstructionDto.password?: string` 做一次授权展示；该值不得进入
+  SQLite、日志、事件、报告、全局 store 或 TanStack Query 缓存。
 - catalog 导入只接受 case/source/partition，依赖已验证运行时密钥，复用统一
   `enumerate_partition_with_fs` 写入 source DB；重复调用遇到真实分区根时幂等返回。
 - inspect、unlock 和 catalog 读取都持有 preview scope lease。锁定先 retire source、等待
@@ -269,7 +272,9 @@ AES key schedule 不会在 drop 时擦除(FVEK 字节会)。升到 `aes 0.9` 能
 - unlock、lock、catalog import 写入案件审计日志；审计只含 source、partition、
   metadata fingerprint、方法、结果和稳定错误码。
 - 若解锁验证成功但明文复探测失败，立即撤销刚注册的运行时密钥，避免半成功状态。
-- `check-bitlocker-credential-guard.ps1` 同时禁止 transport DTO 新增 secret 字段。
+- `check-bitlocker-credential-guard.ps1` 禁止 transport DTO 新增 secret 字段，并把上述
+  optional recovery-password reveal 精确限制在指定 DTO、字段名和类型；其他命名或非
+  optional 形式仍会失败。
 
 Stage 3 有意把“解锁”和“目录导入”分成两个命令。这样百万轮 KDF 完成后凭据即可
 离开作用域，可能长时间运行的文件树枚举只使用已验证 cipher state；初次镜像导入
