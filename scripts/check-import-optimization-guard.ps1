@@ -4,15 +4,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-# Real E01 regression tests moved from the desktop command pipeline into
-# app-services integration tests.
-$e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/e01_full_pipeline_test.rs"
+# The real import profile test lives under the crate's physical tests tree and
+# is linked by the test-only bridge in app-services.
+$e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/import_pipeline/mod.rs"
 # Staging DB pragmas and merge logic moved from app-services/src/staging.rs
 # to persistence-sqlite/src/repositories/staging_repo.rs during the
 # engineering refactor (commit c24a989 + 1b1a7e3).
 $stagingPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_repo.rs"
-# Import analysis phase configuration (e.g. timeline projection deferral).
-$pipelinePhasesPath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/analyze.rs"
+# Import finalization owns the bounded file-activity Timeline projection.
+$pipelineFinalizePath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/finalize.rs"
+$timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_service/projection.rs"
 # Post-import skip logging lives in the analysis worker pool.
 $workerPoolPath = Join-Path $repoRoot "crates/app-services/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
@@ -23,7 +24,8 @@ $performanceGatePath = Join-Path $repoRoot "scripts/check-e01-import-performance
 foreach ($path in @(
     $e01PipelineTestPath,
     $stagingPath,
-    $pipelinePhasesPath,
+    $pipelineFinalizePath,
+    $timelineProjectionPath,
     $workerPoolPath,
     $appStatePath,
     $persistenceConnectionPath,
@@ -37,7 +39,8 @@ foreach ($path in @(
 
 $e01PipelineTest = Get-Content -LiteralPath $e01PipelineTestPath -Raw -Encoding UTF8
 $staging = Get-Content -LiteralPath $stagingPath -Raw -Encoding UTF8
-$pipelinePhases = Get-Content -LiteralPath $pipelinePhasesPath -Raw -Encoding UTF8
+$pipelineFinalize = Get-Content -LiteralPath $pipelineFinalizePath -Raw -Encoding UTF8
+$timelineProjection = Get-Content -LiteralPath $timelineProjectionPath -Raw -Encoding UTF8
 $workerPool = Get-Content -LiteralPath $workerPoolPath -Raw -Encoding UTF8
 $appState = Get-Content -LiteralPath $appStatePath -Raw -Encoding UTF8
 $persistenceConnection = Get-Content -LiteralPath $persistenceConnectionPath -Raw -Encoding UTF8
@@ -45,19 +48,32 @@ $profileScript = Get-Content -LiteralPath $profileScriptPath -Raw -Encoding UTF8
 $performanceGate = Get-Content -LiteralPath $performanceGatePath -Raw -Encoding UTF8
 
 if ($e01PipelineTest -notmatch 'FORENSICS_E01_FIXTURE') {
-  throw "desktop real E01 regression must be driven by FORENSICS_E01_FIXTURE"
+  throw "real E01 import profile must be driven by FORENSICS_E01_FIXTURE"
 }
 foreach ($forbidden in @('liuyang_pc\.E01', 'E:\\pangushi', '刘洋')) {
   if ($e01PipelineTest -match $forbidden) {
-    throw "desktop real E01 regression must not hard-code private sample path fragment: $forbidden"
+    throw "real E01 import profile must not hard-code private sample path fragment: $forbidden"
   }
 }
-if ($pipelinePhases -notmatch 'let\s+image_backed\s*=\s*ctx\.import_config\.is_image_backed\(\)' -or
-    $pipelinePhases -notmatch 'enable_timeline_projection:\s*!image_backed') {
-  throw "E01/RAW imports must keep Timeline projection outside the import critical path"
+if ($e01PipelineTest -notmatch 'Timeline events after import') {
+  throw "real E01 import profile must verify the import-finalized Timeline projection"
 }
-if ($workerPool -notmatch 'timeline=deferred content=disabled text=disabled') {
-  throw "E01/RAW metadata-only import must emit an explicit deferred post-import profile detail"
+if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
+    $pipelineFinalize -notmatch 'timeline_service::materialize_file_activity\(') {
+  throw "Filesystem imports must finalize the narrowed file-activity Timeline projection before becoming ready"
+}
+foreach ($pattern in @(
+    'const\s+SOURCE_BATCH_SIZE:\s*u32\s*=\s*10_000',
+    'insert_file_activity_batched',
+    'DataSourcePlatform::Windows',
+    'DataSourcePlatform::Linux'
+  )) {
+  if ($timelineProjection -notmatch $pattern) {
+    throw "Timeline finalization lost its bounded or platform-specific projection policy: $pattern"
+  }
+}
+if ($workerPool -notmatch 'timeline=finalize content=disabled text=disabled') {
+  throw "E01/RAW metadata-only import must report Timeline finalization explicitly"
 }
 
 foreach ($pattern in @(
@@ -110,7 +126,7 @@ foreach ($pattern in @(
     'MinRowsPerSec',
     'run-e01-import-profile\.ps1',
     'NTFS shape: root Windows=\\d\+, root System32=0',
-    'Timeline events after lazy query',
+    'Timeline events after import',
     'System info: status=Parsed'
   )) {
   if ($performanceGate -notmatch $pattern) {
@@ -118,4 +134,4 @@ foreach ($pattern in @(
   }
 }
 
-Write-Host "Import optimization guard passed: sample path, timeline deferral, DB pragmas, and profile harness are locked"
+Write-Host "Import optimization guard passed: sample path, bounded Timeline finalization, DB pragmas, and profile harness are locked"

@@ -1061,7 +1061,7 @@ fn e01_full_import() {
         .with_conn(|conn| {
             let job_id = JobRepo::new(conn).create(&active.meta.id.0, "Import regression")?;
 
-            eprintln!("\n[1/5] Starting import...");
+            eprintln!("\n[1/7] Starting import...");
             let t_import = std::time::Instant::now();
             let profile_sink = RecordingImportEventSink::default();
             let result = execute_import_job(
@@ -1098,7 +1098,7 @@ fn e01_full_import() {
                 crate::source_db::open_source_db(&active.case_root, &data_source_id)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            eprintln!("\n[2/5] Verifying file entries...");
+            eprintln!("\n[2/7] Verifying file entries...");
             let file_count: i64 =
                 source_conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
             eprintln!("  File entries: {}", file_count);
@@ -1149,24 +1149,25 @@ fn e01_full_import() {
                 "Expected Windows registry/event-log paths after NTFS import"
             );
 
-            eprintln!("\n[3/5] Verifying timeline lazy projection...");
-            let tl_count_before: i64 = source_conn.query_row(
+            eprintln!("\n[3/7] Verifying import-finalized timeline...");
+            let tl_count_after_import: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM timeline_events",
                 [],
                 |row| row.get(0),
             )?;
-            eprintln!("  Timeline events before page query: {}", tl_count_before);
-            assert_eq!(
-                tl_count_before, 0,
-                "metadata-only import should defer MACB timeline projection"
+            assert!(
+                tl_count_after_import > 0,
+                "metadata-only import should finalize the narrowed Timeline projection"
             );
             let timeline_page = crate::timeline_service::query_timeline(&source_conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let tl_count = timeline_page.total as i64;
-            eprintln!("  Timeline events after lazy query: {}", tl_count);
-            assert!(tl_count > 0, "Expected lazy timeline events, got 0");
+            assert_eq!(timeline_page.total as i64, tl_count_after_import);
+            eprintln!(
+                "  Timeline events after import: {}",
+                tl_count_after_import
+            );
 
-            eprintln!("\n[4/6] Verifying system information analysis...");
+            eprintln!("\n[4/7] Verifying system information analysis...");
             let header_cache =
                 crate::file_service::FileHeaderReadCache::new(active.meta.id.0.clone());
             let system_info =
@@ -1291,7 +1292,7 @@ fn e01_full_import() {
             eprintln!("Total time: {:.1}s", total_time);
             eprintln!(
                 "Files: {}, Timeline: {}, Artifacts: {}, SystemInfo={:?}",
-                file_count, tl_count, artifact_count, system_info.status
+                file_count, tl_count_after_import, artifact_count, system_info.status
             );
 
             Ok(())

@@ -282,10 +282,10 @@ powershell -ExecutionPolicy Bypass -File scripts\run-e01-import-profile.ps1 -Run
 ## Real E01 Import Performance Gate
 
 The performance gate is also opt-in. It runs the profile harness, then fails if
-the median import phases, RSS peak, row count, throughput, NTFS shape, lazy
-Timeline projection, or system information parsing regress. Keep thresholds
-machine-specific and pass the real sample through `FORENSICS_E01_FIXTURE`; do
-not hard-code private paths in source.
+the median import phases, RSS peak, row count, throughput, NTFS shape, bounded
+import-finalized Timeline projection, or system information parsing regress.
+Keep thresholds machine-specific and pass the real sample through
+`FORENSICS_E01_FIXTURE`; do not hard-code private paths in source.
 
 ```powershell
 $env:FORENSICS_E01_FIXTURE = 'E:\path\to\sample.E01'

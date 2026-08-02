@@ -111,8 +111,8 @@ foreach ($run in $results) {
   if ($log -notmatch 'NTFS shape: root Windows=\d+, root System32=0, key hives/logs=[1-9]\d*') {
     throw "Run $($run.run) did not prove the NTFS tree shape in the raw log."
   }
-  if ($log -notmatch 'Timeline events after lazy query:\s*[1-9]\d*') {
-    throw "Run $($run.run) did not prove lazy timeline projection in the raw log."
+  if ($log -notmatch 'Timeline events after import:\s*[1-9]\d*') {
+    throw "Run $($run.run) did not prove import-finalized Timeline availability in the raw log."
   }
   if ($log -notmatch 'System info: status=Parsed') {
     throw "Run $($run.run) did not parse system information."
