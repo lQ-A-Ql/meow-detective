@@ -324,7 +324,10 @@ export function DenseDataTable<T>({
     >
       <Table
         className="text-[11px]"
-        containerClassName={horizontalScroll ? 'overflow-visible' : undefined}
+        // A clipped intermediary becomes sticky's nearest scroll container
+        // even though it never scrolls. Keep the wrapper visible so the
+        // Radix viewport above remains the header's scroll container.
+        containerClassName="overflow-visible"
         style={tableStyle}
       >
         <TableHeader className="sticky top-0 z-10 bg-forensics-panel">

@@ -1,24 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { V3Dashboard } from './V3Dashboard';
 
 const mocks = vi.hoisted(() => ({
   useCurrentCase: vi.fn(),
-  useDataSources: vi.fn(),
+  useCaseOverviewSnapshot: vi.fn(),
   useGraphSnapshot: vi.fn(),
   useGraphQuery: vi.fn(),
   useNodeNeighborhood: vi.fn(),
   useProvenanceChain: vi.fn(),
   useFileTree: vi.fn(),
-  useTimelineEvents: vi.fn(),
-  useArtifactFamilyCounts: vi.fn(),
-  useCorrelationSnapshot: vi.fn(),
-  useV3GovernanceSnapshot: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.useCurrentCase,
-  useDataSources: mocks.useDataSources,
 }));
 
 vi.mock('@/features/graph/hooks', () => ({
@@ -32,17 +27,8 @@ vi.mock('@/features/files/hooks', () => ({
   useFileTree: mocks.useFileTree,
 }));
 
-vi.mock('@/features/timeline/hooks', () => ({
-  useTimelineEvents: mocks.useTimelineEvents,
-}));
-
-vi.mock('@/features/artifacts/hooks', () => ({
-  useArtifactFamilyCounts: mocks.useArtifactFamilyCounts,
-}));
-
 vi.mock('@/features/analysis/hooks', () => ({
-  useCorrelationSnapshot: mocks.useCorrelationSnapshot,
-  useV3GovernanceSnapshot: mocks.useV3GovernanceSnapshot,
+  useCaseOverviewSnapshot: mocks.useCaseOverviewSnapshot,
 }));
 
 vi.mock('react-router', () => ({
@@ -53,6 +39,7 @@ function queryState(data: unknown) {
   return {
     data,
     error: null,
+    isError: false,
     isLoading: false,
     isSuccess: true,
     isFetching: false,
@@ -79,7 +66,9 @@ describe('V3Dashboard', () => {
 
     global.requestAnimationFrame = vi.fn(() => 0);
     mocks.useCurrentCase.mockReturnValue(queryState({ id: 'case-1' }));
-    mocks.useDataSources.mockReturnValue(queryState([
+    mocks.useCaseOverviewSnapshot.mockReturnValue(queryState({
+      generatedAt: '2026-06-12T00:00:00Z',
+      dataSources: [
       {
         id: 'ds-1',
         name: 'sample.e01',
@@ -107,7 +96,43 @@ describe('V3Dashboard', () => {
           { index: 1, name: 'FAT32', kindLabel: 'Filesystem', status: 'ok', offset: 536870912, length: 536870912 },
         ],
       },
-    ]));
+      ],
+      timelineEventCount: 3200,
+      artifactFamilyCounts: [
+        { family: 'LNK', count: 85 },
+        { family: 'Prefetch', count: 52 },
+        { family: 'EVTX', count: 1200 },
+        { family: 'Registry', count: 340 },
+      ],
+      correlationStatistics: {
+        nodeCount: 15,
+        edgeCount: 8,
+        clusterCount: 7,
+        leadCount: 9,
+        familyCoverage: [
+          { family: 'LNK', displayName: 'LNK', status: 'covered', leadCount: 1, highConfidenceLeadCount: 1, reviewLeadCount: 0, clusterCount: 1, sampleSignals: ['LNK target path matches file path'] },
+          { family: 'Prefetch', displayName: 'Prefetch', status: 'missing', leadCount: 0, highConfidenceLeadCount: 0, reviewLeadCount: 0, clusterCount: 0, sampleSignals: [] },
+        ],
+      },
+      platformCoverage: {
+        windowsArtifactFamilies: 4,
+        linuxArtifactFamilies: 0,
+        crossPlatformArtifactFamilies: 0,
+        unknownArtifactFamilies: 0,
+        totalFamilies: 4,
+        windowsFamilies: ['LNK', 'Prefetch', 'EVTX', 'Registry'],
+        linuxFamilies: [],
+        crossPlatformFamilies: [],
+        unknownFamilies: [],
+      },
+      rulePackCoverage: {
+        loadedPacks: [{ name: 'v2-standard', version: '1.0.0', author: 'Meow_Detective', ruleCount: 10, scope: ['correlation'] }],
+        totalRuleCount: 10,
+        loadStatus: 'loaded',
+        executionStatus: 'not_executed',
+      },
+      batchStatus: { activeJobs: 0, completedJobs: 0, failedJobs: 0, queuedJobs: 0, totalJobs: 0 },
+    }));
     mocks.useGraphSnapshot.mockReturnValue(queryState({
       nodeCountByType: { file: 150, artifact: 42, timeline: 255 },
       edgeCountByType: { pathMatch: 38, timeCorrelation: 15, parentChild: 147 },
@@ -130,61 +155,6 @@ describe('V3Dashboard', () => {
     }));
     mocks.useNodeNeighborhood.mockReturnValue(queryState({ nodes: [], edges: [] }));
     mocks.useProvenanceChain.mockReturnValue(queryState([]));
-    mocks.useTimelineEvents.mockReturnValue(queryState({
-      total: 3200,
-      items: [],
-    }));
-    mocks.useArtifactFamilyCounts.mockReturnValue(queryState([
-      { family: 'LNK', count: 85 },
-      { family: 'Prefetch', count: 52 },
-      { family: 'EVTX', count: 1200 },
-      { family: 'Registry', count: 340 },
-    ]));
-    mocks.useCorrelationSnapshot.mockReturnValue(queryState({
-      generatedAt: '2026-06-12T00:00:00Z',
-      nodeCount: 15,
-      edgeCount: 8,
-      clusterCount: 7,
-      leadCount: 9,
-      familyCoverage: [
-        {
-          family: 'LNK',
-          displayName: 'LNK',
-          status: 'covered',
-          leadCount: 1,
-          highConfidenceLeadCount: 1,
-          reviewLeadCount: 0,
-          clusterCount: 1,
-          sampleSignals: ['LNK target path matches file path'],
-        },
-        {
-          family: 'Prefetch',
-          displayName: 'Prefetch',
-          status: 'missing',
-          leadCount: 0,
-          highConfidenceLeadCount: 0,
-          reviewLeadCount: 0,
-          clusterCount: 0,
-          sampleSignals: [],
-        },
-      ],
-      nodes: [],
-      edges: [],
-      clusters: [],
-      leads: [],
-    }));
-    mocks.useV3GovernanceSnapshot.mockReturnValue(queryState({
-      generatedAt: '2026-06-12T00:00:00Z',
-      overallStatus: 'ok',
-      rulePackQuality: { coverage: 0, missingRules: 0, staleRules: 0, totalRules: 0 },
-      artifactCoverage: { coveredFamilies: 0, missingFamilies: 0, totalFamilies: 0 },
-      batchStatus: undefined,
-      notebookStats: { entryCount: 0, citationCount: 0 },
-      platformCoverage: undefined,
-      graphStatistics: { nodeCountByType: {}, edgeCountByType: {}, totalNodes: 0, totalEdges: 0, density: 0, largestComponentSize: 0 },
-      rulePackCoverage: undefined,
-      familyStatuses: [],
-    }));
   });
 
   it('renders without crashing', () => {
@@ -231,8 +201,9 @@ describe('V3Dashboard', () => {
   it('shows artifact stats section', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('痕迹统计')).toBeDefined();
-    expect(screen.getByText('家族明细')).toBeDefined();
+    const artifactSection = screen.getByText('痕迹统计').closest('section');
+    expect(artifactSection).not.toBeNull();
+    expect(within(artifactSection as HTMLElement).getByText('家族明细')).toBeDefined();
     // LNK appears in both artifact family and correlation family coverage
     expect(screen.getAllByText('LNK').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Prefetch').length).toBeGreaterThanOrEqual(1);
@@ -248,24 +219,42 @@ describe('V3Dashboard', () => {
     expect(screen.getAllByText('missing').length).toBeGreaterThan(0);
   });
 
-  it('shows placeholder platform coverage section', () => {
+  it('shows platform coverage from the overview snapshot', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('平台覆盖')).toBeDefined();
-    expect(screen.getByText('暂无平台覆盖数据。导入数据源并运行痕迹提取后生成。')).toBeDefined();
+    expect(screen.getAllByText('Windows').length).toBeGreaterThan(0);
+    expect(screen.getByText('未分类')).toBeDefined();
   });
 
-  it('shows placeholder rule pack status section', () => {
+  it('separates rule definition and case execution state', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('规则包状态')).toBeDefined();
-    expect(screen.getByText('规则包数据将在导入数据源后加载。')).toBeDefined();
+    expect(screen.getByText('定义状态')).toBeDefined();
+    expect(screen.getByText('本案执行')).toBeDefined();
+    expect(screen.getByText('not_executed')).toBeDefined();
   });
 
-  it('shows placeholder batch status section', () => {
+  it('shows an empty but successfully loaded batch status', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('批处理状态')).toBeDefined();
-    expect(screen.getByText('暂无批处理作业。')).toBeDefined();
+    expect(screen.getByText('进行中')).toBeDefined();
+    expect(screen.getByText('排队中')).toBeDefined();
+  });
+
+  it('shows overview failures as errors instead of zero-valued facts', () => {
+    mocks.useCaseOverviewSnapshot.mockReturnValue({
+      ...queryState(undefined),
+      error: new Error('overview query failed'),
+      isError: true,
+      isSuccess: false,
+    });
+
+    render(<V3Dashboard />);
+
+    expect(screen.getAllByText('overview query failed').length).toBeGreaterThan(1);
+    expect(screen.queryByText('当前案件没有数据源。')).toBeNull();
   });
 });

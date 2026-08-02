@@ -1,4 +1,6 @@
 import type { BatchStatus } from './batch';
+import type { FamilyCount } from './artifacts';
+import type { DataSourceSummary } from './dataSource';
 import type { GraphStats } from './graph';
 import type { NotebookStats } from './notebook';
 
@@ -228,10 +230,12 @@ export interface PlatformCoverage {
   windowsArtifactFamilies: number;
   linuxArtifactFamilies: number;
   crossPlatformArtifactFamilies: number;
+  unknownArtifactFamilies: number;
   totalFamilies: number;
   windowsFamilies: string[];
   linuxFamilies: string[];
   crossPlatformFamilies: string[];
+  unknownFamilies: string[];
 }
 
 export interface RulePackInfo {
@@ -245,6 +249,7 @@ export interface RulePackInfo {
 export interface RulePackStatus {
   loadedPacks: RulePackInfo[];
   totalRuleCount: number;
+  loadStatus: string;
   executionStatus: string;
 }
 
@@ -282,4 +287,23 @@ export interface V3GovernanceSnapshot extends V2GovernanceSnapshot {
   rulePackCoverage: RulePackStatus;
   batchStatus: BatchStatus;
   notebookStats: NotebookStats;
+}
+
+export interface CorrelationOverview {
+  nodeCount: number;
+  edgeCount: number;
+  clusterCount: number;
+  leadCount: number;
+  familyCoverage: CorrelationFamilyCoverage[];
+}
+
+export interface CaseOverviewSnapshot {
+  generatedAt: string;
+  dataSources: DataSourceSummary[];
+  timelineEventCount: number;
+  artifactFamilyCounts: FamilyCount[];
+  correlationStatistics: CorrelationOverview;
+  platformCoverage: PlatformCoverage;
+  rulePackCoverage: RulePackStatus;
+  batchStatus: BatchStatus;
 }

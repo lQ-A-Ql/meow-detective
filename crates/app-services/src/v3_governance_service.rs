@@ -13,6 +13,7 @@
 
 mod artifact_family_platform;
 mod error;
+mod overview;
 mod platform_coverage;
 
 use rusqlite::Connection;
@@ -24,6 +25,7 @@ use transport::dto::{
 };
 
 pub use error::V3GovernanceError;
+pub use overview::get_case_overview_snapshot_for_case;
 use platform_coverage::{
     apply_platform_integrity_gate, build_platform_coverage, build_platform_coverage_for_case,
 };
@@ -121,13 +123,18 @@ fn build_graph_stats_for_case(
 fn build_rule_pack_status() -> RulePackStatusDto {
     use crate::rule_pack::parser;
 
-    let v2_toml = parser::V2_STANDARD_TOML;
+    build_rule_pack_status_from(parser::V2_STANDARD_TOML)
+}
+
+fn build_rule_pack_status_from(source: &str) -> RulePackStatusDto {
+    use crate::rule_pack::parser;
 
     let mut loaded_packs = Vec::new();
+    let mut load_status = "unavailable";
 
-    // Parse the built-in V2 standard rule pack
-    match parser::parse_rule_pack(v2_toml) {
+    match parser::parse_rule_pack(source) {
         Ok(pack) => {
+            load_status = "loaded";
             let rule_count = pack.rules.len() as u32;
             loaded_packs.push(RulePackInfoDto {
                 name: pack.manifest.name.clone(),
@@ -137,27 +144,18 @@ fn build_rule_pack_status() -> RulePackStatusDto {
                 scope: pack.manifest.scope.clone(),
             });
         }
-        Err(_) => {
-            // If parsing fails, report an empty pack entry so the UI can show
-            // that the built-in pack is unavailable.
-            loaded_packs.push(RulePackInfoDto {
-                name: "v2-standard (parse error)".to_string(),
-                version: "0.0.0".to_string(),
-                author: "Forensics Workbench".to_string(),
-                rule_count: 0,
-                scope: vec!["correlation".to_string()],
-            });
+        Err(error) => {
+            tracing::error!(?error, "built-in rule-pack definition could not be loaded");
         }
     }
 
     let total_rule_count = loaded_packs.iter().map(|p| p.rule_count).sum::<u32>();
 
-    // Execution status: the V2 standard pack is parsed at compile time and
-    // executed during the correlation pipeline at import time. Since we can only
-    // report on pack definition (not per-case execution state in the V3 MVP),
-    // we report "loaded" here.
+    // The built-in pack is currently a definition-only capability. No persisted
+    // per-case rule-pack run record exists, so never present a loaded definition
+    // as if it had executed for the active case.
     let execution_status = if total_rule_count > 0 {
-        "loaded"
+        "not_executed"
     } else {
         "unavailable"
     };
@@ -165,6 +163,7 @@ fn build_rule_pack_status() -> RulePackStatusDto {
     RulePackStatusDto {
         loaded_packs,
         total_rule_count,
+        load_status: load_status.to_string(),
         execution_status: execution_status.to_string(),
     }
 }
@@ -175,25 +174,16 @@ fn build_batch_status(
     conn: &Connection,
     case_id: &str,
 ) -> Result<BatchStatusDto, V3GovernanceError> {
-    use crate::batch_service;
-
-    let jobs = batch_service::list_batch_jobs(conn, case_id).unwrap_or_default();
-
-    let active_jobs = jobs
-        .iter()
-        .filter(|job| job.status == "running" || job.status == "starting")
-        .count() as u32;
-    let completed_jobs = jobs.iter().filter(|job| job.status == "completed").count() as u32;
-    let failed_jobs = jobs.iter().filter(|job| job.status == "failed").count() as u32;
-    let queued_jobs = jobs.iter().filter(|job| job.status == "queued").count() as u32;
-    let total_jobs = jobs.len() as u32;
+    let counts = persistence_sqlite::repositories::batch_repo::BatchRepo::new(conn)
+        .count_jobs_by_status(case_id)
+        .map_err(|error| V3GovernanceError::Other(format!("count batch jobs: {error}")))?;
 
     Ok(BatchStatusDto {
-        active_jobs,
-        completed_jobs,
-        failed_jobs,
-        queued_jobs,
-        total_jobs,
+        active_jobs: counts.active_jobs,
+        completed_jobs: counts.completed_jobs,
+        failed_jobs: counts.failed_jobs,
+        queued_jobs: counts.queued_jobs,
+        total_jobs: counts.total_jobs,
     })
 }
 
@@ -203,22 +193,13 @@ fn build_notebook_stats(
     conn: &Connection,
     case_id: &str,
 ) -> Result<NotebookStatsDto, V3GovernanceError> {
-    let entry_count: u32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM notebook_entries WHERE case_id = ?1 AND status != 'deleted'",
-            rusqlite::params![case_id],
-            |row| row.get::<_, i64>(0).map(|v| v as u32),
-        )
-        .unwrap_or(0);
-
-    let citation_count: u32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM evidence_citations
-             WHERE entry_id IN (SELECT id FROM notebook_entries WHERE case_id = ?1 AND status != 'deleted')",
-            rusqlite::params![case_id],
-            |row| row.get::<_, i64>(0).map(|v| v as u32),
-        )
-        .unwrap_or(0);
+    let repo = persistence_sqlite::repositories::notebook_repo::NotebookRepo::new(conn);
+    let entry_count = repo
+        .count_active_entries_for_case(case_id)
+        .map_err(|error| V3GovernanceError::Other(format!("count notebook entries: {error}")))?;
+    let citation_count = repo
+        .count_citations_for_case(case_id)
+        .map_err(|error| V3GovernanceError::Other(format!("count notebook citations: {error}")))?;
 
     Ok(NotebookStatsDto {
         entry_count,

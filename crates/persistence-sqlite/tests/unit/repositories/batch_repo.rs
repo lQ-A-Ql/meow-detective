@@ -88,6 +88,41 @@ fn list_jobs_by_case() {
 }
 
 #[test]
+fn count_jobs_by_status_uses_one_case_scope() {
+    let conn = setup_db();
+    let repo = BatchRepo::new(&conn);
+    conn.execute(
+        "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('case-2', 'Other', datetime('now'), datetime('now'))",
+        [],
+    )
+    .unwrap();
+
+    for (id, status) in [
+        ("running", "running"),
+        ("starting", "starting"),
+        ("completed", "completed"),
+        ("failed", "failed"),
+        ("queued", "queued"),
+        ("cancelled", "cancelled"),
+    ] {
+        repo.create_job(id, "case-1", id, "{}").unwrap();
+        repo.update_job_status(id, status).unwrap();
+    }
+    repo.create_job("other", "case-2", "Other", "{}").unwrap();
+
+    let counts = repo.count_jobs_by_status("case-1").unwrap();
+    assert_eq!(counts.active_jobs, 2);
+    assert_eq!(counts.completed_jobs, 1);
+    assert_eq!(counts.failed_jobs, 1);
+    assert_eq!(counts.queued_jobs, 1);
+    assert_eq!(counts.total_jobs, 6);
+    assert_eq!(
+        repo.count_jobs_by_status("missing").unwrap(),
+        Default::default()
+    );
+}
+
+#[test]
 fn update_job_status() {
     let conn = setup_db();
     let repo = BatchRepo::new(&conn);

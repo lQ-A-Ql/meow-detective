@@ -67,7 +67,7 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 29 |
-| Tauri commands | 114 |
+| Tauri commands | 115 |
 | app-services source modules | 28 |
 | SQLite repositories | 42 logical repositories |
 | SQLite migration scripts | 73 |
@@ -78,7 +78,7 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 10 |
 | `frontend/src/**/*.test.ts(x)` | 101 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 114 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 115 |
 
 治理事实源：
 

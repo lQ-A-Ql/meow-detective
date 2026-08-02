@@ -11,7 +11,8 @@ pub use extraction::{
     get_registry_structured_summary, run_analysis_extraction, run_evidence_classification,
 };
 pub use governance::{
-    get_correlation_snapshot, get_v2_governance_snapshot, get_v3_governance_snapshot,
+    get_case_overview_snapshot, get_correlation_snapshot, get_v2_governance_snapshot,
+    get_v3_governance_snapshot,
 };
 pub use queries::{
     classify_files, get_evidence_classification_summary, get_file_classification_board,

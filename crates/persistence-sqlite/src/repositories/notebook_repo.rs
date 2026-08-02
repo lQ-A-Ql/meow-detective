@@ -276,6 +276,32 @@ impl<'a> NotebookRepo<'a> {
         Ok(citations)
     }
 
+    /// Count non-deleted notebook entries belonging to a case.
+    pub fn count_active_entries_for_case(&self, case_id: &str) -> DbResult<u32> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM notebook_entries WHERE case_id = ?1 AND status != 'deleted'",
+                params![case_id],
+                |row| row.get::<_, i64>(0).map(|count| count.max(0) as u32),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Count citations attached to non-deleted notebook entries in a case.
+    pub fn count_citations_for_case(&self, case_id: &str) -> DbResult<u32> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM evidence_citations
+                 WHERE entry_id IN (
+                     SELECT id FROM notebook_entries
+                     WHERE case_id = ?1 AND status != 'deleted'
+                 )",
+                params![case_id],
+                |row| row.get::<_, i64>(0).map(|count| count.max(0) as u32),
+            )
+            .map_err(Into::into)
+    }
+
     /// Remove a citation by id.
     pub fn remove_citation(&self, citation_id: &str) -> DbResult<()> {
         self.conn.execute(

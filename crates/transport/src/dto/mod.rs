@@ -131,8 +131,9 @@ pub use timeline::{
     TimelineFacetsDto, TimelineHistogramBucketDto, TimelineStripeDto,
 };
 pub use v3_governance::{
-    BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
-    RulePackStatusDto, V3GovernanceSnapshotDto,
+    BatchStatusDto, CaseOverviewSnapshotDto, CorrelationOverviewDto, GraphStatsDto,
+    NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto, RulePackStatusDto,
+    V3GovernanceSnapshotDto,
 };
 pub use viewer::{
     DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ImagePreviewDto, MediaPreviewModeDto,

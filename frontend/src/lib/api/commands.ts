@@ -102,6 +102,7 @@ export const COMMANDS = {
     GET_LINUX_ARTIFACT_SUMMARY: 'get_linux_artifact_summary',
     GET_V2_GOVERNANCE_SNAPSHOT: 'get_v2_governance_snapshot',
     GET_V3_GOVERNANCE_SNAPSHOT: 'get_v3_governance_snapshot',
+    GET_CASE_OVERVIEW_SNAPSHOT: 'get_case_overview_snapshot',
     GET_CORRELATION_SNAPSHOT: 'get_correlation_snapshot',
     GENERATE_ANALYSIS_SUMMARY: 'generate_analysis_summary',
   },

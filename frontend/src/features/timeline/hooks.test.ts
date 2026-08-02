@@ -8,11 +8,22 @@ const mocks = vi.hoisted(() => ({
   getTimelineEventById: vi.fn(),
   getTimelineFacets: vi.fn(),
 }));
+const caseState = vi.hoisted(() => ({ id: 'case-1' }));
 
 vi.mock('@/lib/api/timeline', () => ({
   getTimelineEvents: mocks.getTimelineEvents,
   getTimelineEventById: mocks.getTimelineEventById,
   getTimelineFacets: mocks.getTimelineFacets,
+}));
+
+vi.mock('@/features/case/hooks', () => ({
+  useCurrentCase: () => ({
+    data: { id: caseState.id },
+    error: null,
+    isError: false,
+    isLoading: false,
+    isSuccess: true,
+  }),
 }));
 
 vi.mock('@/features/cache-invalidation', async (importOriginal) => {
@@ -73,6 +84,7 @@ function createWrapper() {
 describe('timeline hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    caseState.id = 'case-1';
   });
 
   describe('useTimelineEvents', () => {
@@ -118,6 +130,19 @@ describe('timeline hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect((result.current.error as Error).message).toBe('timeout');
+    });
+
+    it('uses a separate timeline cache entry after the active case changes', async () => {
+      mocks.getTimelineEvents.mockResolvedValue({ total: 0, items: [] });
+      const { rerender, result } = renderHook(() => useTimelineEvents(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      caseState.id = 'case-2';
+      rerender();
+
+      await waitFor(() => expect(mocks.getTimelineEvents).toHaveBeenCalledTimes(2));
     });
   });
 

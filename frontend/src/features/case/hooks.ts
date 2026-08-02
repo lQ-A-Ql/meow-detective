@@ -20,11 +20,21 @@ export function useCurrentCase() {
 }
 
 export function useCaseMetrics() {
-  return useQuery({ queryKey: ['case', 'metrics'], queryFn: getCaseMetrics });
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['case', 'metrics', currentCase.data?.id ?? null],
+    queryFn: getCaseMetrics,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+  });
 }
 
 export function useRecentObjects() {
-  return useQuery({ queryKey: ['case', 'recent-objects'], queryFn: getRecentObjects });
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['case', 'recent-objects', currentCase.data?.id ?? null],
+    queryFn: getRecentObjects,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+  });
 }
 
 export function useRecentCases() {
@@ -32,7 +42,12 @@ export function useRecentCases() {
 }
 
 export function useDataSources() {
-  return useQuery({ queryKey: ['case', 'data-sources'], queryFn: getDataSources });
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['case', 'data-sources', currentCase.data?.id ?? null],
+    queryFn: getDataSources,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+  });
 }
 
 export function useCreateCase() {
@@ -65,6 +80,7 @@ export function useRenameDataSource() {
       renameDataSource(params.dataSourceId, params.name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['case', 'data-sources'] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'case-overview'] });
     },
   });
 }
@@ -105,6 +121,7 @@ export function useDeleteDataSource() {
       qc.invalidateQueries({ queryKey: ['timeline'] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
       qc.invalidateQueries({ queryKey: ['search'] });
+      qc.invalidateQueries({ queryKey: ['analysis'] });
     },
     onError: (error: Error) => {
       toast.error(`删除数据源失败: ${error.message}`);

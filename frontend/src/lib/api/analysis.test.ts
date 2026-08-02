@@ -5,6 +5,7 @@ import {
   getFileClassificationBoard,
   generateAnalysisSummary,
   getBrowserHistorySummary,
+  getCaseOverviewSnapshot,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvidenceClassificationSummary,
@@ -134,6 +135,12 @@ describe('analysis API', () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getV3GovernanceSnapshot();
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
+  });
+
+  it('getCaseOverviewSnapshot calls the dedicated overview command', async () => {
+    requestMock.mockResolvedValueOnce({} as never);
+    await getCaseOverviewSnapshot();
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_CASE_OVERVIEW_SNAPSHOT);
   });
 
   it('getCorrelationSnapshot calls the correct command', async () => {

@@ -4,6 +4,7 @@ import {
   AnalysisExtractionRun,
   AnalysisSystemInfo,
   BrowserHistorySummary,
+  CaseOverviewSnapshot,
   CorrelationSnapshot,
   EmailExtractionSummary,
   EvtxEventSummary,
@@ -91,6 +92,10 @@ export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
+}
+
+export async function getCaseOverviewSnapshot(): Promise<CaseOverviewSnapshot> {
+  return apiClient.request(COMMANDS.analysis.GET_CASE_OVERVIEW_SNAPSHOT);
 }
 
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {

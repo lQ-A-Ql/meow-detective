@@ -34,6 +34,7 @@ pub(super) fn build_platform_coverage(
         .map_err(|error| V3GovernanceError::Other(error.to_string()))?;
     let mut windows = BTreeSet::new();
     let mut linux = BTreeSet::new();
+    let mut unknown = BTreeSet::new();
     let mut observed = BTreeSet::new();
 
     for (family, _) in family_counts {
@@ -45,11 +46,19 @@ pub(super) fn build_platform_coverage(
             ArtifactFamilyPlatform::Linux => {
                 linux.insert(family);
             }
-            ArtifactFamilyPlatform::Unknown => {}
+            ArtifactFamilyPlatform::Unknown => {
+                unknown.insert(family);
+            }
         }
     }
 
-    Ok(coverage_dto(windows, linux, observed.len()))
+    Ok(coverage_dto(
+        windows,
+        linux,
+        BTreeSet::new(),
+        unknown,
+        observed.len(),
+    ))
 }
 
 pub(super) fn build_platform_coverage_for_case(
@@ -61,8 +70,15 @@ pub(super) fn build_platform_coverage_for_case(
         crate::artifact_service::get_source_attributed_artifact_family_counts_for_case(
             conn, case_root, case_id,
         )?;
+    Ok(assess_source_artifact_counts(source_counts))
+}
+
+pub(super) fn assess_source_artifact_counts(
+    source_counts: Vec<SourceArtifactFamilyCount>,
+) -> PlatformCoverageAssessment {
     let mut windows = BTreeSet::new();
     let mut linux = BTreeSet::new();
+    let mut unknown = BTreeSet::new();
     let mut observed = BTreeSet::new();
     let mut mismatches = Vec::new();
     let mut unclassified = Vec::new();
@@ -71,7 +87,10 @@ pub(super) fn build_platform_coverage_for_case(
         observed.insert(source_count.family.clone());
         let family_platform = classify_artifact_family(&source_count.family);
         match family_platform {
-            ArtifactFamilyPlatform::Unknown => unclassified.push(source_count),
+            ArtifactFamilyPlatform::Unknown => {
+                unknown.insert(source_count.family.clone());
+                unclassified.push(source_count);
+            }
             ArtifactFamilyPlatform::Windows if family_platform.matches(source_count.platform) => {
                 windows.insert(source_count.family);
             }
@@ -85,11 +104,11 @@ pub(super) fn build_platform_coverage_for_case(
         }
     }
 
-    Ok(PlatformCoverageAssessment {
-        coverage: coverage_dto(windows, linux, observed.len()),
+    PlatformCoverageAssessment {
+        coverage: coverage_dto(windows, linux, BTreeSet::new(), unknown, observed.len()),
         mismatches,
         unclassified,
-    })
+    }
 }
 
 pub(super) fn apply_platform_integrity_gate(
@@ -109,16 +128,20 @@ pub(super) fn apply_platform_integrity_gate(
 fn coverage_dto(
     windows: BTreeSet<String>,
     linux: BTreeSet<String>,
+    cross_platform: BTreeSet<String>,
+    unknown: BTreeSet<String>,
     total_families: usize,
 ) -> PlatformCoverageDto {
     PlatformCoverageDto {
         windows_artifact_families: windows.len() as u32,
         linux_artifact_families: linux.len() as u32,
-        cross_platform_artifact_families: 0,
+        cross_platform_artifact_families: cross_platform.len() as u32,
+        unknown_artifact_families: unknown.len() as u32,
         total_families: total_families as u32,
         windows_families: windows.into_iter().collect(),
         linux_families: linux.into_iter().collect(),
-        cross_platform_families: Vec::new(),
+        cross_platform_families: cross_platform.into_iter().collect(),
+        unknown_families: unknown.into_iter().collect(),
     }
 }
 

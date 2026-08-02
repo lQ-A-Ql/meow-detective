@@ -24,8 +24,8 @@ pub use projection::{
     TimelineProjectionStats,
 };
 pub use query::{
-    get_timeline_event_by_id, get_timeline_event_by_id_for_case, query_timeline,
-    query_timeline_filtered, TimelineQuery,
+    count_timeline_events_for_case, get_timeline_event_by_id, get_timeline_event_by_id_for_case,
+    query_timeline, query_timeline_filtered, TimelineQuery,
 };
 
 pub(crate) use ingestion::retain_analysis_events;

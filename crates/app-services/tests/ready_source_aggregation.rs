@@ -331,6 +331,92 @@ fn ready_source_errors_keep_public_service_categories() {
         .expect("preserve ready-source error categories");
 }
 
+#[test]
+fn case_overview_aggregates_ready_source_facts_without_v2_or_graph_payloads() {
+    let temp = tempfile::TempDir::new().expect("create case parent");
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "case-overview-aggregation",
+        Some("overview-test"),
+    )
+    .expect("create case");
+
+    active
+        .with_conn(|case_conn| {
+            register_source(case_conn, &active, "linux-ready", "linux", "ready", true)?;
+            let source_id = DataSourceId("linux-ready".to_string());
+            let source_conn =
+                source_db::open_registered_source_db(case_conn, &active.case_root, &source_id)?;
+            ArtifactRepo::new(&source_conn).insert_batch(
+                &[
+                    Artifact {
+                        id: ArtifactId("journal-1".to_string()),
+                        family: "LinuxJournal".to_string(),
+                        title: "journal".to_string(),
+                        summary: "journal fixture".to_string(),
+                        source_object_id: None,
+                        extractor_id: Some("fixture".to_string()),
+                        extractor_version: Some("1".to_string()),
+                        confidence: Some(1.0),
+                        source_attribution: Some("fixture".to_string()),
+                        created_at: chrono::Utc::now(),
+                        attrs: Default::default(),
+                    },
+                    Artifact {
+                        id: ArtifactId("unknown-1".to_string()),
+                        family: "FixtureUnknown".to_string(),
+                        title: "unknown".to_string(),
+                        summary: "classification fixture".to_string(),
+                        source_object_id: None,
+                        extractor_id: Some("fixture".to_string()),
+                        extractor_version: Some("1".to_string()),
+                        confidence: Some(1.0),
+                        source_attribution: Some("fixture".to_string()),
+                        created_at: chrono::Utc::now(),
+                        attrs: Default::default(),
+                    },
+                ],
+                &active.meta.id.0,
+                &source_id.0,
+            )?;
+            TimelineRepo::new(&source_conn).insert_batch_with_case(
+                &[TimelineEvent {
+                    id: TimelineEventId("event-1".to_string()),
+                    source_object_id: "journal-1".to_string(),
+                    event_type: "LinuxJournal".to_string(),
+                    timestamp: chrono::Utc::now(),
+                    title: "journal event".to_string(),
+                    description: "fixture".to_string(),
+                    parser_id: Some("fixture".to_string()),
+                    parser_version: Some("1".to_string()),
+                    confidence: Some(1.0),
+                    source_attribution: Some("fixture".to_string()),
+                    attrs: Default::default(),
+                }],
+                &active.meta.id.0,
+            )?;
+
+            let overview = v3_governance_service::get_case_overview_snapshot_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id.0,
+            )
+            .map_err(service_error)?;
+
+            assert_eq!(overview.data_sources.len(), 1);
+            assert_eq!(overview.timeline_event_count, 1);
+            assert_eq!(overview.artifact_family_counts.len(), 2);
+            assert_eq!(overview.platform_coverage.linux_artifact_families, 1);
+            assert_eq!(overview.platform_coverage.unknown_artifact_families, 1);
+            assert_eq!(overview.platform_coverage.total_families, 2);
+            assert_eq!(overview.rule_pack_coverage.load_status, "loaded");
+            assert_eq!(overview.rule_pack_coverage.execution_status, "not_executed");
+            assert_eq!(overview.batch_status.total_jobs, 0);
+            Ok(())
+        })
+        .expect("build case overview");
+}
+
 fn unsupported_ready_source_error(
     case_conn: &rusqlite::Connection,
     active: &app_services::active_case::ActiveCase,

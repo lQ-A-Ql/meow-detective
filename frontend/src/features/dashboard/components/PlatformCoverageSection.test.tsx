@@ -10,10 +10,12 @@ describe('PlatformCoverageSection', () => {
           windowsArtifactFamilies: 4,
           linuxArtifactFamilies: 3,
           crossPlatformArtifactFamilies: 2,
+          unknownArtifactFamilies: 0,
           totalFamilies: 9,
           windowsFamilies: ['Registry'],
           linuxFamilies: ['Journal'],
           crossPlatformFamilies: ['BrowserHistory'],
+          unknownFamilies: [],
         }}
       />,
     );

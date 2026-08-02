@@ -110,10 +110,12 @@ fn v3_snapshot_serializes_camel_case() {
             windows_artifact_families: 8,
             linux_artifact_families: 0,
             cross_platform_artifact_families: 0,
+            unknown_artifact_families: 0,
             total_families: 8,
             windows_families: vec!["LNK".to_string(), "Prefetch".to_string()],
             linux_families: vec![],
             cross_platform_families: vec![],
+            unknown_families: vec![],
         },
         rule_pack_coverage: RulePackStatusDto {
             loaded_packs: vec![RulePackInfoDto {
@@ -124,6 +126,7 @@ fn v3_snapshot_serializes_camel_case() {
                 scope: vec!["correlation".to_string()],
             }],
             total_rule_count: 10,
+            load_status: "loaded".to_string(),
             execution_status: "executed".to_string(),
         },
         batch_status: BatchStatusDto {
@@ -182,14 +185,17 @@ fn empty_v3_snapshot_serializes_without_errors() {
             windows_artifact_families: 0,
             linux_artifact_families: 0,
             cross_platform_artifact_families: 0,
+            unknown_artifact_families: 0,
             total_families: 0,
             windows_families: vec![],
             linux_families: vec![],
             cross_platform_families: vec![],
+            unknown_families: vec![],
         },
         rule_pack_coverage: RulePackStatusDto {
             loaded_packs: vec![],
             total_rule_count: 0,
+            load_status: "unavailable".to_string(),
             execution_status: "not_executed".to_string(),
         },
         batch_status: BatchStatusDto {
@@ -209,4 +215,62 @@ fn empty_v3_snapshot_serializes_without_errors() {
     assert_eq!(json["graphStatistics"]["totalNodes"], 0);
     assert_eq!(json["platformCoverage"]["totalFamilies"], 0);
     assert_eq!(json["notebookStats"]["entryCount"], 0);
+}
+
+#[test]
+fn case_overview_contract_contains_only_overview_facts() {
+    let overview = CaseOverviewSnapshotDto {
+        generated_at: "2026-08-02T00:00:00Z".to_string(),
+        data_sources: vec![],
+        timeline_event_count: 12,
+        artifact_family_counts: vec![FamilyCountDto {
+            family: "LinuxJournal".to_string(),
+            count: 7,
+        }],
+        correlation_statistics: CorrelationOverviewDto {
+            node_count: 3,
+            edge_count: 2,
+            cluster_count: 1,
+            lead_count: 1,
+            family_coverage: vec![],
+        },
+        platform_coverage: PlatformCoverageDto {
+            windows_artifact_families: 0,
+            linux_artifact_families: 1,
+            cross_platform_artifact_families: 0,
+            unknown_artifact_families: 0,
+            total_families: 1,
+            windows_families: vec![],
+            linux_families: vec!["LinuxJournal".to_string()],
+            cross_platform_families: vec![],
+            unknown_families: vec![],
+        },
+        rule_pack_coverage: RulePackStatusDto {
+            loaded_packs: vec![],
+            total_rule_count: 0,
+            load_status: "unavailable".to_string(),
+            execution_status: "not_executed".to_string(),
+        },
+        batch_status: BatchStatusDto {
+            active_jobs: 0,
+            completed_jobs: 0,
+            failed_jobs: 0,
+            queued_jobs: 0,
+            total_jobs: 0,
+        },
+    };
+
+    let value = serde_json::to_value(overview).expect("serialize overview");
+    assert_eq!(value["timelineEventCount"], 12);
+    assert_eq!(value["artifactFamilyCounts"][0]["family"], "LinuxJournal");
+    assert_eq!(value["correlationStatistics"]["leadCount"], 1);
+    assert!(value.get("graphStatistics").is_none());
+    assert!(value.get("factSources").is_none());
+    assert!(value.get("notebookStats").is_none());
+
+    let decoded: CaseOverviewSnapshotDto =
+        serde_json::from_value(value).expect("deserialize overview");
+    assert_eq!(decoded.timeline_event_count, 12);
+    assert_eq!(decoded.artifact_family_counts.len(), 1);
+    assert_eq!(decoded.correlation_statistics.lead_count, 1);
 }

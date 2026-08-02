@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getArtifactRowsPage: vi.fn(),
   getArtifactFamilyCounts: vi.fn(),
 }));
+const caseState = vi.hoisted(() => ({ id: 'case-1' }));
 
 vi.mock('@/lib/api/artifacts', () => ({
   getArtifactById: mocks.getArtifactById,
@@ -17,6 +18,16 @@ vi.mock('@/lib/api/artifacts', () => ({
   getArtifactRows: mocks.getArtifactRows,
   getArtifactRowsPage: mocks.getArtifactRowsPage,
   getArtifactFamilyCounts: mocks.getArtifactFamilyCounts,
+}));
+
+vi.mock('@/features/case/hooks', () => ({
+  useCurrentCase: () => ({
+    data: { id: caseState.id },
+    error: null,
+    isError: false,
+    isLoading: false,
+    isSuccess: true,
+  }),
 }));
 
 import {
@@ -39,6 +50,7 @@ function createWrapper() {
 describe('artifacts hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    caseState.id = 'case-1';
     mocks.getArtifactFamilies.mockResolvedValue([
       { family: 'Registry', displayName: 'Registry', count: 10 },
     ]);
@@ -88,6 +100,18 @@ describe('artifacts hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getArtifactFamilyCounts).toHaveBeenCalledTimes(1);
     expect(result.current.data).toEqual([{ family: 'Registry', count: 10 }]);
+  });
+
+  it('uses a separate artifact cache entry after the active case changes', async () => {
+    const { rerender, result } = renderHook(() => useArtifactFamilyCounts(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    caseState.id = 'case-2';
+    rerender();
+
+    await waitFor(() => expect(mocks.getArtifactFamilyCounts).toHaveBeenCalledTimes(2));
   });
 
   it('loads artifact pages using the backend opaque cursor', async () => {

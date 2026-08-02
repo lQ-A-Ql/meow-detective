@@ -1,11 +1,13 @@
 import { Activity, BarChart3, GitBranch, Shield } from 'lucide-react';
+import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
 import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
-import type { CorrelationSnapshot } from '@/types/models';
+import type { CorrelationOverview } from '@/types/models';
 
-export function CorrelationStatsSection({ data }: { data: CorrelationSnapshot | undefined }) {
+export function CorrelationStatsSection({ data, isLoading, isError, error }: { data: CorrelationOverview | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
   return (
     <section>
       <SectionHeader icon={BarChart3} title="关联统计" subtitle="关联分析快照" />
+      <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard title="关联节点" value={data?.nodeCount ?? 0} icon={GitBranch} />
         <StatCard title="关联边" value={data?.edgeCount ?? 0} icon={Activity} />
@@ -43,6 +45,7 @@ export function CorrelationStatsSection({ data }: { data: CorrelationSnapshot | 
           </div>
         </div>
       ) : null}
+      </DashboardQueryState>
     </section>
   );
 }

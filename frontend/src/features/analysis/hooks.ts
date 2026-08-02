@@ -13,6 +13,7 @@ import {
   getSystemInfo,
   getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
+  getCaseOverviewSnapshot,
   runAnalysisExtraction,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
@@ -38,6 +39,10 @@ const ANALYSIS_QUERY_OPTIONS = {
 } as const;
 
 const EVTX_PAGE_SIZE = 500;
+
+function caseOverviewQueryKey(caseId: string | null) {
+  return ['analysis', 'case-overview', caseId] as const;
+}
 
 function mergeEvtxPages(pages: EvtxEventSummary[]): EvtxEventSummary | undefined {
   const first = pages[0];
@@ -108,6 +113,10 @@ async function refreshExtractionQueries(
     ...sourceQueries,
     queryClient.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
     queryClient.invalidateQueries({ queryKey: ['timeline'], refetchType: 'active' }),
+    queryClient.invalidateQueries({
+      queryKey: caseOverviewQueryKey(caseId),
+      refetchType: 'active',
+    }),
     queryClient.invalidateQueries({
       queryKey: ['graph', 'snapshot', caseId],
       refetchType: 'active',
@@ -319,6 +328,17 @@ export function useV3GovernanceSnapshot() {
   });
 }
 
+export function useCaseOverviewSnapshot() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: caseOverviewQueryKey(currentCase.data?.id ?? null),
+    queryFn: getCaseOverviewSnapshot,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+}
+
 export function useRunEvidenceClassification() {
   const qc = useQueryClient();
   const currentCase = useCurrentCase();
@@ -332,6 +352,10 @@ export function useRunEvidenceClassification() {
           refetchType: 'active',
         }),
         qc.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
+        qc.invalidateQueries({
+          queryKey: caseOverviewQueryKey(currentCase.data?.id ?? null),
+          refetchType: 'active',
+        }),
       ]);
     },
   });

@@ -5,7 +5,34 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::V2GovernanceSnapshotDto;
+use super::{
+    CorrelationFamilyCoverageDto, DataSourceSummaryDto, FamilyCountDto, V2GovernanceSnapshotDto,
+};
+
+/// Purpose-built snapshot for the investigator overview screen.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseOverviewSnapshotDto {
+    pub generated_at: String,
+    pub data_sources: Vec<DataSourceSummaryDto>,
+    pub timeline_event_count: u64,
+    pub artifact_family_counts: Vec<FamilyCountDto>,
+    pub correlation_statistics: CorrelationOverviewDto,
+    pub platform_coverage: PlatformCoverageDto,
+    pub rule_pack_coverage: RulePackStatusDto,
+    pub batch_status: BatchStatusDto,
+}
+
+/// Correlation totals required by the overview without transferring graph rows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CorrelationOverviewDto {
+    pub node_count: u32,
+    pub edge_count: u32,
+    pub cluster_count: u32,
+    pub lead_count: u32,
+    pub family_coverage: Vec<CorrelationFamilyCoverageDto>,
+}
 
 // ── V3 Governance Snapshot ────────────────────────────────────────────────
 
@@ -63,6 +90,8 @@ pub struct PlatformCoverageDto {
     pub linux_artifact_families: u32,
     /// Number of artifact families that are cross-platform.
     pub cross_platform_artifact_families: u32,
+    /// Number of families that have no production platform classification.
+    pub unknown_artifact_families: u32,
     /// Total number of distinct artifact families.
     pub total_families: u32,
     /// List of Windows artifact family names.
@@ -71,6 +100,8 @@ pub struct PlatformCoverageDto {
     pub linux_families: Vec<String>,
     /// List of cross-platform artifact family names.
     pub cross_platform_families: Vec<String>,
+    /// List of artifact family names that require platform classification review.
+    pub unknown_families: Vec<String>,
 }
 
 // ── Rule Pack Status ──────────────────────────────────────────────────────
@@ -99,6 +130,8 @@ pub struct RulePackStatusDto {
     pub loaded_packs: Vec<RulePackInfoDto>,
     /// Total number of rules across all loaded packs.
     pub total_rule_count: u32,
+    /// Status of parsing and loading the rule-pack definition.
+    pub load_status: String,
     /// Overall execution status: "executed", "not_executed", "partial".
     pub execution_status: String,
 }

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getEmailExtractionSummary: vi.fn(),
   getEvtxEventSummary: vi.fn(),
   getLinuxArtifactSummary: vi.fn(),
+  getCaseOverviewSnapshot: vi.fn(),
   getV2GovernanceSnapshot: vi.fn(),
   getCorrelationSnapshot: vi.fn(),
   generateAnalysisSummary: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('@/lib/api/analysis', () => ({
   getEmailExtractionSummary: mocks.getEmailExtractionSummary,
   getEvtxEventSummary: mocks.getEvtxEventSummary,
   getLinuxArtifactSummary: mocks.getLinuxArtifactSummary,
+  getCaseOverviewSnapshot: mocks.getCaseOverviewSnapshot,
   getV2GovernanceSnapshot: mocks.getV2GovernanceSnapshot,
   getCorrelationSnapshot: mocks.getCorrelationSnapshot,
   generateAnalysisSummary: mocks.generateAnalysisSummary,
@@ -46,6 +48,7 @@ import {
   useFileClassificationBoard,
   useAnalysisSystemInfo,
   useBrowserHistorySummary,
+  useCaseOverviewSnapshot,
   useCorrelationSnapshot,
   useEmailExtractionSummary,
   useEvtxEventSummary,
@@ -58,10 +61,13 @@ import {
   useV2GovernanceSnapshot,
 } from './hooks';
 
-function createWrapper() {
-  const queryClient = new QueryClient({
+function createQueryClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function createWrapper(queryClient = createQueryClient()) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return createElement(QueryClientProvider, { client: queryClient }, children);
   };
@@ -81,6 +87,37 @@ describe('analysis hooks', () => {
       provenance: [],
     });
     mocks.getFileClassificationBoard.mockResolvedValue({ groups: [] } as never);
+    mocks.getCaseOverviewSnapshot.mockResolvedValue({
+      generatedAt: '2026-08-02T00:00:00Z',
+      dataSources: [],
+      timelineEventCount: 0,
+      artifactFamilyCounts: [],
+      correlationStatistics: {
+        nodeCount: 0,
+        edgeCount: 0,
+        clusterCount: 0,
+        leadCount: 0,
+        familyCoverage: [],
+      },
+      platformCoverage: {
+        windowsArtifactFamilies: 0,
+        linuxArtifactFamilies: 0,
+        crossPlatformArtifactFamilies: 0,
+        unknownArtifactFamilies: 0,
+        totalFamilies: 0,
+        windowsFamilies: [],
+        linuxFamilies: [],
+        crossPlatformFamilies: [],
+        unknownFamilies: [],
+      },
+      rulePackCoverage: {
+        loadedPacks: [],
+        totalRuleCount: 0,
+        loadStatus: 'unavailable',
+        executionStatus: 'not_executed',
+      },
+      batchStatus: { activeJobs: 0, completedJobs: 0, failedJobs: 0, queuedJobs: 0, totalJobs: 0 },
+    });
     mocks.getEvidenceClassificationSummary.mockResolvedValue({
       status: 'notFound',
       categories: [],
@@ -574,8 +611,10 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
+    const queryClient = createQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useRunAnalysisExtraction(), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(queryClient),
     });
 
     await result.current.mutateAsync({
@@ -586,6 +625,10 @@ describe('analysis hooks', () => {
     expect(mocks.runAnalysisExtraction).toHaveBeenCalledWith({
       dataSourceId: 'ds-1',
       categories: ['Registry', 'BrowserHistory', 'Email'],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['analysis', 'case-overview', 'case-1'],
+      refetchType: 'active',
     });
   });
 
@@ -659,5 +702,19 @@ describe('analysis hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getCorrelationSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the case overview only when an active case exists', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-overview' },
+    });
+
+    const { result } = renderHook(() => useCaseOverviewSnapshot(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.getCaseOverviewSnapshot).toHaveBeenCalledTimes(1);
   });
 });

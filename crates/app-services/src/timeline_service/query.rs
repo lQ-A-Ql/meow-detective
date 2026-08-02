@@ -60,6 +60,21 @@ pub fn query_timeline_filtered(
     })
 }
 
+pub fn count_timeline_events_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<u64, TimelineServiceError> {
+    let mut total = 0u64;
+    for (_, source_conn) in
+        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
+    {
+        total =
+            total.saturating_add(TimelineRepo::new(&source_conn).count_filtered(None, None, None)?);
+    }
+    Ok(total)
+}
+
 pub fn get_timeline_event_by_id(
     conn: &Connection,
     event_id: &str,

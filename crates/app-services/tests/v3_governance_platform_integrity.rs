@@ -69,6 +69,7 @@ fn windows_source_with_linux_artifact_is_blocked_and_not_counted_as_linux_covera
         .platform_coverage
         .linux_families
         .contains(&"LinuxJournal".to_string()));
+    assert_eq!(snapshot.platform_coverage.total_families, 2);
     assert!(snapshot
         .v2
         .release_scorecard
@@ -99,6 +100,7 @@ fn linux_source_with_windows_browser_artifact_is_blocked() {
         .platform_coverage
         .windows_families
         .contains(&"BrowserHistory".to_string()));
+    assert_eq!(snapshot.platform_coverage.total_families, 3);
 }
 
 fn governance_snapshot(

@@ -24,20 +24,20 @@ export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
       <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div><div className="font-serif text-xl tracking-tight text-forensics-text">取证总览</div><div className="mt-1 font-mono text-[11px] text-forensics-muted">图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态</div></div>
-          <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={14} className={model.graph.isFetching || model.timeline.isFetching ? 'opacity-70' : ''} />刷新</Button>
+          <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={14} className={model.graph.isFetching || model.overview.isFetching ? 'opacity-70' : ''} />刷新</Button>
         </div>
       </div>
       {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text="正在加载取证总览快照..." /> : (
         <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">
           {model.error ? <AnalysisErrorBanner message={errorMessage(model.error)} onRetry={model.refresh} /> : null}
           <GraphStatsSection data={model.graph.data} />
-          <DataSourceCoverageSection dataSources={model.dataSources} />
-          <TimelineOverviewSection total={model.timeline.data?.total} isLoading={model.timeline.isLoading} isError={model.timeline.isError} isSuccess={model.timeline.isSuccess} />
-          <ArtifactStatsSection data={model.artifactCounts.data} />
-          <CorrelationStatsSection data={model.correlation.data} />
-          <PlatformCoverageSection data={model.governance.data?.platformCoverage} />
-          <RulePackStatusSection data={model.governance.data?.rulePackCoverage} />
-          <BatchStatusSection data={model.governance.data?.batchStatus} />
+          <DataSourceCoverageSection dataSources={model.overview.data?.dataSources} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
+          <TimelineOverviewSection total={model.overview.data?.timelineEventCount} isLoading={model.overview.isLoading} isError={model.overview.isError} isSuccess={model.overview.isSuccess} error={model.overview.error} />
+          <ArtifactStatsSection data={model.overview.data?.artifactFamilyCounts} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
+          <CorrelationStatsSection data={model.overview.data?.correlationStatistics} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
+          <PlatformCoverageSection data={model.overview.data?.platformCoverage} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
+          <RulePackStatusSection data={model.overview.data?.rulePackCoverage} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
+          <BatchStatusSection data={model.overview.data?.batchStatus} isLoading={model.overview.isLoading} isError={model.overview.isError} error={model.overview.error} />
         </ScrollArea>
       )}
     </div>

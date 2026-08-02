@@ -96,6 +96,7 @@ macro_rules! desktop_command_handler {
             get_linux_artifact_summary,
             get_v2_governance_snapshot,
             get_v3_governance_snapshot,
+            get_case_overview_snapshot,
             get_correlation_snapshot,
             generate_analysis_summary,
             get_graph_snapshot,

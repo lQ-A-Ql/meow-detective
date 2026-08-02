@@ -182,6 +182,29 @@ describe('DenseDataTable', () => {
     expect(headerTitle.getAttribute('title')).toBe('Long evidence column 0');
   });
 
+  it('keeps the header sticky to the real table scroll viewport', () => {
+    const { container } = render(
+      <DenseDataTable
+        columns={columns}
+        rows={Array.from({ length: 100 }, (_, index) => ({
+          id: `row-${index}`,
+          name: `Row ${index}`,
+        }))}
+        getRowKey={(row) => row.id}
+      />,
+    );
+
+    const scrollViewport = getScrollViewport(container);
+    const tableContainer = container.querySelector('[data-slot="table-container"]');
+    const tableHeader = container.querySelector<HTMLElement>('[data-slot="table-header"]');
+
+    expect(scrollViewport).toContainElement(tableHeader);
+    expect(tableContainer?.className).toContain('overflow-visible');
+    expect(tableContainer?.className).not.toContain('overflow-hidden');
+    expect(tableHeader?.className).toContain('sticky');
+    expect(tableHeader?.className).toContain('top-0');
+  });
+
   it('does not activate a row while selecting cell text', () => {
     const onRowClick = vi.fn();
     render(

@@ -545,7 +545,7 @@ baseline 只允许减少：
 | Rust 源文件 / 行 | 1,719 / ~296,000 |
 | TypeScript 源文件 / 行（不含测试） | 256 / ~28,900 |
 | workspace 成员 | 29（28 crate + Tauri host package） |
-| Tauri 已注册 commands / 命令文件 | 114 / 71 |
+| Tauri 已注册 commands / 命令文件 | 115 / 71 |
 | transport DTO 文件 | 33 |
 | SQLite 逻辑 repository / 迁移脚本 | 42 / 73 |
 | 前端页面 / feature / UI 基元 | 10 / 17 / 23 |

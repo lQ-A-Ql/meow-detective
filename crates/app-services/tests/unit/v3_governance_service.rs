@@ -6,7 +6,8 @@ use domain::{
     NotebookEntryType,
 };
 use persistence_sqlite::repositories::{
-    case_repo::CaseRepo, datasource_repo::DataSourceRepo, notebook_repo::NotebookRepo,
+    batch_repo::BatchRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
+    notebook_repo::NotebookRepo,
 };
 use rusqlite::Connection;
 
@@ -125,21 +126,32 @@ fn v3_snapshot_includes_rule_pack_status() {
     );
     assert_eq!(snapshot.rule_pack_coverage.loaded_packs[0].rule_count, 10);
     assert_eq!(snapshot.rule_pack_coverage.total_rule_count, 10);
+    assert_eq!(snapshot.rule_pack_coverage.load_status, "loaded");
+    assert_eq!(snapshot.rule_pack_coverage.execution_status, "not_executed");
 }
 
 #[test]
 fn v3_snapshot_includes_batch_status() {
     let conn = setup_case_db("case-batch");
     add_datasource(&conn, "case-batch", "ds-1", "disk.raw");
+    let repo = BatchRepo::new(&conn);
+    for (id, status) in [
+        ("batch-running", "running"),
+        ("batch-completed", "completed"),
+        ("batch-failed", "failed"),
+        ("batch-queued", "queued"),
+    ] {
+        repo.create_job(id, "case-batch", id, "{}").unwrap();
+        repo.update_job_status(id, status).unwrap();
+    }
 
     let snapshot = get_v3_governance_snapshot(&conn, "case-batch").unwrap();
 
-    // Batch status should be present (empty for fresh case)
-    assert_eq!(snapshot.batch_status.total_jobs, 0);
-    assert_eq!(snapshot.batch_status.active_jobs, 0);
-    assert_eq!(snapshot.batch_status.completed_jobs, 0);
-    assert_eq!(snapshot.batch_status.failed_jobs, 0);
-    assert_eq!(snapshot.batch_status.queued_jobs, 0);
+    assert_eq!(snapshot.batch_status.total_jobs, 4);
+    assert_eq!(snapshot.batch_status.active_jobs, 1);
+    assert_eq!(snapshot.batch_status.completed_jobs, 1);
+    assert_eq!(snapshot.batch_status.failed_jobs, 1);
+    assert_eq!(snapshot.batch_status.queued_jobs, 1);
 }
 
 #[test]
@@ -180,7 +192,19 @@ fn build_rule_pack_status_parses_builtin_pack() {
     let status = build_rule_pack_status();
     assert_eq!(status.loaded_packs.len(), 1);
     assert!(status.loaded_packs[0].rule_count > 0);
+    assert_eq!(status.load_status, "loaded");
+    assert_eq!(status.execution_status, "not_executed");
     assert!(status.loaded_packs[0]
         .scope
         .contains(&"correlation".to_string()));
+}
+
+#[test]
+fn invalid_rule_pack_is_not_reported_as_loaded_or_executed() {
+    let status = build_rule_pack_status_from("invalid {{{");
+
+    assert!(status.loaded_packs.is_empty());
+    assert_eq!(status.total_rule_count, 0);
+    assert_eq!(status.load_status, "unavailable");
+    assert_eq!(status.execution_status, "unavailable");
 }

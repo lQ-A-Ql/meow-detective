@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getCurrentCase: vi.fn(),
+  getDataSources: vi.fn(),
   deleteCase: vi.fn(),
+  deleteDataSource: vi.fn(),
+  renameDataSource: vi.fn(),
 }));
 
 vi.mock('@/lib/api/case', () => ({
@@ -14,25 +17,34 @@ vi.mock('@/lib/api/case', () => ({
   createCase: vi.fn(),
   openCase: vi.fn(),
   closeCase: vi.fn(),
-  renameDataSource: vi.fn(),
-  deleteDataSource: vi.fn(),
+  renameDataSource: mocks.renameDataSource,
+  deleteDataSource: mocks.deleteDataSource,
   removeCaseFromList: vi.fn(),
   getCaseMetrics: vi.fn(),
   getRecentCases: vi.fn(),
   getRecentObjects: vi.fn(),
-  getDataSources: vi.fn(),
+  getDataSources: mocks.getDataSources,
 }));
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-import { useCurrentCase, useDeleteCase } from './hooks';
+import {
+  useCurrentCase,
+  useDataSources,
+  useDeleteCase,
+  useDeleteDataSource,
+  useRenameDataSource,
+} from './hooks';
 
-function createWrapper() {
-  const queryClient = new QueryClient({
+function createQueryClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function createWrapper(queryClient = createQueryClient()) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return createElement(QueryClientProvider, { client: queryClient }, children);
   };
@@ -115,5 +127,49 @@ describe('case hooks', () => {
       expect(result.current.error).toBeInstanceOf(Error);
       expect((result.current.error as Error).message).toBe('permission denied');
     });
+  });
+
+  it('scopes data-source cache entries to the active case id', async () => {
+    mocks.getCurrentCase.mockResolvedValue({ id: 'case-1', name: 'Case 1' });
+    mocks.getDataSources.mockResolvedValue([]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = function Wrapper({ children }: { children: React.ReactNode }) {
+      return createElement(QueryClientProvider, { client: queryClient }, children);
+    };
+
+    const { result } = renderHook(() => useDataSources(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryState(['case', 'data-sources', 'case-1'])).toBeDefined();
+  });
+
+  it('invalidates the overview after a data source is renamed', async () => {
+    mocks.renameDataSource.mockResolvedValue(undefined);
+    const queryClient = createQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useRenameDataSource(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync({ dataSourceId: 'ds-1', name: 'Renamed' });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['analysis', 'case-overview'],
+    });
+  });
+
+  it('invalidates all analysis projections after a data source is deleted', async () => {
+    mocks.deleteDataSource.mockResolvedValue(undefined);
+    const queryClient = createQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useDeleteDataSource(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync('ds-1');
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['analysis'] });
   });
 });

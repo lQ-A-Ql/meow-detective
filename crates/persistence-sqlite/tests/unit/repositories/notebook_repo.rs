@@ -354,3 +354,59 @@ fn delete_case_notebook_removes_all() {
         .unwrap();
     assert_eq!(entries.len(), 0);
 }
+
+#[test]
+fn case_counts_exclude_deleted_entries_and_other_cases() {
+    let (conn, repo) = setup();
+    conn.execute(
+        "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('case-2', 'Other', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+
+    for entry in [
+        make_entry(
+            "active-1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "Active",
+            EntryStatus::Draft,
+        ),
+        make_entry(
+            "deleted-1",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "Deleted",
+            EntryStatus::Draft,
+        ),
+        make_entry(
+            "other-1",
+            "case-2",
+            None,
+            NotebookEntryType::Finding,
+            "Other case",
+            EntryStatus::Draft,
+        ),
+    ] {
+        repo.create_entry(&entry).unwrap();
+    }
+
+    for citation in [
+        make_citation("active-citation", "active-1", NodeType::File, "node-1"),
+        make_citation("deleted-citation", "deleted-1", NodeType::File, "node-2"),
+        make_citation("other-citation", "other-1", NodeType::File, "node-3"),
+    ] {
+        repo.add_citation(&citation).unwrap();
+    }
+    repo.delete_entry("deleted-1", "2026-06-15T00:00:00Z")
+        .unwrap();
+
+    assert_eq!(repo.count_active_entries_for_case("case-1").unwrap(), 1);
+    assert_eq!(repo.count_citations_for_case("case-1").unwrap(), 1);
+    assert_eq!(repo.count_active_entries_for_case("case-2").unwrap(), 1);
+    assert_eq!(repo.count_citations_for_case("case-2").unwrap(), 1);
+    assert_eq!(repo.count_active_entries_for_case("missing").unwrap(), 0);
+    assert_eq!(repo.count_citations_for_case("missing").unwrap(), 0);
+}

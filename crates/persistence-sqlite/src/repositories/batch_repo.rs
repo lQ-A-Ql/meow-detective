@@ -28,6 +28,16 @@ pub struct BatchPhaseRow {
     pub warnings_json: String,
 }
 
+/// Aggregated batch-job counts for one case.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BatchJobStatusCounts {
+    pub active_jobs: u32,
+    pub completed_jobs: u32,
+    pub failed_jobs: u32,
+    pub queued_jobs: u32,
+    pub total_jobs: u32,
+}
+
 pub struct BatchRepo<'a> {
     conn: &'a Connection,
 }
@@ -99,6 +109,31 @@ impl<'a> BatchRepo<'a> {
             result.push(r?);
         }
         Ok(result)
+    }
+
+    pub fn count_jobs_by_status(&self, case_id: &str) -> DbResult<BatchJobStatusCounts> {
+        self.conn
+            .query_row(
+                "SELECT
+                     COALESCE(SUM(CASE WHEN status IN ('running', 'starting') THEN 1 ELSE 0 END), 0),
+                     COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0),
+                     COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0),
+                     COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0),
+                     COUNT(*)
+                 FROM batch_jobs
+                 WHERE case_id = ?1",
+                params![case_id],
+                |row| {
+                    Ok(BatchJobStatusCounts {
+                        active_jobs: row.get(0)?,
+                        completed_jobs: row.get(1)?,
+                        failed_jobs: row.get(2)?,
+                        queued_jobs: row.get(3)?,
+                        total_jobs: row.get(4)?,
+                    })
+                },
+            )
+            .map_err(Into::into)
     }
 
     pub fn update_job_status(&self, id: &str, status: &str) -> DbResult<()> {
