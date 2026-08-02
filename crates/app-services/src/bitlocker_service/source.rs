@@ -82,7 +82,7 @@ fn open_source(
             data_source_id: data_source_id.0.clone(),
             partition_index,
         })?;
-    if !is_bitlocker_partition(&partition) {
+    if !crate::partition_capabilities::is_bitlocker_partition(&partition) {
         return Err(BitLockerServiceError::NotBitLocker { partition_index });
     }
     Ok(BitLockerSource {
@@ -164,16 +164,4 @@ fn validate_source_kind(kind: &DataSourceKind) -> Result<(), BitLockerServiceErr
     Err(BitLockerServiceError::UnsupportedSourceKind {
         kind: kind.to_string(),
     })
-}
-
-pub(crate) fn is_bitlocker_partition(partition: &DataSourcePartitionRecord) -> bool {
-    partition.kind_label.eq_ignore_ascii_case("bitlocker")
-        || partition
-            .filesystem
-            .as_deref()
-            .is_some_and(|value| value.eq_ignore_ascii_case("bitlocker"))
-        || matches!(
-            partition.status.to_ascii_lowercase().as_str(),
-            "locked" | "encrypted_bitlocker"
-        )
 }

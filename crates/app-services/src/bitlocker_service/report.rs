@@ -5,10 +5,7 @@ use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord
 use rusqlite::Connection;
 use transport::ServiceErrorCategory;
 
-use super::{
-    inspect_bitlocker_volume, source::is_bitlocker_partition, BitLockerRuntimeContext,
-    BitLockerServiceError,
-};
+use super::{inspect_bitlocker_volume, BitLockerRuntimeContext, BitLockerServiceError};
 
 pub(crate) struct BitLockerReportEntry {
     pub(crate) data_source_id: String,
@@ -48,7 +45,7 @@ pub(crate) fn collect_report_inventory(
         entries.extend(
             partitions
                 .into_iter()
-                .filter(is_bitlocker_partition)
+                .filter(crate::partition_capabilities::is_bitlocker_partition)
                 .map(|partition| {
                     inspect_partition(
                         case_conn, case_root, case_id, &source.id, partition, runtimes,

@@ -3,7 +3,6 @@ use super::*;
 use super::{
     extractor_policy::registry_supports_file,
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
-    progress::memory_hard_limit_exceeded_for_rss,
     search_policy::should_index_file,
     task_feed::{analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page},
     worker_runtime::{reserve_content_budget, SharedAnalysisState},
@@ -1041,12 +1040,4 @@ fn content_budget_blocks_large_file_and_disabled_mode() {
         &file,
         &shared
     ));
-}
-
-#[test]
-fn analysis_memory_guard_detects_hard_limit() {
-    assert!(memory_hard_limit_exceeded_for_rss(3, 2));
-    assert!(memory_hard_limit_exceeded_for_rss(2, 2));
-    assert!(!memory_hard_limit_exceeded_for_rss(1, 2));
-    assert!(!memory_hard_limit_exceeded_for_rss(0, 0));
 }

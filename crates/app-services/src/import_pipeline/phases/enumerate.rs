@@ -4,7 +4,7 @@ use std::time::Instant;
 use evidence_core::LogicalFsReader;
 use transport::CommandError;
 
-use crate::{datasource_service, file_service, import_analysis, staging};
+use crate::{datasource_service, file_service, staging};
 
 use super::{merge, probe};
 use crate::import_pipeline::context::ImportJobContext;
@@ -320,7 +320,7 @@ fn report_reader_build(
             elapsed_ms(started.elapsed()),
             pending,
             failures,
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );
@@ -350,7 +350,7 @@ fn report_enumeration_complete(
             bytes_to_mb(bytes),
             mb_per_sec(bytes, elapsed),
             workers,
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );
@@ -390,7 +390,7 @@ fn report_catalog_ready(
             stats.file_count,
             stats.dir_count,
             stats.warnings.len(),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );

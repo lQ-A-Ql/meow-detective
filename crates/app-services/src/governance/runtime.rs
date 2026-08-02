@@ -1,5 +1,7 @@
 use domain::DataSourceHashStatus;
-use persistence_sqlite::repositories::{audit_repo::AuditRepo, datasource_repo::DataSourceRepo};
+use persistence_sqlite::repositories::{
+    audit_repo::AuditRepo, datasource_repo::DataSourceRepo, report_repo::ReportRepo,
+};
 use rusqlite::Connection;
 use std::path::Path;
 use transport::dto::{
@@ -52,7 +54,7 @@ fn build_runtime_signals_with_correlation(
         DataSourceRepo::new(conn).find_by_case(&domain::CaseId(case_id.to_string()))?;
     let jobs = crate::job_service::get_jobs_from_db(conn)
         .map_err(|e| GovernanceError::Internal(e.to_string()))?;
-    let reports = crate::report::get_report_history(conn, case_id);
+    let report_count = ReportRepo::new(conn).list_by_case(case_id)?.len() as u32;
 
     let hashed_data_source_count = data_sources
         .iter()
@@ -83,7 +85,7 @@ fn build_runtime_signals_with_correlation(
         running_job_count,
         partial_job_count,
         failed_job_count,
-        report_count: reports.len() as u32,
+        report_count,
         correlation_snapshot_available: correlation.snapshot_available,
         correlation_lead_count: correlation.lead_count,
         correlation_high_confidence_lead_count: correlation.high_confidence_lead_count,

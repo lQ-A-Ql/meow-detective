@@ -18,17 +18,16 @@ mod worker_pool;
 mod worker_runtime;
 mod worker_staging;
 
-pub use budget::{
-    content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
-    ContentBudget,
+pub use crate::runtime_resources::{
+    current_rss_mb, default_memory_hard_limit_mb, default_memory_soft_limit_mb, peak_rss_mb,
 };
+pub use budget::{content_budget_for_mode, ContentBudget};
 pub use error::ImportAnalysisError;
 pub(crate) use options::SearchIndexPhaseOptions;
 pub use options::{
     AnalysisProgressCallback, ImportAnalysisMode, ImportAnalysisOptions, ImportAnalysisStats,
     JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions, PostImportPipelineReport,
 };
-pub use progress::{current_rss_mb, peak_rss_mb};
 pub(crate) use search_phase::run_search_index_phase;
 pub use worker_pool::{
     default_analysis_worker_count, resolve_analysis_worker_count,

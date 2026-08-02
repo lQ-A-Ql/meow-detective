@@ -101,7 +101,7 @@ pub(super) fn open_target_reader(
         &target.candidate,
     )
     .map_err(DeletedRecoveryError::Parser)?;
-    if !crate::bitlocker_service::is_bitlocker_partition(&target.partition) {
+    if !crate::partition_capabilities::is_bitlocker_partition(&target.partition) {
         return Ok((reader, offset));
     }
     let runtime = context

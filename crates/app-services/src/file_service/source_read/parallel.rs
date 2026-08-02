@@ -21,8 +21,8 @@ impl SourceReadContext<'_> {
         &mut self,
         descriptor: &PreviewDescriptor,
     ) -> Result<Option<ParallelSourceReaders>, FileServiceError> {
-        let rss_mb = crate::import_analysis::current_rss_mb();
-        let soft_limit_mb = crate::import_analysis::default_memory_soft_limit_mb();
+        let rss_mb = crate::runtime_resources::current_rss_mb();
+        let soft_limit_mb = crate::runtime_resources::default_memory_soft_limit_mb();
         let worker_count = parallel_worker_count(
             descriptor.entry_size,
             std::thread::available_parallelism()

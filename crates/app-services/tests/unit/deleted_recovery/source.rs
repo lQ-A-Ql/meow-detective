@@ -59,7 +59,9 @@ fn linux_recovery_accepts_only_ext4_and_xfs() {
 #[test]
 fn ready_bitlocker_partition_routes_as_ntfs_recovery() {
     let partition = bitlocker_partition();
-    assert!(crate::bitlocker_service::is_bitlocker_partition(&partition));
+    assert!(crate::partition_capabilities::is_bitlocker_partition(
+        &partition
+    ));
     assert_eq!(
         recovery_filesystem(&partition, DataSourcePlatform::Windows),
         Some(("ntfs", ImageFilesystemKind::Ntfs)),

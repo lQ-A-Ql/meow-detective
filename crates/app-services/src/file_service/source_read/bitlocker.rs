@@ -47,7 +47,7 @@ pub(super) fn open_candidate_block_reader(
             candidate.partition_index
         )));
     };
-    if !crate::bitlocker_service::is_bitlocker_partition(&partition) {
+    if !crate::partition_capabilities::is_bitlocker_partition(&partition) {
         return Ok((reader, filesystem_offset, candidate.filesystem_kind.clone()));
     }
     let Some(runtime) = context.bitlocker_runtime.as_ref() else {
@@ -78,7 +78,7 @@ pub(super) fn is_bitlocker_candidate(
 ) -> Result<bool, FileServiceError> {
     Ok(PartitionRepo::new(context.source_conn)
         .find_by_data_source_and_index(&context.data_source_id.0, candidate.partition_index)?
-        .is_some_and(|partition| crate::bitlocker_service::is_bitlocker_partition(&partition)))
+        .is_some_and(|partition| crate::partition_capabilities::is_bitlocker_partition(&partition)))
 }
 
 pub(super) fn detect_plaintext_filesystem(

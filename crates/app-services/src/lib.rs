@@ -41,6 +41,7 @@ pub mod import_state;
 pub mod job_service;
 pub mod notebook_service;
 pub mod parallel_enum;
+mod partition_capabilities;
 pub mod performance;
 pub mod processing_phase_service;
 pub mod report;
@@ -49,6 +50,7 @@ pub use report::{
     get_report_history, get_report_templates,
 };
 pub mod rule_pack;
+pub mod runtime_resources;
 pub mod search_service;
 pub mod source_db;
 pub mod staging;

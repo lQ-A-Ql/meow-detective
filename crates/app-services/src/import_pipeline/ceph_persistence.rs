@@ -17,8 +17,8 @@ pub(super) fn persist_probe_records(
     metadata: Option<&CephMetadataAggregate>,
 ) -> Result<(), CommandError> {
     let started = Instant::now();
-    let rss_before_mb = crate::import_analysis::current_rss_mb();
-    let peak_rss_before_mb = crate::import_analysis::peak_rss_mb();
+    let rss_before_mb = crate::runtime_resources::current_rss_mb();
+    let peak_rss_before_mb = crate::runtime_resources::peak_rss_mb();
     let inventory = std::slice::from_ref(inventory);
     let bindings = std::slice::from_ref(device_binding);
     let result = match metadata {
@@ -56,9 +56,9 @@ pub(super) fn persist_probe_records(
         success = result.is_ok(),
         elapsed_ms = started.elapsed().as_millis(),
         rss_before_mb,
-        rss_after_mb = crate::import_analysis::current_rss_mb(),
+        rss_after_mb = crate::runtime_resources::current_rss_mb(),
         peak_rss_before_mb,
-        peak_rss_after_mb = crate::import_analysis::peak_rss_mb(),
+        peak_rss_after_mb = crate::runtime_resources::peak_rss_mb(),
         "Persisted Ceph metadata and source-bound device identity"
     );
     result.map_err(CommandError::from_service_error)

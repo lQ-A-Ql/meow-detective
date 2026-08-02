@@ -1,8 +1,5 @@
 use super::options::ImportAnalysisMode;
 
-const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 4 * 1024;
-const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 6 * 1024;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentBudget {
     pub max_files: u64,
@@ -50,14 +47,6 @@ impl ContentBudget {
             allowed_extensions: Vec::new(),
         }
     }
-}
-
-pub fn default_memory_soft_limit_mb() -> u64 {
-    DEFAULT_MEMORY_SOFT_LIMIT_MB
-}
-
-pub fn default_memory_hard_limit_mb() -> u64 {
-    DEFAULT_MEMORY_HARD_LIMIT_MB
 }
 
 pub fn content_budget_for_mode(mode: ImportAnalysisMode) -> ContentBudget {

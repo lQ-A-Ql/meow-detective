@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use transport::CommandError;
 
-use crate::{file_service, import_analysis, staging};
+use crate::{file_service, staging};
 
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile, rows_per_sec};
@@ -88,7 +88,7 @@ fn report_merge_complete(
             elapsed_ms(elapsed),
             merged,
             rows_per_sec(merged, elapsed),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );

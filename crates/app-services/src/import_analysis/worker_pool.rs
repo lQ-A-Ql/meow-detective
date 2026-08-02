@@ -1,6 +1,4 @@
-use super::budget::{
-    content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
-};
+use super::budget::content_budget_for_mode;
 use super::error::ImportAnalysisError;
 use super::extractor_policy::validate_analysis_platform;
 use super::finalize::{
@@ -17,6 +15,7 @@ use super::source_reader::prepare_derived_runtime;
 use super::task_feed::{analysis_task_queue_bound, count_analysis_file_tasks};
 use super::tier::advance_tier;
 use super::worker_coordinator::{run_analysis_workers, AnalysisWorkerRunConfig};
+use crate::runtime_resources::{default_memory_hard_limit_mb, default_memory_soft_limit_mb};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;

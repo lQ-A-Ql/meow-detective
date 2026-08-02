@@ -46,7 +46,6 @@ pub use memory_recovery::unlock_bitlocker_with_memory_image;
 pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
 pub(crate) use report::{collect_report_inventory, BitLockerReportEntry};
 pub use restore_on_open::{restore_enabled_bitlocker_volumes, BitLockerRestoreSummary};
-pub(crate) use source::is_bitlocker_partition;
 pub use use_cases::{
     inspect_bitlocker_volume, lock_bitlocker_volume, unlock_bitlocker_with_password,
     unlock_bitlocker_with_recovery_password,

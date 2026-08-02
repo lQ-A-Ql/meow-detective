@@ -451,7 +451,7 @@ fn log_scheduler_snapshot(snapshot: SchedulerSnapshot, policy: ExtractionSchedul
         active_or_queued = snapshot.in_flight_items,
         in_flight_bytes = snapshot.in_flight_bytes,
         worker_budget = policy.worker_count,
-        rss_mb = crate::import_analysis::current_rss_mb(),
+        rss_mb = crate::runtime_resources::current_rss_mb(),
         "Analysis extraction scheduler heartbeat"
     );
 }

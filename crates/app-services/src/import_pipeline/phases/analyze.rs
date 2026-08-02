@@ -151,7 +151,7 @@ fn report_analysis_complete(
             results.timeline_events,
             results.artifact_count,
             results.indexed_count,
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );

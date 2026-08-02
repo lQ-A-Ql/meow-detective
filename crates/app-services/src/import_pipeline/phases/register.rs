@@ -2,7 +2,6 @@ use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use transport::CommandError;
 
 use crate::datasource_service;
-use crate::import_analysis;
 use crate::import_pipeline::context::{ImportJobContext, PhaseTelemetry};
 use crate::import_pipeline::profile::emit_phase_profile;
 
@@ -37,7 +36,7 @@ pub(crate) fn run_attach_phase(
         format!(
             "Attach complete: phase=attach elapsedMs={} rssMb={}",
             telemetry.elapsed_ms(),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );

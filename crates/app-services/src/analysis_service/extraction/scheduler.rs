@@ -25,8 +25,8 @@ impl ExtractionSchedulingPolicy {
     pub(super) fn for_current_process() -> Self {
         Self::for_runtime(
             crate::import_analysis::resolve_analysis_worker_count(None),
-            crate::import_analysis::current_rss_mb(),
-            crate::import_analysis::default_memory_soft_limit_mb(),
+            crate::runtime_resources::current_rss_mb(),
+            crate::runtime_resources::default_memory_soft_limit_mb(),
         )
     }
 

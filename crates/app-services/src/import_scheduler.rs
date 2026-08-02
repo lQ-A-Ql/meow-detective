@@ -255,7 +255,7 @@ impl ImportAdmission {
         // one source is already active, wait for it to drain below the soft
         // capacity before admitting another source. Always admit the first
         // source so a high baseline RSS cannot deadlock an import forever.
-        let rss_mb = crate::import_analysis::current_rss_mb();
+        let rss_mb = crate::runtime_resources::current_rss_mb();
         state.cpu_in_use == 0 || rss_mb == 0 || rss_mb < self.inner.memory_capacity_mb
     }
 }

@@ -2,7 +2,7 @@ use evidence_core::{EvidenceReader, RawImageReader};
 use image_e01::E01Reader;
 use transport::CommandError;
 
-use crate::{datasource_service, file_service, import_analysis, staging};
+use crate::{datasource_service, file_service, staging};
 
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::partition::{
@@ -147,14 +147,14 @@ fn report_probe(
             elapsed_ms(elapsed),
             probe.partitions.len(),
             probe.candidates.len(),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         )
     } else {
         format!(
             "Probe complete: phase={phase} elapsedMs={} candidates={} rssMb={}",
             elapsed_ms(elapsed),
             probe.candidates.len(),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         )
     };
     emit_phase_profile(

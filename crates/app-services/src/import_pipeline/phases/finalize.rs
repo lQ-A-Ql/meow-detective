@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use transport::CommandError;
 
-use crate::{file_service, import_analysis, source_db, step_recorder, timeline_service};
+use crate::{file_service, source_db, step_recorder, timeline_service};
 
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile};
@@ -28,7 +28,7 @@ pub(crate) fn run_finalize_phase(
         format!(
             "Import profile complete: phase=total elapsedMs={} rssMb={}",
             elapsed_ms(import_started.elapsed()),
-            import_analysis::current_rss_mb()
+            crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),
     );
