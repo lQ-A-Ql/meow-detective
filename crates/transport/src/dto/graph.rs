@@ -77,6 +77,10 @@ fn default_limit() -> u32 {
     100
 }
 
+fn default_edge_limit() -> u32 {
+    400
+}
+
 /// Query parameters for traversing the investigative graph.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +98,9 @@ pub struct GraphQueryDto {
     /// Maximum number of nodes to return.
     #[serde(default = "default_limit")]
     pub limit: u32,
+    /// Maximum number of edges to return.
+    #[serde(default = "default_edge_limit")]
+    pub edge_limit: u32,
 }
 
 /// Result of a graph query, containing the matched subgraph.
@@ -108,6 +115,15 @@ pub struct GraphQueryResultDto {
     pub node_count: u32,
     /// Total number of edges matched.
     pub edge_count: u32,
+    /// True when a node or edge budget prevented the full requested window.
+    #[serde(default)]
+    pub truncated: bool,
+    /// Deepest hop represented in this result.
+    #[serde(default)]
+    pub max_depth_reached: u32,
+    /// Data sources represented by returned source-scoped nodes.
+    #[serde(default)]
+    pub data_source_ids: Vec<String>,
 }
 
 /// Request DTO for listing graph nodes without requiring a traversal seed.
@@ -137,7 +153,23 @@ pub struct GraphSnapshotDto {
     /// Graph density: (2 * total_edges) / (total_nodes * (total_nodes - 1)) for total_nodes > 1, else 0.
     pub density: f64,
     /// Size of the largest connected component.
+    /// Zero means the expensive full component calculation was not materialized.
     pub largest_component_size: u64,
+    /// Number of ready data sources represented by the case graph.
+    #[serde(default)]
+    pub data_source_count: u32,
+    /// Number of deterministic case-level entity hubs.
+    #[serde(default)]
+    pub cross_source_entity_count: u64,
+    /// Number of exact cross-source entity projection edges.
+    #[serde(default)]
+    pub cross_source_edge_count: u64,
+    /// Backend-selected deterministic entry nodes for case-level exploration.
+    #[serde(default)]
+    pub seed_ids: Vec<String>,
+    /// ISO 8601 timestamp of the current case graph projection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projection_built_at: Option<String>,
 }
 
 /// Request DTO for `get_node_neighborhood`.

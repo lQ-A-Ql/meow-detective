@@ -1,4 +1,11 @@
-export type EdgeType = 'contains' | 'references' | 'correlatesWith' | 'derivesFrom' | 'precedes' | 'cites' | 'annotates';
+export type EdgeType =
+  | 'contains'
+  | 'references'
+  | 'correlatesWith'
+  | 'derivesFrom'
+  | 'precedes'
+  | 'cites'
+  | 'annotates';
 
 export type NodeType = 'file' | 'artifact' | 'timelineEvent' | 'entity' | 'lead' | 'notebookEntry';
 
@@ -29,6 +36,7 @@ export interface GraphQuery {
   maxDepth: number;
   confidenceFloor?: number;
   limit?: number;
+  edgeLimit?: number;
 }
 
 export interface GraphQueryResult {
@@ -36,6 +44,9 @@ export interface GraphQueryResult {
   edges: GraphEdge[];
   nodeCount: number;
   edgeCount: number;
+  truncated: boolean;
+  maxDepthReached: number;
+  dataSourceIds: string[];
 }
 
 export interface GraphSnapshot {
@@ -45,6 +56,11 @@ export interface GraphSnapshot {
   totalEdges: number;
   density: number;
   largestComponentSize: number;
+  dataSourceCount: number;
+  crossSourceEntityCount: number;
+  crossSourceEdgeCount: number;
+  seedIds: string[];
+  projectionBuiltAt?: string;
 }
 
 export interface GraphStats {

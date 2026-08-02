@@ -45,6 +45,16 @@ pub fn open_or_create_source(path: &Path) -> DbResult<Connection> {
     Ok(conn)
 }
 
+pub fn open_or_create_case_graph(path: &Path) -> DbResult<Connection> {
+    let conn = open_or_create(path)?;
+    crate::migrations::runner::run_case_graph_all(&conn)?;
+    Ok(conn)
+}
+
+pub fn open_existing_case_graph_read_only(path: &Path) -> DbResult<Connection> {
+    open_existing_source_read_only(path)
+}
+
 pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
     let conn = open_existing(path)?;
     crate::migrations::runner::run_source_all(&conn)?;

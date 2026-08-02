@@ -13,7 +13,11 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
             <StatCard title="节点总数" value={data.totalNodes} icon={GitBranch} />
             <StatCard title="边总数" value={data.totalEdges} icon={Activity} />
             <StatCard title="密度" value={data.density} icon={Layers} />
-            <StatCard title="最大联通分量" value={data.largestComponentSize} icon={BarChart3} />
+            <StatCard
+              title="最大联通分量"
+              value={data.largestComponentSize || '未计算'}
+              icon={BarChart3}
+            />
             <StatCard title="节点类型数" value={Object.keys(data.nodeCountByType).length} icon={Shield} />
           </>
         ) : null}

@@ -421,7 +421,7 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
 
     assert_eq!(
         persistence_sqlite::runner::latest_source_version(),
-        "source_028_file_entry_read_only"
+        "source_029_case_graph_entity_index"
     );
     assert_eq!(
         super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),

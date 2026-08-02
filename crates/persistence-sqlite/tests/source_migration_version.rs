@@ -50,6 +50,10 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_028_file_entry_read_only",
         "source_026_timeline_keyset_indexes"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_029_case_graph_entity_index",
+        "source_028_file_entry_read_only"
+    ));
 }
 
 #[test]
@@ -69,7 +73,7 @@ fn source_version_order_rejects_older_and_unknown_versions() {
 }
 
 #[test]
-fn source_024_through_028_upgrade_preserves_rows_and_adds_query_indexes() {
+fn source_024_through_029_upgrade_preserves_rows_and_adds_query_indexes() {
     let connection = persistence_sqlite::open_in_memory().unwrap();
     connection
         .execute_batch(
@@ -158,7 +162,7 @@ fn source_024_through_028_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 5);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 6);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(
@@ -238,4 +242,13 @@ fn source_024_through_028_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
     assert_eq!(keyset_index_count, 4);
+    let entity_projection_index: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index' AND name = 'idx_source_graph_nodes_case_type_id'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(entity_projection_index, 1);
 }

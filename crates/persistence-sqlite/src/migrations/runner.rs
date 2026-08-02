@@ -263,7 +263,15 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_028_file_entry_read_only",
         include_str!("scripts/source_028_file_entry_read_only.sql"),
     ),
+    (
+        "source_029_case_graph_entity_index",
+        include_str!("scripts/source_029_case_graph_entity_index.sql"),
+    ),
 ];
+
+pub use super::case_graph::{
+    latest_version as latest_case_graph_version, run_all as run_case_graph_all,
+};
 
 pub fn latest_version() -> &'static str {
     MIGRATIONS
@@ -304,7 +312,7 @@ pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
     run_migrations(conn, SOURCE_MIGRATIONS)
 }
 
-fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
+pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
     // Hot read paths open source databases frequently, so avoid a bookkeeping
     // write when the complete registry is present. Checking only the latest
     // row is insufficient because a damaged or manually edited database can

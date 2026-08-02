@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import type { GraphEdge, GraphNode, NodeType } from '@/types/models';
 import {
   ALL_EDGE_TYPES,
+  deterministicNodePosition,
   degreeMap,
   edgeTypeColor,
   fitTransform,
@@ -12,6 +13,10 @@ import {
   tickSimulation,
   type SimulationNode,
 } from './graph-utils';
+
+const MAX_SIMULATION_TICKS = 240;
+const STABLE_TICK_TARGET = 12;
+const STABLE_VELOCITY_THRESHOLD = 0.03;
 
 interface ForceGraphProps {
   nodes: GraphNode[];
@@ -62,6 +67,8 @@ export function ForceGraph({
   const [positions, setPositions] = useState<Map<string, SimulationNode>>(new Map());
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
   const initialFitRef = useRef(false);
+  const simulationTickRef = useRef(0);
+  const stableTickRef = useRef(0);
   const dragNodeIdRef = useRef<string | null>(null);
   const isPanningRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
@@ -82,6 +89,13 @@ export function ForceGraph({
   }, []);
 
   const degrees = degreeMap(nodes, edges);
+  const nodeSignature = nodes.map((node) => node.id).join('\0');
+
+  useEffect(() => {
+    initialFitRef.current = false;
+    simulationTickRef.current = 0;
+    stableTickRef.current = 0;
+  }, [nodeSignature, edges]);
 
   // Initialize / merge positions when nodes change.
   useEffect(() => {
@@ -94,10 +108,11 @@ export function ForceGraph({
         if (!next.has(node.id)) {
           const degree = degrees.get(node.id) ?? 0;
           const radius = 6 + Math.sqrt(degree) * 2;
+          const initial = deterministicNodePosition(node.id, width, height);
           next.set(node.id, {
             id: node.id,
-            x: width / 2 + (Math.random() - 0.5) * 80,
-            y: height / 2 + (Math.random() - 0.5) * 80,
+            x: initial.x,
+            y: initial.y,
             vx: 0,
             vy: 0,
             radius,
@@ -128,9 +143,23 @@ export function ForceGraph({
     if (!running || positions.size === 0 || width === 0 || height === 0) return;
     let raf = 0;
     const loop = () => {
+      if (
+        simulationTickRef.current >= MAX_SIMULATION_TICKS ||
+        stableTickRef.current >= STABLE_TICK_TARGET
+      ) {
+        return;
+      }
       setPositions((prev) => {
         const next = new Map(prev);
         tickSimulation(next, edges, width, height);
+        simulationTickRef.current += 1;
+        const averageVelocity =
+          Array.from(next.values()).reduce(
+            (sum, node) => sum + Math.hypot(node.vx, node.vy),
+            0,
+          ) / Math.max(1, next.size);
+        stableTickRef.current =
+          averageVelocity < STABLE_VELOCITY_THRESHOLD ? stableTickRef.current + 1 : 0;
         return next;
       });
       raf = requestAnimationFrame(loop);
@@ -210,6 +239,8 @@ export function ForceGraph({
   function handleNodePointerDown(event: React.PointerEvent<SVGCircleElement>, node: GraphNode) {
     event.stopPropagation();
     dragNodeIdRef.current = node.id;
+    simulationTickRef.current = 0;
+    stableTickRef.current = 0;
     lastPointerRef.current = { x: event.clientX, y: event.clientY };
     capturePointer(event.currentTarget, event.pointerId);
     onNodeClick?.(node);
@@ -354,11 +385,14 @@ export function ForceGraph({
           setPositions((prev) => {
             const next = new Map(prev);
             for (const n of next.values()) {
-              n.x = width / 2 + (Math.random() - 0.5) * 80;
-              n.y = height / 2 + (Math.random() - 0.5) * 80;
+              const initial = deterministicNodePosition(n.id, width, height);
+              n.x = initial.x;
+              n.y = initial.y;
               n.vx = 0;
               n.vy = 0;
             }
+            simulationTickRef.current = 0;
+            stableTickRef.current = 0;
             return next;
           });
         }}

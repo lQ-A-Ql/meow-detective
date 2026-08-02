@@ -69,8 +69,8 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 | Rust workspace crate | 29 |
 | Tauri commands | 115 |
 | app-services source modules | 28 |
-| SQLite repositories | 42 logical repositories |
-| SQLite migration scripts | 73 |
+| SQLite repositories | 43 logical repositories |
+| SQLite migration scripts | 75 |
 | frontend test files | 101 |
 | Mermaid 图块 | 15 |
 

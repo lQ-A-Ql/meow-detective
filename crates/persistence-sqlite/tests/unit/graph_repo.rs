@@ -75,6 +75,26 @@ fn list_nodes_for_case_paginates_newest_first() {
 }
 
 #[test]
+fn entity_projection_query_applies_its_sql_limit() {
+    let (_conn, repo) = setup();
+    repo.insert_nodes_batch(&[
+        make_node("entity-c", NodeType::Entity, "c"),
+        make_node("entity-a", NodeType::Entity, "a"),
+        make_node("entity-b", NodeType::Entity, "b"),
+        make_node("file-a", NodeType::File, "file"),
+    ])
+    .unwrap();
+
+    let nodes = repo
+        .list_nodes_by_type_for_case_bounded("case-1", &NodeType::Entity, 2)
+        .unwrap();
+    assert_eq!(
+        nodes.into_iter().map(|node| node.id).collect::<Vec<_>>(),
+        vec!["entity-a", "entity-b"]
+    );
+}
+
+#[test]
 fn keyset_pagination_preserves_tie_order_without_duplicates() {
     let (_conn, repo) = setup();
     let timestamp = "2026-06-15T00:00:00Z";

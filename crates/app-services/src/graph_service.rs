@@ -1,3 +1,4 @@
+mod case_graph;
 mod error;
 mod pagination;
 mod query;

@@ -249,6 +249,7 @@ fn scoped_graph_reads_reject_non_ready_sources() {
                     max_depth: 1,
                     confidence_floor: None,
                     limit: 10,
+                    edge_limit: 40,
                 },
             )
             .expect_err("seeded query must reject importing source");

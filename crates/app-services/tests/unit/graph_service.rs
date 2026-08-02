@@ -118,6 +118,7 @@ fn query_graph_traversal() {
             max_depth: 2,
             confidence_floor: None,
             limit: 100,
+            edge_limit: 400,
         },
     )
     .unwrap();
@@ -151,6 +152,7 @@ fn query_graph_respects_confidence_floor() {
             max_depth: 2,
             confidence_floor: Some(0.5),
             limit: 100,
+            edge_limit: 400,
         },
     )
     .unwrap();
@@ -165,6 +167,7 @@ fn query_graph_respects_confidence_floor() {
             max_depth: 2,
             confidence_floor: Some(0.99),
             limit: 100,
+            edge_limit: 400,
         },
     )
     .unwrap();
@@ -241,14 +244,6 @@ fn case_graph_provenance_lookup_rejects_unscoped_ids() {
     let conn = setup_case_db();
 
     let err = get_provenance_chain_for_case(&conn, tmp.path(), "case-1", "e1").unwrap_err();
-
-    assert!(matches!(err, GraphServiceError::InvalidInput(_)));
-    assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
-}
-
-#[test]
-fn case_graph_query_start_ids_reject_unscoped_ids() {
-    let err = super::source_aggregation::scoped_start_ids(&["n1".to_string()]).unwrap_err();
 
     assert!(matches!(err, GraphServiceError::InvalidInput(_)));
     assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));

@@ -264,7 +264,7 @@ fn source_migration_installs_normalized_wal_schema_without_raw_keys_or_values() 
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_028_file_entry_read_only"
+        "source_029_case_graph_entity_index"
     );
     for table in ["ceph_rocksdb_wal_files", "ceph_rocksdb_wal_records"] {
         let columns = conn

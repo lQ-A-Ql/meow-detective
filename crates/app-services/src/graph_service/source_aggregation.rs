@@ -3,14 +3,14 @@ use std::{collections::HashMap, path::Path};
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::dto::{
-    GraphEdgeDto, GraphNodeDto, GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto,
-    GraphSnapshotDto,
+    GraphNodeDto, GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
 };
 
 use crate::source_db::{self, encode_source_scoped_id};
 
 use super::{
-    query::{get_node_neighborhood, get_provenance_chain, query_graph},
+    case_graph::{ensure_case_graph, query_case_graph},
+    query::get_provenance_chain,
     snapshot::{get_graph_snapshot, graph_density},
     GraphServiceError,
 };
@@ -20,6 +20,7 @@ pub fn get_graph_snapshot_for_case(
     case_root: &Path,
     case_id: &str,
 ) -> Result<GraphSnapshotDto, GraphServiceError> {
+    let case_graph = ensure_case_graph(case_conn, case_root, case_id)?;
     let mut merged = empty_snapshot();
     for (_, source_conn) in source_db::open_ready_source_connections_read_only(
         case_conn,
@@ -28,7 +29,27 @@ pub fn get_graph_snapshot_for_case(
     )? {
         merge_snapshot(&mut merged, get_graph_snapshot(&source_conn, case_id)?);
     }
+    let projection = case_graph.projection;
+    merged.total_nodes = merged
+        .total_nodes
+        .saturating_add(projection.cross_source_entity_count);
+    merged.total_edges = merged
+        .total_edges
+        .saturating_add(projection.cross_source_edge_count);
+    *merged
+        .node_count_by_type
+        .entry("entity".to_string())
+        .or_default() += projection.cross_source_entity_count;
+    *merged
+        .edge_count_by_type
+        .entry("correlates_with".to_string())
+        .or_default() += projection.cross_source_edge_count;
     merged.density = graph_density(merged.total_nodes, merged.total_edges);
+    merged.data_source_count = projection.source_count;
+    merged.cross_source_entity_count = projection.cross_source_entity_count;
+    merged.cross_source_edge_count = projection.cross_source_edge_count;
+    merged.seed_ids = projection.seed_ids;
+    merged.projection_built_at = Some(projection.built_at);
     Ok(merged)
 }
 
@@ -38,22 +59,7 @@ pub fn query_graph_for_case(
     case_id: &str,
     query: GraphQueryDto,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
-    if let Some((source_id, local_ids)) = scoped_start_ids(&query.start_ids)? {
-        return query_scoped_source(case_conn, case_root, case_id, query, source_id, local_ids);
-    }
-
-    let mut merged = empty_query_result();
-    for (source_id, source_conn) in source_db::open_ready_source_connections_read_only(
-        case_conn,
-        case_root,
-        &CaseId(case_id.to_string()),
-    )? {
-        let source_result =
-            scope_graph_result(query_graph(&source_conn, query.clone())?, &source_id);
-        append_graph_result(&mut merged, source_result);
-    }
-    sort_graph_result(&mut merged);
-    Ok(merged)
+    query_case_graph(case_conn, case_root, case_id, query)
 }
 
 pub fn get_node_neighborhood_for_case(
@@ -63,17 +69,19 @@ pub fn get_node_neighborhood_for_case(
     node_id: &str,
     depth: u32,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
-    let (source_id, local_id) = parse_scoped_id("Graph node id", node_id, "graph nodes")?;
-    let source = source_db::open_ready_source_read_only_by_id(
+    query_case_graph(
         case_conn,
         case_root,
-        &CaseId(case_id.to_string()),
-        &source_id,
-    )?;
-    Ok(scope_graph_result(
-        get_node_neighborhood(&source.connection, &local_id, depth)?,
-        &source_id,
-    ))
+        case_id,
+        GraphQueryDto {
+            start_ids: vec![node_id.to_string()],
+            edge_types: Vec::new(),
+            max_depth: depth,
+            confidence_floor: None,
+            limit: 200,
+            edge_limit: 600,
+        },
+    )
 }
 
 pub fn get_provenance_chain_for_case(
@@ -82,6 +90,10 @@ pub fn get_provenance_chain_for_case(
     case_id: &str,
     edge_id: &str,
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
+    if edge_id.starts_with("case:edge:") {
+        let case_graph = ensure_case_graph(case_conn, case_root, case_id)?;
+        return get_provenance_chain(&case_graph.connection, edge_id);
+    }
     let (source_id, local_id) = parse_scoped_id("Graph edge id", edge_id, "graph edges")?;
     let source = source_db::open_ready_source_read_only_by_id(
         case_conn,
@@ -96,51 +108,12 @@ pub fn get_provenance_chain_for_case(
     Ok(entries)
 }
 
-pub(crate) fn scoped_start_ids(
-    ids: &[String],
-) -> Result<Option<(DataSourceId, Vec<String>)>, GraphServiceError> {
-    let mut source = None;
-    let mut local_ids = Vec::with_capacity(ids.len());
-    for id in ids {
-        let (candidate, local_id) = parse_scoped_id("Graph start id", id, "graph query startIds")?;
-        if source.as_ref().is_some_and(|current| current != &candidate) {
-            return Err(GraphServiceError::InvalidInput(
-                "graph query startIds cannot mix data sources".to_string(),
-            ));
-        }
-        source.get_or_insert(candidate);
-        local_ids.push(local_id);
-    }
-    Ok(source.map(|source_id| (source_id, local_ids)))
-}
-
-pub(super) fn scope_graph_node(
+pub(crate) fn scope_graph_node(
     mut node: GraphNodeDto,
     data_source_id: &DataSourceId,
 ) -> GraphNodeDto {
     node.id = encode_source_scoped_id(data_source_id, &node.id);
     node
-}
-
-fn query_scoped_source(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &str,
-    mut query: GraphQueryDto,
-    source_id: DataSourceId,
-    local_ids: Vec<String>,
-) -> Result<GraphQueryResultDto, GraphServiceError> {
-    query.start_ids = local_ids;
-    let source = source_db::open_ready_source_read_only_by_id(
-        case_conn,
-        case_root,
-        &CaseId(case_id.to_string()),
-        &source_id,
-    )?;
-    Ok(scope_graph_result(
-        query_graph(&source.connection, query)?,
-        &source_id,
-    ))
 }
 
 fn parse_scoped_id(
@@ -155,52 +128,11 @@ fn parse_scoped_id(
     })
 }
 
-fn scope_graph_result(
-    mut result: GraphQueryResultDto,
-    source_id: &DataSourceId,
-) -> GraphQueryResultDto {
-    result.nodes = result
-        .nodes
-        .into_iter()
-        .map(|node| scope_graph_node(node, source_id))
-        .collect();
-    result.edges = result
-        .edges
-        .into_iter()
-        .map(|edge| scope_graph_edge(edge, source_id))
-        .collect();
-    result.node_count = result.nodes.len() as u32;
-    result.edge_count = result.edges.len() as u32;
-    result
-}
-
-fn scope_graph_edge(mut edge: GraphEdgeDto, source_id: &DataSourceId) -> GraphEdgeDto {
-    edge.id = encode_source_scoped_id(source_id, &edge.id);
-    edge.source_id = encode_source_scoped_id(source_id, &edge.source_id);
-    edge.target_id = encode_source_scoped_id(source_id, &edge.target_id);
-    edge
-}
-
-fn append_graph_result(target: &mut GraphQueryResultDto, source: GraphQueryResultDto) {
-    target.nodes.extend(source.nodes);
-    target.edges.extend(source.edges);
-    target.node_count = target.nodes.len() as u32;
-    target.edge_count = target.edges.len() as u32;
-}
-
-fn sort_graph_result(result: &mut GraphQueryResultDto) {
-    result.nodes.sort_by(|left, right| left.id.cmp(&right.id));
-    result.edges.sort_by(|left, right| left.id.cmp(&right.id));
-}
-
 fn merge_snapshot(target: &mut GraphSnapshotDto, source: GraphSnapshotDto) {
     merge_counts(&mut target.node_count_by_type, source.node_count_by_type);
     merge_counts(&mut target.edge_count_by_type, source.edge_count_by_type);
-    target.total_nodes += source.total_nodes;
-    target.total_edges += source.total_edges;
-    target.largest_component_size = target
-        .largest_component_size
-        .max(source.largest_component_size);
+    target.total_nodes = target.total_nodes.saturating_add(source.total_nodes);
+    target.total_edges = target.total_edges.saturating_add(source.total_edges);
 }
 
 fn merge_counts(target: &mut HashMap<String, u64>, source: HashMap<String, u64>) {
@@ -217,14 +149,10 @@ fn empty_snapshot() -> GraphSnapshotDto {
         total_edges: 0,
         density: 0.0,
         largest_component_size: 0,
-    }
-}
-
-fn empty_query_result() -> GraphQueryResultDto {
-    GraphQueryResultDto {
-        nodes: Vec::new(),
-        edges: Vec::new(),
-        node_count: 0,
-        edge_count: 0,
+        data_source_count: 0,
+        cross_source_entity_count: 0,
+        cross_source_edge_count: 0,
+        seed_ids: Vec::new(),
+        projection_built_at: None,
     }
 }

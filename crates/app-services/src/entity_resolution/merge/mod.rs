@@ -17,6 +17,13 @@ impl EntityMergeEngine {
         canonicalization::canonicalize_entity(value, entity_type)
     }
 
+    pub fn entity_type_from_tags(tags: &[String]) -> String {
+        tags.iter()
+            .find(|tag| tag.as_str() != "entity")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+
     pub fn merge_entities(
         conn: &Connection,
         case_id: &str,

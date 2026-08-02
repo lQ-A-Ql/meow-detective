@@ -547,10 +547,10 @@ baseline 只允许减少：
 | workspace 成员 | 29（28 crate + Tauri host package） |
 | Tauri 已注册 commands / 命令文件 | 115 / 71 |
 | transport DTO 文件 | 33 |
-| SQLite 逻辑 repository / 迁移脚本 | 42 / 73 |
+| SQLite 逻辑 repository / 迁移脚本 | 43 / 75 |
 | 前端页面 / feature / UI 基元 | 10 / 17 / 23 |
 | Rust 测试函数 | 以 `cargo test --workspace -- --list` 为准 |
-| 前端测试文件 | 94 |
+| 前端测试文件 | 101 |
 | 守卫脚本 | 33 |
 | Mermaid 图块（`docs/model-architecture-algorithm-diagrams.md`） | 15 |
 

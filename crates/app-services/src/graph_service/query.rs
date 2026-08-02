@@ -133,6 +133,9 @@ fn to_query_result(mut nodes: Vec<GraphNode>, mut edges: Vec<GraphEdge>) -> Grap
         edge_count: edges.len() as u32,
         nodes,
         edges,
+        truncated: false,
+        max_depth_reached: 0,
+        data_source_ids: Vec::new(),
     }
 }
 
@@ -142,6 +145,9 @@ fn empty_query_result() -> GraphQueryResultDto {
         edges: Vec::new(),
         node_count: 0,
         edge_count: 0,
+        truncated: false,
+        max_depth_reached: 0,
+        data_source_ids: Vec::new(),
     }
 }
 

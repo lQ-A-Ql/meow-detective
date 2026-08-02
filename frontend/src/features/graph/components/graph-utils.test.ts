@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { degreeMap, edgeTypeColor, fitTransform, nodeTypeColor, tickSimulation } from './graph-utils';
+import {
+  degreeMap,
+  deterministicNodePosition,
+  edgeTypeColor,
+  fitTransform,
+  nodeTypeColor,
+  tickSimulation,
+} from './graph-utils';
 import type { GraphEdge, GraphNode, NodeType } from '@/types/models';
 
 function makeNode(id: string, type: NodeType = 'file'): GraphNode {
@@ -44,6 +51,15 @@ describe('graph-utils', () => {
     expect(degrees.get('a')).toBe(2);
     expect(degrees.get('b')).toBe(1);
     expect(degrees.get('c')).toBe(1);
+  });
+
+  it('uses deterministic initial positions for the same graph node', () => {
+    expect(deterministicNodePosition('case:entity:one', 800, 600)).toEqual(
+      deterministicNodePosition('case:entity:one', 800, 600),
+    );
+    expect(deterministicNodePosition('case:entity:one', 800, 600)).not.toEqual(
+      deterministicNodePosition('case:entity:two', 800, 600),
+    );
   });
 
   it('moves connected nodes closer during simulation', () => {

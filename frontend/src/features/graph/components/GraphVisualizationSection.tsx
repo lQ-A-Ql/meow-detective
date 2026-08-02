@@ -27,7 +27,6 @@ import {
   useNodeNeighborhood,
   useProvenanceChain,
 } from '@/features/graph/hooks';
-import { useFileTree } from '@/features/files/hooks';
 import type { EdgeType, GraphEdge, GraphNode, GraphProvenanceEntry, NodeType } from '@/types/models';
 
 const MAX_SEEDS = 6;
@@ -36,7 +35,6 @@ export function GraphVisualizationSection() {
   const currentCase = useCurrentCase();
   const caseId = currentCase.data?.id ?? '';
   const snapshot = useGraphSnapshot(caseId);
-  const fileTree = useFileTree();
 
   const [seedIds, setSeedIds] = useState<string[]>([]);
   const [maxDepth, setMaxDepth] = useState(2);
@@ -72,18 +70,24 @@ export function GraphVisualizationSection() {
   }, [caseId]);
 
   useEffect(() => {
-    if (seedIds.length > 0) return;
-    if (!fileTree.data || fileTree.data.length === 0) return;
-    const ids = fileTree.data.slice(0, MAX_SEEDS).map((n) => n.id);
-    setSeedIds(ids);
-  }, [fileTree.data, seedIds.length]);
+    setSeedIds(snapshot.data?.seedIds.slice(0, MAX_SEEDS) ?? []);
+  }, [snapshot.data?.seedIds]);
 
+  const hasSelectedEdgeTypes = selectedEdgeTypes.length > 0;
   const initialQuery = useGraphQuery({
-    startIds: seedIds,
+    startIds: hasSelectedEdgeTypes ? seedIds : [],
     edgeTypes: selectedEdgeTypes,
     maxDepth,
     limit: 150,
+    edgeLimit: 600,
   });
+
+  useEffect(() => {
+    if (hasSelectedEdgeTypes) return;
+    setGraphData({ nodes: [], edges: [] });
+    setSelectedNodeId(undefined);
+    setSelectedEdgeId(undefined);
+  }, [hasSelectedEdgeTypes]);
 
   useEffect(() => {
     if (initialQuery.data) {
@@ -147,16 +151,19 @@ export function GraphVisualizationSection() {
   }
 
   async function refresh() {
-    await Promise.all([snapshot.refetch(), fileTree.refetch(), initialQuery.refetch()]);
+    await snapshot.refetch();
+    if (hasSelectedEdgeTypes && seedIds.length > 0) {
+      await initialQuery.refetch();
+    }
   }
 
   const hasNodes = graphData.nodes.length > 0;
-  const isLoadingGraph = fileTree.isLoading || initialQuery.isLoading;
+  const isLoadingGraph = snapshot.isLoading || (hasSelectedEdgeTypes && initialQuery.isLoading);
 
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeader icon={GitBranch} title="关系图谱" subtitle="节点、边与邻域展开" />
+        <SectionHeader icon={GitBranch} title="关系图谱" subtitle="案件级跨数据源实体与证据邻域" />
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="text-forensics-muted">深度</span>
@@ -229,8 +236,8 @@ export function GraphVisualizationSection() {
         <div ref={canvasRef} className="relative flex-1">
           {!hasNodes && !isLoadingGraph ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-forensics-muted">
-              <div>暂无图数据可可视化。</div>
-              <div className="mt-1">导入数据源并运行分析提取后，将在此处渲染关系网络。</div>
+              <div>暂无确定性的跨数据源实体关联。</div>
+              <div className="mt-1">完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。</div>
             </div>
           ) : (
             <ForceGraph
@@ -289,6 +296,18 @@ export function GraphVisualizationSection() {
               {snapshot.data ? (
                 <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
                   <div className="flex justify-between">
+                    <span>数据源</span>
+                    <span className="font-mono text-forensics-text">{snapshot.data.dataSourceCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>跨源实体</span>
+                    <span className="font-mono text-forensics-text">{snapshot.data.crossSourceEntityCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>跨源关系</span>
+                    <span className="font-mono text-forensics-text">{snapshot.data.crossSourceEdgeCount}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span>节点</span>
                     <span className="font-mono text-forensics-text">{snapshot.data.totalNodes}</span>
                   </div>
@@ -301,6 +320,9 @@ export function GraphVisualizationSection() {
                     <span className="font-mono text-forensics-text">{snapshot.data.density}</span>
                   </div>
                 </div>
+              ) : null}
+              {initialQuery.data?.truncated ? (
+                <p className="text-forensics-warning">当前图窗口已达到节点或关系预算，请缩小深度或关系类型。</p>
               ) : null}
             </div>
           )}

@@ -51,6 +51,15 @@ fn legacy_source_connection() -> Connection {
              source_object_id TEXT NOT NULL,
              parser_id TEXT
          );
+         CREATE TABLE graph_nodes (
+             id TEXT PRIMARY KEY NOT NULL,
+             case_id TEXT NOT NULL,
+             node_type TEXT NOT NULL,
+             label TEXT NOT NULL,
+             summary TEXT NOT NULL DEFAULT '',
+             tags TEXT NOT NULL DEFAULT '[]',
+             created_at TEXT NOT NULL
+         );
          CREATE TABLE data_sources (
              id TEXT PRIMARY KEY NOT NULL
          );
@@ -138,10 +147,10 @@ fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     insert_entry(&conn, "unknown", None, "ds-a", "Volume (XFS)", None);
     insert_entry(&conn, "preset", None, "ds-a", "Partition 3", Some(99));
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 13);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 14);
     assert_eq!(
         runner::latest_source_version(),
-        "source_028_file_entry_read_only"
+        "source_029_case_graph_entity_index"
     );
 
     for id in ["root-2", "etc", "ssh"] {
@@ -227,6 +236,15 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
              source_object_id TEXT NOT NULL,
              parser_id TEXT
          );
+         CREATE TABLE graph_nodes (
+             id TEXT PRIMARY KEY NOT NULL,
+             case_id TEXT NOT NULL,
+             node_type TEXT NOT NULL,
+             label TEXT NOT NULL,
+             summary TEXT NOT NULL DEFAULT '',
+             tags TEXT NOT NULL DEFAULT '[]',
+             created_at TEXT NOT NULL
+         );
          CREATE TABLE data_sources (
              id TEXT PRIMARY KEY NOT NULL
          );
@@ -254,7 +272,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 13);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 14);
     for id in ["root-4", "child"] {
         let partition_index: Option<i64> = conn
             .query_row(
@@ -271,7 +289,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
 fn source_022_repairs_rows_added_after_source_016() {
     let conn = source_021_connection_with_late_file_rows();
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 7);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 8);
     for id in ["late-root", "late-child"] {
         let partition_index: Option<i64> = conn
             .query_row(
@@ -311,6 +329,15 @@ fn source_022_repairs_a_catalog_created_after_source_016_was_skipped() {
              artifact_type TEXT NOT NULL DEFAULT '',
              created_at TEXT NOT NULL DEFAULT ''
          );
+         CREATE TABLE graph_nodes (
+             id TEXT PRIMARY KEY NOT NULL,
+             case_id TEXT NOT NULL,
+             node_type TEXT NOT NULL,
+             label TEXT NOT NULL,
+             summary TEXT NOT NULL DEFAULT '',
+             tags TEXT NOT NULL DEFAULT '[]',
+             created_at TEXT NOT NULL
+         );
          INSERT INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type)
          VALUES
@@ -347,7 +374,7 @@ fn source_022_repairs_a_catalog_created_after_source_016_was_skipped() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 7);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 8);
     let partition_index: Option<i64> = conn
         .query_row(
             "SELECT partition_index FROM file_entries WHERE id = 'late-root-no-column'",

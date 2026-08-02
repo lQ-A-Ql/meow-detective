@@ -86,6 +86,7 @@ fn graph_query_dto_defaults_and_camel_case() {
         max_depth: 3,
         confidence_floor: Some(0.5),
         limit: 100,
+        edge_limit: 300,
     };
 
     let json = serde_json::to_value(&query).unwrap();
@@ -95,6 +96,7 @@ fn graph_query_dto_defaults_and_camel_case() {
     assert_eq!(json["maxDepth"], 3);
     assert_eq!(json["confidenceFloor"], 0.5);
     assert_eq!(json["limit"], 100);
+    assert_eq!(json["edgeLimit"], 300);
     assert!(json.get("start_ids").is_none());
     assert!(json.get("max_depth").is_none());
     assert!(json.get("confidence_floor").is_none());
@@ -114,6 +116,7 @@ fn graph_query_dto_deserializes_with_defaults() {
     assert_eq!(query.max_depth, 3);
     assert_eq!(query.confidence_floor, None);
     assert_eq!(query.limit, 100);
+    assert_eq!(query.edge_limit, 400);
 }
 
 #[test]
@@ -144,6 +147,9 @@ fn graph_query_result_dto_serializes_camel_case() {
         edges: vec![edge],
         node_count: 1,
         edge_count: 1,
+        truncated: true,
+        max_depth_reached: 2,
+        data_source_ids: vec!["source-1".to_string()],
     };
 
     let json = serde_json::to_value(result).unwrap();
@@ -152,6 +158,9 @@ fn graph_query_result_dto_serializes_camel_case() {
     assert_eq!(json["edgeCount"], 1);
     assert_eq!(json["nodes"][0]["id"], "node-1");
     assert_eq!(json["edges"][0]["id"], "edge-1");
+    assert_eq!(json["truncated"], true);
+    assert_eq!(json["maxDepthReached"], 2);
+    assert_eq!(json["dataSourceIds"][0], "source-1");
     assert!(json.get("node_count").is_none());
     assert!(json.get("edge_count").is_none());
 }
@@ -191,6 +200,11 @@ fn graph_snapshot_dto_serializes_camel_case() {
         total_edges: 50,
         density: 0.0313,
         largest_component_size: 40,
+        data_source_count: 2,
+        cross_source_entity_count: 3,
+        cross_source_edge_count: 6,
+        seed_ids: vec!["case:entity:one".to_string()],
+        projection_built_at: Some("2026-08-02T00:00:00Z".to_string()),
     };
 
     let json = serde_json::to_value(snapshot).unwrap();
@@ -199,6 +213,10 @@ fn graph_snapshot_dto_serializes_camel_case() {
     assert_eq!(json["totalEdges"], 50);
     assert_eq!(json["density"], 0.0313);
     assert_eq!(json["largestComponentSize"], 40);
+    assert_eq!(json["dataSourceCount"], 2);
+    assert_eq!(json["crossSourceEntityCount"], 3);
+    assert_eq!(json["crossSourceEdgeCount"], 6);
+    assert_eq!(json["seedIds"][0], "case:entity:one");
     assert_eq!(json["nodeCountByType"]["file"], 42);
     assert_eq!(json["nodeCountByType"]["artifact"], 15);
     assert_eq!(json["edgeCountByType"]["references"], 30);

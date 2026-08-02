@@ -44,6 +44,11 @@ describe('graph hooks', () => {
       totalEdges: 1,
       density: 0.5,
       largestComponentSize: 2,
+      dataSourceCount: 2,
+      crossSourceEntityCount: 1,
+      crossSourceEdgeCount: 2,
+      seedIds: ['case:entity:one'],
+      projectionBuiltAt: '2026-08-02T00:00:00Z',
     });
     mocks.getNodeNeighborhood.mockResolvedValue({
       center: 'n1',
@@ -53,6 +58,11 @@ describe('graph hooks', () => {
     mocks.queryGraph.mockResolvedValue({
       nodes: [{ id: 'n1' }],
       edges: [],
+      nodeCount: 1,
+      edgeCount: 0,
+      truncated: false,
+      maxDepthReached: 0,
+      dataSourceIds: ['source-1'],
     });
     mocks.listGraphNodes.mockResolvedValue([
       {

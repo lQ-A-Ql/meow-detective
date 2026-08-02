@@ -40,7 +40,7 @@ fn fresh_source_schema_contains_timeline_projection_identity() {
         runner::current_version(&connection)
             .expect("read source version")
             .as_deref(),
-        Some("source_028_file_entry_read_only")
+        Some("source_029_case_graph_entity_index")
     );
 }
 
@@ -80,6 +80,15 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
                  artifact_type TEXT NOT NULL DEFAULT '',
                  created_at TEXT NOT NULL DEFAULT ''
              );
+             CREATE TABLE graph_nodes (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 case_id TEXT NOT NULL,
+                 node_type TEXT NOT NULL,
+                 label TEXT NOT NULL,
+                 summary TEXT NOT NULL DEFAULT '',
+                 tags TEXT NOT NULL DEFAULT '[]',
+                 created_at TEXT NOT NULL
+             );
              CREATE TABLE ceph_bluestore_semantic_scans (
                  inventory_id TEXT PRIMARY KEY NOT NULL
              );
@@ -105,7 +114,7 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
 
     assert_eq!(
         runner::run_source_all(&connection).expect("upgrade source database"),
-        12
+        13
     );
     let row: (String, i64, String) = connection
         .query_row(

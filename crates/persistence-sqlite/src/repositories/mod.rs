@@ -3,6 +3,7 @@ pub mod artifact_repo;
 pub mod audit_repo;
 pub mod batch_repo;
 pub mod bitlocker_restore_intent_repo;
+pub mod case_graph_repo;
 pub mod case_repo;
 pub mod catalog_file_repo;
 pub mod catalog_publication_repo;

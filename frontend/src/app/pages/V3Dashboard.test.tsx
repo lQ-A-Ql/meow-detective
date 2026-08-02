@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { V3Dashboard } from './V3Dashboard';
 
@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   useGraphQuery: vi.fn(),
   useNodeNeighborhood: vi.fn(),
   useProvenanceChain: vi.fn(),
-  useFileTree: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -21,10 +20,6 @@ vi.mock('@/features/graph/hooks', () => ({
   useGraphQuery: mocks.useGraphQuery,
   useNodeNeighborhood: mocks.useNodeNeighborhood,
   useProvenanceChain: mocks.useProvenanceChain,
-}));
-
-vi.mock('@/features/files/hooks', () => ({
-  useFileTree: mocks.useFileTree,
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
@@ -140,10 +135,12 @@ describe('V3Dashboard', () => {
       totalEdges: 277,
       density: 0.0026,
       largestComponentSize: 180,
+      dataSourceCount: 2,
+      crossSourceEntityCount: 1,
+      crossSourceEdgeCount: 2,
+      seedIds: ['case:entity:alice'],
+      projectionBuiltAt: '2026-08-02T00:00:00Z',
     }));
-    mocks.useFileTree.mockReturnValue(queryState([
-      { id: 'file-1', name: 'root', path: '/', isDirectory: true, children: [] },
-    ]));
     mocks.useGraphQuery.mockReturnValue(queryState({
       nodes: [
         { id: 'file-1', nodeType: 'file', label: 'root', summary: 'Root directory' },
@@ -152,6 +149,11 @@ describe('V3Dashboard', () => {
       edges: [
         { id: 'edge-1', edgeType: 'references', sourceId: 'art-1', targetId: 'file-1', confidence: 0.9, provenance: [] },
       ],
+      nodeCount: 2,
+      edgeCount: 1,
+      truncated: true,
+      maxDepthReached: 2,
+      dataSourceIds: ['ds-1', 'ds-2'],
     }));
     mocks.useNodeNeighborhood.mockReturnValue(queryState({ nodes: [], edges: [] }));
     mocks.useProvenanceChain.mockReturnValue(queryState([]));
@@ -180,6 +182,31 @@ describe('V3Dashboard', () => {
     expect(screen.getByText('pathMatch')).toBeDefined();
     expect(screen.getByText('timeCorrelation')).toBeDefined();
     expect(screen.getByText('parentChild')).toBeDefined();
+  });
+
+  it('uses backend-selected case graph seeds and reports a bounded result', () => {
+    render(<V3Dashboard />);
+
+    expect(mocks.useGraphQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startIds: ['case:entity:alice'],
+        edgeLimit: 600,
+      }),
+    );
+    expect(screen.getByText('跨源实体')).toBeDefined();
+    expect(screen.getByText('跨源关系')).toBeDefined();
+    expect(screen.getByText(/当前图窗口已达到节点或关系预算/)).toBeDefined();
+  });
+
+  it('does not reinterpret clearing relation types as selecting every type', () => {
+    render(<V3Dashboard />);
+
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+
+    expect(mocks.useGraphQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ startIds: [], edgeTypes: [] }),
+    );
+    expect(screen.getByText('暂无确定性的跨数据源实体关联。')).toBeDefined();
   });
 
   it('shows data source coverage section', () => {

@@ -862,3 +862,81 @@ JumpList 本质上是内嵌的 LNK 流集合，因此规则与 LNK 相同（路�
   - Registry: covered/review/missing, 路径匹配率: X%, 名称匹配率: Y%
   - ...
 ```
+
+## 11. 案件级跨源关系图投影（2026-08-02）
+
+### 11.1 存储与所有权边界
+
+案件级跨源图是可重建派生数据，不是新的事实源：
+
+- `app.db` 继续保存案件与数据源注册，不保存跨源图明细。
+- 每个 `sources/<dataSourceId>/source.db` 继续独立保存源内 `graph_nodes`、`graph_edges`、artifact 和文件树。
+- `indexes/case-graph.db` 只保存参与确定性跨源匹配的镜像实体节点、案件实体 hub、跨源边和构建 manifest。
+- 构建过程只读打开所有 ready source DB；不会把跨源边反写任一 source DB，也不会复制完整文件树。
+- `CaseGraphRepo::replace_projection` 在一个 SQLite 事务内替换投影。构建或写入失败时，已有完整投影保持可读。
+
+对应源码边界：
+
+- `crates/app-services/src/graph_service/case_graph/manifest.rs`
+- `crates/app-services/src/graph_service/case_graph/projection.rs`
+- `crates/app-services/src/graph_service/case_graph/traversal.rs`
+- `crates/persistence-sqlite/src/repositories/case_graph_repo.rs`
+- `crates/persistence-sqlite/src/migrations/scripts/case_graph_001.sql`
+- `crates/persistence-sqlite/src/migrations/scripts/source_029_case_graph_entity_index.sql`
+
+### 11.2 确定性匹配规则
+
+当前只在以下条件全部成立时建立案件实体 hub：
+
+1. 节点类型为 `Entity`。
+2. entity type 相同，例如 `person`、`account` 或 `device`。
+3. 使用既有 `EntityMergeEngine` 规范化后的值完全一致。
+4. 匹配成员至少来自两个不同的 data source。
+
+规范化沿用既有实体规则：trim、lowercase、Unicode NFKD，并按 entity type 去除已支持的 `mailto:` 或 `sid:` 前缀。系统不会为案件图执行编辑距离、近似字符串、名称包含、时间邻近或其他启发式匹配。相似但不相同的实体不会被连接。
+
+案件 hub ID 和边 ID 均由 SHA-256 确定性生成。跨源边固定使用 `CorrelatesWith`、置信度 `1.0`，provenance 至少记录匹配策略、entity type、canonical hash、两端数据源和 projection version；UI 展示的关联仍需回跳源节点与原始 artifact 复核。
+
+### 11.3 新鲜度与发布
+
+投影 manifest 绑定：
+
+- case ID 与 projection version
+- ready data source ID 与 source schema version
+- source DB 文件大小和修改时间
+- source DB WAL 文件大小和修改时间
+
+查询前会比较 manifest。输入变化时重建投影；重建前后再次采集 manifest，若源库在构建期间继续变化，则不发布该结果并要求稍后重试。进程内构建锁避免并发查询重复发布，SQLite WAL 和单事务替换保证已有读取者继续看到上一个完整快照。
+
+### 11.4 混合查询与资源预算
+
+`query_graph_for_case` 使用有界混合 BFS，同时遍历 `case-graph.db` 与相关 source DB：
+
+- 案件 hub 可展开到多个数据源中的精确实体成员。
+- source-scoped 实体可继续进入本数据源的 artifact、file 和其他源内邻域。
+- 查询允许混合 `ds:<dataSourceId>:<localId>` 种子以及案件 hub 种子。
+- 最大深度为 5，节点上限为 500，边上限为 2000，起始节点上限为 64。
+- 每次 SQLite 邻接查询都有独立 LIMIT，confidence 在发现节点前过滤。
+- 达到节点或边预算时返回 `truncated=true`，不会用静默截断伪装完整结果。
+- 非法 edge type、未作用域源节点 ID 和非 ready 数据源均返回明确 `InvalidInput`。
+
+快照会返回 ready 数据源数、案件 hub 数、跨源边数、后端选择的稳定 seed IDs 与投影时间。`largestComponentSize=0` 明确表示未物化全图连通分量，前端显示“未计算”，不再用节点总数冒充最大分量。
+
+### 11.5 前端契约
+
+`GraphVisualizationSection` 只使用后端 `GraphSnapshot.seedIds` 启动关系图，不再从文件树前若干根节点猜测种子。图布局初始坐标由节点 ID 确定性生成，达到稳定阈值或 240 tick 后停止模拟；查询被预算截断时显示明确提示。
+
+### 11.6 验证与当前边界
+
+自动化测试 `crates/app-services/tests/case_graph_cross_source.rs` 当前覆盖：
+
+- Windows/Linux 精确实体跨源连通并进入两端源内 artifact 邻域
+- 混合数据源种子
+- edge budget 截断
+- 相似但不相同实体不误连
+- source graph 变化后自动重建
+- 非法 edge type 拒绝
+
+持久化测试覆盖独立 schema、事务失败保留旧投影、必要索引和只读重开。前端测试覆盖后端 seed 驱动、截断提示和确定性节点位置。
+
+当前不承诺模糊实体消歧、跨案件匹配、全图连通分量物化、后台预构建或超出预算的无界全图导出。真实 E01 双源的实体命中率与误关联率仍需单独建立 opt-in 样本基线；现有自动化证明的是算法边界和 source DB 隔离，不把合成测试数量冒充真实样本结果。

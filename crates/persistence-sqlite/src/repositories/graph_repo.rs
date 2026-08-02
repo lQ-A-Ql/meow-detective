@@ -23,6 +23,12 @@ pub struct GraphSnapshot {
     pub total_edges: u64,
 }
 
+#[derive(Debug)]
+pub struct GraphNeighborPage {
+    pub neighbors: Vec<(GraphEdge, GraphNode)>,
+    pub truncated: bool,
+}
+
 /// Stable continuation key for graph nodes ordered by creation time and id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphNodePageCursor {
@@ -75,7 +81,7 @@ impl<'a> GraphRepo<'a> {
         Ok(nodes.len() as u64)
     }
 
-    fn insert_nodes_batch_unchecked(&self, nodes: &[GraphNode]) -> DbResult<()> {
+    pub(crate) fn insert_nodes_batch_unchecked(&self, nodes: &[GraphNode]) -> DbResult<()> {
         if nodes.is_empty() {
             return Ok(());
         }
@@ -109,7 +115,7 @@ impl<'a> GraphRepo<'a> {
         Ok(edges.len() as u64)
     }
 
-    fn insert_edges_batch_unchecked(&self, edges: &[GraphEdge]) -> DbResult<()> {
+    pub(crate) fn insert_edges_batch_unchecked(&self, edges: &[GraphEdge]) -> DbResult<()> {
         if edges.is_empty() {
             return Ok(());
         }
@@ -241,6 +247,119 @@ impl<'a> GraphRepo<'a> {
             results.push(row?);
         }
         Ok(results)
+    }
+
+    pub fn get_neighbors_bounded(
+        &self,
+        node_id: &str,
+        edge_types: &[EdgeType],
+        direction: Direction,
+        confidence_floor: Option<f64>,
+        limit: u32,
+    ) -> DbResult<GraphNeighborPage> {
+        if limit == 0 {
+            return Ok(GraphNeighborPage {
+                neighbors: Vec::new(),
+                truncated: false,
+            });
+        }
+        let fetch_limit = limit.saturating_add(1);
+        let mut neighbors = match direction {
+            Direction::Outgoing => self.query_neighbors_direction(
+                node_id,
+                edge_types,
+                confidence_floor,
+                fetch_limit,
+                true,
+            )?,
+            Direction::Incoming => self.query_neighbors_direction(
+                node_id,
+                edge_types,
+                confidence_floor,
+                fetch_limit,
+                false,
+            )?,
+            Direction::Both => {
+                let mut rows = self.query_neighbors_direction(
+                    node_id,
+                    edge_types,
+                    confidence_floor,
+                    fetch_limit,
+                    true,
+                )?;
+                rows.extend(self.query_neighbors_direction(
+                    node_id,
+                    edge_types,
+                    confidence_floor,
+                    fetch_limit,
+                    false,
+                )?);
+                rows.sort_by(|left, right| left.0.id.cmp(&right.0.id));
+                rows.dedup_by(|left, right| left.0.id == right.0.id);
+                rows
+            }
+        };
+        let truncated = neighbors.len() > limit as usize;
+        neighbors.truncate(limit as usize);
+        Ok(GraphNeighborPage {
+            neighbors,
+            truncated,
+        })
+    }
+
+    fn query_neighbors_direction(
+        &self,
+        node_id: &str,
+        edge_types: &[EdgeType],
+        confidence_floor: Option<f64>,
+        limit: u32,
+        outgoing: bool,
+    ) -> DbResult<Vec<(GraphEdge, GraphNode)>> {
+        let (match_column, neighbor_column) = if outgoing {
+            ("e.source_id", "e.target_id")
+        } else {
+            ("e.target_id", "e.source_id")
+        };
+        let mut values = vec![rusqlite::types::Value::Text(node_id.to_string())];
+        let mut filters = Vec::new();
+        if !edge_types.is_empty() {
+            let first = values.len() + 1;
+            filters.push(format!(
+                "e.edge_type IN ({})",
+                placeholders(first, edge_types.len())
+            ));
+            values.extend(
+                edge_types
+                    .iter()
+                    .map(|edge_type| rusqlite::types::Value::Text(edge_type_str(edge_type).into())),
+            );
+        }
+        if let Some(floor) = confidence_floor {
+            values.push(rusqlite::types::Value::Real(floor));
+            filters.push(format!("COALESCE(e.confidence, 0.0) >= ?{}", values.len()));
+        }
+        values.push(rusqlite::types::Value::Integer(i64::from(limit)));
+        let extra_filter = if filters.is_empty() {
+            String::new()
+        } else {
+            format!(" AND {}", filters.join(" AND "))
+        };
+        let sql = format!(
+            "SELECT e.id, e.case_id, e.source_id, e.target_id, e.edge_type,
+                    e.confidence, e.provenance, e.created_at,
+                    n.id, n.case_id, n.node_type, n.label, n.summary, n.tags,
+                    n.created_at
+             FROM graph_edges e
+             JOIN graph_nodes n ON n.id = {neighbor_column}
+             WHERE {match_column} = ?1{extra_filter}
+             ORDER BY e.id ASC
+             LIMIT ?{}",
+            values.len()
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows =
+            statement.query_map(rusqlite::params_from_iter(values), row_to_edge_node_pair)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     fn get_neighbors_both(
@@ -472,6 +591,26 @@ impl<'a> GraphRepo<'a> {
             nodes.push(row?);
         }
         Ok(nodes)
+    }
+
+    pub fn list_nodes_by_type_for_case_bounded(
+        &self,
+        case_id: &str,
+        node_type: &NodeType,
+        limit: u32,
+    ) -> DbResult<Vec<GraphNode>> {
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM graph_nodes
+             WHERE case_id = ?1 AND node_type = ?2
+             ORDER BY id ASC
+             LIMIT ?3"
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(
+            params![case_id, node_type_str(node_type), limit],
+            row_to_node,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Helper: count rows grouped by a column with a filter.

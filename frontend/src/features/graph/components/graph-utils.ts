@@ -85,6 +85,18 @@ export function degreeMap(nodes: GraphNode[], edges: GraphEdge[]): Map<string, n
   return degrees;
 }
 
+export function deterministicNodePosition(
+  id: string,
+  width: number,
+  height: number,
+  spread = 80,
+): { x: number; y: number } {
+  return {
+    x: width / 2 + stableSignedUnit(`${id}:x`) * spread,
+    y: height / 2 + stableSignedUnit(`${id}:y`) * spread,
+  };
+}
+
 export function tickSimulation(
   positions: Map<string, SimulationNode>,
   edges: GraphEdge[],
@@ -121,8 +133,8 @@ export function tickSimulation(
       let dy = a.y - b.y;
       let distSq = dx * dx + dy * dy;
       if (distSq === 0) {
-        dx = Math.random() - 0.5;
-        dy = Math.random() - 0.5;
+        dx = stableSignedUnit(`${a.id}:${b.id}:x`) || 0.01;
+        dy = stableSignedUnit(`${a.id}:${b.id}:y`) || 0.01;
         distSq = dx * dx + dy * dy;
       }
       const dist = Math.sqrt(distSq);
@@ -171,6 +183,15 @@ export function tickSimulation(
     node.vx *= damping;
     node.vy *= damping;
   }
+}
+
+function stableSignedUnit(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) / 0xffffffff - 0.5;
 }
 
 export function fitTransform(
