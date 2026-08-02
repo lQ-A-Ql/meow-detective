@@ -8,13 +8,27 @@ use super::{
     materialization::{read_capability_record, validate_assembly_record},
     CephFsSourceCapability, CephFsSourceError, CephFsSourceResult,
 };
-use crate::{
-    ceph_reconstruction::{
-        CephFsDataRangeReader, CephFsFileDataContent, CephFsFileDataDescriptor,
-        SourceDbCephFsObjectReader,
-    },
-    file_service::PreviewDescriptor,
+use crate::ceph_reconstruction::{
+    CephFsDataRangeReader, CephFsFileDataContent, CephFsFileDataDescriptor,
+    CephFsSparseExtentProof, SourceDbCephFsObjectReader,
 };
+
+pub(crate) struct CephFsFileReadRequest {
+    pub(crate) data_source_id: DataSourceId,
+    pub(crate) size: u64,
+    pub(crate) filesystem_identity: String,
+    pub(crate) filesystem_id: i64,
+    pub(crate) fsmap_epoch: u32,
+    pub(crate) inode: u64,
+    pub(crate) stripe_unit: u32,
+    pub(crate) stripe_count: u32,
+    pub(crate) object_size: u32,
+    pub(crate) pool_id: i64,
+    pub(crate) pool_namespace: String,
+    pub(crate) inline_data: Option<Vec<u8>>,
+    pub(crate) sparse_extents: Vec<CephFsSparseExtentProof>,
+    pub(crate) projection_sha256: String,
+}
 
 pub(crate) struct PreparedCephFsFileReader {
     reader: CephFsDataRangeReader<SourceDbCephFsObjectReader>,
@@ -52,23 +66,23 @@ pub(crate) fn open_cephfs_file_reader(
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
-    descriptor: &PreviewDescriptor,
+    request: &CephFsFileReadRequest,
 ) -> CephFsSourceResult<PreparedCephFsFileReader> {
-    if descriptor.source_kind != "ceph_fs" || descriptor.data_source_id != data_source_id.0 {
+    if request.data_source_id != *data_source_id {
         return Err(CephFsSourceError::InvalidInput(
-            "preview descriptor is not bound to this CephFS source",
+            "file-read request is not bound to this CephFS source",
         ));
     }
-    let file = descriptor
-        .ceph_fs
-        .as_ref()
-        .ok_or(CephFsSourceError::InvalidInput(
-            "CephFS preview descriptor is missing",
-        ))?;
-    let runtime = load_runtime(case_conn, case_root, case_id, data_source_id, file.pool_id)?;
-    if runtime.descriptor.identity != file.filesystem_identity
-        || runtime.descriptor.filesystem_id != file.filesystem_id
-        || runtime.descriptor.fsmap_epoch != file.fsmap_epoch
+    let runtime = load_runtime(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        request.pool_id,
+    )?;
+    if runtime.descriptor.identity != request.filesystem_identity
+        || runtime.descriptor.filesystem_id != request.filesystem_id
+        || runtime.descriptor.fsmap_epoch != request.fsmap_epoch
     {
         return Err(CephFsSourceError::InconsistentState(
             "CephFS preview descriptor does not match lineage".to_string(),
@@ -82,7 +96,7 @@ pub(crate) fn open_cephfs_file_reader(
         .ok_or_else(|| {
             CephFsSourceError::InconsistentState("CephFS lineage is missing".to_string())
         })?;
-    if aggregate.lineage.namespace_projection_sha256 != file.projection_sha256 {
+    if aggregate.lineage.namespace_projection_sha256 != request.projection_sha256 {
         return Err(CephFsSourceError::InconsistentState(
             "CephFS namespace projection is stale".to_string(),
         ));
@@ -110,23 +124,23 @@ pub(crate) fn open_cephfs_file_reader(
         });
     }
     let layout = CephFsFileLayout::new(
-        file.stripe_unit,
-        file.stripe_count,
-        file.object_size,
+        request.stripe_unit,
+        request.stripe_count,
+        request.object_size,
         runtime.resolved_pool_id,
-        file.pool_namespace.clone(),
+        request.pool_namespace.clone(),
     )
     .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
     let data_descriptor = CephFsFileDataDescriptor::with_content(
-        file.filesystem_identity.clone(),
-        file.filesystem_id,
-        file.fsmap_epoch,
-        file.inode,
-        descriptor.size,
+        request.filesystem_identity.clone(),
+        request.filesystem_id,
+        request.fsmap_epoch,
+        request.inode,
+        request.size,
         layout,
         CephFsFileDataContent {
-            inline_data: file.inline_data.clone(),
-            sparse_extents: file.sparse_extents.clone(),
+            inline_data: request.inline_data.clone(),
+            sparse_extents: request.sparse_extents.clone(),
         },
     )
     .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
@@ -141,8 +155,8 @@ pub(crate) fn open_cephfs_file_reader(
         .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
     Ok(PreparedCephFsFileReader {
         reader,
-        size: descriptor.size,
-        projection_sha256: file.projection_sha256.clone(),
+        size: request.size,
+        projection_sha256: request.projection_sha256.clone(),
         lineage_fingerprint: runtime.lineage_fingerprint,
     })
 }

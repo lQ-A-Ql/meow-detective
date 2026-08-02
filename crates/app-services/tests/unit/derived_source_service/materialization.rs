@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::*;
-use crate::ceph_reconstruction::derived_source::catalog_manifest::persist_current_source_manifest;
+use crate::derived_source_service::catalog_manifest::persist_current_source_manifest;
 use domain::{DataSourceKind, DataSourcePlatform, DataSourceProvenance};
 use persistence_sqlite::repositories::catalog_publication_repo::{
     seal_for, CatalogPublicationRepo,
@@ -629,7 +629,7 @@ fn stale_catalog_attempt_cannot_publish_after_a_new_claim_takes_over() {
         .join(&source.id.0)
         .join(format!("source.db.build.{}", stale_attempt.attempt_id()))
         .is_file());
-    crate::ceph_reconstruction::derived_finalizer::refresh_catalog_claim(
+    crate::derived_source_service::finalizer::refresh_catalog_claim(
         &connection,
         &source.id,
         FINGERPRINT,

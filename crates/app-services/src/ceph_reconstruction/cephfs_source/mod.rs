@@ -17,4 +17,6 @@ pub use materialization::materialize_cephfs_source;
 pub use model::{
     CephFsSourceCapability, CephFsSourceMaterializationRequest, MaterializedCephFsSource,
 };
-pub(crate) use preview::{open_cephfs_file_reader, PreparedCephFsFileReader};
+pub(crate) use preview::{
+    open_cephfs_file_reader, CephFsFileReadRequest, PreparedCephFsFileReader,
+};

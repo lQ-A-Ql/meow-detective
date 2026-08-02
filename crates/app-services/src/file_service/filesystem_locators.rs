@@ -265,7 +265,7 @@ pub(crate) fn derived_filesystem_locator_scope(
     update_scope_field(&mut hasher, &DERIVED_LOCATOR_SCOPE_VERSION.to_le_bytes());
     update_scope_field(
         &mut hasher,
-        &crate::ceph_reconstruction::CATALOG_MATERIALIZER_VERSION.to_le_bytes(),
+        &crate::derived_source_catalog::CATALOG_MATERIALIZER_VERSION.to_le_bytes(),
     );
     update_scope_field(&mut hasher, catalog_fingerprint.as_bytes());
     update_scope_field(&mut hasher, &candidate_identity);

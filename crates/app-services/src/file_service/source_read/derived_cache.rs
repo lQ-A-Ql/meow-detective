@@ -103,10 +103,9 @@ impl DerivedSourceReadCache {
         if !self.filesystems.contains_key(&key) {
             match open_derived_filesystem(runtime, candidate) {
                 Ok(filesystem) => {
-                    let catalog_fingerprint =
-                        crate::ceph_reconstruction::derived_catalog_fingerprint(
-                            runtime.lineage_fingerprint(),
-                        );
+                    let catalog_fingerprint = crate::derived_source_catalog::catalog_fingerprint(
+                        runtime.lineage_fingerprint(),
+                    );
                     let locator_scope =
                         derived_filesystem_locator_scope(&catalog_fingerprint, candidate)?;
                     let persisted_counts = restore_filesystem_locators(

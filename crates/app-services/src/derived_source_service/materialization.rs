@@ -18,12 +18,12 @@ use super::{
     derived_data_source_id, DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
 };
 use crate::ceph_reconstruction::{
-    derived_finalizer::{
-        begin_catalog_phase, catalog_phase_is_current, complete_catalog_phase, defer_catalog_phase,
-        fail_catalog_phase, finalize_derived_source, queue_post_catalog_phases,
-        start_catalog_heartbeat, PhaseClaim, ProcessingPhaseAttempt,
-    },
     load_lineage_fingerprint, RadosReplicaSource, RbdImageDescriptor,
+};
+use crate::derived_source_service::finalizer::{
+    begin_catalog_phase, catalog_phase_is_current, complete_catalog_phase, defer_catalog_phase,
+    fail_catalog_phase, finalize_derived_source, queue_post_catalog_phases,
+    start_catalog_heartbeat, PhaseClaim, ProcessingPhaseAttempt,
 };
 
 mod guards;
@@ -283,7 +283,7 @@ fn publish_catalog_readiness(
     summary: &MaterializedRbdSource,
 ) -> DerivedSourceResult<()> {
     let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(&data_source.id);
-    let catalog_fingerprint = crate::ceph_reconstruction::derived_catalog_fingerprint(fingerprint);
+    let catalog_fingerprint = crate::derived_source_catalog::catalog_fingerprint(fingerprint);
     if !CatalogPublicationRepo::new(case_conn).is_published(
         &data_source.id,
         &catalog_fingerprint,
@@ -471,7 +471,7 @@ pub(super) fn ready_source_summary_if_current(
     let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(&data_source_id);
     if !CatalogPublicationRepo::new(case_conn).is_published(
         &data_source_id,
-        &crate::ceph_reconstruction::derived_catalog_fingerprint(&lineage_fingerprint),
+        &crate::derived_source_catalog::catalog_fingerprint(&lineage_fingerprint),
         &source_db_rel_path,
         &summary.catalog_digest,
     )? {
@@ -485,5 +485,5 @@ pub(super) fn ready_source_summary_if_current(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/unit/ceph_reconstruction/derived_source/materialization.rs"]
+#[path = "../../tests/unit/derived_source_service/materialization.rs"]
 mod tests;

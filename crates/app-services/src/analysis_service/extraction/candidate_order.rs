@@ -55,11 +55,10 @@ fn load_derived_xfs_inode_hints(
     let file_repo = FileRepo::new(conn);
     let partition_repo = PartitionRepo::new(conn);
     let locator_repo = FilesystemLocatorRepo::new(conn);
-    let catalog_fingerprint =
-        match crate::ceph_reconstruction::load_derived_catalog_fingerprint(conn) {
-            Ok(Some(fingerprint)) => fingerprint,
-            Ok(None) | Err(_) => return HashMap::new(),
-        };
+    let catalog_fingerprint = match crate::derived_source_catalog::load_catalog_fingerprint(conn) {
+        Ok(Some(fingerprint)) => fingerprint,
+        Ok(None) | Err(_) => return HashMap::new(),
+    };
     let mut hints = HashMap::new();
 
     for source_id in source_ids {

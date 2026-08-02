@@ -50,7 +50,7 @@ fn derived_source_connection() -> Connection {
             .expect("insert XFS partition");
     }
     let manifest = serde_json::json!({
-        "materializerVersion": crate::ceph_reconstruction::CATALOG_MATERIALIZER_VERSION,
+        "materializerVersion": crate::derived_source_catalog::CATALOG_MATERIALIZER_VERSION,
         "inputFingerprint": CATALOG_FINGERPRINT,
         "recordCount": 0,
         "directoryCount": 0,

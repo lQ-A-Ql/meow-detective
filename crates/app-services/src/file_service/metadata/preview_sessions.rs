@@ -113,7 +113,7 @@ fn open_preview_session_internal(
             case_root,
             case_id,
             &global_id.data_source_id,
-            &descriptor,
+            &crate::file_service::cephfs_adapter::file_read_request(&descriptor)?,
         )?;
         PreviewSession::prepared_cephfs(
             case_id.0.clone(),

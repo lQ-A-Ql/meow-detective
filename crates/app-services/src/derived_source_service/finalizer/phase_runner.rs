@@ -23,12 +23,12 @@ use super::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ceph_reconstruction) struct ProcessingPhaseAttempt {
+pub(in crate::derived_source_service) struct ProcessingPhaseAttempt {
     phase: ProcessingPhase,
     attempt_id: String,
 }
 
-pub(in crate::ceph_reconstruction) struct ProcessingPhaseHeartbeat {
+pub(in crate::derived_source_service) struct ProcessingPhaseHeartbeat {
     stop: Option<mpsc::Sender<()>>,
     worker: Option<thread::JoinHandle<()>>,
     lease_lost: Arc<AtomicBool>,
@@ -43,7 +43,7 @@ impl ProcessingPhaseHeartbeat {
         }
     }
 
-    pub(in crate::ceph_reconstruction) fn lease_lost(&self) -> bool {
+    pub(in crate::derived_source_service) fn lease_lost(&self) -> bool {
         self.lease_lost.load(Ordering::Acquire)
     }
 }
@@ -66,13 +66,13 @@ impl ProcessingPhaseAttempt {
         self.phase
     }
 
-    pub(in crate::ceph_reconstruction) fn attempt_id(&self) -> &str {
+    pub(in crate::derived_source_service) fn attempt_id(&self) -> &str {
         &self.attempt_id
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::ceph_reconstruction) enum PhaseClaim {
+pub(in crate::derived_source_service) enum PhaseClaim {
     Acquired(ProcessingPhaseAttempt),
     Ready(DerivedFinalizationPhaseOutcome),
     Busy(DerivedFinalizationPhaseOutcome),

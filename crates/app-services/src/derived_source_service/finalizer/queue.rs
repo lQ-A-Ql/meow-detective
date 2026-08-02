@@ -9,7 +9,7 @@ use super::fingerprint::{
     PROCESSING_PHASE_VERSION,
 };
 
-pub(in crate::ceph_reconstruction) fn queue_post_catalog_phases(
+pub(in crate::derived_source_service) fn queue_post_catalog_phases(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     lineage_fingerprint: &str,

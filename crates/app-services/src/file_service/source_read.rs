@@ -417,7 +417,7 @@ impl PreviewReadContext for SourceReadContext<'_> {
                 self.case_root,
                 self.case_id,
                 self.data_source_id,
-                descriptor,
+                &crate::file_service::cephfs_adapter::file_read_request(descriptor)?,
             )?;
             self.cephfs_readers.insert(cache_key.clone(), reader);
         }

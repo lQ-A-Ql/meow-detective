@@ -4,10 +4,8 @@ mod cephfs_presence_bindings;
 mod cephfs_presence_storage;
 mod cephfs_presence_validation;
 mod cephfs_source;
-mod derived_finalizer;
 mod derived_reader;
 mod derived_runtime;
-mod derived_source;
 mod rados_provider;
 mod rados_reader;
 mod rbd_catalog;
@@ -47,16 +45,11 @@ pub use cephfs_source::{
     materialize_cephfs_source, CephFsSourceCapability, CephFsSourceError,
     CephFsSourceMaterializationRequest, CephFsSourceResult, MaterializedCephFsSource,
 };
-pub(crate) use cephfs_source::{open_cephfs_file_reader, PreparedCephFsFileReader};
+pub(crate) use cephfs_source::{
+    open_cephfs_file_reader, CephFsFileReadRequest, PreparedCephFsFileReader,
+};
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
-pub(crate) use derived_source::CATALOG_MATERIALIZER_VERSION;
-pub(crate) use derived_source::{derived_catalog_fingerprint, load_derived_catalog_fingerprint};
-pub use derived_source::{
-    finalize_rbd_source_processing, finalize_rbd_source_processing_with_cancel,
-    materialize_rbd_sources_for_cluster, materialize_rbd_sources_for_cluster_with_cancel,
-    verify_derived_source_catalog, DerivedSourceError, MaterializedRbdSource,
-};
 pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{
     BluestoreDeviceOpener, FilesystemBluestoreDeviceOpener, RadosProviderError,

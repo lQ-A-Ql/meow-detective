@@ -6,7 +6,7 @@ use std::{
 use domain::DataSourceId;
 
 use crate::{
-    ceph_reconstruction::{derived_catalog_fingerprint, DerivedRbdRuntime},
+    ceph_reconstruction::DerivedRbdRuntime,
     file_service::{
         derived_filesystem::open_derived_filesystem,
         filesystem_locators::{derived_filesystem_locator_scope, restore_filesystem_locators},
@@ -97,7 +97,8 @@ fn build_shared_filesystem(
     candidate: &PreviewPartitionCandidate,
 ) -> Result<SharedPreparedFilesystem, FileServiceError> {
     let filesystem = open_derived_filesystem(runtime, candidate)?;
-    let catalog_fingerprint = derived_catalog_fingerprint(runtime.lineage_fingerprint());
+    let catalog_fingerprint =
+        crate::derived_source_catalog::catalog_fingerprint(runtime.lineage_fingerprint());
     let locator_scope = derived_filesystem_locator_scope(&catalog_fingerprint, candidate)?;
     restore_filesystem_locators(
         source_conn,

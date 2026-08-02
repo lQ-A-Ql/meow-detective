@@ -3,9 +3,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{
-    DerivedSourceError, DerivedSourceResult, MaterializedRbdSource, CATALOG_MATERIALIZER_VERSION,
-};
+use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
+use crate::derived_source_catalog::CATALOG_MATERIALIZER_VERSION;
 
 const SOURCE_META_KEY: &str = "derived.catalog.manifest";
 
@@ -300,15 +299,7 @@ pub(super) fn load_current_source_summary(
 }
 
 pub(super) fn catalog_fingerprint_for_source(lineage_fingerprint: &str) -> String {
-    super::super::derived_finalizer::phase_input_fingerprint_for_catalog(lineage_fingerprint)
-}
-
-pub(super) fn load_catalog_fingerprint(
-    connection: &Connection,
-) -> DerivedSourceResult<Option<String>> {
-    Ok(load_catalog_manifest(connection)?
-        .filter(|stored| stored.materializer_version == CATALOG_MATERIALIZER_VERSION)
-        .map(|stored| stored.input_fingerprint))
+    crate::derived_source_catalog::catalog_fingerprint(lineage_fingerprint)
 }
 
 fn update_field(hasher: &mut Sha256, value: &[u8]) {

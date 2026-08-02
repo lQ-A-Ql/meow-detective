@@ -10,10 +10,8 @@ use crate::source_db;
 use super::catalog_manifest::persist_current_source_manifest;
 use super::filesystem::build_catalog_on_connection;
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
-use crate::ceph_reconstruction::{
-    derived_finalizer::{refresh_catalog_claim, ProcessingPhaseAttempt},
-    RadosReplicaSource, RbdImageDescriptor,
-};
+use crate::ceph_reconstruction::{RadosReplicaSource, RbdImageDescriptor};
+use crate::derived_source_service::finalizer::{refresh_catalog_claim, ProcessingPhaseAttempt};
 
 pub(super) struct CatalogBuildRequest<'a> {
     pub(super) case_conn: &'a rusqlite::Connection,

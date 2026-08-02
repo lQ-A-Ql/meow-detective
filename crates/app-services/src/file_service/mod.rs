@@ -1,6 +1,7 @@
 //! File browsing, metadata routing, preview, and extraction services.
 
 mod browse;
+mod cephfs_adapter;
 mod checkpointed_enumeration;
 mod data_sources;
 mod derived_filesystem;

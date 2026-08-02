@@ -12,19 +12,19 @@ use persistence_sqlite::repositories::{
 };
 use thiserror::Error;
 
-use crate::source_db;
-
-use super::{discover_rbd_images_from_source_dbs, RadosReplicaSource};
+use crate::{
+    ceph_reconstruction::{discover_rbd_images_from_source_dbs, RadosReplicaSource},
+    source_db,
+};
 
 mod catalog_build;
 mod catalog_manifest;
 mod filesystem;
+mod finalizer;
 mod materialization;
 use materialization::{
     finalize_ready_source, materialize_one_rbd_source, RbdMaterializationContext,
 };
-
-pub(crate) const CATALOG_MATERIALIZER_VERSION: u32 = 3;
 
 #[derive(Debug, Error)]
 pub enum DerivedSourceError {
@@ -76,16 +76,6 @@ pub enum DerivedSourceError {
 }
 
 pub type DerivedSourceResult<T> = Result<T, DerivedSourceError>;
-
-pub(crate) fn derived_catalog_fingerprint(lineage_fingerprint: &str) -> String {
-    catalog_manifest::catalog_fingerprint_for_source(lineage_fingerprint)
-}
-
-pub(crate) fn load_derived_catalog_fingerprint(
-    connection: &rusqlite::Connection,
-) -> DerivedSourceResult<Option<String>> {
-    catalog_manifest::load_catalog_fingerprint(connection)
-}
 
 #[derive(Debug, Clone)]
 pub struct MaterializedRbdSource {
@@ -383,8 +373,9 @@ pub fn verify_derived_source_catalog(
                 data_source_id.0, case_id.0
             ))
         })?;
-    let lineage_fingerprint = super::load_lineage_fingerprint(case_conn, data_source_id)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let lineage_fingerprint =
+        crate::ceph_reconstruction::load_lineage_fingerprint(case_conn, data_source_id)
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     let connection =
         source_db::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
     catalog_manifest::verify_current_source_manifest_deep(&connection, &lineage_fingerprint, source)
@@ -420,5 +411,5 @@ fn ensure_not_cancelled(cancel_token: &AtomicBool) -> DerivedSourceResult<()> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/ceph_reconstruction/derived_source.rs"]
+#[path = "../tests/unit/derived_source_service.rs"]
 mod tests;

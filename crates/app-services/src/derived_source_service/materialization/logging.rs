@@ -1,6 +1,6 @@
 use domain::DataSourceId;
 
-use crate::ceph_reconstruction::derived_finalizer::DerivedFinalizationReport;
+use crate::derived_source_service::finalizer::DerivedFinalizationReport;
 
 pub(super) fn log_finalization_report(
     data_source_id: &DataSourceId,

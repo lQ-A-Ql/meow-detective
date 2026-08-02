@@ -20,7 +20,7 @@ pub(super) use catalog::{
     refresh_catalog_claim, start_catalog_heartbeat,
 };
 pub(super) use coordinator::finalize_derived_source;
-pub(super) use fingerprint::{catalog_phase_is_current, phase_input_fingerprint_for_catalog};
+pub(super) use fingerprint::catalog_phase_is_current;
 pub(super) use outcome::DerivedFinalizationReport;
 pub(super) use phase_runner::{PhaseClaim, ProcessingPhaseAttempt};
 pub(super) use queue::queue_post_catalog_phases;
@@ -34,5 +34,5 @@ pub(super) struct DerivedSourceContext<'a> {
 }
 
 #[cfg(test)]
-#[path = "../../../tests/unit/ceph_reconstruction/derived_finalizer.rs"]
+#[path = "../../../tests/unit/derived_source_service/finalizer.rs"]
 mod tests;

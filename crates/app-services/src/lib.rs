@@ -23,6 +23,8 @@ pub mod correlation;
 pub use correlation::get_correlation_snapshot;
 pub mod datasource_service;
 pub mod deleted_recovery;
+mod derived_source_catalog;
+pub mod derived_source_service;
 mod e01_reader_cache;
 pub mod entity_extraction;
 pub mod entity_resolution;

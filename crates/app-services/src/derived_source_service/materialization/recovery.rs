@@ -9,13 +9,11 @@ use super::{
     publish_catalog_readiness, ready_source_summary_if_current, record_catalog_failure,
     start_catalog,
 };
-use crate::ceph_reconstruction::{
-    derived_finalizer::{catalog_phase_is_current, queue_post_catalog_phases},
-    derived_source::{
-        catalog_manifest::{load_current_source_summary, verify_current_source_manifest_deep},
-        DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
-    },
-    load_lineage_fingerprint,
+use crate::ceph_reconstruction::load_lineage_fingerprint;
+use crate::derived_source_service::{
+    catalog_manifest::{load_current_source_summary, verify_current_source_manifest_deep},
+    finalizer::{catalog_phase_is_current, queue_post_catalog_phases},
+    DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
 };
 
 pub(super) fn reuse_existing_catalog(
@@ -130,7 +128,7 @@ fn reconcile_catalog_publication(
             ))
         })?;
     let catalog_fingerprint =
-        crate::ceph_reconstruction::derived_catalog_fingerprint(lineage_fingerprint);
+        crate::derived_source_catalog::catalog_fingerprint(lineage_fingerprint);
     let source_db_rel_path = crate::source_db::canonical_source_db_rel_path(data_source_id);
     let expected_seal = persistence_sqlite::repositories::catalog_publication_repo::seal_for(
         &data_source_id.0,

@@ -410,13 +410,13 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
         FINGERPRINT,
         ProcessingPhase::Catalog,
         "source_015_ceph_bluestore_rbd_header_context",
-        super::fingerprint::CATALOG_POLICY_VERSION,
+        crate::derived_source_catalog::CATALOG_POLICY_VERSION,
     );
     let latest_source = super::fingerprint::phase_input_fingerprint_with_contract(
         FINGERPRINT,
         ProcessingPhase::Catalog,
         persistence_sqlite::runner::latest_source_version(),
-        super::fingerprint::CATALOG_POLICY_VERSION,
+        crate::derived_source_catalog::CATALOG_POLICY_VERSION,
     );
 
     assert_eq!(

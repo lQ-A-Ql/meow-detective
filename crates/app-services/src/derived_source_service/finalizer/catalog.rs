@@ -3,9 +3,9 @@ use persistence_sqlite::repositories::processing_phase_repo::ProcessingPhase;
 use serde_json::json;
 
 use super::phase_runner::{PhaseClaim, ProcessingPhaseAttempt, ProcessingPhaseRunner};
-use crate::ceph_reconstruction::MaterializedRbdSource;
+use crate::derived_source_service::MaterializedRbdSource;
 
-pub(in crate::ceph_reconstruction) fn begin_catalog_phase(
+pub(in crate::derived_source_service) fn begin_catalog_phase(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
@@ -14,7 +14,7 @@ pub(in crate::ceph_reconstruction) fn begin_catalog_phase(
         .claim(ProcessingPhase::Catalog)
 }
 
-pub(in crate::ceph_reconstruction) fn complete_catalog_phase(
+pub(in crate::derived_source_service) fn complete_catalog_phase(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
@@ -22,7 +22,7 @@ pub(in crate::ceph_reconstruction) fn complete_catalog_phase(
     summary: &MaterializedRbdSource,
 ) -> Result<(), persistence_sqlite::DbError> {
     let stats = json!({
-        "materializerVersion": super::super::derived_source::CATALOG_MATERIALIZER_VERSION,
+        "materializerVersion": crate::derived_source_catalog::CATALOG_MATERIALIZER_VERSION,
         "recordCount": summary.file_count,
         "directoryCount": summary.directory_count,
         "totalSize": summary.total_size,
@@ -38,7 +38,7 @@ pub(in crate::ceph_reconstruction) fn complete_catalog_phase(
         .map(|_| ())
 }
 
-pub(in crate::ceph_reconstruction) fn start_catalog_heartbeat(
+pub(in crate::derived_source_service) fn start_catalog_heartbeat(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
@@ -48,7 +48,7 @@ pub(in crate::ceph_reconstruction) fn start_catalog_heartbeat(
         .start_heartbeat(attempt)
 }
 
-pub(in crate::ceph_reconstruction) fn refresh_catalog_claim(
+pub(in crate::derived_source_service) fn refresh_catalog_claim(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
@@ -57,7 +57,7 @@ pub(in crate::ceph_reconstruction) fn refresh_catalog_claim(
     ProcessingPhaseRunner::new(case_conn, data_source_id, input_fingerprint).refresh(attempt)
 }
 
-pub(in crate::ceph_reconstruction) fn fail_catalog_phase(
+pub(in crate::derived_source_service) fn fail_catalog_phase(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,
@@ -69,7 +69,7 @@ pub(in crate::ceph_reconstruction) fn fail_catalog_phase(
         .map(|_| ())
 }
 
-pub(in crate::ceph_reconstruction) fn defer_catalog_phase(
+pub(in crate::derived_source_service) fn defer_catalog_phase(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     input_fingerprint: &str,

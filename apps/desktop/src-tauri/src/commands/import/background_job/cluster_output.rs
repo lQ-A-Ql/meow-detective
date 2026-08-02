@@ -1,4 +1,4 @@
-use app_services::ceph_reconstruction::MaterializedRbdSource;
+use app_services::derived_source_service::MaterializedRbdSource;
 
 use super::types::{BackgroundDerivedSourceProcessingJob, BackgroundLinuxClusterImportJob};
 

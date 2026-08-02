@@ -54,7 +54,8 @@ pub(super) fn build_catalog_on_connection(
     cancel_token: &AtomicBool,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
     DataSourceRepo::new(source_conn).upsert_source_local_metadata(case_id, data_source)?;
-    let catalog_fingerprint = super::derived_catalog_fingerprint(lineage_fingerprint);
+    let catalog_fingerprint =
+        crate::derived_source_catalog::catalog_fingerprint(lineage_fingerprint);
 
     let provider = SharedRadosObjectProvider::new(
         SourceDbRadosObjectProvider::new(

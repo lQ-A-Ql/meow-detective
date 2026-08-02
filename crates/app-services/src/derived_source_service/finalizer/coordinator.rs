@@ -26,7 +26,7 @@ struct ReadyPlatform {
     output_identity: String,
 }
 
-pub(in crate::ceph_reconstruction) fn finalize_derived_source(
+pub(in crate::derived_source_service) fn finalize_derived_source(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,

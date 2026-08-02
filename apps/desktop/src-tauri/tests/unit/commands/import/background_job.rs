@@ -7,11 +7,14 @@ use std::sync::{Arc, Once};
 use std::time::{Duration, Instant, SystemTime};
 
 use app_services::ceph_reconstruction::{
-    discover_rbd_images_from_source_dbs, materialize_rbd_sources_for_cluster, open_rbd_head_image,
-    verify_derived_source_catalog, RadosReplicaSource, SourceDbRadosObjectProvider,
+    discover_rbd_images_from_source_dbs, open_rbd_head_image, RadosReplicaSource,
+    SourceDbRadosObjectProvider,
 };
 use app_services::cluster_service::{plan_linux_cluster_import, LinuxClusterImportPlan};
 use app_services::datasource_service::{self, ImageFilesystemKind, PartitionStatus};
+use app_services::derived_source_service::{
+    materialize_rbd_sources_for_cluster, verify_derived_source_catalog,
+};
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
@@ -584,7 +587,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         );
     }
     for source in &materialized {
-        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+        app_services::derived_source_service::finalize_rbd_source_processing(
             &case_conn,
             &case_root,
             &cluster.case_id,
@@ -604,7 +607,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
             &materialized[0].data_source.id,
             false,
         );
-        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+        app_services::derived_source_service::finalize_rbd_source_processing(
             &case_conn,
             &case_root,
             &cluster.case_id,
@@ -1442,7 +1445,7 @@ fn assert_derived_rbd_automatic_processing(
     let repeated = materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
         .expect("repeat ready derived-source materialization");
     for source in repeated {
-        app_services::ceph_reconstruction::finalize_rbd_source_processing(
+        app_services::derived_source_service::finalize_rbd_source_processing(
             case_conn,
             case_root,
             case_id,

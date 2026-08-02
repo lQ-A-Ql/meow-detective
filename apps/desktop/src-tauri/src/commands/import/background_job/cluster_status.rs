@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use app_services::ceph_reconstruction::{DerivedSourceError, MaterializedRbdSource};
+use app_services::derived_source_service::{DerivedSourceError, MaterializedRbdSource};
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::AppHandle;
 use transport::CommandError;
@@ -89,7 +89,7 @@ pub(super) fn materialize_cluster_rbd_sources(
     summary: &ClusterImportSummary,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<Option<Vec<MaterializedRbdSource>>, CommandError> {
-    match app_services::ceph_reconstruction::materialize_rbd_sources_for_cluster_with_cancel(
+    match app_services::derived_source_service::materialize_rbd_sources_for_cluster_with_cancel(
         connection,
         &job.case_root,
         &job.case_id,
@@ -144,7 +144,7 @@ pub(crate) fn continue_cluster_rbd_processing(
             return Ok(());
         }
         if let Err(error) =
-            app_services::ceph_reconstruction::finalize_rbd_source_processing_with_cancel(
+            app_services::derived_source_service::finalize_rbd_source_processing_with_cancel(
                 &connection,
                 &job.case_root,
                 &job.case_id,
