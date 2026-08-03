@@ -106,8 +106,13 @@ V2 benchmark 至少覆盖：
 | small 1 MiB mbox 解析 | ≤ 1.0s |
 | small 10-message 合成 PST 解析 | ≤ 100ms |
 | medium 10 MiB PST 解析 | ≤ 10s（待流式解析器完成后实测） |
+| 私有 Windows E01 导入 | 总耗时中位数 ≤ 45s，枚举中位数 ≤ 30s，峰值 RSS ≤ 1024 MiB |
 
 如有调整，必须同步更新 `testdata/governance/v2-benchmark-baseline.json`、支持矩阵和文档索引中的字段承诺。
+
+Windows E01 导入门禁还要求至少 90,000 条文件记录、枚举吞吐至少 6,000
+条/秒，并验证 NTFS 树形、导入完成后的 Timeline 和系统信息结果。搜索索引优化不得通过
+减少文件记录、跳过 Timeline 或放宽解析告警来满足耗时阈值。
 
 ## 6. 运行分层
 

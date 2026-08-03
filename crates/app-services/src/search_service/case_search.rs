@@ -186,7 +186,11 @@ pub(super) fn current_sources(
         }) {
             Ok(index) => index,
             Err(error) => {
-                tracing::warn!(data_source_id = %source.id.0, error = %error, "File search index is unavailable");
+                tracing::warn!(
+                    data_source_id = %source.id.0,
+                    error = %error,
+                    "File search index is unavailable; re-run data-source analysis to rebuild the index"
+                );
                 coverage.missing_source_ids.push(source.id.0.clone());
                 continue;
             }

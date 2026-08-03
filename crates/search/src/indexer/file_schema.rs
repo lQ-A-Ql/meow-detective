@@ -9,17 +9,26 @@ use super::tantivy_writer::{IndexError, Result};
 pub(super) fn build_search_schema() -> Schema {
     let mut schema = Schema::builder();
     schema.add_text_field("file_id", STRING | STORED | FAST);
-    schema.add_text_field("path", TEXT | STORED);
+    // Metadata browsing only materializes these values. Substring matching
+    // uses the dedicated exact/ngram fields below; indexing the full path and
+    // name again duplicates postings for every metadata document.
+    schema.add_text_field("path", STORED);
     schema.add_text_field("content", TEXT | STORED);
-    schema.add_text_field("name", TEXT | STORED);
+    schema.add_text_field("name", STORED);
     schema.add_text_field("name_exact", STRING);
-    schema.add_text_field("name_unigram", ngram_options("file_unigram"));
-    schema.add_text_field("name_bigram", ngram_options("file_bigram"));
-    schema.add_text_field("name_trigram", ngram_options("file_trigram"));
+    schema.add_text_field(
+        "name_unigram",
+        ngram_options("file_unigram", IndexRecordOption::Basic),
+    );
+    schema.add_text_field(
+        "name_bigram",
+        ngram_options("file_bigram", IndexRecordOption::Basic),
+    );
+    schema.add_text_field(
+        "name_trigram",
+        ngram_options("file_trigram", IndexRecordOption::WithFreqsAndPositions),
+    );
     schema.add_text_field("path_exact", STRING);
-    schema.add_text_field("path_unigram", ngram_options("file_unigram"));
-    schema.add_text_field("path_bigram", ngram_options("file_bigram"));
-    schema.add_text_field("path_trigram", ngram_options("file_trigram"));
     schema.add_text_field("sort_name", STRING | STORED | FAST);
     schema.add_text_field("sort_path", STRING | STORED | FAST);
     schema.add_text_field("sort_size", STRING | STORED | FAST);
@@ -48,11 +57,11 @@ pub(super) fn register_file_tokenizers(index: &Index) -> Result<()> {
     Ok(())
 }
 
-fn ngram_options(tokenizer: &str) -> TextOptions {
+fn ngram_options(tokenizer: &str, record_option: IndexRecordOption) -> TextOptions {
     TextOptions::default().set_indexing_options(
         TextFieldIndexing::default()
             .set_tokenizer(tokenizer)
-            .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+            .set_index_option(record_option),
     )
 }
 

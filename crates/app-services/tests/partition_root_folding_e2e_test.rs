@@ -65,7 +65,18 @@ fn seed_main_db(conn: &Connection) {
             lvm_lv_name TEXT,
             lvm_pv_offsets_json TEXT,
             lvm_pv_sources_json TEXT
-        );",
+        );
+        CREATE TABLE IF NOT EXISTS source_meta (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO schema_migrations (id, name)
+        VALUES (30, 'source_030_analysis_file_feed_index');",
     )
     .unwrap();
 }

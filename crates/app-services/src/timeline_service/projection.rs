@@ -20,6 +20,8 @@ const SOURCE_BATCH_SIZE: u32 = 10_000;
 pub struct TimelineProjectionStats {
     pub inserted_count: u64,
     pub elapsed_ms: u128,
+    pub events_elapsed_ms: u128,
+    pub graph_elapsed_ms: u128,
     pub already_projected: bool,
     pub graph_complete: bool,
     pub warnings: Vec<String>,
@@ -74,6 +76,7 @@ pub fn materialize_file_activity_with_identity(
     }
 
     let started = Instant::now();
+    let events_started = Instant::now();
     let inserted_count = if file_events_done {
         0
     } else {
@@ -81,16 +84,21 @@ pub fn materialize_file_activity_with_identity(
         mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
         inserted
     };
+    let events_elapsed_ms = events_started.elapsed().as_millis();
+    let graph_started = Instant::now();
     let warnings = if graph_done {
         Vec::new()
     } else {
         populate_graph_non_fatal(conn, cancel_token, input_identity)?
     };
+    let graph_elapsed_ms = graph_started.elapsed().as_millis();
     let graph_complete = !graph_supported
         || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
     Ok(TimelineProjectionStats {
         inserted_count,
         elapsed_ms: started.elapsed().as_millis(),
+        events_elapsed_ms,
+        graph_elapsed_ms,
         already_projected: false,
         graph_complete,
         warnings,

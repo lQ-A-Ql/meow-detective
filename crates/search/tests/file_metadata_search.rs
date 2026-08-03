@@ -274,6 +274,31 @@ fn metadata_commit_releases_merge_handles_before_generation_rename() {
     assert_eq!(published.document_count().unwrap(), 12_000);
 }
 
+#[test]
+fn query_session_rejects_a_conflicting_reused_total() {
+    let directory = tempfile::tempdir().unwrap();
+    let index = SearchIndex::create(directory.path()).unwrap();
+    let mut writer = index.metadata_writer().unwrap();
+    writer
+        .add_documents(&[
+            document("one", "one.txt", "/one.txt", "file", Some(1), Some(1)),
+            document("two", "two.txt", "/two.txt", "file", Some(2), Some(2)),
+        ])
+        .unwrap();
+    writer.commit().unwrap();
+
+    let session = index
+        .file_query_session(&FileSearchOptions::default())
+        .unwrap();
+    let first = session.rank_after(None, 1).unwrap();
+    let after = first.hits.last().map(|hit| hit.after_key());
+    let error = session
+        .rank_after_with_total(after.as_ref(), 1, first.total_count + 1)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("snapshot total changed"));
+}
+
 fn assert_complete_paging(
     index: &SearchIndex,
     field: FileSearchSortField,

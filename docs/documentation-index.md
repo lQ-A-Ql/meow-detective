@@ -70,7 +70,7 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 | Tauri commands | 115 |
 | app-services source modules | 32 |
 | SQLite repositories | 43 logical repositories |
-| SQLite migration scripts | 75 |
+| SQLite migration scripts | 76 |
 | frontend test files | 101 |
 | Mermaid 图块 | 15 |
 

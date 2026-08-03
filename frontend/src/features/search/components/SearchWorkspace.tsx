@@ -152,7 +152,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           {model.activeQuery ? <span>查询 {model.searchTookMs} ms</span> : null}
           {coverage && !coverage.complete ? (
             <span className="flex items-center gap-1 text-forensics-error-text" title={`未就绪数据源: ${coverage.missingSourceIds.join(', ')}`}>
-              <AlertTriangle size={12} />索引覆盖不完整 {coverage.indexedEntryCount}/{coverage.expectedEntryCount}
+              <AlertTriangle size={12} />索引覆盖不完整，需要重新分析以重建索引 {coverage.indexedEntryCount}/{coverage.expectedEntryCount}
             </span>
           ) : coverage ? <span>索引覆盖 {coverage.indexedEntryCount} 项 / {coverage.readySourceCount} 个数据源</span> : null}
           {model.truncated ? <span className="text-forensics-error-text">结果超过浏览上限，仅显示前 {model.searchHits.length > 0 ? model.searchHits.length : model.totalHits} 项窗口</span> : null}

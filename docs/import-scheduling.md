@@ -83,6 +83,33 @@ members are the only source-level parallel unit in this contract. BlueStore
 metadata and Ceph/RBD derived processing retain their own phase boundaries and
 are not silently multiplied by the import scheduler.
 
+## Post-import metadata index policy
+
+The source-local file metadata index is a deterministic projection of one
+`source.db` snapshot. A rebuild writes to a fresh generation and publishes it
+by directory rename only after commit, merge completion, and schema
+validation. Because a fresh generation cannot contain an older copy of a
+document, its writer must not enqueue a delete-by-file-id operation before
+every insert. Incremental content-index writers retain replacement semantics.
+
+The metadata schema separates display values from query structures:
+
+- raw `name` and `path` values are stored for result materialization but are
+  not indexed a second time by the default tokenizer;
+- filename substring search uses exact plus unigram, bigram, and positional
+  trigram fields so the default Everything-style interaction remains fast;
+- optional path matching uses the normalized `path_exact` term dictionary and
+  a bounded query automaton instead of duplicating every full path into three
+  n-gram posting lists; and
+- sort fields remain stored fast fields, so search-after ordering and stable
+  tie-breaking do not depend on result materialization.
+
+Query sessions bind generation, schema version, and Tantivy opstamp. The first
+page computes the exact result count. A continuation cursor may reuse that
+count only after all three snapshot identities have been checked; otherwise
+the request fails as a stale cursor rather than reporting a plausible but
+incorrect total.
+
 ## Cancellation and failure
 
 Cancellation is checked while waiting for admission and inside the existing
@@ -116,3 +143,12 @@ The run must record wall time, peak RSS, scheduler admission observations,
 member ready/failed counts, and source-database isolation. It must not claim a
 throughput improvement until the same fixture has a comparable serial baseline
 under the same build and storage conditions.
+
+The source-local metadata projection also has an ignored 100,000-document
+synthetic gate in
+`crates/search/tests/file_metadata_search_performance.rs`. It records build
+time, index bytes, query p50/p95, full-cursor integrity time, and peak working
+set. Real E01 acceptance additionally runs
+`scripts/check-e01-import-performance.ps1`; neither gate may relax file-count,
+Timeline, system-information, or stable-cursor correctness to obtain a lower
+wall time.

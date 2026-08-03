@@ -9,7 +9,7 @@ use super::tantivy_writer::{IndexError, Result};
 
 const IDENTITY_FILE_NAME: &str = ".meow-search-generation.json";
 const IDENTITY_FORMAT_VERSION: u32 = 1;
-const SEARCH_SCHEMA_VERSION: u32 = 3;
+const SEARCH_SCHEMA_VERSION: u32 = 4;
 const MAX_IDENTITY_BYTES: u64 = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

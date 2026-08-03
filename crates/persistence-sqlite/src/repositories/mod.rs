@@ -38,6 +38,7 @@ pub mod partition_repo;
 pub mod processing_phase_repo;
 pub mod report_repo;
 pub mod source_meta_repo;
+mod staging_merge_validation;
 pub mod staging_repo;
 pub mod timeline_facets_repo;
 pub mod timeline_repo;

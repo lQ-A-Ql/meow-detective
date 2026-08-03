@@ -82,11 +82,12 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
+                    let partition_index = c.partition_index.unwrap_or(i);
                     persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-                        id: format!("{}:{i}", ds.id.0),
+                        id: format!("{}:{partition_index}", ds.id.0),
                         data_source_id: ds.id.0.clone(),
-                        partition_index: i as u32,
-                        name: format!("Partition {i}"),
+                        partition_index: partition_index as u32,
+                        name: format!("Partition {partition_index}"),
                         kind_label: format!("{:?}", c.kind),
                         status: "Supported".to_string(),
                         type_guid: None,
@@ -127,7 +128,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     })
                     .collect();
             let (actual_ntfs_idx, ntfs) = ntfs_candidates.first().expect("no NTFS partition");
-            let ntfs_partition_index = *actual_ntfs_idx;
+            let ntfs_partition_index = ntfs.partition_index.unwrap_or(*actual_ntfs_idx);
             eprintln!(
                 "Using NTFS partition {} (candidate index {}) at offset {}",
                 ntfs.partition_name.as_deref().unwrap_or("?"),
@@ -180,7 +181,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     persistence_sqlite::DbError::System("data source not found".to_string())
                 })?;
 
-            let stats = file_service::enumerate_filesystem_mft(
+            let stats = file_service::enumerate_filesystem_mft_with_partition(
                 &source_conn,
                 &stored_ds.id,
                 e01_path,
@@ -194,6 +195,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     eprintln!("[{pct}%] {msg}");
                 }),
                 None,
+                ntfs_partition_index,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("MFT enum: {e}")))?;
 

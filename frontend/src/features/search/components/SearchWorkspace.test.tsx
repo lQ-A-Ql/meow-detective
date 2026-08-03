@@ -82,7 +82,7 @@ describe('SearchWorkspace', () => {
     expect(screen.getByRole('textbox', { name: '文件名搜索' })).toHaveValue('report');
     expect(screen.getByText('report.7z')).toBeInTheDocument();
     expect(screen.getByText('Users/alice/Downloads/report.7z')).toBeInTheDocument();
-    expect(screen.getByText(/索引覆盖不完整 80\/100/)).toBeInTheDocument();
+    expect(screen.getByText(/索引覆盖不完整，需要重新分析以重建索引 80\/100/)).toBeInTheDocument();
   });
 
   it('opens the preview from a single result-row click', () => {

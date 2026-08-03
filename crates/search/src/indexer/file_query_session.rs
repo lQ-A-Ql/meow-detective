@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use tantivy::collector::Count;
 use tantivy::schema::{Field, Value};
 use tantivy::{DocAddress, ReloadPolicy, Searcher, TantivyDocument};
@@ -5,13 +7,14 @@ use tantivy::{DocAddress, ReloadPolicy, Searcher, TantivyDocument};
 use super::file_query::{
     compile_file_query, FileSearchOptions, FileSearchSortDirection, FileSearchSortField,
 };
-use super::file_search_after::FileSearchAfterCollector;
+use super::file_search_after::{FileSearchAfterCollector, FileSearchCandidate};
 use super::tantivy_writer::{IndexError, Result, SearchIndex};
 
 pub struct FileSearchQuerySession {
     searcher: Searcher,
     query: Box<dyn tantivy::query::Query>,
     fields: FileResultFields,
+    total_count: OnceLock<u64>,
     sort_field: String,
     sort_direction: FileSearchSortDirection,
     index_generation: String,
@@ -103,10 +106,12 @@ impl SearchIndex {
                 "search index changed while opening a file query snapshot".to_string(),
             ));
         }
+        let query = compile_file_query(self, options)?;
         Ok(FileSearchQuerySession {
             searcher,
-            query: compile_file_query(self, options)?,
+            query,
             fields: FileResultFields::load(self)?,
+            total_count: OnceLock::new(),
             sort_field: sort_field_name(options.sort_field).to_string(),
             sort_direction: options.sort_direction,
             index_generation: self.generation().to_string(),
@@ -131,13 +136,13 @@ impl SearchIndex {
             "name_bigram",
             "name_trigram",
             "path_exact",
-            "path_unigram",
-            "path_bigram",
-            "path_trigram",
             "extension",
             "entry_type",
         ] {
             self.validate_text_field(field, true, false, false)?;
+        }
+        for field in ["name", "path"] {
+            self.validate_text_field(field, false, true, false)?;
         }
         Ok(())
     }
@@ -161,12 +166,44 @@ impl FileSearchQuerySession {
         after: Option<&FileSearchAfterKey>,
         limit: usize,
     ) -> Result<FileSearchRankPage> {
+        self.rank_after_internal(after, limit)
+    }
+
+    /// Collect a continuation page using a count previously obtained from
+    /// this immutable index snapshot.
+    ///
+    /// The caller must validate the index generation, schema version, and
+    /// opstamp before supplying the count. A session rejects conflicting
+    /// totals once one has been established.
+    pub fn rank_after_with_total(
+        &self,
+        after: Option<&FileSearchAfterKey>,
+        limit: usize,
+        total_count: u64,
+    ) -> Result<FileSearchRankPage> {
+        self.establish_total_count(total_count)?;
+        self.rank_after_internal(after, limit)
+    }
+
+    fn rank_after_internal(
+        &self,
+        after: Option<&FileSearchAfterKey>,
+        limit: usize,
+    ) -> Result<FileSearchRankPage> {
         if limit == 0 {
             return Ok(FileSearchRankPage {
                 hits: Vec::new(),
-                total_count: self.searcher.search(&self.query, &Count)? as u64,
+                total_count: self.count_matches()?,
             });
         }
+        if let Some(total_count) = self.total_count.get().copied() {
+            let candidates = self.searcher.search(
+                &self.query,
+                &FileSearchAfterCollector::new(limit, after, &self.sort_field, self.sort_direction),
+            )?;
+            return Ok(file_rank_page(candidates, total_count));
+        }
+
         let (candidates, total_count) = self.searcher.search(
             &self.query,
             &(
@@ -174,17 +211,26 @@ impl FileSearchQuerySession {
                 Count,
             ),
         )?;
-        Ok(FileSearchRankPage {
-            hits: candidates
-                .into_iter()
-                .map(|candidate| FileSearchRankedHit {
-                    file_id: candidate.file_id,
-                    sort_value: candidate.sort_value,
-                    address: candidate.address,
-                })
-                .collect(),
-            total_count: total_count as u64,
-        })
+        let total_count = self.establish_total_count(total_count as u64)?;
+        Ok(file_rank_page(candidates, total_count))
+    }
+
+    fn count_matches(&self) -> Result<u64> {
+        if let Some(total_count) = self.total_count.get().copied() {
+            return Ok(total_count);
+        }
+        let total_count = self.searcher.search(&self.query, &Count)? as u64;
+        self.establish_total_count(total_count)
+    }
+
+    fn establish_total_count(&self, total_count: u64) -> Result<u64> {
+        let established = *self.total_count.get_or_init(|| total_count);
+        if established != total_count {
+            return Err(IndexError::Query(
+                "file search snapshot total changed within one query session".to_string(),
+            ));
+        }
+        Ok(established)
     }
 
     pub fn materialize(&self, ranked: FileSearchRankedHit) -> Result<FileSearchHit> {
@@ -208,6 +254,20 @@ impl FileSearchQuerySession {
             system: optional_bool(&document, self.fields.system),
             encrypted: optional_bool(&document, self.fields.encrypted),
         })
+    }
+}
+
+fn file_rank_page(candidates: Vec<FileSearchCandidate>, total_count: u64) -> FileSearchRankPage {
+    FileSearchRankPage {
+        hits: candidates
+            .into_iter()
+            .map(|candidate| FileSearchRankedHit {
+                file_id: candidate.file_id,
+                sort_value: candidate.sort_value,
+                address: candidate.address,
+            })
+            .collect(),
+        total_count,
     }
 }
 

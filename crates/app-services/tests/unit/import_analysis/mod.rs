@@ -647,7 +647,8 @@ fn analysis_tasks_include_title_case_file_entry_type() {
     let page = fetch_analysis_file_page(
         &persistence_sqlite::open_existing_source(&db_path).unwrap(),
         &ds_id,
-        0,
+        None,
+        None,
         10,
     )
     .unwrap();
@@ -665,6 +666,35 @@ fn analysis_tasks_include_title_case_file_entry_type() {
     .unwrap();
     assert_eq!(stats.processed_count, 1);
     assert_eq!(stats.timeline_count, 0);
+}
+
+#[test]
+fn analysis_file_feed_uses_a_strict_path_and_id_cursor() {
+    let tmp = TempDir::new().unwrap();
+    let (db_path, ds_id) = setup_source_db(&tmp);
+    let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
+    insert_file_with_type(&conn, "f-b", &ds_id, "same/path.txt", "file");
+    insert_file_with_type(&conn, "f-a", &ds_id, "same/path.txt", "file");
+    insert_file_with_type(&conn, "f-c", &ds_id, "z/path.txt", "file");
+
+    let first = fetch_analysis_file_page(&conn, &ds_id, None, None, 2).unwrap();
+    assert_eq!(
+        first
+            .iter()
+            .map(|task| task.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["f-a", "f-b"]
+    );
+    let cursor = first.last().unwrap();
+    let second =
+        fetch_analysis_file_page(&conn, &ds_id, Some(&cursor.path), Some(&cursor.id.0), 2).unwrap();
+    assert_eq!(
+        second
+            .iter()
+            .map(|task| task.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["f-c"]
+    );
 }
 
 #[test]

@@ -1,6 +1,9 @@
 use crate::connection::{DbError, DbResult};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashSet;
+
+use super::source_registry::SOURCE_MIGRATIONS;
+
 const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
     (
@@ -153,122 +156,6 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
 ];
 
-const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
-    ("source_001", include_str!("scripts/source_001.sql")),
-    (
-        "source_002_data_source_metadata",
-        include_str!("scripts/source_002_data_source_metadata.sql"),
-    ),
-    (
-        "source_003_correlation_cache",
-        include_str!("scripts/source_003_correlation_cache.sql"),
-    ),
-    (
-        "source_004_graph_node_order_index",
-        include_str!("scripts/source_004_graph_node_order_index.sql"),
-    ),
-    (
-        "source_005_ceph_osd_inventory",
-        include_str!("scripts/source_005_ceph_osd_inventory.sql"),
-    ),
-    (
-        "source_006_ceph_bluefs_inventory",
-        include_str!("scripts/source_006_ceph_bluefs_inventory.sql"),
-    ),
-    (
-        "source_007_ceph_bluefs_replay",
-        include_str!("scripts/source_007_ceph_bluefs_replay.sql"),
-    ),
-    (
-        "source_008_ceph_rocksdb_inventory",
-        include_str!("scripts/source_008_ceph_rocksdb_inventory.sql"),
-    ),
-    (
-        "source_009_ceph_sst_inventory",
-        include_str!("scripts/source_009_ceph_sst_inventory.sql"),
-    ),
-    (
-        "source_010_ceph_wal_inventory",
-        include_str!("scripts/source_010_ceph_wal_inventory.sql"),
-    ),
-    (
-        "source_011_ceph_latest_state",
-        include_str!("scripts/source_011_ceph_latest_state.sql"),
-    ),
-    (
-        "source_012_ceph_bluestore_semantics",
-        include_str!("scripts/source_012_ceph_bluestore_semantics.sql"),
-    ),
-    (
-        "source_013_ceph_bluestore_omap",
-        include_str!("scripts/source_013_ceph_bluestore_omap.sql"),
-    ),
-    (
-        "source_014_ceph_osd_device_bindings",
-        include_str!("scripts/source_014_ceph_osd_device_bindings.sql"),
-    ),
-    (
-        "source_015_ceph_bluestore_rbd_header_context",
-        include_str!("scripts/source_015_ceph_bluestore_rbd_header_context.sql"),
-    ),
-    (
-        "source_016_file_partition_index",
-        include_str!("scripts/source_016_file_partition_index.sql"),
-    ),
-    (
-        "source_017_timeline_projection_identity",
-        include_str!("scripts/source_017_timeline_projection_identity.sql"),
-    ),
-    (
-        "source_018_cephfs_metadata_inventory",
-        include_str!("scripts/source_018_cephfs_metadata_inventory.sql"),
-    ),
-    (
-        "source_019_cephfs_journal_replay",
-        include_str!("scripts/source_019_cephfs_journal_replay.sql"),
-    ),
-    (
-        "source_020_cephfs_namespace_layout",
-        include_str!("scripts/source_020_cephfs_namespace_layout.sql"),
-    ),
-    (
-        "source_021_cephfs_assembly_capability",
-        include_str!("scripts/source_021_cephfs_assembly_capability.sql"),
-    ),
-    (
-        "source_022_file_partition_index_repair",
-        include_str!("scripts/source_022_file_partition_index_repair.sql"),
-    ),
-    (
-        "source_023_deleted_recovery",
-        include_str!("scripts/source_023_deleted_recovery.sql"),
-    ),
-    (
-        "source_024_ntfs_deleted_recovery",
-        include_str!("scripts/source_024_ntfs_deleted_recovery.sql"),
-    ),
-    (
-        "source_025_file_entry_encrypted",
-        include_str!("scripts/source_025_file_entry_encrypted.sql"),
-    ),
-    (
-        "source_026_timeline_keyset_indexes",
-        include_str!("scripts/source_026_timeline_keyset_indexes.sql"),
-    ),
-    (
-        "source_027_artifact_keyset_indexes",
-        include_str!("scripts/source_027_artifact_keyset_indexes.sql"),
-    ),
-    (
-        "source_028_file_entry_read_only",
-        include_str!("scripts/source_028_file_entry_read_only.sql"),
-    ),
-    (
-        "source_029_case_graph_entity_index",
-        include_str!("scripts/source_029_case_graph_entity_index.sql"),
-    ),
-];
-
 pub use super::case_graph::{
     latest_version as latest_case_graph_version, run_all as run_case_graph_all,
 };
@@ -309,7 +196,9 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
 }
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
-    run_migrations(conn, SOURCE_MIGRATIONS)
+    let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;
+    ensure_analysis_file_feed_index(conn, source_analysis_file_feed_index_sql())?;
+    Ok(applied)
 }
 
 pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
@@ -359,6 +248,8 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
                 super::timeline_projection_identity::add_timeline_projection_identity(conn, sql)
             } else if *name == "source_024_ntfs_deleted_recovery" {
                 super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
+            } else if *name == "source_030_analysis_file_feed_index" {
+                ensure_analysis_file_feed_index(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -490,6 +381,69 @@ fn add_file_partition_index_and_backfill(conn: &Connection, sql: &str) -> DbResu
         conn.execute_batch("ALTER TABLE file_entries ADD COLUMN partition_index INTEGER")?;
     }
     conn.execute_batch(sql)?;
+    Ok(())
+}
+
+fn source_analysis_file_feed_index_sql() -> &'static str {
+    SOURCE_MIGRATIONS
+        .iter()
+        .find_map(|(name, sql)| (*name == "source_030_analysis_file_feed_index").then_some(*sql))
+        .expect("source analysis feed migration must be registered")
+}
+
+fn ensure_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()> {
+    let has_feed_columns: bool = conn.query_row(
+        "SELECT COUNT(*) = 4
+         FROM pragma_table_info('file_entries')
+         WHERE name IN ('data_source_id', 'path', 'id', 'entry_type')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_feed_columns {
+        return Err(DbError::Migration(
+            "source_030 requires file_entries(data_source_id, path, id, entry_type)".to_string(),
+        ));
+    }
+    let current_sql = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master
+             WHERE type = 'index' AND name = 'idx_source_file_entries_analysis_feed'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    if current_sql
+        .as_deref()
+        .is_some_and(analysis_feed_index_is_current)
+    {
+        return Ok(());
+    }
+    repair_analysis_file_feed_index(conn, sql)
+}
+
+fn analysis_feed_index_is_current(sql: &str) -> bool {
+    let normalized = sql
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    normalized.contains("on file_entries(data_source_id, path asc, id asc)")
+        && normalized.contains("where lower(entry_type) = 'file'")
+}
+
+fn repair_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()> {
+    conn.execute_batch(
+        "SAVEPOINT source_030_analysis_feed_repair;
+         DROP INDEX IF EXISTS idx_source_file_entries_analysis_feed;",
+    )?;
+    if let Err(error) = conn.execute_batch(sql) {
+        let _ = conn.execute_batch(
+            "ROLLBACK TO source_030_analysis_feed_repair;
+             RELEASE source_030_analysis_feed_repair;",
+        );
+        return Err(error.into());
+    }
+    conn.execute_batch("RELEASE source_030_analysis_feed_repair;")?;
     Ok(())
 }
 

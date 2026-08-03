@@ -534,9 +534,13 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
         error: None,
     });
     active
-        .with_conn(|conn| {
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &data_source_id,
+            )?;
             let merged = staging::merge_all_staging_to_main(
-                conn,
+                &source_conn,
                 &active.case_root,
                 &data_source_id.0,
                 &manifest,
@@ -545,7 +549,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
-            let repo = FileRepo::new(conn);
+            let repo = FileRepo::new(&source_conn);
             // After merge_all_staging_to_main, the tree structure may re-parent
             // entries — use a data_source-scoped name query rather than assuming
             // the root_id survives merge unchanged.
@@ -776,9 +780,13 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
         error: None,
     });
     active
-        .with_conn(|conn| {
+        .with_conn(|_conn| {
+            let source_conn = app_services::source_db::open_source_db(
+                &active.case_root,
+                &data_source_id,
+            )?;
             let merged = staging::merge_all_staging_to_main(
-                conn,
+                &source_conn,
                 &active.case_root,
                 &data_source_id.0,
                 &manifest,
@@ -787,7 +795,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
-            let repo = FileRepo::new(conn);
+            let repo = FileRepo::new(&source_conn);
             // After merge_all_staging_to_main, entries may be re-parented
             // under the partition placeholder rather than the raw MFT root.
             // Query by data_source + name instead of assuming a fixed root_id.
@@ -1157,8 +1165,28 @@ fn liuyang_e01_correlation_snapshot_and_governance() {
             });
             assert!(matching.is_some(), "Expected path/name containing '{expected_fragment}'");
 
-            // Build timeline from MACB
+            // Correlation consumes artifacts and timeline rows, not the file catalog
+            // directly. A bounded real-file projection supplies that explicit input
+            // without turning this snapshot test into a second full Timeline test.
             let tl_start = Instant::now();
+            let timeline_files = entries
+                .iter()
+                .filter(|entry| entry.entry_type == domain::EntryType::File)
+                .filter(|entry| {
+                    entry.created_at.is_some()
+                        || entry.modified_at.is_some()
+                        || entry.accessed_at.is_some()
+                        || entry.changed_at.is_some()
+                })
+                .take(256)
+                .cloned()
+                .collect::<Vec<_>>();
+            let projected =
+                timeline_service::project_and_store_file_activity(conn, &timeline_files)
+                    .map_err(|error| {
+                        persistence_sqlite::DbError::System(error.to_string())
+                    })?;
+            assert!(projected > 0, "real-file projection should create timeline input");
             let tl_result = timeline_service::query_timeline(conn, 0, 100).unwrap();
             eprintln!(
                 "timeline query: {} items in {:?}",

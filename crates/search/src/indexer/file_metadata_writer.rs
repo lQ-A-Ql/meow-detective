@@ -4,6 +4,9 @@ use tantivy::{IndexWriter, TantivyDocument, Term};
 use super::file_query::normalize;
 use super::tantivy_writer::{IndexError, Result, SearchIndex};
 
+const INCREMENTAL_WRITER_MEMORY_BYTES: usize = 50_000_000;
+const NEW_GENERATION_WRITER_MEMORY_BYTES: usize = 128_000_000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchFileDocument {
     pub file_id: String,
@@ -22,6 +25,7 @@ pub struct SearchFileDocument {
 pub struct SearchMetadataWriter {
     writer: IndexWriter,
     fields: MetadataFields,
+    replace_existing: bool,
 }
 
 struct MetadataFields {
@@ -33,9 +37,6 @@ struct MetadataFields {
     name_bigram: Field,
     name_trigram: Field,
     path_exact: Field,
-    path_unigram: Field,
-    path_bigram: Field,
-    path_trigram: Field,
     sort_name: Field,
     sort_path: Field,
     sort_size: Field,
@@ -52,9 +53,28 @@ struct MetadataFields {
 
 impl SearchIndex {
     pub fn metadata_writer(&self) -> Result<SearchMetadataWriter> {
+        self.metadata_writer_with_mode(true)
+    }
+
+    /// Open a writer for a freshly created generation.
+    ///
+    /// The generation is empty by construction, so deleting an existing
+    /// document term before every insert only adds index work. Incremental
+    /// callers must continue using [`Self::metadata_writer`].
+    pub fn metadata_writer_for_new_generation(&self) -> Result<SearchMetadataWriter> {
+        self.metadata_writer_with_mode(false)
+    }
+
+    fn metadata_writer_with_mode(&self, replace_existing: bool) -> Result<SearchMetadataWriter> {
+        let memory_budget = if replace_existing {
+            INCREMENTAL_WRITER_MEMORY_BYTES
+        } else {
+            NEW_GENERATION_WRITER_MEMORY_BYTES
+        };
         Ok(SearchMetadataWriter {
-            writer: self.index.writer(50_000_000)?,
+            writer: self.index.writer(memory_budget)?,
             fields: MetadataFields::load(&self.schema)?,
+            replace_existing,
         })
     }
 }
@@ -62,10 +82,12 @@ impl SearchIndex {
 impl SearchMetadataWriter {
     pub fn add_documents(&mut self, documents: &[SearchFileDocument]) -> Result<u64> {
         for document in documents {
-            self.writer.delete_term(Term::from_field_text(
-                self.fields.file_id,
-                &document.file_id,
-            ));
+            if self.replace_existing {
+                self.writer.delete_term(Term::from_field_text(
+                    self.fields.file_id,
+                    &document.file_id,
+                ));
+            }
             self.writer.add_document(self.fields.document(document))?;
         }
         Ok(documents.len() as u64)
@@ -94,9 +116,6 @@ impl MetadataFields {
             name_bigram: field("name_bigram")?,
             name_trigram: field("name_trigram")?,
             path_exact: field("path_exact")?,
-            path_unigram: field("path_unigram")?,
-            path_bigram: field("path_bigram")?,
-            path_trigram: field("path_trigram")?,
             sort_name: field("sort_name")?,
             sort_path: field("sort_path")?,
             sort_size: field("sort_size")?,
@@ -113,14 +132,16 @@ impl MetadataFields {
     }
 
     fn document(&self, source: &SearchFileDocument) -> TantivyDocument {
+        let normalized_name = normalize(&source.name);
+        let normalized_path = normalize(&source.path);
         let mut indexed = TantivyDocument::default();
         indexed.add_text(self.file_id, &source.file_id);
         indexed.add_text(self.path, &source.path);
         indexed.add_text(self.name, &source.name);
-        self.add_searchable_value(&mut indexed, &source.name, true);
-        self.add_searchable_value(&mut indexed, &source.path, false);
-        indexed.add_text(self.sort_name, normalize(&source.name));
-        indexed.add_text(self.sort_path, normalize(&source.path));
+        self.add_searchable_name(&mut indexed, &normalized_name);
+        indexed.add_text(self.path_exact, &normalized_path);
+        indexed.add_text(self.sort_name, &normalized_name);
+        indexed.add_text(self.sort_path, &normalized_path);
         indexed.add_text(self.sort_size, format!("{:020}", source.size.unwrap_or(0)));
         indexed.add_text(
             self.sort_modified,
@@ -141,27 +162,11 @@ impl MetadataFields {
         indexed
     }
 
-    fn add_searchable_value(&self, document: &mut TantivyDocument, value: &str, is_name: bool) {
-        let normalized = normalize(value);
-        let (exact, unigram, bigram, trigram) = if is_name {
-            (
-                self.name_exact,
-                self.name_unigram,
-                self.name_bigram,
-                self.name_trigram,
-            )
-        } else {
-            (
-                self.path_exact,
-                self.path_unigram,
-                self.path_bigram,
-                self.path_trigram,
-            )
-        };
-        document.add_text(exact, &normalized);
-        document.add_text(unigram, &normalized);
-        document.add_text(bigram, &normalized);
-        document.add_text(trigram, &normalized);
+    fn add_searchable_name(&self, document: &mut TantivyDocument, normalized: &str) {
+        document.add_text(self.name_exact, normalized);
+        document.add_text(self.name_unigram, normalized);
+        document.add_text(self.name_bigram, normalized);
+        document.add_text(self.name_trigram, normalized);
     }
 }
 

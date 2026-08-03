@@ -344,6 +344,7 @@ impl StagingRepo {
         partition_index: usize,
         partition_name: &str,
     ) -> rusqlite::Result<u64> {
+        super::staging_merge_validation::validate_enum_merge_target(main_conn)?;
         let staging_path = staging_db_file_path(staging_conn)?;
         let escaped = staging_path.replace('\'', "''");
         main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS staging", escaped))?;

@@ -72,11 +72,12 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
+                    let partition_index = c.partition_index.unwrap_or(i);
                     persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-                        id: format!("{}:{i}", ds.id.0),
+                        id: format!("{}:{partition_index}", ds.id.0),
                         data_source_id: ds.id.0.clone(),
-                        partition_index: i as u32,
-                        name: format!("Partition {i}"),
+                        partition_index: partition_index as u32,
+                        name: format!("Partition {partition_index}"),
                         kind_label: format!("{:?}", c.kind),
                         status: "Supported".to_string(),
                         type_guid: None,
@@ -117,9 +118,10 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     })
                     .collect();
             let (actual_ntfs_idx, ntfs) = ntfs_candidates.first().expect("no NTFS partition");
+            let partition_index = ntfs.partition_index.unwrap_or(*actual_ntfs_idx);
             eprintln!(
-                "NTFS partition: candidate index={}, offset={}",
-                actual_ntfs_idx, ntfs.offset
+                "NTFS partition: index={}, candidate ordinal={}, offset={}",
+                partition_index, actual_ntfs_idx, ntfs.offset
             );
 
             // MFT enumerate
@@ -158,7 +160,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .find(|d| d.name == "test-e01")
                 .ok_or_else(|| persistence_sqlite::DbError::System("ds not found".to_string()))?;
 
-            let stats = file_service::enumerate_filesystem_mft(
+            let stats = file_service::enumerate_filesystem_mft_with_partition(
                 &source_conn,
                 &stored_ds.id,
                 e01_path,
@@ -170,6 +172,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 mft_data_size,
                 Some(&|pct, msg| eprintln!("[{pct}%] {msg}")),
                 None,
+                partition_index,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("MFT: {e}")))?;
 
@@ -390,56 +393,19 @@ fn liuyang_full_scan_read_first_8_bytes() {
 
 #[test]
 #[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_png_magic() {
+fn liuyang_preview_common_file_magics() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(
-        &active,
-        &ds_id,
-        ".png",
-        &[0x89, 0x50, 0x4E, 0x47],
-        "Liuyang PNG",
-    );
-}
-
-#[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_pdf_magic() {
-    let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".pdf", b"%PDF", "Liuyang PDF");
-}
-
-#[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_zip_magic() {
-    let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".zip", b"PK\x03\x04", "Liuyang ZIP");
-}
-
-#[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_exe_magic() {
-    let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".exe", b"MZ", "Liuyang EXE");
-}
-
-#[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_jpg_magic() {
-    let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".jpg", &[0xFF, 0xD8, 0xFF], "Liuyang JPG");
-}
-
-#[test]
-#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real E01 sample"]
-fn liuyang_preview_jpeg_magic() {
-    let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(
-        &active,
-        &ds_id,
-        ".jpeg",
-        &[0xFF, 0xD8, 0xFF],
-        "Liuyang JPEG",
-    );
+    let cases: [(&str, &[u8], &str); 6] = [
+        (".png", &[0x89, 0x50, 0x4E, 0x47], "Liuyang PNG"),
+        (".pdf", b"%PDF", "Liuyang PDF"),
+        (".zip", b"PK\x03\x04", "Liuyang ZIP"),
+        (".exe", b"MZ", "Liuyang EXE"),
+        (".jpg", &[0xFF, 0xD8, 0xFF], "Liuyang JPG"),
+        (".jpeg", &[0xFF, 0xD8, 0xFF], "Liuyang JPEG"),
+    ];
+    for (extension, magic, label) in cases {
+        assert_file_magic(&active, &ds_id, extension, magic, label);
+    }
 }
 
 #[test]

@@ -31,7 +31,6 @@ use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{
-    case_repo::CaseRepo,
     datasource_repo::DataSourceRepo,
     partition_repo::{DataSourcePartitionRecord, PartitionRepo},
 };
@@ -41,7 +40,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use transport::dto::{AnalysisExtractionRunDto, AnalysisParseStatusDto, ViewerRangeRequestDto};
 
@@ -68,6 +67,31 @@ const MIN_LIUYANG_ROOT_LV_DIR_COUNT: u64 = 7_000;
 const MIN_LIUYANG_LINUX_ARTIFACT_CANDIDATES: usize = 100;
 const MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const LINUX_PREVIEW_RANGE_LEN: u32 = 4096;
+
+#[derive(Clone)]
+struct CachedEnumerationStats {
+    file_count: u64,
+    dir_count: u64,
+    total_size: u64,
+    warnings: Vec<String>,
+    diagnostics: Vec<evidence_core::filesystem::FileSystemDiagnostic>,
+}
+
+struct CachedRootCatalog {
+    fixture_identity: FixtureIdentity,
+    _directory: tempfile::TempDir,
+    database_path: PathBuf,
+    stats: CachedEnumerationStats,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FixtureIdentity {
+    canonical_path: PathBuf,
+    length: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+static ROOT_CATALOG_CACHE: OnceLock<Mutex<Option<CachedRootCatalog>>> = OnceLock::new();
 const LINUX_ANALYSIS_SECTION_KEYS: &[&str] = &[
     "LinuxJournal",
     "LinuxLogin",
@@ -767,19 +791,6 @@ fn synthetic_lvm_partition(
     )
 }
 
-fn setup_case(conn: &Connection, case_id: &str) {
-    let case = domain::CaseMeta {
-        id: CaseId(case_id.to_string()),
-        name: "Linux E01 Test".to_string(),
-        number: None,
-        examiner: None,
-        notes: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    };
-    CaseRepo::new(conn).create(&case).unwrap();
-}
-
 fn detect_expanded_linux_probe() -> app_services::datasource_service::ImageFilesystemProbe {
     let fixture = fixture_path();
     let mut reader = E01Reader::open(&fixture).unwrap();
@@ -1126,15 +1137,135 @@ fn enumerate_root_lv_into_case(
     let root_lv = root_lv_candidate(&probe);
     file_service::store_data_source_partitions(conn, ds_id, &probe.partitions).unwrap();
 
+    let fixture = fixture_path();
+    let fixture_identity = fixture_identity(&fixture);
+    let cache = ROOT_CATALOG_CACHE.get_or_init(|| Mutex::new(None));
+    let mut cache = cache.lock().expect("lock Linux root catalog cache");
+    if let Some(cached) = cache
+        .as_ref()
+        .filter(|cached| cached.fixture_identity == fixture_identity)
+    {
+        restore_cached_root_catalog(conn, ds_id, cached);
+        return enumeration_stats_from_cache(&cached.stats);
+    }
+
     let fs = open_root_lv_xfs();
-    file_service::enumerate_filesystem_with_root_name(
+    let stats = file_service::enumerate_filesystem_with_root_name(
         conn,
         ds_id,
         &fs,
         Some(&format_partition_root_name(root_lv)),
         None::<&dyn Fn(u32)>,
     )
-    .unwrap()
+    .unwrap();
+    *cache = Some(snapshot_root_catalog(conn, fixture_identity, &stats));
+    stats
+}
+
+fn fixture_identity(path: &Path) -> FixtureIdentity {
+    let canonical_path = path
+        .canonicalize()
+        .expect("canonicalize Linux E01 fixture path");
+    let metadata = canonical_path
+        .metadata()
+        .expect("read Linux E01 fixture metadata");
+    FixtureIdentity {
+        canonical_path,
+        length: metadata.len(),
+        modified: metadata.modified().ok(),
+    }
+}
+
+fn snapshot_root_catalog(
+    conn: &Connection,
+    fixture_identity: FixtureIdentity,
+    stats: &app_services::file_service::EnumerationStats,
+) -> CachedRootCatalog {
+    let directory = tempfile::TempDir::new().expect("create Linux catalog cache directory");
+    let database_path = directory.path().join("root-catalog.db");
+    conn.execute(
+        "VACUUM main INTO ?1",
+        [database_path.to_string_lossy().as_ref()],
+    )
+    .expect("snapshot Linux root catalog");
+    CachedRootCatalog {
+        fixture_identity,
+        _directory: directory,
+        database_path,
+        stats: CachedEnumerationStats {
+            file_count: stats.file_count,
+            dir_count: stats.dir_count,
+            total_size: stats.total_size,
+            warnings: stats.warnings.clone(),
+            diagnostics: stats.diagnostics.clone(),
+        },
+    }
+}
+
+fn restore_cached_root_catalog(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    cached: &CachedRootCatalog,
+) {
+    let case_id: String = conn
+        .query_row(
+            "SELECT case_id FROM data_sources WHERE id = ?1",
+            [&ds_id.0],
+            |row| row.get(0),
+        )
+        .expect("read target source case id");
+    conn.execute(
+        "ATTACH DATABASE ?1 AS root_catalog_cache",
+        [cached.database_path.to_string_lossy().as_ref()],
+    )
+    .expect("attach Linux root catalog cache");
+    let result = (|| -> rusqlite::Result<()> {
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        conn.execute(
+            "INSERT INTO main.file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext,
+              deleted, hidden, system, read_only, encrypted, created_at, modified_at,
+              accessed_at, changed_at, hash_sha256, partition_index)
+             SELECT id, parent_id, ?1, path, name, entry_type, size, ext,
+                    deleted, hidden, system, read_only, encrypted, created_at, modified_at,
+                    accessed_at, changed_at, hash_sha256, partition_index
+             FROM root_catalog_cache.file_entries",
+            [&ds_id.0],
+        )?;
+        conn.execute(
+            "INSERT INTO main.graph_nodes
+             (id, case_id, node_type, label, summary, tags, created_at)
+             SELECT id, ?1, node_type, label, summary, tags, created_at
+             FROM root_catalog_cache.graph_nodes",
+            [&case_id],
+        )?;
+        conn.execute(
+            "INSERT INTO main.graph_edges
+             (id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at)
+             SELECT id, ?1, source_id, target_id, edge_type, confidence, provenance, created_at
+             FROM root_catalog_cache.graph_edges",
+            [&case_id],
+        )?;
+        conn.execute_batch("COMMIT")?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = conn.execute_batch("ROLLBACK");
+    }
+    let _ = conn.execute_batch("DETACH DATABASE root_catalog_cache");
+    result.expect("restore Linux root catalog cache");
+}
+
+fn enumeration_stats_from_cache(
+    stats: &CachedEnumerationStats,
+) -> app_services::file_service::EnumerationStats {
+    app_services::file_service::EnumerationStats {
+        file_count: stats.file_count,
+        dir_count: stats.dir_count,
+        total_size: stats.total_size,
+        warnings: stats.warnings.clone(),
+        diagnostics: stats.diagnostics.clone(),
+    }
 }
 
 fn import_full_linux_image_into_case(
@@ -3461,24 +3592,8 @@ fn assert_lvm_root_lv_visible_without_expanded_pool_root(
     root_lv: &ImageFilesystemCandidate,
 ) {
     let fixture = fixture_path();
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    setup_case(&conn, "linux-e01-lvm-tree-test");
-
     let ds_id = DataSourceId("e01-linux-lvm-tree-ds".to_string());
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("linux-e01-lvm-tree-test".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "Linux E01 LVM tree".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: fixture.clone(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
+    let conn = setup_linux_fixture_case("linux-e01-lvm-tree-test", &ds_id);
 
     let expanded_pool = expanded_probe
         .partitions

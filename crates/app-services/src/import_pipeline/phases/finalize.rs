@@ -14,11 +14,17 @@ pub(crate) fn run_finalize_phase(
     pipeline_message: &str,
     import_started: Instant,
 ) -> Result<String, CommandError> {
-    if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
-        let timeline_count = materialize_timeline(ctx, data_source)?;
+    let timeline_count =
+        if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
+            Some(materialize_timeline(ctx, data_source)?)
+        } else {
+            None
+        };
+    ctx.report_job_progress(95, "Finalizing...")?;
+    checkpoint_source_database(ctx, data_source)?;
+    if let Some(timeline_count) = timeline_count {
         emit_projection_ready_events(ctx, timeline_count);
     }
-    ctx.report_job_progress(95, "Finalizing...")?;
     emit_phase_profile(
         ctx.event_sink(),
         ctx.job_id,
@@ -32,7 +38,6 @@ pub(crate) fn run_finalize_phase(
         ),
         ctx.cancel_requested(),
     );
-    checkpoint_source_database(ctx, data_source)?;
     record_import_step(ctx, stats, import_started);
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {
@@ -66,6 +71,23 @@ fn materialize_timeline(
         ctx.options.cancel_token.as_ref(),
     )
     .map_err(CommandError::from_service_error)?;
+    emit_phase_profile(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&data_source.id),
+        94,
+        format!(
+            "Timeline materialization complete: phase=timeline elapsedMs={} eventMs={} graphMs={} rows={} warnings={} rssMb={}",
+            projection.elapsed_ms,
+            projection.events_elapsed_ms,
+            projection.graph_elapsed_ms,
+            projection.inserted_count,
+            projection.warnings.len(),
+            crate::runtime_resources::current_rss_mb()
+        ),
+        ctx.cancel_requested(),
+    );
     for warning in &projection.warnings {
         tracing::warn!(
             data_source_id = %data_source.id.0,
@@ -107,6 +129,7 @@ fn checkpoint_source_database(
     let Some(source_conn) = ctx.source_conn else {
         return Ok(());
     };
+    let started = Instant::now();
     source_db::checkpoint_source_db(source_conn).map_err(|error| {
         tracing::error!(
             data_source_id = %data_source.id.0,
@@ -114,7 +137,21 @@ fn checkpoint_source_database(
             "Source DB WAL checkpoint failed during import finalization"
         );
         CommandError::from_service_error(error)
-    })
+    })?;
+    emit_phase_profile(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&data_source.id),
+        98,
+        format!(
+            "Source checkpoint complete: phase=checkpoint elapsedMs={} rssMb={}",
+            elapsed_ms(started.elapsed()),
+            crate::runtime_resources::current_rss_mb()
+        ),
+        ctx.cancel_requested(),
+    );
+    Ok(())
 }
 
 fn record_import_step(

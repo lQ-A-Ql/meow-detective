@@ -192,17 +192,18 @@ pub(crate) fn descriptor_is_fresh(
         }
     };
 
-    let current_partition_index = match file_repo.find_partition_index_by_id(file_id) {
-        Ok(index) => index,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                file_id = %file_id.0,
-                "Failed to validate descriptor partition routing"
-            );
-            return false;
-        }
-    };
+    let current_partition_index =
+        match crate::file_service::viewer::resolve_partition_index_for_entry(&file_repo, &entry) {
+            Ok(index) => index,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    file_id = %file_id.0,
+                    "Failed to validate descriptor partition routing"
+                );
+                return false;
+            }
+        };
     let current_size = entry.size.unwrap_or(0);
     let current_modified = entry.modified_at.as_ref().map(|dt| dt.to_rfc3339());
 

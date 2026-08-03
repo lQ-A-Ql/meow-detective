@@ -107,6 +107,9 @@ fn substring_query(index: &SearchIndex, prefix: &str, raw: &str) -> Result<Box<d
     if normalized.is_empty() {
         return Ok(Box::new(AllQuery));
     }
+    if prefix == "path" {
+        return path_substring_query(index, &normalized);
+    }
     if normalized.contains(['*', '?']) {
         let field = required_field(index, &format!("{prefix}_exact"))?;
         return RegexQuery::from_pattern(&glob_pattern(&normalized), field)
@@ -139,6 +142,18 @@ fn substring_query(index: &SearchIndex, prefix: &str, raw: &str) -> Result<Box<d
             Ok(Box::new(PhraseQuery::new(terms)))
         }
     }
+}
+
+fn path_substring_query(index: &SearchIndex, normalized: &str) -> Result<Box<dyn Query>> {
+    let field = required_field(index, "path_exact")?;
+    let pattern = if normalized.contains(['*', '?']) {
+        glob_pattern(normalized)
+    } else {
+        format!(".*{}.*", glob_pattern(normalized))
+    };
+    RegexQuery::from_pattern(&pattern, field)
+        .map(|query| Box::new(query) as Box<dyn Query>)
+        .map_err(|error| IndexError::Query(error.to_string()))
 }
 
 fn exact_term(field: Field, value: &str) -> Box<dyn Query> {

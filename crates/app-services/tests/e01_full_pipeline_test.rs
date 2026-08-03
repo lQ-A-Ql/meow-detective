@@ -14,6 +14,35 @@ fn sample_path() -> std::path::PathBuf {
     })
 }
 
+fn windows_ntfs_candidate<'a>(
+    path: &std::path::Path,
+    probe: &'a datasource_service::ImageFilesystemProbe,
+) -> Option<(usize, &'a datasource_service::ImageFilesystemCandidate)> {
+    for (ordinal, candidate) in probe.candidates.iter().enumerate() {
+        if !matches!(
+            candidate.kind,
+            datasource_service::ImageFilesystemKind::Ntfs
+        ) {
+            continue;
+        }
+        let Ok(fs) =
+            fs_ntfs::NtfsReader::open(Box::new(E01Reader::open(path).ok()?), candidate.offset)
+        else {
+            continue;
+        };
+        let Ok(children) = fs.list_children("") else {
+            continue;
+        };
+        if children
+            .iter()
+            .any(|child| child.is_dir && child.name.eq_ignore_ascii_case("Windows"))
+        {
+            return Some((candidate.partition_index.unwrap_or(ordinal), candidate));
+        }
+    }
+    None
+}
+
 #[test]
 #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_probe_and_partition_detection() {
@@ -33,7 +62,6 @@ fn e01_probe_and_partition_detection() {
         );
     }
 
-    // Verify at least one NTFS and one FAT
     let has_ntfs = probe
         .candidates
         .iter()
@@ -42,20 +70,31 @@ fn e01_probe_and_partition_detection() {
         .candidates
         .iter()
         .any(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat));
-    assert!(has_ntfs, "Should detect NTFS");
-    assert!(has_fat, "Should detect FAT");
-
-    // Verify BitLocker detection
-    let bitlocker = probe
+    let has_bitlocker = probe
         .partitions
         .iter()
-        .find(|p| p.kind_label.contains("BitLocker"));
-    assert!(bitlocker.is_some(), "Should detect BitLocker partition");
+        .any(|partition| partition.kind_label.contains("BitLocker"));
+
+    assert!(
+        has_ntfs,
+        "the FORENSICS_E01_FIXTURE baseline must contain NTFS"
+    );
+    assert!(
+        has_fat,
+        "the FORENSICS_E01_FIXTURE baseline must contain FAT"
+    );
+    assert!(
+        has_bitlocker,
+        "the FORENSICS_E01_FIXTURE baseline must contain a BitLocker partition"
+    );
 
     eprintln!(
-        "Probe: {} partitions, {} candidates",
+        "Probe: {} partitions, {} candidates, ntfs={}, fat={}, bitlocker={}",
         probe.partitions.len(),
-        probe.candidates.len()
+        probe.candidates.len(),
+        has_ntfs,
+        has_fat,
+        has_bitlocker
     );
 }
 
@@ -64,11 +103,8 @@ fn e01_probe_and_partition_detection() {
 fn e01_ntfs_root_listing() {
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe
-        .candidates
-        .iter()
-        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
-        .unwrap();
+    let (_, ntfs) = windows_ntfs_candidate(&sample_path(), &probe)
+        .expect("fixture should expose an NTFS Windows system volume");
 
     let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
     let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
@@ -113,11 +149,8 @@ fn e01_ntfs_root_listing() {
 fn e01_ntfs_windows_config_listing_and_hive_headers() {
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe
-        .candidates
-        .iter()
-        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
-        .unwrap();
+    let (_, ntfs) = windows_ntfs_candidate(&sample_path(), &probe)
+        .expect("fixture should expose an NTFS Windows system volume");
 
     let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
     let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
@@ -235,7 +268,7 @@ fn e01_fat_root_listing() {
         .candidates
         .iter()
         .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat))
-        .unwrap();
+        .expect("the FORENSICS_E01_FIXTURE baseline must contain a FAT candidate");
 
     let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
     let fs = fs_fat::FatReader::open(boxed, fat.offset).unwrap();
@@ -266,11 +299,8 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let probe = datasource_service::detect_image_filesystem(&mut reader)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let ntfs = probe
-                .candidates
-                .iter()
-                .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
-                .unwrap();
+            let (partition_index, ntfs) = windows_ntfs_candidate(&sample_path(), &probe)
+                .expect("fixture should expose an NTFS Windows system volume");
 
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
             DataSourceRepo::new(conn).insert(
@@ -289,8 +319,16 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 read_mft_parameters(&sample_path(), ntfs.offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            let stats = file_service::enumerate_filesystem_mft(
-                conn,
+            let source_conn = app_services::source_db::open_source_db(&active.case_root, &ds_id)?;
+            let source = DataSourceRepo::new(conn)
+                .find_by_case(&case_id)?
+                .into_iter()
+                .find(|source| source.id == ds_id)
+                .expect("inserted source should exist");
+            DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&case_id, &source)?;
+
+            let stats = file_service::enumerate_filesystem_mft_with_partition(
+                &source_conn,
                 &ds_id,
                 &sample_path(),
                 ntfs.offset,
@@ -303,6 +341,7 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                     eprintln!("[{}%] {}", pct, msg);
                 }),
                 None,
+                partition_index,
             )?;
             assert!(stats.file_count > 1000, "Should enumerate many files");
             assert!(stats.dir_count > 10, "Should enumerate directories");
@@ -312,17 +351,18 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
             );
 
             // Verify tree
-            let tree = file_service::get_file_tree_real(conn)
+            let tree = file_service::get_file_tree_real(&source_conn)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!tree.is_empty());
             assert_eq!(tree.len(), 1, "MFT tree should have one anchored root");
 
+            let root_id = format!("mft:{partition_index}:5");
             let root = tree
                 .iter()
-                .find(|node| node.id == "mft:5")
+                .find(|node| node.id == root_id)
                 .unwrap_or(&tree[0]);
-            assert_eq!(root.id, "mft:5");
-            let children = file_service::get_file_children_lazy(conn, &root.id, 0, 500)
+            assert_eq!(root.id, root_id);
+            let children = file_service::get_file_children_lazy(&source_conn, &root.id, 0, 500)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!children.children.is_empty());
             eprintln!(
@@ -426,7 +466,7 @@ fn e01_timeline_projection() {
                 .candidates
                 .iter()
                 .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat))
-                .unwrap();
+                .expect("the FORENSICS_E01_FIXTURE baseline must contain a FAT candidate");
 
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
             DataSourceRepo::new(conn).insert(

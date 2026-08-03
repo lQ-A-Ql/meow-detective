@@ -35,22 +35,44 @@ pub(super) fn count_analysis_file_tasks(
 pub(super) fn fetch_analysis_file_page(
     conn: &Connection,
     data_source_id: &DataSourceId,
-    offset: u64,
+    after_path: Option<&str>,
+    after_id: Option<&str>,
     limit: u64,
 ) -> Result<Vec<FileTask>, ImportAnalysisError> {
-    let mut stmt = conn
-        .prepare(
+    let (sql, cursor) = match (after_path, after_id) {
+        (None, None) => (
             "SELECT id, parent_id, data_source_id, path, name, entry_type,
                     size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
              FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
              ORDER BY path ASC, id ASC
-             LIMIT ?2 OFFSET ?3",
-        )?;
-    let rows = stmt.query_map(params![data_source_id.0, limit, offset], row_to_file_task)?;
+             LIMIT ?2",
+            None,
+        ),
+        (Some(path), Some(id)) => (
+            "SELECT id, parent_id, data_source_id, path, name, entry_type,
+                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
+             FROM file_entries
+             WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
+               AND (path > ?2 OR (path = ?2 AND id > ?3))
+             ORDER BY path ASC, id ASC
+             LIMIT ?4",
+            Some((path, id)),
+        ),
+        _ => {
+            return Err(ImportAnalysisError::Other(
+                "analysis file cursor requires both path and id".to_string(),
+            ))
+        }
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let mut rows = match cursor {
+        Some((path, id)) => stmt.query(params![data_source_id.0, path, id, limit])?,
+        None => stmt.query(params![data_source_id.0, limit])?,
+    };
     let mut files = Vec::new();
-    for row in rows {
-        files.push(row?);
+    while let Some(row) = rows.next()? {
+        files.push(row_to_file_task(row)?);
     }
     Ok(files)
 }
@@ -75,17 +97,25 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
 ) -> Result<(), ImportAnalysisError> {
     let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
     let conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
-    let mut offset = 0u64;
+    let mut cursor: Option<(String, String)> = None;
 
     loop {
         if options.cancel_token.load(Ordering::Relaxed) {
             break;
         }
-        let page =
-            fetch_analysis_file_page(&conn, &options.data_source_id, offset, FILE_PAGE_SIZE)?;
+        let page = fetch_analysis_file_page(
+            &conn,
+            &options.data_source_id,
+            cursor.as_ref().map(|value| value.0.as_str()),
+            cursor.as_ref().map(|value| value.1.as_str()),
+            FILE_PAGE_SIZE,
+        )?;
         if page.is_empty() {
             break;
         }
+        cursor = page
+            .last()
+            .map(|file| (file.path.clone(), file.id.0.clone()));
 
         let mut pq = PriorityTaskQueue::new();
         for file in page {
@@ -111,8 +141,6 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
                 .map_err(|e| ImportAnalysisError::Other(format!("Queue analysis task: {e}")))?;
             shared.queued_total.fetch_add(1, Ordering::Relaxed);
         }
-
-        offset += FILE_PAGE_SIZE;
     }
     Ok(())
 }

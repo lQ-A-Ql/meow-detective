@@ -28,7 +28,7 @@ pub(crate) fn run_search_index_phase(
     let index = SearchIndex::create(&next_index_dir)
         .map_err(|error| ImportAnalysisError::Other(format!("Create search index: {error}")))?;
     let mut writer = index
-        .metadata_writer()
+        .metadata_writer_for_new_generation()
         .map_err(|error| ImportAnalysisError::Other(format!("Open search writer: {error}")))?;
     let mut stats = SearchIndexPhaseStats {
         eligible_count: count_metadata_rows(&connection, &options)?,

@@ -48,7 +48,7 @@ pub(super) fn search_files_for_case_cursor(
     let total = sessions
         .iter()
         .map(|source| source.state.total_count)
-        .sum::<u64>();
+        .fold(0u64, u64::saturating_add);
     let available = total.min(MAX_CASE_SEARCH_WINDOW);
     let consumed = decoded.as_ref().map_or(0, |payload| payload.consumed);
     validate_window(decoded.as_ref(), total, available, consumed)?;
@@ -144,9 +144,12 @@ fn open_source_sessions(
             }) {
                 return Err(stale_cursor("a source file index changed"));
             }
-            let page = session
-                .rank_after(expected.and_then(|state| state.after.as_ref()), limit)
-                .map_err(index_error)?;
+            let page = match expected {
+                Some(state) => session
+                    .rank_after_with_total(state.after.as_ref(), limit, state.total_count)
+                    .map_err(index_error)?,
+                None => session.rank_after(None, limit).map_err(index_error)?,
+            };
             if expected.is_some_and(|state| state.total_count != page.total_count) {
                 return Err(stale_cursor("a source result count changed"));
             }

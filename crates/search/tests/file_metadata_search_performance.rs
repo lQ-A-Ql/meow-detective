@@ -13,7 +13,7 @@ const PAGE_SIZE: usize = 2_048;
 fn metadata_search_100k_performance_and_cursor_integrity() {
     let directory = tempfile::tempdir().unwrap();
     let index = SearchIndex::create(directory.path()).unwrap();
-    let mut writer = index.metadata_writer().unwrap();
+    let mut writer = index.metadata_writer_for_new_generation().unwrap();
     let index_started = Instant::now();
     for batch_start in (0..DOCUMENT_COUNT).step_by(INDEX_BATCH_SIZE) {
         let documents = (batch_start..batch_start + INDEX_BATCH_SIZE)

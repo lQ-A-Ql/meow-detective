@@ -1,40 +1,46 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
-use rusqlite::{params, CachedStatement, Connection, Rows, Statement};
+use rusqlite::{params, Connection, Rows, Statement};
 
 use super::TimelineServiceError;
 
-const TIMELINE_GRAPH_BATCH: u32 = 5000;
-pub(super) const FIRST_GRAPH_PAGE_SQL: &str =
-    "SELECT id, source_object_id, event_type, title, confidence
+const TIMELINE_GRAPH_BATCH: u32 = 20_000;
+pub(super) const FIRST_GRAPH_PAGE_SQL: &str = "SELECT id
      FROM timeline_events
      WHERE case_id = ?1
      ORDER BY id ASC
      LIMIT ?2";
-pub(super) const NEXT_GRAPH_PAGE_SQL: &str =
-    "SELECT id, source_object_id, event_type, title, confidence
+pub(super) const NEXT_GRAPH_PAGE_SQL: &str = "SELECT id
      FROM timeline_events
      WHERE case_id = ?1 AND id > ?2
      ORDER BY id ASC
      LIMIT ?3";
-const INSERT_GRAPH_NODE_SQL: &str = "INSERT OR REPLACE INTO graph_nodes
+const INSERT_GRAPH_NODES_FOR_RANGE_SQL: &str = "INSERT OR REPLACE INTO graph_nodes
      (id, case_id, node_type, label, summary, tags, created_at)
-     VALUES (?1, ?2, 'timeline_event', ?3, ?4, '[]', ?5)";
-const INSERT_GRAPH_EDGE_SQL: &str = "INSERT OR REPLACE INTO graph_edges
+     SELECT id, case_id, 'timeline_event', title, event_type, '[]', ?4
+     FROM timeline_events
+     WHERE case_id = ?1 AND id >= ?2 AND id <= ?3";
+const INSERT_GRAPH_EDGES_FOR_RANGE_SQL: &str = "INSERT OR REPLACE INTO graph_edges
      (id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at)
-     VALUES (?1, ?2, ?3, ?4, 'references', ?5, ?6, ?7)";
-const INSERT_GRAPH_EDGE_WITH_TARGET_SQL: &str = "INSERT OR REPLACE INTO graph_edges
+     SELECT 'references:' || id || ':' || source_object_id,
+            case_id, id, source_object_id, 'references', confidence,
+            'timeline:' || event_type, ?4
+     FROM timeline_events
+     WHERE case_id = ?1 AND id >= ?2 AND id <= ?3
+       AND source_object_id <> ''";
+const INSERT_GRAPH_EDGES_WITH_TARGET_FOR_RANGE_SQL: &str = "INSERT OR REPLACE INTO graph_edges
      (id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at)
-     SELECT ?1, ?2, ?3, ?4, 'references', ?5, ?6, ?7
-     WHERE EXISTS (SELECT 1 FROM graph_nodes WHERE id = ?4)";
+     SELECT 'references:' || event.id || ':' || event.source_object_id,
+            event.case_id, event.id, event.source_object_id, 'references', event.confidence,
+            'timeline:' || event.event_type, ?4
+     FROM timeline_events event
+     WHERE event.case_id = ?1 AND event.id >= ?2 AND event.id <= ?3
+       AND event.source_object_id <> ''
+       AND EXISTS (SELECT 1 FROM graph_nodes target WHERE target.id = event.source_object_id)";
 
 pub(super) struct TimelineGraphRow {
     pub(super) id: String,
-    source_object_id: String,
-    event_type: String,
-    title: String,
-    confidence: Option<f64>,
 }
 
 pub(super) fn populate_timeline_event_graph(
@@ -159,13 +165,7 @@ fn collect_graph_rows(mut rows: Rows<'_>) -> Result<Vec<TimelineGraphRow>, Timel
         .next()
         .map_err(|error| TimelineServiceError::Other(format!("read timeline graph row: {error}")))?
     {
-        collected.push(TimelineGraphRow {
-            id: row.get(0)?,
-            source_object_id: row.get(1)?,
-            event_type: row.get(2)?,
-            title: row.get(3)?,
-            confidence: row.get(4)?,
-        });
+        collected.push(TimelineGraphRow { id: row.get(0)? });
     }
     Ok(collected)
 }
@@ -178,86 +178,38 @@ fn write_graph_batch(
     require_existing_target: bool,
     cancel_token: &AtomicBool,
 ) -> Result<u64, TimelineServiceError> {
+    let Some(first_id) = rows.first().map(|row| row.id.as_str()) else {
+        return Ok(0);
+    };
+    let last_id = rows.last().map(|row| row.id.as_str()).ok_or_else(|| {
+        TimelineServiceError::Other("timeline graph batch lost its cursor".to_string())
+    })?;
     let transaction = conn.unchecked_transaction().map_err(|error| {
         TimelineServiceError::Other(format!("begin timeline graph batch: {error}"))
     })?;
-    let skipped = {
-        let mut node_insert =
-            transaction
-                .prepare_cached(INSERT_GRAPH_NODE_SQL)
-                .map_err(|error| {
-                    TimelineServiceError::Other(format!(
-                        "prepare timeline graph node insert: {error}"
-                    ))
-                })?;
-        let edge_sql = if require_existing_target {
-            INSERT_GRAPH_EDGE_WITH_TARGET_SQL
-        } else {
-            INSERT_GRAPH_EDGE_SQL
-        };
-        let mut edge_insert = transaction.prepare_cached(edge_sql).map_err(|error| {
-            TimelineServiceError::Other(format!("prepare timeline graph edge insert: {error}"))
+    transaction
+        .execute(
+            INSERT_GRAPH_NODES_FOR_RANGE_SQL,
+            params![case_id, first_id, last_id, created_at],
+        )
+        .map_err(|error| {
+            TimelineServiceError::Other(format!("timeline graph node batch insert: {error}"))
         })?;
-        write_graph_rows(
-            rows,
-            case_id,
-            created_at,
-            require_existing_target,
-            cancel_token,
-            &mut node_insert,
-            &mut edge_insert,
-        )?
+    ensure_not_cancelled(cancel_token)?;
+    let edge_sql = if require_existing_target {
+        INSERT_GRAPH_EDGES_WITH_TARGET_FOR_RANGE_SQL
+    } else {
+        INSERT_GRAPH_EDGES_FOR_RANGE_SQL
     };
+    let inserted_edges = transaction
+        .execute(edge_sql, params![case_id, first_id, last_id, created_at])
+        .map_err(|error| {
+            TimelineServiceError::Other(format!("timeline graph edge batch insert: {error}"))
+        })? as u64;
+    let skipped = rows.len() as u64 - inserted_edges.min(rows.len() as u64);
     transaction.commit().map_err(|error| {
         TimelineServiceError::Other(format!("commit timeline graph batch: {error}"))
     })?;
-    Ok(skipped)
-}
-
-fn write_graph_rows(
-    rows: &[TimelineGraphRow],
-    case_id: &str,
-    created_at: &str,
-    require_existing_target: bool,
-    cancel_token: &AtomicBool,
-    node_insert: &mut CachedStatement<'_>,
-    edge_insert: &mut CachedStatement<'_>,
-) -> Result<u64, TimelineServiceError> {
-    let mut skipped = 0;
-    for row in rows {
-        ensure_not_cancelled(cancel_token)?;
-        node_insert
-            .execute(params![
-                row.id,
-                case_id,
-                row.title,
-                row.event_type,
-                created_at
-            ])
-            .map_err(|error| {
-                TimelineServiceError::Other(format!("timeline graph node insert: {error}"))
-            })?;
-        if row.source_object_id.is_empty() {
-            skipped += 1;
-            continue;
-        }
-        let inserted = edge_insert
-            .execute(params![
-                format!("references:{}:{}", row.id, row.source_object_id),
-                case_id,
-                row.id,
-                row.source_object_id,
-                row.confidence,
-                format!("timeline:{}", row.event_type),
-                created_at
-            ])
-            .map_err(|error| {
-                TimelineServiceError::Other(format!("timeline graph edge insert: {error}"))
-            })?;
-        if require_existing_target && inserted == 0 {
-            skipped += 1;
-        }
-    }
     Ok(skipped)
 }
 

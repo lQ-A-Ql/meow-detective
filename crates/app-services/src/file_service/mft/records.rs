@@ -11,14 +11,26 @@ pub fn records_to_file_entries(
     records: &[MftRecord],
     data_source_id: &DataSourceId,
 ) -> Vec<FileEntry> {
+    records_to_file_entries_with_partition(records, data_source_id, None)
+}
+
+pub fn records_to_file_entries_with_partition(
+    records: &[MftRecord],
+    data_source_id: &DataSourceId,
+    partition_index: Option<usize>,
+) -> Vec<FileEntry> {
     records
         .iter()
         .filter(|record| record.is_valid && (!record.name.is_empty() || record.record_number == 5))
-        .map(|record| record_to_file_entry(record, data_source_id))
+        .map(|record| record_to_file_entry(record, data_source_id, partition_index))
         .collect()
 }
 
-fn record_to_file_entry(record: &MftRecord, data_source_id: &DataSourceId) -> FileEntry {
+fn record_to_file_entry(
+    record: &MftRecord,
+    data_source_id: &DataSourceId,
+    partition_index: Option<usize>,
+) -> FileEntry {
     let is_root = record.record_number == 5;
     let name = if is_root && (record.name.is_empty() || record.name == ".") {
         "/".to_string()
@@ -31,8 +43,9 @@ fn record_to_file_entry(record: &MftRecord, data_source_id: &DataSourceId) -> Fi
         EntryType::File
     };
     FileEntry {
-        id: FileEntryId(format!("mft:{}", record.record_number)),
-        parent_id: (!is_root).then(|| FileEntryId(format!("mft:{}", record.parent_ref))),
+        id: FileEntryId(mft_entry_id(partition_index, record.record_number)),
+        parent_id: (!is_root)
+            .then(|| FileEntryId(mft_entry_id(partition_index, record.parent_ref))),
         data_source_id: data_source_id.clone(),
         path: String::new(),
         name,
@@ -70,11 +83,11 @@ pub fn add_entry_to_path_map(
     deleted_records: &mut HashSet<String>,
     entry: &FileEntry,
 ) {
-    let record_number = entry.id.0.strip_prefix("mft:").unwrap_or(&entry.id.0);
+    let record_number = mft_record_number(&entry.id.0);
     let parent_number = entry
         .parent_id
         .as_ref()
-        .and_then(|parent| parent.0.strip_prefix("mft:").map(str::to_string));
+        .map(|parent| mft_record_number(&parent.0));
     path_map.insert(
         record_number.to_string(),
         (
@@ -95,8 +108,35 @@ pub fn update_entry_paths(
     deleted_records: &HashSet<String>,
     partition_index: usize,
 ) -> DbResult<()> {
+    let tx = conn.unchecked_transaction()?;
+    update_entry_paths_in_transaction(
+        &tx,
+        data_source_id,
+        path_map,
+        deleted_records,
+        partition_index,
+        None,
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub(super) fn update_entry_paths_in_transaction(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
+    partition_index: usize,
+    id_partition_index: Option<usize>,
+) -> DbResult<()> {
     let resolved = resolve_all_paths(path_map, deleted_records);
-    persist_resolved_paths(conn, data_source_id, &resolved, partition_index)
+    persist_resolved_paths(
+        conn,
+        data_source_id,
+        &resolved,
+        partition_index,
+        id_partition_index,
+    )
 }
 
 fn resolve_all_paths(
@@ -160,22 +200,19 @@ fn persist_resolved_paths(
     data_source_id: &DataSourceId,
     resolved: &HashMap<String, String>,
     partition_index: usize,
+    id_partition_index: Option<usize>,
 ) -> DbResult<()> {
     let prefix = format!("[P{partition_index}]");
-    let tx = conn.unchecked_transaction()?;
-    {
-        let mut statement =
-            tx.prepare("UPDATE file_entries SET path = ?1 WHERE id = ?2 AND data_source_id = ?3")?;
-        for (record_number, path) in resolved {
-            let prefixed_path = prefixed_path(&prefix, path);
-            statement.execute(rusqlite::params![
-                prefixed_path,
-                format!("mft:{record_number}"),
-                data_source_id.0
-            ])?;
-        }
+    let mut statement =
+        conn.prepare("UPDATE file_entries SET path = ?1 WHERE id = ?2 AND data_source_id = ?3")?;
+    for (record_number, path) in resolved {
+        let prefixed_path = prefixed_path(&prefix, path);
+        statement.execute(rusqlite::params![
+            prefixed_path,
+            mft_entry_id(id_partition_index, record_number),
+            data_source_id.0
+        ])?;
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -194,19 +231,31 @@ pub fn update_entry_parent_ids(
     path_map: &HashMap<String, (Option<String>, String, bool)>,
 ) -> DbResult<()> {
     let tx = conn.unchecked_transaction()?;
-    {
-        let mut statement = tx.prepare(
-            "UPDATE file_entries SET parent_id = ?1 WHERE id = ?2 AND data_source_id = ?3",
-        )?;
-        for (record_number, (parent, _, _)) in path_map {
-            statement.execute(rusqlite::params![
-                mft_parent_entry_id(record_number, parent.as_deref(), path_map),
-                format!("mft:{record_number}"),
-                data_source_id.0
-            ])?;
-        }
-    }
+    update_entry_parent_ids_in_transaction(&tx, data_source_id, path_map, None)?;
     tx.commit()?;
+    Ok(())
+}
+
+pub(super) fn update_entry_parent_ids_in_transaction(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+    partition_index: Option<usize>,
+) -> DbResult<()> {
+    let mut statement = conn
+        .prepare("UPDATE file_entries SET parent_id = ?1 WHERE id = ?2 AND data_source_id = ?3")?;
+    for (record_number, (parent, _, _)) in path_map {
+        statement.execute(rusqlite::params![
+            mft_parent_entry_id_with_partition(
+                record_number,
+                parent.as_deref(),
+                path_map,
+                partition_index,
+            ),
+            mft_entry_id(partition_index, record_number),
+            data_source_id.0
+        ])?;
+    }
     Ok(())
 }
 
@@ -215,14 +264,38 @@ pub fn mft_parent_entry_id(
     parent_number: Option<&str>,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
 ) -> Option<String> {
+    mft_parent_entry_id_with_partition(record_number, parent_number, path_map, None)
+}
+
+pub fn mft_parent_entry_id_with_partition(
+    record_number: &str,
+    parent_number: Option<&str>,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+    partition_index: Option<usize>,
+) -> Option<String> {
     if record_number == "5" {
         return None;
     }
     match parent_number {
         Some(parent) if parent != record_number && path_map.contains_key(parent) => {
-            Some(format!("mft:{parent}"))
+            Some(mft_entry_id(partition_index, parent))
         }
-        _ if path_map.contains_key("5") => Some("mft:5".to_string()),
+        _ if path_map.contains_key("5") => Some(mft_entry_id(partition_index, "5")),
         _ => None,
     }
+}
+
+fn mft_entry_id(partition_index: Option<usize>, record_number: impl std::fmt::Display) -> String {
+    match partition_index {
+        Some(partition_index) => format!("mft:{partition_index}:{record_number}"),
+        None => format!("mft:{record_number}"),
+    }
+}
+
+fn mft_record_number(entry_id: &str) -> String {
+    entry_id
+        .strip_prefix("mft:")
+        .and_then(|value| value.rsplit(':').next())
+        .unwrap_or(entry_id)
+        .to_string()
 }

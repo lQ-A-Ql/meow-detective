@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use tantivy::{
     collector::{
         sort_key::{SortBySimilarityScore, SortByString},
@@ -17,6 +19,7 @@ pub struct SearchQuerySession {
     searcher: Searcher,
     query: Box<dyn Query>,
     query_text: String,
+    total_count: OnceLock<u64>,
     file_id_field: Field,
     path_field: Field,
     content_field: Field,
@@ -97,6 +100,7 @@ impl SearchIndex {
             searcher,
             query,
             query_text: query_text.to_string(),
+            total_count: OnceLock::new(),
             file_id_field,
             path_field,
             content_field,
@@ -122,18 +126,25 @@ impl SearchQuerySession {
 
     pub fn rank_page(&self, offset: usize, limit: usize) -> Result<SearchRankPage> {
         if limit == 0 {
-            let total_count = self.searcher.search(&self.query, &Count)?;
             return Ok(SearchRankPage {
                 hits: Vec::new(),
-                total_count: total_count as u64,
+                total_count: self.count_matches()?,
             });
         }
         let collector = TopDocs::with_limit(limit).and_offset(offset).order_by((
             (SortBySimilarityScore, Order::Desc),
             (SortByString::for_field("file_id"), Order::Asc),
         ));
-        let (docs, total_count): (StableTopDocs, usize) =
-            self.searcher.search(&self.query, &(collector, Count))?;
+        let (docs, total_count): (StableTopDocs, u64) =
+            if let Some(total_count) = self.total_count.get().copied() {
+                (self.searcher.search(&self.query, &collector)?, total_count)
+            } else {
+                let (docs, total_count): (StableTopDocs, usize) =
+                    self.searcher.search(&self.query, &(collector, Count))?;
+                let total_count = total_count as u64;
+                let _ = self.total_count.set(total_count);
+                (docs, total_count)
+            };
         let mut hits = Vec::with_capacity(docs.len());
         for ((score, file_id), address) in docs {
             let file_id = file_id.ok_or_else(missing_file_id_error)?;
@@ -143,10 +154,7 @@ impl SearchQuerySession {
                 address,
             });
         }
-        Ok(SearchRankPage {
-            hits,
-            total_count: total_count as u64,
-        })
+        Ok(SearchRankPage { hits, total_count })
     }
 
     pub fn rank_after(
@@ -155,19 +163,30 @@ impl SearchQuerySession {
         limit: usize,
     ) -> Result<SearchRankPage> {
         if limit == 0 {
-            let total_count = self.searcher.search(&self.query, &Count)?;
             return Ok(SearchRankPage {
                 hits: Vec::new(),
-                total_count: total_count as u64,
+                total_count: self.count_matches()?,
             });
         }
-        let (docs, total_count) = self
-            .searcher
-            .search(
-                &self.query,
-                &(SearchAfterCollector::new(limit, after), Count),
+        let (docs, total_count) = if let Some(total_count) = self.total_count.get().copied() {
+            (
+                self.searcher
+                    .search(&self.query, &SearchAfterCollector::new(limit, after))
+                    .map_err(map_search_error)?,
+                total_count,
             )
-            .map_err(map_search_error)?;
+        } else {
+            let (docs, total_count) = self
+                .searcher
+                .search(
+                    &self.query,
+                    &(SearchAfterCollector::new(limit, after), Count),
+                )
+                .map_err(map_search_error)?;
+            let total_count = total_count as u64;
+            let _ = self.total_count.set(total_count);
+            (docs, total_count)
+        };
         Ok(SearchRankPage {
             hits: docs
                 .into_iter()
@@ -177,8 +196,17 @@ impl SearchQuerySession {
                     address: candidate.address,
                 })
                 .collect(),
-            total_count: total_count as u64,
+            total_count,
         })
+    }
+
+    fn count_matches(&self) -> Result<u64> {
+        if let Some(total_count) = self.total_count.get().copied() {
+            return Ok(total_count);
+        }
+        let total_count = self.searcher.search(&self.query, &Count)? as u64;
+        let _ = self.total_count.set(total_count);
+        Ok(total_count)
     }
 
     pub fn materialize(&self, ranked: SearchRankedHit) -> Result<SearchHit> {

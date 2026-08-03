@@ -11,7 +11,6 @@ use std::{
 use crossbeam_channel::{bounded, Receiver, Sender};
 use domain::{DataSourceId, EntryType, FileEntry};
 use fs_ntfs::mft_scanner::MftScanner;
-use image_e01::E01Reader;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use rusqlite::Connection;
 
@@ -19,22 +18,18 @@ use crate::file_service::enumeration::EnumerationStats;
 
 use super::{
     graph::populate_file_graph_for_data_source,
+    reader::{self, MftChunk, MftReaderConfig},
     records::{
-        add_entry_to_path_map, records_to_file_entries, update_entry_parent_ids, update_entry_paths,
+        add_entry_to_path_map, records_to_file_entries_with_partition,
+        update_entry_parent_ids_in_transaction, update_entry_paths_in_transaction,
     },
-    stream::{read_contiguous_ntfs_mft_stream, read_ntfs_mft_data_runs, read_ntfs_mft_stream},
+    stream::read_ntfs_mft_data_runs,
+    workers,
 };
 
-const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_CHANNEL_BOUND: usize = 4;
 const MFT_DB_BATCH_SIZE: usize = 2_000;
 type ProgressCallback<'a> = Option<&'a dyn Fn(u32, &str)>;
-
-struct MftChunk {
-    data: Vec<u8>,
-    start_record: u64,
-    count: u64,
-}
 
 #[derive(Clone)]
 struct ScanConfig {
@@ -47,8 +42,10 @@ struct ScanConfig {
     total_records: u64,
     scanner_record_size: u32,
     data_runs: Vec<(i64, u64)>,
+    partition_index: Option<usize>,
 }
 
+#[derive(Default)]
 struct ScanOutput {
     file_count: u64,
     dir_count: u64,
@@ -72,7 +69,7 @@ pub fn enumerate_filesystem_mft(
     progress_fn: ProgressCallback<'_>,
     cancel: Option<Arc<AtomicBool>>,
 ) -> DbResult<EnumerationStats> {
-    enumerate_filesystem_mft_with_partition(
+    enumerate_filesystem_mft_inner(
         conn,
         data_source_id,
         e01_path,
@@ -84,7 +81,7 @@ pub fn enumerate_filesystem_mft(
         mft_data_size,
         progress_fn,
         cancel,
-        0,
+        None,
     )
 }
 
@@ -103,6 +100,37 @@ pub fn enumerate_filesystem_mft_with_partition(
     cancel: Option<Arc<AtomicBool>>,
     partition_index: usize,
 ) -> DbResult<EnumerationStats> {
+    enumerate_filesystem_mft_inner(
+        conn,
+        data_source_id,
+        e01_path,
+        volume_offset,
+        mft_cluster,
+        cluster_size,
+        record_size,
+        bytes_per_sector,
+        mft_data_size,
+        progress_fn,
+        cancel,
+        Some(partition_index),
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn enumerate_filesystem_mft_inner(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    e01_path: &Path,
+    volume_offset: u64,
+    mft_cluster: u64,
+    cluster_size: u64,
+    record_size: u32,
+    bytes_per_sector: u16,
+    mft_data_size: u64,
+    progress_fn: ProgressCallback<'_>,
+    cancel: Option<Arc<AtomicBool>>,
+    partition_index: Option<usize>,
+) -> DbResult<EnumerationStats> {
     if let Some(progress) = progress_fn {
         progress(5, "Starting MFT scan...");
     }
@@ -114,16 +142,19 @@ pub fn enumerate_filesystem_mft_with_partition(
         record_size,
         bytes_per_sector,
         mft_data_size,
+        partition_index,
     )?;
-    let mut output = run_scan(conn, data_source_id, &config, progress_fn, cancel)?;
+    let transaction = conn.unchecked_transaction()?;
+    let mut output = run_scan(&transaction, data_source_id, &config, progress_fn, cancel)?;
     finalize_scan(
-        conn,
+        &transaction,
         data_source_id,
         &output.path_map,
         &output.deleted_records,
         partition_index,
         progress_fn,
     )?;
+    transaction.commit()?;
     if let Err(error) = populate_file_graph_for_data_source(conn, data_source_id) {
         output
             .warnings
@@ -132,6 +163,9 @@ pub fn enumerate_filesystem_mft_with_partition(
             "Failed to populate file graph after MFT enumeration: {}",
             error
         );
+    }
+    if let Some(progress) = progress_fn {
+        progress(100, "MFT scan complete");
     }
     Ok(EnumerationStats {
         file_count: output.file_count,
@@ -151,6 +185,7 @@ fn build_scan_config(
     record_size: u32,
     bytes_per_sector: u16,
     mft_data_size: u64,
+    partition_index: Option<usize>,
 ) -> DbResult<ScanConfig> {
     let scanner = MftScanner::new(
         volume_offset,
@@ -185,6 +220,7 @@ fn build_scan_config(
         total_records: scanner.total_records(),
         scanner_record_size: scanner.record_size(),
         data_runs,
+        partition_index,
     })
 }
 
@@ -198,106 +234,54 @@ fn run_scan(
     let (chunk_tx, chunk_rx) = bounded(MFT_CHANNEL_BOUND);
     let (entry_tx, entry_rx) = bounded(MFT_CHANNEL_BOUND);
     let processed = Arc::new(AtomicU64::new(0));
-    let insert_errors = Arc::new(AtomicU64::new(0));
-    let reader = spawn_reader(config.clone(), chunk_tx, processed.clone(), cancel)?;
+    let pipeline_stop = Arc::new(AtomicBool::new(false));
     let parsers = spawn_parsers(config, data_source_id, chunk_rx, entry_tx)?;
-    let mut output = collect_entries(
+    let reader = reader::spawn_reader(
+        MftReaderConfig {
+            e01_path: config.e01_path.clone(),
+            volume_offset: config.volume_offset,
+            mft_cluster: config.mft_cluster,
+            cluster_size: config.cluster_size,
+            total_records: config.total_records,
+            scanner_record_size: config.scanner_record_size,
+            data_runs: config.data_runs.clone(),
+        },
+        chunk_tx,
+        processed.clone(),
+        cancel,
+        pipeline_stop.clone(),
+    )?;
+    let collected = collect_entries(
         conn,
         entry_rx,
         &processed,
-        &insert_errors,
+        &pipeline_stop,
         config.total_records,
         progress_fn,
     );
-    join_workers(reader, parsers, &mut output.warnings);
-    Ok(output)
-}
-
-fn spawn_reader(
-    config: ScanConfig,
-    chunk_tx: Sender<MftChunk>,
-    processed: Arc<AtomicU64>,
-    cancel: Option<Arc<AtomicBool>>,
-) -> DbResult<JoinHandle<()>> {
-    std::thread::Builder::new()
-        .name("mft-reader".into())
-        .spawn(move || read_chunks(config, chunk_tx, processed, cancel))
-        .map_err(|error| DbError::System(format!("Failed to spawn MFT reader: {error}")))
-}
-
-fn read_chunks(
-    config: ScanConfig,
-    chunk_tx: Sender<MftChunk>,
-    processed: Arc<AtomicU64>,
-    cancel: Option<Arc<AtomicBool>>,
-) {
-    let mut reader = match E01Reader::open(&config.e01_path) {
-        Ok(reader) => reader,
-        Err(error) => {
-            tracing::error!("MFT reader: failed to open E01: {}", error);
-            return;
+    let mut output = match collected {
+        Ok(output) => output,
+        Err(persistence_error) => {
+            let mut worker_warnings = Vec::new();
+            if let Err(worker_error) = workers::join_workers(reader, parsers, &mut worker_warnings)
+            {
+                tracing::debug!(
+                    error = %worker_error,
+                    "MFT workers stopped after a persistence failure"
+                );
+            }
+            return Err(persistence_error);
         }
     };
-    let mut start_record = 0u64;
-    while start_record < config.total_records {
-        if cancel
-            .as_ref()
-            .is_some_and(|flag| flag.load(Ordering::Relaxed))
-        {
-            tracing::info!("MFT reader: cancelled");
-            return;
-        }
-        let chunk_count = MFT_CHUNK_RECORDS.min(config.total_records - start_record);
-        let mut data = vec![0u8; (chunk_count * config.scanner_record_size as u64) as usize];
-        if let Err(error) = read_chunk(&mut reader, &config, start_record, &mut data) {
-            tracing::warn!(
-                "MFT reader: read error at record {}: {}",
-                start_record,
-                error
-            );
-            break;
-        }
-        if chunk_tx
-            .send(MftChunk {
-                data,
-                start_record,
-                count: chunk_count,
-            })
-            .is_err()
-        {
-            break;
-        }
-        start_record += chunk_count;
-        processed.store(start_record, Ordering::Relaxed);
+    workers::join_workers(reader, parsers, &mut output.warnings)?;
+    let processed_records = processed.load(Ordering::Relaxed);
+    if processed_records != config.total_records {
+        return Err(DbError::System(format!(
+            "MFT enumeration stopped after {processed_records} of {} records",
+            config.total_records
+        )));
     }
-}
-
-fn read_chunk(
-    reader: &mut E01Reader,
-    config: &ScanConfig,
-    start_record: u64,
-    data: &mut [u8],
-) -> std::io::Result<()> {
-    let stream_offset = start_record * config.scanner_record_size as u64;
-    if config.data_runs.is_empty() {
-        read_contiguous_ntfs_mft_stream(
-            reader,
-            config.volume_offset,
-            config.mft_cluster,
-            config.cluster_size,
-            stream_offset,
-            data,
-        )
-    } else {
-        read_ntfs_mft_stream(
-            reader,
-            config.volume_offset,
-            config.cluster_size,
-            &config.data_runs,
-            stream_offset,
-            data,
-        )
-    }
+    Ok(output)
 }
 
 fn spawn_parsers(
@@ -340,7 +324,11 @@ fn parse_chunks(
     );
     for chunk in receiver.iter() {
         let records = scanner.parse_chunk(&chunk.data, chunk.start_record, chunk.count);
-        let entries = records_to_file_entries(&records, &data_source_id);
+        let entries = records_to_file_entries_with_partition(
+            &records,
+            &data_source_id,
+            config.partition_index,
+        );
         if !entries.is_empty() && sender.send(entries).is_err() {
             break;
         }
@@ -351,20 +339,26 @@ fn collect_entries(
     conn: &Connection,
     receiver: Receiver<Vec<FileEntry>>,
     processed: &AtomicU64,
-    insert_errors: &AtomicU64,
+    pipeline_stop: &AtomicBool,
     total_records: u64,
     progress_fn: ProgressCallback<'_>,
-) -> ScanOutput {
+) -> DbResult<ScanOutput> {
     let repo = FileRepo::new(conn);
-    let mut output = empty_output();
+    let mut output = ScanOutput::default();
     let mut batch = Vec::with_capacity(MFT_DB_BATCH_SIZE);
     for entries in receiver.iter() {
         collect_batch(&mut output, &mut batch, entries);
-        flush_full_batch(&repo, &mut batch, &mut output.warnings, insert_errors);
+        if let Err(error) = flush_full_batch(&repo, &mut batch) {
+            pipeline_stop.store(true, Ordering::Relaxed);
+            return Err(error);
+        }
         report_progress(processed, total_records, progress_fn);
     }
-    flush_remaining_batch(&repo, &batch, &mut output.warnings);
-    output
+    if let Err(error) = flush_remaining_batch(&repo, &batch) {
+        pipeline_stop.store(true, Ordering::Relaxed);
+        return Err(error);
+    }
+    Ok(output)
 }
 
 fn collect_batch(output: &mut ScanOutput, batch: &mut Vec<FileEntry>, entries: Vec<FileEntry>) {
@@ -382,29 +376,25 @@ fn collect_batch(output: &mut ScanOutput, batch: &mut Vec<FileEntry>, entries: V
     }
 }
 
-fn flush_full_batch(
-    repo: &FileRepo<'_>,
-    batch: &mut Vec<FileEntry>,
-    warnings: &mut Vec<String>,
-    insert_errors: &AtomicU64,
-) {
+fn flush_full_batch(repo: &FileRepo<'_>, batch: &mut Vec<FileEntry>) -> DbResult<()> {
     if batch.len() < MFT_DB_BATCH_SIZE {
-        return;
+        return Ok(());
     }
-    if let Err(error) = repo.insert_batch(batch) {
-        warnings.push(format!("DB insert error: {error}"));
-        insert_errors.fetch_add(1, Ordering::Relaxed);
-    }
+    repo.insert_batch_unchecked(batch)?;
     batch.clear();
+    Ok(())
 }
 
-fn flush_remaining_batch(repo: &FileRepo<'_>, batch: &[FileEntry], warnings: &mut Vec<String>) {
+fn flush_remaining_batch(repo: &FileRepo<'_>, batch: &[FileEntry]) -> DbResult<()> {
     if !batch.is_empty() {
-        if let Err(error) = repo.insert_batch(batch) {
-            warnings.push(format!("DB insert error: {error}"));
-        }
+        repo.insert_batch_unchecked(batch)?;
     }
+    Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/file_service/mft/enumeration.rs"]
+mod tests;
 
 fn report_progress(processed: &AtomicU64, total_records: u64, progress_fn: ProgressCallback<'_>) {
     if let Some(progress) = progress_fn {
@@ -417,51 +407,25 @@ fn report_progress(processed: &AtomicU64, total_records: u64, progress_fn: Progr
     }
 }
 
-fn join_workers(reader: JoinHandle<()>, parsers: Vec<JoinHandle<()>>, warnings: &mut Vec<String>) {
-    if let Err(error) = reader.join() {
-        warnings.push(format!("MFT reader thread panicked: {error:?}"));
-        tracing::error!("MFT reader thread panicked: {:?}", error);
-    }
-    for parser in parsers {
-        if let Err(error) = parser.join() {
-            warnings.push(format!("MFT parser thread panicked: {error:?}"));
-            tracing::error!("MFT parser thread panicked: {:?}", error);
-        }
-    }
-}
-
 fn finalize_scan(
     conn: &Connection,
     data_source_id: &DataSourceId,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
     deleted_records: &HashSet<String>,
-    partition_index: usize,
+    partition_index: Option<usize>,
     progress_fn: ProgressCallback<'_>,
 ) -> DbResult<()> {
     if let Some(progress) = progress_fn {
         progress(95, "Reconstructing paths...");
     }
-    update_entry_paths(
+    update_entry_paths_in_transaction(
         conn,
         data_source_id,
         path_map,
         deleted_records,
+        partition_index.unwrap_or(0),
         partition_index,
     )?;
-    update_entry_parent_ids(conn, data_source_id, path_map)?;
-    if let Some(progress) = progress_fn {
-        progress(100, "MFT scan complete");
-    }
+    update_entry_parent_ids_in_transaction(conn, data_source_id, path_map, partition_index)?;
     Ok(())
-}
-
-fn empty_output() -> ScanOutput {
-    ScanOutput {
-        file_count: 0,
-        dir_count: 0,
-        total_size: 0,
-        warnings: Vec::new(),
-        path_map: HashMap::new(),
-        deleted_records: HashSet::new(),
-    }
 }

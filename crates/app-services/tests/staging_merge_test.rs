@@ -192,15 +192,7 @@ fn staging_merge_conflict_is_visible_and_rolls_back() {
 fn staging_merge_failure_rolls_back_and_detaches_database() {
     let tmp = tempfile::TempDir::new().unwrap();
     let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    main.execute_batch(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY NOT NULL, data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL, name TEXT NOT NULL, entry_type TEXT NOT NULL
-        );
-        INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
-        VALUES ('existing', 'ds', '/existing', 'existing', 'File');",
-    )
-    .unwrap();
+    persistence_sqlite::migrations::runner::run_all(&main).unwrap();
     let ds_id = "ds-failure";
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
@@ -214,11 +206,18 @@ fn staging_merge_failure_rolls_back_and_detaches_database() {
     let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "P0", 1));
 
-    assert!(merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).is_err());
+    let error = merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None)
+        .expect_err("an app-db-shaped target must be rejected before staging attach");
+    assert!(
+        error
+            .to_string()
+            .contains("source merge target is not a source database"),
+        "unexpected merge target error: {error}"
+    );
     let count: i64 = main
         .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(count, 1);
+    assert_eq!(count, 0);
     assert!(!attached_db_names(&main)
         .iter()
         .any(|name| name == "staging"));

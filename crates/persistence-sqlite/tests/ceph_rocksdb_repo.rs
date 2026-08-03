@@ -333,7 +333,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_029_case_graph_entity_index"
+        "source_030_analysis_file_feed_index"
     );
     for table in [
         "ceph_rocksdb_manifests",

@@ -920,6 +920,18 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
         events.iter().any(|event| event.starts_with("timeline:")),
         "sink should receive finalize timeline events: {events:?}"
     );
+    let checkpoint_index = events
+        .iter()
+        .position(|event| event.starts_with("phase:") && event.ends_with(":98"))
+        .expect("sink should receive source checkpoint progress");
+    let timeline_index = events
+        .iter()
+        .position(|event| event.starts_with("timeline:"))
+        .expect("sink should receive timeline readiness");
+    assert!(
+        checkpoint_index < timeline_index,
+        "timeline readiness must follow a successful source checkpoint: {events:?}"
+    );
     assert!(
         events.iter().any(|event| event.starts_with("data-source:")),
         "sink should receive imported data-source events: {events:?}"

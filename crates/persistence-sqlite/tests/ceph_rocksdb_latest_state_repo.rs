@@ -205,7 +205,7 @@ fn source_011_installs_digest_only_latest_state_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_029_case_graph_entity_index"
+        "source_030_analysis_file_feed_index"
     );
     let columns = conn
         .prepare("SELECT name FROM pragma_table_info('ceph_rocksdb_latest_state') ORDER BY cid")

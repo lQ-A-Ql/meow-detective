@@ -288,6 +288,27 @@ fn index_without_generation_identity_is_rejected() {
 }
 
 #[test]
+fn index_with_previous_schema_identity_is_rejected() {
+    let dir = tempdir().unwrap();
+    let index_path = dir.path().join("previous-schema");
+    let index = SearchIndex::create(&index_path).unwrap();
+    drop(index);
+
+    let identity_path = index_path.join(".meow-search-generation.json");
+    let mut identity: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&identity_path).unwrap()).unwrap();
+    identity["schemaVersion"] = serde_json::json!(3);
+    std::fs::write(&identity_path, serde_json::to_vec(&identity).unwrap()).unwrap();
+
+    let error = SearchIndex::open(&index_path)
+        .err()
+        .expect("previous physical schema must require an index rebuild");
+    assert!(error
+        .to_string()
+        .contains("unsupported search schema version"));
+}
+
+#[test]
 fn index_documents_skips_non_extractable() {
     let dir = tempdir().unwrap();
     let index_path = dir.path().join("test_index");

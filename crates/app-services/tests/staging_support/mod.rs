@@ -25,7 +25,17 @@ pub fn create_main_file_entries_table(conn: &Connection) {
             changed_at TEXT,
             hash_sha256 TEXT,
             partition_index INTEGER
-        )",
+        );
+        CREATE TABLE source_meta (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE schema_migrations (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO schema_migrations (id, name) VALUES (30, 'source_030_analysis_file_feed_index');",
     )
     .unwrap();
 }

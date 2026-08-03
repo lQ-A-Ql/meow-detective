@@ -181,6 +181,8 @@ try {
     $readerBuild = Get-ProfilePhase -Records $records -Phase "reader-build"
     $enumeration = Get-ProfilePhase -Records $records -Phase "enumeration"
     $enumMerge = Get-ProfilePhase -Records $records -Phase "enum-merge"
+    $timeline = Get-ProfilePhase -Records $records -Phase "timeline"
+    $checkpoint = Get-ProfilePhase -Records $records -Phase "checkpoint"
     $postImport = Get-ProfilePhase -Records $records -Phase "post-import"
     if ($null -eq $postImport) {
       $postImport = Get-ProfilePhase -Records $records -Phase "post-import-skip"
@@ -194,6 +196,10 @@ try {
       readerBuildMs = if ($readerBuild) { $readerBuild.elapsedMs } else { $null }
       enumerationMs = if ($enumeration) { $enumeration.elapsedMs } else { $null }
       enumMergeMs = if ($enumMerge) { $enumMerge.elapsedMs } else { $null }
+      timelineMs = if ($timeline) { $timeline.elapsedMs } else { $null }
+      timelineEventMs = if ($timeline -and ($timeline.PSObject.Properties.Name -contains "eventMs")) { $timeline.eventMs } else { $null }
+      timelineGraphMs = if ($timeline -and ($timeline.PSObject.Properties.Name -contains "graphMs")) { $timeline.graphMs } else { $null }
+      checkpointMs = if ($checkpoint) { $checkpoint.elapsedMs } else { $null }
       postImportMs = if ($postImport) { $postImport.elapsedMs } else { $null }
       rows = if ($enumeration -and ($enumeration.PSObject.Properties.Name -contains "rows")) { $enumeration.rows } else { $null }
       rowsPerSec = if ($enumeration -and ($enumeration.PSObject.Properties.Name -contains "rowsPerSec")) { $enumeration.rowsPerSec } else { $null }
@@ -245,17 +251,21 @@ $lines.Add("- Total median: $([Math]::Round([double]$summary.totalMedianSeconds,
 $lines.Add("- Enumeration median: $([Math]::Round([double]$summary.enumerationMedianSeconds, 1))s") | Out-Null
 $lines.Add("- RSS max: $($summary.rssMaxMb)MB") | Out-Null
 $lines.Add("") | Out-Null
-$lines.Add("| Run | Total | Probe | Reader build | Enumeration | Enum merge | Post-import | Rows | Rows/s | MB/s | RSS | Log |") | Out-Null
-$lines.Add("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |") | Out-Null
+$lines.Add("| Run | Total | Probe | Reader build | Enumeration | Enum merge | Timeline | Events | Graph | Checkpoint | Post-import | Rows | Rows/s | MB/s | RSS | Log |") | Out-Null
+$lines.Add("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |") | Out-Null
 foreach ($run in $results) {
   $lines.Add((
-      "| {0} | {1:n1}s | {2:n1}s | {3:n1}s | {4:n1}s | {5:n1}s | {6:n1}s | {7} | {8} | {9} | {10}MB | {11} |" -f
+      "| {0} | {1:n1}s | {2:n1}s | {3:n1}s | {4:n1}s | {5:n1}s | {6:n1}s | {7:n1}s | {8:n1}s | {9:n1}s | {10:n1}s | {11} | {12} | {13} | {14}MB | {15} |" -f
       $run.run,
       (Convert-MillisToSeconds -Value $run.totalMs),
       (Convert-MillisToSeconds -Value $run.probeMs),
       (Convert-MillisToSeconds -Value $run.readerBuildMs),
       (Convert-MillisToSeconds -Value $run.enumerationMs),
       (Convert-MillisToSeconds -Value $run.enumMergeMs),
+      (Convert-MillisToSeconds -Value $run.timelineMs),
+      (Convert-MillisToSeconds -Value $run.timelineEventMs),
+      (Convert-MillisToSeconds -Value $run.timelineGraphMs),
+      (Convert-MillisToSeconds -Value $run.checkpointMs),
       (Convert-MillisToSeconds -Value $run.postImportMs),
       $run.rows,
       $run.rowsPerSec,

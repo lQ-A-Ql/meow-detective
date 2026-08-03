@@ -40,7 +40,7 @@ fn fresh_source_schema_contains_timeline_projection_identity() {
         runner::current_version(&connection)
             .expect("read source version")
             .as_deref(),
-        Some("source_029_case_graph_entity_index")
+        Some("source_030_analysis_file_feed_index")
     );
 }
 
@@ -67,7 +67,9 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
                  id TEXT PRIMARY KEY NOT NULL,
                  parent_id TEXT,
                  data_source_id TEXT NOT NULL,
+                 path TEXT NOT NULL DEFAULT '',
                  name TEXT NOT NULL,
+                 entry_type TEXT NOT NULL DEFAULT 'file',
                  partition_index INTEGER
              );
              CREATE TABLE timeline_events (
@@ -114,7 +116,7 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
 
     assert_eq!(
         runner::run_source_all(&connection).expect("upgrade source database"),
-        13
+        14
     );
     let row: (String, i64, String) = connection
         .query_row(

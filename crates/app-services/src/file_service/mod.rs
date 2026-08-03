@@ -60,9 +60,9 @@ pub use metadata::source_routing::{
     text_preview_for_source_case,
 };
 pub use mft::{
-    add_entry_to_path_map, enumerate_filesystem_mft, mft_parent_entry_id, parse_ntfs_data_runs,
-    populate_file_graph_for_data_source, read_ntfs_mft_stream, records_to_file_entries,
-    update_entry_parent_ids, update_entry_paths,
+    add_entry_to_path_map, enumerate_filesystem_mft, enumerate_filesystem_mft_with_partition,
+    mft_parent_entry_id, parse_ntfs_data_runs, populate_file_graph_for_data_source,
+    read_ntfs_mft_stream, records_to_file_entries, update_entry_parent_ids, update_entry_paths,
 };
 pub(crate) use partition_roots::partition_placeholder_status;
 pub use partition_roots::{

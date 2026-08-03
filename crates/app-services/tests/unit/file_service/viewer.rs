@@ -1093,6 +1093,17 @@ fn preview_descriptor_prefers_persisted_partition_index_over_legacy_hints() {
 }
 
 #[test]
+fn preview_descriptor_freshness_uses_the_same_legacy_root_fallback_as_creation() {
+    let (_dir, conn, file_id) =
+        setup_e01_preview_routing_case("legacy-file-id", None, "Partition 2 (NTFS)");
+
+    let descriptor = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id).unwrap();
+
+    assert_eq!(descriptor.partition_index, Some(2));
+    assert!(descriptor_is_fresh(&conn, &file_id, &descriptor));
+}
+
+#[test]
 fn preview_descriptor_fails_closed_without_exact_partition_index() {
     let (_dir, conn, file_id) =
         setup_e01_preview_routing_case("legacy-file-id", None, "Evidence Root");

@@ -92,7 +92,11 @@ fn import_phase_from_profile(detail: &str, progress: u32) -> ImportPhaseDto {
         Some("enum-merge") => ImportPhaseDto::MergeEnumeration,
         Some("analysis-start") | Some("analysis") => ImportPhaseDto::Analyze,
         Some("analysis-merge") => ImportPhaseDto::MergeAnalysis,
-        Some("post-import") | Some("post-import-skip") | Some("total") => ImportPhaseDto::Finalize,
+        Some("timeline")
+        | Some("checkpoint")
+        | Some("post-import")
+        | Some("post-import-skip")
+        | Some("total") => ImportPhaseDto::Finalize,
         _ if progress < 25 => ImportPhaseDto::Attach,
         _ if progress < 70 => ImportPhaseDto::Enumerate,
         _ if progress < 84 => ImportPhaseDto::Analyze,
