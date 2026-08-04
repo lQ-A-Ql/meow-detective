@@ -8,13 +8,20 @@ const NEW_ADDRESS: u32 = u32::MAX;
 const COMPRESSED_ADDRESS: u32 = u32::MAX - 1;
 
 pub(crate) struct F2fsFile {
-    source: SharedReader,
-    volume_offset: u64,
-    main_block: u32,
-    block_count: u64,
+    storage: F2fsFileStorage,
     size: u64,
-    blocks: Vec<u32>,
     cursor: u64,
+}
+
+enum F2fsFileStorage {
+    Blocks {
+        source: SharedReader,
+        volume_offset: u64,
+        main_block: u32,
+        block_count: u64,
+        blocks: Vec<u32>,
+    },
+    Inline(Box<[u8]>),
 }
 
 impl F2fsFile {
@@ -28,12 +35,30 @@ impl F2fsFile {
     ) -> Result<Self> {
         validate_blocks(&blocks, main_block, block_count)?;
         Ok(Self {
-            source,
-            volume_offset,
-            main_block,
-            block_count,
+            storage: F2fsFileStorage::Blocks {
+                source,
+                volume_offset,
+                main_block,
+                block_count,
+                blocks,
+            },
             size,
-            blocks,
+            cursor: 0,
+        })
+    }
+
+    pub(crate) fn from_inline(size: u64, data: &[u8]) -> Result<Self> {
+        let length = usize::try_from(size)
+            .map_err(|_| F2fsError::Invalid("inline file size exceeds usize".to_string()))?;
+        let data = data.get(..length).ok_or_else(|| {
+            F2fsError::Invalid(format!(
+                "inline file size {size} exceeds capacity {}",
+                data.len()
+            ))
+        })?;
+        Ok(Self {
+            storage: F2fsFileStorage::Inline(data.into()),
+            size,
             cursor: 0,
         })
     }
@@ -45,37 +70,87 @@ impl F2fsFile {
         let requested = output
             .len()
             .min(usize::try_from(self.size - offset).unwrap_or(usize::MAX));
+        match &self.storage {
+            F2fsFileStorage::Blocks {
+                source,
+                volume_offset,
+                main_block,
+                block_count,
+                blocks,
+            } => Self::read_blocks_at(
+                source,
+                *volume_offset,
+                *main_block,
+                *block_count,
+                blocks,
+                offset,
+                &mut output[..requested],
+            ),
+            F2fsFileStorage::Inline(data) => {
+                let start = usize::try_from(offset).map_err(|_| {
+                    F2fsError::Invalid("inline file read offset exceeds usize".to_string())
+                })?;
+                output[..requested].copy_from_slice(&data[start..start + requested]);
+                Ok(requested)
+            }
+        }
+    }
+
+    fn read_blocks_at(
+        source: &SharedReader,
+        volume_offset: u64,
+        main_block: u32,
+        block_count: u64,
+        blocks: &[u32],
+        offset: u64,
+        output: &mut [u8],
+    ) -> Result<usize> {
+        let requested = output.len();
         let mut written = 0usize;
         while written < requested {
             let position = offset + written as u64;
             let block_index = (position / F2FS_BLOCK_SIZE as u64) as usize;
             let within = (position % F2FS_BLOCK_SIZE as u64) as usize;
             let length = (F2FS_BLOCK_SIZE - within).min(requested - written);
-            let address = *self
-                .blocks
+            let address = *blocks
                 .get(block_index)
                 .ok_or_else(|| F2fsError::Unsupported("indirect file block lookup".to_string()))?;
             if address == NULL_ADDRESS {
                 output[written..written + length].fill(0);
             } else {
-                self.read_physical(address, within, &mut output[written..written + length])?;
+                Self::read_physical(
+                    source,
+                    volume_offset,
+                    main_block,
+                    block_count,
+                    address,
+                    within,
+                    &mut output[written..written + length],
+                )?;
             }
             written += length;
         }
         Ok(written)
     }
 
-    fn read_physical(&self, block: u32, within: usize, output: &mut [u8]) -> Result<()> {
-        if block < self.main_block || u64::from(block) >= self.block_count {
+    fn read_physical(
+        source: &SharedReader,
+        volume_offset: u64,
+        main_block: u32,
+        block_count: u64,
+        block: u32,
+        within: usize,
+        output: &mut [u8],
+    ) -> Result<()> {
+        if block < main_block || u64::from(block) >= block_count {
             return Err(F2fsError::Invalid(format!(
                 "file data block {block} is outside the main area"
             )));
         }
-        let offset = block_offset(self.volume_offset, block)?
+        let offset = block_offset(volume_offset, block)?
             .checked_add(within as u64)
             .ok_or_else(|| F2fsError::Invalid("file read offset overflows".to_string()))?;
-        let mut source = self
-            .source
+        let mut source = source
             .lock()
             .map_err(|_| F2fsError::Invalid("evidence reader lock is poisoned".to_string()))?;
         source.seek(SeekFrom::Start(offset))?;

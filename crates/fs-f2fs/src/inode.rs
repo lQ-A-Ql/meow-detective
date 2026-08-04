@@ -24,6 +24,7 @@ pub(crate) struct F2fsInode {
     pub(crate) inline_flags: u8,
     pub(crate) flags: u32,
     pub(crate) data_blocks: Vec<u32>,
+    inline_data: Option<Vec<u8>>,
 }
 
 impl F2fsInode {
@@ -65,6 +66,28 @@ impl F2fsInode {
             .and_then(|count| count.checked_sub(inline_xattr_words))
             .ok_or_else(|| F2fsError::Invalid("inode address capacity underflows".to_string()))?;
         let address_start = INODE_ADDRESS_OFFSET + extra_size;
+        let inline_length = address_words
+            .checked_sub(1)
+            .and_then(|words| words.checked_mul(4))
+            .ok_or_else(|| F2fsError::Invalid("inline data capacity underflows".to_string()))?;
+        let inline_start = address_start
+            .checked_add(4)
+            .ok_or_else(|| F2fsError::Invalid("inline data offset overflows".to_string()))?;
+        let inline_end = inline_start
+            .checked_add(inline_length)
+            .ok_or_else(|| F2fsError::Invalid("inline data range overflows".to_string()))?;
+        let inline_data = if inline_flags & (INLINE_DATA | INLINE_DENTRY) != 0 {
+            Some(
+                bytes
+                    .get(inline_start..inline_end)
+                    .ok_or_else(|| {
+                        F2fsError::Invalid("inline inode data exceeds its node".to_string())
+                    })?
+                    .to_vec(),
+            )
+        } else {
+            None
+        };
         let mut data_blocks = Vec::with_capacity(address_words);
         for index in 0..address_words {
             data_blocks.push(read_u32(
@@ -80,6 +103,7 @@ impl F2fsInode {
             inline_flags,
             flags: read_u32(bytes, 80, "inode flags")?,
             data_blocks,
+            inline_data,
         })
     }
 
@@ -100,12 +124,7 @@ impl F2fsInode {
     }
 
     pub(crate) fn require_external_data(&self, operation: &str) -> Result<()> {
-        if self.is_encrypted() {
-            return Err(F2fsError::Unsupported(format!(
-                "encrypted {operation} for inode {}",
-                self.nid
-            )));
-        }
+        self.require_unencrypted(operation)?;
         let disallowed = if self.is_directory() {
             INLINE_DENTRY
         } else {
@@ -118,6 +137,28 @@ impl F2fsInode {
             )));
         }
         Ok(())
+    }
+
+    pub(crate) fn require_unencrypted(&self, operation: &str) -> Result<()> {
+        if self.is_encrypted() {
+            return Err(F2fsError::Unsupported(format!(
+                "encrypted {operation} for inode {}",
+                self.nid
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn inline_file_data(&self) -> Option<&[u8]> {
+        (self.inline_flags & INLINE_DATA != 0)
+            .then_some(self.inline_data.as_deref())
+            .flatten()
+    }
+
+    pub(crate) fn inline_directory_data(&self) -> Option<&[u8]> {
+        (self.inline_flags & INLINE_DENTRY != 0)
+            .then_some(self.inline_data.as_deref())
+            .flatten()
     }
 
     pub(crate) fn required_blocks(&self) -> Result<usize> {

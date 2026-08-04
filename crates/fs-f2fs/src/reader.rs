@@ -5,7 +5,7 @@ use evidence_core::filesystem::path_components;
 use evidence_core::EvidenceReader;
 
 use crate::checkpoint::Checkpoint;
-use crate::directory::{parse_directory_block, DirectoryEntry};
+use crate::directory::{parse_directory_block, parse_inline_directory, DirectoryEntry};
 use crate::file::F2fsFile;
 use crate::inode::F2fsInode;
 use crate::io::{block_offset, read_exact_at, SharedReader};
@@ -106,6 +106,10 @@ impl F2fsReader {
                 inode.nid
             )));
         }
+        inode.require_unencrypted("directory entries")?;
+        if let Some(data) = inode.inline_directory_data() {
+            return parse_inline_directory(data);
+        }
         inode.require_external_data("directory entries")?;
         let block_count = inode.required_blocks()?;
         let mut entries = Vec::new();
@@ -143,6 +147,10 @@ impl F2fsReader {
                 "inode {} is not a regular file",
                 inode.nid
             )));
+        }
+        inode.require_unencrypted("file data")?;
+        if let Some(data) = inode.inline_file_data() {
+            return F2fsFile::from_inline(inode.size, data);
         }
         inode.require_external_data("file data")?;
         let blocks = inode.data_blocks[..inode.required_blocks()?].to_vec();
