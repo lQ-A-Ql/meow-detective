@@ -120,7 +120,7 @@ fn falls_back_to_backup_superblock_and_rejects_checkpoint_corruption() {
 }
 
 #[test]
-fn rejects_truncated_source_and_indirect_file_without_partial_results() {
+fn rejects_truncated_source_and_file_tree_beyond_format_capacity() {
     let mut truncated = minimal_f2fs_image();
     truncated.truncate(truncated.len() - 4096);
     let error = F2fsReader::open(Box::new(MemoryReader::new(truncated)), 0)
@@ -128,15 +128,21 @@ fn rejects_truncated_source_and_indirect_file_without_partial_results() {
         .expect("reject truncated source");
     assert!(matches!(error, F2fsError::Invalid(_)));
 
-    let mut indirect = minimal_f2fs_image();
+    let mut oversized = minimal_f2fs_image();
     let file_inode = 4097 * 4096;
-    let size = 924u64 * 4096;
-    indirect[file_inode + 16..file_inode + 24].copy_from_slice(&size.to_le_bytes());
-    let reader = F2fsReader::open(Box::new(MemoryReader::new(indirect)), 0).expect("open metadata");
+    let values_per_node = 1018usize;
+    let max_blocks = 923
+        + 2 * values_per_node
+        + 2 * values_per_node * values_per_node
+        + values_per_node * values_per_node * values_per_node;
+    let size = (max_blocks as u64 + 1) * BLOCK_SIZE as u64;
+    oversized[file_inode + 16..file_inode + 24].copy_from_slice(&size.to_le_bytes());
+    let reader =
+        F2fsReader::open(Box::new(MemoryReader::new(oversized)), 0).expect("open metadata");
     let error = reader
         .open_file("hello.txt")
         .err()
-        .expect("indirect node lookup is explicit unsupported");
+        .expect("file tree beyond double-indirect capacity is unsupported");
     assert_eq!(error.kind(), io::ErrorKind::Unsupported);
 }
 
@@ -291,6 +297,20 @@ fn rejects_encrypted_inline_file_plaintext_reads() {
         .open_file("hello.txt")
         .err()
         .expect("encrypted inline plaintext read must be rejected");
+    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+}
+
+#[test]
+fn rejects_compressed_inode_before_reading_encoded_blocks() {
+    let mut image = minimal_f2fs_image();
+    let flags = FILE_INODE_BLOCK * BLOCK_SIZE + 80;
+    image[flags..flags + 4].copy_from_slice(&0x0000_0004u32.to_le_bytes());
+
+    let reader = F2fsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open compressed inode metadata");
+    let error = reader
+        .read_file_range("hello.txt", 0, 10)
+        .expect_err("compressed bytes must not be exposed as plaintext");
     assert_eq!(error.kind(), io::ErrorKind::Unsupported);
 }
 

@@ -10,6 +10,7 @@ const INLINE_XATTR: u8 = 0x01;
 const INLINE_DATA: u8 = 0x02;
 const INLINE_DENTRY: u8 = 0x04;
 const EXTRA_ATTR: u8 = 0x20;
+const COMPRESSED_INODE_FLAG: u32 = 0x0000_0004;
 const ENCRYPTED_INODE_FLAG: u32 = 0x0000_0800;
 const INODE_ADDRESS_OFFSET: usize = 360;
 const INODE_ADDRESS_WORDS: usize = 923;
@@ -24,6 +25,7 @@ pub(crate) struct F2fsInode {
     pub(crate) inline_flags: u8,
     pub(crate) flags: u32,
     pub(crate) data_blocks: Vec<u32>,
+    pub(crate) node_ids: [u32; 5],
     inline_data: Option<Vec<u8>>,
 }
 
@@ -96,6 +98,10 @@ impl F2fsInode {
                 "inode data block address",
             )?);
         }
+        let mut node_ids = [0u32; 5];
+        for (index, node_id) in node_ids.iter_mut().enumerate() {
+            *node_id = read_u32(bytes, INODE_NID_OFFSET + index * 4, "inode node id")?;
+        }
         Ok(Self {
             nid: expected_nid,
             mode: read_u16(bytes, 0, "inode mode")?,
@@ -103,6 +109,7 @@ impl F2fsInode {
             inline_flags,
             flags: read_u32(bytes, 80, "inode flags")?,
             data_blocks,
+            node_ids,
             inline_data,
         })
     }
@@ -123,8 +130,12 @@ impl F2fsInode {
         self.flags & ENCRYPTED_INODE_FLAG != 0
     }
 
+    pub(crate) fn is_compressed(&self) -> bool {
+        self.flags & COMPRESSED_INODE_FLAG != 0
+    }
+
     pub(crate) fn require_external_data(&self, operation: &str) -> Result<()> {
-        self.require_unencrypted(operation)?;
+        self.require_readable_data(operation)?;
         let disallowed = if self.is_directory() {
             INLINE_DENTRY
         } else {
@@ -139,10 +150,16 @@ impl F2fsInode {
         Ok(())
     }
 
-    pub(crate) fn require_unencrypted(&self, operation: &str) -> Result<()> {
+    pub(crate) fn require_readable_data(&self, operation: &str) -> Result<()> {
         if self.is_encrypted() {
             return Err(F2fsError::Unsupported(format!(
                 "encrypted {operation} for inode {}",
+                self.nid
+            )));
+        }
+        if self.is_compressed() {
+            return Err(F2fsError::Unsupported(format!(
+                "compressed {operation} for inode {}",
                 self.nid
             )));
         }
@@ -165,12 +182,6 @@ impl F2fsInode {
         let blocks = self.size.div_ceil(F2FS_BLOCK_SIZE as u64);
         let blocks = usize::try_from(blocks)
             .map_err(|_| F2fsError::Unsupported("file block count exceeds usize".to_string()))?;
-        if blocks > self.data_blocks.len() {
-            return Err(F2fsError::Unsupported(format!(
-                "indirect node traversal for inode {}",
-                self.nid
-            )));
-        }
         Ok(blocks)
     }
 }

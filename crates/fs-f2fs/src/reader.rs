@@ -6,17 +6,19 @@ use evidence_core::EvidenceReader;
 
 use crate::checkpoint::Checkpoint;
 use crate::directory::{parse_directory_block, parse_inline_directory, DirectoryEntry};
-use crate::file::F2fsFile;
+use crate::file::{validate_data_block, F2fsFile};
 use crate::inode::F2fsInode;
 use crate::io::{block_offset, read_exact_at, SharedReader};
 use crate::nat::NatTable;
+use crate::node::{new_node_cache, F2fsBlockResolver, F2fsNodeContext, NodeCache};
 use crate::{F2fsError, F2fsSuperblock, Result, F2FS_BLOCK_SIZE};
 
 pub struct F2fsReader {
     pub(crate) source: SharedReader,
     pub(crate) volume_offset: u64,
     pub(crate) superblock: F2fsSuperblock,
-    nat: NatTable,
+    nat: Arc<NatTable>,
+    node_cache: NodeCache,
     inode_cache: Mutex<HashMap<u32, Arc<F2fsInode>>>,
 }
 
@@ -27,12 +29,13 @@ impl F2fsReader {
         validate_source_size(&source, volume_offset, &superblock)?;
         let checkpoint = Checkpoint::read(&source, volume_offset, &superblock)?;
         let _checkpoint_version = checkpoint.version;
-        let nat = NatTable::new(&superblock, &checkpoint);
+        let nat = Arc::new(NatTable::new(&superblock, &checkpoint));
         let reader = Self {
             source,
             volume_offset,
             superblock,
             nat,
+            node_cache: new_node_cache(),
             inode_cache: Mutex::new(HashMap::new()),
         };
         let root = reader.read_inode(reader.superblock.root_inode)?;
@@ -106,28 +109,27 @@ impl F2fsReader {
                 inode.nid
             )));
         }
-        inode.require_unencrypted("directory entries")?;
+        inode.require_readable_data("directory entries")?;
         if let Some(data) = inode.inline_directory_data() {
             return parse_inline_directory(data);
         }
         inode.require_external_data("directory entries")?;
         let block_count = inode.required_blocks()?;
+        let resolver = self.block_resolver(inode, block_count)?;
         let mut entries = Vec::new();
-        for block in inode.data_blocks.iter().take(block_count) {
-            if *block == 0 {
+        for logical_block in 0..block_count {
+            let block = resolver.resolve(logical_block)?;
+            if block == 0 {
                 continue;
             }
-            if *block < self.superblock.main_block
-                || u64::from(*block) >= self.superblock.block_count
-            {
-                return Err(F2fsError::Invalid(format!(
-                    "directory inode {} references invalid block {block}",
-                    inode.nid
-                )));
-            }
+            validate_data_block(
+                block,
+                self.superblock.main_block,
+                self.superblock.block_count,
+            )?;
             let bytes = read_exact_at(
                 &self.source,
-                block_offset(self.volume_offset, *block)?,
+                block_offset(self.volume_offset, block)?,
                 F2FS_BLOCK_SIZE,
             )?;
             entries.extend(parse_directory_block(&bytes)?);
@@ -148,19 +150,41 @@ impl F2fsReader {
                 inode.nid
             )));
         }
-        inode.require_unencrypted("file data")?;
+        inode.require_readable_data("file data")?;
         if let Some(data) = inode.inline_file_data() {
             return F2fsFile::from_inline(inode.size, data);
         }
         inode.require_external_data("file data")?;
-        let blocks = inode.data_blocks[..inode.required_blocks()?].to_vec();
-        F2fsFile::new(
+        let required_blocks = inode.required_blocks()?;
+        let resolver = self.block_resolver(inode, required_blocks)?;
+        Ok(F2fsFile::new(
             Arc::clone(&self.source),
             self.volume_offset,
             self.superblock.main_block,
             self.superblock.block_count,
             inode.size,
-            blocks,
+            resolver,
+        ))
+    }
+
+    fn block_resolver(
+        &self,
+        inode: &F2fsInode,
+        required_blocks: usize,
+    ) -> Result<F2fsBlockResolver> {
+        let context = F2fsNodeContext::new(
+            Arc::clone(&self.source),
+            Arc::clone(&self.nat),
+            Arc::clone(&self.node_cache),
+            self.volume_offset,
+            &self.superblock,
+        );
+        F2fsBlockResolver::new(
+            context,
+            inode.nid,
+            inode.data_blocks.clone(),
+            inode.node_ids,
+            required_blocks,
         )
     }
 }

@@ -1,6 +1,7 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::io::{block_offset, SharedReader};
+use crate::node::F2fsBlockResolver;
 use crate::{F2fsError, Result, F2FS_BLOCK_SIZE};
 
 const NULL_ADDRESS: u32 = 0;
@@ -19,7 +20,7 @@ enum F2fsFileStorage {
         volume_offset: u64,
         main_block: u32,
         block_count: u64,
-        blocks: Vec<u32>,
+        resolver: F2fsBlockResolver,
     },
     Inline(Box<[u8]>),
 }
@@ -31,20 +32,19 @@ impl F2fsFile {
         main_block: u32,
         block_count: u64,
         size: u64,
-        blocks: Vec<u32>,
-    ) -> Result<Self> {
-        validate_blocks(&blocks, main_block, block_count)?;
-        Ok(Self {
+        resolver: F2fsBlockResolver,
+    ) -> Self {
+        Self {
             storage: F2fsFileStorage::Blocks {
                 source,
                 volume_offset,
                 main_block,
                 block_count,
-                blocks,
+                resolver,
             },
             size,
             cursor: 0,
-        })
+        }
     }
 
     pub(crate) fn from_inline(size: u64, data: &[u8]) -> Result<Self> {
@@ -76,13 +76,13 @@ impl F2fsFile {
                 volume_offset,
                 main_block,
                 block_count,
-                blocks,
+                resolver,
             } => Self::read_blocks_at(
                 source,
                 *volume_offset,
                 *main_block,
                 *block_count,
-                blocks,
+                resolver,
                 offset,
                 &mut output[..requested],
             ),
@@ -101,7 +101,7 @@ impl F2fsFile {
         volume_offset: u64,
         main_block: u32,
         block_count: u64,
-        blocks: &[u32],
+        resolver: &F2fsBlockResolver,
         offset: u64,
         output: &mut [u8],
     ) -> Result<usize> {
@@ -112,9 +112,8 @@ impl F2fsFile {
             let block_index = (position / F2FS_BLOCK_SIZE as u64) as usize;
             let within = (position % F2FS_BLOCK_SIZE as u64) as usize;
             let length = (F2FS_BLOCK_SIZE - within).min(requested - written);
-            let address = *blocks
-                .get(block_index)
-                .ok_or_else(|| F2fsError::Unsupported("indirect file block lookup".to_string()))?;
+            let address = resolver.resolve(block_index)?;
+            validate_data_block(address, main_block, block_count)?;
             if address == NULL_ADDRESS {
                 output[written..written + length].fill(0);
             } else {
@@ -187,27 +186,18 @@ impl Seek for F2fsFile {
     }
 }
 
-fn validate_blocks(blocks: &[u32], main_block: u32, block_count: u64) -> Result<()> {
-    for block in blocks {
-        match *block {
-            NULL_ADDRESS => {}
-            NEW_ADDRESS => {
-                return Err(F2fsError::Invalid(
-                    "file references an unallocated NEW_ADDR block".to_string(),
-                ));
-            }
-            COMPRESSED_ADDRESS => {
-                return Err(F2fsError::Unsupported(
-                    "compressed F2FS clusters".to_string(),
-                ));
-            }
-            value if value < main_block || u64::from(value) >= block_count => {
-                return Err(F2fsError::Invalid(format!(
-                    "file data block {value} is outside the main area"
-                )));
-            }
-            _ => {}
-        }
+pub(crate) fn validate_data_block(block: u32, main_block: u32, block_count: u64) -> Result<()> {
+    match block {
+        NULL_ADDRESS => Ok(()),
+        NEW_ADDRESS => Err(F2fsError::Invalid(
+            "file references an unallocated NEW_ADDR block".to_string(),
+        )),
+        COMPRESSED_ADDRESS => Err(F2fsError::Unsupported(
+            "compressed F2FS clusters".to_string(),
+        )),
+        value if value < main_block || u64::from(value) >= block_count => Err(F2fsError::Invalid(
+            format!("data block {value} is outside the main area"),
+        )),
+        _ => Ok(()),
     }
-    Ok(())
 }

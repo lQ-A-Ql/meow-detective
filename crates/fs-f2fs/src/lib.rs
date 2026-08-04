@@ -9,6 +9,7 @@ mod filesystem;
 mod inode;
 mod io;
 mod nat;
+mod node;
 mod reader;
 mod superblock;
 
