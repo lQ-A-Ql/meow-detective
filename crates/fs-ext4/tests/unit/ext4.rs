@@ -16,6 +16,7 @@ mod cases {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
+    use testing::builders::ext4::minimal_ext4_image;
 
     // -----------------------------------------------------------------------
     // Fake evidence reader for in-memory fixtures
@@ -107,155 +108,13 @@ mod cases {
     // Fixture builder
     // -----------------------------------------------------------------------
 
-    /// Build a minimal ext4 filesystem image in memory.
-    ///
-    /// Layout (block_size = 4096, 10 blocks total):
-    ///
-    /// | Block | Offset    | Content                        |
-    /// |-------|-----------|--------------------------------|
-    /// | 0     | 0         | boot + superblock at 1024      |
-    /// | 1     | 4096      | BG descriptor table (1 entry)  |
-    /// | 2     | 8192      | inode table (16 inodes x 256)  |
-    /// | 3     | 12288     | root directory data            |
-    /// | 4     | 16384     | "test.txt" file data           |
-    /// | 5     | 20480     | subdir directory data          |
-    /// | 6     | 24576     | "hello.dat" file data          |
-    ///
-    /// Inodes: 1=reserved, 2=root dir, 3=test.txt, 4=subdir,
-    /// 5=hello.dat, 6=fast symlink.
     fn build_ext4_fixture() -> Vec<u8> {
-        let block_size: u64 = 4096;
-        let total_blocks: u64 = 10;
-        let total_size = (total_blocks * block_size) as usize;
-        let mut img = vec![0u8; total_size];
-
-        // ---- Superblock at offset 1024 ----
-        let sb_off = 1024usize;
-        let sb = &mut img[sb_off..sb_off + 1024];
-        sb[0x00..0x04].copy_from_slice(&16u32.to_le_bytes()); // s_inodes_count
-        sb[0x04..0x08].copy_from_slice(&(total_blocks as u32).to_le_bytes()); // s_blocks_count_lo
-        sb[0x14..0x18].copy_from_slice(&0u32.to_le_bytes()); // s_first_data_block
-        sb[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes()); // s_log_block_size = 2 -> 4096
-        sb[0x20..0x24].copy_from_slice(&32768u32.to_le_bytes()); // s_blocks_per_group
-        sb[0x28..0x2C].copy_from_slice(&16u32.to_le_bytes()); // s_inodes_per_group
-        sb[0x38..0x3A].copy_from_slice(&EXT4_MAGIC.to_le_bytes()); // s_magic
-        sb[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes()); // s_inode_size
-
-        // ---- BG descriptor: inode table at block 2 ----
-        img[4096 + 0x08..4096 + 0x0C].copy_from_slice(&2u32.to_le_bytes());
-
-        let inode_table_off = 8192usize;
-
-        // ---- Inode 2: root directory ----
-        let ri = &mut img[inode_table_off + 256..inode_table_off + 512];
-        ri[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes()); // i_mode (dir 0755)
-        ri[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes()); // i_size_lo
-        ri[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
-        ri[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes()); // eh_magic
-        ri[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
-        ri[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
-                                                             // eh_depth=0 (leaf)
-        ri[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
-        ri[0x3C..0x40].copy_from_slice(&3u32.to_le_bytes()); // ee_start_lo=3
-
-        // ---- Inode 3: test.txt ----
-        let fi = &mut img[inode_table_off + 512..inode_table_off + 768];
-        fi[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes()); // i_mode (reg 0644)
-        fi[0x04..0x08].copy_from_slice(&11u32.to_le_bytes()); // i_size_lo=11
-        fi[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
-        fi[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
-        fi[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
-        fi[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
-        fi[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
-        fi[0x3C..0x40].copy_from_slice(&4u32.to_le_bytes()); // ee_start_lo=4
-
-        // ---- Inode 4: subdir ----
-        let sd = &mut img[inode_table_off + 768..inode_table_off + 1024];
-        sd[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes()); // i_mode (dir 0755)
-        sd[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes()); // i_size_lo
-        sd[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
-        sd[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
-        sd[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
-        sd[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
-        sd[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
-        sd[0x3C..0x40].copy_from_slice(&5u32.to_le_bytes()); // ee_start_lo=5
-
-        // ---- Inode 5: hello.dat ----
-        let hi = &mut img[inode_table_off + 1024..inode_table_off + 1280];
-        hi[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes()); // i_mode (reg 0644)
-        hi[0x04..0x08].copy_from_slice(&13u32.to_le_bytes()); // i_size_lo=13
-        hi[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
-        hi[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
-        hi[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
-        hi[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
-        hi[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
-        hi[0x3C..0x40].copy_from_slice(&6u32.to_le_bytes()); // ee_start_lo=6
-
-        // ---- Inode 6: fast symlink ----
-        let sl = &mut img[inode_table_off + 1280..inode_table_off + 1536];
-        sl[0x00..0x02].copy_from_slice(&0xA1FFu16.to_le_bytes()); // i_mode (symlink 0777)
-        sl[0x04..0x08].copy_from_slice(&14u32.to_le_bytes()); // i_size=14
-        let target = b"/usr/bin/perl";
-        sl[0x28..0x28 + target.len()].copy_from_slice(target);
-
-        // ---- Block 3: root directory data ----
-        let root_data_off = 12288usize;
-        let rd = &mut img[root_data_off..root_data_off + 4096];
-        // "."
-        rd[0x00..0x04].copy_from_slice(&2u32.to_le_bytes());
-        rd[0x04..0x06].copy_from_slice(&12u16.to_le_bytes());
-        rd[0x06] = 1;
-        rd[0x07] = 2;
-        rd[0x08] = b'.';
-        // ".."
-        rd[12..16].copy_from_slice(&2u32.to_le_bytes());
-        rd[16..18].copy_from_slice(&12u16.to_le_bytes());
-        rd[18] = 2;
-        rd[19] = 2;
-        rd[20..22].copy_from_slice(b"..");
-        // "test.txt"
-        rd[24..28].copy_from_slice(&3u32.to_le_bytes());
-        rd[28..30].copy_from_slice(&24u16.to_le_bytes());
-        rd[30] = 8;
-        rd[31] = 1;
-        rd[32..40].copy_from_slice(b"test.txt");
-        // "subdir"
-        rd[48..52].copy_from_slice(&4u32.to_le_bytes());
-        rd[52..54].copy_from_slice(&(4096u16 - 48u16).to_le_bytes());
-        rd[54] = 6;
-        rd[55] = 2;
-        rd[56..62].copy_from_slice(b"subdir");
-
-        // ---- Block 4: test.txt data ----
-        img[16384..16384 + 11].copy_from_slice(b"Hello World");
-
-        // ---- Block 5: subdir directory data ----
-        let sd_data = &mut img[20480..20480 + 4096];
-        sd_data[0x00..0x04].copy_from_slice(&4u32.to_le_bytes());
-        sd_data[0x04..0x06].copy_from_slice(&12u16.to_le_bytes());
-        sd_data[0x06] = 1;
-        sd_data[0x07] = 2;
-        sd_data[0x08] = b'.';
-        sd_data[12..16].copy_from_slice(&2u32.to_le_bytes());
-        sd_data[16..18].copy_from_slice(&12u16.to_le_bytes());
-        sd_data[18] = 2;
-        sd_data[19] = 2;
-        sd_data[20..22].copy_from_slice(b"..");
-        sd_data[24..28].copy_from_slice(&5u32.to_le_bytes());
-        sd_data[28..30].copy_from_slice(&24u16.to_le_bytes());
-        sd_data[30] = 9;
-        sd_data[31] = 1;
-        sd_data[32..41].copy_from_slice(b"hello.dat");
-
-        // ---- Block 6: hello.dat data ----
-        img[24576..24576 + 13].copy_from_slice(b"Hello subdir!");
-
-        img
+        minimal_ext4_image()
     }
 
     fn build_large_sparse_ext4_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
         const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
-        let mut img = build_ext4_fixture();
+        let mut img = minimal_ext4_image();
         let block_size = 4096u64;
         let logical_block = (LOGICAL_OFFSET / block_size) as u32;
         let physical_block = 7u32;

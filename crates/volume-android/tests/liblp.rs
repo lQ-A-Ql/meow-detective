@@ -1,12 +1,14 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use evidence_core::RawImageReader;
+use evidence_core::{FileSystemReader, RawImageReader};
+use fs_ext4::Ext4Reader;
 use image_android::{AndroidSparseReader, SPARSE_DONT_CARE_CHUNK, SPARSE_MAGIC, SPARSE_RAW_CHUNK};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
+use testing::builders::ext4::minimal_ext4_image;
 use volume_android::{
-    GeometryCopy, LogicalPartitionReader, MetadataCopy, SuperMetadata, VolumeAndroidError,
-    LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
+    probe_filesystem, AndroidFilesystemKind, GeometryCopy, LogicalPartitionReader, MetadataCopy,
+    SuperMetadata, VolumeAndroidError, LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
 };
 
 const GEOMETRY_PRIMARY: usize = 4096;
@@ -70,6 +72,58 @@ fn maps_a_logical_partition_directly_over_an_android_sparse_reader() {
 }
 
 #[test]
+fn reads_ext4_tree_and_ranges_through_sparse_super_without_expansion() {
+    let raw = super_image_with_ext4();
+    let sparse = sparse_wrap(&raw, 4096);
+    assert!(sparse.len() < raw.len());
+    let file = write_temp(&sparse);
+
+    let mut parser_source = AndroidSparseReader::open(file.path()).expect("open sparse super");
+    let metadata = SuperMetadata::read_slot(&mut parser_source, 0).expect("parse liblp metadata");
+    let partition = metadata
+        .partition("system")
+        .expect("system partition")
+        .clone();
+    let source = AndroidSparseReader::open(file.path()).expect("reopen sparse super");
+    let mut logical = LogicalPartitionReader::new(Box::new(source), partition)
+        .expect("map ext4 logical partition");
+    assert_eq!(
+        probe_filesystem(&mut logical).expect("probe ext4 logical partition"),
+        AndroidFilesystemKind::Ext4
+    );
+
+    let filesystem = Ext4Reader::open(Box::new(logical), 0).expect("open ext4 filesystem");
+    let mut root_names = filesystem
+        .list_children("")
+        .expect("list ext4 root")
+        .into_iter()
+        .map(|node| node.name)
+        .collect::<Vec<_>>();
+    root_names.sort();
+    assert_eq!(root_names, ["subdir", "test.txt"]);
+
+    let nested = filesystem
+        .list_children("subdir")
+        .expect("list nested directory");
+    assert_eq!(nested.len(), 1);
+    assert_eq!(nested[0].name, "hello.dat");
+    assert_eq!(
+        filesystem
+            .read_file_range("test.txt", 6, 5)
+            .expect("read bounded file range"),
+        b"World"
+    );
+    let mut nested_file = filesystem
+        .open_file("subdir/hello.dat")
+        .expect("open nested file");
+    let mut nested_content = String::new();
+    nested_file
+        .read_to_string(&mut nested_content)
+        .expect("read nested file");
+    assert_eq!(nested_content, "Hello subdir!");
+}
+
+#[test]
 fn falls_back_to_valid_geometry_and_metadata_backups() {
     let mut geometry_fallback = valid_super_image(0);
     geometry_fallback[GEOMETRY_PRIMARY + 8] ^= 0xff;
@@ -118,6 +172,25 @@ fn valid_super_image(partition_attributes: u32) -> Vec<u8> {
     image
 }
 
+fn super_image_with_ext4() -> Vec<u8> {
+    let ext4 = minimal_ext4_image();
+    let image_size = DATA_OFFSET + ext4.len();
+    let mut image = vec![0u8; image_size];
+    let geometry = geometry_bytes();
+    image[GEOMETRY_PRIMARY..GEOMETRY_PRIMARY + geometry.len()].copy_from_slice(&geometry);
+    image[GEOMETRY_BACKUP..GEOMETRY_BACKUP + geometry.len()].copy_from_slice(&geometry);
+    let metadata = linear_partition_metadata_bytes(
+        "system",
+        ext4.len() as u64 / 512,
+        DATA_OFFSET as u64 / 512,
+        image_size as u64,
+    );
+    image[METADATA_PRIMARY..METADATA_PRIMARY + metadata.len()].copy_from_slice(&metadata);
+    image[METADATA_BACKUP..METADATA_BACKUP + metadata.len()].copy_from_slice(&metadata);
+    image[DATA_OFFSET..DATA_OFFSET + ext4.len()].copy_from_slice(&ext4);
+    image
+}
+
 fn geometry_bytes() -> Vec<u8> {
     let mut bytes = Vec::with_capacity(52);
     bytes.extend(LP_METADATA_GEOMETRY_MAGIC.to_le_bytes());
@@ -144,6 +217,53 @@ fn metadata_bytes(partition_attributes: u32) -> Vec<u8> {
     write_descriptor(&mut header, 92, 52, 2, 24);
     write_descriptor(&mut header, 104, 100, 1, 48);
     write_descriptor(&mut header, 116, 148, 1, 64);
+    let checksum = Sha256::digest(&header);
+    header[12..44].copy_from_slice(&checksum);
+    header.extend(tables);
+    header
+}
+
+fn linear_partition_metadata_bytes(
+    name: &str,
+    sectors: u64,
+    source_sector: u64,
+    image_size: u64,
+) -> Vec<u8> {
+    let mut tables = Vec::with_capacity(188);
+    tables.extend(fixed_name::<36>(name));
+    tables.extend(0u32.to_le_bytes());
+    tables.extend(0u32.to_le_bytes());
+    tables.extend(1u32.to_le_bytes());
+    tables.extend(0u32.to_le_bytes());
+
+    tables.extend(sectors.to_le_bytes());
+    tables.extend(0u32.to_le_bytes());
+    tables.extend(source_sector.to_le_bytes());
+    tables.extend(0u32.to_le_bytes());
+
+    tables.extend(fixed_name::<36>("default"));
+    tables.extend(0u32.to_le_bytes());
+    tables.extend(0u64.to_le_bytes());
+
+    tables.extend(64u64.to_le_bytes());
+    tables.extend(4096u32.to_le_bytes());
+    tables.extend(0u32.to_le_bytes());
+    tables.extend(image_size.to_le_bytes());
+    tables.extend(fixed_name::<36>("super"));
+    tables.extend(0u32.to_le_bytes());
+    assert_eq!(tables.len(), 188);
+
+    let mut header = vec![0u8; 128];
+    write_u32(&mut header, 0, LP_METADATA_HEADER_MAGIC);
+    write_u16(&mut header, 4, 10);
+    write_u16(&mut header, 6, 0);
+    write_u32(&mut header, 8, 128);
+    write_u32(&mut header, 44, tables.len() as u32);
+    header[48..80].copy_from_slice(&Sha256::digest(&tables));
+    write_descriptor(&mut header, 80, 0, 1, 52);
+    write_descriptor(&mut header, 92, 52, 1, 24);
+    write_descriptor(&mut header, 104, 76, 1, 48);
+    write_descriptor(&mut header, 116, 124, 1, 64);
     let checksum = Sha256::digest(&header);
     header[12..44].copy_from_slice(&checksum);
     header.extend(tables);

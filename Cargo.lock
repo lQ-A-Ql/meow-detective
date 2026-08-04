@@ -1620,6 +1620,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "tempfile",
+ "testing",
  "thiserror 2.0.18",
 ]
 
@@ -6003,9 +6004,11 @@ name = "volume-android"
 version = "0.1.0"
 dependencies = [
  "evidence-core",
+ "fs-ext4",
  "image-android",
  "sha2 0.10.9",
  "tempfile",
+ "testing",
  "thiserror 2.0.18",
 ]
 

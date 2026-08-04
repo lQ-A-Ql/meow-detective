@@ -2,6 +2,8 @@ use std::io;
 
 use thiserror::Error;
 
+use crate::AndroidFilesystemKind;
+
 pub type Result<T> = std::result::Result<T, VolumeAndroidError>;
 
 #[derive(Debug, Error)]
@@ -37,4 +39,8 @@ pub enum VolumeAndroidError {
     DisabledPartition { partition: String },
     #[error("logical partition has no extent covering offset {0}")]
     MissingExtent(u64),
+    #[error("Android filesystem `{filesystem}` is recognized but its reader is not available")]
+    UnsupportedFilesystem { filesystem: AndroidFilesystemKind },
+    #[error("Android logical partition does not contain a recognized filesystem")]
+    UnrecognizedFilesystem,
 }

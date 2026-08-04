@@ -6,11 +6,13 @@
 
 mod bytes;
 mod error;
+mod filesystem;
 mod geometry;
 mod metadata;
 mod reader;
 
 pub use error::{Result, VolumeAndroidError};
+pub use filesystem::{probe_filesystem, AndroidFilesystemKind};
 pub use geometry::{GeometryCopy, LpGeometry};
 pub use metadata::{
     BlockDevice, LogicalExtent, LogicalExtentTarget, LogicalPartition, MetadataCopy, SuperMetadata,
