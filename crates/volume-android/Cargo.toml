@@ -9,11 +9,11 @@ license.workspace = true
 thiserror.workspace = true
 sha2.workspace = true
 evidence-core.workspace = true
+fs-ext4.workspace = true
+fs-f2fs.workspace = true
+fs-erofs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 image-android.workspace = true
-fs-ext4.workspace = true
-fs-f2fs.workspace = true
-fs-erofs.workspace = true
 testing.workspace = true

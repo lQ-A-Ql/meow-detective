@@ -43,4 +43,9 @@ pub enum VolumeAndroidError {
     UnsupportedFilesystem { filesystem: AndroidFilesystemKind },
     #[error("Android logical partition does not contain a recognized filesystem")]
     UnrecognizedFilesystem,
+    #[error("failed to open Android {filesystem} filesystem reader: {message}")]
+    FilesystemReaderOpen {
+        filesystem: AndroidFilesystemKind,
+        message: String,
+    },
 }

@@ -1,9 +1,6 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use evidence_core::{FileSystemReader, RawImageReader};
-use fs_erofs::ErofsReader;
-use fs_ext4::Ext4Reader;
-use fs_f2fs::F2fsReader;
+use evidence_core::RawImageReader;
 use image_android::{AndroidSparseReader, SPARSE_DONT_CARE_CHUNK, SPARSE_MAGIC, SPARSE_RAW_CHUNK};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
@@ -11,8 +8,9 @@ use testing::builders::{
     erofs::minimal_erofs_image, ext4::minimal_ext4_image, f2fs::minimal_f2fs_image,
 };
 use volume_android::{
-    probe_filesystem, AndroidFilesystemKind, GeometryCopy, LogicalPartitionReader, MetadataCopy,
-    SuperMetadata, VolumeAndroidError, LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
+    open_filesystem_reader, probe_filesystem, AndroidFilesystemKind, GeometryCopy,
+    LogicalPartitionReader, MetadataCopy, SuperMetadata, VolumeAndroidError,
+    LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
 };
 
 const GEOMETRY_PRIMARY: usize = 4096;
@@ -96,7 +94,8 @@ fn reads_ext4_tree_and_ranges_through_sparse_super_without_expansion() {
         AndroidFilesystemKind::Ext4
     );
 
-    let filesystem = Ext4Reader::open(Box::new(logical), 0).expect("open ext4 filesystem");
+    let filesystem = open_filesystem_reader(Box::new(logical), AndroidFilesystemKind::Ext4, 0)
+        .expect("open ext4 filesystem");
     let mut root_names = filesystem
         .list_children("")
         .expect("list ext4 root")
@@ -148,7 +147,8 @@ fn reads_f2fs_tree_and_ranges_through_sparse_super_without_expansion() {
         AndroidFilesystemKind::F2fs
     );
 
-    let filesystem = F2fsReader::open(Box::new(logical), 0).expect("open F2FS filesystem");
+    let filesystem = open_filesystem_reader(Box::new(logical), AndroidFilesystemKind::F2fs, 0)
+        .expect("open F2FS filesystem");
     let children = filesystem.list_children("").expect("list F2FS root");
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "hello.txt");
@@ -181,7 +181,8 @@ fn reads_erofs_tree_and_ranges_through_sparse_super_without_expansion() {
         AndroidFilesystemKind::Erofs
     );
 
-    let filesystem = ErofsReader::open(Box::new(logical), 0).expect("open EROFS filesystem");
+    let filesystem = open_filesystem_reader(Box::new(logical), AndroidFilesystemKind::Erofs, 0)
+        .expect("open EROFS filesystem");
     let children = filesystem.list_children("").expect("list EROFS root");
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "hello.txt");
