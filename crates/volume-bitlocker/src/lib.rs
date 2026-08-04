@@ -18,8 +18,7 @@
 //! verified key packages remain later stages; the crate itself never owns those
 //! application concerns.
 //!
-//! See `docs/bitlocker-volume-layer-design.md` for the staged plan and
-//! `docs/bitlocker-dependency-decision.md` for upstream provenance.
+//! See `docs/bitlocker-dependency-decision.md` for upstream provenance.
 //!
 //! # Boundaries that must not move
 //!

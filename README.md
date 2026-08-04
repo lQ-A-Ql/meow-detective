@@ -282,7 +282,7 @@ cargo tauri build
 | `crates/artifacts-windows/`、`artifacts-linux/` | Windows 和 Linux 取证制品解析。 |
 | `crates/search/`、`timeline/`、`reports/` | 检索、时间线和报告能力。 |
 | `crates/ceph-wire/`、`rocksdb-wire/` | 只读 Ceph/BlueStore/RocksDB 低层解析原语。 |
-| `docs/` | 架构约束、支持矩阵、测试基线、错误分类和专题设计文档。 |
+| `docs/` | 支持矩阵、测试基线、错误分类、安全和前后端契约。模块设计与开发文档仅保留在工作站。 |
 | `scripts/` | 架构边界、质量门禁、真实样本回归和基准脚本。 |
 
 ## 质量与安全约束
@@ -293,18 +293,13 @@ cargo tauri build
 - 导出前校验目标路径，默认 `overwrite=false`，使用临时文件和原子改名避免半成品。
 - 生产代码与测试物理分离；后端模块、函数、命令边界均由仓库 PowerShell guard 检查。
 
-完整门禁、真实样本测试和文档索引见 [开发工程指南](docs/development-engineering-guide.md)、[验证可信框架](docs/validation-trust-framework.md) 与 [文档索引](docs/documentation-index.md)。
+完整门禁、真实样本测试和文档索引见 [验证可信框架](docs/validation-trust-framework.md) 与 [文档索引](docs/documentation-index.md)。
 
 ### 技术文档
 
-- [架构与数据模型](docs/architecture-model.md)
-- [后端模块架构](docs/backend-module-architecture.md)
-- [设计约束](docs/design-constraints.md)
-- [模型、架构与算法图谱](docs/model-architecture-algorithm-diagrams.md)
 - [预期 JSON 契约](docs/expected-json-contract.md)
 - [错误分类手册](docs/error-classification-manual.md)
 - [性能基线](docs/benchmark-baseline.md)
-- [关联分析设计](docs/correlation-analysis-design.md)
 - [解析器支持矩阵](docs/parser-support-matrix.md)
 - [MCP 安全模型](docs/mcp-security-model.md)
 - [导出与媒体安全](docs/export-and-media-safety.md)
@@ -321,9 +316,9 @@ cargo tauri build
 
 | 项目 | 许可证 | 借鉴/使用方式 |
 |---|---|---|
-| [Autopsy](https://github.com/sleuthkit/autopsy) | Apache-2.0 | 数字取证工作台的能力分层与工作流闭环（案件 → 数据源 → 文件浏览 → 工件提取 → 检索 → 时间线 → 报告）的产品与架构思想参考，详见根目录 `autopsy-borrowings.md`；未复用其源码 |
-| [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit) | IPL-1.0 / CPL-1.0 | BitLocker 卷侧 `metadata -> VMK -> FVEK -> sector reader` 处理顺序与元数据冗余策略的正确性参照（见 `docs/bitlocker-memory-key-recovery-design.md`）；未复用其源码 |
-| [Dokany](https://github.com/dokan-dev/dokany) / [dokan-rust](https://github.com/dokan-dev/dokan-rust) | Dokany runtime/driver: LGPL；Rust binding: MIT | Windows 逻辑分区只读盘符的用户态文件系统 runtime 与 Rust API；本项目不自动安装或再分发 Dokany runtime，挂载行为和版本前置见 `docs/image-mount-design.md` |
+| [Autopsy](https://github.com/sleuthkit/autopsy) | Apache-2.0 | 数字取证工作台的能力分层与工作流闭环（案件 → 数据源 → 文件浏览 → 工件提取 → 检索 → 时间线 → 报告）的产品与架构思想参考；未复用其源码 |
+| [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit) | IPL-1.0 / CPL-1.0 | BitLocker 卷侧 `metadata -> VMK -> FVEK -> sector reader` 处理顺序与元数据冗余策略的正确性参照；未复用其源码 |
+| [Dokany](https://github.com/dokan-dev/dokany) / [dokan-rust](https://github.com/dokan-dev/dokan-rust) | Dokany runtime/driver: LGPL；Rust binding: MIT | Windows 逻辑分区只读盘符的用户态文件系统 runtime 与 Rust API；本项目不自动安装或再分发 Dokany runtime，挂载前置要求见本文 Windows 权限与服务章节 |
 | [libewf](https://github.com/libyal/libewf) | LGPL-3.0 | 参考 `ewfmount.c`、Dokan/FUSE 回调和 EWF handle 生命周期设计，确定最小只读操作集、句柄边界与卸载清理；生产链路使用本项目 `image-e01` reader，未复用 libewf 源码或调用其 CLI |
 | [iscsi-target](https://github.com/lawless-m/iscsi-crate) | MIT OR Apache-2.0 | 物理磁盘模式的本机 loopback iSCSI target 基础实现；仓库在 `vendor/iscsi-target` 保留许可证并增加写保护 SCSI 与 Windows 互操作补丁，修改说明见 `vendor/iscsi-target/MEOW_PATCH.md` |
 | [Microsoft Windows iSCSI API](https://learn.microsoft.com/windows/win32/iscsi/portal) | Microsoft Learn / Windows SDK 使用条款 | 物理挂载使用系统 `iscsidsc.dll`、Microsoft iSCSI Initiator 和 Service Control Manager API；不复制或分发 Windows 组件，服务修改范围见本文“Windows 权限与系统服务” |

@@ -14,10 +14,10 @@
 //! The rotation constants and cycle order follow the `dislocker` (`diffuser.c`)
 //! and `libbde` reference. Correctness is not provable by a self-authored
 //! round-trip — that only shows the two directions agree with each other. The
-//! real proof is the public `bdetogo.raw` oracle in
-//! `docs/bitlocker-volume-layer-design.md` section 4; the regression vector in
-//! the tests was captured from the oracle-validated upstream and pins the
-//! transform against accidental edits.
+//! real proof is the public `bdetogo.raw` case exercised by
+//! `tests/bitlocker_oracle.rs`; the regression vector in the unit tests was
+//! captured from the oracle-validated upstream and pins the transform against
+//! accidental edits.
 
 /// Diffuser A rotation amounts, indexed by word position modulo 4.
 const ROTATIONS_A: [u32; 4] = [9, 0, 13, 0];

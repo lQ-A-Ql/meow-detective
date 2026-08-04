@@ -41,12 +41,10 @@ foreach ($relativePath in $trackedDocs) {
 }
 
 $requiredTechnicalDocs = @(
-  'docs/architecture-model.md',
-  'docs/backend-module-architecture.md',
-  'docs/design-constraints.md',
   'docs/documentation-index.md',
-  'docs/model-architecture-algorithm-diagrams.md',
+  'docs/known-unsupported-formats.md',
   'docs/parser-support-matrix.md',
+  'docs/error-taxonomy.md',
   'docs/validation-trust-framework.md'
 )
 foreach ($relativePath in $requiredTechnicalDocs) {

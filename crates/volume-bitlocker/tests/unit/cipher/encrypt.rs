@@ -5,7 +5,7 @@
 //!
 //! A passing round-trip here proves only that these two directions agree with
 //! each other, **not** that either matches BitLocker. The real proof is the public
-//! oracle set in `docs/bitlocker-volume-layer-design.md` section 4. What these
+//! oracle set exercised by `tests/bitlocker_oracle.rs`. What these
 //! tests do catch is an edit to the decrypt path that changes its behaviour.
 
 use aes::cipher::block_padding::NoPadding;

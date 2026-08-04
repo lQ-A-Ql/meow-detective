@@ -3,7 +3,7 @@
 //! These tests are self-consistency checks: this file authors the encoder and the
 //! crate authors the decoder, so passing proves the pipeline agrees with itself,
 //! **not** that it agrees with BitLocker. Real-format proof comes from the
-//! env-gated oracles listed in `docs/bitlocker-volume-layer-design.md` section 4.
+//! env-gated public oracles exercised by `tests/bitlocker_oracle.rs`.
 
 use aes::Aes256;
 use ccm::aead::generic_array::GenericArray;

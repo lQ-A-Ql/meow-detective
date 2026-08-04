@@ -6,8 +6,7 @@
   The BitLocker volume layer handles passwords and recovery passwords that must
   never reach persistent storage, logs, events, or reports. The sole frontend
   exception is the explicitly authorized, transient recovery-password reveal
-  returned by memory-image unlock. This
-  guard enforces the rules from docs/bitlocker-volume-layer-design.md section 2.4
+  returned by memory-image unlock. This guard enforces the credential boundary
   structurally, so a leak fails CI rather than a review:
 
     1. Secret-bearing types must not derive Debug, Clone, or Serialize.
