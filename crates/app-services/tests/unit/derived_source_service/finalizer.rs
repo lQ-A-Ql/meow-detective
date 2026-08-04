@@ -419,9 +419,9 @@ fn unrelated_source_schema_migration_does_not_invalidate_catalog_fingerprint() {
         crate::derived_source_catalog::CATALOG_POLICY_VERSION,
     );
 
-    assert_eq!(
+    assert_ne!(
         persistence_sqlite::runner::latest_source_version(),
-        "source_030_analysis_file_feed_index"
+        super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog)
     );
     assert_eq!(
         super::fingerprint::phase_schema_dependency(ProcessingPhase::Catalog),

@@ -23,62 +23,7 @@ use tempfile::TempDir;
 const DS_ID: &str = "ds-e2e-folding";
 
 fn seed_main_db(conn: &Connection) {
-    // Minimal schema needed by the merge + tree-builder paths. Mirrors the
-    // production file_entries / data_source_partitions columns.
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS file_entries (
-            id TEXT PRIMARY KEY NOT NULL,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            partition_index INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS data_source_partitions (
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT NOT NULL,
-            partition_index INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            kind_label TEXT NOT NULL,
-            status TEXT NOT NULL,
-            type_guid TEXT,
-            offset INTEGER NOT NULL,
-            length INTEGER NOT NULL,
-            filesystem TEXT,
-            unlock_hint TEXT,
-            lvm_vg_uuid TEXT,
-            lvm_vg_name TEXT,
-            lvm_lv_uuid TEXT,
-            lvm_lv_name TEXT,
-            lvm_pv_offsets_json TEXT,
-            lvm_pv_sources_json TEXT
-        );
-        CREATE TABLE IF NOT EXISTS source_meta (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT INTO schema_migrations (id, name)
-        VALUES (30, 'source_030_analysis_file_feed_index');",
-    )
-    .unwrap();
+    persistence_sqlite::runner::run_source_all(conn).unwrap();
 }
 
 fn seed_partitions_table(conn: &Connection) {

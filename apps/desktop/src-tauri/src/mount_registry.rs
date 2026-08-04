@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use app_services::mount_service::prepare_mount_session;
 use evidence_mount::MountSession;
 use thiserror::Error;
-use transport::dto::{MountStateDto, MountStatusDto, MountTargetDto};
+use transport::dto::{MountModeDto, MountStateDto, MountStatusDto, MountTargetDto};
 
 use crate::mount_backend::{self, BackendHandle, MountBackendError};
 
@@ -107,6 +107,9 @@ impl MountRegistry {
                 filesystem: plan.filesystem_kind.clone(),
                 mount_point: requested_mount_point.unwrap_or("").to_string(),
                 read_only: true,
+                mode: MountModeDto::LogicalPartition,
+                physical_device_path: None,
+                target_address: None,
             },
             state: MountStateDto::Preparing,
             active_handle_count: 0,

@@ -50,6 +50,7 @@ export const COMMANDS = {
   },
   mount: {
     MOUNT_IMAGE: 'mount_image',
+    MOUNT_PHYSICAL_IMAGE: 'mount_physical_image',
     UNMOUNT_IMAGE: 'unmount_image',
     GET_MOUNT_STATUS: 'get_mount_status',
     LIST_MOUNTS: 'list_mounts',

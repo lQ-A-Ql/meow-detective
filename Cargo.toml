@@ -9,6 +9,8 @@ members = [
   "crates/runtime-cache",
   "crates/evidence-core",
   "crates/evidence-mount",
+  "crates/evidence-block",
+  "crates/physical-mount",
   "crates/fs-ntfs",
   "crates/fs-fat",
   "crates/fs-exfat",
@@ -33,6 +35,7 @@ members = [
   "crates/ceph-wire",
   "crates/rocksdb-wire",
 ]
+exclude = ["vendor/iscsi-target"]
 
 [workspace.package]
 edition = "2021"
@@ -70,6 +73,8 @@ infrastructure = { path = "crates/infrastructure" }
 persistence-sqlite = { path = "crates/persistence-sqlite" }
 evidence-core = { path = "crates/evidence-core" }
 evidence-mount = { path = "crates/evidence-mount" }
+evidence-block = { path = "crates/evidence-block" }
+physical-mount = { path = "crates/physical-mount" }
 fs-ntfs = { path = "crates/fs-ntfs" }
 fs-fat = { path = "crates/fs-fat" }
 fs-exfat = { path = "crates/fs-exfat" }
@@ -106,7 +111,8 @@ csv = "1"
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1" }
 unicode-normalization = "0.1"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
+iscsi-target = "1.0.0"
 dirs = "6"
 lz4_flex = "~0.13"
 xxhash-rust = { version = "~0.8", features = ["xxh3"] }
@@ -138,3 +144,9 @@ lopdf = "0.44"
 winres = "~0.1"
 binread = "~2.2"
 mimalloc = { version = "0.1", default-features = false }
+
+[patch.crates-io]
+# Upstream 1.0.0 acknowledges WRITE commands, reports writable MODE SENSE data,
+# and emits Data-In status/residual fields that Windows rejects. The local patch
+# adds the forensic read-only contract and RFC 7143 interoperability fixes.
+iscsi-target = { path = "vendor/iscsi-target" }

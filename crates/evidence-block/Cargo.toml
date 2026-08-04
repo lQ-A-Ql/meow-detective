@@ -1,0 +1,15 @@
+[package]
+name = "evidence-block"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+evidence-core.workspace = true
+image-e01.workspace = true
+iscsi-target.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

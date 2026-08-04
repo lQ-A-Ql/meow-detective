@@ -1,9 +1,15 @@
 import { COMMANDS } from '@/lib/api/commands';
 import { apiClient } from '@/lib/api/client';
-import type { MountImageRequest, MountStatus } from '@/types/models';
+import type { MountImageRequest, MountPhysicalImageRequest, MountStatus } from '@/types/models';
 
 export async function mountImage(request: MountImageRequest): Promise<MountStatus> {
   return apiClient.request<MountStatus>(COMMANDS.mount.MOUNT_IMAGE, { request });
+}
+
+export async function mountPhysicalImage(
+  request: MountPhysicalImageRequest,
+): Promise<MountStatus> {
+  return apiClient.request<MountStatus>(COMMANDS.mount.MOUNT_PHYSICAL_IMAGE, { request });
 }
 
 export async function unmountImage(mountId: string): Promise<void> {

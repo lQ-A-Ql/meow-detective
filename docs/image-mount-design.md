@@ -1,25 +1,32 @@
-# 镜像只读逻辑盘挂载设计
+# 镜像只读挂载设计
 
 ## 1. 文档状态
 
-- 状态：Stage 1-3 初版实现，真实 Dokan/E01 FAT 与 NTFS 端到端冒烟验收通过
-- 适用版本：Meow~Detective 当前开发基线 `88a14ffb`
-- 范围：E01/EWF 和 raw 镜像中的单个已识别文件系统分区
+- 状态：逻辑分区模式已验收；物理磁盘模式已通过管理员 Windows 互操作验收
+- 适用版本：Meow~Detective 当前开发基线 `4504daa0`
+- 范围：E01/EWF 和 raw 镜像的单分区逻辑挂载，以及完整逻辑字节流的只读物理磁盘呈现
 - 首选宿主平台：Windows x64
 - 证据原则：原始镜像和其 EWF segment 永不写入
+- Windows 应用清单：桌面程序请求 `requireAdministrator`，启动时由 UAC 授予管理员令牌；
+  这是物理磁盘模式调用 Microsoft iSCSI Initiator 所需的固定运行前提，不通过运行时自提权。
 
 本设计定义挂载模块的边界、实现状态和落地顺序，不改变现有文件树、预览、BitLocker、
 独立 source database 或 Ceph/PVE 解析语义。当前核心只读语义、source catalog 路由、
 Windows Dokan backend 和案件生命周期清理已经落地；已在 Dokan 2.3.1 环境中完成真实
-E01 的 FAT 与 NTFS 盘符读取、目录列举、写入拒绝和卸载释放验收。
+E01 的 FAT 与 NTFS 盘符读取、目录列举、写入拒绝和卸载释放验收。新增物理磁盘模式
+不依赖 Arsenal 授权或自签名驱动：后端把 E01/raw 逻辑字节流作为只读 SCSI block device，
+通过仅绑定 `127.0.0.1` 的临时 iSCSI target 交给 Microsoft iSCSI Initiator。
 
 ## 2. 目标与非目标
 
 ### 2.1 目标
 
-用户可以选择一个已经导入且状态为 `ready` 的数据源、一个明确的分区，将其以只读
-逻辑盘符或目录挂载到宿主系统。挂载后的文件访问仍由本项目的证据 reader、文件系统
-解析器和 source database 路由完成。
+用户可以选择一个已经导入且状态为 `ready` 的数据源，并明确选择两种互不回退的模式：
+
+- `logicalPartition`：选择一个分区，以只读逻辑盘符挂载；文件访问由本项目 parser 和
+  source database 路由；
+- `physicalDisk`：不选择分区，把完整 E01/raw 逻辑字节流呈现为 Windows 物理磁盘，
+  由 Windows 原生发现 MBR/GPT 及其可识别卷。
 
 v1 必须具备：
 
@@ -31,13 +38,17 @@ v1 必须具备：
 - 读请求大小、并发数、打开句柄数和缓存大小均有上限；
 - 错误、状态和挂载能力通过 typed DTO 返回，不让前端计算分区或宿主路径；
 - 审计记录包含来源、分区、挂载实例、只读策略和失败原因，但不保存密钥或完整证据路径。
+- 物理模式使用每次挂载独立 IQN 和仅驻留内存的 CHAP 凭据；target 只监听 loopback；
+- 临时 CHAP secret 固定为 Windows 接受的 16 字节上限，不写入数据库、日志或 DTO；
+- SCSI `WRITE(10/16)` 返回 `DATA PROTECT / WRITE PROTECTED`，MODE SENSE 同时报告 WP；
+- 物理模式通过 `iscsidsc.dll` 登录和注销，不调用 PowerShell、diskpart 或外部 mount CLI。
 
 ### 2.2 非目标
 
 以下能力不在本轮 v1：
 
-- 让 Windows 原生 `NTFS.sys` 直接接管 E01 内部 NTFS；
-- 创建虚拟物理磁盘、虚拟块设备、磁盘管理器可分区设备；
+- 自写、侧载或分发未签名虚拟磁盘驱动；
+- 依赖 Arsenal Image Mounter 授权或其专有 backend；
 - 写入证据、回写元数据、删除/重命名/创建文件；
 - 自动调用 `ewfmount`、`libewf` CLI、`ceph-fuse`、`mount.ceph`、`rbd map`、`qemu-nbd`；
 - Ceph BlueStore、CephFS、PVE 多成员集群作为一个宿主卷挂载；
@@ -110,14 +121,29 @@ libewf 的 `ewftools/ewfmount.c` 负责解析命令行、打开 EWF source、创
 |---|---|---|---|---|
 | Dokan 用户态文件系统 | 逻辑盘符/目录 | Windows 生态成熟，Rust wrapper 为 MIT；读写边界可控 | 需要 Dokan runtime/driver 和发布验证 | **v1 首选** |
 | WinFsp 用户态文件系统 | 逻辑盘符/目录 | 可作为后续可替换 backend | 当前 Rust binding 存在 GPL 合规风险 | 后续评估，不进入 v1 |
-| EWF 连续流 + 系统块设备 | 虚拟磁盘/物理设备 | 可让系统文件系统驱动接管 | 驱动签名、IOCTL、分区写保护、崩溃隔离和安全成本高 | v2 另立项目 |
+| EWF 连续流 + loopback iSCSI | Windows 物理磁盘 | 使用 Microsoft 已签名 Initiator，无自写驱动；系统原生发现分区 | 需要 MSiSCSI 服务和管理员进程 | **物理模式初版** |
 | 外部 `ewfmount`/第三方工具 | 依赖外部挂载点 | 开发快 | 绕过本项目 source routing，权限/生命周期/路径审计不可控 | 禁止作为生产路径 |
 
-v1 的“逻辑分区”是 Dokan 用户态文件系统映射出来的逻辑盘，不宣称是磁盘管理器
+逻辑模式的“逻辑分区”是 Dokan 用户态文件系统映射出来的逻辑盘，不宣称是磁盘管理器
 意义上的物理卷。WinFsp 只作为后续可替换 backend，不在 v1 同时维护两套 backend。
 Dokan runtime/driver 未安装时必须返回 typed external/unsupported 错误，不允许静默回退。
-若产品必须支持原生 Windows 程序依赖 NTFS 控制码、USN 或卷级 IOCTL，
-必须另行立项实现只读虚拟块设备，不能在 v1 中伪装兼容。
+依赖原生卷识别的工具应选择物理模式；该模式只承诺只读磁盘呈现，不承诺绕过 Windows
+自身对未知文件系统、离线 SAN 策略或加密卷的限制。
+
+### 3.4 Windows iSCSI API 依据
+
+物理模式只使用 Windows iSCSI Discovery Library API，不通过 shell 间接调用：
+
+- [`ISCSI_LOGIN_OPTIONS`](https://learn.microsoft.com/windows/win32/api/iscsidsc/ns-iscsidsc-iscsi_login_options)
+  定义 CHAP 用户名、共享密钥和 login flags；
+- [`LoginIScsiTargetW`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-loginiscsitargetw)
+  与 [`LogoutIScsiTarget`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-logoutiscsitarget)
+  定义临时会话生命周期；
+- [`GetDevicesForIScsiSessionW`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-getdevicesforiscsisessionw)
+  返回会话对应的物理设备路径；
+- Windows 的 [`CHAP shared-secret`](https://learn.microsoft.com/windows/win32/api/vds/ns-vds-vds_iscsi_shared_secret)
+  契约要求长度为 12 至 16 字节，本实现使用随机 16 字节 secret，并且不进入 DTO、审计
+  或持久化存储。
 
 ## 4. 目标架构
 
@@ -136,6 +162,11 @@ flowchart LR
     FS --> ADAPTER[Mount filesystem adapter]
     ADAPTER --> DOKAN[Dokan runtime/driver]
     DOKAN --> DRIVE[Logical drive]
+    PLAN --> BLOCK[Read-only evidence block provider]
+    BLOCK --> SCSI[Write-protected SCSI device]
+    SCSI --> TARGET[Loopback iSCSI target]
+    TARGET --> INIT[Microsoft iSCSI Initiator]
+    INIT --> DISK[Windows physical disk]
 ```
 
 依赖方向固定为：
@@ -144,6 +175,7 @@ flowchart LR
 transport -> mount service -> evidence-mount adapter
                          -> app-services source routing
 evidence-mount -> evidence-core / domain
+physical-mount -> evidence-block -> image-e01 / evidence-core
 Tauri command -> app-services / transport
 frontend -> transport mirror / API wrapper
 ```
@@ -165,6 +197,21 @@ crates/evidence-mount/
     session.rs
   tests/unit.rs
 
+crates/evidence-block/
+  src/
+    device.rs
+    e01.rs
+    raw.rs
+    geometry.rs
+    provider.rs
+
+crates/physical-mount/
+  src/
+    target.rs
+    windows_initiator.rs
+    windows_service.rs
+    lifecycle.rs
+
 crates/transport/src/dto/mount.rs
 crates/app-services/src/mount_service/
   mod.rs
@@ -177,10 +224,16 @@ crates/app-services/src/mount_service/
 
 apps/desktop/src-tauri/src/
   mount_registry.rs
+  physical_mount_registry.rs
   mount_backend/mod.rs
   mount_backend/dokan.rs
   commands/mount_commands.rs
 ```
+
+`vendor/iscsi-target` 固定为 crates.io `iscsi-target 1.0.0` 的受控补丁。上游版本会接受
+WRITE command、在 MODE SENSE 中报告可写，并错误复用 Data-In status/residual 字节，不能
+直接用于取证或 Windows Initiator。补丁增加 read-only trait、write-protected sense、WP bit、
+pre-bound listener、RFC 7143 residual 编码和独立 status 字段；不得承载本项目解析逻辑。
 
 每个生产文件只拥有一个 use case 或稳定能力。`mod.rs/lib.rs` 只做声明和 re-export；
 测试正文不回到 `src/`。
@@ -547,6 +600,31 @@ worker panic、backend crash、取消和 timeout 不泄漏盘符或 permit。
 
 **验收标准**：静态 guard、Rust/frontend gate、真实样本、安装/卸载和原始 hash 检查全部通过。
 
+### Stage 6：Windows 物理磁盘模式
+
+**stage_design**：保留 Stage 1-5 的 Dokan 逻辑分区路径，新增完全独立的整盘块设备路径；
+禁止物理模式失败后回退到逻辑模式。
+
+**phase / task**：
+
+- `evidence-block` 提供 E01/raw sector-aligned 随机读和 16 MiB 单请求上限；
+- `physical-mount` 启动 pre-bound `127.0.0.1` iSCSI target，使用临时 IQN/CHAP；
+- 通过 `iscsidsc.dll` 启动/检查 MSiSCSI、以 `Persist=false` 注册临时 static target、登录、
+  枚举物理设备、注销并移除 target；该路径需要管理员进程；
+- `PhysicalMountRegistry` 与逻辑 `MountRegistry` 分离，case/source cleanup 同时清理两者；
+- 前端显式选择逻辑分区或物理磁盘，物理模式不显示分区和盘符输入。
+
+**测试标准**：SCSI handler 和 target path 均拒绝写；MODE SENSE WP=1；临时 raw MBR fixture
+能被 Windows 枚举为 physical disk；读取首扇区一致；卸载后设备消失且 source bytes 不变。
+
+**预期结果**：无需 Arsenal 授权和自写驱动即可提供 FTK 类整盘只读呈现。
+
+**评估方案**：记录 target startup、Windows login、device discovery、首扇区读取和 logout
+耗时；检查 listener 仅为 loopback、无持久 target、无 PowerShell/外部 CLI。
+
+**验收标准**：管理员 Windows 环境真实互操作测试通过，非管理员或 MSiSCSI 不可启动时
+返回 typed error；任何写请求均不得成功。
+
 ## 12. 测试矩阵
 
 | 测试面 | 用例 | 预期 |
@@ -556,6 +634,8 @@ worker panic、backend crash、取消和 timeout 不泄漏盘符或 permit。
 | catalog | ready、importing、failed、seal 缺失、stale locator | 只有 ready 且一致时可挂载 |
 | path | `..`、NUL、反斜杠混合、保留设备名、ADS | 拒绝或规范化后唯一解析 |
 | readonly | write/create/delete/rename/setattr/lock | 全部 write-protected/access-denied |
+| physical SCSI | WRITE(10/16)、MODE SENSE、越界 LBA | DATA PROTECT、WP=1、typed range error |
+| Windows iSCSI | service、login、device discovery、logout | 临时会话、物理盘出现并可完全移除 |
 | directory | 空目录、长目录、分页、重复 lookup | 不全树预读，结果稳定 |
 | concurrency | 多句柄、多读请求、取消、关闭中读 | bounded、可 drain、无死锁 |
 | lifecycle | case close/open/delete、source delete、应用退出 | 盘符释放，状态可恢复 |
@@ -585,6 +665,9 @@ powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
 
 - mount backend 只存在 Windows target cfg 内；
 - mount adapter 不调用 `std::fs::write`、删除、rename 或外部 mount command；
+- physical target 只绑定 `127.0.0.1`，不得出现 `0.0.0.0`；
+- production Windows 登录/注销只使用 `iscsidsc.dll` API；
+- patched iSCSI dependency 必须保留 WRITE PROTECTED 和 MODE SENSE WP 守卫；
 - source path 不从 frontend DTO 直接进入 filesystem callback；
 - 所有 mounted handles 在 case close/delete 测试中 drain；
 - 生产代码无明文密钥日志；
@@ -608,6 +691,9 @@ powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
 - Windows Dokan 的只读 `open/read/readdir/getattr` 及所有写操作拒绝；
 - mount registry、案件关闭/删除、数据源删除和应用退出时的清理；
 - transport DTO、Tauri command、前端 API 镜像和 `check-image-mount-guard.ps1`。
+- `evidence-block` 的 E01/raw sector provider、写保护 SCSI adapter 和 bounded request；
+- `physical-mount` 的 loopback target、临时 CHAP、MSiSCSI 启动检查、登录/注销和设备枚举；
+- 独立 `PhysicalMountRegistry`、`mount_physical_image` command 以及前端模式选择。
 - `image.mount` / `image.unmount` 案件审计，以及普通挂载排除删除恢复候选的边界；
 - FAT/NTFS/exFAT 的 `FileSystemReader::read_file_range` trait 转发，避免 trait object 回落到
   `Unsupported`；
@@ -631,5 +717,8 @@ cargo test -p forensics-desktop real_e01_mount_reads_through_a_read_only_drive_a
 
 - 未在本仓库中自动安装或启动 Dokan runtime/driver；
 - 尚未完成 ext4/XFS/Btrfs 和 exFAT 的真实样本盘符回归；
-- BitLocker 解密 reader、Ceph/RBD/CephFS 和物理块设备挂载不属于当前 v1 已验收能力；
+- BitLocker 解密 reader、Ceph/RBD/CephFS 不属于当前物理模式首版边界；
+- 2026-08-04 已在管理员 Windows 环境通过 Microsoft iSCSI Initiator 真实互操作测试：
+  最小 raw MBR fixture 被枚举为 `PhysicalDrive`，首扇区一致，写入失败，注销后设备消失，
+  原始 fixture 字节不变；非管理员进程返回 typed `security` error；
 - mount intent 的持久化状态和失败后的后台 cleanup pending 重试仍属于后续阶段。

@@ -25,7 +25,11 @@
     "mount": {
       "open": "Mount Image",
       "title": "Mount Read-Only Image",
-      "description": "Select an imported data source and partition to expose it as a read-only logical drive. Original evidence is never written.",
+      "description": "Choose a logical partition drive or complete physical-disk presentation. Both paths are read-only and never write original evidence.",
+      "mode": {
+        "logical": "Logical partition",
+        "physical": "Physical disk"
+      },
       "sourceSection": "Data Source",
       "sourceLabel": "Imported data source",
       "sourcePlaceholder": "Select a data source",
@@ -34,10 +38,13 @@
       "partitionPlaceholder": "Select a partition",
       "partitionOption": "Partition {{index}} · {{name}} · {{filesystem}} · {{size}}",
       "partitionHint": "Each mount binds to one partition; partitions are never concatenated.",
+      "physicalDescription": "The complete E01/raw image is presented to Windows through an iSCSI target bound only to loopback. Windows discovers the partition table and native volumes; no individual partition is selected.",
       "optionsSection": "Mount Options",
       "mountPointLabel": "Drive letter",
       "autoDrive": "Automatically choose an available drive",
       "mountPointHint": "If a drive letter is occupied, the backend rejects the request instead of taking it over.",
+      "physicalTargetTitle": "Windows physical disk",
+      "physicalTargetHint": "Microsoft iSCSI Initiator creates a temporary non-persistent session. This mode requires Meow~Detective to run as administrator. Windows assigns drive letters to recognized volumes according to system policy, and unmount removes the entire disk.",
       "readOnly": "READ ONLY",
       "readOnlyTitle": "Evidence protection enabled",
       "readOnlyDescription": "Only reads, directory enumeration, and metadata queries are allowed. Create, write, delete, rename, and metadata changes are rejected.",

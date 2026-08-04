@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './client';
 import { COMMANDS } from './commands';
-import { getMountStatus, listMounts, mountImage, unmountImage } from './mount';
+import {
+  getMountStatus,
+  listMounts,
+  mountImage,
+  mountPhysicalImage,
+  unmountImage,
+} from './mount';
 
 vi.mock('./client', () => ({
   apiClient: {
@@ -31,6 +37,15 @@ describe('mount API', () => {
     await unmountImage('mount-1');
 
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.mount.UNMOUNT_IMAGE, { mountId: 'mount-1' });
+  });
+
+  it('mountPhysicalImage sends only the data source identity', async () => {
+    requestMock.mockResolvedValueOnce({} as never);
+    const request = { dataSourceId: 'ds-1' };
+
+    await mountPhysicalImage(request);
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.mount.MOUNT_PHYSICAL_IMAGE, { request });
   });
 
   it('queries one mount status and the complete active mount list', async () => {

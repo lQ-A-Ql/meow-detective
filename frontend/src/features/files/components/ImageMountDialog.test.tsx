@@ -32,6 +32,8 @@ function createModel(overrides: Partial<ImageMountModel> = {}): ImageMountModel 
     selectedSourceId: source.id,
     setSelectedSourceId: vi.fn(),
     selectedSource: source,
+    mountMode: 'logicalPartition',
+    setMountMode: vi.fn(),
     partitions: source.partitions ?? [],
     selectedPartitionIndex: '3',
     setSelectedPartitionIndex: vi.fn(),
@@ -72,6 +74,15 @@ describe('ImageMountDialog', () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
+  it('shows physical-disk semantics without partition or drive-letter controls', () => {
+    render(<ImageMountDialog model={createModel({ mountMode: 'physicalDisk' })} />);
+
+    expect(screen.getByText(/整份 E01\/raw 镜像/)).toBeInTheDocument();
+    expect(screen.queryByText('文件系统分区')).not.toBeInTheDocument();
+    expect(screen.queryByText('盘符')).not.toBeInTheDocument();
+    expect(screen.getByText('Windows 物理磁盘')).toBeInTheDocument();
+  });
+
   it('exposes an active mount and delegates unmount to the feature model', () => {
     const unmount = vi.fn().mockResolvedValue(undefined);
     const mount: MountStatus = {
@@ -82,6 +93,7 @@ describe('ImageMountDialog', () => {
         filesystem: 'NTFS',
         mountPoint: 'M:',
         readOnly: true,
+        mode: 'logicalPartition',
       },
       state: 'mounted',
       activeHandleCount: 0,

@@ -22,6 +22,7 @@ chrono.workspace = true
 transport.workspace = true
 app-services.workspace = true
 evidence-mount.workspace = true
+physical-mount.workspace = true
 domain.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
@@ -48,6 +49,7 @@ dokan-sys.workspace = true
 widestring.workspace = true
 winapi.workspace = true
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_System_Memory", "Win32_System_Threading"] }
+windows-sys.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

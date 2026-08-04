@@ -22,7 +22,7 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 | IPC 事件 | `docs/ipc-event-contract.md` | Tauri command/event 契约和进度语义 |
 | 关联分析 | `docs/correlation-analysis-design.md` | 节点、边、聚类、线索、置信度和 provenance 模型 |
 | 批处理 | `docs/batch-processing-design.md` | 离线批处理、检查点和资源治理模型 |
-| 镜像挂载 | `docs/image-mount-design.md` | E01/EWF 单分区只读逻辑盘、WinFsp/Dokan 适配、生命周期和安全边界 |
+| 镜像挂载 | `docs/image-mount-design.md` | E01/raw 单分区 Dokan 逻辑盘与 loopback iSCSI 物理磁盘、生命周期和安全边界 |
 
 ## 3. 文件系统、卷与集群算法
 
@@ -67,8 +67,8 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 
 | 事实 | 当前值 |
 |---|---:|
-| Rust workspace crate | 30 |
-| Tauri commands | 119 |
+| Rust workspace crate | 32 |
+| Tauri commands | 120 |
 | app-services source modules | 32 |
 | SQLite repositories | 43 logical repositories |
 | SQLite migration scripts | 77 |
@@ -79,7 +79,7 @@ roadmap、runbook、walkthrough 和编辑器状态由工作站本地保存，不
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 10 |
 | `frontend/src/**/*.test.ts(x)` | 103 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 119 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 120 |
 
 治理事实源：
 

@@ -25,7 +25,11 @@
     "mount": {
       "open": "挂载镜像",
       "title": "挂载只读镜像",
-      "description": "选择已导入的数据源和分区，将其映射为只读逻辑盘。原始证据不会被写入。",
+      "description": "选择逻辑分区盘符或完整物理磁盘模式。两种路径均只读，原始证据不会被写入。",
+      "mode": {
+        "logical": "逻辑分区",
+        "physical": "物理磁盘"
+      },
       "sourceSection": "数据源",
       "sourceLabel": "已导入数据源",
       "sourcePlaceholder": "选择数据源",
@@ -34,10 +38,13 @@
       "partitionPlaceholder": "选择分区",
       "partitionOption": "分区 {{index}} · {{name}} · {{filesystem}} · {{size}}",
       "partitionHint": "一次挂载只绑定一个分区，不拼接多个分区。",
+      "physicalDescription": "整份 E01/raw 镜像将通过仅绑定本机回环地址的 iSCSI 目标交给 Windows，分区表和卷由系统原生识别。此模式不选择单独分区。",
       "optionsSection": "挂载选项",
       "mountPointLabel": "盘符",
       "autoDrive": "自动选择可用盘符",
       "mountPointHint": "盘符冲突时后端会拒绝请求，不会抢占现有盘符。",
+      "physicalTargetTitle": "Windows 物理磁盘",
+      "physicalTargetHint": "Microsoft iSCSI Initiator 建立临时非持久会话。此模式需要以管理员身份运行 Meow~Detective。可识别卷由 Windows 按系统策略分配盘符，卸载时会注销会话并移除整块磁盘。",
       "readOnly": "只读",
       "readOnlyTitle": "证据保护已启用",
       "readOnlyDescription": "挂载仅允许读取、目录列举和属性查询；创建、写入、删除、重命名及元数据修改均会被拒绝。",

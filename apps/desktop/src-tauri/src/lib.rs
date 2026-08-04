@@ -6,6 +6,7 @@ pub mod events;
 mod media_protocol;
 mod mount_backend;
 mod mount_registry;
+mod physical_mount_registry;
 mod platform_security;
 pub mod state;
 
@@ -130,6 +131,7 @@ macro_rules! desktop_command_handler {
             add_evidence_citation,
             list_investigation_steps,
             mount_image,
+            mount_physical_image,
             unmount_image,
             get_mount_status,
             list_mounts,

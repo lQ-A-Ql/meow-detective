@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use domain::{CaseId, DataSourceId, DataSourceKind};
+use domain::{CaseId, DataSourceId};
 use evidence_mount::{MountPlan, MountReadPolicy, MountSession};
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, partition_repo::PartitionRepo,
@@ -13,6 +13,9 @@ use crate::source_db::{open_ready_source_read_only_by_id, ReadySourceError};
 use super::catalog::CatalogMountFileSystem;
 use super::error::MountServiceError;
 use super::filesystem_factory::open_partition_filesystem;
+use super::source_validation::{
+    mount_source_binding, validate_source_identity, validate_source_kind,
+};
 
 pub fn prepare_mount_session(
     case_conn: &Connection,
@@ -67,35 +70,6 @@ pub fn prepare_mount_session(
         .read_directory(&evidence_mount::MountPath::root(), None, 1)
         .map_err(|error| MountServiceError::Catalog(error.to_string()))?;
     Ok(session)
-}
-
-fn mount_source_binding(data_source_id: &DataSourceId, source_hash: Option<String>) -> String {
-    source_hash
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| format!("data-source-id:{}", data_source_id.0))
-}
-
-fn validate_source_kind(source_kind: &DataSourceKind) -> Result<(), MountServiceError> {
-    if matches!(source_kind, DataSourceKind::E01 | DataSourceKind::Raw) {
-        return Ok(());
-    }
-    Err(MountServiceError::Unsupported(format!(
-        "data source kind '{source_kind}' is outside the E01/raw mount boundary"
-    )))
-}
-
-fn validate_source_identity(
-    source_path: &Path,
-    expected_size: Option<u64>,
-) -> Result<(), MountServiceError> {
-    let Some(expected) = expected_size else {
-        return Ok(());
-    };
-    let actual = std::fs::metadata(source_path)?.len();
-    if actual != expected {
-        return Err(MountServiceError::SourceIdentityMismatch { expected, actual });
-    }
-    Ok(())
 }
 
 fn validate_partition(status: &str, filesystem: Option<&str>) -> Result<(), MountServiceError> {

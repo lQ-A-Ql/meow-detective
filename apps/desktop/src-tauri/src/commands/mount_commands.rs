@@ -4,6 +4,10 @@ use transport::{commands::MountImageRequestDto, dto::MountStatusDto, CommandErro
 
 use crate::{mount_registry::MountRegistryError, state::AppState};
 
+mod physical;
+
+pub use physical::mount_physical_image;
+
 #[tauri::command]
 pub async fn mount_image(
     state: State<'_, AppState>,
@@ -72,10 +76,18 @@ pub async fn unmount_image(
             .get_connection()
             .map_err(CommandError::from_service_error)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
-        let registry = app_state.mount_registry.clone();
-        let status = registry
-            .status(&mount_id)
-            .map_err(CommandError::from_typed_service_error)?;
+        let physical = is_physical_mount_id(&mount_id);
+        let status = if physical {
+            app_state
+                .physical_mount_registry
+                .status(&mount_id)
+                .map_err(CommandError::from_typed_service_error)?
+        } else {
+            app_state
+                .mount_registry
+                .status(&mount_id)
+                .map_err(CommandError::from_typed_service_error)?
+        };
         let details = serde_json::json!({
             "status": "requested",
             "mountId": status.target.mount_id,
@@ -93,9 +105,17 @@ pub async fn unmount_image(
                 &details.to_string(),
             )
             .map_err(CommandError::from_typed_service_error)?;
-        registry
-            .unmount(&mount_id)
-            .map_err(CommandError::from_typed_service_error)
+        if physical {
+            app_state
+                .physical_mount_registry
+                .unmount(&mount_id)
+                .map_err(CommandError::from_typed_service_error)
+        } else {
+            app_state
+                .mount_registry
+                .unmount(&mount_id)
+                .map_err(CommandError::from_typed_service_error)
+        }
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -109,11 +129,18 @@ pub async fn get_mount_status(
     if mount_id.trim().is_empty() {
         return Err(CommandError::invalid_input("mount id is required"));
     }
-    let registry = state.inner().mount_registry.clone();
+    let logical_registry = state.inner().mount_registry.clone();
+    let physical_registry = state.inner().physical_mount_registry.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        registry
-            .status(&mount_id)
-            .map_err(CommandError::from_typed_service_error)
+        if is_physical_mount_id(&mount_id) {
+            physical_registry
+                .status(&mount_id)
+                .map_err(CommandError::from_typed_service_error)
+        } else {
+            logical_registry
+                .status(&mount_id)
+                .map_err(CommandError::from_typed_service_error)
+        }
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -121,12 +148,24 @@ pub async fn get_mount_status(
 
 #[tauri::command]
 pub async fn list_mounts(state: State<'_, AppState>) -> Result<Vec<MountStatusDto>, CommandError> {
-    let registry = state.inner().mount_registry.clone();
+    let logical_registry = state.inner().mount_registry.clone();
+    let physical_registry = state.inner().physical_mount_registry.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        registry
+        let mut mounts = logical_registry
             .list()
-            .map_err(|error: MountRegistryError| CommandError::from_typed_service_error(error))
+            .map_err(|error: MountRegistryError| CommandError::from_typed_service_error(error))?;
+        mounts.extend(
+            physical_registry
+                .list()
+                .map_err(CommandError::from_typed_service_error)?,
+        );
+        mounts.sort_by(|left, right| left.target.mount_id.cmp(&right.target.mount_id));
+        Ok(mounts)
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+fn is_physical_mount_id(mount_id: &str) -> bool {
+    mount_id.starts_with("physical-")
 }

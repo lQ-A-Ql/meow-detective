@@ -103,7 +103,10 @@ pub use mcp::{
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,
     McpTestConnectionResultDto, McpToolCallRequestDto, McpToolCallResultDto, McpToolDto,
 };
-pub use mount::{MountImageRequestDto, MountStateDto, MountStatusDto, MountTargetDto};
+pub use mount::{
+    MountImageRequestDto, MountModeDto, MountPhysicalImageRequestDto, MountStateDto,
+    MountStatusDto, MountTargetDto,
+};
 pub use notebook::{
     AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
     GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,

@@ -4,40 +4,7 @@ use app_services::staging::{PartitionEntry, PartitionStatus, StagingManifest};
 use rusqlite::{params, Connection};
 
 pub fn create_main_file_entries_table(conn: &Connection) {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS file_entries (
-            id TEXT PRIMARY KEY NOT NULL,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            partition_index INTEGER
-        );
-        CREATE TABLE source_meta (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL
-        );
-        CREATE TABLE schema_migrations (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT INTO schema_migrations (id, name) VALUES (30, 'source_030_analysis_file_feed_index');",
-    )
-    .unwrap();
+    persistence_sqlite::runner::run_source_all(conn).unwrap();
 }
 
 pub fn create_main_analysis_tables(conn: &Connection) {

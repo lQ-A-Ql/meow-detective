@@ -6,6 +6,12 @@ export interface MountImageRequest {
   mountPoint?: string | null;
 }
 
+export interface MountPhysicalImageRequest {
+  dataSourceId: string;
+}
+
+export type MountMode = 'logicalPartition' | 'physicalDisk';
+
 export interface MountTarget {
   mountId: string;
   dataSourceId: string;
@@ -13,6 +19,9 @@ export interface MountTarget {
   filesystem: string;
   mountPoint: string;
   readOnly: boolean;
+  mode: MountMode;
+  physicalDevicePath?: string;
+  targetAddress?: string;
 }
 
 export interface MountStatus {

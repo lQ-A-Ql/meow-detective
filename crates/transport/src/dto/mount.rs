@@ -9,6 +9,29 @@ pub struct MountImageRequestDto {
     pub mount_point: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MountPhysicalImageRequestDto {
+    pub data_source_id: String,
+}
+
+impl MountPhysicalImageRequestDto {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.data_source_id.trim().is_empty() {
+            return Err("data source id is required");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MountModeDto {
+    #[default]
+    LogicalPartition,
+    PhysicalDisk,
+}
+
 impl MountImageRequestDto {
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.data_source_id.trim().is_empty() {
@@ -32,6 +55,12 @@ pub struct MountTargetDto {
     pub filesystem: String,
     pub mount_point: String,
     pub read_only: bool,
+    #[serde(default)]
+    pub mode: MountModeDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub physical_device_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

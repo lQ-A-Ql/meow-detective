@@ -12,6 +12,7 @@ import {
 } from '@/app/components/ui/dialog';
 import { Field, FieldError, FieldHint, FieldLabel } from '@/app/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { formatBytes } from '@/lib/format-bytes';
 import type { ImageMountModel } from '@/features/files/hooks/use-image-mount-model';
 
@@ -34,7 +35,8 @@ function sourceLabel(source: ImageMountModel['dataSources'][number]) {
 export function ImageMountDialog({ model }: ImageMountDialogProps) {
   const { t } = useTranslation();
   const selectedMount = model.selectedMount;
-  const canSubmit = Boolean(model.selectedSourceId && model.selectedPartition)
+  const canSubmit = Boolean(model.selectedSourceId
+    && (model.mountMode === 'physicalDisk' || model.selectedPartition))
     && !selectedMount
     && !model.isSubmitting;
 
@@ -58,6 +60,20 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
             void model.submit();
           }}
         >
+          <Tabs
+            value={model.mountMode}
+            onValueChange={(value) => model.setMountMode(value as ImageMountModel['mountMode'])}
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="logicalPartition">
+                {t('fileBrowser.mount.mode.logical')}
+              </TabsTrigger>
+              <TabsTrigger value="physicalDisk">
+                {t('fileBrowser.mount.mode.physical')}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(220px,1fr)]">
             <section className="space-y-4 border border-forensics-border bg-forensics-surface p-4">
               <div className="flex items-center justify-between gap-3 border-b border-forensics-border pb-3">
@@ -85,31 +101,37 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                 <FieldHint>{t('fileBrowser.mount.sourceHint')}</FieldHint>
               </Field>
 
-              <Field>
-                <FieldLabel htmlFor="image-mount-partition">{t('fileBrowser.mount.partitionLabel')}</FieldLabel>
-                <Select
-                  value={model.selectedPartitionIndex}
-                  onValueChange={model.setSelectedPartitionIndex}
-                  disabled={model.partitions.length === 0}
-                >
-                  <SelectTrigger id="image-mount-partition" variant="mono">
-                    <SelectValue placeholder={t('fileBrowser.mount.partitionPlaceholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {model.partitions.map((partition) => (
-                      <SelectItem key={partition.index} value={String(partition.index)}>
-                        {t('fileBrowser.mount.partitionOption', {
-                          index: partition.index,
-                          name: partition.name,
-                          filesystem: partition.filesystem ?? partition.kindLabel,
-                          size: formatBytes(partition.length),
-                        })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldHint>{t('fileBrowser.mount.partitionHint')}</FieldHint>
-              </Field>
+              {model.mountMode === 'logicalPartition' ? (
+                <Field>
+                  <FieldLabel htmlFor="image-mount-partition">{t('fileBrowser.mount.partitionLabel')}</FieldLabel>
+                  <Select
+                    value={model.selectedPartitionIndex}
+                    onValueChange={model.setSelectedPartitionIndex}
+                    disabled={model.partitions.length === 0}
+                  >
+                    <SelectTrigger id="image-mount-partition" variant="mono">
+                      <SelectValue placeholder={t('fileBrowser.mount.partitionPlaceholder')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {model.partitions.map((partition) => (
+                        <SelectItem key={partition.index} value={String(partition.index)}>
+                          {t('fileBrowser.mount.partitionOption', {
+                            index: partition.index,
+                            name: partition.name,
+                            filesystem: partition.filesystem ?? partition.kindLabel,
+                            size: formatBytes(partition.length),
+                          })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldHint>{t('fileBrowser.mount.partitionHint')}</FieldHint>
+                </Field>
+              ) : (
+                <div className="border border-forensics-border bg-forensics-panel p-3 text-[11px] leading-5 text-forensics-muted">
+                  {t('fileBrowser.mount.physicalDescription')}
+                </div>
+              )}
             </section>
 
             <section className="space-y-4 border border-forensics-border bg-forensics-panel p-4">
@@ -118,21 +140,32 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                 {t('fileBrowser.mount.optionsSection')}
               </div>
 
-              <Field>
-                <FieldLabel htmlFor="image-mount-point">{t('fileBrowser.mount.mountPointLabel')}</FieldLabel>
-                <Select value={model.mountPoint} onValueChange={model.setMountPoint}>
-                  <SelectTrigger id="image-mount-point" variant="mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">{t('fileBrowser.mount.autoDrive')}</SelectItem>
-                    {model.mountPointOptions.map((drive) => (
-                      <SelectItem key={drive} value={drive}>{drive}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldHint>{t('fileBrowser.mount.mountPointHint')}</FieldHint>
-              </Field>
+              {model.mountMode === 'logicalPartition' ? (
+                <Field>
+                  <FieldLabel htmlFor="image-mount-point">{t('fileBrowser.mount.mountPointLabel')}</FieldLabel>
+                  <Select value={model.mountPoint} onValueChange={model.setMountPoint}>
+                    <SelectTrigger id="image-mount-point" variant="mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{t('fileBrowser.mount.autoDrive')}</SelectItem>
+                      {model.mountPointOptions.map((drive) => (
+                        <SelectItem key={drive} value={drive}>{drive}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldHint>{t('fileBrowser.mount.mountPointHint')}</FieldHint>
+                </Field>
+              ) : (
+                <div className="space-y-1 border border-forensics-border bg-forensics-surface p-3">
+                  <div className="text-[11px] text-forensics-text">
+                    {t('fileBrowser.mount.physicalTargetTitle')}
+                  </div>
+                  <p className="text-[11px] leading-5 text-forensics-muted">
+                    {t('fileBrowser.mount.physicalTargetHint')}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2 border border-forensics-sakura-300 bg-forensics-sakura-100/25 p-3">
                 <div className="flex items-center gap-2 text-[11px] text-forensics-text">

@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { listMounts, mountImage, unmountImage } from '@/lib/api/mount';
+import { listMounts, mountImage, mountPhysicalImage, unmountImage } from '@/lib/api/mount';
 import { errorMessage } from '@/lib/errors';
-import type { DataSourcePartition, DataSourceSummary, MountStatus } from '@/types/models';
+import type {
+  DataSourcePartition,
+  DataSourceSummary,
+  MountMode,
+  MountStatus,
+} from '@/types/models';
 
 const MOUNT_QUERY_KEY = ['mounts'] as const;
 
@@ -34,6 +39,7 @@ export function useImageMountModel() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState('');
+  const [mountMode, setMountMode] = useState<MountMode>('logicalPartition');
   const [selectedPartitionIndex, setSelectedPartitionIndex] = useState('');
   const [mountPoint, setMountPoint] = useState('auto');
 
@@ -53,9 +59,14 @@ export function useImageMountModel() {
   const partitions = selectedSource?.partitions ?? [];
   const selectedPartition = findSelectedPartition(selectedSource, selectedPartitionIndex);
   const selectedMount = useMemo(
-    () => mountsQuery.data?.find((mount) => mount.target.dataSourceId === selectedSourceId
-      && String(mount.target.partitionIndex) === selectedPartitionIndex),
-    [mountsQuery.data, selectedPartitionIndex, selectedSourceId],
+    () => mountsQuery.data?.find((mount) => {
+      if (mount.target.dataSourceId !== selectedSourceId || mount.target.mode !== mountMode) {
+        return false;
+      }
+      return mountMode === 'physicalDisk'
+        || String(mount.target.partitionIndex) === selectedPartitionIndex;
+    }),
+    [mountMode, mountsQuery.data, selectedPartitionIndex, selectedSourceId],
   );
 
   useEffect(() => {
@@ -84,8 +95,14 @@ export function useImageMountModel() {
 
   const mountMutation = useMutation({
     mutationFn: () => {
-      if (!selectedSourceId || !selectedPartitionIndex) {
-        throw new Error('请选择数据源和分区。');
+      if (!selectedSourceId) {
+        throw new Error('请选择数据源。');
+      }
+      if (mountMode === 'physicalDisk') {
+        return mountPhysicalImage({ dataSourceId: selectedSourceId });
+      }
+      if (!selectedPartitionIndex) {
+        throw new Error('请选择分区。');
       }
       return mountImage({
         dataSourceId: selectedSourceId,
@@ -105,6 +122,7 @@ export function useImageMountModel() {
     mountMutation.reset();
     unmountMutation.reset();
     setMountPoint('auto');
+    setMountMode('logicalPartition');
     setDialogOpen(true);
     void mountsQuery.refetch();
   }, [mountMutation, mountsQuery, unmountMutation]);
@@ -132,6 +150,8 @@ export function useImageMountModel() {
     selectedSourceId,
     setSelectedSourceId,
     selectedSource,
+    mountMode,
+    setMountMode,
     partitions,
     selectedPartitionIndex,
     setSelectedPartitionIndex,
