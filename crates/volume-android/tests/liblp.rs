@@ -1,12 +1,15 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use evidence_core::{FileSystemReader, RawImageReader};
+use fs_erofs::ErofsReader;
 use fs_ext4::Ext4Reader;
 use fs_f2fs::F2fsReader;
 use image_android::{AndroidSparseReader, SPARSE_DONT_CARE_CHUNK, SPARSE_MAGIC, SPARSE_RAW_CHUNK};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
-use testing::builders::{ext4::minimal_ext4_image, f2fs::minimal_f2fs_image};
+use testing::builders::{
+    erofs::minimal_erofs_image, ext4::minimal_ext4_image, f2fs::minimal_f2fs_image,
+};
 use volume_android::{
     probe_filesystem, AndroidFilesystemKind, GeometryCopy, LogicalPartitionReader, MetadataCopy,
     SuperMetadata, VolumeAndroidError, LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
@@ -154,6 +157,39 @@ fn reads_f2fs_tree_and_ranges_through_sparse_super_without_expansion() {
             .read_file_range("hello.txt", 6, 4)
             .expect("read bounded F2FS range"),
         b"F2FS"
+    );
+}
+
+#[test]
+fn reads_erofs_tree_and_ranges_through_sparse_super_without_expansion() {
+    let raw = super_image_with_partition(&minimal_erofs_image());
+    let sparse = sparse_wrap(&raw, 4096);
+    assert!(sparse.len() < raw.len());
+    let file = write_temp(&sparse);
+
+    let mut parser_source = AndroidSparseReader::open(file.path()).expect("open sparse super");
+    let metadata = SuperMetadata::read_slot(&mut parser_source, 0).expect("parse liblp metadata");
+    let partition = metadata
+        .partition("system")
+        .expect("system partition")
+        .clone();
+    let source = AndroidSparseReader::open(file.path()).expect("reopen sparse super");
+    let mut logical = LogicalPartitionReader::new(Box::new(source), partition)
+        .expect("map EROFS logical partition");
+    assert_eq!(
+        probe_filesystem(&mut logical).expect("probe EROFS logical partition"),
+        AndroidFilesystemKind::Erofs
+    );
+
+    let filesystem = ErofsReader::open(Box::new(logical), 0).expect("open EROFS filesystem");
+    let children = filesystem.list_children("").expect("list EROFS root");
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name, "hello.txt");
+    assert_eq!(
+        filesystem
+            .read_file_range("hello.txt", 6, 6)
+            .expect("read bounded EROFS range"),
+        b"EROFS!"
     );
 }
 

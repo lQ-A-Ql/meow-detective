@@ -39,9 +39,7 @@ fn identifies_supported_and_recognized_unsupported_filesystems() {
     );
     assert!(matches!(
         AndroidFilesystemKind::Erofs.require_reader(),
-        Err(VolumeAndroidError::UnsupportedFilesystem {
-            filesystem: AndroidFilesystemKind::Erofs
-        })
+        Ok(AndroidFilesystemKind::Erofs)
     ));
 }
 

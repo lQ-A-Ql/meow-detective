@@ -1597,6 +1597,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-erofs"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "testing",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "fs-exfat"
 version = "0.1.0"
 dependencies = [
@@ -6013,6 +6022,7 @@ name = "volume-android"
 version = "0.1.0"
 dependencies = [
  "evidence-core",
+ "fs-erofs",
  "fs-ext4",
  "fs-f2fs",
  "image-android",

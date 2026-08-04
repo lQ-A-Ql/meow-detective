@@ -30,6 +30,7 @@ members = [
   "crates/containers-pst",
   "crates/fs-ext4",
   "crates/fs-f2fs",
+  "crates/fs-erofs",
   "crates/fs-btrfs",
   "crates/fs-xfs",
   "crates/fs-lvm",
@@ -84,6 +85,7 @@ fs-fat = { path = "crates/fs-fat" }
 fs-exfat = { path = "crates/fs-exfat" }
 fs-ext4 = { path = "crates/fs-ext4" }
 fs-f2fs = { path = "crates/fs-f2fs" }
+fs-erofs = { path = "crates/fs-erofs" }
 fs-btrfs = { path = "crates/fs-btrfs" }
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }
