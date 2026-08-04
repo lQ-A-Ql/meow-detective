@@ -19,15 +19,13 @@ pub enum AndroidFilesystemKind {
 
 impl AndroidFilesystemKind {
     pub const fn has_reader(self) -> bool {
-        matches!(self, Self::Ext4)
+        matches!(self, Self::Ext4 | Self::F2fs)
     }
 
     pub fn require_reader(self) -> Result<Self> {
         match self {
-            Self::Ext4 => Ok(self),
-            Self::F2fs | Self::Erofs => {
-                Err(VolumeAndroidError::UnsupportedFilesystem { filesystem: self })
-            }
+            Self::Ext4 | Self::F2fs => Ok(self),
+            Self::Erofs => Err(VolumeAndroidError::UnsupportedFilesystem { filesystem: self }),
             Self::Unknown => Err(VolumeAndroidError::UnrecognizedFilesystem),
         }
     }

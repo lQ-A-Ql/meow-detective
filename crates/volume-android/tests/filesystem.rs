@@ -30,13 +30,13 @@ fn identifies_supported_and_recognized_unsupported_filesystems() {
     }
 
     assert!(AndroidFilesystemKind::Ext4.has_reader());
-    assert!(!AndroidFilesystemKind::F2fs.has_reader());
-    assert!(matches!(
-        AndroidFilesystemKind::F2fs.require_reader(),
-        Err(VolumeAndroidError::UnsupportedFilesystem {
-            filesystem: AndroidFilesystemKind::F2fs
-        })
-    ));
+    assert!(AndroidFilesystemKind::F2fs.has_reader());
+    assert_eq!(
+        AndroidFilesystemKind::F2fs
+            .require_reader()
+            .expect("F2FS reader is available"),
+        AndroidFilesystemKind::F2fs
+    );
     assert!(matches!(
         AndroidFilesystemKind::Erofs.require_reader(),
         Err(VolumeAndroidError::UnsupportedFilesystem {

@@ -2,10 +2,11 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use evidence_core::{FileSystemReader, RawImageReader};
 use fs_ext4::Ext4Reader;
+use fs_f2fs::F2fsReader;
 use image_android::{AndroidSparseReader, SPARSE_DONT_CARE_CHUNK, SPARSE_MAGIC, SPARSE_RAW_CHUNK};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
-use testing::builders::ext4::minimal_ext4_image;
+use testing::builders::{ext4::minimal_ext4_image, f2fs::minimal_f2fs_image};
 use volume_android::{
     probe_filesystem, AndroidFilesystemKind, GeometryCopy, LogicalPartitionReader, MetadataCopy,
     SuperMetadata, VolumeAndroidError, LP_METADATA_GEOMETRY_MAGIC, LP_METADATA_HEADER_MAGIC,
@@ -73,7 +74,7 @@ fn maps_a_logical_partition_directly_over_an_android_sparse_reader() {
 
 #[test]
 fn reads_ext4_tree_and_ranges_through_sparse_super_without_expansion() {
-    let raw = super_image_with_ext4();
+    let raw = super_image_with_partition(&minimal_ext4_image());
     let sparse = sparse_wrap(&raw, 4096);
     assert!(sparse.len() < raw.len());
     let file = write_temp(&sparse);
@@ -121,6 +122,39 @@ fn reads_ext4_tree_and_ranges_through_sparse_super_without_expansion() {
         .read_to_string(&mut nested_content)
         .expect("read nested file");
     assert_eq!(nested_content, "Hello subdir!");
+}
+
+#[test]
+fn reads_f2fs_tree_and_ranges_through_sparse_super_without_expansion() {
+    let raw = super_image_with_partition(&minimal_f2fs_image());
+    let sparse = sparse_wrap(&raw, 4096);
+    assert!(sparse.len() < raw.len());
+    let file = write_temp(&sparse);
+
+    let mut parser_source = AndroidSparseReader::open(file.path()).expect("open sparse super");
+    let metadata = SuperMetadata::read_slot(&mut parser_source, 0).expect("parse liblp metadata");
+    let partition = metadata
+        .partition("system")
+        .expect("system partition")
+        .clone();
+    let source = AndroidSparseReader::open(file.path()).expect("reopen sparse super");
+    let mut logical = LogicalPartitionReader::new(Box::new(source), partition)
+        .expect("map F2FS logical partition");
+    assert_eq!(
+        probe_filesystem(&mut logical).expect("probe F2FS logical partition"),
+        AndroidFilesystemKind::F2fs
+    );
+
+    let filesystem = F2fsReader::open(Box::new(logical), 0).expect("open F2FS filesystem");
+    let children = filesystem.list_children("").expect("list F2FS root");
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name, "hello.txt");
+    assert_eq!(
+        filesystem
+            .read_file_range("hello.txt", 6, 4)
+            .expect("read bounded F2FS range"),
+        b"F2FS"
+    );
 }
 
 #[test]
@@ -172,22 +206,21 @@ fn valid_super_image(partition_attributes: u32) -> Vec<u8> {
     image
 }
 
-fn super_image_with_ext4() -> Vec<u8> {
-    let ext4 = minimal_ext4_image();
-    let image_size = DATA_OFFSET + ext4.len();
+fn super_image_with_partition(payload: &[u8]) -> Vec<u8> {
+    let image_size = DATA_OFFSET + payload.len();
     let mut image = vec![0u8; image_size];
     let geometry = geometry_bytes();
     image[GEOMETRY_PRIMARY..GEOMETRY_PRIMARY + geometry.len()].copy_from_slice(&geometry);
     image[GEOMETRY_BACKUP..GEOMETRY_BACKUP + geometry.len()].copy_from_slice(&geometry);
     let metadata = linear_partition_metadata_bytes(
         "system",
-        ext4.len() as u64 / 512,
+        payload.len() as u64 / 512,
         DATA_OFFSET as u64 / 512,
         image_size as u64,
     );
     image[METADATA_PRIMARY..METADATA_PRIMARY + metadata.len()].copy_from_slice(&metadata);
     image[METADATA_BACKUP..METADATA_BACKUP + metadata.len()].copy_from_slice(&metadata);
-    image[DATA_OFFSET..DATA_OFFSET + ext4.len()].copy_from_slice(&ext4);
+    image[DATA_OFFSET..DATA_OFFSET + payload.len()].copy_from_slice(payload);
     image
 }
 

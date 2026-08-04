@@ -1625,6 +1625,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-f2fs"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "testing",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "fs-fat"
 version = "0.1.0"
 dependencies = [
@@ -6005,6 +6014,7 @@ version = "0.1.0"
 dependencies = [
  "evidence-core",
  "fs-ext4",
+ "fs-f2fs",
  "image-android",
  "sha2 0.10.9",
  "tempfile",
