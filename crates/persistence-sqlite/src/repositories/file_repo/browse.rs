@@ -7,6 +7,77 @@ use rusqlite::params;
 use super::{mapping::collect_entries, mapping::row_to_file_entry, FileRepo, FILE_ENTRY_COLUMNS};
 
 impl FileRepo<'_> {
+    pub fn find_mount_children_for_partition(
+        &self,
+        parent_id: &FileEntryId,
+        data_source_id: &DataSourceId,
+        partition_index: usize,
+    ) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND data_source_id = ?2 AND partition_index = ?3
+               AND deleted = 0
+             ORDER BY entry_type ASC, name COLLATE NOCASE ASC, id ASC",
+        );
+        let mut statement = self.conn.prepare_cached(&sql)?;
+        let rows = statement.query_map(
+            params![parent_id.0, data_source_id.0, partition_index as u64],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
+    pub fn find_root_for_partition(
+        &self,
+        data_source_id: &DataSourceId,
+        partition_index: usize,
+    ) -> DbResult<Option<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id IS NULL AND data_source_id = ?1 AND partition_index = ?2
+               AND deleted = 0
+             ORDER BY id ASC LIMIT 1",
+        );
+        let result = self.conn.query_row(
+            &sql,
+            params![data_source_id.0, partition_index as u64],
+            row_to_file_entry,
+        );
+        match result {
+            Ok(entry) => Ok(Some(entry)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn find_children_page_for_partition(
+        &self,
+        parent_id: &FileEntryId,
+        data_source_id: &DataSourceId,
+        partition_index: usize,
+        offset: u64,
+        limit: u32,
+    ) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND data_source_id = ?2 AND partition_index = ?3
+               AND deleted = 0
+             ORDER BY entry_type ASC, name ASC LIMIT ?4 OFFSET ?5",
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(
+            params![
+                parent_id.0,
+                data_source_id.0,
+                partition_index as u64,
+                limit as u64,
+                offset
+            ],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
     pub fn find_children(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC",

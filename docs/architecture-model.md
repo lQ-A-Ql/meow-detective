@@ -135,7 +135,7 @@ image-e01、artifacts-core、runtime-cache、volume-bitlocker、app-services、m
 | Crate | 职责 | 备注 |
 |-------|------|------|
 | **app-services** | 跨 crate 用例编排 | 32 个根源码模块；模块与函数结构债务 baseline 均为 0 |
-| **persistence-sqlite** | 连接、迁移、仓库 | 43 个逻辑 repository；75 个迁移脚本（主库 44 + source 29 + case graph 1 + staging 1） |
+| **persistence-sqlite** | 连接、迁移、仓库 | 43 个逻辑 repository；77 个迁移脚本（主库 44 + source 31 + case graph 1 + staging 1） |
 | **infrastructure** | 日志、哈希、fs 工具、文本、时钟、配置 | 跨切面工具 |
 | **runtime-cache** | 运行时临时缓存 | 只被 Tauri host 消费；不得成为事实源 |
 
@@ -547,7 +547,7 @@ baseline 只允许减少：
 | workspace 成员 | 29（28 crate + Tauri host package） |
 | Tauri 已注册 commands / 命令文件 | 115 / 71 |
 | transport DTO 文件 | 33 |
-| SQLite 逻辑 repository / 迁移脚本 | 43 / 75 |
+| SQLite 逻辑 repository / 迁移脚本 | 43 / 77 |
 | 前端页面 / feature / UI 基元 | 10 / 17 / 23 |
 | Rust 测试函数 | 以 `cargo test --workspace -- --list` 为准 |
 | 前端测试文件 | 101 |

@@ -17,9 +17,11 @@ tauri.workspace = true
 tauri-plugin-dialog = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 chrono.workspace = true
 transport.workspace = true
 app-services.workspace = true
+evidence-mount.workspace = true
 domain.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
@@ -41,6 +43,10 @@ base64.workspace = true
 reqwest.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+dokan.workspace = true
+dokan-sys.workspace = true
+widestring.workspace = true
+winapi.workspace = true
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_System_Memory", "Win32_System_Threading"] }
 
 [dev-dependencies]

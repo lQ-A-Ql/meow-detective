@@ -54,6 +54,10 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_030_analysis_file_feed_index",
         "source_028_file_entry_read_only"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_031_mount_directory_index",
+        "source_030_analysis_file_feed_index"
+    ));
 }
 
 #[test]
@@ -73,7 +77,7 @@ fn source_version_order_rejects_older_and_unknown_versions() {
 }
 
 #[test]
-fn source_024_through_030_upgrade_preserves_rows_and_adds_query_indexes() {
+fn source_024_through_031_upgrade_preserves_rows_and_adds_query_indexes() {
     let connection = persistence_sqlite::open_in_memory().unwrap();
     connection
         .execute_batch(
@@ -162,7 +166,7 @@ fn source_024_through_030_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 7);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 8);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(
@@ -262,6 +266,18 @@ fn source_024_through_030_upgrade_preserves_rows_and_adds_query_indexes() {
         .expect("source_030 must add the analysis keyset feed index");
     assert!(analysis_feed_index_sql.contains("data_source_id, path ASC, id ASC"));
     assert!(analysis_feed_index_sql.contains("WHERE LOWER(entry_type) = 'file'"));
+
+    let mount_index_sql: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master
+             WHERE type = 'index' AND name = 'idx_source_file_entries_mount_children'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("source_031 must add the mount directory index");
+    assert!(mount_index_sql.contains("parent_id"));
+    assert!(mount_index_sql.contains("name COLLATE NOCASE"));
+    assert!(!mount_index_sql.contains("WHERE deleted = 0"));
 }
 
 #[test]
@@ -282,6 +298,31 @@ fn current_source_schema_repairs_a_missing_analysis_feed_index() {
         )
         .unwrap();
     assert!(repaired.contains("WHERE LOWER(entry_type) = 'file'"));
+}
+
+#[test]
+fn current_source_schema_repairs_an_outdated_mount_directory_index() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    assert!(runner::run_source_all(&connection).unwrap() > 0);
+    connection
+        .execute_batch(
+            "DROP INDEX idx_source_file_entries_mount_children;
+             CREATE INDEX idx_source_file_entries_mount_children
+             ON file_entries(parent_id, data_source_id, partition_index);",
+        )
+        .unwrap();
+
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 0);
+    let repaired: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master
+             WHERE type = 'index' AND name = 'idx_source_file_entries_mount_children'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(repaired.contains("name COLLATE NOCASE"));
+    assert!(!repaired.contains("WHERE deleted = 0"));
 }
 
 #[test]

@@ -8,6 +8,7 @@ members = [
   "crates/persistence-sqlite",
   "crates/runtime-cache",
   "crates/evidence-core",
+  "crates/evidence-mount",
   "crates/fs-ntfs",
   "crates/fs-fat",
   "crates/fs-exfat",
@@ -68,6 +69,7 @@ domain = { path = "crates/domain" }
 infrastructure = { path = "crates/infrastructure" }
 persistence-sqlite = { path = "crates/persistence-sqlite" }
 evidence-core = { path = "crates/evidence-core" }
+evidence-mount = { path = "crates/evidence-mount" }
 fs-ntfs = { path = "crates/fs-ntfs" }
 fs-fat = { path = "crates/fs-fat" }
 fs-exfat = { path = "crates/fs-exfat" }
@@ -109,6 +111,10 @@ dirs = "6"
 lz4_flex = "~0.13"
 xxhash-rust = { version = "~0.8", features = ["xxh3"] }
 toml = "~0.8"
+dokan = "0.3.1"
+dokan-sys = "0.3.1"
+widestring = "0.4.3"
+winapi = { version = "0.3.9", features = ["std", "minwindef", "ntdef", "ntstatus", "winnt"] }
 ed25519-dalek = "~2"
 sha2 = "~0.10"
 tantivy = "0.26"

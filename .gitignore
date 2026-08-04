@@ -96,6 +96,7 @@ AGENTS.md
 !/docs/frontend-state-management.md
 !/docs/import-scheduling.md
 !/docs/ipc-event-contract.md
+!/docs/image-mount-design.md
 !/docs/known-unsupported-formats.md
 !/docs/large-file-browsing-optimization-design.md
 !/docs/linux-cluster-import-design.md

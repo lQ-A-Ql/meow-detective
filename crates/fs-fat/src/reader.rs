@@ -57,6 +57,10 @@ impl FileSystemReader for FatReader {
         Ok(Box::new(self.open_file_cursor(path)?))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        FatReader::read_file_range(self, path, offset, length)
+    }
+
     fn data_source_name(&self) -> &str {
         match self.fat_type {
             FatType::Fat12 => "FAT12",

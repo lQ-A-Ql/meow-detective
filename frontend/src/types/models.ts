@@ -28,3 +28,4 @@ export * from './entityResolution';
 export * from './notebook';
 export * from './batch';
 export * from './exchange';
+export * from './mount';

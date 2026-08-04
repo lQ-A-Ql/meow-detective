@@ -116,4 +116,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_030_analysis_file_feed_index",
         include_str!("scripts/source_030_analysis_file_feed_index.sql"),
     ),
+    (
+        "source_031_mount_directory_index",
+        include_str!("scripts/source_031_mount_directory_index.sql"),
+    ),
 ];

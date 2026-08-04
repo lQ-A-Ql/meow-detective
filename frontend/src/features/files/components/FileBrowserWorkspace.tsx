@@ -10,14 +10,17 @@ import { FileListPanel } from '@/features/files/components/FileListPanel';
 import { FilePreviewPanel } from '@/features/files/components/FilePreviewPanel';
 import { FileTreePanel } from '@/features/files/components/FileTreePanel';
 import { FileVisibilityToggle } from '@/features/files/components/FileVisibilityToggle';
+import { ImageMountControl } from '@/features/files/components/ImageMountControl';
+import type { ImageMountModel } from '@/features/files/hooks/use-image-mount-model';
 import type { useFileBrowserModel } from '@/features/files/use-file-browser-model';
 
 interface FileBrowserWorkspaceProps {
   model: ReturnType<typeof useFileBrowserModel>;
+  mountModel: ImageMountModel;
 }
 
 /** Pure file-browser presentation surface. All evidence routing remains in the feature model. */
-export function FileBrowserWorkspace({ model }: FileBrowserWorkspaceProps) {
+export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspaceProps) {
   const { t } = useTranslation();
 
   if (!model.currentCase) {
@@ -47,6 +50,7 @@ export function FileBrowserWorkspace({ model }: FileBrowserWorkspaceProps) {
             <div className="flex items-center gap-2 text-forensics-muted">{t('fileBrowser.filter.label')}<Input type="text" variant="mono" inputSize="inline" className="w-40 bg-forensics-surface focus-visible:border-forensics-muted" defaultValue={t('fileBrowser.filter.placeholder')} /></div>
             <div className="font-mono text-[11px] text-forensics-muted-light">{t('fileBrowser.viewer.status')}</div>
             <FileVisibilityToggle checked={model.showHidden} onCheckedChange={model.setShowHidden} />
+            <ImageMountControl model={mountModel} />
             <div className="ml-auto text-[11px] text-forensics-muted-light">{model.rowsPage?.truncated ? t('fileBrowser.itemCountWithTotal', { visibleCount: model.sortedRows.length, total: model.rowsPage.totalCount }) : t('fileBrowser.itemCount', { visibleCount: model.sortedRows.length })}</div>
           </div>
         </PageSubbar>

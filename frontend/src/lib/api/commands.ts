@@ -48,6 +48,12 @@ export const COMMANDS = {
     RESTORE_PERSISTED_BITLOCKER_KEY: 'restore_persisted_bitlocker_key',
     FORGET_PERSISTED_BITLOCKER_KEY: 'forget_persisted_bitlocker_key',
   },
+  mount: {
+    MOUNT_IMAGE: 'mount_image',
+    UNMOUNT_IMAGE: 'unmount_image',
+    GET_MOUNT_STATUS: 'get_mount_status',
+    LIST_MOUNTS: 'list_mounts',
+  },
   jobs: {
     GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',
     GET_WARNINGS: 'get_warnings',

@@ -75,6 +75,11 @@ pub async fn close_case(state: State<'_, AppState>, app: AppHandle) -> Result<()
             "Timed out waiting for active preview reads to finish",
         ));
     }
+    if let Err(error) = app_state.cleanup_mounts_for_case(&identity.case_id) {
+        app_state.task_manager.reactivate_case(&identity.case_id);
+        let _ = app_state.reactivate_preview_case(&identity.case_id);
+        return Err(CommandError::from_service_error(error));
+    }
 
     if !clear_active_case_if_matches(&app_state, &identity)? {
         app_state.task_manager.reactivate_case(&identity.case_id);

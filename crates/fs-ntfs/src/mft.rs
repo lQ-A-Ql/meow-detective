@@ -395,6 +395,10 @@ impl FileSystemReader for NtfsReader {
         Ok(Box::new(self.open_file_cursor(path)?))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        NtfsReader::read_file_range(self, path, offset, length)
+    }
+
     fn data_source_name(&self) -> &str {
         "NTFS"
     }

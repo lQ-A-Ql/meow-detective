@@ -198,6 +198,26 @@ fn insert_then_find_by_case_round_trips_provenance() {
 }
 
 #[test]
+fn mount_source_identity_queries_round_trip_registered_evidence() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let mut ds = make_ds("ds-mount", "Mount source");
+    ds.kind = DataSourceKind::E01;
+    ds.source_path = std::path::PathBuf::from("D:/evidence/sample.E01");
+    ds.provenance.source_hash_sha256 = Some("a".repeat(64));
+    ds.provenance.evidence_size = Some(42_000);
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    assert_eq!(repo.source_path(&ds.id).unwrap(), "D:/evidence/sample.E01");
+    assert_eq!(
+        repo.source_fingerprint(&ds.id).unwrap(),
+        ds.provenance.source_hash_sha256
+    );
+    assert_eq!(repo.source_kind(&ds.id).unwrap(), DataSourceKind::E01);
+    assert_eq!(repo.source_evidence_size(&ds.id).unwrap(), Some(42_000));
+}
+
+#[test]
 fn legacy_null_provenance_loads_safe_defaults() {
     let conn = setup_db();
     conn.execute(

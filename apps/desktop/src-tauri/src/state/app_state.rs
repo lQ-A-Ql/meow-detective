@@ -13,6 +13,7 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;
 
 use super::task_manager::TaskManager;
+use crate::mount_registry::MountRegistry;
 use app_services::file_service::PreviewRuntimeRegistry;
 
 const APP_CODE_NAME: &str = "Meow_Detective";
@@ -44,6 +45,8 @@ pub struct AppState {
     pub bitlocker_runtime: Arc<BitLockerUnlockRegistry>,
     /// OS-protected persistence for verified FVEK/tweak packages.
     pub bitlocker_key_store: Arc<dyn BitLockerKeyStore>,
+    /// Active user-mode read-only logical mounts.
+    pub mount_registry: Arc<MountRegistry>,
 }
 
 impl Default for AppState {
@@ -67,6 +70,7 @@ impl Default for AppState {
             preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),
             bitlocker_runtime: Arc::new(BitLockerUnlockRegistry::default()),
             bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
+            mount_registry: Arc::new(MountRegistry::default()),
         }
     }
 }
@@ -214,6 +218,22 @@ impl AppState {
                 .map_err(|error| format!("Failed to clear BitLocker runtime: {error}"))?;
         }
         Ok(drained)
+    }
+
+    pub fn cleanup_mounts_for_case(&self, case_id: &str) -> Result<(), String> {
+        self.mount_registry
+            .cleanup_case(case_id)
+            .map_err(|error| format!("Failed to clean up image mounts: {error}"))
+    }
+
+    pub fn cleanup_mounts_for_source(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> Result<(), String> {
+        self.mount_registry
+            .cleanup_source(case_id, data_source_id)
+            .map_err(|error| format!("Failed to clean up data-source image mounts: {error}"))
     }
 
     pub fn retire_preview_source(

@@ -226,6 +226,23 @@ impl<'a> DataSourceRepo<'a> {
         )?)
     }
 
+    pub fn source_fingerprint(&self, data_source_id: &DataSourceId) -> DbResult<Option<String>> {
+        Ok(self.conn.query_row(
+            "SELECT source_hash_sha256 FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| row.get(0),
+        )?)
+    }
+
+    pub fn source_evidence_size(&self, data_source_id: &DataSourceId) -> DbResult<Option<u64>> {
+        let size = self.conn.query_row(
+            "SELECT evidence_size FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| row.get::<_, Option<i64>>(0),
+        )?;
+        Ok(size.and_then(|value| u64::try_from(value).ok()))
+    }
+
     pub fn source_kind(&self, data_source_id: &DataSourceId) -> DbResult<DataSourceKind> {
         Ok(self.conn.query_row(
             "SELECT kind FROM data_sources WHERE id = ?1",

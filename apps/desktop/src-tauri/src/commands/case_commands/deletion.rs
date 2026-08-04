@@ -54,6 +54,11 @@ pub async fn delete_case(
                 "Timed out waiting for active preview reads to finish",
             ));
         }
+        if let Err(error) = app_state.cleanup_mounts_for_case(case_id) {
+            app_state.task_manager.reactivate_case(case_id);
+            let _ = app_state.reactivate_preview_case(case_id);
+            return Err(CommandError::from_service_error(error));
+        }
     }
 
     let root_clone = root.clone();
@@ -166,6 +171,11 @@ pub async fn delete_data_source(
             return Err(CommandError::timeout(
                 "Timed out waiting for data-source preview reads to finish",
             ));
+        }
+        if let Err(error) = worker_state.cleanup_mounts_for_source(&case_id.0, &data_source_id) {
+            worker_state.task_manager.reactivate_source(&case_id.0, &data_source_id);
+            let _ = worker_state.reactivate_preview_source(&case_id.0, &data_source_id);
+            return Err(CommandError::from_service_error(error));
         }
         app_services::file_service::clear_e01_reader_cache_for_case(&case_id.0);
         if let Err(error) =

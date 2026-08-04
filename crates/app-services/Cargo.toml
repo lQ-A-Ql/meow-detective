@@ -20,6 +20,7 @@ transport.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
+evidence-mount.workspace = true
 volume-bitlocker.workspace = true
 memory-windows.workspace = true
 fs-ntfs.workspace = true

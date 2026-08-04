@@ -4,6 +4,8 @@ mod command_registry;
 mod commands;
 pub mod events;
 mod media_protocol;
+mod mount_backend;
+mod mount_registry;
 mod platform_security;
 pub mod state;
 
@@ -127,6 +129,10 @@ macro_rules! desktop_command_handler {
             get_notebook_thread,
             add_evidence_citation,
             list_investigation_steps,
+            mount_image,
+            unmount_image,
+            get_mount_status,
+            list_mounts,
         ]
     };
 }

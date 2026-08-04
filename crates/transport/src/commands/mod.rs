@@ -9,6 +9,7 @@ mod settings;
 mod timeline;
 mod validation;
 
+pub use crate::dto::MountImageRequestDto;
 pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
     GetEvtxEventSummaryRequest, RunAnalysisExtractionRequest, RunEvidenceClassificationRequest,

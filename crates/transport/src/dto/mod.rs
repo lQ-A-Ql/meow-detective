@@ -21,6 +21,7 @@ pub mod graph;
 pub mod import;
 pub mod jobs;
 pub mod mcp;
+pub mod mount;
 pub mod notebook;
 pub mod recovery;
 pub mod registry;
@@ -102,6 +103,7 @@ pub use mcp::{
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,
     McpTestConnectionResultDto, McpToolCallRequestDto, McpToolCallResultDto, McpToolDto,
 };
+pub use mount::{MountImageRequestDto, MountStateDto, MountStatusDto, MountTargetDto};
 pub use notebook::{
     AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
     GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,

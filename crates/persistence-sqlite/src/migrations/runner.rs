@@ -198,6 +198,7 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
     let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;
     ensure_analysis_file_feed_index(conn, source_analysis_file_feed_index_sql())?;
+    super::mount_directory_index::ensure(conn, super::mount_directory_index::registered_sql())?;
     Ok(applied)
 }
 
@@ -250,6 +251,8 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
                 super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
             } else if *name == "source_030_analysis_file_feed_index" {
                 ensure_analysis_file_feed_index(conn, sql)
+            } else if *name == "source_031_mount_directory_index" {
+                super::mount_directory_index::ensure(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };

@@ -53,6 +53,10 @@ impl FileSystemReader for ExfatReader {
         Ok(Box::new(self.open_file_cursor(path)?))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        ExfatReader::read_file_range(self, path, offset, length)
+    }
+
     fn data_source_name(&self) -> &str {
         "exFAT"
     }

@@ -81,8 +81,9 @@ pub use viewer::{
     MediaPreviewPlan,
 };
 pub(crate) use viewer::{
-    preview_partition_candidate_from_record, PreviewDescriptor, PreviewPartitionCandidate,
-    RangeContentReader,
+    entry_image_path_candidates, open_candidate_block_reader_with_lvm_cache,
+    open_host_evidence_reader, preview_partition_candidate_from_record, LvmPoolRequestCache,
+    PreviewDescriptor, PreviewPartitionCandidate, RangeContentReader,
 };
 
 #[cfg(test)]

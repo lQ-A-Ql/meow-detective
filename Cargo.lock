@@ -127,6 +127,7 @@ dependencies = [
  "domain",
  "encoding_rs",
  "evidence-core",
+ "evidence-mount",
  "flate2",
  "fs-btrfs",
  "fs-exfat",
@@ -1180,6 +1181,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "dokan"
+version = "0.3.1+dokan206"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2559899e13c4d1c2ad38fa09be2daf9cde88ff4b70495a70ce4aa371b3b3b1a"
+dependencies = [
+ "bitflags 1.3.2",
+ "dokan-sys",
+ "widestring",
+ "winapi",
+]
+
+[[package]]
+name = "dokan-sys"
+version = "0.3.1+dokan206"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb7e49e8ac8b6867cd04fc1869a54d4bb32b680180ff2f86d695ef1955534668"
+dependencies = [
+ "cc",
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "dom_query"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1346,6 +1370,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "evidence-mount"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "evtx"
 version = "0.11.2"
 dependencies = [
@@ -1488,8 +1522,11 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "dirs",
+ "dokan",
+ "dokan-sys",
  "domain",
  "evidence-core",
+ "evidence-mount",
  "fs-fat",
  "fs-ntfs",
  "image-e01",
@@ -1505,12 +1542,15 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "transport",
  "uuid",
  "volume-bitlocker",
+ "widestring",
+ "winapi",
  "windows 0.58.0",
 ]
 
@@ -6118,6 +6158,12 @@ name = "weezl"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4ca08e5ef825b65b056d9efbd95c8750683f0a6d0466d02e96dc2e4e360f3d2"
+
+[[package]]
+name = "widestring"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
 
 [[package]]
 name = "winapi"

@@ -1,14 +1,20 @@
 use super::*;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::Arc;
 use std::thread;
 
 #[test]
 fn spawn_and_cancel() {
     let manager = TaskManager::new();
+    let allow_completion = Arc::new(AtomicBool::new(false));
+    let task_allow_completion = Arc::clone(&allow_completion);
     let cancel = manager
-        .spawn("test-task".to_string(), |cancel| {
+        .spawn("test-task".to_string(), move |cancel| {
             while !cancel.load(Ordering::Acquire) {
                 thread::sleep(Duration::from_millis(5));
+            }
+            while !task_allow_completion.load(Ordering::Acquire) {
+                thread::yield_now();
             }
             Ok(())
         })
@@ -19,6 +25,7 @@ fn spawn_and_cancel() {
     assert!(!cancel.load(Ordering::Acquire));
     assert!(manager.cancel("test-task"));
     assert!(manager.is_cancelled("test-task"));
+    allow_completion.store(true, Ordering::Release);
     assert_eq!(
         manager.wait_task("test-task", Duration::from_secs(1)),
         Some(Ok(()))

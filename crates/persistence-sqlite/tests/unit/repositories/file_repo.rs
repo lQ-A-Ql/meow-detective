@@ -6,6 +6,8 @@ use domain::{
 use rusqlite::{params, Connection};
 use tempfile::TempDir;
 
+use crate::repositories::catalog_file_repo::CatalogFileRepo;
+
 fn insert_data_source(conn: &Connection, id: &DataSourceId) {
     conn.execute(
         "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('case-1', 'Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
@@ -39,6 +41,22 @@ fn entry(id: &str, ds_id: &DataSourceId, path: &str) -> FileEntry {
         changed_at: None,
         hash_sha256: None,
     }
+}
+
+fn catalog_entry(
+    id: &str,
+    parent_id: Option<&str>,
+    ds_id: &DataSourceId,
+    path: &str,
+    name: &str,
+    entry_type: EntryType,
+) -> FileEntry {
+    let mut value = entry(id, ds_id, path);
+    value.parent_id = parent_id.map(|parent| FileEntryId(parent.to_string()));
+    value.name = name.to_string();
+    value.entry_type = entry_type.clone();
+    value.size = (entry_type == EntryType::File).then_some(1);
+    value
 }
 
 #[test]
@@ -232,4 +250,110 @@ fn reads_and_assigns_partition_index_by_file_id() {
             .unwrap(),
         None
     );
+}
+
+#[test]
+fn mount_catalog_queries_are_partition_scoped_and_accept_prefixed_paths() {
+    let conn = open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-mount".to_string());
+    let transaction = conn.unchecked_transaction().unwrap();
+    let mut deleted = catalog_entry(
+        "deleted",
+        Some("root-2"),
+        &ds_id,
+        "[P2]/deleted",
+        "deleted",
+        EntryType::File,
+    );
+    deleted.deleted = true;
+    CatalogFileRepo::new(&transaction)
+        .insert_batch_with_partition_index_in_transaction(
+            &[
+                catalog_entry(
+                    "root-2",
+                    None,
+                    &ds_id,
+                    "",
+                    "Partition 2 (NTFS)",
+                    EntryType::Directory,
+                ),
+                catalog_entry(
+                    "etc",
+                    Some("root-2"),
+                    &ds_id,
+                    "[P2]/etc",
+                    "etc",
+                    EntryType::Directory,
+                ),
+                catalog_entry(
+                    "hosts",
+                    Some("root-2"),
+                    &ds_id,
+                    "[P2]/etc/hosts",
+                    "hosts",
+                    EntryType::File,
+                ),
+                deleted,
+            ],
+            2,
+        )
+        .unwrap();
+    CatalogFileRepo::new(&transaction)
+        .insert_batch_with_partition_index_in_transaction(
+            &[catalog_entry(
+                "root-1",
+                None,
+                &ds_id,
+                "",
+                "Partition 1 (FAT32)",
+                EntryType::Directory,
+            )],
+            1,
+        )
+        .unwrap();
+    transaction.commit().unwrap();
+
+    let repo = FileRepo::new(&conn);
+    let root = repo
+        .find_root_for_partition(&ds_id, 2)
+        .unwrap()
+        .expect("partition root");
+    assert_eq!(root.id.0, "root-2");
+    let first_page = repo
+        .find_children_page_for_partition(&root.id, &ds_id, 2, 0, 1)
+        .unwrap();
+    assert_eq!(first_page.len(), 1);
+    assert_eq!(first_page[0].id.0, "etc");
+    let second_page = repo
+        .find_children_page_for_partition(&root.id, &ds_id, 2, 1, 1)
+        .unwrap();
+    assert_eq!(second_page.len(), 1);
+    assert_eq!(second_page[0].id.0, "hosts");
+    assert!(repo
+        .find_children_page_for_partition(&root.id, &ds_id, 2, 2, 1)
+        .unwrap()
+        .is_empty());
+    let mount_children = repo
+        .find_mount_children_for_partition(&root.id, &ds_id, 2)
+        .unwrap();
+    assert_eq!(
+        mount_children
+            .iter()
+            .map(|entry| entry.id.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["etc", "hosts"]
+    );
+    assert_eq!(
+        repo.find_by_partition_and_path(&ds_id, 2, "etc/hosts")
+            .unwrap()
+            .expect("partition-prefixed path")
+            .id
+            .0,
+        "hosts"
+    );
+    assert!(repo
+        .find_by_partition_and_path(&ds_id, 1, "etc/hosts")
+        .unwrap()
+        .is_none());
 }

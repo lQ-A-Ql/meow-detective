@@ -43,6 +43,7 @@ pub(crate) use crate::commands::{
         get_mcp_prompt, list_mcp_prompts, list_mcp_resources, list_mcp_tools, remove_mcp_server,
         save_mcp_config, test_mcp_connection,
     },
+    mount_commands::{get_mount_status, list_mounts, mount_image, unmount_image},
     notebook_commands::{
         add_evidence_citation, create_notebook_entry, get_notebook_thread,
         list_investigation_steps, list_notebook_entries, update_notebook_entry,

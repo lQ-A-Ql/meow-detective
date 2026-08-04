@@ -86,3 +86,20 @@ fn query_by_action_filters_entries() {
     assert_eq!(mcp_entries.len(), 1);
     assert_eq!(mcp_entries[0].resource_type, "mcp");
 }
+
+#[test]
+fn image_mount_actions_use_the_mount_audit_resource() {
+    let conn = setup_conn();
+    let repo = AuditRepo::new(&conn);
+
+    repo.log_simple(Some("case-1"), &AuditAction::ImageMount, Some("source-1"))
+        .unwrap();
+    repo.log_simple(Some("case-1"), &AuditAction::ImageUnmount, Some("source-1"))
+        .unwrap();
+
+    let entries = repo.query(Some("case-1"), None, 10, 0).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().all(|entry| entry.resource_type == "mount"));
+    assert!(entries.iter().any(|entry| entry.action == "image.mount"));
+    assert!(entries.iter().any(|entry| entry.action == "image.unmount"));
+}

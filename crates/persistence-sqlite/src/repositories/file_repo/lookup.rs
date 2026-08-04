@@ -10,6 +10,40 @@ use super::{
 };
 
 impl FileRepo<'_> {
+    pub fn find_by_partition_and_path(
+        &self,
+        data_source_id: &DataSourceId,
+        partition_index: usize,
+        path: &str,
+    ) -> DbResult<Option<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE data_source_id = ?1 AND partition_index = ?2
+               AND deleted = 0
+               AND path IN (?3, ?4, ?5)
+             LIMIT 1",
+        );
+        let normalized = path.trim_start_matches('/');
+        let partition_prefixed = format!("[P{partition_index}]/{normalized}");
+        let leading_slash = format!("/{normalized}");
+        let result = self.conn.query_row(
+            &sql,
+            params![
+                data_source_id.0,
+                partition_index as u64,
+                path,
+                partition_prefixed,
+                leading_slash
+            ],
+            row_to_file_entry,
+        );
+        match result {
+            Ok(entry) => Ok(Some(entry)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     pub fn find_by_path_prefix(
         &self,
         data_source_id: &DataSourceId,
