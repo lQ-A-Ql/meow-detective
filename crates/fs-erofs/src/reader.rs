@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 
 use evidence_core::EvidenceReader;
@@ -65,7 +66,7 @@ impl ErofsReader {
             )
             .ok_or_else(|| ErofsError::Invalid("inode offset overflows".to_string()))?;
         let bytes = read_exact_at(&self.source, offset, 64)?;
-        let inode = Arc::new(ErofsInode::parse(&bytes, nid)?);
+        let inode = Arc::new(ErofsInode::parse(&bytes, nid, offset)?);
         self.inode_cache
             .lock()
             .map_err(|_| ErofsError::Invalid("inode cache lock is poisoned".to_string()))?
@@ -93,28 +94,18 @@ impl ErofsReader {
                 inode.nid
             )));
         }
-        inode.require_plain("directory entries")?;
+        inode.require_uncompressed("directory entries")?;
+        let mut file = self.open_inode_data(inode)?;
         let blocks = inode.size.div_ceil(self.superblock.block_size as u64);
         let mut entries = Vec::new();
         for index in 0..blocks {
-            let block = inode.start_block.checked_add(index).ok_or_else(|| {
-                ErofsError::Invalid("directory block address overflows".to_string())
-            })?;
-            if block >= self.superblock.block_count {
-                return Err(ErofsError::Invalid(format!(
-                    "directory inode {} references invalid block {block}",
-                    inode.nid
-                )));
-            }
-            let bytes = read_exact_at(
-                &self.source,
-                block_offset(self.volume_offset, block, self.superblock.block_size)?,
-                self.superblock.block_size,
-            )?;
             let remaining = inode.size - index * self.superblock.block_size as u64;
             let valid = usize::try_from(remaining)
                 .unwrap_or(self.superblock.block_size)
                 .min(self.superblock.block_size);
+            let mut bytes = vec![0u8; self.superblock.block_size];
+            file.seek(SeekFrom::Start(index * self.superblock.block_size as u64))?;
+            file.read_exact(&mut bytes[..valid])?;
             entries.extend(parse_directory_block(&bytes, valid)?);
         }
         Ok(entries)
@@ -133,13 +124,18 @@ impl ErofsReader {
                 inode.nid
             )));
         }
-        inode.require_plain("file data")?;
+        inode.require_uncompressed("file data")?;
+        self.open_inode_data(inode)
+    }
+
+    fn open_inode_data(&self, inode: &ErofsInode) -> Result<ErofsFile> {
         ErofsFile::new(
             Arc::clone(&self.source),
             self.volume_offset,
             self.superblock.block_size,
             self.superblock.block_count,
             inode.start_block,
+            inode.inline_data_offset()?,
             inode.size,
         )
     }

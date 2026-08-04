@@ -125,6 +125,47 @@ fn reads_extended_flat_inode_and_validates_superblock_checksum() {
 }
 
 #[test]
+fn reads_flat_inline_tail_across_external_and_metadata_storage() {
+    let mut image = minimal_erofs_image();
+    let inode = 2 * 4096 + 2 * 32;
+    image[inode..inode + 2].copy_from_slice(&4u16.to_le_bytes());
+    image[inode + 2..inode + 4].copy_from_slice(&1u16.to_le_bytes());
+    image[inode + 8..inode + 12].copy_from_slice(&4102u32.to_le_bytes());
+    image[4 * 4096..5 * 4096].fill(b'A');
+    image[inode + 44..inode + 50].copy_from_slice(b"TAIL!!");
+
+    let reader =
+        ErofsReader::open(Box::new(MemoryReader::new(image)), 0).expect("open flat-inline EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 4094, 8)
+            .expect("read across external and inline tail"),
+        b"AATAIL!!"
+    );
+}
+
+#[test]
+fn lists_flat_inline_directory_without_scanning_data_blocks() {
+    let mut image = minimal_erofs_image();
+    let metadata = 2 * 4096;
+    let root_inode = metadata + 32;
+    let old_file_inode = metadata + 64;
+    let new_file_inode = metadata + 4 * 32;
+    image.copy_within(old_file_inode..old_file_inode + 32, new_file_inode);
+    image[3 * 4096 + 24..3 * 4096 + 32].copy_from_slice(&4u64.to_le_bytes());
+    let directory = image[3 * 4096..3 * 4096 + 48].to_vec();
+    image[root_inode..root_inode + 2].copy_from_slice(&4u16.to_le_bytes());
+    image[root_inode + 8..root_inode + 12].copy_from_slice(&48u32.to_le_bytes());
+    image[root_inode + 32..root_inode + 80].copy_from_slice(&directory);
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open inline-directory EROFS");
+    let children = reader.list_children("").expect("list inline directory");
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name, "hello.txt");
+}
+
+#[test]
 fn rejects_truncated_source_and_bad_metadata() {
     let mut truncated = minimal_erofs_image();
     truncated.truncate(4096 * 15);

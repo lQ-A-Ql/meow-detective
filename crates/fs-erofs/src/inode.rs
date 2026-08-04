@@ -23,10 +23,13 @@ pub(crate) struct ErofsInode {
     pub(crate) size: u64,
     pub(crate) data_layout: u8,
     pub(crate) start_block: u64,
+    pub(crate) source_offset: u64,
+    pub(crate) inode_size: usize,
+    pub(crate) xattr_size: usize,
 }
 
 impl ErofsInode {
-    pub(crate) fn parse(bytes: &[u8], nid: u64) -> Result<Self> {
+    pub(crate) fn parse(bytes: &[u8], nid: u64, source_offset: u64) -> Result<Self> {
         let format = read_u16(bytes, 0, "inode format")?;
         if format & !0x001f != 0 {
             return Err(ErofsError::Unsupported(format!(
@@ -58,12 +61,23 @@ impl ErofsInode {
             } else {
                 0
             };
+        let xattr_count = usize::from(read_u16(bytes, 2, "inode xattr count")?);
+        let xattr_size = if xattr_count == 0 {
+            0
+        } else {
+            12usize
+                .checked_add((xattr_count - 1).saturating_mul(4))
+                .ok_or_else(|| ErofsError::Invalid("inode xattr size overflows".to_string()))?
+        };
         Ok(Self {
             nid,
             mode,
             size,
             data_layout,
             start_block: start_low | start_high << 32,
+            source_offset,
+            inode_size,
+            xattr_size,
         })
     }
 
@@ -79,16 +93,12 @@ impl ErofsInode {
         self.mode & MODE_TYPE_MASK == MODE_SYMLINK
     }
 
-    pub(crate) fn require_plain(&self, operation: &str) -> Result<()> {
+    pub(crate) fn require_uncompressed(&self, operation: &str) -> Result<()> {
         match self.data_layout {
-            LAYOUT_FLAT_PLAIN => Ok(()),
+            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE => Ok(()),
             LAYOUT_COMPRESSED_FULL | LAYOUT_COMPRESSED_COMPACT => Err(ErofsError::Unsupported(
                 format!("compressed {operation} for inode {}", self.nid),
             )),
-            LAYOUT_FLAT_INLINE => Err(ErofsError::Unsupported(format!(
-                "inline {operation} for inode {}",
-                self.nid
-            ))),
             LAYOUT_CHUNK => Err(ErofsError::Unsupported(format!(
                 "chunk-based {operation} for inode {}",
                 self.nid
@@ -98,5 +108,16 @@ impl ErofsInode {
                 self.nid
             ))),
         }
+    }
+
+    pub(crate) fn inline_data_offset(&self) -> Result<Option<u64>> {
+        if self.data_layout != LAYOUT_FLAT_INLINE {
+            return Ok(None);
+        }
+        self.source_offset
+            .checked_add(self.inode_size as u64)
+            .and_then(|offset| offset.checked_add(self.xattr_size as u64))
+            .map(Some)
+            .ok_or_else(|| ErofsError::Invalid("inline data offset overflows".to_string()))
     }
 }
