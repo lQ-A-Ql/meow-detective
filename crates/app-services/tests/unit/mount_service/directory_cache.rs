@@ -81,4 +81,33 @@ fn oversized_snapshot_is_returned_without_being_retained() {
 
     assert!(Arc::ptr_eq(&returned, &snapshot));
     assert!(cache.get(&root).is_none());
+    assert!(cache.find_entry(&path).is_none());
+}
+
+#[test]
+fn evicting_a_snapshot_removes_its_global_path_entries() {
+    let root = MountPath::root();
+    let nested = MountPath::parse("/nested").expect("nested path");
+    let first_path = MountPath::parse("/first").expect("first path");
+    let second_path = MountPath::parse("/nested/second").expect("second path");
+    let first = entry("first");
+    let second = entry("nested/second");
+    let first_snapshot = Arc::new(DirectorySnapshot::new(vec![(
+        node(&first_path, &first),
+        first,
+    )]));
+    let second_snapshot = Arc::new(DirectorySnapshot::new(vec![(
+        node(&second_path, &second),
+        second,
+    )]));
+    let mut cache = DirectorySnapshotCache::new(first_snapshot.weight.max(second_snapshot.weight));
+
+    cache.insert(root.clone(), first_snapshot);
+    assert!(cache.find_entry(&first_path).is_some());
+
+    cache.insert(nested, second_snapshot);
+
+    assert!(cache.get(&root).is_none());
+    assert!(cache.find_entry(&first_path).is_none());
+    assert!(cache.find_entry(&second_path).is_some());
 }

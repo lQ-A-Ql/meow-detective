@@ -44,16 +44,13 @@ impl DirectorySnapshot {
     pub(crate) fn len(&self) -> usize {
         self.entries.len()
     }
-
-    fn entry(&self, path: &MountPath) -> Option<Arc<FileEntry>> {
-        self.catalog_entries.get(path).cloned()
-    }
 }
 
 pub(crate) struct DirectorySnapshotCache {
     capacity_bytes: usize,
     current_bytes: usize,
     snapshots: HashMap<MountPath, Arc<DirectorySnapshot>>,
+    entries_by_path: HashMap<MountPath, Arc<FileEntry>>,
     insertion_order: VecDeque<MountPath>,
 }
 
@@ -63,6 +60,7 @@ impl DirectorySnapshotCache {
             capacity_bytes: capacity_bytes.max(1),
             current_bytes: 0,
             snapshots: HashMap::new(),
+            entries_by_path: HashMap::new(),
             insertion_order: VecDeque::new(),
         }
     }
@@ -72,9 +70,7 @@ impl DirectorySnapshotCache {
     }
 
     pub(crate) fn find_entry(&self, path: &MountPath) -> Option<Arc<FileEntry>> {
-        self.snapshots
-            .values()
-            .find_map(|snapshot| snapshot.entry(path))
+        self.entries_by_path.get(path).cloned()
     }
 
     pub(crate) fn insert(
@@ -91,11 +87,24 @@ impl DirectorySnapshotCache {
             };
             if let Some(evicted) = self.snapshots.remove(&evicted_path) {
                 self.current_bytes = self.current_bytes.saturating_sub(evicted.weight);
+                for (entry_path, entry) in &evicted.catalog_entries {
+                    let should_remove = self
+                        .entries_by_path
+                        .get(entry_path)
+                        .is_some_and(|cached| Arc::ptr_eq(cached, entry));
+                    if should_remove {
+                        self.entries_by_path.remove(entry_path);
+                    }
+                }
             }
         }
         if snapshot.weight <= self.capacity_bytes {
             self.current_bytes = self.current_bytes.saturating_add(snapshot.weight);
             self.insertion_order.push_back(path.clone());
+            for (entry_path, entry) in &snapshot.catalog_entries {
+                self.entries_by_path
+                    .insert(entry_path.clone(), Arc::clone(entry));
+            }
             self.snapshots.insert(path, Arc::clone(&snapshot));
         }
         snapshot

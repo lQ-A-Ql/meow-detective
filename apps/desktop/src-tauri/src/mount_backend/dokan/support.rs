@@ -27,7 +27,7 @@ pub(super) fn has_write_access(desired_access: winnt::ACCESS_MASK) -> bool {
 }
 
 pub(super) fn file_attributes(node: &MountNode) -> u32 {
-    let mut attributes = winnt::FILE_ATTRIBUTE_READONLY;
+    let mut attributes = winnt::FILE_ATTRIBUTE_READONLY | winnt::FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
     if node.is_dir {
         attributes |= winnt::FILE_ATTRIBUTE_DIRECTORY;
     }

@@ -7,7 +7,7 @@ use evidence_mount::{
 };
 use widestring::U16CString;
 
-use super::{find_directory_files, has_write_access, windows_filesystem_name};
+use super::{file_attributes, find_directory_files, has_write_access, windows_filesystem_name};
 use winapi::um::winnt;
 
 struct LargeDirectoryFilesystem;
@@ -136,6 +136,16 @@ fn windows_filesystem_name_uses_known_windows_compatibility_names() {
             .to_string_lossy(),
         "NTFS"
     );
+}
+
+#[test]
+fn evidence_nodes_are_read_only_and_excluded_from_host_content_indexing() {
+    let node = directory_node(MountPath::root(), "root");
+    let attributes = file_attributes(&node);
+
+    assert_ne!(attributes & winnt::FILE_ATTRIBUTE_READONLY, 0);
+    assert_ne!(attributes & winnt::FILE_ATTRIBUTE_DIRECTORY, 0);
+    assert_ne!(attributes & winnt::FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, 0);
 }
 
 #[test]

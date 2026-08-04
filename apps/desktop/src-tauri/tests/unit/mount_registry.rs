@@ -47,6 +47,8 @@ fn real_e01_mount_reads_through_a_read_only_drive_and_releases_it() {
     let source_db = source_db_path(&case_conn, &case_root, &data_source_id);
     let expected_root_entries =
         mountable_root_child_count(&source_db, &data_source_id, partition_index);
+    let (dense_directory, expected_dense_entries) =
+        mountable_dense_directory(&source_db, &data_source_id, partition_index);
     let relative_path = readable_file_path(&source_db, &data_source_id, partition_index);
     let mount_path = MountPath::parse(&relative_path).expect("catalog path must be mountable");
     let session = app_services::mount_service::prepare_mount_session(
@@ -58,6 +60,13 @@ fn real_e01_mount_reads_through_a_read_only_drive_and_releases_it() {
         MountReadPolicy::default(),
     )
     .expect("real E01 mount session must open");
+    let (catalog_dense_entries, catalog_dense_elapsed) =
+        enumerate_session_directory(&session, &dense_directory);
+    eprintln!(
+        "catalog_dense_directory={} entries={} elapsed={catalog_dense_elapsed:?}",
+        dense_directory, catalog_dense_entries
+    );
+    assert_eq!(catalog_dense_entries, expected_dense_entries);
     let handle_id = session
         .open(&mount_path, MountAccess::ReadOnly)
         .expect("direct session file must open");
@@ -90,6 +99,25 @@ fn real_e01_mount_reads_through_a_read_only_drive_and_releases_it() {
         assert!(
             enumeration_elapsed < Duration::from_secs(5),
             "large mounted directory exceeded the 5 second regression limit: {enumeration_elapsed:?}"
+        );
+    }
+    let mounted_dense_directory = mounted_path(&status.target.mount_point, &dense_directory);
+    let (actual_dense_entries, cold_dense_elapsed) = enumerate_directory(&mounted_dense_directory);
+    let (warm_dense_entries, warm_dense_elapsed) = enumerate_directory(&mounted_dense_directory);
+    eprintln!(
+        "mounted_dense_directory={} entries={} cold={cold_dense_elapsed:?} warm={warm_dense_elapsed:?}",
+        dense_directory, actual_dense_entries
+    );
+    assert_eq!(actual_dense_entries, expected_dense_entries);
+    assert_eq!(warm_dense_entries, expected_dense_entries);
+    if expected_dense_entries >= 10_000 {
+        assert!(
+            cold_dense_elapsed < Duration::from_secs(5),
+            "large mounted directory exceeded the 5 second cold regression limit: {cold_dense_elapsed:?}"
+        );
+        assert!(
+            warm_dense_elapsed < Duration::from_secs(2),
+            "large mounted directory exceeded the 2 second warm regression limit: {warm_dense_elapsed:?}"
         );
     }
     assert!(std::fs::OpenOptions::new()
@@ -240,6 +268,92 @@ fn mountable_root_child_count(
         .filter_map(Result::ok)
         .filter(|name| MountPath::parse(name).is_ok())
         .count()
+}
+
+fn mountable_dense_directory(
+    source_db: &Path,
+    data_source_id: &DataSourceId,
+    partition_index: usize,
+) -> (String, usize) {
+    let connection = persistence_sqlite::connection::open_existing_source_read_only(source_db)
+        .expect("source database must open read-only");
+    let mut statement = connection
+        .prepare(
+            "SELECT parent.id, parent.path, COUNT(child.id) AS child_count
+             FROM file_entries parent
+             JOIN file_entries child ON child.parent_id = parent.id AND child.deleted = 0
+             WHERE parent.data_source_id = ?1 AND parent.partition_index = ?2
+               AND parent.parent_id IS NOT NULL
+               AND parent.entry_type = 'directory' COLLATE NOCASE
+             GROUP BY parent.id, parent.path
+             ORDER BY child_count DESC LIMIT 32",
+        )
+        .expect("dense directory query must prepare");
+    let candidates = statement
+        .query_map(
+            rusqlite::params![data_source_id.0, partition_index as u64],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .expect("dense directory query must run")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("dense directory candidates must decode");
+
+    for (parent_id, stored_path) in candidates {
+        let path = strip_partition_prefix(&stored_path, partition_index);
+        let Ok(parent_path) = MountPath::parse(&path) else {
+            continue;
+        };
+        let mut child_statement = connection
+            .prepare(
+                "SELECT name FROM file_entries
+                 WHERE parent_id = ?1 AND data_source_id = ?2 AND partition_index = ?3
+                   AND deleted = 0",
+            )
+            .expect("dense directory child query must prepare");
+        let count = child_statement
+            .query_map(
+                rusqlite::params![parent_id, data_source_id.0, partition_index as u64],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("dense directory child query must run")
+            .filter_map(Result::ok)
+            .filter(|name| MountPath::parse(&format!("{}/{}", parent_path.as_str(), name)).is_ok())
+            .count();
+        if count > 0 {
+            return (path, count);
+        }
+    }
+    panic!("partition must contain a mountable non-root directory")
+}
+
+fn enumerate_directory(path: &Path) -> (usize, Duration) {
+    let started = Instant::now();
+    let count = std::fs::read_dir(path)
+        .expect("mounted directory must enumerate")
+        .try_fold(0usize, |count, entry| entry.map(|_| count + 1))
+        .expect("mounted directory entries must be readable");
+    (count, started.elapsed())
+}
+
+fn enumerate_session_directory(
+    session: &evidence_mount::MountSession,
+    relative_path: &str,
+) -> (usize, Duration) {
+    let path = MountPath::parse(relative_path).expect("catalog directory path must be mountable");
+    let started = Instant::now();
+    let mut cursor = None;
+    let mut count = 0usize;
+    loop {
+        let page = session
+            .read_directory(&path, cursor.as_deref(), 4096)
+            .expect("catalog directory must enumerate");
+        count = count.saturating_add(page.entries.len());
+        let Some(next_cursor) = page.next_cursor else {
+            break;
+        };
+        cursor = Some(next_cursor);
+    }
+    (count, started.elapsed())
 }
 
 fn readable_large_file_path(

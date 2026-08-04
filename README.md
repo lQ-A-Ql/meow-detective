@@ -8,6 +8,13 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 当前工程事实快照：10 frontend pages、120 Tauri commands、32 source modules、migration scripts (77)、103 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
+> [!IMPORTANT]
+> **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
+> `requireAdministrator`，启动时会触发 UAC 并以管理员令牌运行。物理磁盘挂载会使用系统
+> `MSiSCSI` 服务；应用可能在挂载期间临时启动该服务，并在服务租约结束后恢复由应用自身
+> 修改的启动类型。应用不会自动安装 Dokan 或 iSCSI 组件，也不会强制停止可能被其他程序
+> 使用的 `MSiSCSI` 服务。详细边界见下文 [Windows 权限与系统服务](#windows-权限与系统服务)。
+
 ## 功能简介
 
 ### 证据导入与文件浏览
@@ -21,6 +28,20 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 镜像挂载提供逻辑分区和完整物理磁盘两种只读模式；逻辑分区通过 Dokan Mount Manager
   发布为普通资源管理器可见的只读盘符，物理磁盘模式通过本机回环 iSCSI 交给 Windows
   原生卷管理，不依赖自写驱动或 Arsenal 授权。
+
+### Windows 权限与系统服务
+
+这是挂载功能的运行前置和系统影响边界，使用前应明确区分两种模式：
+
+| 范围 | 权限/服务要求 | 应用行为 | 退出与恢复边界 |
+|---|---|---|---|
+| 桌面应用 | 发布版需要管理员令牌 | 启动时由 UAC 授权，不在运行中静默提权 | 拒绝 UAC 后无法启动桌面应用 |
+| 逻辑分区挂载 | 需要预先安装 Dokan runtime/driver | 使用 Dokan `Mount Manager` 发布全局只读盘符；不使用 `CURRENT_SESSION`，不修改 Windows 服务 | 应用负责卸载并清理挂载；Dokan 未安装时返回明确错误，不静默调用外部挂载工具 |
+| 物理磁盘挂载 | 需要管理员令牌和 Microsoft iSCSI Initiator (`MSiSCSI`) | 通过本机 loopback iSCSI 将 E01/RAW 只读字节流交给 Windows；不安装自写驱动、不依赖 Arsenal 授权 | 首个物理挂载建立服务租约；最后一个挂载释放后恢复应用临时修改的启动类型，不强制停止服务 |
+| `MSiSCSI` 已禁用 | 需要服务配置权限 | 挂载前临时改为 `Manual` 并启动；仅由应用持有的租约负责恢复 | 若其他程序同时改变配置，应用保留外部修改；应用崩溃或被强制终止后需管理员复核服务启动类型 |
+| Windows Search (`WSearch`) | 不修改系统服务 | 逻辑挂载的虚拟文件节点声明 `NOT_CONTENT_INDEXED`，减少宿主索引对目录回调的争用 | 不停止、不禁用、不修改全局搜索策略 |
+
+无论哪种模式，原始证据始终只读；服务启动类型、挂载生命周期和错误状态由后端维护，前端只显示后端返回的状态。常规 Rust 测试使用非提权测试 manifest，不需要 UAC；只有桌面应用启动、Dokan 互操作和物理 iSCSI 互操作测试需要管理员权限。
 
 ### Windows 取证分析
 
@@ -193,9 +214,8 @@ flowchart TD
 - Node.js LTS、Corepack 与 pnpm `10.25.0`。
 - Visual Studio 2022 Build Tools，安装 Desktop development with C++ 和 Windows SDK。
 - WebView2 Runtime（Tauri 桌面运行时需要）。
-- 应用清单请求管理员权限，启动时会显示 UAC；物理磁盘挂载需要 Microsoft iSCSI Initiator
-  (`MSiSCSI`) 服务。若该服务处于 Disabled，应用会在管理员确认的运行上下文中临时改为
-  Manual 并启动，最后一个物理挂载释放后恢复原启动类型；应用异常退出时需人工复核服务状态。
+- 发布版应用清单请求管理员权限，启动时会显示 UAC；挂载模式、Dokan 前置和
+  `MSiSCSI` 服务租约的详细边界见 [Windows 权限与系统服务](#windows-权限与系统服务)。
 
 涉及链接的 Rust 命令应在 **x64 Native Tools Command Prompt for VS 2022** 或已执行 `vcvars64.bat` 的终端中运行，避免误用 Git 自带的 `link.exe`。
 管理员 manifest 仅链接最终桌面 binary；Rust 测试 harness 使用独立的非提权 Common Controls
@@ -303,6 +323,10 @@ cargo tauri build
 |---|---|---|
 | [Autopsy](https://github.com/sleuthkit/autopsy) | Apache-2.0 | 数字取证工作台的能力分层与工作流闭环（案件 → 数据源 → 文件浏览 → 工件提取 → 检索 → 时间线 → 报告）的产品与架构思想参考，详见根目录 `autopsy-borrowings.md`；未复用其源码 |
 | [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit) | IPL-1.0 / CPL-1.0 | BitLocker 卷侧 `metadata -> VMK -> FVEK -> sector reader` 处理顺序与元数据冗余策略的正确性参照（见 `docs/bitlocker-memory-key-recovery-design.md`）；未复用其源码 |
+| [Dokany](https://github.com/dokan-dev/dokany) / [dokan-rust](https://github.com/dokan-dev/dokan-rust) | Dokany runtime/driver: LGPL；Rust binding: MIT | Windows 逻辑分区只读盘符的用户态文件系统 runtime 与 Rust API；本项目不自动安装或再分发 Dokany runtime，挂载行为和版本前置见 `docs/image-mount-design.md` |
+| [libewf](https://github.com/libyal/libewf) | LGPL-3.0 | 参考 `ewfmount.c`、Dokan/FUSE 回调和 EWF handle 生命周期设计，确定最小只读操作集、句柄边界与卸载清理；生产链路使用本项目 `image-e01` reader，未复用 libewf 源码或调用其 CLI |
+| [iscsi-target](https://github.com/lawless-m/iscsi-crate) | MIT OR Apache-2.0 | 物理磁盘模式的本机 loopback iSCSI target 基础实现；仓库在 `vendor/iscsi-target` 保留许可证并增加写保护 SCSI 与 Windows 互操作补丁，修改说明见 `vendor/iscsi-target/MEOW_PATCH.md` |
+| [Microsoft Windows iSCSI API](https://learn.microsoft.com/windows/win32/iscsi/portal) | Microsoft Learn / Windows SDK 使用条款 | 物理挂载使用系统 `iscsidsc.dll`、Microsoft iSCSI Initiator 和 Service Control Manager API；不复制或分发 Windows 组件，服务修改范围见本文“Windows 权限与系统服务” |
 | [omerbenamram/EVTX](https://github.com/omerbenamram/EVTX) | MIT OR Apache-2.0 | `crates/evtx-patched` 为其本地补丁分支（去除失维护依赖），上游许可证文本保留于 `crates/evtx-patched/LICENSE-APACHE` 与 `crates/evtx-patched/LICENSE-MIT` |
 | [SecurityRonin/bitlocker-forensic](https://github.com/SecurityRonin/bitlocker-forensic)（含 [elephant-diffuser](https://github.com/SecurityRonin/elephant-diffuser)） | Apache-2.0 | `crates/volume-bitlocker` 派生自 bitlocker-core 0.3.5 与 elephant-diffuser（Albert Hui 著）。上游许可证文本保留于 `crates/volume-bitlocker/LICENSE-APACHE-2.0-UPSTREAM`，修改声明（Apache-2.0 §4(b)）与逐文件来源校验见 `crates/volume-bitlocker/NOTICE` 和 `docs/bitlocker-dependency-decision.md` |
 | [shadcn/ui](https://ui.shadcn.com/) | MIT | 前端 `frontend/src/app/components/ui/` 的 UI 原语组件集（Radix Slot + cva + `cn()` 结构，已按本项目主题改写），见 `frontend/ATTRIBUTIONS.md` |
