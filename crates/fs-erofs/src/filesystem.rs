@@ -48,8 +48,7 @@ impl FileSystemReader for ErofsReader {
             return Err(path_is_directory(path));
         }
         Ok(Box::new(
-            self.open_regular_file(&inode)
-                .map_err(ErofsError::into_io)?,
+            self.open_file_data(&inode).map_err(ErofsError::into_io)?,
         ))
     }
 
@@ -59,8 +58,7 @@ impl FileSystemReader for ErofsReader {
             return Err(path_is_directory(path));
         }
         Ok(Box::new(
-            self.open_regular_file(&inode)
-                .map_err(ErofsError::into_io)?,
+            self.open_file_data(&inode).map_err(ErofsError::into_io)?,
         ))
     }
 
@@ -72,9 +70,7 @@ impl FileSystemReader for ErofsReader {
         if offset >= inode.size || length == 0 {
             return Ok(Vec::new());
         }
-        let mut file = self
-            .open_regular_file(&inode)
-            .map_err(ErofsError::into_io)?;
+        let mut file = self.open_file_data(&inode).map_err(ErofsError::into_io)?;
         file.seek(SeekFrom::Start(offset))?;
         let bounded = length.min(usize::try_from(inode.size - offset).unwrap_or(usize::MAX));
         let mut bytes = vec![0u8; bounded];

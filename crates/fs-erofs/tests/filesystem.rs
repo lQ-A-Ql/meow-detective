@@ -99,6 +99,35 @@ fn rejects_compressed_inode_without_falling_back_to_plain_data() {
 }
 
 #[test]
+fn reads_flat_plain_and_inline_symbolic_link_targets() {
+    let inode = 2 * 4096 + 2 * 32;
+    let mut plain = minimal_erofs_image();
+    plain[inode + 4..inode + 6].copy_from_slice(&0xa1ffu16.to_le_bytes());
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(plain)), 0)
+        .expect("open flat-plain symlink fixture");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, 12)
+            .expect("read flat-plain symlink target"),
+        b"Hello EROFS!"
+    );
+
+    let mut inline = minimal_erofs_image();
+    inline[inode..inode + 2].copy_from_slice(&4u16.to_le_bytes());
+    inline[inode + 4..inode + 6].copy_from_slice(&0xa1ffu16.to_le_bytes());
+    inline[inode + 8..inode + 12].copy_from_slice(&12u32.to_le_bytes());
+    inline[inode + 32..inode + 44].copy_from_slice(b"Hello EROFS!");
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(inline)), 0)
+        .expect("open flat-inline symlink fixture");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, 12)
+            .expect("read flat-inline symlink target"),
+        b"Hello EROFS!"
+    );
+}
+
+#[test]
 fn reads_extended_flat_inode_and_validates_superblock_checksum() {
     let mut image = minimal_erofs_image();
     let inode = 2 * 4096 + 2 * 32;

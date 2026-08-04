@@ -111,16 +111,10 @@ impl ErofsReader {
         Ok(entries)
     }
 
-    pub(crate) fn open_regular_file(&self, inode: &ErofsInode) -> Result<ErofsFile> {
-        if inode.is_symlink() {
-            return Err(ErofsError::Unsupported(format!(
-                "symlink inode {}",
-                inode.nid
-            )));
-        }
-        if !inode.is_regular() {
+    pub(crate) fn open_file_data(&self, inode: &ErofsInode) -> Result<ErofsFile> {
+        if !inode.is_regular() && !inode.is_symlink() {
             return Err(ErofsError::Invalid(format!(
-                "inode {} is not a regular file",
+                "inode {} has no readable file data",
                 inode.nid
             )));
         }
