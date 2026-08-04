@@ -113,7 +113,7 @@ fn dont_care_chunk(blocks: u32) -> Vec<u8> {
 }
 
 fn crc_chunk(value: u32) -> Vec<u8> {
-    chunk_header(SPARSE_CRC32_CHUNK, 1, 4)
+    chunk_header(SPARSE_CRC32_CHUNK, 0, 4)
         .into_iter()
         .chain(value.to_le_bytes())
         .collect()

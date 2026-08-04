@@ -270,10 +270,10 @@ fn parse_checksum_chunk<R: Read + Seek>(
 ) -> Result<ParsedEntry> {
     match descriptor.chunk_type {
         SPARSE_CRC32_CHUNK => {
-            if descriptor.chunk_blocks != 1 {
+            if descriptor.chunk_blocks != 0 {
                 return Err(SparseImageError::invalid_chunk(
                     descriptor.index,
-                    "CRC32 chunk must declare one block",
+                    "CRC32 chunk must declare zero blocks",
                 ));
             }
             ensure_total_size(

@@ -5999,6 +5999,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "volume-android"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "image-android",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "volume-bitlocker"
 version = "0.1.0"
 dependencies = [

@@ -16,6 +16,7 @@ members = [
   "crates/fs-exfat",
   "crates/image-e01",
   "crates/image-android",
+  "crates/volume-android",
   "crates/mcp-client",
   "crates/search",
   "crates/timeline",
@@ -88,6 +89,7 @@ volume-bitlocker = { path = "crates/volume-bitlocker" }
 memory-windows = { path = "crates/memory-windows" }
 image-e01 = { path = "crates/image-e01" }
 image-android = { path = "crates/image-android" }
+volume-android = { path = "crates/volume-android" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
