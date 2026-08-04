@@ -185,23 +185,29 @@ impl MountRegistry {
     }
 
     pub(crate) fn list(&self) -> Result<Vec<MountStatusDto>, MountRegistryError> {
-        let entries = self
+        let mut entries = self
             .entries
             .lock()
             .map_err(|_| MountRegistryError::LockPoisoned)?;
+        for entry in entries.values_mut() {
+            refresh_backend_state(entry);
+        }
         let mut result = entries.values().map(status_for_entry).collect::<Vec<_>>();
         result.sort_by(|left, right| left.target.mount_id.cmp(&right.target.mount_id));
         Ok(result)
     }
 
     pub(crate) fn status(&self, mount_id: &str) -> Result<MountStatusDto, MountRegistryError> {
-        let entries = self
+        let mut entries = self
             .entries
             .lock()
             .map_err(|_| MountRegistryError::LockPoisoned)?;
         entries
-            .get(mount_id)
-            .map(status_for_entry)
+            .get_mut(mount_id)
+            .map(|entry| {
+                refresh_backend_state(entry);
+                status_for_entry(entry)
+            })
             .ok_or_else(|| MountRegistryError::NotFound(mount_id.to_string()))
     }
 
@@ -266,6 +272,28 @@ fn status_for_entry(entry: &MountEntry) -> MountStatusDto {
     let mut status = entry.status.clone();
     status.active_handle_count = entry.session.active_handle_count().unwrap_or(0) as u64;
     status
+}
+
+fn refresh_backend_state(entry: &mut MountEntry) {
+    if !matches!(entry.status.state, MountStateDto::Mounted) {
+        return;
+    }
+    let Some(backend) = entry.backend.as_ref() else {
+        entry.status.state = MountStateDto::Failed;
+        entry.status.error = Some("logical mount backend handle is missing".to_string());
+        return;
+    };
+    match backend.poll_exit() {
+        Ok(Some(error)) => {
+            entry.status.state = MountStateDto::Failed;
+            entry.status.error = Some(error);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            entry.status.state = MountStateDto::Failed;
+            entry.status.error = Some(error.to_string());
+        }
+    }
 }
 
 #[cfg(test)]

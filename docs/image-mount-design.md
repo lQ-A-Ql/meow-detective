@@ -9,6 +9,11 @@
 - 证据原则：原始镜像和其 EWF segment 永不写入
 - Windows 应用清单：桌面程序请求 `requireAdministrator`，启动时由 UAC 授予管理员令牌；
   这是物理磁盘模式调用 Microsoft iSCSI Initiator 所需的固定运行前提，不通过运行时自提权。
+- 构建资源隔离：管理员 manifest 只链接 `forensics-desktop` binary；Rust 测试 harness 使用
+  独立的非提权 Common Controls v6 manifest，默认质量门禁不需要以管理员身份执行。
+- MSiSCSI 服务：若服务已安装但启动类型为 `Disabled`，物理挂载会临时改为 `Manual` 并启动；
+  进程内最后一个物理挂载释放后恢复原启动类型，不强制停止可能被其他程序使用的服务。
+  异常退出属于恢复边界外场景，启动类型需要由系统管理员复核。
 
 本设计定义挂载模块的边界、实现状态和落地顺序，不改变现有文件树、预览、BitLocker、
 独立 source database 或 Ceph/PVE 解析语义。当前核心只读语义、source catalog 路由、
@@ -24,7 +29,8 @@ E01 的 FAT 与 NTFS 盘符读取、目录列举、写入拒绝和卸载释放�
 用户可以选择一个已经导入且状态为 `ready` 的数据源，并明确选择两种互不回退的模式：
 
 - `logicalPartition`：选择一个分区，以只读逻辑盘符挂载；文件访问由本项目 parser 和
-  source database 路由；
+  source database 路由。由于桌面进程默认提权，Dokan 必须通过 Mount Manager 发布全局
+  盘符，不得使用仅提权会话可见的 `CURRENT_SESSION`；
 - `physicalDisk`：不选择分区，把完整 E01/raw 逻辑字节流呈现为 Windows 物理磁盘，
   由 Windows 原生发现 MBR/GPT 及其可识别卷。
 
@@ -139,6 +145,9 @@ Dokan runtime/driver 未安装时必须返回 typed external/unsupported 错误�
 - [`LoginIScsiTargetW`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-loginiscsitargetw)
   与 [`LogoutIScsiTarget`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-logoutiscsitarget)
   定义临时会话生命周期；
+- [`QueryServiceConfigW`](https://learn.microsoft.com/windows/win32/api/winsvc/nf-winsvc-queryserviceconfigw)
+  与 [`ChangeServiceConfigW`](https://learn.microsoft.com/windows/win32/api/winsvc/nf-winsvc-changeserviceconfigw)
+  用于检测并临时调整 `MSiSCSI` 启动类型；
 - [`GetDevicesForIScsiSessionW`](https://learn.microsoft.com/windows/win32/api/iscsidsc/nf-iscsidsc-getdevicesforiscsisessionw)
   返回会话对应的物理设备路径；
 - Windows 的 [`CHAP shared-secret`](https://learn.microsoft.com/windows/win32/api/vds/ns-vds-vds_iscsi_shared_secret)
@@ -689,6 +698,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
 - `evidence-mount` 核心的虚拟路径、目录游标、bounded read、句柄上限和只读拒绝；
 - `mount_service` 对 ready source、分区候选、source DB 和现有 filesystem reader 的路由；
 - Windows Dokan 的只读 `open/read/readdir/getattr` 及所有写操作拒绝；
+- Dokan 逻辑盘通过 Mount Manager 发布；Registry 仅在 `Mounted` 回调返回实际盘符后进入
+  `Mounted`，并在状态查询时检测 worker 异常退出，不再把驱动创建成功误报为盘符可用；
 - mount registry、案件关闭/删除、数据源删除和应用退出时的清理；
 - transport DTO、Tauri command、前端 API 镜像和 `check-image-mount-guard.ps1`。
 - `evidence-block` 的 E01/raw sector provider、写保护 SCSI adapter 和 bounded request；

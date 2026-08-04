@@ -24,6 +24,17 @@ pub(crate) struct BackendHandle {
 
 impl BackendHandle {
     #[cfg(windows)]
+    pub(crate) fn poll_exit(&self) -> Result<Option<String>, MountBackendError> {
+        self.inner.poll_exit()
+    }
+
+    #[cfg(not(windows))]
+    pub(crate) fn poll_exit(&self) -> Result<Option<String>, MountBackendError> {
+        let _ = self;
+        Err(MountBackendError::UnsupportedPlatform)
+    }
+
+    #[cfg(windows)]
     pub(crate) fn stop(&self) -> Result<(), MountBackendError> {
         self.inner.stop()
     }

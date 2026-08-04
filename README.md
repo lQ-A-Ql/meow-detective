@@ -18,6 +18,9 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。
 - 支持向调查员指定的路径提取文件，默认禁止覆盖，提取过程返回真实进度和完整性信息。
 - 提供 NTFS、ext4 与 XFS 的删除文件恢复/雕刻能力，恢复范围和完整性状态会显式标注。
+- 镜像挂载提供逻辑分区和完整物理磁盘两种只读模式；逻辑分区通过 Dokan Mount Manager
+  发布为普通资源管理器可见的只读盘符，物理磁盘模式通过本机回环 iSCSI 交给 Windows
+  原生卷管理，不依赖自写驱动或 Arsenal 授权。
 
 ### Windows 取证分析
 
@@ -190,8 +193,13 @@ flowchart TD
 - Node.js LTS、Corepack 与 pnpm `10.25.0`。
 - Visual Studio 2022 Build Tools，安装 Desktop development with C++ 和 Windows SDK。
 - WebView2 Runtime（Tauri 桌面运行时需要）。
+- 应用清单请求管理员权限，启动时会显示 UAC；物理磁盘挂载需要 Microsoft iSCSI Initiator
+  (`MSiSCSI`) 服务。若该服务处于 Disabled，应用会在管理员确认的运行上下文中临时改为
+  Manual 并启动，最后一个物理挂载释放后恢复原启动类型；应用异常退出时需人工复核服务状态。
 
 涉及链接的 Rust 命令应在 **x64 Native Tools Command Prompt for VS 2022** 或已执行 `vcvars64.bat` 的终端中运行，避免误用 Git 自带的 `link.exe`。
+管理员 manifest 仅链接最终桌面 binary；Rust 测试 harness 使用独立的非提权 Common Controls
+manifest，因此常规 `cargo test` 不需要 UAC。只有启动桌面应用和物理磁盘挂载互操作测试需要管理员权限。
 
 ### 安装依赖
 

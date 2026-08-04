@@ -29,7 +29,6 @@ pub(crate) struct WindowsIscsiSession {
 
 impl WindowsIscsiSession {
     pub(crate) fn connect(connection: &TargetConnection) -> Result<Self, PhysicalMountError> {
-        crate::windows_service::ensure_iscsi_service_running()?;
         let target_name = wide_null(&connection.iqn);
         let mut portal = portal(connection)?;
         let mut username = connection.chap_username.as_bytes().to_vec();

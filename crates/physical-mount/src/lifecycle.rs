@@ -25,6 +25,8 @@ pub struct PhysicalMount {
     target: LocalIscsiTarget,
     #[cfg(windows)]
     session: Option<crate::windows_initiator::WindowsIscsiSession>,
+    #[cfg(windows)]
+    service_lease: Option<crate::windows_service::IscsiServiceLease>,
 }
 
 impl PhysicalMount {
@@ -33,11 +35,19 @@ impl PhysicalMount {
         let mount_id = format!("physical-{}", uuid::Uuid::new_v4().simple());
         let device = ReadOnlyScsiDevice::open(path, kind.into())?;
         let mut target = LocalIscsiTarget::start(&mount_id, device)?;
+        let service_lease = match crate::windows_service::IscsiServiceLease::acquire() {
+            Ok(lease) => lease,
+            Err(error) => {
+                let _ = target.stop();
+                return Err(error);
+            }
+        };
         let session =
             match crate::windows_initiator::WindowsIscsiSession::connect(target.connection()) {
                 Ok(session) => session,
                 Err(error) => {
                     let _ = target.stop();
+                    drop(service_lease);
                     return Err(error);
                 }
             };
@@ -45,6 +55,7 @@ impl PhysicalMount {
             mount_id,
             target,
             session: Some(session),
+            service_lease: Some(service_lease),
         })
     }
 
@@ -88,7 +99,15 @@ impl PhysicalMount {
         #[cfg(not(windows))]
         let session_result = Ok(());
         let target_result = self.target.stop();
-        session_result.and(target_result)
+        #[cfg(windows)]
+        let service_result = self
+            .service_lease
+            .take()
+            .map(|mut lease| lease.release())
+            .unwrap_or(Ok(()));
+        #[cfg(not(windows))]
+        let service_result = Ok(());
+        session_result.and(target_result).and(service_result)
     }
 }
 

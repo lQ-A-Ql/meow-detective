@@ -1,10 +1,8 @@
-use std::sync::{mpsc, Mutex, Once};
-use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use dokan::{
-    CreateFileInfo, DiskSpaceInfo, FileInfo, FileSystemHandler, FileSystemMounter, FindData,
-    MountFlags, MountOptions, OperationInfo, OperationResult, VolumeInfo,
+    CreateFileInfo, DiskSpaceInfo, FileInfo, FileSystemHandler, FindData, OperationInfo,
+    OperationResult, VolumeInfo,
 };
 use dokan_sys::win32::{FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN};
 use evidence_mount::{MountAccess, MountSession};
@@ -12,206 +10,14 @@ use widestring::{U16CStr, U16CString};
 use winapi::shared::ntstatus::*;
 use winapi::um::winnt;
 
-use super::MountBackendError;
 use support::{
     file_attributes, has_write_access, map_mount_error, path_from_dokan, stable_file_index,
 };
 
+mod lifecycle;
 mod support;
 
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
-static DOKAN_INIT: Once = Once::new();
-
-pub(crate) struct DokanMount {
-    mount_point: U16CString,
-    join_handle: Mutex<Option<JoinHandle<Result<(), String>>>>,
-}
-
-impl DokanMount {
-    pub(crate) fn mount_point(&self) -> String {
-        self.mount_point
-            .to_string_lossy()
-            .trim_end_matches('\\')
-            .to_string()
-    }
-
-    pub(crate) fn stop(&self) -> Result<(), MountBackendError> {
-        let handle = self
-            .join_handle
-            .lock()
-            .map_err(|_| MountBackendError::Backend("mount thread lock is poisoned".to_string()))?
-            .take();
-        if handle.is_none() {
-            return Ok(());
-        }
-        if !dokan::unmount(&self.mount_point) {
-            if let Ok(mut guard) = self.join_handle.lock() {
-                *guard = handle;
-            }
-            return Err(MountBackendError::Backend(
-                "Dokan rejected the unmount request".to_string(),
-            ));
-        }
-        if let Some(handle) = handle {
-            handle
-                .join()
-                .map_err(|_| MountBackendError::Backend("mount thread panicked".to_string()))?
-                .map_err(MountBackendError::Backend)?;
-        }
-        Ok(())
-    }
-}
-
-impl Drop for DokanMount {
-    fn drop(&mut self) {
-        let _ = self.stop();
-    }
-}
-
-pub(crate) fn start(
-    session: MountSession,
-    requested_mount_point: Option<&str>,
-) -> Result<DokanMount, MountBackendError> {
-    DOKAN_INIT.call_once(dokan::init);
-    let mount_point = choose_mount_point(requested_mount_point)?;
-    let mount_point_for_thread = mount_point.clone();
-    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
-    let join_handle = thread::Builder::new()
-        .name("meow-detective-dokan".to_string())
-        .spawn(move || run_mount_thread(session, mount_point_for_thread, ready_tx))
-        .map_err(|error| MountBackendError::Backend(error.to_string()))?;
-
-    match ready_rx.recv_timeout(STARTUP_TIMEOUT) {
-        Ok(Ok(())) => Ok(DokanMount {
-            mount_point,
-            join_handle: Mutex::new(Some(join_handle)),
-        }),
-        Ok(Err(error)) => {
-            let _ = join_handle.join();
-            Err(MountBackendError::Backend(error))
-        }
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            let _ = dokan::unmount(&mount_point);
-            let _ = join_handle.join();
-            Err(MountBackendError::StartupTimeout)
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            let error = join_handle
-                .join()
-                .map_err(|_| MountBackendError::Backend("mount thread panicked".to_string()))?
-                .err()
-                .unwrap_or_else(|| "mount thread exited before startup".to_string());
-            Err(MountBackendError::Backend(error))
-        }
-    }
-}
-
-fn run_mount_thread(
-    session: MountSession,
-    mount_point: U16CString,
-    ready_tx: mpsc::SyncSender<Result<(), String>>,
-) -> Result<(), String> {
-    let handler = ReadOnlyHandler { session };
-    let options = MountOptions {
-        flags: MountFlags::WRITE_PROTECT | MountFlags::CURRENT_SESSION,
-        timeout: STARTUP_TIMEOUT,
-        allocation_unit_size: 4096,
-        sector_size: 512,
-        ..MountOptions::default()
-    };
-    let mut mounter = FileSystemMounter::new(&handler, &mount_point, &options);
-    let mount_result = mounter.mount();
-    match mount_result {
-        Ok(file_system) => {
-            let _ = ready_tx.send(Ok(()));
-            drop(file_system);
-            Ok(())
-        }
-        Err(error) => {
-            let message = error.to_string();
-            tracing::error!(
-                mount_point = %mount_point.to_string_lossy(),
-                error = %message,
-                "Dokan mount failed"
-            );
-            let _ = ready_tx.send(Err(message.clone()));
-            Err(format!(
-                "Dokan mount failed for {}: {message}",
-                mount_point.to_string_lossy()
-            ))
-        }
-    }
-}
-
-fn choose_mount_point(requested: Option<&str>) -> Result<U16CString, MountBackendError> {
-    let point = match requested {
-        Some(value) => validate_drive_letter(value)?,
-        None => find_free_drive_letter()?,
-    };
-    U16CString::from_str(point)
-        .map_err(|error| MountBackendError::InvalidMountPoint(error.to_string()))
-}
-
-fn validate_drive_letter(value: &str) -> Result<String, MountBackendError> {
-    let letter = parse_drive_letter(value)?;
-    ensure_drive_letter_available(letter)?;
-    Ok(dokan_drive_mount_point(letter))
-}
-
-fn parse_drive_letter(value: &str) -> Result<u8, MountBackendError> {
-    let value = value.trim().trim_end_matches('\\');
-    let bytes = value.as_bytes();
-    if bytes.len() != 2 || bytes[1] != b':' || !bytes[0].is_ascii_alphabetic() {
-        return Err(MountBackendError::InvalidMountPoint(
-            "v1 accepts a drive letter such as M:".to_string(),
-        ));
-    }
-    Ok(bytes[0].to_ascii_uppercase())
-}
-
-fn ensure_drive_letter_available(letter: u8) -> Result<(), MountBackendError> {
-    // SAFETY: GetLogicalDrives is a read-only process-wide query with no pointer arguments.
-    let drives = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };
-    let index = u32::from(letter - b'A');
-    if drives & (1u32 << index) != 0 || dokan_drive_is_mounted(letter) {
-        return Err(MountBackendError::InvalidMountPoint(format!(
-            "drive {letter}: is already in use"
-        )));
-    }
-    Ok(())
-}
-
-fn find_free_drive_letter() -> Result<String, MountBackendError> {
-    // SAFETY: GetLogicalDrives is a read-only process-wide query with no pointer arguments.
-    let drives = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };
-    for index in 3..26 {
-        let letter = b'A' + u8::try_from(index).unwrap_or(25);
-        if drives & (1u32 << index) == 0 && !dokan_drive_is_mounted(letter) {
-            return Ok(dokan_drive_mount_point(letter));
-        }
-    }
-    Err(MountBackendError::InvalidMountPoint(
-        "no free drive letter is available".to_string(),
-    ))
-}
-
-fn dokan_drive_mount_point(letter: u8) -> String {
-    format!("{}:\\", char::from(letter))
-}
-
-fn dokan_drive_is_mounted(letter: u8) -> bool {
-    let suffix = format!("{}:", char::from(letter));
-    dokan::list_mount_points(false).is_some_and(|mount_points| {
-        mount_points.into_iter().any(|mount_point| {
-            mount_point.mount_point.is_some_and(|value| {
-                value
-                    .to_string_lossy()
-                    .to_ascii_uppercase()
-                    .ends_with(&suffix)
-            })
-        })
-    })
-}
+pub(crate) use lifecycle::{start, DokanMount};
 
 #[cfg(test)]
 #[path = "../../tests/unit/mount_backend/dokan.rs"]
@@ -219,6 +25,7 @@ mod tests;
 
 struct ReadOnlyHandler {
     session: MountSession,
+    publication: lifecycle::MountPublication,
 }
 
 struct MountFileContext {
@@ -462,9 +269,10 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for ReadOnlyHandler {
 
     fn mounted(
         &'h self,
-        _mount_point: &U16CStr,
+        mount_point: &U16CStr,
         _info: &OperationInfo<'c, 'h, Self>,
     ) -> OperationResult<()> {
+        self.publication.publish(mount_point);
         Ok(())
     }
 

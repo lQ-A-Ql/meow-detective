@@ -1545,6 +1545,7 @@ dependencies = [
  "dokan",
  "dokan-sys",
  "domain",
+ "embed-resource",
  "evidence-core",
  "evidence-mount",
  "fs-fat",

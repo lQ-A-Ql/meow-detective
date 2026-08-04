@@ -49,6 +49,10 @@ impl transport::ServiceErrorCategory for PhysicalMountRegistryError {
                 PhysicalMountError::IscsiServiceRequiresElevation
                 | PhysicalMountError::IscsiLoginRequiresElevation,
             ) => transport::ErrorCategory::Security,
+            Self::Backend(
+                PhysicalMountError::IscsiServiceLeaseState
+                | PhysicalMountError::IscsiServiceCoordinatorPoisoned,
+            ) => transport::ErrorCategory::Internal,
             Self::Backend(PhysicalMountError::BlockDevice(_)) => transport::ErrorCategory::Io,
             Self::Backend(_) => transport::ErrorCategory::External,
         }

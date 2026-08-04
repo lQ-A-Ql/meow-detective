@@ -3,9 +3,9 @@ use std::fs;
 use std::path::Path;
 
 #[cfg(windows)]
-#[link(name = "resource", kind = "static")]
-// SAFETY: The block declares no foreign functions; it only links Tauri's generated
-// Windows resource into this unit-test harness.
+#[link(name = "windows-test-manifest", kind = "static")]
+// SAFETY: The block declares no foreign functions; it only links the dedicated
+// non-elevated Common Controls v6 manifest into this unit-test harness.
 unsafe extern "C" {}
 
 #[test]

@@ -18,6 +18,10 @@ pub enum PhysicalMountError {
     IscsiLoginRequiresElevation,
     #[error("Microsoft iSCSI Initiator service did not start before the timeout")]
     IscsiServiceStartupTimeout,
+    #[error("Microsoft iSCSI service lease state is inconsistent")]
+    IscsiServiceLeaseState,
+    #[error("Microsoft iSCSI service coordinator lock is poisoned")]
+    IscsiServiceCoordinatorPoisoned,
     #[error("Windows iSCSI operation '{operation}' failed with code {code}")]
     WindowsApi { operation: &'static str, code: u32 },
     #[error("Windows connected the iSCSI session but did not expose a physical disk")]

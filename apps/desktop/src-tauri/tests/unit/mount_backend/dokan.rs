@@ -1,4 +1,16 @@
-use super::{dokan_drive_mount_point, parse_drive_letter, validate_drive_letter};
+use super::lifecycle::{
+    dokan_drive_mount_point, mount_flags, parse_drive_letter, validate_drive_letter,
+};
+use dokan::MountFlags;
+
+#[test]
+fn logical_mount_is_global_and_read_only() {
+    let flags = mount_flags();
+
+    assert!(flags.contains(MountFlags::WRITE_PROTECT));
+    assert!(flags.contains(MountFlags::MOUNT_MANAGER));
+    assert!(!flags.contains(MountFlags::CURRENT_SESSION));
+}
 
 #[test]
 fn dokan_drive_mount_point_uses_a_root_path() {
