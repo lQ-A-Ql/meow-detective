@@ -315,6 +315,32 @@ fn rejects_compressed_inode_before_reading_encoded_blocks() {
 }
 
 #[test]
+fn reads_external_and_inline_symbolic_link_targets() {
+    let mut external = minimal_f2fs_image();
+    let inode = FILE_INODE_BLOCK * BLOCK_SIZE;
+    external[inode..inode + 2].copy_from_slice(&0xa1ffu16.to_le_bytes());
+    let reader = F2fsReader::open(Box::new(MemoryReader::new(external)), 0)
+        .expect("open external symlink fixture");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, 10)
+            .expect("read external symlink target"),
+        b"Hello F2FS"
+    );
+
+    let mut inline = with_inline_file(minimal_f2fs_image(), 0, 0);
+    inline[inode..inode + 2].copy_from_slice(&0xa1ffu16.to_le_bytes());
+    let reader = F2fsReader::open(Box::new(MemoryReader::new(inline)), 0)
+        .expect("open inline symlink fixture");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, 10)
+            .expect("read inline symlink target"),
+        b"Hello F2FS"
+    );
+}
+
+#[test]
 fn selects_nat_secondary_copy_from_checkpoint_bitmap() {
     let mut image = minimal_f2fs_image();
     let primary_nat = 2560 * BLOCK_SIZE;

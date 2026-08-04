@@ -137,16 +137,10 @@ impl F2fsReader {
         Ok(entries)
     }
 
-    pub(crate) fn open_regular_file(&self, inode: &F2fsInode) -> Result<F2fsFile> {
-        if inode.is_symlink() {
-            return Err(F2fsError::Unsupported(format!(
-                "symlink inode {}",
-                inode.nid
-            )));
-        }
-        if !inode.is_regular() {
+    pub(crate) fn open_file_data(&self, inode: &F2fsInode) -> Result<F2fsFile> {
+        if !inode.is_regular() && !inode.is_symlink() {
             return Err(F2fsError::Invalid(format!(
-                "inode {} is not a regular file",
+                "inode {} has no readable file data",
                 inode.nid
             )));
         }
