@@ -10,6 +10,7 @@ mod attribute;
 mod compression;
 mod data_runs;
 mod directory;
+mod file_name;
 mod file_stream;
 mod mft;
 mod mft_stream;

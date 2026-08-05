@@ -1,3 +1,4 @@
+use crate::file_name::FileNameNamespace;
 use chrono::{DateTime, TimeZone, Utc};
 use evidence_core::filesystem::invalid_fs_data;
 use std::io;
@@ -139,7 +140,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                                 .collect();
                             let parsed_name = String::from_utf16_lossy(&chars);
 
-                            let rank = file_name_namespace_rank(name_ns);
+                            let rank = FileNameNamespace::from_raw(name_ns).rank();
                             if selected_name_rank.is_none_or(|current| rank > current) {
                                 name = parsed_name;
                                 parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
@@ -251,16 +252,6 @@ fn attribute_header_flags(record: &[u8], attr_pos: usize, attr_len: usize) -> Op
     Some(u16::from_le_bytes(
         record.get(flags_start..flags_end)?.try_into().ok()?,
     ))
-}
-
-fn file_name_namespace_rank(namespace: u8) -> u8 {
-    match namespace {
-        1 => 4, // Win32
-        3 => 3, // Win32 + DOS
-        0 => 2, // POSIX
-        2 => 1, // DOS 8.3
-        _ => 0,
-    }
 }
 
 /// MFT bulk scanner. Reads MFT records sequentially in large chunks.

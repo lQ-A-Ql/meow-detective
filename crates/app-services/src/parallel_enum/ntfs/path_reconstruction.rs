@@ -168,19 +168,20 @@ pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions(
     directory_ref: u64,
     mut entries: Vec<NtfsDirectoryEntry>,
 ) -> Vec<MftDirectoryIndexBackfillAction> {
-    entries.sort_by(|left, right| {
-        left.mft_ref
-            .cmp(&right.mft_ref)
-            .then_with(|| left.name.cmp(&right.name))
-    });
+    // fs-ntfs orders aliases by namespace rank. Stable sorting by record keeps
+    // the preferred modern name first for the inode-keyed catalog insert.
+    entries.sort_by_key(|entry| entry.mft_ref);
     let parent_key = directory_ref.to_string();
     let mut actions = Vec::new();
+    let mut selected_records = HashSet::new();
     for entry in entries {
         if entry.name.is_empty() || entry.mft_ref == directory_ref {
             continue;
         }
         let record_key = entry.mft_ref.to_string();
-        if index_entry_should_update(path_map, &record_key, &parent_key, &entry) {
+        if selected_records.insert(record_key.clone())
+            && index_entry_should_update(path_map, &record_key, &parent_key, &entry)
+        {
             path_map.insert(
                 record_key,
                 (Some(parent_key.clone()), entry.name.clone(), entry.is_dir),
@@ -218,6 +219,7 @@ fn index_entry_should_update(
                 || (parent.as_deref() == Some("5") && parent_key != "5")
                 || parent.as_deref() != Some(parent_key)
                 || *is_dir != entry.is_dir
+                || name != &entry.name
         }
     }
 }
@@ -305,10 +307,15 @@ fn update_file_paths(
 ) -> rusqlite::Result<()> {
     let prefix = format!("mft:{partition_index}:");
     conn.execute(
-        "UPDATE file_entries SET path = (
-             SELECT resolved_path FROM mft_path_records
-             WHERE record_num = substr(file_entries.id, ?1)
-         )
+        "UPDATE file_entries SET
+             path = (
+                 SELECT resolved_path FROM mft_path_records
+                 WHERE record_num = substr(file_entries.id, ?1)
+             ),
+             name = (
+                 SELECT name FROM mft_path_records
+                 WHERE record_num = substr(file_entries.id, ?1)
+             )
          WHERE data_source_id = ?2 AND id LIKE ?3
            AND EXISTS (
              SELECT 1 FROM mft_path_records

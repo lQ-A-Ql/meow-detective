@@ -1,12 +1,16 @@
 //! NTFS directory entry types and INDX entry parsing.
 
+use crate::file_name::FileNameNamespace;
 use evidence_core::filesystem::fs_node_with_attributes;
 use evidence_core::FsNode;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Internal entry with MFT reference for path resolution.
+#[derive(Debug)]
 pub(crate) struct DirEntry {
     pub(crate) node: FsNode,
     pub(crate) mft_ref: u64,
+    pub(crate) namespace: FileNameNamespace,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +38,7 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             break;
         }
         let name_len = data[off + 0x50] as usize;
+        let namespace = FileNameNamespace::from_raw(data[off + 0x51]);
         let name_start = off + 0x52;
         if name_len > 0
             && name_start + name_len * 2 <= data.len()
@@ -62,9 +67,48 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
                 name, is_dir, size, hidden, system, encrypted, None, None, None,
             );
             node.read_only = flags & 0x01 != 0;
-            entries.push(DirEntry { node, mft_ref });
+            entries.push(DirEntry {
+                node,
+                mft_ref,
+                namespace,
+            });
         }
         off += entry_size;
     }
     entries
 }
+
+pub(crate) fn canonicalize_indx_entries(entries: Vec<DirEntry>) -> Vec<DirEntry> {
+    let mut entries_by_reference = BTreeMap::<u64, Vec<DirEntry>>::new();
+    for entry in entries {
+        entries_by_reference
+            .entry(entry.mft_ref)
+            .or_default()
+            .push(entry);
+    }
+
+    let mut canonical = Vec::new();
+    for mut aliases in entries_by_reference.into_values() {
+        if aliases
+            .iter()
+            .any(|entry| entry.namespace.rank() > FileNameNamespace::Dos.rank())
+        {
+            aliases.retain(|entry| !entry.namespace.is_dos());
+        }
+        aliases.sort_by(|left, right| {
+            right
+                .namespace
+                .rank()
+                .cmp(&left.namespace.rank())
+                .then_with(|| left.node.name.cmp(&right.node.name))
+        });
+        let mut seen_names = BTreeSet::new();
+        aliases.retain(|entry| seen_names.insert(entry.node.name.clone()));
+        canonical.extend(aliases);
+    }
+    canonical
+}
+
+#[cfg(test)]
+#[path = "../tests/unit/directory.rs"]
+mod tests;

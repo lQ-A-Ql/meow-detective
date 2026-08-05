@@ -494,6 +494,67 @@ fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
 }
 
 #[test]
+fn ntfs_directory_index_backfill_preserves_canonical_name_priority() {
+    let mut path_map = HashMap::new();
+    path_map.insert("5".to_string(), (None, "/".to_string(), true));
+    path_map.insert(
+        "42".to_string(),
+        (Some("5".to_string()), "PROGRA~1".to_string(), true),
+    );
+
+    let actions = mft_directory_index_backfill_actions(
+        &mut path_map,
+        5,
+        vec![
+            fake_ntfs_index_entry(42, "Program Files", true),
+            fake_ntfs_index_entry(42, "Program Files Hardlink", true),
+        ],
+    );
+
+    assert_eq!(actions[0].name, "Program Files");
+    assert_eq!(actions[1].name, "Program Files Hardlink");
+    assert_eq!(
+        path_map.get("42"),
+        Some(&(Some("5".to_string()), "Program Files".to_string(), true))
+    );
+}
+
+#[test]
+fn ntfs_directory_index_backfill_updates_persisted_mft_name() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+    ))
+    .unwrap();
+    let ds_id = "ds-index-name";
+    insert_staging_entry(&conn, "mft:4:5", ds_id);
+    insert_staging_entry(&conn, "mft:4:42", ds_id);
+    let mut path_map = HashMap::from([
+        ("5".to_string(), (None, "/".to_string(), true)),
+        (
+            "42".to_string(),
+            (Some("5".to_string()), "PROGRA~1".to_string(), true),
+        ),
+    ]);
+
+    mft_directory_index_backfill_actions(
+        &mut path_map,
+        5,
+        vec![fake_ntfs_index_entry(42, "Program Files", true)],
+    );
+    update_mft_staging_paths_via_sqlite(&conn, ds_id, 4, &path_map, &HashSet::new()).unwrap();
+
+    let name: String = conn
+        .query_row(
+            "SELECT name FROM file_entries WHERE id = 'mft:4:42'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(name, "Program Files");
+}
+
+#[test]
 fn mft_large_record_count_uses_sqlite_resolver() {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     conn.execute_batch(include_str!(

@@ -1,6 +1,28 @@
 use std::io;
 
 pub(crate) const V1_TABLE_HEADER_SIZE: usize = 24;
+const SUPPORTED_SECTOR_SIZES: [u32; 4] = [512, 1024, 2048, 4096];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct E01Geometry {
+    pub(crate) sector_count: u64,
+    pub(crate) sectors_per_chunk: u32,
+    pub(crate) bytes_per_sector: u32,
+}
+
+impl E01Geometry {
+    pub(crate) fn total_bytes(self) -> io::Result<u64> {
+        self.sector_count
+            .checked_mul(u64::from(self.bytes_per_sector))
+            .ok_or_else(|| invalid_geometry("logical media size overflows u64"))
+    }
+
+    pub(crate) fn chunk_bytes(self) -> io::Result<u64> {
+        u64::from(self.sectors_per_chunk)
+            .checked_mul(u64::from(self.bytes_per_sector))
+            .ok_or_else(|| invalid_geometry("chunk size overflows u64"))
+    }
+}
 
 pub(crate) fn build_chunk_table(
     sections: &[(String, u64, u64, Vec<u8>)],
@@ -88,59 +110,56 @@ pub(crate) fn should_read_section_content(kind: &str) -> bool {
     kind == "volume" || kind.starts_with("disk") || matches!(kind, "table" | "table2")
 }
 
-pub(crate) fn find_geometry(
-    sections: &[(String, Vec<u8>)],
-    file_len: u64,
-) -> io::Result<(u64, u32)> {
+pub(crate) fn find_geometry(sections: &[(String, Vec<u8>)]) -> io::Result<E01Geometry> {
+    let mut geometry_error = None;
     for (kind, content) in sections {
-        if (kind == "volume" || kind.starts_with("disk")) && content.len() >= 24 {
-            let sectors = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0; 8]));
-            if sectors > 0 && geometry_section_has_valid_sector_size(kind, content) {
-                return Ok((
-                    sectors,
-                    chunk_sectors_from_geometry_section(kind, content).max(1),
-                ));
+        if kind == "volume" || kind.starts_with("disk") {
+            match parse_geometry_section(kind, content) {
+                Ok(geometry) => return Ok(geometry),
+                Err(error) => geometry_error = Some(error),
             }
         }
     }
-    for (_, content) in sections {
-        if content.len() < 24 {
-            continue;
-        }
-        let sectors = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0; 8]));
-        if sectors > 1_000_000 && sectors < 100_000_000 && sectors * 512 < file_len * 2 {
-            return Ok((sectors, 64));
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        "no geometry found",
-    ))
+    Err(geometry_error.unwrap_or_else(|| invalid_geometry("no geometry section found")))
 }
 
-fn chunk_sectors_from_geometry_section(kind: &str, content: &[u8]) -> u32 {
-    let primary = if kind == "volume" && content.len() >= 16 {
-        u32::from_le_bytes(content[12..16].try_into().unwrap_or([0; 4]))
-    } else if content.len() >= 12 {
-        u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]))
-    } else {
-        0
+fn parse_geometry_section(kind: &str, content: &[u8]) -> io::Result<E01Geometry> {
+    if content.len() < 24 {
+        return Err(invalid_geometry(format!(
+            "{kind} section is too short: expected at least 24 bytes, got {}",
+            content.len()
+        )));
+    }
+    let sectors_per_chunk = u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]));
+    let bytes_per_sector = u32::from_le_bytes(content[12..16].try_into().unwrap_or([0; 4]));
+    let sector_count = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0; 8]));
+    if sectors_per_chunk == 0 {
+        return Err(invalid_geometry(format!(
+            "{kind} section declares zero sectors per chunk"
+        )));
+    }
+    if !SUPPORTED_SECTOR_SIZES.contains(&bytes_per_sector) {
+        return Err(invalid_geometry(format!(
+            "{kind} section declares unsupported sector size {bytes_per_sector}"
+        )));
+    }
+    if sector_count == 0 {
+        return Err(invalid_geometry(format!(
+            "{kind} section declares zero media sectors"
+        )));
+    }
+    let geometry = E01Geometry {
+        sector_count,
+        sectors_per_chunk,
+        bytes_per_sector,
     };
-    if primary > 0 {
-        primary
-    } else if content.len() >= 12 {
-        u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]))
-    } else {
-        64
-    }
+    geometry.total_bytes()?;
+    let chunk_bytes = geometry.chunk_bytes()?;
+    usize::try_from(chunk_bytes)
+        .map_err(|_| invalid_geometry("chunk size does not fit the current platform"))?;
+    Ok(geometry)
 }
 
-fn geometry_section_has_valid_sector_size(kind: &str, content: &[u8]) -> bool {
-    if kind == "volume" || !kind.starts_with("disk") || content.len() < 16 {
-        return true;
-    }
-    matches!(
-        u32::from_le_bytes(content[12..16].try_into().unwrap_or([0; 4])),
-        0 | 512 | 1024 | 2048 | 4096
-    )
+fn invalid_geometry(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
 }

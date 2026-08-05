@@ -1,6 +1,8 @@
 //! NTFS MFT record reading, directory enumeration, and file system interface.
 
-use crate::directory::{parse_indx_entries, DirEntry, NtfsDirectoryEntry};
+use crate::directory::{
+    canonicalize_indx_entries, parse_indx_entries, DirEntry, NtfsDirectoryEntry,
+};
 use crate::utils::{
     index_record_bytes, mft_inode_from_path, mft_record_bytes, read_contiguous_mft_record,
     root_dir_frn,
@@ -12,7 +14,6 @@ use evidence_core::filesystem::{
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::io::{self, Read, Seek, SeekFrom};
 
 pub struct NtfsReader {
@@ -127,7 +128,6 @@ impl NtfsReader {
     pub(crate) fn list_dir_by_inode(&self, inode: u64) -> io::Result<Vec<DirEntry>> {
         let rec = self.read_mft_record(inode)?;
         let mut entries = Vec::new();
-        let mut seen = HashSet::new();
 
         // Walk attributes looking for $INDEX_ROOT (0x90) and $INDEX_ALLOCATION (0xA0)
         let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
@@ -211,23 +211,15 @@ impl NtfsReader {
             );
         }
 
-        // Merge: $INDEX_ALLOCATION entries first (more complete), then
-        // fill gaps from $INDEX_ROOT. Deduplicate by mft_ref.
+        // Merge both index sources before resolving NTFS filename namespaces.
         if let Some(alloc) = index_alloc_entries {
-            for e in alloc {
-                seen.insert(e.mft_ref);
-                entries.push(e);
-            }
+            entries.extend(alloc);
         }
         if let Some(root) = index_root_entries {
-            for e in root {
-                if seen.insert(e.mft_ref) {
-                    entries.push(e);
-                }
-            }
+            entries.extend(root);
         }
 
-        Ok(entries)
+        Ok(canonicalize_indx_entries(entries))
     }
 
     fn parse_index_root_entries(

@@ -8,6 +8,7 @@ use super::{
     build_chunk_table, build_segment_path, find_geometry, should_read_section_content, E01Reader,
     SECTION_DESCRIPTOR_SIZE,
 };
+use crate::table::E01Geometry;
 
 type Section = (String, u64, u64, Vec<u8>);
 
@@ -16,9 +17,14 @@ impl E01Reader {
         let mut segment_files = open_segment_files(path)?;
         let file_len = verify_header(&mut segment_files[0])?;
         let sections = read_sections(&mut segment_files[0], file_len)?;
-        let (total_bytes, chunk_size_sectors) = geometry(&sections, file_len)?;
-        let chunk_table =
-            select_chunk_table(&sections, &segment_files, total_bytes, chunk_size_sectors)?;
+        let geometry = geometry(&sections)?;
+        let total_bytes = geometry.total_bytes()?;
+        let chunk_table = select_chunk_table(
+            &sections,
+            &segment_files,
+            total_bytes,
+            geometry.chunk_bytes()?,
+        )?;
         Ok(Self::from_parts(
             ReaderInfo {
                 path: path.to_path_buf(),
@@ -26,7 +32,8 @@ impl E01Reader {
                 kind: "e01".into(),
             },
             total_bytes,
-            chunk_size_sectors,
+            geometry.sectors_per_chunk,
+            geometry.bytes_per_sector,
             chunk_table,
             segment_files,
         ))
@@ -157,26 +164,24 @@ fn valid_next_offset(next: u64, file_len: u64) -> u64 {
     }
 }
 
-fn geometry(sections: &[Section], file_len: u64) -> io::Result<(u64, u32)> {
+fn geometry(sections: &[Section]) -> io::Result<E01Geometry> {
     let views = sections
         .iter()
         .map(|(kind, _, _, content)| (kind.clone(), content.clone()))
         .collect::<Vec<_>>();
-    let (sectors, chunk_size) = find_geometry(&views, file_len)?;
-    Ok((sectors * 512, if chunk_size > 0 { chunk_size } else { 64 }))
+    find_geometry(&views)
 }
 
 fn select_chunk_table(
     sections: &[Section],
     segment_files: &[std::fs::File],
     total_bytes: u64,
-    chunk_size_sectors: u32,
+    chunk_bytes: u64,
 ) -> io::Result<Vec<(usize, u64, bool, u64)>> {
     let segment_sizes = segment_files
         .iter()
         .map(|file| file.metadata().map(|metadata| metadata.len()).unwrap_or(0))
         .collect::<Vec<_>>();
-    let chunk_bytes = u64::from(chunk_size_sectors) * 512;
     let expected_chunks = total_bytes.div_ceil(chunk_bytes);
     let mut table = build_chunk_table(sections, &segment_sizes, "table");
     if table.len() as u64 != expected_chunks {

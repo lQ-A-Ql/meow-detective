@@ -22,6 +22,7 @@ pub struct E01Reader {
     pub(crate) info: ReaderInfo,
     pub(crate) total_bytes: u64,
     pub(crate) chunk_size_sectors: u32,
+    pub(crate) bytes_per_sector: u32,
     pub(crate) chunk_table: Arc<Vec<(usize, u64, bool, u64)>>,
     pub(crate) segment_files: Vec<std::fs::File>,
     pub(crate) cursor: u64,
@@ -35,6 +36,7 @@ impl E01Reader {
         info: ReaderInfo,
         total_bytes: u64,
         chunk_size_sectors: u32,
+        bytes_per_sector: u32,
         chunk_table: Vec<(usize, u64, bool, u64)>,
         segment_files: Vec<std::fs::File>,
     ) -> Self {
@@ -42,6 +44,7 @@ impl E01Reader {
             info,
             total_bytes,
             chunk_size_sectors,
+            bytes_per_sector,
             chunk_table: Arc::new(chunk_table),
             segment_files,
             cursor: 0,
@@ -62,6 +65,7 @@ impl E01Reader {
             info: self.info.clone(),
             total_bytes: self.total_bytes,
             chunk_size_sectors: self.chunk_size_sectors,
+            bytes_per_sector: self.bytes_per_sector,
             chunk_table: Arc::clone(&self.chunk_table),
             segment_files: segment_files?,
             cursor: 0,
@@ -91,6 +95,7 @@ impl E01Reader {
             info: self.info.clone(),
             total_bytes: self.total_bytes,
             chunk_size_sectors: self.chunk_size_sectors,
+            bytes_per_sector: self.bytes_per_sector,
             chunk_table: Arc::clone(&self.chunk_table),
             segment_files,
             cursor: 0,
@@ -102,57 +107,37 @@ impl E01Reader {
 
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (segment, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
-        let chunk_bytes = self.chunk_size_sectors as usize * 512;
+        let chunk_bytes = usize::try_from(self.chunk_size_bytes()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "E01 chunk size does not fit the current platform",
+            )
+        })?;
+        let context = ChunkReadContext {
+            index: idx,
+            segment,
+            offset,
+            stored_size,
+            expected_size: chunk_bytes,
+            codec: if compressed { "deflate" } else { "raw" },
+        };
         if segment >= self.segment_files.len() {
-            return Err(io::Error::new(
+            return Err(context.error(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "chunk references segment {} but only {} available",
-                    segment,
+                    "segment is unavailable; only {} segment(s) are open",
                     self.segment_files.len()
                 ),
             ));
         }
 
         let file = &mut self.segment_files[segment];
-        file.seek(SeekFrom::Start(offset))?;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|error| context.source_error("seek source chunk", error))?;
         if compressed {
-            if stored_size == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "compressed chunk has zero stored size",
-                ));
-            }
-            let mut raw = vec![0u8; stored_size as usize];
-            file.read_exact(&mut raw)?;
-            let mut decoder = flate2::read::ZlibDecoder::new(&raw[..]);
-            let mut buffer = vec![0u8; chunk_bytes];
-            decoder
-                .read_exact(&mut buffer)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            return Ok(buffer);
+            return read_compressed_chunk(file, &context);
         }
-
-        let read_size = if stored_size == 0 {
-            chunk_bytes
-        } else {
-            stored_size.min(chunk_bytes as u64) as usize
-        };
-        if read_size == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "uncompressed chunk has zero stored size",
-            ));
-        }
-        let mut buffer = vec![0u8; chunk_bytes];
-        file.read_exact(&mut buffer[..read_size])?;
-        if read_size < chunk_bytes {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            ));
-        }
-        Ok(buffer)
+        read_uncompressed_chunk(file, &context)
     }
 
     fn read_chunk_cached(&mut self, idx: u64, sequential: bool) -> io::Result<Arc<[u8]>> {
@@ -218,7 +203,7 @@ impl E01Reader {
         }
         let mut total = 0;
         let mut position = offset;
-        let chunk_size = self.chunk_size_sectors as u64 * 512;
+        let chunk_size = self.chunk_size_bytes();
         while total < buffer.len() && position < self.total_bytes {
             let chunk_idx = position / chunk_size;
             let intra = (position % chunk_size) as usize;
@@ -234,6 +219,107 @@ impl E01Reader {
         }
         Ok(total)
     }
+
+    pub(crate) fn chunk_size_bytes(&self) -> u64 {
+        u64::from(self.chunk_size_sectors) * u64::from(self.bytes_per_sector)
+    }
+}
+
+struct ChunkReadContext {
+    index: u64,
+    segment: usize,
+    offset: u64,
+    stored_size: u64,
+    expected_size: usize,
+    codec: &'static str,
+}
+
+impl ChunkReadContext {
+    fn error(&self, kind: io::ErrorKind, detail: impl std::fmt::Display) -> io::Error {
+        io::Error::new(kind, format!("{}: {detail}", self.description()))
+    }
+
+    fn source_error(&self, operation: &str, error: io::Error) -> io::Error {
+        self.error(error.kind(), format!("{operation} failed: {error}"))
+    }
+
+    fn description(&self) -> String {
+        format!(
+            "E01 chunk {} codec={} segment={} offset={} stored_length={} expected_decompressed_length={}",
+            self.index,
+            self.codec,
+            self.segment,
+            self.offset,
+            self.stored_size,
+            self.expected_size
+        )
+    }
+}
+
+fn read_compressed_chunk(
+    file: &mut std::fs::File,
+    context: &ChunkReadContext,
+) -> io::Result<Vec<u8>> {
+    if context.stored_size == 0 {
+        return Err(context.error(
+            io::ErrorKind::UnexpectedEof,
+            "compressed chunk has zero stored length",
+        ));
+    }
+    let raw = read_stored_bytes(file, context, context.stored_size)?;
+    let decoder = flate2::read::ZlibDecoder::new(&raw[..]);
+    let limit = u64::try_from(context.expected_size)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut decoded = Vec::new();
+    decoded
+        .try_reserve_exact(context.expected_size.saturating_add(1))
+        .map_err(|error| context.error(io::ErrorKind::OutOfMemory, error))?;
+    decoder
+        .take(limit)
+        .read_to_end(&mut decoded)
+        .map_err(|error| context.source_error("deflate decode", error))?;
+    if decoded.len() != context.expected_size {
+        return Err(context.error(
+            io::ErrorKind::InvalidData,
+            format!("deflate output length was {}", decoded.len()),
+        ));
+    }
+    Ok(decoded)
+}
+
+fn read_uncompressed_chunk(
+    file: &mut std::fs::File,
+    context: &ChunkReadContext,
+) -> io::Result<Vec<u8>> {
+    if context.stored_size > 0 && context.stored_size < context.expected_size as u64 {
+        return Err(context.error(
+            io::ErrorKind::UnexpectedEof,
+            "raw stored length is shorter than the expected chunk length",
+        ));
+    }
+    read_stored_bytes(file, context, context.expected_size as u64)
+}
+
+fn read_stored_bytes(
+    file: &mut std::fs::File,
+    context: &ChunkReadContext,
+    length: u64,
+) -> io::Result<Vec<u8>> {
+    let length = usize::try_from(length).map_err(|_| {
+        context.error(
+            io::ErrorKind::InvalidData,
+            "stored length does not fit the current platform",
+        )
+    })?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(length)
+        .map_err(|error| context.error(io::ErrorKind::OutOfMemory, error))?;
+    bytes.resize(length, 0);
+    file.read_exact(&mut bytes)
+        .map_err(|error| context.source_error("read source chunk", error))?;
+    Ok(bytes)
 }
 
 impl Read for E01Reader {

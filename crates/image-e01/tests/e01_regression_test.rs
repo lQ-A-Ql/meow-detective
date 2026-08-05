@@ -116,7 +116,8 @@ fn multi_segment_with_only_first_file_works() {
 
     // volume section: desc at 13, content at 89, next desc at 89+36=125
     let mut vol = vec![0u8; 36];
-    vol[12..16].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[8..12].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[12..16].copy_from_slice(&512u32.to_le_bytes());
     vol[16..24].copy_from_slice(&sectors.to_le_bytes());
     f.write_all(&sdesc("volume", 125, 36)).unwrap();
     f.write_all(&vol).unwrap();

@@ -126,17 +126,22 @@ fn e01_ntfs_root_listing() {
         .find(|c| c.name.eq_ignore_ascii_case("Windows"));
     assert!(windows.is_some(), "Should find Windows directory");
 
-    // Verify common NTFS directories
-    let has_users = children
-        .iter()
-        .any(|c| c.name.eq_ignore_ascii_case("Users"));
-    let has_program_files = children
-        .iter()
-        .any(|c| c.name.eq_ignore_ascii_case("Program Files"));
-    assert!(
-        has_users || has_program_files,
-        "Should have Users or Program Files"
-    );
+    for expected in [
+        "Program Files",
+        "Program Files (x86)",
+        "System Volume Information",
+    ] {
+        assert!(
+            children.iter().any(|child| child.name == expected),
+            "NTFS root should contain modern name {expected:?}"
+        );
+    }
+    for dos_alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
+        assert!(
+            children.iter().all(|child| child.name != dos_alias),
+            "NTFS root should not expose DOS alias {dos_alias:?}"
+        );
+    }
 
     eprintln!("NTFS root: {} children", children.len());
     for c in children.iter().take(20) {
@@ -365,6 +370,29 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
             let children = file_service::get_file_children_lazy(&source_conn, &root.id, 0, 500)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!children.children.is_empty());
+            for expected in [
+                "Program Files",
+                "Program Files (x86)",
+                "System Volume Information",
+            ] {
+                let count = source_conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND name = ?2",
+                    rusqlite::params![root.id, expected],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                assert_eq!(count, 1, "imported catalog should contain {expected:?}");
+            }
+            for dos_alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
+                let count = source_conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND name = ?2",
+                    rusqlite::params![root.id, dos_alias],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                assert_eq!(
+                    count, 0,
+                    "imported catalog contains DOS alias {dos_alias:?}"
+                );
+            }
             eprintln!(
                 "Tree: {} roots, {} children",
                 tree.len(),

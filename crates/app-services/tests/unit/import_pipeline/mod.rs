@@ -1160,6 +1160,34 @@ fn e01_full_import() {
                 system_hives >= 2,
                 "Expected Windows registry/event-log paths after NTFS import"
             );
+            for expected in [
+                "Program Files",
+                "Program Files (x86)",
+                "System Volume Information",
+            ] {
+                let count: i64 = source_conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries
+                     WHERE name = ?1
+                       AND parent_id IN (
+                         SELECT id FROM file_entries WHERE parent_id IS NULL
+                       )",
+                    [expected],
+                    |row| row.get(0),
+                )?;
+                assert!(count >= 1, "Expected modern NTFS name {expected:?}");
+            }
+            for dos_alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
+                let count: i64 = source_conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries
+                     WHERE name = ?1
+                       AND parent_id IN (
+                         SELECT id FROM file_entries WHERE parent_id IS NULL
+                       )",
+                    [dos_alias],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(count, 0, "Unexpected DOS alias {dos_alias:?}");
+            }
 
             eprintln!("\n[3/7] Verifying import-finalized timeline...");
             let tl_count_after_import: i64 = source_conn.query_row(

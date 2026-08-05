@@ -59,10 +59,40 @@ fn large_compressed_disk_geometry_is_not_rejected_by_segment_size_ratio() {
     disk[16..24].copy_from_slice(&268_435_456u64.to_le_bytes());
     let sections = vec![("disk".to_string(), disk)];
 
-    let (sectors, chunk_sectors) = find_geometry(&sections, 2_823_000_000).unwrap();
+    let geometry = find_geometry(&sections).unwrap();
 
-    assert_eq!(sectors, 268_435_456);
-    assert_eq!(chunk_sectors, 64);
+    assert_eq!(geometry.sector_count, 268_435_456);
+    assert_eq!(geometry.sectors_per_chunk, 64);
+    assert_eq!(geometry.bytes_per_sector, 512);
+    assert_eq!(geometry.total_bytes().unwrap(), 137_438_953_472);
+}
+
+#[test]
+fn encase_volume_geometry_uses_chunk_sectors_at_offset_eight() {
+    let mut volume = vec![0u8; 32];
+    volume[8..12].copy_from_slice(&64u32.to_le_bytes());
+    volume[12..16].copy_from_slice(&512u32.to_le_bytes());
+    volume[16..24].copy_from_slice(&419_430_400u64.to_le_bytes());
+
+    let geometry = find_geometry(&[("volume".to_string(), volume)]).unwrap();
+
+    assert_eq!(geometry.sectors_per_chunk, 64);
+    assert_eq!(geometry.bytes_per_sector, 512);
+    assert_eq!(geometry.chunk_bytes().unwrap(), 32 * 1024);
+    assert_eq!(geometry.total_bytes().unwrap(), 200 * 1024 * 1024 * 1024);
+}
+
+#[test]
+fn invalid_geometry_is_rejected_instead_of_guessed() {
+    let mut volume = vec![0u8; 32];
+    volume[8..12].copy_from_slice(&64u32.to_le_bytes());
+    volume[12..16].copy_from_slice(&123u32.to_le_bytes());
+    volume[16..24].copy_from_slice(&1024u64.to_le_bytes());
+
+    let error = find_geometry(&[("volume".to_string(), volume)]).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("unsupported sector size 123"));
 }
 
 #[test]
@@ -83,7 +113,7 @@ fn sequential_reads_populate_bounded_neighbor_cache() {
     write_multichunk_e01(&path, 6).unwrap();
 
     let mut reader = E01Reader::open(&path).unwrap();
-    let chunk_bytes = reader.chunk_size_sectors as usize * 512;
+    let chunk_bytes = reader.chunk_size_bytes() as usize;
     let mut buf = vec![0u8; chunk_bytes + 1];
     reader.read_exact(&mut buf).unwrap();
 
@@ -106,7 +136,7 @@ fn seek_resets_sequential_prefetch_hint() {
     write_multichunk_e01(&path, 6).unwrap();
 
     let mut reader = E01Reader::open(&path).unwrap();
-    let chunk_bytes = reader.chunk_size_sectors as u64 * 512;
+    let chunk_bytes = reader.chunk_size_bytes();
     let mut byte = [0u8; 1];
     reader.read_exact(&mut byte).unwrap();
     reader.seek(SeekFrom::Start(chunk_bytes * 4)).unwrap();
@@ -132,7 +162,7 @@ fn cloned_reader_reads_same_data() {
     let mut clone = reader.try_clone().unwrap();
 
     // Both should read the same data from the start.
-    let chunk_bytes = reader.chunk_size_sectors as usize * 512;
+    let chunk_bytes = reader.chunk_size_bytes() as usize;
     let mut buf1 = vec![0u8; chunk_bytes];
     let mut buf2 = vec![0u8; chunk_bytes];
     reader.read_exact(&mut buf1).unwrap();
@@ -151,6 +181,74 @@ fn cloned_reader_reads_same_data() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn compressed_chunk_length_error_contains_forensic_context() {
+    let path = temporary_chunk_path("short-deflate");
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder.write_all(&[0x41; 32]).unwrap();
+    let compressed = encoder.finish().unwrap();
+    std::fs::write(&path, &compressed).unwrap();
+    let file = std::fs::File::open(&path).unwrap();
+    let mut reader = E01Reader::from_parts(
+        evidence_core::ReaderInfo {
+            path: path.clone(),
+            size: 512,
+            kind: "e01".to_string(),
+        },
+        512,
+        1,
+        512,
+        vec![(0, 0, true, compressed.len() as u64)],
+        vec![file],
+    );
+
+    let mut byte = [0u8; 1];
+    let error = reader.read_exact(&mut byte).unwrap_err();
+    drop(reader);
+    std::fs::remove_file(path).unwrap();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    let message = error.to_string();
+    assert!(message.contains("E01 chunk 0 codec=deflate"));
+    assert!(message.contains("segment=0 offset=0"));
+    assert!(message.contains("expected_decompressed_length=512"));
+    assert!(message.contains("deflate output length was 32"));
+}
+
+#[test]
+fn source_chunk_short_read_is_distinct_from_decode_failure() {
+    let path = temporary_chunk_path("source-short-read");
+    std::fs::write(&path, [0x42; 4]).unwrap();
+    let file = std::fs::File::open(&path).unwrap();
+    let mut reader = E01Reader::from_parts(
+        evidence_core::ReaderInfo {
+            path: path.clone(),
+            size: 512,
+            kind: "e01".to_string(),
+        },
+        512,
+        1,
+        512,
+        vec![(0, 0, false, 512)],
+        vec![file],
+    );
+
+    let mut byte = [0u8; 1];
+    let error = reader.read_exact(&mut byte).unwrap_err();
+    drop(reader);
+    std::fs::remove_file(path).unwrap();
+
+    assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
+    let message = error.to_string();
+    assert!(message.contains("E01 chunk 0 codec=raw"));
+    assert!(message.contains("stored_length=512"));
+    assert!(message.contains("read source chunk failed"));
+}
+
+fn temporary_chunk_path(label: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("image-e01-{label}-{}.bin", std::process::id()))
+}
+
 fn write_multichunk_e01(path: &Path, chunk_count: u32) -> io::Result<()> {
     let chunk_sectors: u32 = 8;
     let sectors = chunk_count as u64 * chunk_sectors as u64;
@@ -160,7 +258,8 @@ fn write_multichunk_e01(path: &Path, chunk_count: u32) -> io::Result<()> {
     f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")?;
 
     let mut vol = vec![0u8; 36];
-    vol[12..16].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[8..12].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[12..16].copy_from_slice(&512u32.to_le_bytes());
     vol[16..24].copy_from_slice(&sectors.to_le_bytes());
 
     let volume_desc_offset = 13u64;
