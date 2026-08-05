@@ -1,4 +1,5 @@
 mod index;
+mod map;
 
 use std::sync::{Arc, Mutex};
 
@@ -7,6 +8,7 @@ use crate::io::{block_offset, read_exact_at, SharedReader};
 use crate::{ErofsError, ErofsSuperblock, Result};
 
 use self::index::CompressionIndexes;
+use self::map::{map_extent, ExtentStorage};
 
 pub(crate) struct ErofsCompressedFile {
     source: SharedReader,
@@ -15,18 +17,13 @@ pub(crate) struct ErofsCompressedFile {
     block_count: u64,
     indexes: CompressionIndexes,
     size: u64,
-    cache: Mutex<Option<CachedCluster>>,
+    cache: Mutex<Option<CachedExtent>>,
 }
 
-struct CachedCluster {
-    index: u64,
+struct CachedExtent {
+    start: u64,
+    end: u64,
     bytes: Arc<[u8]>,
-}
-
-pub(super) enum ClusterKind {
-    Plain(u64),
-    Lz4(u64),
-    Hole,
 }
 
 impl ErofsCompressedFile {
@@ -60,57 +57,64 @@ impl ErofsCompressedFile {
             let position = offset.checked_add(written as u64).ok_or_else(|| {
                 ErofsError::Invalid("compressed read position overflows".to_string())
             })?;
-            let cluster_index = position / self.block_size as u64;
-            let within = usize::try_from(position % self.block_size as u64)
-                .map_err(|_| ErofsError::Invalid("cluster offset exceeds usize".to_string()))?;
-            let cluster = self.load_cluster(cluster_index)?;
-            let available = cluster.len().checked_sub(within).ok_or_else(|| {
-                ErofsError::Invalid("compressed cluster offset exceeds output".to_string())
+            let extent = self.load_extent(position)?;
+            let within = usize::try_from(position - extent.start)
+                .map_err(|_| ErofsError::Invalid("extent offset exceeds usize".to_string()))?;
+            let available = extent.bytes.len().checked_sub(within).ok_or_else(|| {
+                ErofsError::Invalid("compressed extent offset exceeds output".to_string())
             })?;
             let length = available.min(requested - written);
-            output[written..written + length].copy_from_slice(&cluster[within..within + length]);
+            output[written..written + length]
+                .copy_from_slice(&extent.bytes[within..within + length]);
             written += length;
         }
         Ok(written)
     }
 
-    fn load_cluster(&self, index: u64) -> Result<Arc<[u8]>> {
-        if let Some(bytes) = self
+    fn load_extent(&self, position: u64) -> Result<CachedExtent> {
+        if let Some(cached) = self
             .cache
             .lock()
             .map_err(|_| ErofsError::Invalid("compression cache lock is poisoned".to_string()))?
             .as_ref()
-            .filter(|cached| cached.index == index)
-            .map(|cached| Arc::clone(&cached.bytes))
+            .filter(|cached| cached.start <= position && position < cached.end)
+            .map(|cached| CachedExtent {
+                start: cached.start,
+                end: cached.end,
+                bytes: Arc::clone(&cached.bytes),
+            })
         {
-            return Ok(bytes);
+            return Ok(cached);
         }
-        let cluster_start = index
-            .checked_mul(self.block_size as u64)
-            .ok_or_else(|| ErofsError::Invalid("logical cluster offset overflows".to_string()))?;
-        let remaining = self.size.checked_sub(cluster_start).ok_or_else(|| {
-            ErofsError::Invalid(format!("logical cluster {index} is beyond the file"))
-        })?;
-        let decoded_length = usize::try_from(remaining.min(self.block_size as u64))
-            .map_err(|_| ErofsError::Invalid("decoded cluster length exceeds usize".to_string()))?;
-        let bytes: Arc<[u8]> = match self.read_cluster_kind(index)? {
-            ClusterKind::Plain(block) => self.read_plain(block, decoded_length)?.into(),
-            ClusterKind::Lz4(block) => self.read_lz4(block, decoded_length)?.into(),
-            ClusterKind::Hole => vec![0u8; decoded_length].into(),
+        let mapped = map_extent(
+            &self.indexes,
+            &self.source,
+            position,
+            self.size,
+            self.block_size,
+        )?;
+        let decoded_length = usize::try_from(mapped.end - mapped.start)
+            .map_err(|_| ErofsError::Invalid("decoded extent length exceeds usize".to_string()))?;
+        let bytes: Arc<[u8]> = match mapped.storage {
+            ExtentStorage::Plain(block) => self.read_plain(block, decoded_length)?.into(),
+            ExtentStorage::Lz4(block) => self.read_lz4(block, decoded_length)?.into(),
+            ExtentStorage::Hole => vec![0u8; decoded_length].into(),
+        };
+        let cached = CachedExtent {
+            start: mapped.start,
+            end: mapped.end,
+            bytes: Arc::clone(&bytes),
         };
         *self
             .cache
             .lock()
             .map_err(|_| ErofsError::Invalid("compression cache lock is poisoned".to_string()))? =
-            Some(CachedCluster {
-                index,
-                bytes: Arc::clone(&bytes),
+            Some(CachedExtent {
+                start: cached.start,
+                end: cached.end,
+                bytes,
             });
-        Ok(bytes)
-    }
-
-    fn read_cluster_kind(&self, index: u64) -> Result<ClusterKind> {
-        self.indexes.read_cluster_kind(&self.source, index)
+        Ok(cached)
     }
 
     fn read_plain(&self, block: u64, decoded_length: usize) -> Result<Vec<u8>> {

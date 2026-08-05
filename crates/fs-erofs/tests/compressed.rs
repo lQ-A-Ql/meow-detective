@@ -97,6 +97,32 @@ fn reads_lz4_and_plain_clusters_without_materializing_the_file() {
 }
 
 #[test]
+fn reads_full_multi_cluster_lz4_extent() {
+    let mut image = compressed_image(2 * BLOCK_SIZE as u32);
+    let expected = vec![b'M'; 2 * BLOCK_SIZE];
+    let encoded = lz4_flex::block::compress(&expected);
+    let encoded_start = 7 * BLOCK_SIZE - encoded.len();
+    image[encoded_start..7 * BLOCK_SIZE].copy_from_slice(&encoded);
+    write_full_index(&mut image, FULL_INDEX, 1, 6);
+    write_full_nonhead(&mut image, FULL_INDEX + 8, 1, 1);
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open full multi-cluster EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, expected.len())
+            .expect("read full multi-cluster extent"),
+        expected
+    );
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", BLOCK_SIZE as u64 - 3, 6)
+            .expect("read across multi-cluster extent boundary"),
+        b"MMMMMM"
+    );
+}
+
+#[test]
 fn zero_fills_declared_compressed_holes_and_rejects_nonhead_extents() {
     let mut hole = compressed_image(BLOCK_SIZE as u32);
     write_full_index(&mut hole, FULL_INDEX, 0x4000, u32::MAX);
@@ -115,7 +141,7 @@ fn zero_fills_declared_compressed_holes_and_rejects_nonhead_extents() {
         .expect("open nonhead fixture")
         .read_file_range("hello.txt", 0, 1)
         .expect_err("multi-cluster extents remain unsupported");
-    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData, "{error:?}");
 }
 
 #[test]
@@ -129,7 +155,7 @@ fn rejects_legacy_lz4_without_structural_input_length() {
         .expect("open legacy EROFS")
         .read_file_range("hello.txt", 0, 1)
         .expect_err("legacy trailing-padding LZ4 remains unsupported");
-    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    assert_eq!(error.kind(), io::ErrorKind::Unsupported, "{error:?}");
 }
 
 #[test]
@@ -166,7 +192,7 @@ fn reads_compact_four_byte_lz4_and_plain_clusters() {
     let encoded_start = 7 * BLOCK_SIZE - encoded.len();
     image[encoded_start..7 * BLOCK_SIZE].copy_from_slice(&encoded);
     image[7 * BLOCK_SIZE..8 * BLOCK_SIZE].fill(b'P');
-    write_compact_pack(&mut image, COMPACT_INDEX, 4, &[1, 0], 5);
+    write_compact_pack(&mut image, COMPACT_INDEX, 4, &[1 << 12, 0], 5);
 
     let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
         .expect("open compact four-byte EROFS");
@@ -179,13 +205,32 @@ fn reads_compact_four_byte_lz4_and_plain_clusters() {
 }
 
 #[test]
+fn reads_compact_multi_cluster_lz4_extent() {
+    let mut image = compact_compressed_image(2 * BLOCK_SIZE as u32, 0);
+    let expected = vec![b'Q'; 2 * BLOCK_SIZE];
+    let encoded = lz4_flex::block::compress(&expected);
+    let encoded_start = 7 * BLOCK_SIZE - encoded.len();
+    image[encoded_start..7 * BLOCK_SIZE].copy_from_slice(&encoded);
+    write_compact_pack(&mut image, COMPACT_INDEX, 4, &[1 << 12, (2 << 12) | 1], 5);
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open compact multi-cluster EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, expected.len())
+            .expect("read compact multi-cluster extent"),
+        expected
+    );
+}
+
+#[test]
 fn reads_compact_two_byte_pack_and_rejects_nonhead_entries() {
     let mut image = compact_compressed_image(23 * BLOCK_SIZE as u32, 1);
     image.resize(40 * BLOCK_SIZE, 0);
     write_u32(&mut image, SUPERBLOCK_BLOCK_COUNT, 40);
     let two_byte_pack = COMPACT_INDEX + 6 * 4;
     let mut kinds = [0; 16];
-    kinds[15] = 1;
+    kinds[15] = 1 << 12;
     write_compact_pack(&mut image, two_byte_pack, 2, &kinds, 19);
     image[20 * BLOCK_SIZE..21 * BLOCK_SIZE].fill(b'T');
     let last = vec![b'U'; BLOCK_SIZE];
@@ -218,12 +263,37 @@ fn reads_compact_two_byte_pack_and_rejects_nonhead_entries() {
     );
 
     let mut nonhead = compact_compressed_image(BLOCK_SIZE as u32, 0);
-    write_compact_pack(&mut nonhead, COMPACT_INDEX, 4, &[2, 0], 5);
+    write_compact_pack(&mut nonhead, COMPACT_INDEX, 4, &[(2 << 12) | 1, 0], 5);
     let error = ErofsReader::open(Box::new(MemoryReader::new(nonhead)), 0)
         .expect("open compact nonhead fixture")
         .read_file_range("hello.txt", 0, 1)
         .expect_err("compact multi-cluster extents remain unsupported");
-    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData, "{error:?}");
+}
+
+#[test]
+fn reads_compact_head_after_cross_pack_nonhead() {
+    let mut image = compact_compressed_image(23 * BLOCK_SIZE as u32, 1);
+    image.resize(40 * BLOCK_SIZE, 0);
+    write_u32(&mut image, SUPERBLOCK_BLOCK_COUNT, 40);
+    let pack = COMPACT_INDEX + 6 * 4;
+    let mut kinds = [0; 16];
+    kinds[0] = (2 << 12) | 1;
+    kinds[1] = 1 << 12;
+    write_compact_pack(&mut image, pack, 2, &kinds, 19);
+    let data = vec![b'R'; BLOCK_SIZE];
+    let encoded = lz4_flex::block::compress(&data);
+    let encoded_start = 21 * BLOCK_SIZE - encoded.len();
+    image[encoded_start..21 * BLOCK_SIZE].copy_from_slice(&encoded);
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open cross-pack compact EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 7 * BLOCK_SIZE as u64, 4)
+            .expect("read head after a cross-pack NONHEAD"),
+        b"RRRR"
+    );
 }
 
 fn compressed_image(size: u32) -> Vec<u8> {
@@ -248,6 +318,13 @@ fn write_full_index(bytes: &mut [u8], offset: usize, advise: u16, block: u32) {
     write_u32(bytes, offset + 4, block);
 }
 
+fn write_full_nonhead(bytes: &mut [u8], offset: usize, delta_back: u16, delta_forward: u16) {
+    write_u16(bytes, offset, 2);
+    write_u16(bytes, offset + 2, 0);
+    write_u16(bytes, offset + 4, delta_back);
+    write_u16(bytes, offset + 6, delta_forward);
+}
+
 fn write_compact_pack(
     bytes: &mut [u8],
     offset: usize,
@@ -259,7 +336,7 @@ fn write_compact_pack(
     let encoded_bits = ((pack_bytes - 4) * 8) / kinds.len();
     bytes[offset..offset + pack_bytes].fill(0);
     for (index, kind) in kinds.iter().enumerate() {
-        let value = u32::from(*kind) << 12;
+        let value = u32::from(*kind);
         let bit_offset = index * encoded_bits;
         for bit in 0..14 {
             if value & (1 << bit) != 0 {
