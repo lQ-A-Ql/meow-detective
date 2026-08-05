@@ -6,7 +6,6 @@ const SUPERBLOCK_OFFSET: u64 = 1024;
 const SUPERBLOCK_BYTES: usize = 3072;
 const SUPERBLOCK_CHECKSUM_OFFSET: usize = 3068;
 const FEATURE_SUPERBLOCK_CHECKSUM: u32 = 0x0000_0800;
-const FEATURE_PACKED_SSA: u32 = 0x0001_0000;
 const CHECKPOINT_PACK_BLOCKS: u32 = 2;
 const PERSISTENT_CURSEG_BLOCKS: u32 = 6;
 
@@ -121,11 +120,6 @@ fn validate_layout(superblock: &F2fsSuperblock) -> Result<()> {
             "checkpoint payload {} exceeds segment capacity",
             superblock.cp_payload_blocks
         )));
-    }
-    if superblock.feature_flags & FEATURE_PACKED_SSA != 0 {
-        return Err(F2fsError::Unsupported(
-            "packed SSA summary layout".to_string(),
-        ));
     }
     Ok(())
 }

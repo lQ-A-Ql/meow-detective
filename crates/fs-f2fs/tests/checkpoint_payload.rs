@@ -15,6 +15,7 @@ const CHECKPOINT_NAT_SIZE_OFFSET: usize = 160;
 const CHECKPOINT_CHECKSUM_FIELD_OFFSET: usize = 164;
 const CHECKPOINT_BITMAP_OFFSET: usize = 192;
 const CHECKPOINT_CHECKSUM_OFFSET: usize = BLOCK_SIZE - 4;
+const SUPERBLOCK_FEATURE_OFFSET: usize = 2180;
 
 struct MemoryReader {
     bytes: Vec<u8>,
@@ -117,6 +118,23 @@ fn rejects_checkpoint_payload_beyond_segment_capacity() {
         .err()
         .expect("reject insane checkpoint payload");
     assert!(matches!(error, F2fsError::Invalid(_)));
+}
+
+#[test]
+fn reads_files_when_packed_ssa_is_enabled_on_four_kib_blocks() {
+    let mut image = minimal_f2fs_image();
+    for offset in [1024usize, BLOCK_SIZE + 1024] {
+        image[offset + SUPERBLOCK_FEATURE_OFFSET..offset + SUPERBLOCK_FEATURE_OFFSET + 4]
+            .copy_from_slice(&0x0001_0000u32.to_le_bytes());
+    }
+    let reader = F2fsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("packed SSA does not alter the 4 KiB NAT/node read path");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 6, 4)
+            .expect("read through packed SSA filesystem"),
+        b"F2FS"
+    );
 }
 
 fn with_checkpoint_payload(mut image: Vec<u8>, large_nat: bool) -> Vec<u8> {
