@@ -123,7 +123,7 @@ impl ErofsReader {
     }
 
     fn open_inode_data(&self, inode: &ErofsInode) -> Result<ErofsFile> {
-        if inode.is_compressed_full() {
+        if inode.is_compressed() {
             if !self.superblock.supports_lz4_compression() {
                 return Err(ErofsError::Unsupported(format!(
                     "compressed inode {} without declared LZ4 support",

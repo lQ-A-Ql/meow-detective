@@ -107,13 +107,11 @@ impl ErofsInode {
 
     pub(crate) fn require_readable_layout(&self, operation: &str) -> Result<()> {
         match self.data_layout {
-            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE | LAYOUT_COMPRESSED_FULL | LAYOUT_CHUNK => {
-                Ok(())
-            }
-            LAYOUT_COMPRESSED_COMPACT => Err(ErofsError::Unsupported(format!(
-                "compact compressed {operation} for inode {}",
-                self.nid
-            ))),
+            LAYOUT_FLAT_PLAIN
+            | LAYOUT_FLAT_INLINE
+            | LAYOUT_COMPRESSED_FULL
+            | LAYOUT_COMPRESSED_COMPACT
+            | LAYOUT_CHUNK => Ok(()),
             _ => Err(ErofsError::Unsupported(format!(
                 "unknown {operation} layout for inode {}",
                 self.nid
@@ -127,6 +125,14 @@ impl ErofsInode {
 
     pub(crate) fn is_compressed_full(&self) -> bool {
         self.data_layout == LAYOUT_COMPRESSED_FULL
+    }
+
+    pub(crate) fn is_compressed_compact(&self) -> bool {
+        self.data_layout == LAYOUT_COMPRESSED_COMPACT
+    }
+
+    pub(crate) fn is_compressed(&self) -> bool {
+        self.is_compressed_full() || self.is_compressed_compact()
     }
 
     pub(crate) fn inline_data_offset(&self) -> Result<Option<u64>> {

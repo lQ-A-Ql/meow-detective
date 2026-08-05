@@ -9,6 +9,8 @@ const BLOCK_SIZE: usize = 4096;
 const FILE_INODE: usize = 2 * BLOCK_SIZE + 2 * 32;
 const MAP_HEADER: usize = FILE_INODE + 32;
 const FULL_INDEX: usize = MAP_HEADER + 16;
+const COMPACT_INDEX: usize = MAP_HEADER + 8;
+const SUPERBLOCK_BLOCK_COUNT: usize = 1024 + 36;
 const SUPERBLOCK_INCOMPAT: usize = 1024 + 80;
 const SUPERBLOCK_LZ4_MAX_DISTANCE: usize = 1024 + 84;
 
@@ -156,6 +158,74 @@ fn rejects_inline_tail_data_and_out_of_bounds_physical_blocks() {
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
 }
 
+#[test]
+fn reads_compact_four_byte_lz4_and_plain_clusters() {
+    let mut image = compact_compressed_image(2 * BLOCK_SIZE as u32, 0);
+    let first = vec![b'C'; BLOCK_SIZE];
+    let encoded = lz4_flex::block::compress(&first);
+    let encoded_start = 7 * BLOCK_SIZE - encoded.len();
+    image[encoded_start..7 * BLOCK_SIZE].copy_from_slice(&encoded);
+    image[7 * BLOCK_SIZE..8 * BLOCK_SIZE].fill(b'P');
+    write_compact_pack(&mut image, COMPACT_INDEX, 4, &[1, 0], 5);
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open compact four-byte EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", BLOCK_SIZE as u64 - 2, 4)
+            .expect("read across compact LZ4 and plain clusters"),
+        b"CCPP"
+    );
+}
+
+#[test]
+fn reads_compact_two_byte_pack_and_rejects_nonhead_entries() {
+    let mut image = compact_compressed_image(23 * BLOCK_SIZE as u32, 1);
+    image.resize(40 * BLOCK_SIZE, 0);
+    write_u32(&mut image, SUPERBLOCK_BLOCK_COUNT, 40);
+    let two_byte_pack = COMPACT_INDEX + 6 * 4;
+    let mut kinds = [0; 16];
+    kinds[15] = 1;
+    write_compact_pack(&mut image, two_byte_pack, 2, &kinds, 19);
+    image[20 * BLOCK_SIZE..21 * BLOCK_SIZE].fill(b'T');
+    let last = vec![b'U'; BLOCK_SIZE];
+    let encoded = lz4_flex::block::compress(&last);
+    let encoded_start = 36 * BLOCK_SIZE - encoded.len();
+    image[encoded_start..36 * BLOCK_SIZE].copy_from_slice(&encoded);
+    let trailing_four_byte_pack = two_byte_pack + 32;
+    write_compact_pack(&mut image, trailing_four_byte_pack, 4, &[0, 0], 35);
+    image[36 * BLOCK_SIZE..37 * BLOCK_SIZE].fill(b'V');
+
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open compact two-byte EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 6 * BLOCK_SIZE as u64, 4)
+            .expect("read first cluster in compact two-byte pack"),
+        b"TTTT"
+    );
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 21 * BLOCK_SIZE as u64, 4)
+            .expect("read final cluster in compact two-byte pack"),
+        b"UUUU"
+    );
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 22 * BLOCK_SIZE as u64, 4)
+            .expect("read trailing compact four-byte pack"),
+        b"VVVV"
+    );
+
+    let mut nonhead = compact_compressed_image(BLOCK_SIZE as u32, 0);
+    write_compact_pack(&mut nonhead, COMPACT_INDEX, 4, &[2, 0], 5);
+    let error = ErofsReader::open(Box::new(MemoryReader::new(nonhead)), 0)
+        .expect("open compact nonhead fixture")
+        .read_file_range("hello.txt", 0, 1)
+        .expect_err("compact multi-cluster extents remain unsupported");
+    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+}
+
 fn compressed_image(size: u32) -> Vec<u8> {
     let mut image = minimal_erofs_image();
     write_u32(&mut image, SUPERBLOCK_INCOMPAT, 1);
@@ -165,10 +235,40 @@ fn compressed_image(size: u32) -> Vec<u8> {
     image
 }
 
+fn compact_compressed_image(size: u32, advise: u16) -> Vec<u8> {
+    let mut image = compressed_image(size);
+    write_u16(&mut image, FILE_INODE, 6);
+    write_u16(&mut image, MAP_HEADER + 4, advise);
+    image
+}
+
 fn write_full_index(bytes: &mut [u8], offset: usize, advise: u16, block: u32) {
     write_u16(bytes, offset, advise);
     write_u16(bytes, offset + 2, 0);
     write_u32(bytes, offset + 4, block);
+}
+
+fn write_compact_pack(
+    bytes: &mut [u8],
+    offset: usize,
+    entry_bytes: usize,
+    kinds: &[u16],
+    base_block: u32,
+) {
+    let pack_bytes = entry_bytes * kinds.len();
+    let encoded_bits = ((pack_bytes - 4) * 8) / kinds.len();
+    bytes[offset..offset + pack_bytes].fill(0);
+    for (index, kind) in kinds.iter().enumerate() {
+        let value = u32::from(*kind) << 12;
+        let bit_offset = index * encoded_bits;
+        for bit in 0..14 {
+            if value & (1 << bit) != 0 {
+                let target = bit_offset + bit;
+                bytes[offset + target / 8] |= 1 << (target % 8);
+            }
+        }
+    }
+    write_u32(bytes, offset + pack_bytes - 4, base_block);
 }
 
 fn write_u16(bytes: &mut [u8], offset: usize, value: u16) {
