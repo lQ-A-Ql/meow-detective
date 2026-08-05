@@ -2,6 +2,7 @@
 
 mod checksum;
 mod chunk;
+mod compression;
 mod directory;
 mod error;
 mod file;

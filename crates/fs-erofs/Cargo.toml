@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 thiserror.workspace = true
 evidence-core.workspace = true
+lz4_flex.workspace = true
 
 [dev-dependencies]
 testing.workspace = true

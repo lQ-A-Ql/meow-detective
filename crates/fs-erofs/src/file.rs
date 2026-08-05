@@ -1,6 +1,7 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::chunk::ErofsChunkFile;
+use crate::compression::ErofsCompressedFile;
 use crate::inode::ErofsInode;
 use crate::io::{block_offset, SharedReader};
 use crate::{ErofsError, ErofsSuperblock, Result};
@@ -14,6 +15,7 @@ pub(crate) struct ErofsFile {
 enum ErofsFileStorage {
     Flat(ErofsFlatFile),
     Chunked(ErofsChunkFile),
+    Compressed(ErofsCompressedFile),
 }
 
 struct ErofsFlatFile {
@@ -70,6 +72,24 @@ impl ErofsFile {
         })
     }
 
+    pub(crate) fn new_compressed(
+        source: SharedReader,
+        volume_offset: u64,
+        superblock: &ErofsSuperblock,
+        inode: &ErofsInode,
+    ) -> Result<Self> {
+        Ok(Self {
+            storage: ErofsFileStorage::Compressed(ErofsCompressedFile::new(
+                source,
+                volume_offset,
+                superblock,
+                inode,
+            )?),
+            size: inode.size,
+            cursor: 0,
+        })
+    }
+
     fn read_at(&self, offset: u64, output: &mut [u8]) -> Result<usize> {
         if offset >= self.size || output.is_empty() {
             return Ok(0);
@@ -80,6 +100,7 @@ impl ErofsFile {
         match &self.storage {
             ErofsFileStorage::Flat(file) => file.read_at(offset, &mut output[..requested]),
             ErofsFileStorage::Chunked(file) => file.read_at(offset, &mut output[..requested]),
+            ErofsFileStorage::Compressed(file) => file.read_at(offset, &mut output[..requested]),
         }
     }
 }

@@ -105,12 +105,15 @@ impl ErofsInode {
         self.mode & MODE_TYPE_MASK == MODE_SYMLINK
     }
 
-    pub(crate) fn require_uncompressed(&self, operation: &str) -> Result<()> {
+    pub(crate) fn require_readable_layout(&self, operation: &str) -> Result<()> {
         match self.data_layout {
-            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE | LAYOUT_CHUNK => Ok(()),
-            LAYOUT_COMPRESSED_FULL | LAYOUT_COMPRESSED_COMPACT => Err(ErofsError::Unsupported(
-                format!("compressed {operation} for inode {}", self.nid),
-            )),
+            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE | LAYOUT_COMPRESSED_FULL | LAYOUT_CHUNK => {
+                Ok(())
+            }
+            LAYOUT_COMPRESSED_COMPACT => Err(ErofsError::Unsupported(format!(
+                "compact compressed {operation} for inode {}",
+                self.nid
+            ))),
             _ => Err(ErofsError::Unsupported(format!(
                 "unknown {operation} layout for inode {}",
                 self.nid
@@ -120,6 +123,10 @@ impl ErofsInode {
 
     pub(crate) fn is_chunk_based(&self) -> bool {
         self.data_layout == LAYOUT_CHUNK
+    }
+
+    pub(crate) fn is_compressed_full(&self) -> bool {
+        self.data_layout == LAYOUT_COMPRESSED_FULL
     }
 
     pub(crate) fn inline_data_offset(&self) -> Result<Option<u64>> {

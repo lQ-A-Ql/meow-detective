@@ -94,7 +94,7 @@ impl ErofsReader {
                 inode.nid
             )));
         }
-        inode.require_uncompressed("directory entries")?;
+        inode.require_readable_layout("directory entries")?;
         let mut file = self.open_inode_data(inode)?;
         let blocks = inode.size.div_ceil(self.superblock.block_size as u64);
         let mut entries = Vec::new();
@@ -118,11 +118,25 @@ impl ErofsReader {
                 inode.nid
             )));
         }
-        inode.require_uncompressed("file data")?;
+        inode.require_readable_layout("file data")?;
         self.open_inode_data(inode)
     }
 
     fn open_inode_data(&self, inode: &ErofsInode) -> Result<ErofsFile> {
+        if inode.is_compressed_full() {
+            if !self.superblock.supports_lz4_compression() {
+                return Err(ErofsError::Unsupported(format!(
+                    "compressed inode {} without declared LZ4 support",
+                    inode.nid
+                )));
+            }
+            return ErofsFile::new_compressed(
+                Arc::clone(&self.source),
+                self.volume_offset,
+                &self.superblock,
+                inode,
+            );
+        }
         if inode.is_chunk_based() {
             if !self.superblock.supports_chunked_files() {
                 return Err(ErofsError::Invalid(format!(
