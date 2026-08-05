@@ -123,6 +123,54 @@ fn reads_full_multi_cluster_lz4_extent() {
 }
 
 #[test]
+fn maps_nonzero_head_offsets_to_the_correct_extent() {
+    let mut image = compressed_image(2 * BLOCK_SIZE as u32);
+    let first = vec![b'A'; BLOCK_SIZE + 3];
+    let first_encoded = lz4_flex::block::compress(&first);
+    let first_start = 7 * BLOCK_SIZE - first_encoded.len();
+    image[first_start..7 * BLOCK_SIZE].copy_from_slice(&first_encoded);
+    let second = vec![b'B'; BLOCK_SIZE - 3];
+    let second_encoded = lz4_flex::block::compress(&second);
+    let second_start = 8 * BLOCK_SIZE - second_encoded.len();
+    image[second_start..8 * BLOCK_SIZE].copy_from_slice(&second_encoded);
+    write_full_head(&mut image, FULL_INDEX, 1, 0, 6);
+    write_full_head(&mut image, FULL_INDEX + 8, 1, 3, 7);
+
+    let reader =
+        ErofsReader::open(Box::new(MemoryReader::new(image)), 0).expect("open shifted-head EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", BLOCK_SIZE as u64 - 2, 8)
+            .expect("read across a non-zero HEAD offset"),
+        b"AAAAABBB"
+    );
+}
+
+#[test]
+fn rejects_single_pcluster_output_above_memory_bound() {
+    const LOGICAL_CLUSTERS: usize = 513;
+
+    let mut image = compressed_image((LOGICAL_CLUSTERS * BLOCK_SIZE) as u32);
+    image.copy_within(3 * BLOCK_SIZE..4 * BLOCK_SIZE, 5 * BLOCK_SIZE);
+    write_u32(&mut image, FILE_INODE - 32 + 16, 5);
+    write_full_index(&mut image, FULL_INDEX, 1, 6);
+    for index in 1..LOGICAL_CLUSTERS {
+        write_full_nonhead(
+            &mut image,
+            FULL_INDEX + index * 8,
+            index as u16,
+            (LOGICAL_CLUSTERS - index) as u16,
+        );
+    }
+
+    let error = ErofsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .expect("open oversized-pcluster EROFS")
+        .read_file_range("hello.txt", 0, 1)
+        .expect_err("oversized decompression must fail before allocation");
+    assert_eq!(error.kind(), io::ErrorKind::Unsupported, "{error:?}");
+}
+
+#[test]
 fn zero_fills_declared_compressed_holes_and_rejects_nonhead_extents() {
     let mut hole = compressed_image(BLOCK_SIZE as u32);
     write_full_index(&mut hole, FULL_INDEX, 0x4000, u32::MAX);
@@ -313,8 +361,12 @@ fn compact_compressed_image(size: u32, advise: u16) -> Vec<u8> {
 }
 
 fn write_full_index(bytes: &mut [u8], offset: usize, advise: u16, block: u32) {
+    write_full_head(bytes, offset, advise, 0, block);
+}
+
+fn write_full_head(bytes: &mut [u8], offset: usize, advise: u16, cluster_offset: u16, block: u32) {
     write_u16(bytes, offset, advise);
-    write_u16(bytes, offset + 2, 0);
+    write_u16(bytes, offset + 2, cluster_offset);
     write_u32(bytes, offset + 4, block);
 }
 
