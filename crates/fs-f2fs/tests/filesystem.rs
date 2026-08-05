@@ -389,29 +389,6 @@ fn reads_nat_journal_from_compact_checkpoint_summary() {
     );
 }
 
-#[test]
-fn preserves_unsupported_errors_when_all_metadata_copies_are_valid() {
-    let mut superblocks = minimal_f2fs_image();
-    for offset in [1024usize, BLOCK_SIZE + 1024] {
-        superblocks[offset + 1664..offset + 1668].copy_from_slice(&1u32.to_le_bytes());
-    }
-    let error = F2fsReader::open(Box::new(MemoryReader::new(superblocks)), 0)
-        .err()
-        .expect("checkpoint payload remains unsupported");
-    assert!(matches!(error, F2fsError::Unsupported(_)));
-
-    let mut checkpoints = minimal_f2fs_image();
-    for block in [512usize, 1024] {
-        let offset = block * BLOCK_SIZE + CHECKPOINT_FLAGS_OFFSET;
-        checkpoints[offset..offset + 4].copy_from_slice(&0x0000_0401u32.to_le_bytes());
-        refresh_checkpoint_checksum(&mut checkpoints, block);
-    }
-    let error = F2fsReader::open(Box::new(MemoryReader::new(checkpoints)), 0)
-        .err()
-        .expect("large NAT bitmap remains unsupported");
-    assert!(matches!(error, F2fsError::Unsupported(_)));
-}
-
 fn with_inline_file(mut image: Vec<u8>, extra_size: u16, xattr_words: u16) -> Vec<u8> {
     let inode_start = FILE_INODE_BLOCK * BLOCK_SIZE;
     let mut inline_flags = INLINE_DATA;

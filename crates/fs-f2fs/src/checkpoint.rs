@@ -82,23 +82,25 @@ fn read_pack(
         ));
     }
     let flags = read_u32(&first, 132, "checkpoint flags")?;
-    if flags & CP_LARGE_NAT_BITMAP_FLAG != 0 {
-        return Err(F2fsError::Unsupported(
-            "large NAT checkpoint bitmap".to_string(),
-        ));
-    }
     let sit_size = read_u32(&first, 156, "SIT bitmap size")? as usize;
     let nat_size = read_u32(&first, 160, "NAT bitmap size")? as usize;
-    let start = CHECKPOINT_BITMAP_OFFSET
-        .checked_add(sit_size)
-        .ok_or_else(|| F2fsError::Invalid("checkpoint bitmap offset overflows".to_string()))?;
-    let end = start
-        .checked_add(nat_size)
-        .ok_or_else(|| F2fsError::Invalid("checkpoint bitmap length overflows".to_string()))?;
-    let nat_bitmap = first
-        .get(start..end)
-        .ok_or_else(|| F2fsError::Invalid("NAT bitmap exceeds checkpoint block".to_string()))?
-        .to_vec();
+    let checksum_offset =
+        read_u32(&first, CHECKSUM_OFFSET_FIELD, "checkpoint checksum offset")? as usize;
+    let checkpoint = read_checkpoint_region(
+        source,
+        volume_offset,
+        start_block,
+        &first,
+        superblock.cp_payload_blocks,
+    )?;
+    let nat_bitmap = extract_nat_bitmap(
+        &checkpoint,
+        sit_size,
+        nat_size,
+        checksum_offset,
+        superblock.cp_payload_blocks,
+        flags,
+    )?;
     let start_sum = read_u32(&first, 140, "checkpoint summary start")?;
     let nat_journal = read_nat_journal(
         source,
@@ -113,6 +115,100 @@ fn read_pack(
         nat_bitmap,
         nat_journal,
     })
+}
+
+fn read_checkpoint_region(
+    source: &SharedReader,
+    volume_offset: u64,
+    start_block: u32,
+    first: &[u8],
+    payload_blocks: u32,
+) -> Result<Vec<u8>> {
+    let capacity = usize::try_from(payload_blocks + 1)
+        .ok()
+        .and_then(|blocks| blocks.checked_mul(F2FS_BLOCK_SIZE))
+        .ok_or_else(|| F2fsError::Invalid("checkpoint payload size overflows".to_string()))?;
+    let mut checkpoint = Vec::with_capacity(capacity);
+    checkpoint.extend_from_slice(first);
+    for relative in 1..=payload_blocks {
+        let block = start_block.checked_add(relative).ok_or_else(|| {
+            F2fsError::Invalid("checkpoint payload address overflows".to_string())
+        })?;
+        checkpoint.extend_from_slice(&read_exact_at(
+            source,
+            block_offset(volume_offset, block)?,
+            F2FS_BLOCK_SIZE,
+        )?);
+    }
+    Ok(checkpoint)
+}
+
+fn extract_nat_bitmap(
+    checkpoint: &[u8],
+    sit_size: usize,
+    nat_size: usize,
+    checksum_offset: usize,
+    payload_blocks: u32,
+    flags: u32,
+) -> Result<Vec<u8>> {
+    let large = flags & CP_LARGE_NAT_BITMAP_FLAG != 0;
+    let start = if large {
+        if checksum_offset != CHECKPOINT_BITMAP_OFFSET {
+            return Err(F2fsError::Invalid(format!(
+                "large NAT bitmap checksum offset {checksum_offset} is not {CHECKPOINT_BITMAP_OFFSET}"
+            )));
+        }
+        let start = CHECKPOINT_BITMAP_OFFSET + 4;
+        validate_bitmap_end(checkpoint, start, nat_size, sit_size)?;
+        start
+    } else if payload_blocks != 0 {
+        validate_bitmap_end(checkpoint, F2FS_BLOCK_SIZE, sit_size, 0)?;
+        validate_checksum_bound(CHECKPOINT_BITMAP_OFFSET, nat_size, checksum_offset)?;
+        CHECKPOINT_BITMAP_OFFSET
+    } else {
+        let start = CHECKPOINT_BITMAP_OFFSET
+            .checked_add(sit_size)
+            .ok_or_else(|| F2fsError::Invalid("checkpoint bitmap offset overflows".to_string()))?;
+        validate_checksum_bound(start, nat_size, checksum_offset)?;
+        start
+    };
+    let end = start
+        .checked_add(nat_size)
+        .ok_or_else(|| F2fsError::Invalid("NAT bitmap length overflows".to_string()))?;
+    checkpoint
+        .get(start..end)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| F2fsError::Invalid("NAT bitmap exceeds checkpoint payload".to_string()))
+}
+
+fn validate_bitmap_end(
+    checkpoint: &[u8],
+    start: usize,
+    first_size: usize,
+    second_size: usize,
+) -> Result<()> {
+    let end = start
+        .checked_add(first_size)
+        .and_then(|value| value.checked_add(second_size))
+        .ok_or_else(|| F2fsError::Invalid("checkpoint bitmap range overflows".to_string()))?;
+    if end > checkpoint.len() {
+        return Err(F2fsError::Invalid(
+            "checkpoint bitmaps exceed payload blocks".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_checksum_bound(start: usize, length: usize, checksum_offset: usize) -> Result<()> {
+    if start
+        .checked_add(length)
+        .is_none_or(|end| end > checksum_offset)
+    {
+        return Err(F2fsError::Invalid(
+            "checkpoint bitmap overlaps its checksum".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn read_nat_journal(
