@@ -1,11 +1,7 @@
 //! NTFS attribute parsing and data extent helpers.
 
 use crate::data_runs::{data_runs_logical_size, parse_data_runs_ext};
-use crate::{
-    invalid_fs_data, ATTR_TYPE_ATTRIBUTE_LIST, ATTR_TYPE_DATA, ATTR_TYPE_END,
-    MAX_ATTRIBUTE_LIST_ENTRIES, MAX_EXTERNAL_ATTRIBUTE_RECORDS,
-};
-use std::collections::HashSet;
+use crate::{invalid_fs_data, ATTR_TYPE_ATTRIBUTE_LIST, ATTR_TYPE_END, MAX_ATTRIBUTE_LIST_ENTRIES};
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -15,6 +11,7 @@ pub enum DataAttributeExtent {
     },
     NonResident {
         lowest_vcn: u64,
+        highest_vcn: u64,
         allocated_size: u64,
         real_size: u64,
         attr_flags: u16,
@@ -27,7 +24,11 @@ pub enum DataAttributeExtent {
 pub struct AttributeListEntry {
     pub attr_type: u32,
     pub name_len: u8,
+    pub lowest_vcn: u64,
+    pub name: Option<String>,
     pub record_number: u64,
+    pub record_sequence: u16,
+    pub attribute_id: u16,
 }
 
 pub(crate) fn resident_attr_content(
@@ -97,6 +98,11 @@ pub(crate) fn parse_data_attribute_extent(
                 .try_into()
                 .unwrap_or([0; 8]),
         );
+        let highest_vcn = u64::from_le_bytes(
+            record[attr_pos + 0x18..attr_pos + 0x20]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
         let allocated_size = u64::from_le_bytes(
             record[attr_pos + 0x28..attr_pos + 0x30]
                 .try_into()
@@ -116,6 +122,7 @@ pub(crate) fn parse_data_attribute_extent(
         let runs = parse_data_runs_ext(&record[attr_pos + run_off..attr_end])?;
         return Ok(Some(DataAttributeExtent::NonResident {
             lowest_vcn,
+            highest_vcn,
             allocated_size,
             real_size,
             attr_flags,
@@ -132,9 +139,14 @@ pub(crate) fn parse_data_attribute_extent(
     }))
 }
 
-pub(crate) fn parse_attribute_list_entries(mut data: &[u8]) -> Vec<AttributeListEntry> {
+pub(crate) fn parse_attribute_list_entries(mut data: &[u8]) -> io::Result<Vec<AttributeListEntry>> {
     let mut entries = Vec::new();
-    while data.len() >= 0x1a && entries.len() < MAX_ATTRIBUTE_LIST_ENTRIES {
+    while data.len() >= 0x1a {
+        if entries.len() >= MAX_ATTRIBUTE_LIST_ENTRIES {
+            return Err(invalid_fs_data(
+                "NTFS attribute list exceeds the entry safety limit",
+            ));
+        }
         let attr_type = u32::from_le_bytes(data[0..4].try_into().unwrap_or([0; 4]));
         if attr_type == ATTR_TYPE_END {
             break;
@@ -142,26 +154,54 @@ pub(crate) fn parse_attribute_list_entries(mut data: &[u8]) -> Vec<AttributeList
 
         let entry_len = u16::from_le_bytes(data[4..6].try_into().unwrap_or([0; 2])) as usize;
         if entry_len < 0x1a || entry_len > data.len() {
-            break;
+            return Err(invalid_fs_data("invalid NTFS attribute-list entry length"));
         }
 
         let name_len = data[6];
         let name_off = data[7] as usize;
-        if name_len > 0 && name_off.saturating_add(name_len as usize * 2) > entry_len {
-            break;
+        let name_bytes = (name_len as usize)
+            .checked_mul(2)
+            .ok_or_else(|| invalid_fs_data("NTFS attribute-list name length overflow"))?;
+        if name_len > 0
+            && (name_off < 0x1a
+                || name_off
+                    .checked_add(name_bytes)
+                    .is_none_or(|end| end > entry_len))
+        {
+            return Err(invalid_fs_data("invalid NTFS attribute-list name range"));
         }
 
-        let record_number = u64::from_le_bytes(data[0x10..0x18].try_into().unwrap_or([0; 8]))
-            & 0x0000_FFFF_FFFF_FFFF;
+        let name = if name_len == 0 {
+            None
+        } else {
+            let name_end = name_off + name_bytes;
+            let chars = data[name_off..name_end]
+                .chunks_exact(2)
+                .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                .collect::<Vec<_>>();
+            Some(String::from_utf16_lossy(&chars))
+        };
+
+        let lowest_vcn = u64::from_le_bytes(data[8..0x10].try_into().unwrap_or([0; 8]));
+        let file_reference = u64::from_le_bytes(data[0x10..0x18].try_into().unwrap_or([0; 8]));
         entries.push(AttributeListEntry {
             attr_type,
             name_len,
-            record_number,
+            lowest_vcn,
+            name,
+            record_number: file_reference & 0x0000_FFFF_FFFF_FFFF,
+            record_sequence: (file_reference >> 48) as u16,
+            attribute_id: u16::from_le_bytes(data[0x18..0x1a].try_into().unwrap_or([0; 2])),
         });
         data = &data[entry_len..];
     }
 
-    entries
+    if !data.is_empty() && !data.iter().all(|byte| *byte == 0) {
+        return Err(invalid_fs_data(
+            "truncated trailing bytes in NTFS attribute list",
+        ));
+    }
+    Ok(entries)
 }
 
 pub(crate) fn sort_data_extents(extents: &mut [DataAttributeExtent]) {
@@ -265,42 +305,56 @@ pub(crate) fn is_unnamed_attribute(record: &[u8], attr_pos: usize) -> bool {
     attr_pos + 0x0a <= record.len() && record[attr_pos + 0x09] == 0
 }
 
-impl crate::NtfsReader {
-    pub(crate) fn external_attribute_records_for_unnamed_data(
-        &self,
-        inode: u64,
-        record: &[u8],
-    ) -> io::Result<Vec<u64>> {
-        let mut records = Vec::new();
-        let mut seen = HashSet::new();
-
-        for entry in self.attribute_list_entries(record)? {
-            if entry.attr_type != ATTR_TYPE_DATA || entry.name_len != 0 {
-                continue;
-            }
-            if entry.record_number == inode {
-                continue;
-            }
-            if seen.insert(entry.record_number) {
-                records.push(entry.record_number);
-                if records.len() >= MAX_EXTERNAL_ATTRIBUTE_RECORDS {
-                    tracing::warn!(
-                        inode,
-                        limit = MAX_EXTERNAL_ATTRIBUTE_RECORDS,
-                        "Stopping NTFS external $DATA expansion at safety limit"
-                    );
-                    break;
-                }
-            }
-        }
-
-        Ok(records)
+pub(crate) fn attribute_name_matches(
+    record: &[u8],
+    attr_pos: usize,
+    attr_len: usize,
+    expected: Option<&str>,
+) -> bool {
+    let Some(attr_end) = attr_pos.checked_add(attr_len) else {
+        return false;
+    };
+    if attr_pos + 0x0c > record.len() || attr_end > record.len() {
+        return false;
     }
+    let name_len = record[attr_pos + 0x09] as usize;
+    if name_len == 0 {
+        return expected.is_none();
+    }
+    let Some(expected) = expected else {
+        return false;
+    };
+    let name_off = u16::from_le_bytes([record[attr_pos + 0x0a], record[attr_pos + 0x0b]]) as usize;
+    let Some(name_start) = attr_pos.checked_add(name_off) else {
+        return false;
+    };
+    let Some(name_end) = name_start.checked_add(name_len.saturating_mul(2)) else {
+        return false;
+    };
+    if name_start < attr_pos || name_end > attr_end {
+        return false;
+    }
+    let chars = record[name_start..name_end]
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect::<Vec<_>>();
+    String::from_utf16_lossy(&chars).eq_ignore_ascii_case(expected)
+}
 
-    fn attribute_list_entries(&self, record: &[u8]) -> io::Result<Vec<AttributeListEntry>> {
+impl crate::NtfsReader {
+    pub(crate) fn attribute_list_entries(
+        &self,
+        record: &[u8],
+    ) -> io::Result<Option<Vec<AttributeListEntry>>> {
+        if record.len() < 0x18 {
+            return Err(invalid_fs_data(
+                "FILE record is too short for an attribute list",
+            ));
+        }
         let mut entries = Vec::new();
         let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
         let mut pos = attr_off;
+        let mut saw_attribute_list = false;
 
         while pos + 8 < record.len() {
             let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap_or([0; 4]));
@@ -309,19 +363,21 @@ impl crate::NtfsReader {
             }
             let len =
                 u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
-            if len == 0 || pos + len > record.len() {
+            if len == 0 || pos.checked_add(len).is_none_or(|end| end > record.len()) {
+                if typ == ATTR_TYPE_ATTRIBUTE_LIST {
+                    return Err(invalid_fs_data("invalid NTFS attribute-list attribute"));
+                }
                 break;
             }
 
             if typ == ATTR_TYPE_ATTRIBUTE_LIST {
+                saw_attribute_list = true;
                 let attr_entries = self.read_attribute_list_content(record, pos, len)?;
                 for entry in attr_entries {
                     if entries.len() >= MAX_ATTRIBUTE_LIST_ENTRIES {
-                        tracing::warn!(
-                            limit = MAX_ATTRIBUTE_LIST_ENTRIES,
-                            "Stopping NTFS $ATTRIBUTE_LIST parsing at safety limit"
-                        );
-                        return Ok(entries);
+                        return Err(invalid_fs_data(
+                            "NTFS attribute list exceeds the entry safety limit",
+                        ));
                     }
                     entries.push(entry);
                 }
@@ -330,7 +386,7 @@ impl crate::NtfsReader {
             pos += len;
         }
 
-        Ok(entries)
+        Ok(saw_attribute_list.then_some(entries))
     }
 
     fn read_attribute_list_content(
@@ -341,16 +397,33 @@ impl crate::NtfsReader {
     ) -> io::Result<Vec<AttributeListEntry>> {
         let is_nonresident = pos_is_nonresident(record, attr_pos);
         if is_nonresident {
-            if attr_pos + 0x40 > record.len() {
-                return Ok(Vec::new());
+            if attr_len < 0x40
+                || attr_pos
+                    .checked_add(0x40)
+                    .is_none_or(|end| end > record.len())
+            {
+                return Err(invalid_fs_data(
+                    "non-resident NTFS attribute-list header is truncated",
+                ));
             }
             let content = self.read_attr_nonresident(attr_pos, record)?;
-            return Ok(parse_attribute_list_entries(&content));
+            return parse_attribute_list_entries(&content);
         }
 
-        let Some(content) = resident_attr_content(record, attr_pos, attr_len) else {
-            return Ok(Vec::new());
-        };
-        Ok(parse_attribute_list_entries(content))
+        let content = resident_attr_content(record, attr_pos, attr_len)
+            .ok_or_else(|| invalid_fs_data("invalid resident NTFS attribute-list content range"))?;
+        parse_attribute_list_entries(content)
     }
 }
+
+pub(crate) fn optional_name_matches(actual: Option<&str>, expected: Option<&str>) -> bool {
+    match (actual, expected) {
+        (None, None) => true,
+        (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/unit/attribute.rs"]
+mod tests;

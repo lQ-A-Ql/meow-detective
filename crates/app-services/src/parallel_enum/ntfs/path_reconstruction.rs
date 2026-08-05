@@ -2,6 +2,7 @@ use super::super::batch_sink::{
     insert_ntfs_index_entry, prepare_ntfs_index_insert, stage_mft_record, EnumerationStats,
 };
 use super::super::error::ParallelEnumError;
+use super::size_reconciliation::ExternalFileSizes;
 use evidence_core::EvidenceReader;
 use fs_ntfs::mft_scanner::MftRecord;
 use fs_ntfs::{NtfsDirectoryEntry, NtfsReader};
@@ -14,6 +15,9 @@ pub(in crate::parallel_enum) type PathMap = HashMap<String, (Option<String>, Str
 pub(in crate::parallel_enum) struct MftCatalog {
     path_map: PathMap,
     deleted_records: HashSet<String>,
+    record_sequences: HashMap<u64, u16>,
+    index_representatives: HashMap<String, (u64, String, bool)>,
+    external_file_sizes: ExternalFileSizes,
     stats: EnumerationStats,
 }
 
@@ -32,6 +36,9 @@ impl MftCatalog {
         for record in records.iter().filter(|record| {
             record.is_valid && (!record.name.is_empty() || record.record_number == 5)
         }) {
+            self.external_file_sizes.track(record);
+            self.record_sequences
+                .insert(record.record_number, record.sequence_number);
             let (parent_key, name) =
                 stage_mft_record(statement, record, data_source_id, partition_index)?;
             self.path_map.insert(
@@ -63,6 +70,13 @@ impl MftCatalog {
         let ntfs = NtfsReader::open(evidence_reader, volume_offset).map_err(|error| {
             ParallelEnumError::MftParams(format!("Open NTFS reader for directory indexes: {error}"))
         })?;
+        self.external_file_sizes.reconcile(
+            conn,
+            &ntfs,
+            data_source_id,
+            partition_index,
+            &mut self.stats,
+        )?;
         let mut statement =
             prepare_ntfs_index_insert(conn).map_err(ParallelEnumError::MftParams)?;
         let mut queue = VecDeque::from([5]);
@@ -71,7 +85,7 @@ impl MftCatalog {
             if !visited.insert(directory_ref) {
                 continue;
             }
-            let entries = match ntfs.list_directory_entries_by_inode(directory_ref) {
+            let entries = match ntfs.list_directory_entries_with_sequence_by_inode(directory_ref) {
                 Ok(entries) => entries,
                 Err(error) => {
                     self.stats.directory_index_failures =
@@ -84,8 +98,23 @@ impl MftCatalog {
                     continue;
                 }
             };
-            let actions =
-                mft_directory_index_backfill_actions(&mut self.path_map, directory_ref, entries);
+            let entries = entries
+                .into_iter()
+                .filter_map(|(entry, sequence)| {
+                    directory_reference_sequence_matches(
+                        &self.record_sequences,
+                        entry.mft_ref,
+                        sequence,
+                    )
+                    .then_some(entry)
+                })
+                .collect();
+            let actions = mft_directory_index_backfill_actions_with_representatives(
+                &mut self.path_map,
+                &mut self.index_representatives,
+                directory_ref,
+                entries,
+            );
             for action in actions {
                 self.insert_backfill_action(
                     &mut statement,
@@ -163,8 +192,9 @@ pub(in crate::parallel_enum) struct MftDirectoryIndexBackfillAction {
     pub(in crate::parallel_enum) encrypted: bool,
 }
 
-pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions(
+pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions_with_representatives(
     path_map: &mut PathMap,
+    representatives: &mut HashMap<String, (u64, String, bool)>,
     directory_ref: u64,
     mut entries: Vec<NtfsDirectoryEntry>,
 ) -> Vec<MftDirectoryIndexBackfillAction> {
@@ -179,12 +209,14 @@ pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions(
             continue;
         }
         let record_key = entry.mft_ref.to_string();
-        if selected_records.insert(record_key.clone())
-            && index_entry_should_update(path_map, &record_key, &parent_key, &entry)
-        {
-            path_map.insert(
+        if selected_records.insert(record_key.clone()) {
+            select_index_representative(
+                path_map,
+                representatives,
                 record_key,
-                (Some(parent_key.clone()), entry.name.clone(), entry.is_dir),
+                directory_ref,
+                &parent_key,
+                &entry,
             );
         }
         actions.push(MftDirectoryIndexBackfillAction {
@@ -201,26 +233,38 @@ pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions(
     actions
 }
 
-fn index_entry_should_update(
-    path_map: &PathMap,
-    record_key: &str,
+pub(in crate::parallel_enum) fn directory_reference_sequence_matches(
+    record_sequences: &HashMap<u64, u16>,
+    record_number: u64,
+    reference_sequence: u16,
+) -> bool {
+    record_sequences
+        .get(&record_number)
+        .is_none_or(|expected| *expected == reference_sequence)
+}
+
+fn select_index_representative(
+    path_map: &mut PathMap,
+    representatives: &mut HashMap<String, (u64, String, bool)>,
+    record_key: String,
+    parent_ref: u64,
     parent_key: &str,
     entry: &NtfsDirectoryEntry,
-) -> bool {
-    match path_map.get(record_key) {
-        None => true,
-        Some((parent, name, is_dir)) => {
-            name.is_empty()
-                || parent.is_none()
-                || parent.as_deref() == Some(record_key)
-                || parent
-                    .as_deref()
-                    .is_some_and(|value| !path_map.contains_key(value))
-                || (parent.as_deref() == Some("5") && parent_key != "5")
-                || parent.as_deref() != Some(parent_key)
-                || *is_dir != entry.is_dir
-                || name != &entry.name
-        }
+) {
+    let candidate = (parent_ref, entry.name.clone(), entry.is_dir);
+    let should_update = representatives
+        .get(&record_key)
+        .is_none_or(|current| candidate < *current);
+    if should_update {
+        representatives.insert(record_key.clone(), candidate);
+        path_map.insert(
+            record_key,
+            (
+                Some(parent_key.to_string()),
+                entry.name.clone(),
+                entry.is_dir,
+            ),
+        );
     }
 }
 

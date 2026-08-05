@@ -596,6 +596,22 @@ fn registry_hive_fields_are_parsed_with_field_provenance() {
 }
 
 #[test]
+fn windows_build_number_includes_update_build_revision_when_available() {
+    assert_eq!(
+        super::system_info::format_full_build_number("19045", Some("6216")),
+        "19045.6216"
+    );
+    assert_eq!(
+        super::system_info::format_full_build_number("19045", None),
+        "19045"
+    );
+    assert_eq!(
+        super::system_info::format_full_build_number("19045.6216", Some("6216")),
+        "19045.6216"
+    );
+}
+
+#[test]
 fn corrupted_registry_hive_records_warning_without_facts() {
     let (conn, _tmp, ds_id) = setup_case_db();
     FileRepo::new(&conn)

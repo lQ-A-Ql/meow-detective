@@ -60,17 +60,22 @@ pub(crate) fn validate_file_record(record: &[u8], inode: u64) -> io::Result<()> 
     Ok(())
 }
 
-/// Return the base record reference stored in a FILE record header.
+/// Return the full base file reference stored in a FILE record header.
 pub(crate) fn base_record_reference(record: &[u8]) -> u64 {
     if record.len() < 0x28 {
         return 0;
     }
-    u64::from_le_bytes(record[0x20..0x28].try_into().unwrap_or([0; 8])) & 0x0000_FFFF_FFFF_FFFF
+    u64::from_le_bytes(record[0x20..0x28].try_into().unwrap_or([0; 8]))
 }
 
-/// Check whether `record` is an extension record for `base_inode`.
-pub(crate) fn is_extension_record_for(record: &[u8], base_inode: u64) -> bool {
-    record.len() >= 0x28 && &record[0..4] == b"FILE" && base_record_reference(record) == base_inode
+pub(crate) fn file_record_sequence(record: &[u8]) -> Option<u16> {
+    (record.len() >= 0x12).then(|| u16::from_le_bytes([record[0x10], record[0x11]]))
+}
+
+/// Check the full record number and sequence in an extension's base reference.
+pub(crate) fn is_extension_record_for(record: &[u8], base_inode: u64, base_sequence: u16) -> bool {
+    let expected = (u64::from(base_sequence) << 48) | (base_inode & 0x0000_FFFF_FFFF_FFFF);
+    record.len() >= 0x28 && &record[0..4] == b"FILE" && base_record_reference(record) == expected
 }
 
 /// Extract an inode from an `mft:` prefixed path.

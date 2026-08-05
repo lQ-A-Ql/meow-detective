@@ -1,4 +1,4 @@
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -66,7 +66,6 @@ const FILE_LIST_COLUMNS: DenseColumn<FileEntryRow>[] = [
 export interface FileListPanelProps {
   sortedRows: FileEntryRow[];
   selectedFileId: string | undefined;
-  viewerTab?: 'metadata' | 'text' | 'hex' | 'preview';
   fileSortKey: string;
   fileSortDirection: 'asc' | 'desc';
   handleSort: (key: string) => void;
@@ -86,7 +85,6 @@ export interface FileListPanelProps {
 export function FileListPanel({
   sortedRows,
   selectedFileId,
-  viewerTab,
   fileSortKey,
   fileSortDirection,
   handleSort,
@@ -146,6 +144,32 @@ export function FileListPanel({
           <ArrowUp size={12} />
           {t('fileBrowser.parentDirectory')}
         </Button>
+        {canGoToPreviousRows || canGoToNextRows ? (
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              type="button"
+              variant="viewerControl"
+              size="iconXs"
+              onClick={goToPreviousRows}
+              disabled={!canGoToPreviousRows}
+              aria-label="上一页"
+              title="上一页"
+            >
+              <ChevronLeft size={12} />
+            </Button>
+            <Button
+              type="button"
+              variant="viewerControl"
+              size="iconXs"
+              onClick={goToNextRows}
+              disabled={!canGoToNextRows}
+              aria-label="下一页"
+              title="下一页"
+            >
+              <ChevronRight size={12} />
+            </Button>
+          </div>
+        ) : null}
       </div>
       <DenseDataTableFrame layout="fill" variant="plain">
         <DenseDataTable<FileEntryRow>
@@ -166,35 +190,6 @@ export function FileListPanel({
         columns={FILE_LIST_COLUMNS}
         />
       </DenseDataTableFrame>
-      {rowsPage && viewerTab !== 'hex' ? (
-        <div className="flex items-center justify-between border-t border-forensics-border bg-forensics-panel px-3 py-2 text-[11px] text-forensics-muted">
-          <span>
-            显示第 {rowsPage.totalCount === 0 ? 0 : rowsPage.offset + 1} - {Math.min(rowsPage.offset + rowsPage.rows.length, rowsPage.totalCount)} 项，共 {rowsPage.totalCount} 项
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              onClick={goToPreviousRows}
-              disabled={!canGoToPreviousRows}
-            >
-              上一页
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              onClick={goToNextRows}
-              disabled={!canGoToNextRows}
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

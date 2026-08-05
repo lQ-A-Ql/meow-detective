@@ -60,6 +60,44 @@ pub(crate) fn lookup_optional_string_field(
     }
 }
 
+pub(crate) fn lookup_optional_dword_field(
+    hive: &RegistryHiveReader<'_>,
+    hive_path: &str,
+    parser: &str,
+    key_path: &[&str],
+    value_name: &str,
+    warnings: &mut Vec<String>,
+) -> Option<ParsedRegistryField> {
+    match hive.lookup_value(key_path, value_name) {
+        Ok(Some(RegistryValue::Dword(value))) => Some(ParsedRegistryField {
+            value: value.to_string(),
+            hive_path: hive_path.to_string(),
+            key_path: key_path.join("\\"),
+            value_name: value_name.to_string(),
+            parser: parser.to_string(),
+        }),
+        Ok(Some(other)) => {
+            warnings.push(format!(
+                "{}\\{} has unsupported type: {:?}",
+                key_path.join("\\"),
+                value_name,
+                other
+            ));
+            None
+        }
+        Ok(None) => None,
+        Err(err) => {
+            warnings.push(format!(
+                "{}\\{} parse error: {}",
+                key_path.join("\\"),
+                value_name,
+                err
+            ));
+            None
+        }
+    }
+}
+
 pub(crate) fn lookup_install_date_field(
     hive: &RegistryHiveReader<'_>,
     hive_path: &str,

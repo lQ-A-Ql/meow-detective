@@ -309,12 +309,7 @@ fn inspect_software_registry_fields(
         &mut extraction.os_version,
         &mut extraction.field_provenance,
     );
-    parsed_any |= assign_registry_field(
-        "buildNumber",
-        info.current_build,
-        &mut extraction.build_number,
-        &mut extraction.field_provenance,
-    );
+    parsed_any |= assign_build_number(info.current_build, info.update_build_revision, extraction);
     parsed_any |= assign_registry_field(
         "installDate",
         info.install_date,
@@ -371,6 +366,46 @@ fn assign_display_version(
         _ => {}
     }
     true
+}
+
+fn assign_build_number(
+    current_build: Option<artifacts_windows::ParsedRegistryField>,
+    update_build_revision: Option<artifacts_windows::ParsedRegistryField>,
+    extraction: &mut SystemInfoExtraction,
+) -> bool {
+    let Some(current_build) = current_build else {
+        return false;
+    };
+    let revision = update_build_revision
+        .as_ref()
+        .map(|field| field.value.as_str());
+    extraction.build_number = Some(format_full_build_number(&current_build.value, revision));
+    extraction
+        .field_provenance
+        .push(registry_field_provenance("buildNumber", current_build));
+    if let Some(update_build_revision) = update_build_revision {
+        extraction.field_provenance.push(registry_field_provenance(
+            "buildNumber",
+            update_build_revision,
+        ));
+    }
+    true
+}
+
+pub(in crate::analysis_service) fn format_full_build_number(
+    current_build: &str,
+    update_build_revision: Option<&str>,
+) -> String {
+    let current_build = current_build.trim();
+    match update_build_revision
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(revision) if !current_build.contains('.') => {
+            format!("{current_build}.{revision}")
+        }
+        _ => current_build.to_string(),
+    }
 }
 
 fn record_missing_registry_hive(

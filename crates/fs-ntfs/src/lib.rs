@@ -12,6 +12,7 @@ mod data_runs;
 mod directory;
 mod file_name;
 mod file_stream;
+mod index_allocation;
 mod mft;
 mod mft_stream;
 mod path;
@@ -34,6 +35,9 @@ pub(crate) use evidence_core::filesystem::{
 
 pub(crate) const ATTR_TYPE_ATTRIBUTE_LIST: u32 = 0x20;
 pub(crate) const ATTR_TYPE_DATA: u32 = 0x80;
+pub(crate) const ATTR_TYPE_INDEX_ROOT: u32 = 0x90;
+pub(crate) const ATTR_TYPE_INDEX_ALLOCATION: u32 = 0xA0;
+pub(crate) const ATTR_TYPE_BITMAP: u32 = 0xB0;
 pub(crate) const ATTR_TYPE_END: u32 = 0xFFFF_FFFF;
 pub(crate) const MAX_EXTERNAL_ATTRIBUTE_RECORDS: usize = 256;
 pub(crate) const MAX_ATTRIBUTE_LIST_ENTRIES: usize = 4096;

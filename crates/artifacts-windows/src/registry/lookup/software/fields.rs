@@ -1,7 +1,8 @@
-use super::super::txlog_util::apply_single_txlog_override;
+use super::super::txlog_util::{apply_single_txlog_dword_override, apply_single_txlog_override};
 use super::super::{
-    lookup_install_date_field, lookup_optional_string_field, lookup_string_field,
-    ParsedRegistryField, RegistryHiveReader, SoftwareHiveInfo, TxlogTimestampInfo,
+    lookup_install_date_field, lookup_optional_dword_field, lookup_optional_string_field,
+    lookup_string_field, ParsedRegistryField, RegistryHiveReader, SoftwareHiveInfo,
+    TxlogTimestampInfo,
 };
 use crate::registry::txlog::parse_transaction_log;
 use crate::registry::RegistryError;
@@ -28,6 +29,14 @@ pub fn extract_software_hive_fields(
         "registry.software",
         &key,
         "CurrentBuild",
+        &mut info.warnings,
+    );
+    info.update_build_revision = lookup_optional_dword_field(
+        &hive,
+        hive_path,
+        "registry.software",
+        &key,
+        "UBR",
         &mut info.warnings,
     );
     info.current_version = lookup_optional_string_field(
@@ -111,6 +120,11 @@ pub fn extract_software_hive_fields_with_txlog(
     ];
     for field in fields.into_iter().flatten() {
         let timestamp = apply_single_txlog_override(field, &txlog.transactions);
+        txlog_applied |= timestamp.txlog_used;
+        timestamps.push(timestamp);
+    }
+    if let Some(revision) = &mut info.update_build_revision {
+        let timestamp = apply_single_txlog_dword_override(revision, &txlog.transactions);
         txlog_applied |= timestamp.txlog_used;
         timestamps.push(timestamp);
     }

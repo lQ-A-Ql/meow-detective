@@ -107,7 +107,7 @@ fn multi_segment_with_only_first_file_works() {
     let e01_path = dir.join("test.E01");
 
     let chunk_sectors: u32 = 8;
-    let sectors: u64 = 16;
+    let sectors: u64 = 8;
     let chunk_bytes = (chunk_sectors * 512) as usize;
 
     let mut f = std::fs::File::create(&e01_path).unwrap();
@@ -119,7 +119,7 @@ fn multi_segment_with_only_first_file_works() {
     vol[8..12].copy_from_slice(&chunk_sectors.to_le_bytes());
     vol[12..16].copy_from_slice(&512u32.to_le_bytes());
     vol[16..24].copy_from_slice(&sectors.to_le_bytes());
-    f.write_all(&sdesc("volume", 125, 36)).unwrap();
+    f.write_all(&sdesc("volume", 125, 76 + 36)).unwrap();
     f.write_all(&vol).unwrap();
 
     // table (1 chunk): v1 header 24 bytes + 1 entry 4 bytes + footer 4 bytes
@@ -181,15 +181,16 @@ fn prefers_primary_table_over_table2_duplicates() {
     disk[16..24].copy_from_slice(&sectors.to_le_bytes());
 
     let disk_desc_off = 13u64;
+    let table_len = 24 + 2 * 4 + 4;
     let table_desc_off = disk_desc_off + 76 + disk.len() as u64;
-    let table2_desc_off = table_desc_off + 76 + 32;
-    let done_desc_off = table2_desc_off + 76 + 32;
+    let table2_desc_off = table_desc_off + 76 + table_len;
+    let done_desc_off = table2_desc_off + 76 + table_len;
     let chunk0_off = done_desc_off + 76;
     f.write_all(&sdesc("disk", table_desc_off, 76 + disk.len() as u64))
         .unwrap();
     f.write_all(&disk).unwrap();
 
-    let mut table = vec![0u8; 32];
+    let mut table = vec![0u8; table_len as usize];
     table[0..4].copy_from_slice(&(2u32).to_le_bytes());
     table[8..16].copy_from_slice(&(chunk0_off).to_le_bytes());
     table[24..28].copy_from_slice(&(0u32).to_le_bytes());
@@ -198,7 +199,7 @@ fn prefers_primary_table_over_table2_duplicates() {
         .unwrap();
     f.write_all(&table).unwrap();
 
-    let mut table2 = vec![0u8; 32];
+    let mut table2 = vec![0u8; table_len as usize];
     table2[0..4].copy_from_slice(&(2u32).to_le_bytes());
     table2[8..16].copy_from_slice(&(chunk0_off).to_le_bytes());
     table2[24..28].copy_from_slice(&(0u32).to_le_bytes());
@@ -225,6 +226,83 @@ fn prefers_primary_table_over_table2_duplicates() {
     assert_eq!(&buf[chunk_bytes..chunk_bytes + 4], b"BBBB");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reads_chunk_tables_from_each_segment() {
+    let dir = std::env::temp_dir().join(format!("e01_two_segments_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let e01_path = dir.join("split.E01");
+    let e02_path = dir.join("split.E02");
+
+    write_single_chunk_segment(&e01_path, Some((8, 16)), b"FIRST").unwrap();
+    write_single_chunk_segment(&e02_path, None, b"SECOND").unwrap();
+
+    let mut reader = E01Reader::open(&e01_path).unwrap();
+    let mut bytes = vec![0u8; 2 * 8 * 512];
+    reader.read_exact(&mut bytes).unwrap();
+    assert_eq!(&bytes[..5], b"FIRST");
+    assert_eq!(&bytes[8 * 512..8 * 512 + 6], b"SECOND");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rejects_incomplete_segment_chunk_table() {
+    let dir = std::env::temp_dir().join(format!("e01_missing_segment_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let e01_path = dir.join("split.E01");
+    write_single_chunk_segment(&e01_path, Some((8, 16)), b"FIRST").unwrap();
+
+    let error = match E01Reader::open(&e01_path) {
+        Ok(_) => panic!("incomplete chunk table was accepted"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(error
+        .to_string()
+        .contains("chunk table count mismatch: expected 2, found 1"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn write_single_chunk_segment(
+    path: &std::path::Path,
+    geometry: Option<(u32, u64)>,
+    marker: &[u8],
+) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")?;
+    let first_section_offset = 13u64;
+    let table_offset = first_section_offset + geometry.map(|_| 76 + 36).unwrap_or_default();
+    let table_len = 24 + 4 + 4;
+    let done_offset = table_offset + 76 + table_len;
+    let chunk_offset = done_offset + 76;
+
+    if let Some((chunk_sectors, sector_count)) = geometry {
+        let mut volume = vec![0u8; 36];
+        volume[8..12].copy_from_slice(&chunk_sectors.to_le_bytes());
+        volume[12..16].copy_from_slice(&512u32.to_le_bytes());
+        volume[16..24].copy_from_slice(&sector_count.to_le_bytes());
+        file.write_all(&sdesc("volume", table_offset, 76 + volume.len() as u64))?;
+        file.write_all(&volume)?;
+    }
+
+    let mut table = vec![0u8; table_len as usize];
+    table[0..4].copy_from_slice(&1u32.to_le_bytes());
+    table[8..16].copy_from_slice(&chunk_offset.to_le_bytes());
+    file.write_all(&sdesc("table", done_offset, 76 + table_len))?;
+    file.write_all(&table)?;
+    file.write_all(&sdesc("done", 0, 0))?;
+
+    let mut chunk = vec![0u8; 8 * 512];
+    chunk[..marker.len()].copy_from_slice(marker);
+    file.write_all(&chunk)?;
+    file.flush()
 }
 
 fn sdesc(stype: &str, next: u64, size: u64) -> [u8; 76] {

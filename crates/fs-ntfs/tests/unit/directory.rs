@@ -23,9 +23,11 @@ fn parsed_entry(mft_ref: u64, name: &str, namespace: u8) -> DirEntry {
 
 #[test]
 fn index_entry_parses_filename_namespace() {
-    let entry = parsed_entry(42, "Program Files", 1);
+    let entry = parsed_entry((7u64 << 48) | 42, "Program Files", 1);
 
     assert_eq!(entry.namespace, FileNameNamespace::Win32);
+    assert_eq!(entry.mft_ref, 42);
+    assert_eq!(entry.mft_sequence, 7);
 }
 
 #[test]

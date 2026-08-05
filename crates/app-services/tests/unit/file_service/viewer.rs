@@ -52,7 +52,8 @@ fn write_tiny_e01(path: &std::path::Path) -> std::io::Result<()> {
     f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")?;
 
     let mut vol = vec![0u8; 36];
-    vol[12..16].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[8..12].copy_from_slice(&chunk_sectors.to_le_bytes());
+    vol[12..16].copy_from_slice(&512u32.to_le_bytes());
     vol[16..24].copy_from_slice(&sectors.to_le_bytes());
 
     let volume_desc_offset = 13u64;
@@ -164,6 +165,7 @@ fn write_large_ntfs_raw_fixture(
     let logical_size = sparse_prefix_bytes + marker.len() as u64;
     rec6[data_attr..data_attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
     rec6[data_attr + 8] = 1;
+    rec6[data_attr + 0x18..data_attr + 0x20].copy_from_slice(&sparse_prefix_clusters.to_le_bytes());
     rec6[data_attr + 0x20..data_attr + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec6[data_attr + 0x28..data_attr + 0x30]
         .copy_from_slice(&((sparse_prefix_clusters + 1) * CLUSTER_SIZE as u64).to_le_bytes());
@@ -806,6 +808,20 @@ fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
 
     assert_eq!(response.raw_bytes.unwrap(), bytes[17..29].to_vec());
     assert!(response.lines.is_empty());
+}
+
+#[test]
+fn mft_inode_range_is_not_bounded_by_stale_catalog_size() {
+    assert!(super::range::api::catalog_size_allows_offset(
+        "mft:3:34971",
+        1024 * 1024,
+        Some(8_192),
+    ));
+    assert!(!super::range::api::catalog_size_allows_offset(
+        "logical-file",
+        1024 * 1024,
+        Some(8_192),
+    ));
 }
 
 #[test]

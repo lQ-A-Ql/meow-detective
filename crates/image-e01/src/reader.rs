@@ -4,7 +4,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::build_segment_path;
+use crate::{build_segment_path, table::MAX_STORED_CHUNK_BYTES};
 
 const SEQUENTIAL_PREFETCH_CHUNKS: u64 = 3;
 pub(crate) const SEQUENTIAL_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -91,6 +91,16 @@ impl E01Reader {
                 "no E01 segments found",
             ));
         }
+        if segment_files.len() != self.segment_files.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "E01 segment set changed: expected {}, found {}",
+                    self.segment_files.len(),
+                    segment_files.len()
+                ),
+            ));
+        }
         Ok(Self {
             info: self.info.clone(),
             total_bytes: self.total_bytes,
@@ -107,7 +117,12 @@ impl E01Reader {
 
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (segment, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
-        let chunk_bytes = usize::try_from(self.chunk_size_bytes()).map_err(|_| {
+        let chunk_size = self.chunk_size_bytes();
+        let chunk_start = idx.checked_mul(chunk_size).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "E01 chunk offset overflow")
+        })?;
+        let expected_size = chunk_size.min(self.total_bytes.saturating_sub(chunk_start));
+        let chunk_bytes = usize::try_from(expected_size).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "E01 chunk size does not fit the current platform",
@@ -132,6 +147,7 @@ impl E01Reader {
         }
 
         let file = &mut self.segment_files[segment];
+        validate_stored_range(file, &context)?;
         file.seek(SeekFrom::Start(offset))
             .map_err(|error| context.source_error("seek source chunk", error))?;
         if compressed {
@@ -225,6 +241,30 @@ impl E01Reader {
     }
 }
 
+fn validate_stored_range(file: &std::fs::File, context: &ChunkReadContext) -> io::Result<()> {
+    if context.stored_size == 0 || context.stored_size > MAX_STORED_CHUNK_BYTES {
+        return Err(context.error(
+            io::ErrorKind::InvalidData,
+            "stored length is zero or exceeds the parser safety limit",
+        ));
+    }
+    let end = context
+        .offset
+        .checked_add(context.stored_size)
+        .ok_or_else(|| context.error(io::ErrorKind::InvalidData, "stored range overflows u64"))?;
+    let segment_len = file
+        .metadata()
+        .map_err(|error| context.source_error("inspect source segment", error))?
+        .len();
+    if end > segment_len {
+        return Err(context.error(
+            io::ErrorKind::UnexpectedEof,
+            format!("stored range ends at {end}, beyond segment length {segment_len}"),
+        ));
+    }
+    Ok(())
+}
+
 struct ChunkReadContext {
     index: u64,
     segment: usize,
@@ -292,13 +332,22 @@ fn read_uncompressed_chunk(
     file: &mut std::fs::File,
     context: &ChunkReadContext,
 ) -> io::Result<Vec<u8>> {
-    if context.stored_size > 0 && context.stored_size < context.expected_size as u64 {
+    let data_length = context.expected_size as u64;
+    let checksummed_length = data_length.checked_add(4).ok_or_else(|| {
+        context.error(
+            io::ErrorKind::InvalidData,
+            "raw chunk checksum length overflows u64",
+        )
+    })?;
+    if context.stored_size != data_length && context.stored_size != checksummed_length {
         return Err(context.error(
-            io::ErrorKind::UnexpectedEof,
-            "raw stored length is shorter than the expected chunk length",
+            io::ErrorKind::InvalidData,
+            format!(
+                "raw stored length must be {data_length} bytes without a checksum or {checksummed_length} bytes with a checksum"
+            ),
         ));
     }
-    read_stored_bytes(file, context, context.expected_size as u64)
+    read_stored_bytes(file, context, data_length)
 }
 
 fn read_stored_bytes(

@@ -358,7 +358,7 @@ export function TextViewer({
                     {line.continuation ? '...' : lineNum}
                   </div>
                   {/* 代码内容 */}
-                  <div className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0">
+                  <div className="min-w-0 flex-1 whitespace-pre px-3">
                     <span data-testid="text-line-content">
                       {highlightText(line.content) || '\u00A0'}
                     </span> {/* 空行也显示高度 */}

@@ -20,7 +20,7 @@ export function AnalysisProgressDrawer({
   }
 
   return (
-    <section data-testid="analysis-progress-drawer" className="border border-forensics-border bg-forensics-panel p-3">
+    <section data-testid="analysis-progress-drawer" className="min-w-0 max-w-full overflow-hidden border border-forensics-border bg-forensics-panel p-3">
       <div className="mb-3 flex min-w-0 items-center gap-2 text-[11px] text-forensics-text">
         <Activity size={13} className="shrink-0 text-forensics-muted-light" />
         <span className="shrink-0 font-light">数据源提取进度</span>

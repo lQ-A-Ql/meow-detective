@@ -1,5 +1,6 @@
 pub(super) mod mft_scan;
 pub(super) mod path_reconstruction;
+pub(super) mod size_reconciliation;
 pub(super) mod validation;
 
 use super::batch_sink::{prepare_mft_insert, EnumerationStats};

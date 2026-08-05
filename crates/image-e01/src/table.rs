@@ -1,7 +1,19 @@
 use std::io;
 
 pub(crate) const V1_TABLE_HEADER_SIZE: usize = 24;
-const SUPPORTED_SECTOR_SIZES: [u32; 4] = [512, 1024, 2048, 4096];
+const V1_TABLE_CHECKSUM_SIZE: usize = 4;
+const MAX_BYTES_PER_SECTOR: u32 = 64 * 1024;
+pub(crate) const MAX_CHUNK_BYTES: u64 = 128 * 1024 * 1024;
+pub(crate) const MAX_STORED_CHUNK_BYTES: u64 = MAX_CHUNK_BYTES + 1024 * 1024;
+
+#[derive(Debug)]
+pub(crate) struct E01Section {
+    pub(crate) kind: String,
+    pub(crate) segment_index: usize,
+    pub(crate) start_offset: u64,
+    pub(crate) next_offset: u64,
+    pub(crate) content: Vec<u8>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct E01Geometry {
@@ -25,85 +37,145 @@ impl E01Geometry {
 }
 
 pub(crate) fn build_chunk_table(
-    sections: &[(String, u64, u64, Vec<u8>)],
-    segment_sizes: &[u64],
+    sections: &[E01Section],
+    segment_len: u64,
     section_type: &str,
-) -> Vec<(usize, u64, bool, u64)> {
+) -> io::Result<Vec<(usize, u64, bool, u64)>> {
     let mut chunk_table = Vec::new();
-    for (kind, start_offset, next_offset, content) in sections {
-        if kind != section_type || content.len() < V1_TABLE_HEADER_SIZE {
-            continue;
-        }
-        let table_base = u64::from_le_bytes(content[8..16].try_into().unwrap_or([0; 8]));
-        let entry_count = u32::from_le_bytes(content[0..4].try_into().unwrap_or([0; 4])) as usize;
-        if entry_count == 0 {
-            continue;
-        }
-        let segment = segment_for_table(table_base, segment_sizes);
-        let entries = parse_table_entries(content, entry_count);
-        append_chunk_entries(
-            &mut chunk_table,
-            &entries,
-            segment,
-            table_base,
-            *start_offset,
-            *next_offset,
-        );
+    for section in sections
+        .iter()
+        .filter(|section| section.kind == section_type)
+    {
+        let entries = parse_table_section(section, segment_len)?;
+        chunk_table.extend(entries);
     }
-    chunk_table
+    Ok(chunk_table)
 }
 
-fn segment_for_table(table_base: u64, segment_sizes: &[u64]) -> usize {
-    if segment_sizes.len() <= 1 {
-        return 0;
+fn parse_table_section(
+    section: &E01Section,
+    segment_len: u64,
+) -> io::Result<Vec<(usize, u64, bool, u64)>> {
+    let content = &section.content;
+    if content.len() < V1_TABLE_HEADER_SIZE + V1_TABLE_CHECKSUM_SIZE {
+        return Err(invalid_table(section, "table section is too short"));
     }
-    let mut cumulative = 0;
-    let mut selected = 0;
-    for (index, size) in segment_sizes.iter().enumerate() {
-        selected = index;
-        if table_base < cumulative + size {
-            break;
+    let entry_count = u32::from_le_bytes(content[0..4].try_into().unwrap_or([0; 4])) as usize;
+    if entry_count == 0 {
+        return Err(invalid_table(section, "table declares zero entries"));
+    }
+    let entries_bytes = entry_count
+        .checked_mul(4)
+        .and_then(|size| V1_TABLE_HEADER_SIZE.checked_add(size))
+        .and_then(|size| size.checked_add(V1_TABLE_CHECKSUM_SIZE))
+        .ok_or_else(|| invalid_table(section, "table entry length overflows usize"))?;
+    if entries_bytes > content.len() {
+        return Err(invalid_table(
+            section,
+            format!(
+                "table declares {entry_count} entries but contains only {} bytes",
+                content.len()
+            ),
+        ));
+    }
+
+    let table_base = u64::from_le_bytes(content[8..16].try_into().unwrap_or([0; 8]));
+    let entries = parse_table_entries(section, content, entry_count)?;
+    build_chunk_entries(section, segment_len, table_base, &entries)
+}
+
+fn parse_table_entries(
+    section: &E01Section,
+    content: &[u8],
+    entry_count: usize,
+) -> io::Result<Vec<(u64, bool)>> {
+    let mut entries = Vec::with_capacity(entry_count);
+    for index in 0..entry_count {
+        let offset = V1_TABLE_HEADER_SIZE + index * 4;
+        let raw = content
+            .get(offset..offset + 4)
+            .and_then(|bytes| bytes.try_into().ok())
+            .map(u32::from_le_bytes)
+            .ok_or_else(|| invalid_table(section, "table entry is truncated"))?;
+        let relative = u64::from(raw & 0x7FFF_FFFF);
+        if entries
+            .last()
+            .is_some_and(|(previous, _)| relative <= *previous)
+        {
+            return Err(invalid_table(
+                section,
+                format!("table offsets are not strictly increasing at entry {index}"),
+            ));
         }
-        cumulative += size;
+        entries.push((relative, raw & 0x8000_0000 != 0));
     }
-    selected
+    Ok(entries)
 }
 
-fn parse_table_entries(content: &[u8], entry_count: usize) -> Vec<(u64, bool)> {
-    (0..entry_count)
-        .filter_map(|index| {
-            let offset = V1_TABLE_HEADER_SIZE + index * 4;
-            let raw = content
-                .get(offset..offset + 4)
-                .and_then(|bytes| bytes.try_into().ok())
-                .map(u32::from_le_bytes)?;
-            Some(((raw & 0x7FFF_FFFF) as u64, raw & 0x8000_0000 != 0))
-        })
-        .collect()
-}
-
-fn append_chunk_entries(
-    table: &mut Vec<(usize, u64, bool, u64)>,
-    entries: &[(u64, bool)],
-    segment: usize,
+fn build_chunk_entries(
+    section: &E01Section,
+    segment_len: u64,
     table_base: u64,
-    start_offset: u64,
-    next_offset: u64,
-) {
+    entries: &[(u64, bool)],
+) -> io::Result<Vec<(usize, u64, bool, u64)>> {
+    let mut chunks = Vec::with_capacity(entries.len());
     for (index, (relative, compressed)) in entries.iter().copied().enumerate() {
-        let absolute = table_base + relative;
-        let stored_size = entries
-            .get(index + 1)
-            .map(|(next, _)| next.saturating_sub(relative))
-            .unwrap_or_else(|| {
-                if absolute < start_offset {
-                    start_offset.saturating_sub(absolute)
-                } else {
-                    next_offset.saturating_sub(absolute)
-                }
-            });
-        table.push((segment, absolute, compressed, stored_size));
+        let absolute = table_base
+            .checked_add(relative)
+            .ok_or_else(|| invalid_table(section, "chunk offset overflows u64"))?;
+        let end = chunk_end(section, segment_len, table_base, entries, index)?;
+        let stored_size = end.checked_sub(absolute).ok_or_else(|| {
+            invalid_table(section, format!("chunk {index} has a reversed byte range"))
+        })?;
+        validate_chunk_range(section, index, absolute, stored_size, segment_len)?;
+        chunks.push((section.segment_index, absolute, compressed, stored_size));
     }
+    Ok(chunks)
+}
+
+fn chunk_end(
+    section: &E01Section,
+    segment_len: u64,
+    table_base: u64,
+    entries: &[(u64, bool)],
+    index: usize,
+) -> io::Result<u64> {
+    if let Some((next_relative, _)) = entries.get(index + 1) {
+        return table_base
+            .checked_add(*next_relative)
+            .ok_or_else(|| invalid_table(section, "next chunk offset overflows u64"));
+    }
+    let absolute = table_base
+        .checked_add(entries[index].0)
+        .ok_or_else(|| invalid_table(section, "last chunk offset overflows u64"))?;
+    if absolute < section.start_offset {
+        Ok(section.start_offset)
+    } else if section.next_offset > absolute {
+        Ok(section.next_offset)
+    } else {
+        Ok(segment_len)
+    }
+}
+
+fn validate_chunk_range(
+    section: &E01Section,
+    index: usize,
+    offset: u64,
+    stored_size: u64,
+    segment_len: u64,
+) -> io::Result<()> {
+    let end = offset
+        .checked_add(stored_size)
+        .ok_or_else(|| invalid_table(section, "chunk byte range overflows u64"))?;
+    if stored_size == 0 || stored_size > MAX_STORED_CHUNK_BYTES || end > segment_len {
+        return Err(invalid_table(
+            section,
+            format!(
+                "chunk {index} range is invalid: offset={offset} stored_length={stored_size} segment_length={segment_len}"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn should_read_section_content(kind: &str) -> bool {
@@ -138,9 +210,9 @@ fn parse_geometry_section(kind: &str, content: &[u8]) -> io::Result<E01Geometry>
             "{kind} section declares zero sectors per chunk"
         )));
     }
-    if !SUPPORTED_SECTOR_SIZES.contains(&bytes_per_sector) {
+    if bytes_per_sector == 0 || bytes_per_sector > MAX_BYTES_PER_SECTOR {
         return Err(invalid_geometry(format!(
-            "{kind} section declares unsupported sector size {bytes_per_sector}"
+            "{kind} section declares invalid sector size {bytes_per_sector}"
         )));
     }
     if sector_count == 0 {
@@ -155,9 +227,27 @@ fn parse_geometry_section(kind: &str, content: &[u8]) -> io::Result<E01Geometry>
     };
     geometry.total_bytes()?;
     let chunk_bytes = geometry.chunk_bytes()?;
+    if chunk_bytes > MAX_CHUNK_BYTES {
+        return Err(invalid_geometry(format!(
+            "{kind} section declares chunk size {chunk_bytes} above the {MAX_CHUNK_BYTES} byte limit"
+        )));
+    }
     usize::try_from(chunk_bytes)
         .map_err(|_| invalid_geometry("chunk size does not fit the current platform"))?;
     Ok(geometry)
+}
+
+fn invalid_table(section: &E01Section, message: impl Into<String>) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "E01 segment {} {} section at offset {}: {}",
+            section.segment_index,
+            section.kind,
+            section.start_offset,
+            message.into()
+        ),
+    )
 }
 
 fn invalid_geometry(message: impl Into<String>) -> io::Error {

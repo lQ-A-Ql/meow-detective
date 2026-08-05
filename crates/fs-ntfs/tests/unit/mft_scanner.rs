@@ -37,7 +37,7 @@ fn make_test_record(_record_number: u64, name: &str, parent: u64, is_dir: bool) 
 
     // $FILE_NAME (0x30) — resident
     let name_bytes: Vec<u16> = name.encode_utf16().collect();
-    let fn_content_size = 0x52u32 + (name_bytes.len() as u32) * 2;
+    let fn_content_size = 0x42u32 + (name_bytes.len() as u32) * 2;
     let fn_attr_len = 0x18 + fn_content_size;
     rec[pos..pos + 4].copy_from_slice(&0x30u32.to_le_bytes());
     rec[pos + 4..pos + 8].copy_from_slice(&fn_attr_len.to_le_bytes());
@@ -92,7 +92,7 @@ fn append_file_name_attr(rec: &mut [u8], name: &str, parent: u64, namespace: u8)
     }
 
     let name_bytes: Vec<u16> = name.encode_utf16().collect();
-    let fn_content_size = 0x52usize + name_bytes.len() * 2;
+    let fn_content_size = 0x42usize + name_bytes.len() * 2;
     let fn_attr_len = 0x18usize + fn_content_size;
     assert!(pos + fn_attr_len + 4 <= rec.len());
     rec[pos..pos + 4].copy_from_slice(&0x30u32.to_le_bytes());
@@ -249,6 +249,27 @@ fn parse_valid_file_record() {
     assert!(!result.deleted);
     assert!(result.created_at.is_some());
     assert_eq!(result.size, 1234);
+}
+
+#[test]
+fn parse_standard_short_file_name_record() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let rec = make_test_record(101, "SYSTEM", 5, false);
+    let result = parser.parse(&rec, 101).unwrap();
+    assert_eq!(result.name, "SYSTEM");
+    assert_eq!(result.parent_ref, 5);
+}
+
+#[test]
+fn truncated_file_name_content_is_rejected_safely() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let mut rec = make_test_record(102, "S", 5, false);
+    let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+    while u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap()) != 0x30 {
+        pos += u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap()) as usize;
+    }
+    rec[pos + 0x10..pos + 0x14].copy_from_slice(&0x42u32.to_le_bytes());
+    assert!(parser.parse(&rec, 102).is_none());
 }
 
 #[test]

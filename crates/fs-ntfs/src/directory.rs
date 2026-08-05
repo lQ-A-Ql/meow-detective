@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct DirEntry {
     pub(crate) node: FsNode,
     pub(crate) mft_ref: u64,
+    pub(crate) mft_sequence: u16,
     pub(crate) namespace: FileNameNamespace,
 }
 
@@ -31,8 +32,8 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
     let mut entries = Vec::new();
     let mut off = 0usize;
     while off + 0x52 < data.len() {
-        let mft_ref = u64::from_le_bytes(data[off..off + 8].try_into().unwrap_or([0; 8]))
-            & 0x0000_FFFF_FFFF_FFFF;
+        let file_reference = u64::from_le_bytes(data[off..off + 8].try_into().unwrap_or([0; 8]));
+        let mft_ref = file_reference & 0x0000_FFFF_FFFF_FFFF;
         let entry_size = u16::from_le_bytes([data[off + 8], data[off + 9]]) as usize;
         if entry_size < 0x52 || off + entry_size > data.len() {
             break;
@@ -70,6 +71,7 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             entries.push(DirEntry {
                 node,
                 mft_ref,
+                mft_sequence: (file_reference >> 48) as u16,
                 namespace,
             });
         }
@@ -79,10 +81,10 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
 }
 
 pub(crate) fn canonicalize_indx_entries(entries: Vec<DirEntry>) -> Vec<DirEntry> {
-    let mut entries_by_reference = BTreeMap::<u64, Vec<DirEntry>>::new();
+    let mut entries_by_reference = BTreeMap::<(u64, u16), Vec<DirEntry>>::new();
     for entry in entries {
         entries_by_reference
-            .entry(entry.mft_ref)
+            .entry((entry.mft_ref, entry.mft_sequence))
             .or_default()
             .push(entry);
     }

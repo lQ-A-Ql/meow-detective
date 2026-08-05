@@ -34,6 +34,29 @@ pub(crate) fn apply_single_txlog_override(
     }
 }
 
+/// Apply a matching transaction-log value that is known to be a REG_DWORD.
+pub(crate) fn apply_single_txlog_dword_override(
+    field: &mut ParsedRegistryField,
+    transactions: &[RegistryTransaction],
+) -> TxlogTimestampInfo {
+    let best = find_best_txlog_match(transactions, &field.key_path, &field.value_name);
+    let txlog_used = best
+        .and_then(|transaction| transaction.data_after.as_deref())
+        .and_then(|data| data.get(..4))
+        .and_then(|data| data.try_into().ok())
+        .map(|bytes| {
+            field.value = u32::from_le_bytes(bytes).to_string();
+        })
+        .is_some();
+
+    TxlogTimestampInfo {
+        field_name: field.value_name.clone(),
+        hive_timestamp: None,
+        txlog_timestamp: best.and_then(|transaction| transaction.timestamp),
+        txlog_used,
+    }
+}
+
 /// Search transaction-log entries for the best `SetValue` matching `key_path`
 /// and `value_name`.  "Best" means the highest sequence number among matches.
 pub(crate) fn find_best_txlog_match<'a>(

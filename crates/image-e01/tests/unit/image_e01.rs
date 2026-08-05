@@ -1,5 +1,5 @@
 use super::*;
-use crate::table::V1_TABLE_HEADER_SIZE;
+use crate::table::{find_geometry, should_read_section_content, V1_TABLE_HEADER_SIZE};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
@@ -83,16 +83,41 @@ fn encase_volume_geometry_uses_chunk_sectors_at_offset_eight() {
 }
 
 #[test]
-fn invalid_geometry_is_rejected_instead_of_guessed() {
+fn non_enumerated_sector_size_is_accepted_when_bounded() {
     let mut volume = vec![0u8; 32];
     volume[8..12].copy_from_slice(&64u32.to_le_bytes());
-    volume[12..16].copy_from_slice(&123u32.to_le_bytes());
+    volume[12..16].copy_from_slice(&520u32.to_le_bytes());
+    volume[16..24].copy_from_slice(&1024u64.to_le_bytes());
+
+    let geometry = find_geometry(&[("volume".to_string(), volume)]).unwrap();
+
+    assert_eq!(geometry.bytes_per_sector, 520);
+    assert_eq!(geometry.chunk_bytes().unwrap(), 64 * 520);
+}
+
+#[test]
+fn zero_sector_size_is_rejected_instead_of_guessed() {
+    let mut volume = vec![0u8; 32];
+    volume[8..12].copy_from_slice(&64u32.to_le_bytes());
     volume[16..24].copy_from_slice(&1024u64.to_le_bytes());
 
     let error = find_geometry(&[("volume".to_string(), volume)]).unwrap_err();
 
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    assert!(error.to_string().contains("unsupported sector size 123"));
+    assert!(error.to_string().contains("invalid sector size 0"));
+}
+
+#[test]
+fn oversized_chunk_geometry_is_rejected() {
+    let mut volume = vec![0u8; 32];
+    volume[8..12].copy_from_slice(&32_769u32.to_le_bytes());
+    volume[12..16].copy_from_slice(&4096u32.to_le_bytes());
+    volume[16..24].copy_from_slice(&32_769u64.to_le_bytes());
+
+    let error = find_geometry(&[("volume".to_string(), volume)]).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("above the 134217728 byte limit"));
 }
 
 #[test]
@@ -242,7 +267,66 @@ fn source_chunk_short_read_is_distinct_from_decode_failure() {
     let message = error.to_string();
     assert!(message.contains("E01 chunk 0 codec=raw"));
     assert!(message.contains("stored_length=512"));
-    assert!(message.contains("read source chunk failed"));
+    assert!(message.contains("stored range ends at 512, beyond segment length 4"));
+}
+
+#[test]
+fn final_compressed_chunk_uses_remaining_logical_length() {
+    let path = temporary_chunk_path("partial-final-deflate");
+    let expected = vec![0x43; 512];
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder.write_all(&expected).unwrap();
+    let compressed = encoder.finish().unwrap();
+    std::fs::write(&path, &compressed).unwrap();
+    let file = std::fs::File::open(&path).unwrap();
+    let mut reader = E01Reader::from_parts(
+        evidence_core::ReaderInfo {
+            path: path.clone(),
+            size: 512,
+            kind: "e01".to_string(),
+        },
+        512,
+        64,
+        512,
+        vec![(0, 0, true, compressed.len() as u64)],
+        vec![file],
+    );
+
+    let mut actual = Vec::new();
+    reader.read_to_end(&mut actual).unwrap();
+    drop(reader);
+    std::fs::remove_file(path).unwrap();
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn invalid_raw_chunk_length_is_reported() {
+    let path = temporary_chunk_path("invalid-raw-length");
+    std::fs::write(&path, [0x44; 513]).unwrap();
+    let file = std::fs::File::open(&path).unwrap();
+    let mut reader = E01Reader::from_parts(
+        evidence_core::ReaderInfo {
+            path: path.clone(),
+            size: 512,
+            kind: "e01".to_string(),
+        },
+        512,
+        1,
+        512,
+        vec![(0, 0, false, 513)],
+        vec![file],
+    );
+
+    let mut byte = [0u8; 1];
+    let error = reader.read_exact(&mut byte).unwrap_err();
+    drop(reader);
+    std::fs::remove_file(path).unwrap();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error
+        .to_string()
+        .contains("raw stored length must be 512 bytes"));
 }
 
 fn temporary_chunk_path(label: &str) -> std::path::PathBuf {

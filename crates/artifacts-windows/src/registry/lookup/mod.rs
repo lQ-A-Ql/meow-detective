@@ -46,7 +46,8 @@ pub use types::*;
 
 pub(crate) use crate::registry::txlog::parse_transaction_log;
 pub(crate) use fields::{
-    lookup_install_date_field, lookup_optional_string_field, lookup_string_field,
+    lookup_install_date_field, lookup_optional_dword_field, lookup_optional_string_field,
+    lookup_string_field,
 };
 pub(crate) use time::{
     extract_utf16le_from_binary, filetime_to_utc, rot13_decode, windows_filetime_to_rfc3339,

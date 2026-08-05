@@ -1,6 +1,6 @@
 use artifacts_windows::{
     extract_boot_key, extract_installed_software, extract_network_adapters_from_system_hive,
-    extract_ntuser_fields, extract_sam_fields,
+    extract_ntuser_fields, extract_sam_fields, extract_software_hive_fields,
 };
 use evidence_core::{EvidenceReader, FileSystemReader};
 use fs_ntfs::NtfsReader;
@@ -223,6 +223,64 @@ fn e01_registry_sam_users_and_installed_software() {
         software.len() > 1,
         "Expected multiple installed software entries"
     );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE Pinghang real E01 sample"]
+fn pinghang_registry_hives_keep_external_stream_sizes_and_version_fields() {
+    let probe = {
+        let mut reader = E01Reader::open(&sample_path()).unwrap();
+        app_services::datasource_service::detect_image_filesystem(&mut reader).unwrap()
+    };
+    let fs = probe
+        .candidates
+        .iter()
+        .filter(|candidate| {
+            matches!(
+                candidate.kind,
+                app_services::datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .find_map(|candidate| {
+            let reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).ok()?);
+            let fs = NtfsReader::open(reader, candidate.offset).ok()?;
+            fs.list_children("Windows/System32/config")
+                .ok()
+                .filter(|entries| !entries.is_empty())
+                .map(|_| fs)
+        })
+        .expect("No NTFS partition contains Windows/System32/config");
+
+    let config = fs.list_children("Windows/System32/config").unwrap();
+    let system = config
+        .iter()
+        .find(|entry| entry.name.eq_ignore_ascii_case("SYSTEM"))
+        .expect("SYSTEM must be present with its modern NTFS name");
+    let software = config
+        .iter()
+        .find(|entry| entry.name.eq_ignore_ascii_case("SOFTWARE"))
+        .expect("SOFTWARE must be present with its modern NTFS name");
+    assert_eq!(system.size, 12_845_056);
+    assert_eq!(software.size, 75_497_472);
+
+    let system_bytes = read_file(&fs, "Windows/System32/config/SYSTEM");
+    let software_bytes = read_file(&fs, "Windows/System32/config/SOFTWARE");
+    assert_eq!(system_bytes.len() as u64, system.size);
+    assert_eq!(software_bytes.len() as u64, software.size);
+    let info = extract_software_hive_fields(&software_bytes, "Windows/System32/config/SOFTWARE")
+        .expect("SOFTWARE hive parse failed");
+    let product_name = info.product_name.expect("ProductName must be present");
+    let current_build = info.current_build.expect("CurrentBuild must be present");
+    let update_build_revision = info
+        .update_build_revision
+        .expect("UBR must be present for a complete Windows build number");
+    eprintln!(
+        "ProductName={:?}, FullBuild={}.{}",
+        product_name.value, current_build.value, update_build_revision.value
+    );
+    assert!(!product_name.value.is_empty());
+    assert!(!current_build.value.is_empty());
+    assert!(!update_build_revision.value.is_empty());
 }
 
 fn read_file(fs: &NtfsReader, path: &str) -> Vec<u8> {

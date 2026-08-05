@@ -45,6 +45,7 @@ pub struct SystemHiveInfo {
 pub struct SoftwareHiveInfo {
     pub product_name: Option<ParsedRegistryField>,
     pub current_build: Option<ParsedRegistryField>,
+    pub update_build_revision: Option<ParsedRegistryField>,
     pub current_version: Option<ParsedRegistryField>,
     pub display_version: Option<ParsedRegistryField>,
     pub install_date: Option<ParsedRegistryField>,

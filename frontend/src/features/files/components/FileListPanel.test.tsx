@@ -31,13 +31,18 @@ beforeEach(() => {
   });
 });
 
-function renderPanel(rows: FileEntryRow[], onExtractFile = vi.fn()) {
+function renderPanel(
+  rows: FileEntryRow[],
+  onExtractFile = vi.fn(),
+  pagination: { canGoToPreviousRows?: boolean; canGoToNextRows?: boolean } = {},
+) {
   const setSelectedFileId = vi.fn();
+  const goToPreviousRows = vi.fn();
+  const goToNextRows = vi.fn();
   render(
     <FileListPanel
       sortedRows={rows}
       selectedFileId={undefined}
-      viewerTab="metadata"
       fileSortKey="name"
       fileSortDirection="asc"
       handleSort={vi.fn()}
@@ -45,17 +50,33 @@ function renderPanel(rows: FileEntryRow[], onExtractFile = vi.fn()) {
       setSelectedFileId={setSelectedFileId}
       setExpandedDirectoryIds={vi.fn()}
       rowsPage={{ offset: 0, limit: 500, totalCount: rows.length, rows, truncated: false }}
-      canGoToPreviousRows={false}
-      canGoToNextRows={false}
-      goToPreviousRows={vi.fn()}
-      goToNextRows={vi.fn()}
+      canGoToPreviousRows={pagination.canGoToPreviousRows ?? false}
+      canGoToNextRows={pagination.canGoToNextRows ?? false}
+      goToPreviousRows={goToPreviousRows}
+      goToNextRows={goToNextRows}
       onExtractFile={onExtractFile}
     />,
   );
-  return { onExtractFile, setSelectedFileId };
+  return { goToNextRows, goToPreviousRows, onExtractFile, setSelectedFileId };
 }
 
 describe('FileListPanel extraction context menu', () => {
+  it('does not render the redundant paging footer', () => {
+    renderPanel([FILE]);
+
+    expect(screen.queryByText(/显示第/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '上一页' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '下一页' })).toBeNull();
+  });
+
+  it('keeps compact paging controls when another file page exists', () => {
+    const { goToNextRows } = renderPanel([FILE], vi.fn(), { canGoToNextRows: true });
+
+    expect(screen.queryByText(/显示第/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    expect(goToNextRows).toHaveBeenCalledOnce();
+  });
+
   it('opens extraction without selecting the right-clicked file', async () => {
     const { onExtractFile, setSelectedFileId } = renderPanel([FILE]);
 

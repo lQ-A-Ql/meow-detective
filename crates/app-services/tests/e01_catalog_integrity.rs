@@ -374,6 +374,9 @@ fn run_catalog_integrity_test(env_name: &str, platform: DataSourcePlatform) {
 
             let counts = read_catalog_counts(&source_conn, &source.id)?;
             assert_catalog_integrity(&counts, env_name, &source.id);
+            if platform == DataSourcePlatform::Windows {
+                assert_windows_root_names(&source_conn, &source.id, env_name)?;
+            }
             assert_eq!(
                 stats.file_count + bitlocker_file_count,
                 counts.files,
@@ -878,6 +881,42 @@ fn count(conn: &Connection, sql: &str, data_source_id: &str) -> persistence_sqli
     u64::try_from(value).map_err(|error| {
         persistence_sqlite::DbError::System(format!("catalog count is negative: {error}"))
     })
+}
+
+fn assert_windows_root_names(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    env_name: &str,
+) -> persistence_sqlite::DbResult<()> {
+    let root_child_count = |name: &str| -> persistence_sqlite::DbResult<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM file_entries child
+             JOIN file_entries root ON root.id = child.parent_id
+             WHERE child.data_source_id = ?1 AND root.data_source_id = ?1
+               AND root.parent_id IS NULL AND child.name = ?2 COLLATE NOCASE",
+            rusqlite::params![data_source_id.0, name],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
+    };
+    for expected in [
+        "Program Files",
+        "Program Files (x86)",
+        "System Volume Information",
+    ] {
+        assert!(
+            root_child_count(expected)? > 0,
+            "{env_name}: imported catalog has no root child named {expected:?}"
+        );
+    }
+    for alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
+        assert_eq!(
+            root_child_count(alias)?,
+            0,
+            "{env_name}: imported catalog exposes DOS alias {alias:?}"
+        );
+    }
+    Ok(())
 }
 
 fn assert_catalog_integrity(counts: &CatalogCounts, env_name: &str, data_source_id: &DataSourceId) {

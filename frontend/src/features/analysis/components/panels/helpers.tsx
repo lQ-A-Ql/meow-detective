@@ -161,10 +161,10 @@ export function AnalysisExtractionProgress({
       ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
       : 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   return (
-    <div className={`rounded-none border px-3 py-2 ${tone}`}>
-      <div className="mb-2 flex items-center justify-between gap-3 text-[11px]">
-        <span className="font-light text-forensics-text">{progress.label}</span>
-        <span className="font-mono">
+    <div className={`min-w-0 max-w-full overflow-hidden rounded-none border px-3 py-2 ${tone}`}>
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-3 text-[11px]">
+        <span className="min-w-0 truncate font-light text-forensics-text" title={progress.label}>{progress.label}</span>
+        <span className="shrink-0 font-mono">
           {totalCandidates > 0
             ? `${processedCandidates}/${totalCandidates} (${value}%)`
             : extractionProgressLabel(progress.status)}
@@ -183,14 +183,14 @@ export function AnalysisExtractionProgress({
           <span>fallback={progress.textFallbackCandidateCount}</span>
         ) : null}
       </div>
-      {progress.detail ? <div className="mt-1 text-[11px] text-forensics-muted">{progress.detail}</div> : null}
+      {progress.detail ? <div className="mt-1 break-words text-[11px] text-forensics-muted">{progress.detail}</div> : null}
       {progress.currentPath ? (
         <div className="mt-1 truncate font-mono text-[10px] text-forensics-muted" title={progress.currentPath}>
           {progress.currentPath}
         </div>
       ) : null}
       {progress.error ? (
-        <div className="mt-1 text-[11px] text-forensics-error-text">{progress.error}</div>
+        <div className="mt-1 break-words text-[11px] text-forensics-error-text">{progress.error}</div>
       ) : null}
       {progress.warnings.length > 0 ? (
         <div className="mt-1 text-[11px]">{progress.warnings.slice(0, 2).join('；')}</div>

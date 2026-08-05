@@ -12,13 +12,13 @@ use crate::file_service::{
         descriptor_for_file_with_cache, descriptor_image_path_candidates,
         exact_partition_candidate, format_image_range_error, is_exfat_filesystem_kind,
         is_fat_filesystem_kind, is_linux_filesystem_kind, looks_like_exfat_boot_sector,
-        read_bounded, read_seekable_range, try_read_bitlocker_ntfs_range_for_descriptor,
-        try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
-        try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
-        try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
-        try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
-        validate_readable_file_entry, PreviewDescriptor, PreviewPartitionCandidate,
-        PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
+        mft_file_locator_from_entry_id, read_bounded, read_seekable_range,
+        try_read_bitlocker_ntfs_range_for_descriptor, try_read_exfat_image_range_for_descriptor,
+        try_read_exfat_image_range_for_entry, try_read_fat_image_range_for_descriptor,
+        try_read_fat_image_range_for_entry, try_read_linux_image_range_for_descriptor,
+        try_read_linux_image_range_for_entry, try_read_ntfs_image_range_for_descriptor,
+        try_read_ntfs_image_range_for_entry, validate_readable_file_entry, PreviewDescriptor,
+        PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
     },
     FileServiceError,
 };
@@ -84,16 +84,25 @@ where
         let entry = repo
             .find_by_id(file_id)?
             .ok_or_else(|| FileServiceError::not_found("File not found"))?;
-        if entry.size.is_some_and(|size| offset > size) {
+        if !catalog_size_allows_offset(&entry.id.0, offset, entry.size) {
             return Err(FileServiceError::other("Read offset exceeds file size"));
         }
         return read_file_bytes_for_entry(context.conn(), &repo, &entry, offset, length);
     }
     let descriptor = descriptor_for_file_with_cache(&mut context, file_id)?;
-    if offset > descriptor.size {
+    if !catalog_size_allows_offset(&descriptor.file_id, offset, Some(descriptor.size)) {
         return Err(FileServiceError::other("Read offset exceeds file size"));
     }
     read_file_bytes_for_descriptor_with_context(&mut context, &descriptor, offset, length)
+}
+
+pub(crate) fn catalog_size_allows_offset(
+    file_id: &str,
+    offset: u64,
+    catalog_size: Option<u64>,
+) -> bool {
+    mft_file_locator_from_entry_id(file_id).is_some()
+        || catalog_size.is_none_or(|size| offset <= size)
 }
 
 fn read_file_bytes_for_entry(

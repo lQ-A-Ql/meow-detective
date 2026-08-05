@@ -1,13 +1,16 @@
 use super::*;
 use super::{
-    batch_sink::prepare_mft_insert,
+    batch_sink::{prepare_mft_insert, EnumerationStats},
     ntfs::{
         mft_scan::{
             open_partition_evidence_reader, read_ntfs_mft_parameters_at, read_ntfs_mft_stream,
         },
         path_reconstruction::{
-            mft_directory_index_backfill_actions, update_mft_staging_paths_via_sqlite, MftCatalog,
+            directory_reference_sequence_matches,
+            mft_directory_index_backfill_actions_with_representatives,
+            update_mft_staging_paths_via_sqlite, MftCatalog, MftDirectoryIndexBackfillAction,
         },
+        size_reconciliation::apply_authoritative_size,
         validation::validate_mft_staging_shape,
     },
     partition_work::enumerate_single_partition,
@@ -222,6 +225,7 @@ fn fake_mft_record(record_number: u64, parent_ref: u64, name: &str, is_dir: bool
         system: false,
         read_only: false,
         encrypted: false,
+        has_attribute_list: false,
         deleted: false,
         is_valid: true,
     }
@@ -253,6 +257,19 @@ fn fake_ntfs_index_entry(
         read_only: false,
         encrypted: false,
     }
+}
+
+fn mft_directory_index_backfill_actions(
+    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    directory_ref: u64,
+    entries: Vec<NtfsDirectoryEntry>,
+) -> Vec<MftDirectoryIndexBackfillAction> {
+    mft_directory_index_backfill_actions_with_representatives(
+        path_map,
+        &mut HashMap::new(),
+        directory_ref,
+        entries,
+    )
 }
 
 #[test]
@@ -322,6 +339,38 @@ fn ntfs_mft_fast_path_writes_partition_prefixed_ids() {
         )
         .unwrap();
     assert!(encrypted);
+}
+
+#[test]
+fn authoritative_external_data_size_updates_staging_and_statistics() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+    ))
+    .unwrap();
+    let mut record = fake_mft_record(34_971, 5, "SOFTWARE", false);
+    record.size = 8_192;
+    record.has_attribute_list = true;
+    stage_mft_records_for_test(&conn, &[record], "ds-size", 3);
+    let mut stats = EnumerationStats {
+        file_count: 1,
+        total_size: 8_192,
+        ..EnumerationStats::default()
+    };
+
+    assert!(
+        apply_authoritative_size(&conn, "ds-size", 3, 34_971, 8_192, 75_497_472, &mut stats,)
+            .unwrap()
+    );
+    let size: u64 = conn
+        .query_row(
+            "SELECT size FROM file_entries WHERE id = 'mft:3:34971'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(size, 75_497_472);
+    assert_eq!(stats.total_size, 75_497_472);
 }
 
 #[test]
@@ -517,6 +566,51 @@ fn ntfs_directory_index_backfill_preserves_canonical_name_priority() {
         path_map.get("42"),
         Some(&(Some("5".to_string()), "Program Files".to_string(), true))
     );
+}
+
+#[test]
+fn ntfs_hardlink_representative_is_deterministic_across_parent_order() {
+    fn select(order: &[(u64, &str)]) -> HashMap<String, (Option<String>, String, bool)> {
+        let mut path_map = HashMap::from([
+            ("5".to_string(), (None, "/".to_string(), true)),
+            (
+                "10".to_string(),
+                (Some("5".to_string()), "Alpha".to_string(), true),
+            ),
+            (
+                "20".to_string(),
+                (Some("5".to_string()), "Beta".to_string(), true),
+            ),
+        ]);
+        let mut representatives = HashMap::new();
+        for (parent, name) in order {
+            mft_directory_index_backfill_actions_with_representatives(
+                &mut path_map,
+                &mut representatives,
+                *parent,
+                vec![fake_ntfs_index_entry(99, *name, false)],
+            );
+        }
+        path_map
+    }
+
+    let forward = select(&[(20, "zeta.txt"), (10, "alpha.txt")]);
+    let reverse = select(&[(10, "alpha.txt"), (20, "zeta.txt")]);
+
+    assert_eq!(forward.get("99"), reverse.get("99"));
+    assert_eq!(
+        forward.get("99"),
+        Some(&(Some("10".to_string()), "alpha.txt".to_string(), false))
+    );
+}
+
+#[test]
+fn ntfs_directory_reference_sequence_rejects_reused_record() {
+    let sequences = HashMap::from([(42, 7)]);
+
+    assert!(directory_reference_sequence_matches(&sequences, 42, 7));
+    assert!(!directory_reference_sequence_matches(&sequences, 42, 8));
+    assert!(directory_reference_sequence_matches(&sequences, 99, 1));
 }
 
 #[test]

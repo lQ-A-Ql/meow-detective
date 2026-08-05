@@ -24,7 +24,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
 
   return (
     <div
-      className={`z-10 shrink-0 border-t border-forensics-border bg-forensics-panel transition-[height] duration-150 ${
+      className={`z-10 min-w-0 shrink-0 overflow-hidden border-t border-forensics-border bg-forensics-panel transition-[height] duration-150 ${
         model.drawerOpen ? 'flex flex-col' : 'h-8 overflow-hidden'
       }`}
       style={model.drawerOpen ? { height: `${height}px` } : undefined}
@@ -65,7 +65,10 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
             onMouseDown={onResizeStart}
             title="拖拽调整抽屉高度"
           />
-          <div className="grid min-h-0 flex-1 grid-cols-3 overflow-hidden border-t border-forensics-border">
+          <div
+            data-testid="bottom-drawer-panels"
+            className="grid min-h-0 min-w-0 flex-1 grid-cols-3 overflow-hidden border-t border-forensics-border"
+          >
             <BottomDrawerJobs model={model} analysisProgress={analysisProgress} />
             <BottomDrawerIssues errorIssues={model.errorIssues} warningIssues={model.warningIssues} />
             <BottomDrawerTrace trace={model.trace} />

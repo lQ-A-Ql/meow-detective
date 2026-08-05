@@ -114,6 +114,17 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('41%')).toBeDefined();
   });
 
+  it('clips every drawer column to its grid track', () => {
+    const { container } = render(<BottomDrawer />);
+
+    expect(screen.getByTestId('bottom-drawer-panels').className).toContain('min-w-0');
+    const viewports = container.querySelectorAll('[data-slot="scroll-area-viewport"]');
+    expect(viewports).toHaveLength(3);
+    viewports.forEach((viewport) => {
+      expect(viewport.className).toContain('overflow-x-hidden');
+    });
+  });
+
   it('truncates the collapsed headline while preserving its full status as a tooltip', () => {
     mocks.uiStore.mockReturnValue({
       drawerOpen: false,

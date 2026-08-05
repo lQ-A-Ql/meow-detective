@@ -75,6 +75,8 @@ describe('TextViewer', () => {
     const renderedSegments = screen.getAllByTestId('text-line-content');
     expect(renderedSegments.length).toBeGreaterThan(1);
     expect(renderedSegments.every((segment) => (segment.textContent?.length ?? 0) <= 8 * 1024)).toBe(true);
+    expect(renderedSegments.every((segment) => segment.parentElement?.className.includes('whitespace-pre'))).toBe(true);
+    expect(renderedSegments.every((segment) => !segment.parentElement?.className.includes('whitespace-pre-wrap'))).toBe(true);
     expect(screen.queryByText('A'.repeat(20_000))).toBeNull();
   });
 

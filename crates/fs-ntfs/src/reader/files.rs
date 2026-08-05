@@ -31,14 +31,17 @@ impl crate::NtfsReader {
         }
         let record = self.read_mft_record(inode)?;
         validate_file_record(&record, inode)?;
-        let extents = self.collect_unnamed_data_extents_from_base(inode, record)?;
+        let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
         if extents.is_empty() {
             return Ok(Vec::new());
         }
         self.read_data_extents_range(&extents, offset, length)
     }
 
-    fn read_data_extents_to_vec(&self, extents: &[DataAttributeExtent]) -> io::Result<Vec<u8>> {
+    pub(crate) fn read_data_extents_to_vec(
+        &self,
+        extents: &[DataAttributeExtent],
+    ) -> io::Result<Vec<u8>> {
         let data_length = data_extents_logical_size(extents, self.cluster_size)?;
         if data_length as usize > MAX_BUFFERED_FILE_BYTES {
             return Err(invalid_fs_data(format!(
@@ -64,6 +67,15 @@ impl crate::NtfsReader {
             output,
             data_extents_declared_size(extents, self.cluster_size)?,
         ))
+    }
+
+    /// Return the declared length of an inode's unnamed `$DATA` stream.
+    pub fn file_size_by_inode(&self, inode: u64) -> io::Result<Option<u64>> {
+        let extents = self.collect_unnamed_data_extents(inode)?;
+        if extents.is_empty() {
+            return Ok(None);
+        }
+        data_extents_declared_size(&extents, self.cluster_size).map(Some)
     }
 
     fn read_data_extent_to_vec(&self, extent: &DataAttributeExtent) -> io::Result<Vec<u8>> {

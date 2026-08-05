@@ -4,27 +4,26 @@ use std::path::Path;
 
 use evidence_core::ReaderInfo;
 
-use super::{
-    build_chunk_table, build_segment_path, find_geometry, should_read_section_content, E01Reader,
-    SECTION_DESCRIPTOR_SIZE,
+use super::{build_segment_path, E01Reader, SECTION_DESCRIPTOR_SIZE};
+use crate::table::{
+    build_chunk_table, find_geometry, should_read_section_content, E01Geometry, E01Section,
 };
-use crate::table::E01Geometry;
 
-type Section = (String, u64, u64, Vec<u8>);
+const MAX_SECTION_CONTENT_BYTES: u64 = 64 * 1024 * 1024;
+
+struct SegmentSections {
+    file_len: u64,
+    sections: Vec<E01Section>,
+}
 
 impl E01Reader {
     pub fn open(path: &Path) -> io::Result<Self> {
         let mut segment_files = open_segment_files(path)?;
-        let file_len = verify_header(&mut segment_files[0])?;
-        let sections = read_sections(&mut segment_files[0], file_len)?;
-        let geometry = geometry(&sections)?;
+        let segment_sections = read_all_segment_sections(&mut segment_files)?;
+        let geometry = geometry(&segment_sections)?;
         let total_bytes = geometry.total_bytes()?;
-        let chunk_table = select_chunk_table(
-            &sections,
-            &segment_files,
-            total_bytes,
-            geometry.chunk_bytes()?,
-        )?;
+        let chunk_table =
+            select_chunk_table(&segment_sections, total_bytes, geometry.chunk_bytes()?)?;
         Ok(Self::from_parts(
             ReaderInfo {
                 path: path.to_path_buf(),
@@ -58,38 +57,59 @@ fn open_segment_files(path: &Path) -> io::Result<Vec<std::fs::File>> {
     Ok(files)
 }
 
-fn verify_header(file: &mut std::fs::File) -> io::Result<u64> {
+fn read_all_segment_sections(
+    segment_files: &mut [std::fs::File],
+) -> io::Result<Vec<SegmentSections>> {
+    segment_files
+        .iter_mut()
+        .enumerate()
+        .map(|(segment_index, file)| {
+            let file_len = verify_header(file, segment_index)?;
+            let sections = read_sections(file, file_len, segment_index)?;
+            Ok(SegmentSections { file_len, sections })
+        })
+        .collect()
+}
+
+fn verify_header(file: &mut std::fs::File, segment_index: usize) -> io::Result<u64> {
     let file_len = file.seek(SeekFrom::End(0))?;
     file.seek(SeekFrom::Start(0))?;
     let mut header = [0u8; 13];
-    file.read_exact(&mut header)?;
+    file.read_exact(&mut header).map_err(|error| {
+        invalid_data(format!(
+            "E01 segment {segment_index} header is truncated: {error}"
+        ))
+    })?;
     if &header[0..3] != b"EVF" {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "not EWF"));
+        return Err(invalid_data(format!(
+            "E01 segment {segment_index} has an invalid EWF signature"
+        )));
     }
     Ok(file_len)
 }
 
-fn read_sections(file: &mut std::fs::File, file_len: u64) -> io::Result<Vec<Section>> {
+fn read_sections(
+    file: &mut std::fs::File,
+    file_len: u64,
+    segment_index: usize,
+) -> io::Result<Vec<E01Section>> {
     let mut visited = HashSet::new();
-    let mut next_offset = 13u64;
+    let mut next_offset = Some(13u64);
     let mut sections = Vec::new();
-    while next_offset > 0 && next_offset < file_len {
-        if !visited.insert(next_offset) {
-            tracing::warn!(
-                "E01: cycle detected in section chain at offset 0x{:X}, stopping",
-                next_offset
-            );
-            break;
+    while let Some(offset) = next_offset {
+        if !visited.insert(offset) {
+            return Err(invalid_data(format!(
+                "E01 segment {segment_index} section chain cycles at offset {offset}"
+            )));
         }
-        let Some(section) = read_section(file, file_len, next_offset)? else {
-            break;
+        let section = read_section(file, file_len, segment_index, offset)?;
+        let done = section.kind == "done";
+        next_offset = if done {
+            None
+        } else {
+            valid_next_offset(section.next_offset, offset, file_len, segment_index)?
         };
-        let done = section.0 == "done";
-        next_offset = valid_next_offset(section.2, file_len);
         sections.push(section);
-        if done {
-            break;
-        }
     }
     Ok(sections)
 }
@@ -97,104 +117,146 @@ fn read_sections(file: &mut std::fs::File, file_len: u64) -> io::Result<Vec<Sect
 fn read_section(
     file: &mut std::fs::File,
     file_len: u64,
+    segment_index: usize,
     offset: u64,
-) -> io::Result<Option<Section>> {
+) -> io::Result<E01Section> {
+    let descriptor_end = offset
+        .checked_add(SECTION_DESCRIPTOR_SIZE)
+        .ok_or_else(|| invalid_data("E01 section descriptor offset overflows u64"))?;
+    if descriptor_end > file_len {
+        return Err(invalid_data(format!(
+            "E01 segment {segment_index} section descriptor at offset {offset} is truncated"
+        )));
+    }
     file.seek(SeekFrom::Start(offset))?;
     let mut descriptor = [0u8; SECTION_DESCRIPTOR_SIZE as usize];
-    if file.read_exact(&mut descriptor).is_err() {
-        return Ok(None);
-    }
-    let section_type = String::from_utf8_lossy(&descriptor[0..16])
+    file.read_exact(&mut descriptor)?;
+    let kind = String::from_utf8_lossy(&descriptor[0..16])
         .trim_end_matches('\0')
         .to_string();
-    let next = u64::from_le_bytes(descriptor[16..24].try_into().unwrap_or([0; 8]));
+    let next_offset = u64::from_le_bytes(descriptor[16..24].try_into().unwrap_or([0; 8]));
     let section_size = u64::from_le_bytes(descriptor[24..32].try_into().unwrap_or([0; 8]));
-    let content = read_section_content(file, file_len, offset, next, section_size, &section_type)?;
-    Ok(Some((section_type, offset, next, content)))
+    let content = read_section_content(file, file_len, offset, section_size, &kind)?;
+    Ok(E01Section {
+        kind,
+        segment_index,
+        start_offset: offset,
+        next_offset,
+        content,
+    })
 }
 
 fn read_section_content(
     file: &mut std::fs::File,
     file_len: u64,
     offset: u64,
-    next: u64,
     section_size: u64,
     section_type: &str,
 ) -> io::Result<Vec<u8>> {
     if !should_read_section_content(section_type) {
         return Ok(Vec::new());
     }
-    let data_start = offset.saturating_add(SECTION_DESCRIPTOR_SIZE);
-    let size_from_section = section_size.saturating_sub(SECTION_DESCRIPTOR_SIZE);
-    let size_from_next = if next > data_start && next <= file_len {
-        next - data_start
-    } else {
-        0
-    };
-    let read_size = bounded_section_size(size_from_section, size_from_next, file_len, data_start);
-    let mut content = vec![0u8; read_size as usize];
-    if read_size > 0 {
-        file.seek(SeekFrom::Start(data_start))?;
-        file.read_exact(&mut content)?;
+    if section_size < SECTION_DESCRIPTOR_SIZE {
+        return Err(invalid_data(format!(
+            "E01 {section_type} section at offset {offset} has invalid length {section_size}"
+        )));
     }
+    let read_size = section_size - SECTION_DESCRIPTOR_SIZE;
+    if read_size > MAX_SECTION_CONTENT_BYTES {
+        return Err(invalid_data(format!(
+            "E01 {section_type} section content exceeds the {MAX_SECTION_CONTENT_BYTES} byte limit"
+        )));
+    }
+    let data_start = offset
+        .checked_add(SECTION_DESCRIPTOR_SIZE)
+        .ok_or_else(|| invalid_data("E01 section content offset overflows u64"))?;
+    let data_end = data_start
+        .checked_add(read_size)
+        .ok_or_else(|| invalid_data("E01 section content range overflows u64"))?;
+    if data_end > file_len {
+        return Err(invalid_data(format!(
+            "E01 {section_type} section at offset {offset} extends beyond its segment"
+        )));
+    }
+    let mut content = vec![0u8; read_size as usize];
+    file.seek(SeekFrom::Start(data_start))?;
+    file.read_exact(&mut content)?;
     Ok(content)
 }
 
-fn bounded_section_size(
-    size_from_section: u64,
-    size_from_next: u64,
+fn valid_next_offset(
+    next: u64,
+    current: u64,
     file_len: u64,
-    data_start: u64,
-) -> u64 {
-    let candidate = if size_from_section > 0 && size_from_next > 0 {
-        size_from_section.min(size_from_next)
-    } else {
-        size_from_section.max(size_from_next)
-    };
-    candidate
-        .min(10_000_000)
-        .min(file_len.saturating_sub(data_start))
-}
-
-fn valid_next_offset(next: u64, file_len: u64) -> u64 {
-    if next > 0 && next < file_len {
-        next
-    } else {
-        0
+    segment_index: usize,
+) -> io::Result<Option<u64>> {
+    if next == 0 {
+        return Ok(None);
     }
+    let descriptor_end = next
+        .checked_add(SECTION_DESCRIPTOR_SIZE)
+        .ok_or_else(|| invalid_data("E01 next section offset overflows u64"))?;
+    if next <= current || descriptor_end > file_len {
+        return Err(invalid_data(format!(
+            "E01 segment {segment_index} has invalid next section offset {next} after {current}"
+        )));
+    }
+    Ok(Some(next))
 }
 
-fn geometry(sections: &[Section]) -> io::Result<E01Geometry> {
-    let views = sections
+fn geometry(segments: &[SegmentSections]) -> io::Result<E01Geometry> {
+    let views = segments
         .iter()
-        .map(|(kind, _, _, content)| (kind.clone(), content.clone()))
+        .flat_map(|segment| &segment.sections)
+        .map(|section| (section.kind.clone(), section.content.clone()))
         .collect::<Vec<_>>();
     find_geometry(&views)
 }
 
 fn select_chunk_table(
-    sections: &[Section],
-    segment_files: &[std::fs::File],
+    segments: &[SegmentSections],
     total_bytes: u64,
     chunk_bytes: u64,
 ) -> io::Result<Vec<(usize, u64, bool, u64)>> {
-    let segment_sizes = segment_files
-        .iter()
-        .map(|file| file.metadata().map(|metadata| metadata.len()).unwrap_or(0))
-        .collect::<Vec<_>>();
-    let expected_chunks = total_bytes.div_ceil(chunk_bytes);
-    let mut table = build_chunk_table(sections, &segment_sizes, "table");
-    if table.len() as u64 != expected_chunks {
-        let fallback = build_chunk_table(sections, &segment_sizes, "table2");
-        if fallback.len() as u64 == expected_chunks {
-            table = fallback;
-        }
+    let mut table = Vec::new();
+    for segment in segments {
+        table.extend(select_segment_chunk_table(segment)?);
     }
-    if table.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "no usable chunk table found",
-        ));
+    let expected_chunks = total_bytes.div_ceil(chunk_bytes);
+    if table.len() as u64 != expected_chunks {
+        return Err(invalid_data(format!(
+            "E01 chunk table count mismatch: expected {expected_chunks}, found {} across {} segment(s)",
+            table.len(),
+            segments.len()
+        )));
     }
     Ok(table)
+}
+
+fn select_segment_chunk_table(
+    segment: &SegmentSections,
+) -> io::Result<Vec<(usize, u64, bool, u64)>> {
+    let primary = build_chunk_table(&segment.sections, segment.file_len, "table");
+    match primary {
+        Ok(entries) if !entries.is_empty() => Ok(entries),
+        Ok(_) => select_backup_table(segment, None),
+        Err(primary_error) => select_backup_table(segment, Some(primary_error)),
+    }
+}
+
+fn select_backup_table(
+    segment: &SegmentSections,
+    primary_error: Option<io::Error>,
+) -> io::Result<Vec<(usize, u64, bool, u64)>> {
+    match build_chunk_table(&segment.sections, segment.file_len, "table2") {
+        Ok(entries) if !entries.is_empty() => Ok(entries),
+        Ok(_) => Err(primary_error.unwrap_or_else(|| {
+            invalid_data("E01 segment contains no usable table or table2 section")
+        })),
+        Err(backup_error) => Err(primary_error.unwrap_or(backup_error)),
+    }
+}
+
+fn invalid_data(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
 }

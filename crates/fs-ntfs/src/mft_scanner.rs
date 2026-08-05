@@ -26,6 +26,7 @@ pub struct MftRecord {
     pub system: bool,
     pub read_only: bool,
     pub encrypted: bool,
+    pub has_attribute_list: bool,
     pub deleted: bool,
     pub is_valid: bool,
 }
@@ -102,6 +103,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
     let mut fn_flags: Option<u32> = None;
     let mut si_flags: Option<u32> = None;
     let mut unnamed_data_encrypted = false;
+    let mut has_attribute_list = false;
     let mut selected_name_rank: Option<u8> = None;
 
     let mut pos = attr_off;
@@ -127,9 +129,10 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                     si_flags = read_u32_at(content, STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET);
                 }
             }
+            0x20 => has_attribute_list = true,
             0x30 => {
                 if let Some(content) = resident_content(rec, pos, len) {
-                    if content.len() >= 0x52 {
+                    if content.len() >= 0x42 {
                         let name_len = content[0x40] as usize;
                         let name_ns = content[0x41]; // namespace: 0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS
                         let name_start = 0x42;
@@ -191,11 +194,6 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         pos += len;
     }
 
-    let final_created = created_at.or(fn_created);
-    let final_modified = modified_at.or(fn_modified);
-    let final_accessed = accessed_at.or(fn_accessed);
-    let final_changed = changed_at.or(fn_changed);
-
     if !record_name_is_valid(deleted, &name, record_number) {
         return None;
     }
@@ -213,16 +211,17 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         parent_ref,
         is_dir,
         size,
-        created_at: final_created,
-        modified_at: final_modified,
-        accessed_at: final_accessed,
-        changed_at: final_changed,
+        created_at: created_at.or(fn_created),
+        modified_at: modified_at.or(fn_modified),
+        accessed_at: accessed_at.or(fn_accessed),
+        changed_at: changed_at.or(fn_changed),
         hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
         system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
         read_only: file_is_read_only(si_flags, fn_flags),
         encrypted: si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || unnamed_data_encrypted,
+        has_attribute_list,
         deleted,
         is_valid: true,
     })

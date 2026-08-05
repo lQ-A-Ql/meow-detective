@@ -383,6 +383,35 @@ fn build_indx_record(entries_data: &[u8], sectors: usize) -> Vec<u8> {
     rec
 }
 
+fn write_resident_index_bitmap(
+    record: &mut [u8],
+    offset: usize,
+    name: Option<&str>,
+    attribute_id: u16,
+) -> usize {
+    let name_units = name
+        .map(|value| value.encode_utf16().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let name_offset = 0x18usize;
+    let content_offset = (name_offset + name_units.len() * 2 + 7) & !7;
+    let attr_len = content_offset + 8;
+    record[offset..offset + 4].copy_from_slice(&0xB0u32.to_le_bytes());
+    record[offset + 4..offset + 8].copy_from_slice(&(attr_len as u32).to_le_bytes());
+    record[offset + 9] = name_units.len() as u8;
+    record[offset + 0x0A..offset + 0x0C].copy_from_slice(&(name_offset as u16).to_le_bytes());
+    record[offset + 0x0E..offset + 0x10].copy_from_slice(&attribute_id.to_le_bytes());
+    record[offset + 0x10..offset + 0x14].copy_from_slice(&1u32.to_le_bytes());
+    record[offset + 0x14..offset + 0x16].copy_from_slice(&(content_offset as u16).to_le_bytes());
+    for (index, character) in name_units.iter().enumerate() {
+        let start = offset + name_offset + index * 2;
+        record[start..start + 2].copy_from_slice(&character.to_le_bytes());
+    }
+    record[offset + content_offset] = 1;
+    let end = offset + attr_len;
+    record[end..end + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    end
+}
+
 /// Build a fixture with root directory containing:
 /// $INDEX_ROOT → 3 entries
 /// $INDEX_ALLOCATION → INDX record with 5 more entries (non-resident, data run)
@@ -417,6 +446,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     boot[13] = spc;
     boot[0x30..0x38].copy_from_slice(&mft_cluster.to_le_bytes());
     boot[0x40..0x44].copy_from_slice(&(-10i32).to_le_bytes());
+    boot[0x44] = 3;
 
     // MFT record 5 — root directory with $INDEX_ROOT + $INDEX_ALLOCATION
     let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
@@ -450,7 +480,8 @@ fn build_index_alloc_fixture() -> Vec<u8> {
                                                                   // length placeholder
     let idxa_len_pos = idxa + 4;
     rec5[idxa + 8] = 1; // non-resident flag
-                        // data_run_offset = 0x40
+    rec5[idxa + 0x18..idxa + 0x20].copy_from_slice(&2u64.to_le_bytes());
+    // data_run_offset = 0x40
     rec5[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     // allocated_size = 1536
     rec5[idxa + 0x28..idxa + 0x30].copy_from_slice(&1536u64.to_le_bytes());
@@ -471,6 +502,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     // Patch $INDEX_ALLOCATION length
     let idxa_len = (run_pos + 6 - idxa) as u32;
     rec5[idxa_len_pos..idxa_len_pos + 4].copy_from_slice(&idxa_len.to_le_bytes());
+    write_resident_index_bitmap(rec5, run_pos + 6, None, 0);
 
     // Write INDX record at the data run target
     data[indx_offset..indx_offset + indx_rec.len()].copy_from_slice(&indx_rec);
@@ -538,6 +570,7 @@ fn data_run_parse_zero_length_runs_skipped() {
     boot[13] = spc;
     boot[0x30..0x38].copy_from_slice(&mft_cluster.to_le_bytes());
     boot[0x40..0x44].copy_from_slice(&(-10i32).to_le_bytes());
+    boot[0x44] = 1;
 
     let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
     rec5[0..4].copy_from_slice(b"FILE");
@@ -571,6 +604,7 @@ fn data_run_parse_zero_length_runs_skipped() {
     rec5[run + 8] = 0x00; // end of runs
     let idxa_len = (run + 9 - idxa) as u32;
     rec5[idxa + 4..idxa + 8].copy_from_slice(&idxa_len.to_le_bytes());
+    write_resident_index_bitmap(rec5, run + 9, None, 0);
 
     data[indx_offset..indx_offset + indx_rec.len()].copy_from_slice(&indx_rec);
 
@@ -798,6 +832,7 @@ fn build_attribute_list_external_data_fixture() -> Vec<u8> {
     let data_attr = 0x68usize;
     rec7[data_attr..data_attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
     rec7[data_attr + 8] = 1;
+    rec7[data_attr + 0x0E..data_attr + 0x10].copy_from_slice(&1u16.to_le_bytes());
     rec7[data_attr + 0x20..data_attr + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec7[data_attr + 0x28..data_attr + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
     rec7[data_attr + 0x30..data_attr + 0x38]
@@ -813,6 +848,94 @@ fn build_attribute_list_external_data_fixture() -> Vec<u8> {
 
     data[data_offset..data_offset + file_content.len()].copy_from_slice(file_content);
 
+    data
+}
+
+/// Build a fixture where root's named `$I30/$INDEX_ALLOCATION` stream lives
+/// in an extension MFT record referenced by `$ATTRIBUTE_LIST`.
+fn build_external_index_allocation_fixture() -> Vec<u8> {
+    let cluster_size = 512usize;
+    let mft_cluster = 2u64;
+    let record_size = 1024usize;
+    let root_offset = mft_cluster as usize * cluster_size + 5 * record_size;
+    let extension_offset = mft_cluster as usize * cluster_size + 7 * record_size;
+    let index_cluster = 40u64;
+    let index_offset = index_cluster as usize * cluster_size;
+    let (entries, _) = build_indx_entries(&["SYSTEM", "SOFTWARE"], 100, false);
+    let index_record = build_indx_record(&entries, 2);
+    let mut data = vec![0u8; index_offset + index_record.len()];
+    make_boot(&mut data[0..512]);
+
+    let root = &mut data[root_offset..root_offset + record_size];
+    root[0..4].copy_from_slice(b"FILE");
+    root[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    root[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    root[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+
+    let attr_list = 0x68usize;
+    let list_content_offset = 0x18usize;
+    let list_entry_len = 0x28usize;
+    let list_attr_len = list_content_offset + list_entry_len * 2;
+    root[attr_list..attr_list + 4].copy_from_slice(&0x20u32.to_le_bytes());
+    root[attr_list + 4..attr_list + 8].copy_from_slice(&(list_attr_len as u32).to_le_bytes());
+    root[attr_list + 0x10..attr_list + 0x14]
+        .copy_from_slice(&((list_entry_len * 2) as u32).to_le_bytes());
+    root[attr_list + 0x14..attr_list + 0x16]
+        .copy_from_slice(&(list_content_offset as u16).to_le_bytes());
+    let entry = attr_list + list_content_offset;
+    root[entry..entry + 4].copy_from_slice(&0xA0u32.to_le_bytes());
+    root[entry + 4..entry + 6].copy_from_slice(&(list_entry_len as u16).to_le_bytes());
+    root[entry + 6] = 4;
+    root[entry + 7] = 0x1A;
+    root[entry + 0x10..entry + 0x18].copy_from_slice(&7u64.to_le_bytes());
+    for (index, ch) in "$I30".encode_utf16().enumerate() {
+        root[entry + 0x1A + index * 2..entry + 0x1C + index * 2].copy_from_slice(&ch.to_le_bytes());
+    }
+    let bitmap_entry = entry + list_entry_len;
+    root[bitmap_entry..bitmap_entry + 4].copy_from_slice(&0xB0u32.to_le_bytes());
+    root[bitmap_entry + 4..bitmap_entry + 6]
+        .copy_from_slice(&(list_entry_len as u16).to_le_bytes());
+    root[bitmap_entry + 6] = 4;
+    root[bitmap_entry + 7] = 0x1A;
+    root[bitmap_entry + 0x10..bitmap_entry + 0x18].copy_from_slice(&7u64.to_le_bytes());
+    root[bitmap_entry + 0x18..bitmap_entry + 0x1A].copy_from_slice(&1u16.to_le_bytes());
+    for (index, ch) in "$I30".encode_utf16().enumerate() {
+        root[bitmap_entry + 0x1A + index * 2..bitmap_entry + 0x1C + index * 2]
+            .copy_from_slice(&ch.to_le_bytes());
+    }
+    root[attr_list + list_attr_len..attr_list + list_attr_len + 4]
+        .copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+
+    let extension = &mut data[extension_offset..extension_offset + record_size];
+    extension[0..4].copy_from_slice(b"FILE");
+    extension[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    extension[0x20..0x28].copy_from_slice(&5u64.to_le_bytes());
+    extension[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    extension[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let allocation = 0x68usize;
+    extension[allocation..allocation + 4].copy_from_slice(&0xA0u32.to_le_bytes());
+    extension[allocation + 8] = 1;
+    extension[allocation + 9] = 4;
+    extension[allocation + 0x0A..allocation + 0x0C].copy_from_slice(&0x40u16.to_le_bytes());
+    extension[allocation + 0x18..allocation + 0x20].copy_from_slice(&1u64.to_le_bytes());
+    extension[allocation + 0x20..allocation + 0x22].copy_from_slice(&0x48u16.to_le_bytes());
+    extension[allocation + 0x28..allocation + 0x30]
+        .copy_from_slice(&(index_record.len() as u64).to_le_bytes());
+    extension[allocation + 0x30..allocation + 0x38]
+        .copy_from_slice(&(index_record.len() as u64).to_le_bytes());
+    for (index, ch) in "$I30".encode_utf16().enumerate() {
+        extension[allocation + 0x40 + index * 2..allocation + 0x42 + index * 2]
+            .copy_from_slice(&ch.to_le_bytes());
+    }
+    let run = allocation + 0x48;
+    extension[run] = 0x11;
+    extension[run + 1] = 2;
+    extension[run + 2] = index_cluster as u8;
+    extension[run + 3] = 0;
+    extension[allocation + 4..allocation + 8]
+        .copy_from_slice(&((run + 4 - allocation) as u32).to_le_bytes());
+    write_resident_index_bitmap(extension, run + 4, Some("$I30"), 1);
+    data[index_offset..index_offset + index_record.len()].copy_from_slice(&index_record);
     data
 }
 
@@ -876,6 +999,10 @@ fn read_external_attribute_list_data_by_inode_and_range() {
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let expected = b"external-attribute-list-data-across-extension-record";
+    assert_eq!(
+        ntfs.file_size_by_inode(6).unwrap(),
+        Some(expected.len() as u64)
+    );
 
     let mut file = ntfs.open_file("mft:6").unwrap();
     let mut buf = Vec::new();
@@ -887,6 +1014,112 @@ fn read_external_attribute_list_data_by_inode_and_range() {
 
     let middle = ntfs.read_file_range_by_inode(6, 19, 9).unwrap();
     assert_eq!(middle, b"list-data");
+}
+
+#[test]
+fn attribute_list_sequence_mismatch_is_not_treated_as_empty_data() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec7_offset = 2 * 512 + 7 * 1024;
+    img[rec7_offset + 0x10..rec7_offset + 0x12].copy_from_slice(&1u16.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("FILE sequence mismatch"));
+}
+
+#[test]
+fn attribute_list_base_reference_mismatch_is_not_treated_as_empty_data() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec7_offset = 2 * 512 + 7 * 1024;
+    img[rec7_offset + 0x20..rec7_offset + 0x28].copy_from_slice(&99u64.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("mismatched base reference"));
+}
+
+#[test]
+fn attribute_list_instance_mismatch_is_not_treated_as_empty_data() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec7_offset = 2 * 512 + 7 * 1024;
+    let data_attribute = rec7_offset + 0x68;
+    img[data_attribute + 0x0e..data_attribute + 0x10].copy_from_slice(&2u16.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("identity was not found"));
+}
+
+#[test]
+fn malformed_attribute_list_is_not_treated_as_absent_data() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec6_offset = 2 * 512 + 6 * 1024;
+    let list_entry = rec6_offset + 0x68 + 0x18;
+    img[list_entry + 4..list_entry + 6].copy_from_slice(&0u16.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("entry length"));
+}
+
+#[test]
+fn malformed_attribute_list_content_range_is_rejected() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec6_offset = 2 * 512 + 6 * 1024;
+    let attr_list = rec6_offset + 0x68;
+    img[attr_list + 0x14..attr_list + 0x16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("content range"));
+}
+
+#[test]
+fn truncated_nonresident_attribute_list_header_is_rejected() {
+    let mut img = build_attribute_list_external_data_fixture();
+    let rec6_offset = 2 * 512 + 6 * 1024;
+    let attr_list = rec6_offset + 0x68;
+    img[attr_list + 8] = 1;
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    let error = ntfs.file_size_by_inode(6).unwrap_err();
+
+    assert!(error.to_string().contains("header is truncated"));
+}
+
+#[test]
+fn resident_empty_data_is_distinct_from_absent_data() {
+    let mut img = build_resident_data_fixture();
+    let rec6_offset = 2 * 512 + 6 * 1024;
+    let record = &mut img[rec6_offset..rec6_offset + 1024];
+    let mut position = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    while u32::from_le_bytes(record[position..position + 4].try_into().unwrap()) != 0x80 {
+        position +=
+            u32::from_le_bytes(record[position + 4..position + 8].try_into().unwrap()) as usize;
+    }
+    record[position + 0x10..position + 0x14].copy_from_slice(&0u32.to_le_bytes());
+    let ntfs = NtfsReader::open(Box::new(FakeReader::new(img)), 0).unwrap();
+
+    assert_eq!(ntfs.file_size_by_inode(6).unwrap(), Some(0));
+    assert_eq!(ntfs.file_size_by_inode(5).unwrap(), None);
+}
+
+#[test]
+fn list_external_named_index_allocation_entries() {
+    let img = build_external_index_allocation_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let entries = ntfs.list_root_directory_entries().unwrap();
+    let names = entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["SYSTEM", "SOFTWARE"]);
 }
 
 #[test]
@@ -1146,13 +1379,8 @@ fn par_ref_mismatch_returns_none() {
     rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
     rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
     rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
-    // $FILE_NAME (0x30) at 0x68 with par_ref=99
-    let fn_off = 0x68usize;
-    rec6[fn_off..fn_off + 4].copy_from_slice(&0x30u32.to_le_bytes());
-    rec6[fn_off + 4..fn_off + 8].copy_from_slice(&0x48u32.to_le_bytes()); // length
-    rec6[fn_off + 8] = 0; // resident
-                          // par_ref at attribute start: parent=99
-    rec6[fn_off..fn_off + 8].copy_from_slice(&99u64.to_le_bytes());
+    let end = write_resident_file_name(rec6, 0x68, 99, "DirA");
+    rec6[end..end + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
 
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();

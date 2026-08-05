@@ -28,7 +28,7 @@ describe('AnalysisPanels sub-components', () => {
       const systemInfo = {
         computerName: 'FORENSICS-PC',
         osVersion: 'Windows 11',
-        buildNumber: '22631',
+        buildNumber: '22631.3155',
         registeredOwner: 'admin',
         timezone: 'UTC+8',
         installDate: '2025-01-15',
@@ -42,6 +42,7 @@ describe('AnalysisPanels sub-components', () => {
       render(createElement(SystemInfoPanel, { systemInfo }));
       expect(screen.getByText('FORENSICS-PC')).toBeDefined();
       expect(screen.getByText('Windows 11')).toBeDefined();
+      expect(screen.getByText('22631.3155')).toBeDefined();
       expect(screen.getByText('Ethernet')).toBeDefined();
       expect(screen.getByText(/AA:BB:CC:DD:EE:FF/)).toBeDefined();
     });

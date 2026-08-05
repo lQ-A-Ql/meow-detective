@@ -7,7 +7,7 @@ use crate::utils::{
     index_record_bytes, mft_inode_from_path, mft_record_bytes, read_contiguous_mft_record,
     root_dir_frn,
 };
-use crate::MAX_BUFFERED_FILE_BYTES;
+use crate::{ATTR_TYPE_INDEX_ROOT, MAX_BUFFERED_FILE_BYTES};
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, invalid_fs_data as core_invalid_fs_data, root_node,
     FileSystemReader, FsNode,
@@ -127,83 +127,10 @@ impl NtfsReader {
     /// (non-resident B-Tree) for large directories.
     pub(crate) fn list_dir_by_inode(&self, inode: u64) -> io::Result<Vec<DirEntry>> {
         let rec = self.read_mft_record(inode)?;
-        let mut entries = Vec::new();
-
-        // Walk attributes looking for $INDEX_ROOT (0x90) and $INDEX_ALLOCATION (0xA0)
-        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
-        let mut pos = attr_off;
-        let mut index_root_entries: Option<Vec<DirEntry>> = None;
-        let mut index_alloc_entries: Option<Vec<DirEntry>> = None;
-        let mut saw_a0 = false;
-
-        while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
-            if typ == 0xFFFFFFFF {
-                break;
-            }
-            let len =
-                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
-            if len == 0 || pos + len > rec.len() {
-                break;
-            }
-            if typ == 0xA0 {
-                saw_a0 = true;
-            }
-            if typ == 0x20 && !saw_a0 {
-                tracing::info!(
-                    inode = %inode,
-                    "NTFS directory has $ATTRIBUTE_LIST — $INDEX_ALLOCATION may be in external MFT record"
-                );
-            }
-
-            if typ == 0x90 && pos + 0x18 <= rec.len() {
-                // $INDEX_ROOT is a resident attribute. On real disks, the index
-                // header lives inside the resident content, not directly in the
-                // attribute header. Keep a legacy fallback for older synthetic tests.
-                if let Some(entries) = self.parse_index_root_entries(&rec, pos, len) {
-                    index_root_entries = Some(entries);
-                } else {
-                    let entries_off = u32::from_le_bytes(
-                        rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]),
-                    ) as usize;
-                    let ents_start = pos + 0x10 + entries_off;
-                    if ents_start < pos + len {
-                        index_root_entries = Some(parse_indx_entries(&rec[ents_start..pos + len]));
-                    }
-                }
-            }
-
-            if typ == 0xA0 && pos + 0x40 <= rec.len() {
-                // $INDEX_ALLOCATION — non-resident B-Tree INDX records
-                match self.read_attr_nonresident(pos, &rec) {
-                    Ok(data) => {
-                        if data.is_empty() {
-                            tracing::warn!(
-                                inode = %inode,
-                                "NTFS $INDEX_ALLOCATION returned empty data — large directory entries may be missing"
-                            );
-                        } else {
-                            index_alloc_entries = Some(self.parse_indx_buffer(&data));
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            inode = %inode,
-                            error = %e,
-                            "NTFS $INDEX_ALLOCATION read failed, falling back to $INDEX_ROOT only"
-                        );
-                    }
-                }
-            }
-
-            pos += len;
-        }
-
-        // If this is a directory with only $INDEX_ROOT and no $INDEX_ALLOCATION,
-        // the directory listing may be incomplete (large dirs store entries in
-        // the allocation tree, not the root entry).
-        if !saw_a0 && index_root_entries.is_some() {
-            let root_count = index_root_entries.as_ref().map(|v| v.len()).unwrap_or(0);
+        let index_root_entries = self.index_root_entries_from_record(&rec);
+        let index_alloc_entries = self.index_allocation_entries(inode, &rec)?;
+        if index_alloc_entries.is_empty() && index_root_entries.is_some() {
+            let root_count = index_root_entries.as_ref().map_or(0, Vec::len);
             tracing::warn!(
                 inode = %inode,
                 root_entries = %root_count,
@@ -211,15 +138,37 @@ impl NtfsReader {
             );
         }
 
-        // Merge both index sources before resolving NTFS filename namespaces.
-        if let Some(alloc) = index_alloc_entries {
-            entries.extend(alloc);
-        }
+        let mut entries = index_alloc_entries;
         if let Some(root) = index_root_entries {
             entries.extend(root);
         }
-
         Ok(canonicalize_indx_entries(entries))
+    }
+
+    fn index_root_entries_from_record(&self, record: &[u8]) -> Option<Vec<DirEntry>> {
+        let mut pos = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+        while pos + 8 < record.len() {
+            let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
+            if typ == 0xFFFF_FFFF {
+                break;
+            }
+            let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
+            if len == 0 || pos + len > record.len() {
+                break;
+            }
+            if typ == ATTR_TYPE_INDEX_ROOT && pos + 0x18 <= record.len() {
+                return self.parse_index_root_entries(record, pos, len).or_else(|| {
+                    let entries_off =
+                        u32::from_le_bytes(record[pos + 0x10..pos + 0x14].try_into().ok()?)
+                            as usize;
+                    let entries_start = pos + 0x10 + entries_off;
+                    (entries_start < pos + len)
+                        .then(|| parse_indx_entries(&record[entries_start..pos + len]))
+                });
+            }
+            pos += len;
+        }
+        None
     }
 
     fn parse_index_root_entries(
@@ -248,83 +197,6 @@ impl NtfsReader {
         Some(parse_indx_entries(&content[entries_start..entries_end]))
     }
 
-    /// Scan INDX buffer for INDX records, apply fixup, extract entries.
-    fn parse_indx_buffer(&self, data: &[u8]) -> Vec<DirEntry> {
-        let mut entries = Vec::new();
-        let mut off = 0usize;
-        while off + 0x18 < data.len() {
-            let magic = u32::from_le_bytes(data[off..off + 4].try_into().unwrap_or([0; 4]));
-            // INDX record magic: "INDX" = 0x58444E49 (little-endian)
-            if magic != 0x58444E49 {
-                off += 1;
-                continue;
-            }
-            let upd_off = u16::from_le_bytes([data[off + 4], data[off + 5]]) as usize;
-            let upd_cnt = u16::from_le_bytes([data[off + 6], data[off + 7]]) as usize;
-            if !(2..=64).contains(&upd_cnt) {
-                off += 4;
-                continue;
-            }
-
-            // Apply update sequence fixup. Some synthetic fixtures encode a record
-            // larger than the boot-sector index_record_size, so honor whichever is larger:
-            // the advertised record size or the size implied by the USA count.
-            let record_bytes_from_fixup =
-                upd_cnt.saturating_sub(1) * self.bytes_per_sector as usize;
-            let record_len = (self.index_record_size as usize).max(record_bytes_from_fixup);
-            let copy_len = record_len.min(data.len() - off);
-            let mut rec = data[off..off + copy_len].to_vec();
-            if upd_off + upd_cnt * 2 <= rec.len() {
-                let orig = u16::from_le_bytes([rec[upd_off], rec[upd_off + 1]]);
-                for i in 1..upd_cnt {
-                    let fix_off = i * self.bytes_per_sector as usize - 2;
-                    if fix_off + 2 > rec.len() {
-                        break;
-                    }
-                    let val = u16::from_le_bytes([rec[fix_off], rec[fix_off + 1]]);
-                    if val == orig {
-                        let repl_off = upd_off + 2 + (i - 1) * 2;
-                        if repl_off + 2 <= rec.len() {
-                            rec[fix_off] = rec[repl_off];
-                            rec[fix_off + 1] = rec[repl_off + 1];
-                        }
-                    }
-                }
-            }
-
-            // Parse entries from the fixed-up record
-            // Index entry list starts at +0x18
-            let list_start = 0x18usize;
-            if list_start + 12 <= rec.len() {
-                let ent_off = u32::from_le_bytes(
-                    rec[list_start..list_start + 4].try_into().unwrap_or([0; 4]),
-                ) as usize;
-                let ent_end_off = u32::from_le_bytes(
-                    rec[list_start + 4..list_start + 8]
-                        .try_into()
-                        .unwrap_or([0; 4]),
-                ) as usize;
-                let buf_end_off = u32::from_le_bytes(
-                    rec[list_start + 8..list_start + 12]
-                        .try_into()
-                        .unwrap_or([0; 4]),
-                ) as usize;
-                let idxe_start = list_start + ent_off;
-                let idxe_end = (list_start + ent_end_off)
-                    .min(list_start + buf_end_off)
-                    .min(rec.len());
-                if idxe_start < idxe_end {
-                    let mut indx_entries = parse_indx_entries(&rec[idxe_start..idxe_end]);
-                    entries.append(&mut indx_entries);
-                }
-            }
-
-            // Move ahead by one index record after processing a valid INDX record.
-            off += record_len.max(self.bytes_per_sector as usize);
-        }
-        entries
-    }
-
     pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
         Ok(child_nodes_with_parent_path(
             self.list_dir_by_inode(5)?.into_iter().map(|e| e.node),
@@ -341,17 +213,34 @@ impl NtfsReader {
         inode: u64,
     ) -> io::Result<Vec<NtfsDirectoryEntry>> {
         Ok(self
+            .list_directory_entries_with_sequence_by_inode(inode)?
+            .into_iter()
+            .map(|(entry, _)| entry)
+            .collect())
+    }
+
+    pub fn list_directory_entries_with_sequence_by_inode(
+        &self,
+        inode: u64,
+    ) -> io::Result<Vec<(NtfsDirectoryEntry, u16)>> {
+        Ok(self
             .list_dir_by_inode(inode)?
             .into_iter()
-            .map(|entry| NtfsDirectoryEntry {
-                name: entry.node.name,
-                is_dir: entry.node.is_dir,
-                size: entry.node.size,
-                mft_ref: entry.mft_ref,
-                hidden: entry.node.hidden,
-                system: entry.node.system,
-                read_only: entry.node.read_only,
-                encrypted: entry.node.encrypted,
+            .map(|entry| {
+                let sequence = entry.mft_sequence;
+                (
+                    NtfsDirectoryEntry {
+                        name: entry.node.name,
+                        is_dir: entry.node.is_dir,
+                        size: entry.node.size,
+                        mft_ref: entry.mft_ref,
+                        hidden: entry.node.hidden,
+                        system: entry.node.system,
+                        read_only: entry.node.read_only,
+                        encrypted: entry.node.encrypted,
+                    },
+                    sequence,
+                )
             })
             .collect())
     }

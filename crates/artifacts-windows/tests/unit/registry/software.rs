@@ -19,7 +19,7 @@ fn software_current_version_hive() -> Vec<u8> {
         0x400,
         "CurrentVersion",
         &[],
-        &[0x600, 0x680, 0x700],
+        &[0x600, 0x680, 0x700, 0x780],
     );
     write_string_value(
         &mut data,
@@ -30,6 +30,7 @@ fn software_current_version_hive() -> Vec<u8> {
     );
     write_string_value(&mut data, 0x680, "CurrentBuild", "26000", 0x980);
     write_dword_value(&mut data, 0x700, "InstallDate", 1_700_000_000);
+    write_dword_value(&mut data, 0x780, "UBR", 26100);
     data
 }
 
@@ -42,6 +43,7 @@ fn extracts_software_identity_fields() {
     .unwrap();
     assert_eq!(info.product_name.unwrap().value, "Windows Evidence Edition");
     assert_eq!(info.current_build.unwrap().value, "26000");
+    assert_eq!(info.update_build_revision.unwrap().value, "26100");
     assert!(info.install_date.unwrap().value.starts_with("2023-"));
 }
 
@@ -75,21 +77,33 @@ fn committed_software_fixture_remains_compatible() {
 #[test]
 fn transaction_log_overrides_matching_field_only() {
     let data = software_current_version_hive();
-    let log = build_synthetic_log1(&[SyntheticEntry {
-        operation: 2,
-        sequence_number: 50,
-        timestamp: Some(0x01db_a000_0000_0000),
-        key_path: "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
-            .to_string(),
-        value_name: Some("ProductName".to_string()),
-        data_before: Some(encode_utf16le("Windows Evidence Edition")),
-        data_after: Some(encode_utf16le("Windows New")),
-    }]);
+    let key_path = "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+    let log = build_synthetic_log1(&[
+        SyntheticEntry {
+            operation: 2,
+            sequence_number: 50,
+            timestamp: Some(0x01db_a000_0000_0000),
+            key_path: key_path.to_string(),
+            value_name: Some("ProductName".to_string()),
+            data_before: Some(encode_utf16le("Windows Evidence Edition")),
+            data_after: Some(encode_utf16le("Windows New")),
+        },
+        SyntheticEntry {
+            operation: 2,
+            sequence_number: 51,
+            timestamp: Some(0x01db_a000_0000_0001),
+            key_path: key_path.to_string(),
+            value_name: Some("UBR".to_string()),
+            data_before: Some(26100u32.to_le_bytes().to_vec()),
+            data_after: Some(26101u32.to_le_bytes().to_vec()),
+        },
+    ]);
     let info =
         extract_software_hive_fields_with_txlog(&data, "Windows/System32/config/SOFTWARE", &log)
             .unwrap();
     assert_eq!(info.product_name.unwrap().value, "Windows New");
     assert_eq!(info.current_build.unwrap().value, "26000");
+    assert_eq!(info.update_build_revision.unwrap().value, "26101");
     assert!(info.txlog_applied);
     let product_name_timestamp = info
         .txlog_timestamps
@@ -103,6 +117,12 @@ fn transaction_log_overrides_matching_field_only() {
         .find(|timestamp| timestamp.field_name == "CurrentBuild")
         .unwrap();
     assert!(!current_build_timestamp.txlog_used);
+    let revision_timestamp = info
+        .txlog_timestamps
+        .iter()
+        .find(|timestamp| timestamp.field_name == "UBR")
+        .unwrap();
+    assert!(revision_timestamp.txlog_used);
 }
 
 fn set_last_write(data: &mut [u8], offset: u32, filetime: u64) {
