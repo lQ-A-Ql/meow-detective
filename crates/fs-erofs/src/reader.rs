@@ -123,6 +123,20 @@ impl ErofsReader {
     }
 
     fn open_inode_data(&self, inode: &ErofsInode) -> Result<ErofsFile> {
+        if inode.is_chunk_based() {
+            if !self.superblock.supports_chunked_files() {
+                return Err(ErofsError::Invalid(format!(
+                    "inode {} uses chunk mapping without the superblock feature",
+                    inode.nid
+                )));
+            }
+            return ErofsFile::new_chunked(
+                Arc::clone(&self.source),
+                self.volume_offset,
+                &self.superblock,
+                inode,
+            );
+        }
         ErofsFile::new(
             Arc::clone(&self.source),
             self.volume_offset,

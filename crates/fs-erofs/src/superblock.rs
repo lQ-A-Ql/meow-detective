@@ -5,8 +5,9 @@ use crate::{ErofsError, Result, EROFS_BLOCK_SIZE, EROFS_MAGIC};
 const SUPERBLOCK_OFFSET: u64 = 1024;
 const SUPERBLOCK_BYTES: usize = 144;
 const SUPERBLOCK_CHECKSUM_FEATURE: u32 = 0x0000_0001;
+const FEATURE_INCOMPAT_CHUNKED_FILE: u32 = 0x0000_0004;
 const FEATURE_INCOMPAT_48BIT: u32 = 0x0000_0080;
-const FEATURE_INCOMPAT_SUPPORTED: u32 = FEATURE_INCOMPAT_48BIT;
+const FEATURE_INCOMPAT_SUPPORTED: u32 = FEATURE_INCOMPAT_CHUNKED_FILE | FEATURE_INCOMPAT_48BIT;
 const CHECKSUM_SEED: u32 = 0x5045_b54a;
 const CHECKSUM_START: usize = 8;
 const CHECKSUM_END: usize = 3072;
@@ -92,6 +93,10 @@ impl ErofsSuperblock {
             feature_incompat,
         };
         validate_layout(&superblock)
+    }
+
+    pub(crate) fn supports_chunked_files(&self) -> bool {
+        self.feature_incompat & FEATURE_INCOMPAT_CHUNKED_FILE != 0
     }
 }
 

@@ -1,6 +1,7 @@
 //! Read-only EROFS access for Android evidence sources.
 
 mod checksum;
+mod chunk;
 mod directory;
 mod error;
 mod file;

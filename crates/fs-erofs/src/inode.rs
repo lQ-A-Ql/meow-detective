@@ -23,6 +23,7 @@ pub(crate) struct ErofsInode {
     pub(crate) size: u64,
     pub(crate) data_layout: u8,
     pub(crate) start_block: u64,
+    pub(crate) chunk_format: Option<u16>,
     pub(crate) source_offset: u64,
     pub(crate) inode_size: usize,
     pub(crate) xattr_size: usize,
@@ -54,13 +55,23 @@ impl ErofsInode {
         } else {
             u64::from(read_u32(bytes, 8, "compact inode size")?)
         };
-        let start_low = u64::from(read_u32(bytes, 16, "inode start block")?);
-        let start_high =
-            if mode & MODE_TYPE_MASK != MODE_DIRECTORY && format & FORMAT_NLINK_ONE != 0 {
-                u64::from(read_u16(bytes, 6, "inode start block high bits")?)
-            } else {
-                0
-            };
+        let (start_block, chunk_format) = if data_layout == LAYOUT_CHUNK {
+            if read_u16(bytes, 18, "inode chunk reserved field")? != 0 {
+                return Err(ErofsError::Invalid(format!(
+                    "inode {nid} chunk reserved field is non-zero"
+                )));
+            }
+            (0, Some(read_u16(bytes, 16, "inode chunk format")?))
+        } else {
+            let start_low = u64::from(read_u32(bytes, 16, "inode start block")?);
+            let start_high =
+                if mode & MODE_TYPE_MASK != MODE_DIRECTORY && format & FORMAT_NLINK_ONE != 0 {
+                    u64::from(read_u16(bytes, 6, "inode start block high bits")?)
+                } else {
+                    0
+                };
+            (start_low | start_high << 32, None)
+        };
         let xattr_count = usize::from(read_u16(bytes, 2, "inode xattr count")?);
         let xattr_size = if xattr_count == 0 {
             0
@@ -74,7 +85,8 @@ impl ErofsInode {
             mode,
             size,
             data_layout,
-            start_block: start_low | start_high << 32,
+            start_block,
+            chunk_format,
             source_offset,
             inode_size,
             xattr_size,
@@ -95,19 +107,19 @@ impl ErofsInode {
 
     pub(crate) fn require_uncompressed(&self, operation: &str) -> Result<()> {
         match self.data_layout {
-            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE => Ok(()),
+            LAYOUT_FLAT_PLAIN | LAYOUT_FLAT_INLINE | LAYOUT_CHUNK => Ok(()),
             LAYOUT_COMPRESSED_FULL | LAYOUT_COMPRESSED_COMPACT => Err(ErofsError::Unsupported(
                 format!("compressed {operation} for inode {}", self.nid),
             )),
-            LAYOUT_CHUNK => Err(ErofsError::Unsupported(format!(
-                "chunk-based {operation} for inode {}",
-                self.nid
-            ))),
             _ => Err(ErofsError::Unsupported(format!(
                 "unknown {operation} layout for inode {}",
                 self.nid
             ))),
         }
+    }
+
+    pub(crate) fn is_chunk_based(&self) -> bool {
+        self.data_layout == LAYOUT_CHUNK
     }
 
     pub(crate) fn inline_data_offset(&self) -> Result<Option<u64>> {

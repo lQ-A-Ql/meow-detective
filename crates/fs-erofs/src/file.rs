@@ -1,9 +1,22 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
+use crate::chunk::ErofsChunkFile;
+use crate::inode::ErofsInode;
 use crate::io::{block_offset, SharedReader};
-use crate::{ErofsError, Result};
+use crate::{ErofsError, ErofsSuperblock, Result};
 
 pub(crate) struct ErofsFile {
+    storage: ErofsFileStorage,
+    size: u64,
+    cursor: u64,
+}
+
+enum ErofsFileStorage {
+    Flat(ErofsFlatFile),
+    Chunked(ErofsChunkFile),
+}
+
+struct ErofsFlatFile {
     source: SharedReader,
     volume_offset: u64,
     block_size: usize,
@@ -12,11 +25,67 @@ pub(crate) struct ErofsFile {
     external_size: u64,
     inline_offset: Option<u64>,
     size: u64,
-    cursor: u64,
 }
 
 impl ErofsFile {
     pub(crate) fn new(
+        source: SharedReader,
+        volume_offset: u64,
+        block_size: usize,
+        block_count: u64,
+        start_block: u64,
+        inline_offset: Option<u64>,
+        size: u64,
+    ) -> Result<Self> {
+        Ok(Self {
+            storage: ErofsFileStorage::Flat(ErofsFlatFile::new(
+                source,
+                volume_offset,
+                block_size,
+                block_count,
+                start_block,
+                inline_offset,
+                size,
+            )?),
+            size,
+            cursor: 0,
+        })
+    }
+
+    pub(crate) fn new_chunked(
+        source: SharedReader,
+        volume_offset: u64,
+        superblock: &ErofsSuperblock,
+        inode: &ErofsInode,
+    ) -> Result<Self> {
+        Ok(Self {
+            storage: ErofsFileStorage::Chunked(ErofsChunkFile::new(
+                source,
+                volume_offset,
+                superblock,
+                inode,
+            )?),
+            size: inode.size,
+            cursor: 0,
+        })
+    }
+
+    fn read_at(&self, offset: u64, output: &mut [u8]) -> Result<usize> {
+        if offset >= self.size || output.is_empty() {
+            return Ok(0);
+        }
+        let requested = output
+            .len()
+            .min(usize::try_from(self.size - offset).unwrap_or(usize::MAX));
+        match &self.storage {
+            ErofsFileStorage::Flat(file) => file.read_at(offset, &mut output[..requested]),
+            ErofsFileStorage::Chunked(file) => file.read_at(offset, &mut output[..requested]),
+        }
+    }
+}
+
+impl ErofsFlatFile {
+    fn new(
         source: SharedReader,
         volume_offset: u64,
         block_size: usize,
@@ -46,22 +115,15 @@ impl ErofsFile {
             external_size,
             inline_offset,
             size,
-            cursor: 0,
         })
     }
 
     fn read_at(&self, offset: u64, output: &mut [u8]) -> Result<usize> {
-        if offset >= self.size || output.is_empty() {
-            return Ok(0);
-        }
-        let requested = output
-            .len()
-            .min(usize::try_from(self.size - offset).unwrap_or(usize::MAX));
         let mut written = 0usize;
-        while written < requested {
+        while written < output.len() {
             let position = offset + written as u64;
             let (physical, available) = self.physical_range(position)?;
-            let length = available.min((requested - written) as u64) as usize;
+            let length = available.min((output.len() - written) as u64) as usize;
             let mut source = self
                 .source
                 .lock()
@@ -70,7 +132,7 @@ impl ErofsFile {
             source.read_exact(&mut output[written..written + length])?;
             written += length;
         }
-        Ok(requested)
+        Ok(written)
     }
 
     fn physical_range(&self, position: u64) -> Result<(u64, u64)> {
