@@ -24,7 +24,7 @@ pub fn schedule_import_for_active_case(
     active: &active_case::ActiveCase,
     import_config: import_precheck::ImportSourceConfig,
     app: Option<&AppHandle>,
-    task_manager: &TaskManager,
+    task_manager: Arc<TaskManager>,
     max_import_workers: Option<usize>,
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,

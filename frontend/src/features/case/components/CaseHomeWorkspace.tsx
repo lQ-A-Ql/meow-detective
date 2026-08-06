@@ -71,7 +71,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
       <div className="flex min-h-0 flex-1">
         <RecentTasksPanel runningJob={model.runningJob} completedJobs={model.completedJobs} partialJobCount={model.partialJobCount} />
         <div className="flex min-h-0 w-1/2 flex-col bg-forensics-panel">
-          <DataSourcesPanel dataSources={model.dataSources} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onDelete={model.deleteDataSource} />
+          <DataSourcesPanel dataSources={model.dataSources} hashJobs={model.evidenceHashJobs} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onDelete={model.deleteDataSource} />
           <RecentObjectsPanel recentObjects={model.recentObjects} />
         </div>
       </div>

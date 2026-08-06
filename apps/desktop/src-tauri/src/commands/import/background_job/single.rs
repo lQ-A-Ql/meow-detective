@@ -16,11 +16,13 @@ use super::{
     types::BackgroundImportJob,
 };
 use crate::events::event_bridge;
+use crate::state::TaskManager;
 
 pub(crate) fn run_background_import_job(
     job: BackgroundImportJob,
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
+    task_manager: Arc<TaskManager>,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
@@ -93,6 +95,14 @@ pub(crate) fn run_background_import_job(
                 .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
+            }
+            if let Err(error) = super::evidence_hash::schedule_pending_evidence_hashes(
+                &job.case_root,
+                &job.case_id.0,
+                app,
+                task_manager,
+            ) {
+                tracing::warn!(error = %error.message, "Failed to schedule evidence hash jobs after import");
             }
             Ok(())
         }

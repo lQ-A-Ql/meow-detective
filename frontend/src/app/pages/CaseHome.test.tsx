@@ -439,4 +439,53 @@ describe('CaseHome page', () => {
     const matches = screen.getAllByText('导入数据源');
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('shows evidence hash progress on the matching data source', async () => {
+    mocks.currentCase.mockReturnValue(mockQueryState({
+      data: {
+        id: 'case-001',
+        name: 'Test Case',
+        number: '2026-001',
+        examiner: 'Test Examiner',
+        createdAt: '2026-05-14T08:30:00Z',
+        updatedAt: '2026-05-16T11:20:00Z',
+      },
+    }));
+    mocks.caseMetrics.mockReturnValue(mockQueryState({
+      data: { dataSourceCount: 1, indexedFileCount: 0, timelineEventCount: 0, artifactCount: 0 },
+    }));
+    mocks.dataSources.mockReturnValue(mockQueryState({
+      data: [{
+        id: 'ds-1',
+        name: 'disk.E01',
+        kind: 'e01',
+        sourcePath: 'D:/evidence/disk.E01',
+        importedAt: '2026-05-14T08:30:00Z',
+        platform: 'windows',
+        hashStatus: 'pending',
+      }],
+    }));
+    mocks.recentCases.mockReturnValue(mockQueryState({ data: [] }));
+    mocks.recentObjects.mockReturnValue(mockQueryState({ data: [] }));
+    mocks.jobsSnapshot.mockReturnValue(mockQueryState({
+      data: [{
+        id: 'hash-job-1',
+        name: 'Evidence SHA-256',
+        scope: 'data source ds-1',
+        progress: 42,
+        status: 'running',
+        detail: 'source=ds-1; hashing 42%',
+        warningCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        partial: false,
+      }],
+    }));
+    mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
+
+    await renderPageAsync();
+
+    expect(screen.getByText('后台计算中')).toBeDefined();
+    expect(screen.getAllByText('42%').length).toBeGreaterThanOrEqual(1);
+  });
 });

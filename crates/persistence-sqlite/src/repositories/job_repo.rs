@@ -48,6 +48,24 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
+    pub fn has_active_kind_with_detail_prefix(
+        &self,
+        kind: &str,
+        detail_prefix: &str,
+    ) -> DbResult<bool> {
+        let exists = self.conn.query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM jobs
+                 WHERE kind = ?1
+                   AND detail LIKE ?2 || '%'
+                   AND status IN ('running', 'pending', 'cancelling')
+             )",
+            params![kind, detail_prefix],
+            |row| row.get::<_, bool>(0),
+        )?;
+        Ok(exists)
+    }
+
     pub fn update_outcome_counts(
         &self,
         id: &JobId,

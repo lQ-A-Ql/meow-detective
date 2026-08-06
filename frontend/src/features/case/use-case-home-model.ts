@@ -19,6 +19,7 @@ import { useAppSettings } from '@/features/settings/hooks';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 import { readLocalSettings } from '@/lib/settings';
 import type { ImportDataSourceRequest } from '@/types/models';
+import type { EvidenceHashJobView } from './types';
 
 function mutationError(error: unknown): string | null {
   return error instanceof Error ? error.message : null;
@@ -53,6 +54,19 @@ export function useCaseHomeModel() {
   const currentCase = currentCaseQuery.data;
   const jobs = jobsQuery.data;
   const runningJobs = useMemo(() => jobs?.filter((job) => job.status === 'running') ?? [], [jobs]);
+  const evidenceHashJobs = useMemo<EvidenceHashJobView[]>(() => {
+    const views: EvidenceHashJobView[] = [];
+    for (const job of jobs ?? []) {
+      if (job.name !== 'Evidence SHA-256' || (job.status !== 'pending' && job.status !== 'running')) {
+        continue;
+      }
+      const sourceId = /^source=([^;]+);/.exec(job.detail)?.[1];
+      if (sourceId) {
+        views.push({ dataSourceId: sourceId, status: job.status, progress: job.progress });
+      }
+    }
+    return views;
+  }, [jobs]);
   const completedJobs = useMemo(() => jobs?.filter((job) => job.status === 'completed') ?? [], [jobs]);
   const partialJobCount = useMemo(() => jobs?.filter((job) => job.partial).length ?? 0, [jobs]);
   const recentCases = useMemo(() => recentCasesQuery.data ?? [], [recentCasesQuery.data]);
@@ -107,6 +121,7 @@ export function useCaseHomeModel() {
     dataSources: dataSourcesQuery.data,
     deleteCase,
     deleteDataSource: deleteDataSourceMutation.mutate,
+    evidenceHashJobs,
     editingDataSourceId,
     editingDataSourceName,
     importDataSource,

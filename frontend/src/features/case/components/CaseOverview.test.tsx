@@ -43,4 +43,56 @@ describe('DataSourcesPanel', () => {
     expect(screen.getByText('failed 1')).toBeTruthy();
     expect(screen.getByText('deferred 1')).toBeTruthy();
   });
+
+  it('shows live evidence hash progress for the matching data source', () => {
+    render(
+      <DataSourcesPanel
+        dataSources={[{ ...dataSource, hashStatus: 'pending' }]}
+        hashJobs={[{ dataSourceId: dataSource.id, status: 'running', progress: 42 }]}
+        editingDataSourceId={undefined}
+        editingDataSourceName=""
+        setEditingDataSourceId={vi.fn()}
+        setEditingDataSourceName={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('后台计算中')).toBeTruthy();
+    expect(screen.getByText('42%')).toBeTruthy();
+  });
+
+  it('shows the complete evidence hash after the background job finishes', () => {
+    const digest = 'a'.repeat(64);
+    render(
+      <DataSourcesPanel
+        dataSources={[{ ...dataSource, hashStatus: 'hashed', sourceHash: digest }]}
+        editingDataSourceId={undefined}
+        editingDataSourceName=""
+        setEditingDataSourceId={vi.fn()}
+        setEditingDataSourceName={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('已完成')).toBeTruthy();
+    expect(screen.getByTestId(`source-hash-${dataSource.id}`).textContent).toBe(digest);
+  });
+
+  it('shows a failed evidence hash state', () => {
+    render(
+      <DataSourcesPanel
+        dataSources={[{ ...dataSource, hashStatus: 'failed' }]}
+        editingDataSourceId={undefined}
+        editingDataSourceName=""
+        setEditingDataSourceId={vi.fn()}
+        setEditingDataSourceName={vi.fn()}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('计算失败')).toBeTruthy();
+  });
 });

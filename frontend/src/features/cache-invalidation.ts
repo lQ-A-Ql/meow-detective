@@ -91,7 +91,7 @@ const partialResultProjectionKeys: Record<PartialResultKind, ProjectionKey[]> = 
   timelineBuckets: ['timeline'],
   artifactFamily: ['artifacts', 'timeline'],
   searchIndex: ['search'],
-  evidenceHash: ['caseMetrics', 'reports'],
+  evidenceHash: ['caseMetrics', 'caseDataSources', 'reports'],
 };
 
 function invalidateProjectionKeys(queryClient: QueryInvalidator, keys: ProjectionKey[]) {

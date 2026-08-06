@@ -103,6 +103,20 @@ describe('projection cache invalidation', () => {
     expect(invalidatedKeys(invalidateSpy)).toEqual([['timeline']]);
   });
 
+  it('refreshes case data sources when evidence hashing completes', () => {
+    const { queryClient, invalidateSpy } = createClient();
+    const result: Pick<PartialResult, 'kind' | 'freshness'> = { kind: 'evidenceHash', freshness: 'ready' };
+
+    invalidatePartialResultQueries(queryClient, result);
+    vi.advanceTimersByTime(300);
+
+    expect(invalidatedKeys(invalidateSpy)).toEqual([
+      ['case', 'metrics'],
+      ['case', 'data-sources'],
+      ['reports'],
+    ]);
+  });
+
   it('does not invalidate deferred partial results', () => {
     const { queryClient, invalidateSpy } = createClient();
     const result: Pick<PartialResult, 'kind' | 'freshness'> = { kind: 'timelineBuckets', freshness: 'deferred' };

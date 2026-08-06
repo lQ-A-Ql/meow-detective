@@ -226,6 +226,14 @@ impl<'a> DataSourceRepo<'a> {
         )?)
     }
 
+    pub fn case_id(&self, data_source_id: &DataSourceId) -> DbResult<CaseId> {
+        Ok(CaseId(self.conn.query_row(
+            "SELECT case_id FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| row.get(0),
+        )?))
+    }
+
     pub fn source_fingerprint(&self, data_source_id: &DataSourceId) -> DbResult<Option<String>> {
         Ok(self.conn.query_row(
             "SELECT source_hash_sha256 FROM data_sources WHERE id = ?1",
@@ -263,6 +271,27 @@ impl<'a> DataSourceRepo<'a> {
              WHERE id = ?3",
             params![import_state, last_error, data_source_id.0],
         )?;
+        Ok(())
+    }
+
+    pub fn update_source_hash(
+        &self,
+        data_source_id: &DataSourceId,
+        source_hash: Option<&str>,
+        status: DataSourceHashStatus,
+    ) -> DbResult<()> {
+        let updated = self.conn.execute(
+            "UPDATE data_sources
+             SET source_hash_sha256 = ?1, hash_status = ?2
+             WHERE id = ?3",
+            params![source_hash, hash_status_to_str(&status), data_source_id.0],
+        )?;
+        if updated != 1 {
+            return Err(crate::connection::DbError::System(format!(
+                "data source not found: {}",
+                data_source_id.0
+            )));
+        }
         Ok(())
     }
 

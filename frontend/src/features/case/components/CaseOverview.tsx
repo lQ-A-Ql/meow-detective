@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, PencilLine, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -6,6 +6,7 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { InlineProgressRow } from '@/components/status/InlineProgressRow';
 import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
 import type { DataSourceSummary, DataSourcePartition, JobSnapshot, RecentObject } from '@/types/models';
+import type { EvidenceHashJobView } from '../types';
 
 // ── Shared helper ──
 
@@ -126,6 +127,7 @@ export function RecentTasksPanel({
 
 export interface DataSourcesPanelProps {
   dataSources: DataSourceSummary[] | undefined;
+  hashJobs?: EvidenceHashJobView[];
   editingDataSourceId: string | undefined;
   editingDataSourceName: string;
   setEditingDataSourceId: (id: string | undefined) => void;
@@ -136,6 +138,7 @@ export interface DataSourcesPanelProps {
 
 export function DataSourcesPanel({
   dataSources,
+  hashJobs = [],
   editingDataSourceId,
   editingDataSourceName,
   setEditingDataSourceId,
@@ -154,6 +157,8 @@ export function DataSourcesPanel({
           dataSources.map((source) => {
             const isEditing = editingDataSourceId === source.id;
             const partitionCount = source.partitions?.length ?? 0;
+            const hashJob = hashJobs.find((job) => job.dataSourceId === source.id);
+            const hashStatus = source.hashStatus?.toLowerCase();
             return (
               <div key={source.id} className="border-b border-forensics-border-light px-4 py-3 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
@@ -218,6 +223,41 @@ export function DataSourcesPanel({
                     )}
                     <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{source.kind}</div>
                     <div className="mt-1 text-[11px] text-forensics-muted font-mono break-all">{source.sourcePath}</div>
+                    <div className="mt-2 border border-forensics-border-light bg-forensics-panel px-2.5 py-2">
+                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+                        <Hash size={11} />
+                        <span>证据 SHA-256</span>
+                      </div>
+                      {hashJob ? (
+                        <div className="mt-2">
+                          <InlineProgressRow
+                            title={hashJob.status === 'pending' ? '等待计算' : '后台计算中'}
+                            subtitle="导入完成后自动计算"
+                            detail={`${hashJob.progress}%`}
+                            progress={hashJob.progress}
+                          />
+                        </div>
+                      ) : ['hashed', 'recorded', 'ready'].includes(hashStatus ?? '') && source.sourceHash ? (
+                        <div className="mt-1.5">
+                          <div className="flex items-center gap-1 text-[10px] text-forensics-success-text">
+                            <CheckCircle2 size={11} />
+                            <span>已完成</span>
+                          </div>
+                          <div className="mt-1 break-all font-mono text-[10px] leading-4 text-forensics-text" data-testid={`source-hash-${source.id}`}>
+                            {source.sourceHash}
+                          </div>
+                        </div>
+                      ) : hashStatus === 'failed' ? (
+                        <div className="mt-1.5 flex items-center gap-1 text-[10px] text-forensics-error-text">
+                          <XCircle size={11} />
+                          <span>计算失败</span>
+                        </div>
+                      ) : hashStatus === 'unavailable' ? (
+                        <div className="mt-1.5 text-[10px] text-forensics-muted">当前数据源不可计算</div>
+                      ) : (
+                        <div className="mt-1.5 text-[10px] text-forensics-muted">等待后台任务</div>
+                      )}
+                    </div>
                     {source.processing ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                         <span

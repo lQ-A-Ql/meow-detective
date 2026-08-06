@@ -63,6 +63,25 @@ fn update_progress_changes_progress() {
 }
 
 #[test]
+fn active_kind_detail_prefix_prevents_duplicate_hash_jobs() {
+    let conn = setup_db();
+    let repo = JobRepo::new(&conn);
+    let id = repo.create("case-1", "Evidence SHA-256").unwrap();
+    repo.update_progress(&id, 1, "source=ds-1; queued").unwrap();
+
+    assert!(repo
+        .has_active_kind_with_detail_prefix("Evidence SHA-256", "source=ds-1; ")
+        .unwrap());
+    assert!(!repo
+        .has_active_kind_with_detail_prefix("Evidence SHA-256", "source=ds-2; ")
+        .unwrap());
+    repo.complete(&id, "done").unwrap();
+    assert!(!repo
+        .has_active_kind_with_detail_prefix("Evidence SHA-256", "source=ds-1; ")
+        .unwrap());
+}
+
+#[test]
 fn complete_sets_status_to_completed() {
     let conn = setup_db();
     let repo = JobRepo::new(&conn);

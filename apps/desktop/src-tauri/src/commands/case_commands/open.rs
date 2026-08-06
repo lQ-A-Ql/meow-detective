@@ -37,6 +37,14 @@ pub async fn open_case(
     restore_enabled_bitlocker_volumes(&app_state, &root, &dto).await;
     transition.commit(&app_state);
     recover_interrupted_jobs(&app_state);
+    if let Err(error) = crate::commands::import::background_job::schedule_pending_evidence_hashes(
+        &root,
+        &dto.id,
+        Some(&app),
+        app_state.task_manager.clone(),
+    ) {
+        tracing::warn!(error = %error.message, "Failed to schedule pending evidence hash jobs after case open");
+    }
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }

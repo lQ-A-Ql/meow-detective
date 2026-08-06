@@ -218,6 +218,30 @@ fn mount_source_identity_queries_round_trip_registered_evidence() {
 }
 
 #[test]
+fn update_source_hash_changes_digest_and_status() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let ds = make_ds("ds-hash", "Hash me");
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    repo.update_source_hash(
+        &DataSourceId("ds-hash".to_string()),
+        Some(&"b".repeat(64)),
+        DataSourceHashStatus::Hashed,
+    )
+    .unwrap();
+    let stored = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
+    assert_eq!(
+        stored[0].provenance.source_hash_sha256,
+        Some("b".repeat(64))
+    );
+    assert_eq!(
+        stored[0].provenance.hash_status,
+        DataSourceHashStatus::Hashed
+    );
+}
+
+#[test]
 fn legacy_null_provenance_loads_safe_defaults() {
     let conn = setup_db();
     conn.execute(

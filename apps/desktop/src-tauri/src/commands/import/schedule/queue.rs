@@ -14,7 +14,7 @@ pub fn schedule_import_for_active_case(
     active: &active_case::ActiveCase,
     import_config: import_precheck::ImportSourceConfig,
     app: Option<&AppHandle>,
-    task_manager: &crate::state::TaskManager,
+    task_manager: Arc<crate::state::TaskManager>,
     max_import_workers: Option<usize>,
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,
@@ -40,6 +40,7 @@ pub fn schedule_import_for_active_case(
     let app_handle = app.cloned();
     let cancel_token = Arc::new(AtomicBool::new(false));
     let background_cancel_token = cancel_token.clone();
+    let task_manager_for_body = Arc::clone(&task_manager);
     let background_job = BackgroundImportJob {
         db_path,
         case_id,
@@ -55,8 +56,13 @@ pub fn schedule_import_for_active_case(
         TaskScope::case(active.meta.id.0.clone(), job_id_string.clone()),
         cancel_token,
         move || {
-            run_background_import_job(background_job, app_handle.as_ref(), background_cancel_token)
-                .map_err(|error| error.message)
+            run_background_import_job(
+                background_job,
+                app_handle.as_ref(),
+                background_cancel_token,
+                task_manager_for_body,
+            )
+            .map_err(|error| error.message)
         },
     ) {
         let detail = format!("Import task registration failed: {error}");
