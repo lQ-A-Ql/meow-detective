@@ -30,3 +30,21 @@ fn session_workspace_rejects_non_uuid_directory_names() {
     assert!(SessionWorkspace::create(case.path(), "emulation-..\\escape").is_err());
     assert!(SessionWorkspace::create(case.path(), "unscoped-session").is_err());
 }
+
+#[test]
+fn remove_best_effort_deletes_the_session_directory() {
+    let case = tempfile::tempdir().unwrap();
+    let workspace = SessionWorkspace::create(
+        case.path(),
+        "emulation-00000000-0000-4000-8000-000000000000",
+    )
+    .unwrap();
+    workspace.write_vmdk("descriptor").unwrap();
+    let root = workspace.root().to_path_buf();
+    let base = root.parent().unwrap().to_path_buf();
+
+    workspace.remove_best_effort();
+
+    assert!(!root.exists());
+    assert!(base.is_dir());
+}

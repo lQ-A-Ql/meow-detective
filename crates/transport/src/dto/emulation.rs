@@ -38,13 +38,9 @@ impl PrepareEmulationRequestDto {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum EmulationStateDto {
-    Preparing,
-    RecoveringOverlay,
-    Mounted,
     DescriptorReady,
     Running,
     Quiescing,
-    Sealed,
     Released,
     FailedCleanupPending,
 }

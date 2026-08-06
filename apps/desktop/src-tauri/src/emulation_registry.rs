@@ -25,13 +25,9 @@ use workspace::{EmulationProvenance, RecoveryMediaProvenance, SessionWorkspace};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmulationState {
-    Preparing,
-    RecoveringOverlay,
-    Mounted,
     DescriptorReady,
     Running,
     Quiescing,
-    Sealed,
     Released,
     FailedCleanupPending,
 }
@@ -116,16 +112,13 @@ impl EmulationRegistry {
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
         let workspace = SessionWorkspace::create(case_root, &session_id)
             .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-        let disk = Arc::new(CowDisk::create(
-            workspace.overlay_path(),
-            provider,
-            identity.clone(),
-            CowDiskConfig::default(),
-        )?);
-        let firmware = detect_firmware(&disk)?;
-        let backend =
-            emulation_backend::start(Arc::clone(&disk), workspace.root(), workspace.mount_point())
-                .map_err(|error| EmulationRegistryError::Backend(error.to_string()))?;
+        let (disk, firmware, backend) = match build_session_disk(&workspace, provider, &identity) {
+            Ok(parts) => parts,
+            Err(error) => {
+                workspace.remove_best_effort();
+                return Err(error);
+            }
+        };
         let materials = prepare_machine_materials(
             &workspace,
             &identity,
@@ -137,6 +130,7 @@ impl EmulationRegistry {
         );
         if let Err(error) = materials {
             let _ = backend.stop();
+            workspace.remove_best_effort();
             return Err(error);
         }
         let status = EmulationSessionStatus {
@@ -202,7 +196,6 @@ impl EmulationRegistry {
         entry.status.state = EmulationState::Quiescing;
         match quiesce_entry(entry) {
             Ok(()) => {
-                entry.status.state = EmulationState::Sealed;
                 entry.status.state = EmulationState::Released;
                 entry.status.error = None;
                 Ok(entry.status.clone())
@@ -287,6 +280,7 @@ impl EmulationRegistry {
             if let Some(backend) = entry.backend.as_ref() {
                 let _ = backend.stop();
             }
+            entry.workspace.remove_best_effort();
             return Err(EmulationRegistryError::AlreadyActive);
         }
         entries.insert(session_id, entry);
@@ -314,6 +308,24 @@ impl EmulationRegistry {
     fn lock_error() -> EmulationRegistryError {
         EmulationRegistryError::LockPoisoned
     }
+}
+
+fn build_session_disk(
+    workspace: &SessionWorkspace,
+    provider: Arc<dyn evidence_block::BlockProvider>,
+    identity: &ParentIdentity,
+) -> Result<(Arc<CowDisk>, VmwareFirmware, EmulationBackendHandle), EmulationRegistryError> {
+    let disk = Arc::new(CowDisk::create(
+        workspace.overlay_path(),
+        provider,
+        identity.clone(),
+        CowDiskConfig::default(),
+    )?);
+    let firmware = detect_firmware(&disk)?;
+    let backend =
+        emulation_backend::start(Arc::clone(&disk), workspace.root(), workspace.mount_point())
+            .map_err(|error| EmulationRegistryError::Backend(error.to_string()))?;
+    Ok((disk, firmware, backend))
 }
 
 fn prepare_machine_materials(

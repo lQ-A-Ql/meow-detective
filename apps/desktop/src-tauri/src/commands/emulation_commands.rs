@@ -138,13 +138,9 @@ fn to_dto(status: EmulationSessionStatus) -> EmulationSessionStatusDto {
 
 fn state_to_dto(state: EmulationState) -> EmulationStateDto {
     match state {
-        EmulationState::Preparing => EmulationStateDto::Preparing,
-        EmulationState::RecoveringOverlay => EmulationStateDto::RecoveringOverlay,
-        EmulationState::Mounted => EmulationStateDto::Mounted,
         EmulationState::DescriptorReady => EmulationStateDto::DescriptorReady,
         EmulationState::Running => EmulationStateDto::Running,
         EmulationState::Quiescing => EmulationStateDto::Quiescing,
-        EmulationState::Sealed => EmulationStateDto::Sealed,
         EmulationState::Released => EmulationStateDto::Released,
         EmulationState::FailedCleanupPending => EmulationStateDto::FailedCleanupPending,
     }

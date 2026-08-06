@@ -15,13 +15,9 @@ import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platfo
 import type { DataSourceSummary, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([
-  'preparing',
-  'recoveringOverlay',
-  'mounted',
   'descriptorReady',
   'running',
   'quiescing',
-  'sealed',
 ]);
 
 export interface EmulationSourceView {

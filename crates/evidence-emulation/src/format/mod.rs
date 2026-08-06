@@ -1,10 +1,5 @@
 mod record;
 mod superblock;
 
-pub(crate) use record::{
-    commit_digest, read_record, write_commit_record, write_data_record, DataPointer, ParsedRecord,
-    PendingData,
-};
-pub(crate) use superblock::{
-    read_superblock, write_superblock_slot, write_superblocks, Superblock, DATA_START,
-};
+pub(crate) use record::{write_commit_record, write_data_record, DataPointer};
+pub(crate) use superblock::{write_superblock_slot, write_superblocks, Superblock};

@@ -542,13 +542,9 @@
       }
     },
     "states": {
-      "preparing": "Preparing",
-      "recoveringOverlay": "Recovering overlay",
-      "mounted": "Disk mounted",
       "descriptorReady": "Ready to launch",
       "running": "Running",
       "quiescing": "Stopping",
-      "sealed": "Sealed",
       "released": "Released",
       "failedCleanupPending": "Cleanup failed"
     },

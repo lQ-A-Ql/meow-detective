@@ -542,13 +542,9 @@
       }
     },
     "states": {
-      "preparing": "准备中",
-      "recoveringOverlay": "恢复 Overlay",
-      "mounted": "磁盘已挂载",
       "descriptorReady": "等待启动",
       "running": "运行中",
       "quiescing": "正在停止",
-      "sealed": "已封存",
       "released": "已释放",
       "failedCleanupPending": "清理失败"
     },

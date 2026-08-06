@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 
 use sha2::{Digest, Sha256};
 
@@ -20,20 +20,10 @@ pub(crate) struct DataPointer {
 
 #[derive(Debug, Clone)]
 pub(crate) struct PendingData {
-    pub(crate) generation: u64,
     pub(crate) cluster_index: u64,
     pub(crate) record_offset: u64,
     pub(crate) pointer: DataPointer,
     pub(crate) payload_checksum: u32,
-}
-
-pub(crate) enum ParsedRecord {
-    Data(PendingData),
-    Commit {
-        generation: u64,
-        count: u64,
-        digest: [u8; 32],
-    },
 }
 
 pub(crate) fn write_data_record(
@@ -53,7 +43,6 @@ pub(crate) fn write_data_record(
         payload,
     )?;
     Ok(PendingData {
-        generation,
         cluster_index,
         record_offset,
         pointer: DataPointer {
@@ -78,60 +67,6 @@ pub(crate) fn write_commit_record(
         pending.len() as u64,
         &digest,
     )
-}
-
-pub(crate) fn read_record(
-    file: &mut File,
-    offset: u64,
-    file_length: u64,
-    cluster_size: u32,
-) -> Result<Option<(ParsedRecord, u64)>, EmulationError> {
-    if offset == file_length || file_length.saturating_sub(offset) < RECORD_HEADER_SIZE as u64 {
-        return Ok(None);
-    }
-    let mut header = [0u8; RECORD_HEADER_SIZE];
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(&mut header)?;
-    validate_header(&header)?;
-    let kind = u16_at(&header, 8);
-    let generation = u64_at(&header, 16);
-    let key = u64_at(&header, 24);
-    let payload_length = u32_at(&header, 32) as usize;
-    let total_length = u64_at(&header, 36);
-    validate_record_lengths(kind, payload_length, total_length, cluster_size)?;
-    let record_end = offset
-        .checked_add(total_length)
-        .ok_or(EmulationError::ArithmeticOverflow)?;
-    if record_end > file_length {
-        return Ok(None);
-    }
-    let mut payload = vec![0u8; payload_length];
-    file.read_exact(&mut payload)?;
-    let expected = u32_at(&header, 44);
-    if record_checksum(&header, &payload) != expected {
-        return Err(corrupt("record checksum mismatch"));
-    }
-    let next = align_up(record_end)?;
-    let parsed = match kind {
-        KIND_DATA => ParsedRecord::Data(PendingData {
-            generation,
-            cluster_index: key,
-            record_offset: offset,
-            pointer: DataPointer {
-                data_offset: offset + RECORD_HEADER_SIZE as u64,
-            },
-            payload_checksum: crc32c::checksum(&payload),
-        }),
-        KIND_COMMIT => ParsedRecord::Commit {
-            generation,
-            count: key,
-            digest: payload
-                .try_into()
-                .map_err(|_| corrupt("invalid commit digest length"))?,
-        },
-        _ => return Err(corrupt("unknown record type")),
-    };
-    Ok(Some((parsed, next)))
 }
 
 pub(crate) fn commit_digest(generation: u64, pending: &[PendingData]) -> [u8; 32] {
@@ -187,33 +122,6 @@ fn aligned_end(file: &mut File) -> Result<u64, EmulationError> {
     Ok(aligned)
 }
 
-fn validate_header(header: &[u8; RECORD_HEADER_SIZE]) -> Result<(), EmulationError> {
-    if &header[..8] != MAGIC
-        || u16_at(header, 10) != VERSION
-        || u32_at(header, 12) != RECORD_HEADER_SIZE as u32
-    {
-        return Err(corrupt("invalid record header"));
-    }
-    Ok(())
-}
-
-fn validate_record_lengths(
-    kind: u16,
-    payload_length: usize,
-    total_length: u64,
-    cluster_size: u32,
-) -> Result<(), EmulationError> {
-    let expected = match kind {
-        KIND_DATA => cluster_size as usize,
-        KIND_COMMIT => 32,
-        _ => return Err(corrupt("unknown record type")),
-    };
-    if payload_length != expected || total_length != (RECORD_HEADER_SIZE + expected) as u64 {
-        return Err(corrupt("record length does not match its type"));
-    }
-    Ok(())
-}
-
 fn record_checksum(header: &[u8; RECORD_HEADER_SIZE], payload: &[u8]) -> u32 {
     crc32c::checksum_parts(&[&header[..44], payload])
 }
@@ -223,20 +131,4 @@ fn align_up(value: u64) -> Result<u64, EmulationError> {
         .checked_add(RECORD_ALIGNMENT - 1)
         .map(|sum| sum & !(RECORD_ALIGNMENT - 1))
         .ok_or(EmulationError::ArithmeticOverflow)
-}
-
-fn u16_at(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap_or([0; 2]))
-}
-
-fn u32_at(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap_or([0; 4]))
-}
-
-fn u64_at(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap_or([0; 8]))
-}
-
-fn corrupt(message: &str) -> EmulationError {
-    EmulationError::CorruptOverlay(message.to_string())
 }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -7,8 +7,8 @@ use std::sync::Arc;
 use evidence_block::BlockProvider;
 
 use crate::format::{
-    commit_digest, read_record, write_commit_record, write_data_record, write_superblock_slot,
-    write_superblocks, DataPointer, ParsedRecord, PendingData, Superblock, DATA_START,
+    write_commit_record, write_data_record, write_superblock_slot, write_superblocks, DataPointer,
+    Superblock,
 };
 use crate::{EmulationError, ParentIdentity};
 
@@ -46,34 +46,6 @@ impl Overlay {
             file,
             header,
             index: HashMap::new(),
-            poisoned: false,
-            unsynced_bytes: 0,
-        })
-    }
-
-    pub(crate) fn open(
-        path: &Path,
-        parent: &ParentIdentity,
-        expected_cluster_size: u32,
-    ) -> Result<Self, EmulationError> {
-        let mut file = OpenOptions::new().read(true).write(true).open(path)?;
-        let header = crate::format::read_superblock(&mut file)?;
-        if &header.parent != parent {
-            return Err(EmulationError::ParentMismatch);
-        }
-        if header.cluster_size != expected_cluster_size {
-            return Err(EmulationError::CorruptOverlay(format!(
-                "cluster size is {}, expected {expected_cluster_size}",
-                header.cluster_size
-            )));
-        }
-        let (index, committed_end) = recover_index(&mut file, &header)?;
-        file.set_len(committed_end)?;
-        file.sync_all()?;
-        Ok(Self {
-            file,
-            header,
-            index,
             poisoned: false,
             unsynced_bytes: 0,
         })
@@ -179,7 +151,7 @@ impl Overlay {
     fn ensure_usable(&self) -> Result<(), EmulationError> {
         if self.poisoned {
             return Err(EmulationError::CorruptOverlay(
-                "overlay must be reopened after a failed write".to_string(),
+                "overlay session must be released and recreated after a failed write".to_string(),
             ));
         }
         Ok(())
@@ -190,68 +162,4 @@ impl Drop for Overlay {
     fn drop(&mut self) {
         let _ = self.sync_pending();
     }
-}
-
-fn recover_index(
-    file: &mut File,
-    header: &Superblock,
-) -> Result<(HashMap<u64, DataPointer>, u64), EmulationError> {
-    if header.generation == 0 {
-        return Ok((HashMap::new(), DATA_START));
-    }
-    let file_length = file.metadata()?.len();
-    let cluster_count = header
-        .parent
-        .logical_length()
-        .div_ceil(u64::from(header.cluster_size));
-    let mut index = HashMap::new();
-    let mut pending = Vec::<PendingData>::new();
-    let mut seen_clusters = HashSet::new();
-    let mut expected_generation = 1u64;
-    let mut offset = DATA_START;
-    while let Some((record, next)) = read_record(file, offset, file_length, header.cluster_size)? {
-        match record {
-            ParsedRecord::Data(data) => {
-                if data.generation != expected_generation || data.cluster_index >= cluster_count {
-                    return Err(corrupt("data record is outside the expected transaction"));
-                }
-                if !seen_clusters.insert(data.cluster_index) {
-                    return Err(corrupt("transaction contains duplicate cluster records"));
-                }
-                pending.push(data);
-            }
-            ParsedRecord::Commit {
-                generation,
-                count,
-                digest,
-            } => {
-                if generation != expected_generation
-                    || count != pending.len() as u64
-                    || digest != commit_digest(generation, &pending)
-                {
-                    return Err(corrupt(
-                        "transaction commit does not match its data records",
-                    ));
-                }
-                for item in pending.drain(..) {
-                    index.insert(item.cluster_index, item.pointer);
-                }
-                seen_clusters.clear();
-                if generation == header.generation {
-                    return Ok((index, next));
-                }
-                expected_generation = expected_generation
-                    .checked_add(1)
-                    .ok_or(EmulationError::ArithmeticOverflow)?;
-            }
-        }
-        offset = next;
-    }
-    Err(corrupt(
-        "overlay ended before the committed generation was recovered",
-    ))
-}
-
-fn corrupt(message: &str) -> EmulationError {
-    EmulationError::CorruptOverlay(message.to_string())
 }

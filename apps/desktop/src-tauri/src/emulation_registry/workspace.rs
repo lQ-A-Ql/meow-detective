@@ -108,6 +108,19 @@ impl SessionWorkspace {
         let json = serde_json::to_vec_pretty(value)?;
         atomic_write(&self.provenance, &json)
     }
+
+    /// Removes the whole session directory after a failed prepare. Best
+    /// effort: a mounted backend must already be stopped by the caller, and a
+    /// removal failure is logged rather than propagated.
+    pub(super) fn remove_best_effort(self) {
+        if let Err(error) = fs::remove_dir_all(&self.root) {
+            tracing::warn!(
+                error = %error,
+                path = %self.root.display(),
+                "emulation workspace rollback removal failed"
+            );
+        }
+    }
 }
 
 #[derive(Serialize)]

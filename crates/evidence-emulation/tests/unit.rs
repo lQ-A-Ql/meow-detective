@@ -52,7 +52,7 @@ fn fixture() -> (Arc<dyn BlockProvider>, ParentIdentity, Vec<u8>) {
 }
 
 #[test]
-fn cow_disk_preserves_parent_and_recovers_committed_cross_cluster_write() {
+fn cow_disk_preserves_parent_and_applies_committed_cross_cluster_write() {
     let directory = tempdir().unwrap();
     let overlay = directory.path().join("overlay.cow");
     let (parent, identity, original) = fixture();
@@ -63,11 +63,9 @@ fn cow_disk_preserves_parent_and_recovers_committed_cross_cluster_write() {
     let disk = CowDisk::create(&overlay, Arc::clone(&parent), identity.clone(), config).unwrap();
     let patch = vec![0xa5; 6000];
     disk.write_all_at(3500, &patch).unwrap();
-    drop(disk);
 
-    let reopened = CowDisk::open(&overlay, parent, identity, config).unwrap();
     let mut actual = vec![0; 10_000];
-    reopened.read_exact_at(0, &mut actual).unwrap();
+    disk.read_exact_at(0, &mut actual).unwrap();
     let mut expected = original[..10_000].to_vec();
     expected[3500..9500].copy_from_slice(&patch);
     assert_eq!(actual, expected);
@@ -107,81 +105,12 @@ fn cow_disk_cluster_cache_serves_repeated_reads_and_tracks_writes() {
 }
 
 #[test]
-fn cow_disk_rejects_a_corrupted_cached_record_on_reopen() {
-    use std::io::{Seek, SeekFrom, Write};
-
-    let directory = tempdir().unwrap();
-    let overlay = directory.path().join("overlay.cow");
-    let (parent, identity, _) = fixture();
-    let config = CowDiskConfig {
-        cluster_size: 4096,
-        max_write_length: 64 * 1024,
-    };
-    let disk = CowDisk::create(&overlay, Arc::clone(&parent), identity.clone(), config).unwrap();
-    disk.write_all_at(0, &[0x77; 512]).unwrap();
-    disk.flush().unwrap();
-    drop(disk);
-
-    let mut file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&overlay)
-        .unwrap();
-    file.seek(SeekFrom::Start(8192 + 48)).unwrap();
-    file.write_all(&[0x76]).unwrap();
-    file.sync_all().unwrap();
-    drop(file);
-
-    let error = match CowDisk::open(&overlay, parent, identity, config) {
-        Ok(_) => panic!("corrupted overlay record was accepted"),
-        Err(error) => error,
-    };
-    assert!(matches!(error, EmulationError::CorruptOverlay(_)));
-}
-
-#[test]
-fn recovery_discards_complete_records_beyond_committed_superblock() {
-    let directory = tempdir().unwrap();
-    let overlay = directory.path().join("overlay.cow");
-    let (parent, identity, original) = fixture();
-    let config = CowDiskConfig {
-        cluster_size: 4096,
-        max_write_length: 64 * 1024,
-    };
-    let disk = CowDisk::create(&overlay, Arc::clone(&parent), identity.clone(), config).unwrap();
-    disk.write_all_at(0, &[0x11; 512]).unwrap();
-    drop(disk);
-    let committed_length = std::fs::metadata(&overlay).unwrap().len();
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&overlay)
-        .unwrap();
-    file.write_all(&[0xcc; 8192]).unwrap();
-    drop(file);
-
-    let reopened = CowDisk::open(&overlay, parent, identity, config).unwrap();
-    assert_eq!(std::fs::metadata(&overlay).unwrap().len(), committed_length);
-    let mut actual = vec![0; 1024];
-    reopened.read_exact_at(0, &mut actual).unwrap();
-    assert_eq!(&actual[..512], &[0x11; 512]);
-    assert_eq!(&actual[512..], &original[512..1024]);
-}
-
-#[test]
 fn parent_identity_mismatch_is_rejected() {
     let directory = tempdir().unwrap();
     let overlay = directory.path().join("overlay.cow");
     let (parent, identity, _) = fixture();
-    CowDisk::create(
-        &overlay,
-        Arc::clone(&parent),
-        identity,
-        CowDiskConfig::default(),
-    )
-    .unwrap();
-    let wrong = ParentIdentity::new(parent.len(), [7; 32]).unwrap();
-    let error = match CowDisk::open(&overlay, parent, wrong, CowDiskConfig::default()) {
+    let wrong = ParentIdentity::new(identity.logical_length() * 2, [7; 32]).unwrap();
+    let error = match CowDisk::create(&overlay, parent, wrong, CowDiskConfig::default()) {
         Ok(_) => panic!("mismatched parent identity was accepted"),
         Err(error) => error,
     };

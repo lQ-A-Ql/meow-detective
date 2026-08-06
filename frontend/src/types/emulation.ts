@@ -1,11 +1,7 @@
 export type EmulationState =
-  | 'preparing'
-  | 'recoveringOverlay'
-  | 'mounted'
   | 'descriptorReady'
   | 'running'
   | 'quiescing'
-  | 'sealed'
   | 'released'
   | 'failedCleanupPending';
 

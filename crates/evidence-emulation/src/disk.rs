@@ -59,25 +59,6 @@ impl CowDisk {
         })
     }
 
-    pub fn open(
-        overlay_path: &Path,
-        parent: Arc<dyn BlockProvider>,
-        identity: ParentIdentity,
-        config: CowDiskConfig,
-    ) -> Result<Self, EmulationError> {
-        validate_config(&identity, &parent, config)?;
-        let overlay = Overlay::open(overlay_path, &identity, config.cluster_size)?;
-        Ok(Self {
-            parent,
-            identity,
-            config,
-            state: Mutex::new(DiskState {
-                overlay,
-                cache: ClusterLru::new(config.cluster_size),
-            }),
-        })
-    }
-
     pub fn len(&self) -> u64 {
         self.identity.logical_length()
     }
