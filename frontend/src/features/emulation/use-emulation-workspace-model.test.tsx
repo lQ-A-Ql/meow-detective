@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
   dataSources: vi.fn(),
   listSessions: vi.fn(),
+  preflight: vi.fn(),
   prepare: vi.fn(),
   launch: vi.fn(),
   release: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/features/case/hooks', () => ({
 }));
 
 vi.mock('@/lib/api/emulation', () => ({
+  getEmulationPreflight: mocks.preflight,
   listEmulationSessions: mocks.listSessions,
   prepareEmulation: mocks.prepare,
   launchEmulation: mocks.launch,
@@ -67,6 +69,11 @@ describe('useEmulationWorkspaceModel', () => {
       partitions: [],
     }]));
     mocks.listSessions.mockResolvedValue([]);
+    mocks.preflight.mockResolvedValue({
+      dataSourceId: 'source-1',
+      installs: [],
+      recommendedBootRoute: 'directSystem',
+    });
     mocks.prepare.mockResolvedValue({ sessionId: 'emulation-1' });
     mocks.launch.mockResolvedValue({ sessionId: 'emulation-1', state: 'running' });
     mocks.release.mockResolvedValue({ sessionId: 'emulation-1', state: 'released' });
@@ -84,6 +91,7 @@ describe('useEmulationWorkspaceModel', () => {
       dataSourceId: 'source-1',
       recoveryIsoPath: undefined,
       allowDirectBoot: true,
+      options: { network: false, clipboard: false, timeSync: false },
     });
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
@@ -103,6 +111,7 @@ describe('useEmulationWorkspaceModel', () => {
       dataSourceId: 'source-1',
       recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
       allowDirectBoot: false,
+      options: { network: false, clipboard: false, timeSync: false },
     });
   });
 

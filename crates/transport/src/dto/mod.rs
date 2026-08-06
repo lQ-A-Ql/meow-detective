@@ -82,7 +82,8 @@ pub use correlation::{
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
 pub use emulation::{
-    EmulationControlModeDto, EmulationSessionStatusDto, EmulationStateDto,
+    EmulationBootRouteDto, EmulationControlModeDto, EmulationInstallDto, EmulationOptionsDto,
+    EmulationPreflightDto, EmulationSessionStatusDto, EmulationStateDto,
     PrepareEmulationRequestDto,
 };
 pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
@@ -121,9 +122,10 @@ pub use notebook::{
 };
 pub use recovery::{
     DeletedFileRecoveryDto, DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto,
-    DeletedRecoveryFailureDto, DeletedRecoveryPageDto, DeletedRecoveryRunDto,
-    DeletedRecoveryScanDto, RecoveryAllocationStateDto, RecoveryCompletenessDto, RecoveryIssueDto,
-    RecoveryIssueSeverityDto, RecoveryProvenanceRangeDto, RecoveryScanStateDto,
+    DeletedRecoveryFailureDto, DeletedRecoveryHashSearchDto, DeletedRecoveryPageDto,
+    DeletedRecoveryRunDto, DeletedRecoveryScanDto, RecoveryAllocationStateDto,
+    RecoveryCompletenessDto, RecoveryHashAlgorithmDto, RecoveryIssueDto, RecoveryIssueSeverityDto,
+    RecoveryProvenanceRangeDto, RecoveryScanStateDto,
 };
 pub use registry::{
     MountPointDto, NtuserInfoDto, RecentDocDto, RegistryRunKeyDto, RegistryTransactionDto,

@@ -6,12 +6,14 @@ fn prepare_request_validates_the_source_and_optional_iso() {
         data_source_id: "source-1".to_string(),
         recovery_iso_path: Some("C:\\Tools\\LaoMaoTao.iso".to_string()),
         allow_direct_boot: false,
+        options: Default::default(),
     };
     assert!(request.validate().is_ok());
     assert!(PrepareEmulationRequestDto {
         data_source_id: "".to_string(),
         recovery_iso_path: None,
         allow_direct_boot: false,
+        options: Default::default(),
     }
     .validate()
     .is_err());
@@ -23,6 +25,7 @@ fn prepare_request_requires_one_unambiguous_boot_authorization() {
         data_source_id: "source-1".to_string(),
         recovery_iso_path: None,
         allow_direct_boot: true,
+        options: Default::default(),
     };
     assert!(direct_boot.validate().is_ok());
 

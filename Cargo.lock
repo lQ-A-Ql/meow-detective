@@ -141,6 +141,7 @@ dependencies = [
  "infrastructure",
  "lopdf",
  "mailparse",
+ "md-5 0.10.6",
  "memory-windows",
  "mimalloc",
  "num_cpus",
@@ -1641,7 +1642,9 @@ version = "0.1.0"
 dependencies = [
  "evidence-core",
  "hex",
+ "md-5 0.10.6",
  "serde",
+ "sha1",
  "sha2 0.10.9",
  "tempfile",
  "testing",
@@ -6795,6 +6798,8 @@ dependencies = [
 name = "winpe-maintenance"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "windows-sys 0.61.2",

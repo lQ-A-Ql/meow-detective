@@ -20,14 +20,30 @@ impl VmwareFirmware {
     }
 }
 
+/// Investigator-selectable guest integrations. All default to off; enabling
+/// one loosens exactly one isolation control and is recorded in the session
+/// provenance.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct VmOptions {
+    /// Attach a host-only virtual NIC. NAT/bridged modes are intentionally
+    /// not offered.
+    pub network: bool,
+    /// Allow copy/paste and drag-and-drop between host and guest.
+    pub clipboard: bool,
+    /// Let VMware Tools synchronize the guest clock with the host.
+    pub time_sync: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmxConfig {
     disk_path: String,
     disk_adapter: VmdkAdapter,
     recovery_iso_path: Option<String>,
+    maintenance_iso_path: Option<String>,
     firmware: VmwareFirmware,
     memory_mib: u32,
     processor_count: u8,
+    options: VmOptions,
 }
 
 impl VmxConfig {
@@ -39,9 +55,11 @@ impl VmxConfig {
             // requiring an image-specific VMware SCSI driver.
             disk_adapter: VmdkAdapter::Ide,
             recovery_iso_path: None,
+            maintenance_iso_path: None,
             firmware,
             memory_mib: 4096,
             processor_count: 2,
+            options: VmOptions::default(),
         })
     }
 
@@ -56,6 +74,24 @@ impl VmxConfig {
         self
     }
 
+    pub fn with_options(mut self, options: VmOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Attaches the generated maintenance CD as the second optical drive. The
+    /// path is an absolute host path (the image lives in the session
+    /// workspace), unlike the relative recovery-media-agnostic disk paths.
+    pub fn with_maintenance_iso(mut self, iso_path: &str) -> Result<Self, EmulationError> {
+        validate_recovery_iso_path(iso_path)?;
+        self.maintenance_iso_path = Some(iso_path.replace('/', "\\"));
+        Ok(self)
+    }
+
+    pub fn options(&self) -> VmOptions {
+        self.options
+    }
+
     pub fn render(&self) -> String {
         let mut output = String::new();
         for (key, value) in self.settings() {
@@ -64,27 +100,33 @@ impl VmxConfig {
         output
     }
 
-    pub fn validate_rendered(value: &str) -> Result<(), EmulationError> {
+    pub fn validate_rendered(
+        value: &str,
+        options: VmOptions,
+        has_maintenance_media: bool,
+    ) -> Result<(), EmulationError> {
         let settings = parse_settings(value)?;
-        for (key, expected) in required_security_settings() {
+        for (key, expected) in base_security_settings()
+            .into_iter()
+            .chain(conditional_security_settings(options))
+        {
             if settings.get(key).map(String::as_str) != Some(expected) {
                 return Err(invalid_vmx(format!("security setting {key} is missing")));
             }
         }
-        if settings
-            .iter()
-            .any(|(key, value)| key.starts_with("ethernet") && value.eq_ignore_ascii_case("TRUE"))
-        {
-            return Err(invalid_vmx("network adapters must remain disabled"));
-        }
+        validate_isolation_exceptions(&settings, options)?;
         validate_disk_settings(&settings)?;
         validate_recovery_media_settings(&settings)?;
+        validate_maintenance_media_settings(&settings, has_maintenance_media)?;
         Ok(())
     }
 
     fn settings(&self) -> BTreeMap<&'static str, String> {
         let mut values = BTreeMap::new();
-        for (key, value) in required_security_settings() {
+        for (key, value) in base_security_settings()
+            .into_iter()
+            .chain(conditional_security_settings(self.options))
+        {
             values.insert(key, value.to_string());
         }
         values.extend([
@@ -120,6 +162,14 @@ impl VmxConfig {
                 ("ide1:0.startConnected", "TRUE".to_string()),
             ]);
         }
+        if let Some(iso_path) = &self.maintenance_iso_path {
+            values.extend([
+                ("ide1:1.deviceType", "cdrom-image".to_string()),
+                ("ide1:1.fileName", iso_path.clone()),
+                ("ide1:1.present", "TRUE".to_string()),
+                ("ide1:1.startConnected", "TRUE".to_string()),
+            ]);
+        }
         values
     }
 
@@ -132,24 +182,84 @@ impl VmxConfig {
     }
 }
 
-fn required_security_settings() -> [(&'static str, &'static str); 15] {
+fn base_security_settings() -> [(&'static str, &'static str); 6] {
     [
-        ("ethernet0.present", "FALSE"),
         ("floppy0.present", "FALSE"),
-        ("isolation.tools.copy.disable", "TRUE"),
-        ("isolation.tools.dnd.disable", "TRUE"),
         ("isolation.tools.hgfs.disable", "TRUE"),
-        ("isolation.tools.paste.disable", "TRUE"),
         ("isolation.tools.setGUIOptions.enable", "FALSE"),
         ("sharedFolder.maxNum", "0"),
         ("sound.present", "FALSE"),
-        ("time.synchronize.continue", "FALSE"),
-        ("time.synchronize.restore", "FALSE"),
-        ("time.synchronize.resume.disk", "FALSE"),
-        ("time.synchronize.shrink", "FALSE"),
-        ("tools.syncTime", "FALSE"),
         ("usb.present", "FALSE"),
     ]
+}
+
+fn conditional_security_settings(options: VmOptions) -> Vec<(&'static str, &'static str)> {
+    let mut settings = Vec::new();
+    if options.network {
+        settings.push(("ethernet0.present", "TRUE"));
+        settings.push(("ethernet0.connectionType", "hostonly"));
+    } else {
+        settings.push(("ethernet0.present", "FALSE"));
+    }
+    if !options.clipboard {
+        settings.push(("isolation.tools.copy.disable", "TRUE"));
+        settings.push(("isolation.tools.dnd.disable", "TRUE"));
+        settings.push(("isolation.tools.paste.disable", "TRUE"));
+    }
+    if options.time_sync {
+        settings.push(("tools.syncTime", "TRUE"));
+    } else {
+        settings.push(("time.synchronize.continue", "FALSE"));
+        settings.push(("time.synchronize.restore", "FALSE"));
+        settings.push(("time.synchronize.resume.disk", "FALSE"));
+        settings.push(("time.synchronize.shrink", "FALSE"));
+        settings.push(("tools.syncTime", "FALSE"));
+    }
+    settings
+}
+
+fn validate_isolation_exceptions(
+    settings: &BTreeMap<String, String>,
+    options: VmOptions,
+) -> Result<(), EmulationError> {
+    let ethernet_true = settings
+        .iter()
+        .any(|(key, value)| key.starts_with("ethernet") && value.eq_ignore_ascii_case("TRUE"));
+    if !options.network && ethernet_true {
+        return Err(invalid_vmx("network adapters must remain disabled"));
+    }
+    if options.network
+        && settings
+            .keys()
+            .any(|key| key.starts_with("ethernet") && !key.starts_with("ethernet0."))
+    {
+        return Err(invalid_vmx(
+            "only the single host-only adapter may be enabled",
+        ));
+    }
+    if options.clipboard
+        && [
+            "isolation.tools.copy.disable",
+            "isolation.tools.dnd.disable",
+            "isolation.tools.paste.disable",
+        ]
+        .into_iter()
+        .any(|key| settings.get(key).map(String::as_str) == Some("TRUE"))
+    {
+        return Err(invalid_vmx(
+            "clipboard isolation contradicts the clipboard option",
+        ));
+    }
+    if options.time_sync
+        && settings
+            .iter()
+            .any(|(key, value)| key.starts_with("time.synchronize") && value == "FALSE")
+    {
+        return Err(invalid_vmx(
+            "time synchronization contradicts the time sync option",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_disk_settings(settings: &BTreeMap<String, String>) -> Result<(), EmulationError> {
@@ -253,6 +363,35 @@ fn validate_recovery_media_settings(
         }
     }
     validate_recovery_iso_path(path)
+}
+
+fn validate_maintenance_media_settings(
+    settings: &BTreeMap<String, String>,
+    has_maintenance_media: bool,
+) -> Result<(), EmulationError> {
+    let path = settings.get("ide1:1.fileName");
+    match (path, has_maintenance_media) {
+        (Some(path), true) => {
+            for (key, expected) in [
+                ("ide1:1.deviceType", "cdrom-image"),
+                ("ide1:1.present", "TRUE"),
+                ("ide1:1.startConnected", "TRUE"),
+            ] {
+                if settings.get(key).map(String::as_str) != Some(expected) {
+                    return Err(invalid_vmx("maintenance media settings are incomplete"));
+                }
+            }
+            validate_recovery_iso_path(path)
+        }
+        (None, false) => {
+            if settings.keys().any(|key| key.starts_with("ide1:1")) {
+                return Err(invalid_vmx("maintenance media settings are incomplete"));
+            }
+            Ok(())
+        }
+        (Some(_), false) => Err(invalid_vmx("unexpected maintenance media attachment")),
+        (None, true) => Err(invalid_vmx("maintenance media attachment is missing")),
+    }
 }
 
 fn validate_recovery_iso_path(value: &str) -> Result<(), EmulationError> {

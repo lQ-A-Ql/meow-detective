@@ -3,13 +3,17 @@ use std::sync::Arc;
 
 use evidence_block::{BlockDeviceError, BlockProvider};
 use evidence_emulation::{
-    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmdkAdapter, VmdkDescriptor,
+    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmOptions, VmdkAdapter, VmdkDescriptor,
     VmwareFirmware, VmxConfig,
 };
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 
 const DISK_LENGTH: usize = 256 * 1024;
+
+fn validate_default(value: &str) -> Result<(), EmulationError> {
+    VmxConfig::validate_rendered(value, VmOptions::default(), false)
+}
 
 struct MemoryProvider(Vec<u8>);
 
@@ -177,7 +181,7 @@ fn vmx_disables_host_integrations_and_networking() {
     let config = VmxConfig::new("disk.vmdk", VmwareFirmware::Efi).unwrap();
     let rendered = config.render();
 
-    VmxConfig::validate_rendered(&rendered).unwrap();
+    validate_default(&rendered).unwrap();
     assert!(rendered.contains("ethernet0.present = \"FALSE\""));
     assert!(rendered.contains("sharedFolder.maxNum = \"0\""));
     assert!(rendered.contains("usb.present = \"FALSE\""));
@@ -197,7 +201,7 @@ fn vmx_can_boot_a_user_selected_winpe_iso_before_the_evidence_disk() {
         .unwrap()
         .render();
 
-    VmxConfig::validate_rendered(&rendered).unwrap();
+    validate_default(&rendered).unwrap();
     assert!(rendered.contains("bios.bootOrder = \"cdrom,hdd\""));
     assert!(rendered.contains("ide0:0.deviceType = \"disk\""));
     assert!(rendered.contains(r#"ide0:0.fileName = "disk.vmdk""#));
@@ -211,13 +215,123 @@ fn vmx_can_boot_a_user_selected_winpe_iso_before_the_evidence_disk() {
 }
 
 #[test]
+fn iso9660_image_carries_payloads_with_a_stable_layout() {
+    use evidence_emulation::{build_iso, IsoFile};
+
+    let tool = vec![0x4du8; 5000];
+    let targets = br#"{"installs":[],"recommendedBootRoute":"recoveryMedia"}"#.to_vec();
+    let files = [
+        IsoFile {
+            name: "MEOWMTN.EXE",
+            data: &tool,
+        },
+        IsoFile {
+            name: "TARGETS.JSON",
+            data: &targets,
+        },
+    ];
+    let image = build_iso(&files).unwrap();
+    let again = build_iso(&files).unwrap();
+    assert_eq!(image, again, "ISO output must be deterministic");
+    assert_eq!(image.len() % 2048, 0);
+
+    let pvd = &image[16 * 2048..17 * 2048];
+    assert_eq!(pvd[0], 1);
+    assert_eq!(&pvd[1..6], b"CD001");
+    let terminator = &image[17 * 2048..18 * 2048];
+    assert_eq!(terminator[0], 255);
+
+    let root = &image[20 * 2048..21 * 2048];
+    let entries = parse_iso_root(root);
+    assert_eq!(entries.len(), 2);
+    let (tool_extent, tool_length) = entries["MEOWMTN.EXE;1"];
+    let (targets_extent, targets_length) = entries["TARGETS.JSON;1"];
+    let tool_start = tool_extent as usize * 2048;
+    assert_eq!(
+        &image[tool_start..tool_start + tool_length as usize],
+        tool.as_slice()
+    );
+    let targets_start = targets_extent as usize * 2048;
+    assert_eq!(
+        &image[targets_start..targets_start + targets_length as usize],
+        targets.as_slice()
+    );
+}
+
+fn parse_iso_root(sector: &[u8]) -> std::collections::HashMap<String, (u32, u32)> {
+    let mut entries = std::collections::HashMap::new();
+    let mut offset = 0usize;
+    while offset < sector.len() && sector[offset] != 0 {
+        let length = sector[offset] as usize;
+        let name_length = sector[offset + 32] as usize;
+        let name =
+            String::from_utf8_lossy(&sector[offset + 33..offset + 33 + name_length]).into_owned();
+        if name_length > 1 {
+            let extent = u32::from_le_bytes(sector[offset + 2..offset + 6].try_into().unwrap());
+            let size = u32::from_le_bytes(sector[offset + 10..offset + 14].try_into().unwrap());
+            entries.insert(name, (extent, size));
+        }
+        offset += length;
+    }
+    entries
+}
+
+#[test]
+fn vmx_options_enable_exactly_one_isolation_exception_each() {
+    let network = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_options(VmOptions {
+            network: true,
+            clipboard: false,
+            time_sync: false,
+        })
+        .render();
+    VmxConfig::validate_rendered(
+        &network,
+        VmOptions {
+            network: true,
+            clipboard: false,
+            time_sync: false,
+        },
+        false,
+    )
+    .unwrap();
+    assert!(network.contains("ethernet0.present = \"TRUE\""));
+    assert!(network.contains("ethernet0.connectionType = \"hostonly\""));
+    assert!(network.contains("isolation.tools.copy.disable = \"TRUE\""));
+
+    let clipboard = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_options(VmOptions {
+            network: false,
+            clipboard: true,
+            time_sync: true,
+        })
+        .render();
+    VmxConfig::validate_rendered(
+        &clipboard,
+        VmOptions {
+            network: false,
+            clipboard: true,
+            time_sync: true,
+        },
+        false,
+    )
+    .unwrap();
+    assert!(!clipboard.contains("isolation.tools.copy.disable"));
+    assert!(clipboard.contains("tools.syncTime = \"TRUE\""));
+    assert!(!clipboard.contains("time.synchronize"));
+    assert!(clipboard.contains("ethernet0.present = \"FALSE\""));
+}
+
+#[test]
 fn vmx_can_explicitly_select_lsi_logic() {
     let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Efi)
         .unwrap()
         .with_disk_adapter(VmdkAdapter::LsiLogic)
         .render();
 
-    VmxConfig::validate_rendered(&rendered).unwrap();
+    validate_default(&rendered).unwrap();
     assert!(rendered.contains("scsi0.virtualDev = \"lsilogic\""));
     assert!(rendered.contains(r#"scsi0:0.fileName = "disk.vmdk""#));
     assert!(!rendered.contains("ide0:0.fileName"));
@@ -228,10 +342,8 @@ fn vmx_validator_rejects_mixed_or_missing_evidence_disk_controllers() {
     let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
         .unwrap()
         .render();
-    assert!(
-        VmxConfig::validate_rendered(&rendered.replace("ide0:0.present = \"TRUE\"\n", "")).is_err()
-    );
-    assert!(VmxConfig::validate_rendered(&format!(
+    assert!(validate_default(&rendered.replace("ide0:0.present = \"TRUE\"\n", "")).is_err());
+    assert!(validate_default(&format!(
         "{rendered}ide0:0.deviceType = \"disk\"\nide0:0.fileName = \"disk.vmdk\"\nide0:0.present = \"TRUE\"\n"
     ))
     .is_err());
@@ -255,16 +367,16 @@ fn vmx_validator_rejects_networking_and_missing_isolation_controls() {
         .unwrap()
         .render();
 
-    assert!(VmxConfig::validate_rendered(&rendered.replace(
+    assert!(validate_default(&rendered.replace(
         "ethernet0.present = \"FALSE\"",
         "ethernet0.present = \"TRUE\""
     ))
     .is_err());
-    assert!(VmxConfig::validate_rendered(
-        &rendered.replace("isolation.tools.copy.disable = \"TRUE\"\n", "")
-    )
-    .is_err());
-    assert!(VmxConfig::validate_rendered(
+    assert!(
+        validate_default(&rendered.replace("isolation.tools.copy.disable = \"TRUE\"\n", ""))
+            .is_err()
+    );
+    assert!(validate_default(
         &rendered.replace("bios.bootOrder = \"hdd\"", "bios.bootOrder = \"cdrom,hdd\"")
     )
     .is_err());

@@ -512,11 +512,22 @@
       "noSources": "当前案件没有具备可信指纹的 E01/RAW 数据源。",
       "recoveryIso": "WinPE 启动介质",
       "recoveryPlaceholder": "未选择，确认后启动原系统",
-      "bootRoute": "启动路径"
+      "bootRoute": "启动路径",
+      "options": "客机集成（默认全部关闭）",
+      "optionNetwork": "仅主机网络（host-only）",
+      "optionClipboard": "剪贴板 / 拖放",
+      "optionTimeSync": "客机时间同步"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO 优先",
       "directSystem": "原系统（需确认）"
+    },
+    "preflight": {
+      "title": "镜像预检（来自导入索引）",
+      "osdataPresent": "存在 OSDATA",
+      "osdataAbsent": "无 OSDATA",
+      "bypassAvailable": "可绕密",
+      "bypassUnavailable": "不可绕密"
     },
     "source": {
       "kind": "镜像类型",

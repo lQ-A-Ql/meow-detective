@@ -24,6 +24,11 @@ pub async fn prepare_emulation(
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let recovery_iso = request.recovery_iso_path.map(PathBuf::from);
+        let options = evidence_emulation::VmOptions {
+            network: request.options.network,
+            clipboard: request.options.clipboard,
+            time_sync: request.options.time_sync,
+        };
         let status = app_state
             .emulation_registry
             .prepare_session(
@@ -32,6 +37,7 @@ pub async fn prepare_emulation(
                 &active.meta.id,
                 &domain::DataSourceId(request.data_source_id.clone()),
                 recovery_iso.as_deref(),
+                options,
             )
             .map_err(CommandError::from_typed_service_error)?;
         audit_emulation(&app_state, EmulationAuditEvent::Prepare, &status);
@@ -92,6 +98,30 @@ pub async fn list_emulation_sessions(
             .list()
             .map(|statuses| statuses.into_iter().map(to_dto).collect())
             .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
+pub async fn get_emulation_preflight(
+    state: State<'_, AppState>,
+    data_source_id: String,
+) -> Result<transport::dto::EmulationPreflightDto, CommandError> {
+    if data_source_id.trim().is_empty() {
+        return Err(CommandError::invalid_input("data source id is required"));
+    }
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let connection = get_case_connection(&app_state)?;
+        app_services::mount_service::emulation_preflight(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &domain::DataSourceId(data_source_id),
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

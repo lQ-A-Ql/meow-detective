@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 thiserror.workspace = true
 windows-sys.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

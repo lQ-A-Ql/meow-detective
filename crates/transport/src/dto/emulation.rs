@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationOptionsDto {
+    #[serde(default)]
+    pub network: bool,
+    #[serde(default)]
+    pub clipboard: bool,
+    #[serde(default)]
+    pub time_sync: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareEmulationRequestDto {
@@ -8,6 +19,8 @@ pub struct PrepareEmulationRequestDto {
     pub recovery_iso_path: Option<String>,
     #[serde(default)]
     pub allow_direct_boot: bool,
+    #[serde(default)]
+    pub options: EmulationOptionsDto,
 }
 
 impl PrepareEmulationRequestDto {
@@ -49,6 +62,30 @@ pub enum EmulationStateDto {
 #[serde(rename_all = "camelCase")]
 pub enum EmulationControlModeDto {
     InteractiveOnly,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationBootRouteDto {
+    RecoveryMedia,
+    DirectSystem,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationInstallDto {
+    pub partition_index: u32,
+    pub osdata_present: bool,
+    pub sam_present: bool,
+    pub utilman_bypass_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationPreflightDto {
+    pub data_source_id: String,
+    pub installs: Vec<EmulationInstallDto>,
+    pub recommended_boot_route: EmulationBootRouteDto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

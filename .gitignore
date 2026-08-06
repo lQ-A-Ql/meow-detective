@@ -85,3 +85,6 @@ AGENTS.md
 !/docs/parser-support-matrix.md
 !/docs/pst-ost-mbox-support.md
 !/docs/validation-trust-framework.md
+
+# WinPE maintenance tool build output (built by scripts/dev/build-winpe-maintenance.ps1)
+apps/desktop/src-tauri/resources/tools/

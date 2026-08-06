@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldHint, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -180,6 +181,24 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
           </div>
         </div>
 
+        <fieldset className="space-y-2 border-y border-forensics-border py-3">
+          <legend className="text-[11px] text-forensics-muted">{t('emulationPage.launch.options')}</legend>
+          {([
+            ['network', 'emulationPage.launch.optionNetwork'],
+            ['clipboard', 'emulationPage.launch.optionClipboard'],
+            ['timeSync', 'emulationPage.launch.optionTimeSync'],
+          ] as const).map(([key, labelKey]) => (
+            <label key={key} className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
+              <Checkbox
+                checked={model.options[key]}
+                onCheckedChange={() => model.toggleOption(key)}
+                aria-label={t(labelKey)}
+              />
+              {t(labelKey)}
+            </label>
+          ))}
+        </fieldset>
+
         {model.selectedSource ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-forensics-border py-3 text-[11px]">
             <div className="min-w-0">
@@ -203,6 +222,27 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
               </dd>
             </div>
           </dl>
+        ) : null}
+
+        {model.preflight && model.preflight.installs.length > 0 ? (
+          <div className="space-y-1.5 border-y border-forensics-border py-3">
+            <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
+            {model.preflight.installs.map((install) => (
+              <div key={install.partitionIndex} className="flex items-center gap-2 text-[11px]">
+                <span className="font-mono text-forensics-text">[P{install.partitionIndex}]</span>
+                <Badge variant={install.osdataPresent ? 'secondary' : 'outline'}>
+                  {t(install.osdataPresent
+                    ? 'emulationPage.preflight.osdataPresent'
+                    : 'emulationPage.preflight.osdataAbsent')}
+                </Badge>
+                <Badge variant={install.utilmanBypassAvailable ? 'default' : 'outline'}>
+                  {t(install.utilmanBypassAvailable
+                    ? 'emulationPage.preflight.bypassAvailable'
+                    : 'emulationPage.preflight.bypassUnavailable')}
+                </Badge>
+              </div>
+            ))}
+          </div>
         ) : null}
 
         <div className="border border-forensics-sakura-300 bg-forensics-sakura-100/20 p-3">

@@ -2,7 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use winpe_maintenance::{
-    find_single_windows_installation, inspect_osdata, remove_osdata, MaintenanceError, OsdataState,
+    apply_bypass, find_single_windows_installation, inspect_bypass, inspect_osdata, remove_osdata,
+    restore_bypass, BypassState, MaintenanceError, OsdataState,
 };
 
 #[test]
@@ -60,6 +61,73 @@ fn create_windows_root(root: &Path) {
     let config = root.join("Windows/System32/config");
     fs::create_dir_all(&config).unwrap();
     fs::write(config.join("SYSTEM"), b"regf").unwrap();
+}
+
+fn create_utilman_pair(root: &Path) {
+    let system32 = root.join("Windows/System32");
+    fs::create_dir_all(&system32).unwrap();
+    fs::write(system32.join("utilman.exe"), b"original-utilman").unwrap();
+    fs::write(system32.join("cmd.exe"), b"command-shell").unwrap();
+}
+
+#[test]
+fn bypass_apply_and_restore_round_trip() {
+    let directory = tempfile::tempdir().unwrap();
+    create_windows_root(directory.path());
+    create_utilman_pair(directory.path());
+
+    assert_eq!(
+        inspect_bypass(directory.path()).unwrap(),
+        BypassState::NotApplied
+    );
+    assert_eq!(
+        apply_bypass(directory.path()).unwrap(),
+        BypassState::Applied
+    );
+    assert_eq!(
+        fs::read(directory.path().join("Windows/System32/utilman.exe")).unwrap(),
+        b"command-shell"
+    );
+    assert_eq!(
+        fs::read(
+            directory
+                .path()
+                .join("Windows/System32/utilman.exe.meowbak")
+        )
+        .unwrap(),
+        b"original-utilman"
+    );
+    assert!(matches!(
+        apply_bypass(directory.path()),
+        Err(MaintenanceError::BypassBackupExists)
+    ));
+    assert_eq!(
+        restore_bypass(directory.path()).unwrap(),
+        BypassState::NotApplied
+    );
+    assert_eq!(
+        fs::read(directory.path().join("Windows/System32/utilman.exe")).unwrap(),
+        b"original-utilman"
+    );
+    assert!(!directory
+        .path()
+        .join("Windows/System32/utilman.exe.meowbak")
+        .exists());
+}
+
+#[test]
+fn bypass_apply_requires_both_binaries_and_restore_requires_a_backup() {
+    let directory = tempfile::tempdir().unwrap();
+    create_windows_root(directory.path());
+
+    assert!(matches!(
+        apply_bypass(directory.path()),
+        Err(MaintenanceError::BypassTargetMissing)
+    ));
+    assert!(matches!(
+        restore_bypass(directory.path()),
+        Err(MaintenanceError::BypassBackupMissing)
+    ));
 }
 
 #[test]

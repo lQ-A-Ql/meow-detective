@@ -32,4 +32,6 @@ pub enum EmulationError {
     InvalidVmdkDescriptor(String),
     #[error("invalid VMware machine configuration: {0}")]
     InvalidVmx(String),
+    #[error("invalid ISO9660 payload file name: {0}")]
+    InvalidIsoFileName(String),
 }

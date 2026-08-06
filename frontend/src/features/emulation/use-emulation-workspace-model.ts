@@ -5,6 +5,7 @@ import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
+  getEmulationPreflight,
   launchEmulation,
   listEmulationSessions,
   prepareEmulation,
@@ -12,7 +13,7 @@ import {
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
 import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
-import type { DataSourceSummary, EmulationSessionStatus, EmulationState } from '@/types/models';
+import type { DataSourceSummary, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([
   'descriptorReady',
@@ -44,10 +45,14 @@ export interface EmulationWorkspaceModel {
   selectedSourceId: string;
   selectedSource?: EmulationSourceView;
   selectSource: (sourceId: string) => void;
+  preflight?: EmulationPreflight;
+  preflightLoading: boolean;
   recoveryIsoPath: string;
   bootRoute: 'recoveryMedia' | 'directSystem';
   pickRecoveryIso: () => Promise<void>;
   clearRecoveryIso: () => void;
+  options: EmulationOptions;
+  toggleOption: (key: keyof EmulationOptions) => void;
   sessions: EmulationSessionView[];
   metrics: {
     sourceCount: number;
@@ -93,6 +98,11 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const dataSourcesQuery = useDataSources();
   const [selectedSourceId, setSelectedSourceId] = useState('');
   const [recoveryIsoPath, setRecoveryIsoPath] = useState('');
+  const [options, setOptions] = useState<EmulationOptions>({
+    network: false,
+    clipboard: false,
+    timeSync: false,
+  });
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -111,6 +121,13 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     }
   }, [selectedSourceId, sourceOptions]);
 
+  const preflightQuery = useQuery({
+    queryKey: ['emulation', 'preflight', selectedSourceId],
+    queryFn: () => getEmulationPreflight(selectedSourceId),
+    enabled: Boolean(selectedSourceId),
+    retry: false,
+  });
+
   const invalidateSessions = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: EMULATION_SESSIONS_QUERY_KEY });
   }, [queryClient]);
@@ -123,6 +140,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         dataSourceId: selectedSourceId,
         recoveryIsoPath: recoveryIsoPath || undefined,
         allowDirectBoot,
+        options,
       });
       return launchEmulation(prepared.sessionId);
     },
@@ -166,6 +184,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     if (path) setRecoveryIsoPath(path);
   }, []);
   const clearRecoveryIso = useCallback(() => setRecoveryIsoPath(''), []);
+  const toggleOption = useCallback((key: keyof EmulationOptions) => {
+    setOptions((current) => ({ ...current, [key]: !current[key] }));
+  }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
     if (!confirmEmulationBoot(recoveryIsoPath, t('fileBrowser.mount.directBootConfirm'))) return;
@@ -187,10 +208,14 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     selectedSourceId,
     selectedSource,
     selectSource: setSelectedSourceId,
+    preflight: preflightQuery.data,
+    preflightLoading: preflightQuery.isFetching,
     recoveryIsoPath,
     bootRoute: recoveryIsoPath ? 'recoveryMedia' : 'directSystem',
     pickRecoveryIso,
     clearRecoveryIso,
+    options,
+    toggleOption,
     sessions,
     metrics: {
       sourceCount: sourceOptions.length,

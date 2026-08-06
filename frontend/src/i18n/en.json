@@ -512,11 +512,22 @@
       "noSources": "This case has no fingerprinted E01/RAW source available for emulation.",
       "recoveryIso": "WinPE boot media",
       "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
-      "bootRoute": "Boot route"
+      "bootRoute": "Boot route",
+      "options": "Guest integrations (all off by default)",
+      "optionNetwork": "Host-only network",
+      "optionClipboard": "Clipboard / drag-and-drop",
+      "optionTimeSync": "Guest time synchronization"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO first",
       "directSystem": "Original system (confirm)"
+    },
+    "preflight": {
+      "title": "Image preflight (from import index)",
+      "osdataPresent": "OSDATA present",
+      "osdataAbsent": "No OSDATA",
+      "bypassAvailable": "Bypass available",
+      "bypassUnavailable": "Bypass unavailable"
     },
     "source": {
       "kind": "Image type",

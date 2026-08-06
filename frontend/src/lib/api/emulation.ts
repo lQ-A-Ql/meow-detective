@@ -1,11 +1,15 @@
 import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
-import type { EmulationSessionStatus, PrepareEmulationRequest } from '@/types/models';
+import type { EmulationPreflight, EmulationSessionStatus, PrepareEmulationRequest } from '@/types/models';
 
 export async function prepareEmulation(
   request: PrepareEmulationRequest,
 ): Promise<EmulationSessionStatus> {
   return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.PREPARE, { request });
+}
+
+export async function getEmulationPreflight(dataSourceId: string): Promise<EmulationPreflight> {
+  return apiClient.request<EmulationPreflight>(COMMANDS.emulation.GET_PREFLIGHT, { dataSourceId });
 }
 
 export async function launchEmulation(sessionId: string): Promise<EmulationSessionStatus> {

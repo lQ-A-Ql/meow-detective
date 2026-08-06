@@ -343,6 +343,7 @@ fn map_emulation_error(error: EmulationError) -> NTSTATUS {
         | EmulationError::InvalidClusterSize(_)
         | EmulationError::InvalidExtentPath(_)
         | EmulationError::InvalidVmdkDescriptor(_)
+        | EmulationError::InvalidIsoFileName(_)
         | EmulationError::InvalidVmx(_) => STATUS_INVALID_PARAMETER,
         EmulationError::Io(_)
         | EmulationError::ParentRead(_)

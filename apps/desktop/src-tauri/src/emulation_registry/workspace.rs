@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use evidence_emulation::{ParentIdentity, VmwareFirmware};
+use evidence_emulation::{ParentIdentity, VmOptions, VmwareFirmware};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -33,6 +33,7 @@ pub(super) struct SessionWorkspace {
     vmdk: PathBuf,
     vmx: PathBuf,
     provenance: PathBuf,
+    maintenance_iso: PathBuf,
 }
 
 impl SessionWorkspace {
@@ -58,6 +59,7 @@ impl SessionWorkspace {
             vmdk: root.join("disk.vmdk"),
             vmx: root.join("machine.vmx"),
             provenance: root.join("provenance.json"),
+            maintenance_iso: root.join("maintenance.iso"),
             root,
             mount,
         })
@@ -109,6 +111,13 @@ impl SessionWorkspace {
         atomic_write(&self.provenance, &json)
     }
 
+    /// Writes the generated maintenance CD image and returns its absolute
+    /// path for the VMX attachment.
+    pub(super) fn write_maintenance_iso(&self, bytes: &[u8]) -> Result<PathBuf, WorkspaceError> {
+        atomic_write(&self.maintenance_iso, bytes)?;
+        Ok(self.maintenance_iso.clone())
+    }
+
     /// Removes the whole session directory after a failed prepare. Best
     /// effort: a mounted backend must already be stopped by the caller, and a
     /// removal failure is logged rather than propagated.
@@ -136,6 +145,9 @@ pub(super) struct EmulationProvenance<'a> {
     created_at: String,
     evidence_access: &'static str,
     guest_network: &'static str,
+    guest_clipboard: bool,
+    guest_time_sync: bool,
+    maintenance_media: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     recovery_media: Option<RecoveryMediaProvenance<'a>>,
 }
@@ -155,6 +167,8 @@ impl<'a> EmulationProvenance<'a> {
         data_source_id: &'a str,
         identity: &ParentIdentity,
         firmware: VmwareFirmware,
+        options: VmOptions,
+        maintenance_media: bool,
         recovery_media: Option<RecoveryMediaProvenance<'a>>,
     ) -> Self {
         Self {
@@ -170,7 +184,14 @@ impl<'a> EmulationProvenance<'a> {
             },
             created_at: chrono::Utc::now().to_rfc3339(),
             evidence_access: "read-only-parent-with-application-cow",
-            guest_network: "disabled",
+            guest_network: if options.network {
+                "host-only"
+            } else {
+                "disabled"
+            },
+            guest_clipboard: options.clipboard,
+            guest_time_sync: options.time_sync,
+            maintenance_media,
             recovery_media,
         }
     }

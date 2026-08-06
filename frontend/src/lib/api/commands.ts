@@ -36,6 +36,7 @@ export const COMMANDS = {
     EXTRACT_FILE: 'extract_file',
     GET_FILE_JUMP_CONTEXT: 'get_file_jump_context',
     LIST_DELETED_RECOVERIES: 'list_deleted_recoveries',
+    SEARCH_DELETED_RECOVERIES_BY_HASH: 'search_deleted_recoveries_by_hash',
     RUN_DELETED_RECOVERY: 'run_deleted_recovery',
     READ_DELETED_RECOVERY_RANGE: 'read_deleted_recovery_range',
     EXPORT_DELETED_RECOVERY: 'export_deleted_recovery',
@@ -58,6 +59,7 @@ export const COMMANDS = {
   emulation: {
     PREPARE: 'prepare_emulation',
     LAUNCH: 'launch_emulation',
+    GET_PREFLIGHT: 'get_emulation_preflight',
     GET_STATUS: 'get_emulation_status',
     LIST_SESSIONS: 'list_emulation_sessions',
     RELEASE: 'release_emulation',

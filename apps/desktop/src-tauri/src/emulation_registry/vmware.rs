@@ -166,13 +166,75 @@ fn discover() -> Result<(PathBuf, PathBuf), VmwareError> {
         let directory = PathBuf::from(root)
             .join("VMware")
             .join("VMware Workstation");
-        let workstation = directory.join("vmware.exe");
-        let vmrun = directory.join("vmrun.exe");
-        if workstation.is_file() && vmrun.is_file() {
-            return Ok((workstation, vmrun));
+        if let Some(pair) = probe_installation(&directory) {
+            return Ok(pair);
+        }
+    }
+    #[cfg(windows)]
+    if let Some(directory) = registry_install_path() {
+        if let Some(pair) = probe_installation(&directory) {
+            return Ok(pair);
         }
     }
     Err(VmwareError::NotInstalled)
+}
+
+fn probe_installation(directory: &Path) -> Option<(PathBuf, PathBuf)> {
+    let workstation = directory.join("vmware.exe");
+    let vmrun = directory.join("vmrun.exe");
+    (workstation.is_file() && vmrun.is_file()).then_some((workstation, vmrun))
+}
+
+/// Fallback discovery for machines where VMware Workstation is not installed
+/// under the default Program Files layout.
+#[cfg(windows)]
+fn registry_install_path() -> Option<PathBuf> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
+
+    let subkey = HSTRING::from(r"SOFTWARE\VMware, Inc.\VMware Workstation");
+    let value = HSTRING::from("InstallPath");
+    let mut byte_len = 0u32;
+    // SAFETY: all pointers reference valid NUL-terminated UTF-16 strings or
+    // caller-owned buffers that outlive both calls; the first call sizes the
+    // buffer and the second fills it.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(subkey.as_ptr()),
+            PCWSTR(value.as_ptr()),
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut byte_len),
+        )
+    };
+    if !status.is_ok() || byte_len == 0 {
+        return None;
+    }
+    let mut buffer = vec![0u16; (byte_len as usize).div_ceil(2)];
+    // SAFETY: `buffer` is sized from the first call and remains writable for
+    // the duration of this call.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(subkey.as_ptr()),
+            PCWSTR(value.as_ptr()),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut byte_len),
+        )
+    };
+    if !status.is_ok() {
+        return None;
+    }
+    let end = buffer
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(buffer.len());
+    let path = PathBuf::from(String::from_utf16_lossy(&buffer[..end]));
+    path.is_dir().then_some(path)
 }
 
 fn wait_for_control(mut child: std::process::Child) -> Result<(), VmwareError> {

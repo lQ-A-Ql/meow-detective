@@ -20,4 +20,12 @@ pub enum MaintenanceError {
     OsdataDirectoryNotEmpty,
     #[error("OSDATA has an unsupported filesystem node type")]
     UnsupportedOsdataNode,
+    #[error("the utilman bypass backup already exists")]
+    BypassBackupExists,
+    #[error("the utilman bypass backup is missing")]
+    BypassBackupMissing,
+    #[error("utilman.exe or cmd.exe is missing or not a regular file")]
+    BypassTargetMissing,
+    #[error("maintenance targets manifest is invalid: {0}")]
+    InvalidTargets(String),
 }

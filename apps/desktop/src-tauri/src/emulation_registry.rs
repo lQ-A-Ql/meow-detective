@@ -2,26 +2,27 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use app_services::mount_service::{
-    prepare_emulation_source, MountServiceError, PreparedPhysicalImageKind,
-};
+use app_services::mount_service::{prepare_emulation_source, MountServiceError};
 use domain::{CaseId, DataSourceId};
-use evidence_block::{open_block_provider, BlockDeviceError, EvidenceImageKind};
+use evidence_block::{open_block_provider, BlockDeviceError};
 use evidence_emulation::{
-    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmdkAdapter, VmdkDescriptor,
-    VmwareFirmware, VmxConfig,
+    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmOptions, VmwareFirmware,
 };
 use thiserror::Error;
 
 use crate::emulation_backend::{self, EmulationBackendHandle};
 
+mod materials;
 mod recovery_media;
 mod vmware;
 mod workspace;
 
+use materials::{
+    build_maintenance_payload, detect_firmware, image_kind, prepare_machine_materials,
+};
 use recovery_media::RecoveryMedia;
 use vmware::VmwareControl;
-use workspace::{EmulationProvenance, RecoveryMediaProvenance, SessionWorkspace};
+use workspace::SessionWorkspace;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmulationState {
@@ -100,6 +101,7 @@ impl EmulationRegistry {
         case_id: &CaseId,
         data_source_id: &DataSourceId,
         recovery_iso: Option<&Path>,
+        options: VmOptions,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
         self.reject_duplicate(data_source_id)?;
         let recovery_media = recovery_iso
@@ -119,6 +121,21 @@ impl EmulationRegistry {
                 return Err(error);
             }
         };
+        // The maintenance CD only makes sense on the PE boot route; building
+        // it needs the import index, so it runs before material generation
+        // and shares the same rollback path.
+        let maintenance = if recovery_media.is_some() {
+            match build_maintenance_payload(case_conn, case_root, case_id, data_source_id) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    let _ = backend.stop();
+                    workspace.remove_best_effort();
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
         let materials = prepare_machine_materials(
             &workspace,
             &identity,
@@ -127,6 +144,8 @@ impl EmulationRegistry {
             data_source_id,
             &session_id,
             recovery_media.as_ref(),
+            options,
+            maintenance.as_ref(),
         );
         if let Err(error) = materials {
             let _ = backend.stop();
@@ -326,81 +345,6 @@ fn build_session_disk(
         emulation_backend::start(Arc::clone(&disk), workspace.root(), workspace.mount_point())
             .map_err(|error| EmulationRegistryError::Backend(error.to_string()))?;
     Ok((disk, firmware, backend))
-}
-
-fn prepare_machine_materials(
-    workspace: &SessionWorkspace,
-    identity: &ParentIdentity,
-    firmware: VmwareFirmware,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-    session_id: &str,
-    recovery_media: Option<&RecoveryMedia>,
-) -> Result<(), EmulationRegistryError> {
-    // Windows and the user-selected PE must not depend on an optional LSI
-    // Logic driver; the inbox IDE path keeps both boot routes enumerable.
-    let disk_adapter = VmdkAdapter::Ide;
-    let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", disk_adapter)?;
-    let rendered = descriptor.render();
-    if VmdkDescriptor::parse(&rendered)? != descriptor {
-        return Err(EmulationRegistryError::Workspace(
-            "VMDK descriptor round-trip validation failed".to_string(),
-        ));
-    }
-    let reported_length = workspace
-        .extent_length()
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    if reported_length != identity.logical_length() {
-        return Err(EmulationRegistryError::Workspace(
-            "mounted extent length does not match the evidence disk".to_string(),
-        ));
-    }
-    workspace
-        .write_vmdk(&rendered)
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    let mut vmx = VmxConfig::new("disk.vmdk", firmware)?.with_disk_adapter(disk_adapter);
-    if let Some(media) = recovery_media {
-        vmx = vmx.with_recovery_iso(media.vmware_path())?;
-    }
-    let rendered_vmx = vmx.render();
-    VmxConfig::validate_rendered(&rendered_vmx)?;
-    workspace
-        .write_vmx(&rendered_vmx)
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    workspace
-        .write_provenance(&EmulationProvenance::new(
-            session_id,
-            &case_id.0,
-            &data_source_id.0,
-            identity,
-            firmware,
-            recovery_media.map(|media| RecoveryMediaProvenance {
-                file_name: media.file_name(),
-                length: media.length(),
-                sha256: media.sha256(),
-            }),
-        ))
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))
-}
-
-fn detect_firmware(disk: &CowDisk) -> Result<VmwareFirmware, EmulationRegistryError> {
-    if disk.len() < 1024 {
-        return Ok(VmwareFirmware::Bios);
-    }
-    let mut gpt_header = [0u8; 512];
-    disk.read_exact_at(512, &mut gpt_header)?;
-    Ok(if &gpt_header[..8] == b"EFI PART" {
-        VmwareFirmware::Efi
-    } else {
-        VmwareFirmware::Bios
-    })
-}
-
-fn image_kind(kind: PreparedPhysicalImageKind) -> EvidenceImageKind {
-    match kind {
-        PreparedPhysicalImageKind::E01 => EvidenceImageKind::E01,
-        PreparedPhysicalImageKind::Raw => EvidenceImageKind::Raw,
-    }
 }
 
 fn quiesce_entry(entry: &mut EmulationEntry) -> Result<(), EmulationRegistryError> {

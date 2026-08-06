@@ -106,6 +106,12 @@ pub(crate) fn start(
     mount_point: &Path,
 ) -> Result<DokanExtentMount, EmulationBackendError> {
     crate::dokan_runtime::initialize();
+    if dokan::get_driver_version() == 0 {
+        return Err(EmulationBackendError::Backend(
+            "the Dokan 2.x driver is not installed on this machine; emulation mounts require it"
+                .to_string(),
+        ));
+    }
     let mount_point = validate_mount_directory(session_root, mount_point)?;
     let encoded = path_to_u16(&mount_point)?;
     let mount_point_for_thread = encoded.clone();

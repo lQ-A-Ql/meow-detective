@@ -9,7 +9,7 @@ mod open;
 mod physical;
 mod source_validation;
 
-pub use emulation::{prepare_emulation_source, PreparedEmulationSource};
+pub use emulation::{emulation_preflight, prepare_emulation_source, PreparedEmulationSource};
 pub use error::MountServiceError;
 pub use open::prepare_mount_session;
 pub use physical::{
