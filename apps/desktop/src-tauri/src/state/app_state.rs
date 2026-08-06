@@ -13,6 +13,7 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;
 
 use super::task_manager::TaskManager;
+use crate::emulation_registry::EmulationRegistry;
 use crate::mount_registry::MountRegistry;
 use crate::physical_mount_registry::PhysicalMountRegistry;
 use app_services::file_service::PreviewRuntimeRegistry;
@@ -50,6 +51,8 @@ pub struct AppState {
     pub mount_registry: Arc<MountRegistry>,
     /// Active loopback iSCSI read-only physical-disk mounts.
     pub physical_mount_registry: Arc<PhysicalMountRegistry>,
+    /// Active application-owned copy-on-write emulation sessions.
+    pub emulation_registry: Arc<EmulationRegistry>,
 }
 
 impl Default for AppState {
@@ -75,6 +78,7 @@ impl Default for AppState {
             bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
             mount_registry: Arc::new(MountRegistry::default()),
             physical_mount_registry: Arc::new(PhysicalMountRegistry::default()),
+            emulation_registry: Arc::new(EmulationRegistry::default()),
         }
     }
 }
@@ -233,7 +237,11 @@ impl AppState {
             .physical_mount_registry
             .cleanup_case(case_id)
             .map_err(|error| format!("Failed to clean up physical image mounts: {error}"));
-        logical.and(physical)
+        let emulation = self
+            .emulation_registry
+            .cleanup_case(case_id)
+            .map_err(|error| format!("Failed to clean up emulation sessions: {error}"));
+        logical.and(physical).and(emulation)
     }
 
     pub fn cleanup_mounts_for_source(
@@ -249,7 +257,11 @@ impl AppState {
             .physical_mount_registry
             .cleanup_source(case_id, data_source_id)
             .map_err(|error| format!("Failed to clean up physical data-source mounts: {error}"));
-        logical.and(physical)
+        let emulation = self
+            .emulation_registry
+            .cleanup_source(case_id, data_source_id)
+            .map_err(|error| format!("Failed to clean up data-source emulation sessions: {error}"));
+        logical.and(physical).and(emulation)
     }
 
     pub fn retire_preview_source(

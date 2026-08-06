@@ -152,7 +152,7 @@ $crateCount = ([regex]::Matches(
     $workspaceMembersMatch.Groups['members'].Value,
     '"crates/[^"\r\n]+"'
   ) | Measure-Object).Count
-Assert-Equals $crateCount 34 'Workspace crate count drifted'
+Assert-Equals $crateCount 37 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
 $repositoryRoot = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories'

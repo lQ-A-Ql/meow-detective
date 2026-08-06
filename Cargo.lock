@@ -1390,6 +1390,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "evidence-emulation"
+version = "0.1.0"
+dependencies = [
+ "evidence-block",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "evidence-mount"
 version = "0.1.0"
 dependencies = [
@@ -1546,7 +1557,9 @@ dependencies = [
  "dokan-sys",
  "domain",
  "embed-resource",
+ "evidence-block",
  "evidence-core",
+ "evidence-emulation",
  "evidence-mount",
  "fs-fat",
  "fs-ntfs",
@@ -1560,6 +1573,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

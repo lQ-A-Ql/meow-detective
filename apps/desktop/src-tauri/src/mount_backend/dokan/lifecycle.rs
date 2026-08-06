@@ -1,4 +1,4 @@
-use std::sync::{mpsc, Mutex, Once};
+use std::sync::{mpsc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -11,7 +11,6 @@ use crate::mount_backend::MountBackendError;
 use super::ReadOnlyHandler;
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
-static DOKAN_INIT: Once = Once::new();
 
 enum StartupEvent {
     Mounted(U16CString),
@@ -112,7 +111,7 @@ pub(crate) fn start(
     session: MountSession,
     requested_mount_point: Option<&str>,
 ) -> Result<DokanMount, MountBackendError> {
-    DOKAN_INIT.call_once(dokan::init);
+    crate::dokan_runtime::initialize();
     let requested_mount_point = choose_mount_point(requested_mount_point)?;
     let mount_point_for_thread = requested_mount_point.clone();
     let (ready_tx, ready_rx) = mpsc::sync_channel(1);

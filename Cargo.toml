@@ -10,6 +10,7 @@ members = [
   "crates/evidence-core",
   "crates/evidence-mount",
   "crates/evidence-block",
+  "crates/evidence-emulation",
   "crates/physical-mount",
   "crates/fs-ntfs",
   "crates/fs-fat",
@@ -79,6 +80,7 @@ persistence-sqlite = { path = "crates/persistence-sqlite" }
 evidence-core = { path = "crates/evidence-core" }
 evidence-mount = { path = "crates/evidence-mount" }
 evidence-block = { path = "crates/evidence-block" }
+evidence-emulation = { path = "crates/evidence-emulation" }
 physical-mount = { path = "crates/physical-mount" }
 fs-ntfs = { path = "crates/fs-ntfs" }
 fs-fat = { path = "crates/fs-fat" }

@@ -28,7 +28,9 @@ thiserror.workspace = true
 chrono.workspace = true
 transport.workspace = true
 app-services.workspace = true
+evidence-block.workspace = true
 evidence-mount.workspace = true
+evidence-emulation.workspace = true
 physical-mount.workspace = true
 domain.workspace = true
 infrastructure.workspace = true
@@ -60,3 +62,4 @@ windows-sys.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+sha2.workspace = true

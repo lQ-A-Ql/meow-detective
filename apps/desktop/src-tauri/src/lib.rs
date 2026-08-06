@@ -2,6 +2,10 @@ mod bitlocker_key_store;
 mod cache_invalidation;
 mod command_registry;
 mod commands;
+#[cfg(windows)]
+mod dokan_runtime;
+mod emulation_backend;
+mod emulation_registry;
 pub mod events;
 mod media_protocol;
 mod mount_backend;
