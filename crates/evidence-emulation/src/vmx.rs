@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Component, Path};
 
+use crate::vmdk::VmdkAdapter;
 use crate::EmulationError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +23,7 @@ impl VmwareFirmware {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmxConfig {
     disk_path: String,
+    disk_adapter: VmdkAdapter,
     recovery_iso_path: Option<String>,
     firmware: VmwareFirmware,
     memory_mib: u32,
@@ -33,6 +35,9 @@ impl VmxConfig {
         validate_relative_path(disk_path)?;
         Ok(Self {
             disk_path: disk_path.replace('/', "\\"),
+            // IDE is present in legacy and modern Windows/PE images without
+            // requiring an image-specific VMware SCSI driver.
+            disk_adapter: VmdkAdapter::Ide,
             recovery_iso_path: None,
             firmware,
             memory_mib: 4096,
@@ -44,6 +49,11 @@ impl VmxConfig {
         validate_recovery_iso_path(iso_path)?;
         self.recovery_iso_path = Some(iso_path.replace('/', "\\"));
         Ok(self)
+    }
+
+    pub fn with_disk_adapter(mut self, adapter: VmdkAdapter) -> Self {
+        self.disk_adapter = adapter;
+        self
     }
 
     pub fn render(&self) -> String {
@@ -67,6 +77,7 @@ impl VmxConfig {
         {
             return Err(invalid_vmx("network adapters must remain disabled"));
         }
+        validate_disk_settings(&settings)?;
         validate_recovery_media_settings(&settings)?;
         Ok(())
     }
@@ -85,13 +96,22 @@ impl VmxConfig {
             ("guestOS", "windows9-64".to_string()),
             ("memsize", self.memory_mib.to_string()),
             ("numvcpus", self.processor_count.to_string()),
-            ("scsi0.present", "TRUE".to_string()),
-            ("scsi0.virtualDev", "lsilogic".to_string()),
-            ("scsi0:0.deviceType", "disk".to_string()),
-            ("scsi0:0.fileName", self.disk_path.clone()),
-            ("scsi0:0.present", "TRUE".to_string()),
             ("virtualHW.version", "16".to_string()),
         ]);
+        match self.disk_adapter {
+            VmdkAdapter::Ide => values.extend([
+                ("ide0:0.deviceType", "disk".to_string()),
+                ("ide0:0.fileName", self.disk_path.clone()),
+                ("ide0:0.present", "TRUE".to_string()),
+            ]),
+            VmdkAdapter::LsiLogic => values.extend([
+                ("scsi0.present", "TRUE".to_string()),
+                ("scsi0.virtualDev", "lsilogic".to_string()),
+                ("scsi0:0.deviceType", "disk".to_string()),
+                ("scsi0:0.fileName", self.disk_path.clone()),
+                ("scsi0:0.present", "TRUE".to_string()),
+            ]),
+        }
         if let Some(iso_path) = &self.recovery_iso_path {
             values.extend([
                 ("ide1:0.deviceType", "cdrom-image".to_string()),
@@ -130,6 +150,46 @@ fn required_security_settings() -> [(&'static str, &'static str); 15] {
         ("tools.syncTime", "FALSE"),
         ("usb.present", "FALSE"),
     ]
+}
+
+fn validate_disk_settings(settings: &BTreeMap<String, String>) -> Result<(), EmulationError> {
+    let scsi_path = settings.get("scsi0:0.fileName");
+    let ide_path = settings.get("ide0:0.fileName");
+    match (scsi_path, ide_path) {
+        (Some(path), None) => {
+            for (key, expected) in [
+                ("scsi0.present", "TRUE"),
+                ("scsi0.virtualDev", "lsilogic"),
+                ("scsi0:0.deviceType", "disk"),
+                ("scsi0:0.present", "TRUE"),
+            ] {
+                if settings.get(key).map(String::as_str) != Some(expected) {
+                    return Err(invalid_vmx("SCSI evidence disk settings are incomplete"));
+                }
+            }
+            if settings.keys().any(|key| key.starts_with("ide0")) {
+                return Err(invalid_vmx(
+                    "SCSI evidence disk must not expose an IDE controller",
+                ));
+            }
+            validate_relative_path(path)
+        }
+        (None, Some(path)) => {
+            for (key, expected) in [("ide0:0.deviceType", "disk"), ("ide0:0.present", "TRUE")] {
+                if settings.get(key).map(String::as_str) != Some(expected) {
+                    return Err(invalid_vmx("IDE evidence disk settings are incomplete"));
+                }
+            }
+            if settings.keys().any(|key| key.starts_with("scsi0")) {
+                return Err(invalid_vmx(
+                    "IDE evidence disk must not expose an SCSI controller",
+                ));
+            }
+            validate_relative_path(path)
+        }
+        (None, None) => Err(invalid_vmx("evidence disk settings are missing")),
+        (Some(_), Some(_)) => Err(invalid_vmx("evidence disk must use exactly one controller")),
+    }
 }
 
 fn parse_settings(value: &str) -> Result<BTreeMap<String, String>, EmulationError> {

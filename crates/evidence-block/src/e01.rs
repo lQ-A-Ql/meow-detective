@@ -1,4 +1,3 @@
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -33,8 +32,7 @@ impl BlockProvider for E01BlockProvider {
             .reader
             .lock()
             .map_err(|_| BlockDeviceError::LockPoisoned)?;
-        reader.seek(SeekFrom::Start(offset))?;
-        reader.read_exact(buffer)?;
+        reader.read_exact_at(offset, buffer)?;
         Ok(())
     }
 }

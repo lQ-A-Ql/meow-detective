@@ -1,5 +1,6 @@
 //! Copy-on-write virtual disks for controlled forensic emulation.
 
+mod cache;
 mod crc32c;
 mod disk;
 mod error;

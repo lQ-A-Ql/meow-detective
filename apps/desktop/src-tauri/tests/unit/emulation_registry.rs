@@ -171,8 +171,17 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
     let descriptor_length = std::fs::metadata(workspace.root().join("disk.vmdk"))
         .unwrap()
         .len();
+    let descriptor = std::fs::read_to_string(workspace.root().join("disk.vmdk")).unwrap();
+    let machine = std::fs::read_to_string(workspace.vmx_path()).unwrap();
+    assert!(descriptor.contains("ddb.adapterType = \"ide\""));
+    assert!(machine.contains("ide0:0.fileName = \"disk.vmdk\""));
+    assert!(!machine.contains("scsi0:0.fileName"));
     let mut vmware = VmwarePocGuard::new(super::vmware::launch(workspace.vmx_path()).unwrap());
-    std::thread::sleep(std::time::Duration::from_secs(20));
+    let wait_seconds = std::env::var("FORENSICS_EMULATION_BOOT_WAIT_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(20);
+    std::thread::sleep(std::time::Duration::from_secs(wait_seconds));
     assert!(vmware.control().is_running().unwrap());
     let vmware_log = workspace.root().join("vmware.log");
     let log = std::fs::read_to_string(&vmware_log).unwrap();
@@ -181,6 +190,7 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
     }
     assert!(log.len() > 1024);
     assert!(log.lines().count() > 10);
+    assert!(log.contains("ide0:0"));
     if recovery_media.is_some() {
         assert!(log.contains("ide1:0"));
         assert!(log.to_ascii_lowercase().contains("cdrom"));

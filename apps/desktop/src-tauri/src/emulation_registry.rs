@@ -325,7 +325,10 @@ fn prepare_machine_materials(
     session_id: &str,
     recovery_media: Option<&RecoveryMedia>,
 ) -> Result<(), EmulationRegistryError> {
-    let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", VmdkAdapter::LsiLogic)?;
+    // Windows and the user-selected PE must not depend on an optional LSI
+    // Logic driver; the inbox IDE path keeps both boot routes enumerable.
+    let disk_adapter = VmdkAdapter::Ide;
+    let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", disk_adapter)?;
     let rendered = descriptor.render();
     if VmdkDescriptor::parse(&rendered)? != descriptor {
         return Err(EmulationRegistryError::Workspace(
@@ -343,7 +346,7 @@ fn prepare_machine_materials(
     workspace
         .write_vmdk(&rendered)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    let mut vmx = VmxConfig::new("disk.vmdk", firmware)?;
+    let mut vmx = VmxConfig::new("disk.vmdk", firmware)?.with_disk_adapter(disk_adapter);
     if let Some(media) = recovery_media {
         vmx = vmx.with_recovery_iso(media.vmware_path())?;
     }

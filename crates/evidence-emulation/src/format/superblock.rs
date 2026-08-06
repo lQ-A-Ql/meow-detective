@@ -91,7 +91,6 @@ pub(crate) fn write_superblock_slot(
     let slot = header.generation % SUPERBLOCK_COUNT;
     file.seek(SeekFrom::Start(slot * SUPERBLOCK_SIZE as u64))?;
     file.write_all(&header.encode())?;
-    file.sync_all()?;
     Ok(())
 }
 

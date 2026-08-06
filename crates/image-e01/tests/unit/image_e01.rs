@@ -153,6 +153,31 @@ fn sequential_reads_populate_bounded_neighbor_cache() {
 }
 
 #[test]
+fn absolute_reads_keep_sequential_prefetch_when_offsets_are_contiguous() {
+    let dir = std::env::temp_dir().join("e01_cache_absolute_reads");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("cache.E01");
+    write_multichunk_e01(&path, 6).unwrap();
+
+    let mut reader = E01Reader::open(&path).unwrap();
+    let chunk_bytes = reader.chunk_size_bytes() as usize;
+    let mut first = vec![0u8; chunk_bytes];
+    let mut second = vec![0u8; chunk_bytes];
+    reader.read_exact_at(0, &mut first).unwrap();
+    reader
+        .read_exact_at(chunk_bytes as u64, &mut second)
+        .unwrap();
+
+    let cached = reader.cached_chunk_indices_for_test();
+    assert!(cached.contains(&0));
+    assert!(cached.contains(&1));
+    assert!(cached.contains(&2));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn seek_resets_sequential_prefetch_hint() {
     let dir = std::env::temp_dir().join("e01_cache_seek_reset");
     let _ = std::fs::remove_dir_all(&dir);

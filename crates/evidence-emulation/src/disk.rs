@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use evidence_block::BlockProvider;
 
+use crate::cache::ClusterLru;
 use crate::overlay::Overlay;
 use crate::{EmulationError, ParentIdentity};
 
@@ -30,7 +31,12 @@ pub struct CowDisk {
     parent: Arc<dyn BlockProvider>,
     identity: ParentIdentity,
     config: CowDiskConfig,
-    overlay: Mutex<Overlay>,
+    state: Mutex<DiskState>,
+}
+
+struct DiskState {
+    overlay: Overlay,
+    cache: ClusterLru,
 }
 
 impl CowDisk {
@@ -46,7 +52,10 @@ impl CowDisk {
             parent,
             identity,
             config,
-            overlay: Mutex::new(overlay),
+            state: Mutex::new(DiskState {
+                overlay,
+                cache: ClusterLru::new(config.cluster_size),
+            }),
         })
     }
 
@@ -62,7 +71,10 @@ impl CowDisk {
             parent,
             identity,
             config,
-            overlay: Mutex::new(overlay),
+            state: Mutex::new(DiskState {
+                overlay,
+                cache: ClusterLru::new(config.cluster_size),
+            }),
         })
     }
 
@@ -76,8 +88,8 @@ impl CowDisk {
 
     pub fn read_exact_at(&self, offset: u64, buffer: &mut [u8]) -> Result<(), EmulationError> {
         validate_range(offset, buffer.len(), self.len())?;
-        let mut overlay = self
-            .overlay
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| EmulationError::LockPoisoned)?;
         let cluster_size = self.config.cluster_size as usize;
@@ -87,7 +99,12 @@ impl CowDisk {
             let position = offset + copied as u64;
             let cluster_index = position / self.config.cluster_size as u64;
             let intra = (position % self.config.cluster_size as u64) as usize;
-            overlay.read_cluster(&self.parent, cluster_index, &mut cluster)?;
+            if !state.cache.copy_to(cluster_index, &mut cluster) {
+                state
+                    .overlay
+                    .read_cluster(&self.parent, cluster_index, &mut cluster)?;
+                state.cache.insert(cluster_index, &cluster);
+            }
             let count = (cluster_size - intra).min(buffer.len() - copied);
             buffer[copied..copied + count].copy_from_slice(&cluster[intra..intra + count]);
             copied += count;
@@ -106,8 +123,8 @@ impl CowDisk {
         if buffer.is_empty() {
             return Ok(());
         }
-        let mut overlay = self
-            .overlay
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| EmulationError::LockPoisoned)?;
         let cluster_size = self.config.cluster_size as usize;
@@ -117,7 +134,12 @@ impl CowDisk {
         let mut consumed = 0usize;
         for cluster_index in first..=last {
             let mut cluster = vec![0u8; cluster_size];
-            overlay.read_cluster(&self.parent, cluster_index, &mut cluster)?;
+            if !state.cache.copy_to(cluster_index, &mut cluster) {
+                state
+                    .overlay
+                    .read_cluster(&self.parent, cluster_index, &mut cluster)?;
+                state.cache.insert(cluster_index, &cluster);
+            }
             let cluster_start = cluster_index * cluster_size as u64;
             let write_start = offset.max(cluster_start);
             let write_end = (offset + buffer.len() as u64).min(cluster_start + cluster_size as u64);
@@ -127,13 +149,18 @@ impl CowDisk {
             consumed += count;
             clusters.push((cluster_index, cluster));
         }
-        overlay.commit_clusters(&clusters)
+        state.overlay.commit_clusters(&clusters)?;
+        for (cluster_index, data) in clusters {
+            state.cache.insert(cluster_index, &data);
+        }
+        Ok(())
     }
 
     pub fn flush(&self) -> Result<(), EmulationError> {
-        self.overlay
+        self.state
             .lock()
             .map_err(|_| EmulationError::LockPoisoned)?
+            .overlay
             .flush()
     }
 }

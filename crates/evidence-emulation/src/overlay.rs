@@ -17,7 +17,10 @@ pub(crate) struct Overlay {
     header: Superblock,
     index: HashMap<u64, DataPointer>,
     poisoned: bool,
+    unsynced_bytes: u64,
 }
+
+const SYNC_BATCH_BYTES: u64 = 4 * 1024 * 1024;
 
 impl Overlay {
     pub(crate) fn create(
@@ -44,6 +47,7 @@ impl Overlay {
             header,
             index: HashMap::new(),
             poisoned: false,
+            unsynced_bytes: 0,
         })
     }
 
@@ -71,6 +75,7 @@ impl Overlay {
             header,
             index,
             poisoned: false,
+            unsynced_bytes: 0,
         })
     }
 
@@ -116,8 +121,7 @@ impl Overlay {
 
     pub(crate) fn flush(&mut self) -> Result<(), EmulationError> {
         self.ensure_usable()?;
-        self.file.sync_all()?;
-        Ok(())
+        self.sync_pending()
     }
 
     fn commit_clusters_inner(&mut self, clusters: &[(u64, Vec<u8>)]) -> Result<(), EmulationError> {
@@ -141,14 +145,34 @@ impl Overlay {
             )?);
         }
         write_commit_record(&mut self.file, generation, &pending)?;
-        self.file.sync_all()?;
         let mut next_header = self.header.clone();
         next_header.generation = generation;
-        write_superblock_slot(&mut self.file, &next_header)?;
-        for item in pending {
+        for item in &pending {
             self.index.insert(item.cluster_index, item.pointer);
         }
         self.header = next_header;
+        self.unsynced_bytes = self.unsynced_bytes.saturating_add(
+            pending
+                .len()
+                .saturating_mul(self.header.cluster_size as usize) as u64,
+        );
+        if self.unsynced_bytes >= SYNC_BATCH_BYTES {
+            self.sync_pending()?;
+        }
+        Ok(())
+    }
+
+    fn sync_pending(&mut self) -> Result<(), EmulationError> {
+        if self.unsynced_bytes == 0 {
+            return Ok(());
+        }
+        // Publish the generation only after all data and commit records have
+        // reached stable storage. Recovery can then safely truncate any
+        // transaction whose generation is absent from the superblock.
+        self.file.sync_all()?;
+        write_superblock_slot(&mut self.file, &self.header)?;
+        self.file.sync_all()?;
+        self.unsynced_bytes = 0;
         Ok(())
     }
 
@@ -159,6 +183,12 @@ impl Overlay {
             ));
         }
         Ok(())
+    }
+}
+
+impl Drop for Overlay {
+    fn drop(&mut self) {
+        let _ = self.sync_pending();
     }
 }
 

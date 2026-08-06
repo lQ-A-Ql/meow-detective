@@ -115,6 +115,15 @@ impl E01Reader {
         })
     }
 
+    /// Read from an absolute image offset without discarding the sequential
+    /// chunk cache when the caller is already reading forward.
+    pub fn read_exact_at(&mut self, offset: u64, buffer: &mut [u8]) -> io::Result<()> {
+        if self.cursor != offset {
+            self.seek(SeekFrom::Start(offset))?;
+        }
+        self.read_exact(buffer)
+    }
+
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (segment, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
         let chunk_size = self.chunk_size_bytes();
