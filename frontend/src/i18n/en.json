@@ -28,24 +28,37 @@
       "description": "Choose a logical partition drive or complete physical-disk presentation. Both paths are read-only and never write original evidence.",
       "mode": {
         "logical": "Logical partition",
-        "physical": "Physical disk"
+        "physical": "Physical disk",
+        "emulation": "Emulation"
       },
+      "emulationTitle": "Start Image Emulation",
+      "emulationDescription": "Boot the image through an application-managed copy-on-write layer. Original evidence remains read-only and guest writes stay in the session overlay.",
       "sourceSection": "Data Source",
       "sourceLabel": "Imported data source",
       "sourcePlaceholder": "Select a data source",
       "sourceHint": "The backend validates source state, evidence identity, and the partition catalog before mounting.",
+      "selectSourceError": "Select a data source.",
       "partitionLabel": "Filesystem partition",
       "partitionPlaceholder": "Select a partition",
       "partitionOption": "Partition {{index}} · {{name}} · {{filesystem}} · {{size}}",
       "partitionHint": "Each mount binds to one partition; partitions are never concatenated.",
       "physicalDescription": "The complete E01/raw image is presented to Windows through an iSCSI target bound only to loopback. Windows discovers the partition table and native volumes; no individual partition is selected.",
+      "emulationSourceHint": "Emulation binds the complete E01/raw source and isolates every guest write in a sparse COW overlay under the case directory.",
       "optionsSection": "Mount Options",
       "mountPointLabel": "Drive letter",
       "autoDrive": "Automatically choose an available drive",
       "mountPointHint": "The logical drive is published through Windows Mount Manager; the backend returns the final drive letter visible to standard Explorer.",
       "physicalTargetTitle": "Windows physical disk",
       "physicalTargetHint": "Microsoft iSCSI Initiator creates a temporary non-persistent session. Meow~Detective runs as administrator and starts MSiSCSI when needed. If the service was disabled, its startup type is restored after the last physical mount is released. Windows assigns drive letters to recognized volumes according to system policy, and unmount removes the entire disk.",
+      "recoveryIsoLabel": "WinPE boot media",
+      "recoveryIsoPlaceholder": "Not selected; direct system boot requires confirmation",
+      "chooseRecoveryIso": "Choose WinPE ISO",
+      "recoveryIsoHint": "A selected PE ISO always has the highest boot priority. Without trusted PE media, direct system boot requires another confirmation.",
+      "directBootConfirm": "No trusted WinPE boot media is selected.\n\nContinuing will boot the operating system inside the image. All disk writes remain in the case COW overlay and cannot modify original evidence. Continue?",
       "readOnly": "READ ONLY",
+      "cowOverlay": "COW ISOLATED",
+      "cowTitle": "Original evidence remains read-only",
+      "cowDescription": "The guest may write during emulation, but every change stays in the current case's sparse overlay. Shut down the virtual machine before releasing the session.",
       "readOnlyTitle": "Evidence protection enabled",
       "readOnlyDescription": "Only reads, directory enumeration, and metadata queries are allowed. Create, write, delete, rename, and metadata changes are rejected.",
       "activeMount": "{{mountPoint}} · {{state}}",
@@ -58,6 +71,11 @@
       "mount": "Mount",
       "mounting": "Mounting...",
       "unmount": "Unmount",
+      "startEmulation": "Start emulation",
+      "startingEmulation": "Starting...",
+      "activeEmulation": "Emulation session · {{state}}",
+      "releaseEmulation": "Release",
+      "operationFailed": "Image operation failed.",
       "close": "Close",
       "noSources": "No data sources are available in the current case."
     },
@@ -256,6 +274,10 @@
       "files": {
         "label": "File Browser",
         "context": "Directory tree, file table and forensics viewer"
+      },
+      "emulation": {
+        "label": "Image Emulation",
+        "context": "Boot media, COW sessions and runtime state"
       },
       "analysis": {
         "label": "Data Source Analysis",
@@ -470,6 +492,81 @@
       "eventLogs": "Reading event logs...",
       "linuxArtifacts": "Reading Linux artifacts...",
       "files": "Classifying files by metadata..."
+    }
+  },
+  "emulationPage": {
+    "title": "Image Emulation",
+    "noCase": "No case selected",
+    "emptyCase": "Open a case to manage image emulation sessions.",
+    "loading": "Loading emulation state...",
+    "metrics": {
+      "sources": "Available sources",
+      "active": "Active sessions",
+      "running": "Running",
+      "failed": "Cleanup pending"
+    },
+    "launch": {
+      "title": "Launch configuration",
+      "source": "Evidence source",
+      "sourcePlaceholder": "Select an E01 or RAW source",
+      "noSources": "This case has no fingerprinted E01/RAW source available for emulation.",
+      "recoveryIso": "WinPE boot media",
+      "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
+      "bootRoute": "Boot route"
+    },
+    "bootRoutes": {
+      "recoveryMedia": "PE ISO first",
+      "directSystem": "Original system (confirm)"
+    },
+    "source": {
+      "kind": "Image type",
+      "platform": "Platform",
+      "partitions": "Partitions",
+      "evidenceSize": "Evidence size",
+      "unknown": "Unknown"
+    },
+    "protection": {
+      "title": "COW evidence isolation",
+      "detail": "The original image remains read-only; guest writes go only to the sparse case overlay."
+    },
+    "sessions": {
+      "title": "Emulation sessions",
+      "count": "{{count}} sessions",
+      "empty": "This case has no emulation sessions.",
+      "columns": {
+        "source": "Source / session",
+        "state": "State",
+        "size": "Logical size",
+        "control": "Control mode",
+        "action": "Action"
+      }
+    },
+    "states": {
+      "preparing": "Preparing",
+      "recoveringOverlay": "Recovering overlay",
+      "mounted": "Disk mounted",
+      "descriptorReady": "Ready to launch",
+      "running": "Running",
+      "quiescing": "Stopping",
+      "sealed": "Sealed",
+      "released": "Released",
+      "failedCleanupPending": "Cleanup failed"
+    },
+    "controlModes": {
+      "interactiveOnly": "Interactive control"
+    },
+    "actions": {
+      "refresh": "Refresh emulation state",
+      "chooseIso": "Choose WinPE ISO",
+      "clearIso": "Clear WinPE ISO",
+      "start": "Start emulation",
+      "starting": "Starting...",
+      "release": "Release session",
+      "releaseSession": "Release the emulation session for {{source}}"
+    },
+    "errors": {
+      "sourceRequired": "Select an evidence source.",
+      "operationFailed": "Emulation operation failed."
     }
   },
   "textViewer": {

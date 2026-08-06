@@ -3,6 +3,7 @@ pub mod artifact_commands;
 pub mod batch_commands;
 pub mod case_commands;
 pub(crate) mod command_support;
+pub mod emulation_commands;
 pub mod file_commands;
 pub mod graph_commands;
 pub mod import;

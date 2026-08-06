@@ -28,24 +28,37 @@
       "description": "选择逻辑分区盘符或完整物理磁盘模式。两种路径均只读，原始证据不会被写入。",
       "mode": {
         "logical": "逻辑分区",
-        "physical": "物理磁盘"
+        "physical": "物理磁盘",
+        "emulation": "仿真"
       },
+      "emulationTitle": "启动镜像仿真",
+      "emulationDescription": "通过应用管理的写时复制层启动镜像。原始证据保持只读，客体写入仅进入会话 overlay。",
       "sourceSection": "数据源",
       "sourceLabel": "已导入数据源",
       "sourcePlaceholder": "选择数据源",
       "sourceHint": "挂载前由后端校验数据源状态、证据指纹和分区目录。",
+      "selectSourceError": "请选择数据源。",
       "partitionLabel": "文件系统分区",
       "partitionPlaceholder": "选择分区",
       "partitionOption": "分区 {{index}} · {{name}} · {{filesystem}} · {{size}}",
       "partitionHint": "一次挂载只绑定一个分区，不拼接多个分区。",
       "physicalDescription": "整份 E01/raw 镜像将通过仅绑定本机回环地址的 iSCSI 目标交给 Windows，分区表和卷由系统原生识别。此模式不选择单独分区。",
+      "emulationSourceHint": "仿真绑定整份 E01/raw 数据源，并将所有客体写入隔离到案件目录中的稀疏 COW overlay。",
       "optionsSection": "挂载选项",
       "mountPointLabel": "盘符",
       "autoDrive": "自动选择可用盘符",
       "mountPointHint": "逻辑盘通过 Windows Mount Manager 发布；后端会返回普通资源管理器可见的最终盘符。",
       "physicalTargetTitle": "Windows 物理磁盘",
       "physicalTargetHint": "Microsoft iSCSI Initiator 建立临时非持久会话。Meow~Detective 会以管理员身份运行并按需启动 MSiSCSI；若服务原本为 Disabled，最后一个物理挂载释放后会恢复原启动类型。可识别卷由 Windows 按系统策略分配盘符，卸载时会注销会话并移除整块磁盘。",
+      "recoveryIsoLabel": "WinPE 启动介质",
+      "recoveryIsoPlaceholder": "未选择，将在确认后启动原系统",
+      "chooseRecoveryIso": "选择 WinPE ISO",
+      "recoveryIsoHint": "已选择的 PE ISO 始终具有最高启动优先级。无可信 PE 时会在启动原系统前再次确认。",
+      "directBootConfirm": "未选择可信的 WinPE 启动介质。\n\n确认后将直接启动镜像中的原系统。所有磁盘写入仍仅保存到案件 COW overlay，不会修改原始证据。是否继续？",
       "readOnly": "只读",
+      "cowOverlay": "COW 隔离",
+      "cowTitle": "原始证据保持只读",
+      "cowDescription": "仿真允许客体系统写入，但所有变更仅进入当前案件的稀疏 overlay；释放会话前请先正常关闭虚拟机。",
       "readOnlyTitle": "证据保护已启用",
       "readOnlyDescription": "挂载仅允许读取、目录列举和属性查询；创建、写入、删除、重命名及元数据修改均会被拒绝。",
       "activeMount": "{{mountPoint}} · {{state}}",
@@ -58,6 +71,11 @@
       "mount": "挂载",
       "mounting": "挂载中...",
       "unmount": "卸载",
+      "startEmulation": "启动仿真",
+      "startingEmulation": "正在启动...",
+      "activeEmulation": "仿真会话 · {{state}}",
+      "releaseEmulation": "释放",
+      "operationFailed": "镜像操作失败。",
       "close": "关闭",
       "noSources": "当前案件没有可用的数据源。"
     },
@@ -256,6 +274,10 @@
       "files": {
         "label": "文件浏览",
         "context": "目录树、文件表与取证查看器"
+      },
+      "emulation": {
+        "label": "镜像仿真",
+        "context": "启动介质、COW 会话与运行状态"
       },
       "analysis": {
         "label": "数据源分析",
@@ -470,6 +492,81 @@
       "eventLogs": "正在读取事件日志...",
       "linuxArtifacts": "正在读取 Linux 痕迹...",
       "files": "正在按元数据分类文件..."
+    }
+  },
+  "emulationPage": {
+    "title": "镜像仿真",
+    "noCase": "未选择案件",
+    "emptyCase": "打开案件后可管理镜像仿真会话。",
+    "loading": "正在读取仿真状态...",
+    "metrics": {
+      "sources": "可用数据源",
+      "active": "活动会话",
+      "running": "运行中",
+      "failed": "待清理"
+    },
+    "launch": {
+      "title": "启动配置",
+      "source": "证据数据源",
+      "sourcePlaceholder": "选择 E01 或 RAW 数据源",
+      "noSources": "当前案件没有具备可信指纹的 E01/RAW 数据源。",
+      "recoveryIso": "WinPE 启动介质",
+      "recoveryPlaceholder": "未选择，确认后启动原系统",
+      "bootRoute": "启动路径"
+    },
+    "bootRoutes": {
+      "recoveryMedia": "PE ISO 优先",
+      "directSystem": "原系统（需确认）"
+    },
+    "source": {
+      "kind": "镜像类型",
+      "platform": "平台",
+      "partitions": "分区数量",
+      "evidenceSize": "证据大小",
+      "unknown": "未知"
+    },
+    "protection": {
+      "title": "COW 证据隔离",
+      "detail": "原始镜像只读；客体写入仅进入当前案件的稀疏 overlay。"
+    },
+    "sessions": {
+      "title": "仿真会话",
+      "count": "{{count}} 个会话",
+      "empty": "当前案件尚无仿真会话。",
+      "columns": {
+        "source": "数据源 / 会话",
+        "state": "状态",
+        "size": "逻辑大小",
+        "control": "控制模式",
+        "action": "操作"
+      }
+    },
+    "states": {
+      "preparing": "准备中",
+      "recoveringOverlay": "恢复 Overlay",
+      "mounted": "磁盘已挂载",
+      "descriptorReady": "等待启动",
+      "running": "运行中",
+      "quiescing": "正在停止",
+      "sealed": "已封存",
+      "released": "已释放",
+      "failedCleanupPending": "清理失败"
+    },
+    "controlModes": {
+      "interactiveOnly": "交互式控制"
+    },
+    "actions": {
+      "refresh": "刷新仿真状态",
+      "chooseIso": "选择 WinPE ISO",
+      "clearIso": "清除 WinPE ISO",
+      "start": "启动仿真",
+      "starting": "正在启动...",
+      "release": "释放会话",
+      "releaseSession": "释放 {{source}} 的仿真会话"
+    },
+    "errors": {
+      "sourceRequired": "请选择证据数据源。",
+      "operationFailed": "仿真操作失败。"
     }
   },
   "textViewer": {

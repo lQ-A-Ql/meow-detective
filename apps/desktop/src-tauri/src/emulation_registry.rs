@@ -97,7 +97,7 @@ struct EmulationEntry {
 }
 
 impl EmulationRegistry {
-    pub fn prepare(
+    pub fn prepare_session(
         &self,
         case_conn: &rusqlite::Connection,
         case_root: &Path,

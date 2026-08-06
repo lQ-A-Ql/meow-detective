@@ -42,6 +42,12 @@ export const appRoutes: RouteObject[] = [
         }),
       },
       {
+        path: 'emulation',
+        lazy: async () => ({
+          Component: (await import('./pages/Emulation')).Emulation,
+        }),
+      },
+      {
         path: 'search',
         lazy: async () => ({
           Component: (await import('./pages/Search')).Search,

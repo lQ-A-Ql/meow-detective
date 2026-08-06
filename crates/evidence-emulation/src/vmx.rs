@@ -78,6 +78,7 @@ impl VmxConfig {
         }
         values.extend([
             (".encoding", "UTF-8".to_string()),
+            ("bios.bootOrder", self.boot_order().to_string()),
             ("config.version", "8".to_string()),
             ("displayName", "Meow Detective Emulation".to_string()),
             ("firmware", self.firmware.value().to_string()),
@@ -93,7 +94,6 @@ impl VmxConfig {
         ]);
         if let Some(iso_path) = &self.recovery_iso_path {
             values.extend([
-                ("bios.bootOrder", "cdrom,hdd".to_string()),
                 ("ide1:0.deviceType", "cdrom-image".to_string()),
                 ("ide1:0.fileName", iso_path.clone()),
                 ("ide1:0.present", "TRUE".to_string()),
@@ -101,6 +101,14 @@ impl VmxConfig {
             ]);
         }
         values
+    }
+
+    fn boot_order(&self) -> &'static str {
+        if self.recovery_iso_path.is_some() {
+            "cdrom,hdd"
+        } else {
+            "hdd"
+        }
     }
 }
 
@@ -166,10 +174,11 @@ fn validate_recovery_media_settings(
     settings: &BTreeMap<String, String>,
 ) -> Result<(), EmulationError> {
     let Some(path) = settings.get("ide1:0.fileName") else {
-        if settings.keys().any(|key| key.starts_with("ide1:0"))
-            || settings.contains_key("bios.bootOrder")
-        {
+        if settings.keys().any(|key| key.starts_with("ide1:0")) {
             return Err(invalid_vmx("recovery media settings are incomplete"));
+        }
+        if settings.get("bios.bootOrder").map(String::as_str) != Some("hdd") {
+            return Err(invalid_vmx("direct boot must select the evidence disk"));
         }
         return Ok(());
     };

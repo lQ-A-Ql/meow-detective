@@ -12,6 +12,23 @@ pub(crate) struct ActiveCaseSnapshot {
     pub meta: domain::CaseMeta,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum EmulationAuditEvent {
+    Prepare,
+    Launch,
+    Release,
+}
+
+impl EmulationAuditEvent {
+    fn action(self) -> AuditAction {
+        match self {
+            Self::Prepare => AuditAction::EmulationPrepare,
+            Self::Launch => AuditAction::EmulationLaunch,
+            Self::Release => AuditAction::EmulationRelease,
+        }
+    }
+}
+
 pub(crate) fn snapshot_active_case(
     state: &AppState,
 ) -> Result<Option<ActiveCaseSnapshot>, CommandError> {
@@ -70,6 +87,26 @@ pub fn write_audit_log(
             &details_str,
         );
     }
+}
+
+pub(crate) fn write_emulation_audit_log(
+    state: &AppState,
+    event: EmulationAuditEvent,
+    session_id: &str,
+    data_source_id: &str,
+    emulation_state: &str,
+) {
+    write_audit_log(
+        state,
+        event.action(),
+        Some(session_id),
+        serde_json::json!({
+            "sessionId": session_id,
+            "dataSourceId": data_source_id,
+            "state": emulation_state,
+            "controlMode": "interactiveOnly",
+        }),
+    );
 }
 
 #[cfg(test)]

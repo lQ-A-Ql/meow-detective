@@ -29,3 +29,4 @@ export * from './notebook';
 export * from './batch';
 export * from './exchange';
 export * from './mount';
+export * from './emulation';

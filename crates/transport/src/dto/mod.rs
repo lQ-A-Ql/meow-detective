@@ -13,6 +13,7 @@ pub mod batch;
 pub mod bitlocker;
 pub mod case;
 pub mod correlation;
+pub mod emulation;
 pub mod entity_resolution;
 pub mod exchange;
 pub mod files;
@@ -79,6 +80,10 @@ pub use correlation::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,
     CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
     CorrelationProvenanceDto, CorrelationSnapshotDto,
+};
+pub use emulation::{
+    EmulationControlModeDto, EmulationSessionStatusDto, EmulationStateDto,
+    PrepareEmulationRequestDto,
 };
 pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
 pub use exchange::{StixExportRequestDto, StixExportResultDto};

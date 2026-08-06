@@ -22,4 +22,12 @@ describe('app route code splitting', () => {
     expect(v2Route).toBeDefined();
     expect(v2Route?.lazy).toEqual(expect.any(Function));
   });
+
+  it('exposes the image emulation workspace as a lazy route', () => {
+    const rootRoute = appRoutes[0];
+    const emulationRoute = rootRoute.children?.find((route) => route.path === 'emulation');
+
+    expect(emulationRoute).toBeDefined();
+    expect(emulationRoute?.lazy).toEqual(expect.any(Function));
+  });
 });

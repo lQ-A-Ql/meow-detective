@@ -9,6 +9,7 @@ mod settings;
 mod timeline;
 mod validation;
 
+pub use crate::dto::PrepareEmulationRequestDto;
 pub use crate::dto::{MountImageRequestDto, MountPhysicalImageRequestDto};
 pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,

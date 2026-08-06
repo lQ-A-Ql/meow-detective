@@ -1,4 +1,14 @@
-import { CircleCheck, HardDrive, LoaderCircle, LogOut, ShieldCheck, TriangleAlert } from 'lucide-react';
+import {
+  CircleCheck,
+  Disc3,
+  FolderOpen,
+  HardDrive,
+  LoaderCircle,
+  LogOut,
+  Play,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -11,6 +21,7 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { Field, FieldError, FieldHint, FieldLabel } from '@/app/components/ui/field';
+import { Input } from '@/app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { formatBytes } from '@/lib/format-bytes';
@@ -35,9 +46,12 @@ function sourceLabel(source: ImageMountModel['dataSources'][number]) {
 export function ImageMountDialog({ model }: ImageMountDialogProps) {
   const { t } = useTranslation();
   const selectedMount = model.selectedMount;
+  const selectedEmulation = model.selectedEmulation;
+  const isEmulation = model.mountMode === 'emulation';
   const canSubmit = Boolean(model.selectedSourceId
-    && (model.mountMode === 'physicalDisk' || model.selectedPartition))
+    && (model.mountMode !== 'logicalPartition' || model.selectedPartition))
     && !selectedMount
+    && !selectedEmulation
     && !model.isSubmitting;
 
   return (
@@ -47,9 +61,13 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[16px]">
               <ShieldCheck className="size-4 text-forensics-primary-blue" />
-              {t('fileBrowser.mount.title')}
+              {isEmulation ? t('fileBrowser.mount.emulationTitle') : t('fileBrowser.mount.title')}
             </DialogTitle>
-            <DialogDescription>{t('fileBrowser.mount.description')}</DialogDescription>
+            <DialogDescription>
+              {isEmulation
+                ? t('fileBrowser.mount.emulationDescription')
+                : t('fileBrowser.mount.description')}
+            </DialogDescription>
           </DialogHeader>
         </div>
 
@@ -71,6 +89,9 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
               <TabsTrigger value="physicalDisk">
                 {t('fileBrowser.mount.mode.physical')}
               </TabsTrigger>
+              <TabsTrigger value="emulation">
+                {t('fileBrowser.mount.mode.emulation')}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -81,7 +102,9 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                   <HardDrive className="size-4 text-forensics-muted" />
                   {t('fileBrowser.mount.sourceSection')}
                 </div>
-                <Badge variant="secondary">{t('fileBrowser.mount.readOnly')}</Badge>
+                <Badge variant="secondary">
+                  {isEmulation ? t('fileBrowser.mount.cowOverlay') : t('fileBrowser.mount.readOnly')}
+                </Badge>
               </div>
 
               <Field>
@@ -127,9 +150,13 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                   </Select>
                   <FieldHint>{t('fileBrowser.mount.partitionHint')}</FieldHint>
                 </Field>
-              ) : (
+              ) : model.mountMode === 'physicalDisk' ? (
                 <div className="border border-forensics-border bg-forensics-panel p-3 text-[11px] leading-5 text-forensics-muted">
                   {t('fileBrowser.mount.physicalDescription')}
+                </div>
+              ) : (
+                <div className="border border-forensics-border bg-forensics-panel p-3 text-[11px] leading-5 text-forensics-muted">
+                  {t('fileBrowser.mount.emulationSourceHint')}
                 </div>
               )}
             </section>
@@ -156,7 +183,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                   </Select>
                   <FieldHint>{t('fileBrowser.mount.mountPointHint')}</FieldHint>
                 </Field>
-              ) : (
+              ) : model.mountMode === 'physicalDisk' ? (
                 <div className="space-y-1 border border-forensics-border bg-forensics-surface p-3">
                   <div className="text-[11px] text-forensics-text">
                     {t('fileBrowser.mount.physicalTargetTitle')}
@@ -165,15 +192,45 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                     {t('fileBrowser.mount.physicalTargetHint')}
                   </p>
                 </div>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="emulation-recovery-iso">
+                    {t('fileBrowser.mount.recoveryIsoLabel')}
+                  </FieldLabel>
+                  <div className="flex min-w-0 gap-2">
+                    <Input
+                      id="emulation-recovery-iso"
+                      value={model.recoveryIsoPath}
+                      readOnly
+                      placeholder={t('fileBrowser.mount.recoveryIsoPlaceholder')}
+                      className="min-w-0 font-mono text-[11px]"
+                    />
+                    <Button
+                      type="button"
+                      variant="forensicsOutline"
+                      size="icon"
+                      onClick={() => void model.pickRecoveryIso()}
+                      title={t('fileBrowser.mount.chooseRecoveryIso')}
+                      aria-label={t('fileBrowser.mount.chooseRecoveryIso')}
+                    >
+                      <FolderOpen />
+                    </Button>
+                  </div>
+                  <FieldHint>{t('fileBrowser.mount.recoveryIsoHint')}</FieldHint>
+                </Field>
               )}
 
               <div className="space-y-2 border border-forensics-sakura-300 bg-forensics-sakura-100/25 p-3">
                 <div className="flex items-center gap-2 text-[11px] text-forensics-text">
                   <ShieldCheck className="size-4 text-forensics-primary-blue" />
-                  {t('fileBrowser.mount.readOnlyTitle')}
+                  {isEmulation
+                    ? t('fileBrowser.mount.cowTitle')
+                    : t('fileBrowser.mount.readOnlyTitle')}
                 </div>
                 <p className="text-[11px] leading-5 text-forensics-muted">
-                  {t('fileBrowser.mount.readOnlyDescription')}
+                  {isEmulation
+                    ? t('fileBrowser.mount.cowDescription')
+                    : t('fileBrowser.mount.readOnlyDescription')}
                 </p>
               </div>
             </section>
@@ -203,6 +260,27 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
             </div>
           ) : null}
 
+          {selectedEmulation ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border border-forensics-primary-blue/40 bg-forensics-sakura-100/20 p-3">
+              <div className="flex min-w-0 items-center gap-2 text-[11px]">
+                <Disc3 className="size-4 shrink-0 text-forensics-primary-blue" />
+                <span className="truncate text-forensics-text">
+                  {t('fileBrowser.mount.activeEmulation', { state: selectedEmulation.state })}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="forensicsOutline"
+                size="xs"
+                onClick={() => void model.releaseEmulation(selectedEmulation.sessionId)}
+                disabled={model.isSubmitting}
+              >
+                {model.isReleasingEmulation ? <LoaderCircle className="animate-spin" /> : <LogOut />}
+                {t('fileBrowser.mount.releaseEmulation')}
+              </Button>
+            </div>
+          ) : null}
+
           {model.dataSources.length === 0 ? (
             <div className="border border-forensics-border bg-forensics-panel p-3 text-[11px] text-forensics-muted">
               {t('fileBrowser.mount.noSources')}
@@ -226,8 +304,16 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
               {t('fileBrowser.mount.close')}
             </Button>
             <Button type="submit" variant="forensicsPrimary" disabled={!canSubmit}>
-              {model.isMounting ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />}
-              {model.isMounting ? t('fileBrowser.mount.mounting') : t('fileBrowser.mount.mount')}
+              {model.isMounting || model.isEmulating
+                ? <LoaderCircle className="animate-spin" />
+                : isEmulation ? <Play /> : <ShieldCheck />}
+              {isEmulation
+                ? model.isEmulating
+                  ? t('fileBrowser.mount.startingEmulation')
+                  : t('fileBrowser.mount.startEmulation')
+                : model.isMounting
+                  ? t('fileBrowser.mount.mounting')
+                  : t('fileBrowser.mount.mount')}
             </Button>
           </DialogFooter>
         </form>

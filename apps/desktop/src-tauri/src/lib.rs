@@ -139,6 +139,11 @@ macro_rules! desktop_command_handler {
             unmount_image,
             get_mount_status,
             list_mounts,
+            prepare_emulation,
+            launch_emulation,
+            get_emulation_status,
+            list_emulation_sessions,
+            release_emulation,
         ]
     };
 }

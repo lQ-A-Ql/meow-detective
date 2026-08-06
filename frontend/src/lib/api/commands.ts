@@ -55,6 +55,13 @@ export const COMMANDS = {
     GET_MOUNT_STATUS: 'get_mount_status',
     LIST_MOUNTS: 'list_mounts',
   },
+  emulation: {
+    PREPARE: 'prepare_emulation',
+    LAUNCH: 'launch_emulation',
+    GET_STATUS: 'get_emulation_status',
+    LIST_SESSIONS: 'list_emulation_sessions',
+    RELEASE: 'release_emulation',
+  },
   jobs: {
     GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',
     GET_WARNINGS: 'get_warnings',

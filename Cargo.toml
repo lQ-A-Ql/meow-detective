@@ -11,6 +11,7 @@ members = [
   "crates/evidence-mount",
   "crates/evidence-block",
   "crates/evidence-emulation",
+  "crates/winpe-maintenance",
   "crates/physical-mount",
   "crates/fs-ntfs",
   "crates/fs-fat",
@@ -81,6 +82,7 @@ evidence-core = { path = "crates/evidence-core" }
 evidence-mount = { path = "crates/evidence-mount" }
 evidence-block = { path = "crates/evidence-block" }
 evidence-emulation = { path = "crates/evidence-emulation" }
+winpe-maintenance = { path = "crates/winpe-maintenance" }
 physical-mount = { path = "crates/physical-mount" }
 fs-ntfs = { path = "crates/fs-ntfs" }
 fs-fat = { path = "crates/fs-fat" }
@@ -122,7 +124,7 @@ csv = "1"
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1" }
 unicode-normalization = "0.1"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_FileSystem", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
 iscsi-target = "1.0.0"
 dirs = "6"
 lz4_flex = "~0.13"

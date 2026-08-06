@@ -57,6 +57,7 @@ describe('TopBar', () => {
     );
 
     expect(screen.getByText('案件概览')).toBeDefined();
+    expect(screen.getByText('镜像仿真')).toBeDefined();
     expect(screen.getByText('WannaCry 爆发溯源')).toBeDefined();
     expect(screen.getByPlaceholderText('输入全局检索语句或 IOC')).toBeDefined();
     expect(screen.getByRole('button', { name: '0 运行中' })).toBeDefined();

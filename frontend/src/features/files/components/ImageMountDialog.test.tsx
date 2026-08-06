@@ -40,15 +40,23 @@ function createModel(overrides: Partial<ImageMountModel> = {}): ImageMountModel 
     selectedPartition: source.partitions?.[0],
     mountPoint: 'auto',
     setMountPoint: vi.fn(),
+    recoveryIsoPath: '',
+    setRecoveryIsoPath: vi.fn(),
+    pickRecoveryIso: vi.fn().mockResolvedValue(undefined),
     mounts: [],
     selectedMount: undefined,
+    emulationSessions: [],
+    selectedEmulation: undefined,
     isLoadingMounts: false,
     isSubmitting: false,
     isMounting: false,
     isUnmounting: false,
+    isEmulating: false,
+    isReleasingEmulation: false,
     error: undefined,
     submit: vi.fn().mockResolvedValue(undefined),
     unmount: vi.fn().mockResolvedValue(undefined),
+    releaseEmulation: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn(),
     mountPointOptions: ['M:', 'N:'],
     ...overrides,
@@ -81,6 +89,18 @@ describe('ImageMountDialog', () => {
     expect(screen.queryByText('文件系统分区')).not.toBeInTheDocument();
     expect(screen.queryByText('盘符')).not.toBeInTheDocument();
     expect(screen.getByText('Windows 物理磁盘')).toBeInTheDocument();
+  });
+
+  it('shows the selected PE ISO as the preferred emulation boot source', () => {
+    render(<ImageMountDialog model={createModel({
+      mountMode: 'emulation',
+      recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
+    })} />);
+
+    expect(screen.getByText('启动镜像仿真')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('C:\\Tools\\WinPE.iso')).toBeInTheDocument();
+    expect(screen.getByText('COW 隔离')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '启动仿真' })).toBeEnabled();
   });
 
   it('exposes an active mount and delegates unmount to the feature model', () => {

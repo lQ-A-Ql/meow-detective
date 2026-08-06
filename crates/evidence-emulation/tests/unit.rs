@@ -159,6 +159,7 @@ fn vmx_disables_host_integrations_and_networking() {
     assert!(rendered.contains("usb.present = \"FALSE\""));
     assert!(rendered.contains("floppy0.present = \"FALSE\""));
     assert!(rendered.contains("firmware = \"efi\""));
+    assert!(rendered.contains("bios.bootOrder = \"hdd\""));
     assert!(VmxConfig::new("..\\disk.vmdk", VmwareFirmware::Bios).is_err());
 }
 
@@ -205,6 +206,10 @@ fn vmx_validator_rejects_networking_and_missing_isolation_controls() {
     .is_err());
     assert!(VmxConfig::validate_rendered(
         &rendered.replace("isolation.tools.copy.disable = \"TRUE\"\n", "")
+    )
+    .is_err());
+    assert!(VmxConfig::validate_rendered(
+        &rendered.replace("bios.bootOrder = \"hdd\"", "bios.bootOrder = \"cdrom,hdd\"")
     )
     .is_err());
 }

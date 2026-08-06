@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type PageKey = 'home' | 'files' | 'analysis' | 'v2' | 'v3' | 'graph' | 'search' | 'timeline' | 'artifacts' | 'reports';
+export type PageKey = 'home' | 'files' | 'emulation' | 'analysis' | 'v2' | 'v3' | 'graph' | 'search' | 'timeline' | 'artifacts' | 'reports';
 type ViewerTabKey = 'metadata' | 'text' | 'hex' | 'preview';
 type FileSortKey = 'name' | 'size' | 'modifiedAt' | 'ext';
 type FileSortDirection = 'asc' | 'desc';

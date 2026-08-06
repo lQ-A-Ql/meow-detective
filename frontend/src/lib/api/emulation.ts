@@ -1,0 +1,25 @@
+import { apiClient } from '@/lib/api/client';
+import { COMMANDS } from '@/lib/api/commands';
+import type { EmulationSessionStatus, PrepareEmulationRequest } from '@/types/models';
+
+export async function prepareEmulation(
+  request: PrepareEmulationRequest,
+): Promise<EmulationSessionStatus> {
+  return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.PREPARE, { request });
+}
+
+export async function launchEmulation(sessionId: string): Promise<EmulationSessionStatus> {
+  return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.LAUNCH, { sessionId });
+}
+
+export async function getEmulationStatus(sessionId: string): Promise<EmulationSessionStatus> {
+  return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.GET_STATUS, { sessionId });
+}
+
+export async function listEmulationSessions(): Promise<EmulationSessionStatus[]> {
+  return apiClient.request<EmulationSessionStatus[]>(COMMANDS.emulation.LIST_SESSIONS);
+}
+
+export async function releaseEmulation(sessionId: string): Promise<EmulationSessionStatus> {
+  return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.RELEASE, { sessionId });
+}

@@ -1,0 +1,16 @@
+[package]
+name = "winpe-maintenance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+windows-sys.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "meow-winpe-maintenance"
+path = "src/main.rs"

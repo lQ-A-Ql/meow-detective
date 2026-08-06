@@ -22,6 +22,10 @@ pub(crate) use crate::commands::{
         get_case_metrics, get_current_case, get_data_sources, get_recent_cases, get_recent_objects,
         open_case, remove_case_from_list, rename_data_source,
     },
+    emulation_commands::{
+        get_emulation_status, launch_emulation, list_emulation_sessions, prepare_emulation,
+        release_emulation,
+    },
     file_commands::{
         close_file_handle, export_deleted_recovery, extract_file, forget_persisted_bitlocker_key,
         get_document_preview, get_file_children, get_file_children_request, get_file_jump_context,

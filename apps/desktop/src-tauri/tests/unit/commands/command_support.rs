@@ -27,3 +27,19 @@ fn active_case_snapshot_and_pool_connection_stay_in_sync() {
     state.clear_db_state().unwrap();
     std::fs::remove_dir_all(root).ok();
 }
+
+#[test]
+fn emulation_audit_events_map_to_their_persisted_actions() {
+    assert_eq!(
+        EmulationAuditEvent::Prepare.action().as_str(),
+        "emulation.prepare"
+    );
+    assert_eq!(
+        EmulationAuditEvent::Launch.action().as_str(),
+        "emulation.launch"
+    );
+    assert_eq!(
+        EmulationAuditEvent::Release.action().as_str(),
+        "emulation.release"
+    );
+}

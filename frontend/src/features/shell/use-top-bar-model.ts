@@ -12,6 +12,7 @@ export interface TopBarLink {
 const productionLinks: TopBarLink[] = [
   { to: '/', page: 'home' },
   { to: '/files', page: 'files' },
+  { to: '/emulation', page: 'emulation' },
   { to: '/analysis', page: 'analysis' },
   { to: '/v3', page: 'v3' },
   { to: '/search', page: 'search' },

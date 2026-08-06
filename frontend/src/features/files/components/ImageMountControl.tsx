@@ -12,6 +12,9 @@ interface ImageMountControlProps {
 export function ImageMountControl({ model }: ImageMountControlProps) {
   const { t } = useTranslation();
   const activeMountCount = model.mounts.filter((mount) => mount.state === 'mounted').length;
+  const activeEmulationCount = model.emulationSessions.filter((session) => (
+    session.state !== 'released' && session.state !== 'failedCleanupPending'
+  )).length;
 
   return (
     <>
@@ -25,7 +28,9 @@ export function ImageMountControl({ model }: ImageMountControlProps) {
       >
         <HardDriveDownload size={13} />
         <span>{t('fileBrowser.mount.open')}</span>
-        {activeMountCount > 0 ? <Badge variant="secondary">{activeMountCount}</Badge> : null}
+        {activeMountCount + activeEmulationCount > 0 ? (
+          <Badge variant="secondary">{activeMountCount + activeEmulationCount}</Badge>
+        ) : null}
       </Button>
       <ImageMountDialog model={model} />
     </>
