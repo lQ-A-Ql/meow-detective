@@ -536,6 +536,17 @@
       "attached": "Maintenance CD attached",
       "absent": "No maintenance CD"
     },
+    "bypass": {
+      "title": "Logon bypass (offline SAM edit, overlay only)",
+      "partition": "Target partition",
+      "account": "Target account",
+      "action": "Bypass action",
+      "none": "Disabled",
+      "clearPassword": "Clear account password",
+      "enableAndClear": "Enable account and clear password",
+      "disabled": "disabled",
+      "noPassword": "no password"
+    },
     "source": {
       "kind": "Image type",
       "platform": "Platform",

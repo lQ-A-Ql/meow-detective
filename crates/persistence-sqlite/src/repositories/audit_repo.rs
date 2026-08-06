@@ -42,6 +42,7 @@ pub enum AuditAction {
     EmulationPrepare,
     EmulationLaunch,
     EmulationRelease,
+    EmulationBypass,
     SearchExecute,
     ReportGenerate,
     ReportExport,
@@ -80,6 +81,7 @@ impl AuditAction {
             Self::EmulationPrepare => "emulation.prepare",
             Self::EmulationLaunch => "emulation.launch",
             Self::EmulationRelease => "emulation.release",
+            Self::EmulationBypass => "emulation.bypass",
             Self::SearchExecute => "search.execute",
             Self::ReportGenerate => "report.generate",
             Self::ReportExport => "report.export",
@@ -110,7 +112,10 @@ impl AuditAction {
             | Self::BitLockerCatalogImport => "bitlocker",
             Self::FileView | Self::FileExtract => "file",
             Self::ImageMount | Self::ImageUnmount => "mount",
-            Self::EmulationPrepare | Self::EmulationLaunch | Self::EmulationRelease => "emulation",
+            Self::EmulationPrepare
+            | Self::EmulationLaunch
+            | Self::EmulationRelease
+            | Self::EmulationBypass => "emulation",
             Self::SearchExecute => "search",
             Self::ReportGenerate | Self::ReportExport => "report",
             Self::ArtifactView => "artifact",

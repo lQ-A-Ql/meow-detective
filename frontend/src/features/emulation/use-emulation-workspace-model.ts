@@ -5,6 +5,8 @@ import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
+  applyEmulationBypass,
+  getEmulationBypassAccounts,
   getEmulationPreflight,
   launchEmulation,
   listEmulationSessions,
@@ -13,7 +15,7 @@ import {
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
 import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
-import type { DataSourceSummary, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
+import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([
   'descriptorReady',
@@ -53,6 +55,14 @@ export interface EmulationWorkspaceModel {
   clearRecoveryIso: () => void;
   options: EmulationOptions;
   toggleOption: (key: keyof EmulationOptions) => void;
+  bypassPartition?: number;
+  selectBypassPartition: (partition?: number) => void;
+  bypassAccounts: EmulationBypassAccount[];
+  bypassAccountsLoading: boolean;
+  bypassRid?: number;
+  selectBypassRid: (rid?: number) => void;
+  bypassAction: EmulationBypassAction;
+  selectBypassAction: (action: EmulationBypassAction) => void;
   sessions: EmulationSessionView[];
   metrics: {
     sourceCount: number;
@@ -103,6 +113,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     clipboard: false,
     timeSync: false,
   });
+  const [bypassPartition, setBypassPartition] = useState<number | undefined>(undefined);
+  const [bypassRid, setBypassRid] = useState<number | undefined>(undefined);
+  const [bypassAction, setBypassAction] = useState<EmulationBypassAction>('clearPassword');
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -127,6 +140,21 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     enabled: Boolean(selectedSourceId),
     retry: false,
   });
+  const bypassAccountsQuery = useQuery({
+    queryKey: ['emulation', 'bypass-accounts', selectedSourceId, bypassPartition],
+    queryFn: () => getEmulationBypassAccounts(selectedSourceId, bypassPartition!),
+    enabled: Boolean(selectedSourceId) && bypassPartition !== undefined,
+    retry: false,
+  });
+
+  useEffect(() => {
+    setBypassPartition(undefined);
+    setBypassRid(undefined);
+  }, [selectedSourceId]);
+
+  useEffect(() => {
+    setBypassRid(undefined);
+  }, [bypassPartition]);
 
   const invalidateSessions = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: EMULATION_SESSIONS_QUERY_KEY });
@@ -142,6 +170,14 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         allowDirectBoot,
         options,
       });
+      if (bypassRid !== undefined && bypassPartition !== undefined) {
+        await applyEmulationBypass({
+          sessionId: prepared.sessionId,
+          partitionIndex: bypassPartition,
+          rid: bypassRid,
+          action: bypassAction,
+        });
+      }
       return launchEmulation(prepared.sessionId);
     },
     onSuccess: invalidateSessions,
@@ -216,6 +252,14 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     clearRecoveryIso,
     options,
     toggleOption,
+    bypassPartition,
+    selectBypassPartition: setBypassPartition,
+    bypassAccounts: bypassAccountsQuery.data ?? [],
+    bypassAccountsLoading: bypassAccountsQuery.isFetching,
+    bypassRid,
+    selectBypassRid: setBypassRid,
+    bypassAction,
+    selectBypassAction: setBypassAction,
     sessions,
     metrics: {
       sourceCount: sourceOptions.length,

@@ -107,6 +107,48 @@ impl RegistryHiveReader<'_> {
             .collect()
     }
 
+    /// Locate a value's raw data payload as an absolute file offset and
+    /// length. Inline values (≤4 bytes stored in the VK cell itself) return
+    /// `None` — they have no writable data cell.
+    pub(crate) fn value_data_location(
+        &self,
+        key_path: &[&str],
+        value_name: &str,
+    ) -> Result<Option<(usize, usize)>, String> {
+        let Some(key) = self.navigate_to(key_path)? else {
+            return Ok(None);
+        };
+        for offset in self.raw_value_offsets(&key)? {
+            let absolute = self.abs(offset)?;
+            if absolute + 0x18 > self.bytes.len()
+                || &self.bytes[absolute + 4..absolute + 6] != VK_SIGNATURE
+            {
+                continue;
+            }
+            let name_length = read_u16(self.bytes, absolute + 6)? as usize;
+            let data_length_raw = read_u32(self.bytes, absolute + 8)?;
+            let data_offset = read_u32(self.bytes, absolute + 0x0c)?;
+            let flags = read_u16(self.bytes, absolute + 0x14)?;
+            let name_start = absolute + 0x18;
+            self.require(name_start, name_length)?;
+            let name = decode_name(
+                &self.bytes[name_start..name_start + name_length],
+                flags & 0x01 != 0,
+            )?;
+            if !name.eq_ignore_ascii_case(value_name) {
+                continue;
+            }
+            if data_length_raw & 0x8000_0000 != 0 {
+                return Ok(None);
+            }
+            let length = (data_length_raw & 0x7fff_ffff) as usize;
+            let data_start = self.abs(data_offset)? + 4;
+            self.require(data_start, length)?;
+            return Ok(Some((data_start, length)));
+        }
+        Ok(None)
+    }
+
     fn read_raw_vk(&self, offset: u32) -> Result<Option<(String, Vec<u8>)>, String> {
         let absolute = self.abs(offset)?;
         if absolute + 0x18 > self.bytes.len()

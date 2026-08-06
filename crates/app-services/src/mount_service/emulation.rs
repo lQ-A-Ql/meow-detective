@@ -183,10 +183,7 @@ struct EvidenceContext {
     kind: domain::DataSourceKind,
 }
 
-fn repo_context(
-    source_path: &str,
-    source_kind: &domain::DataSourceKind,
-) -> EvidenceContext {
+fn repo_context(source_path: &str, source_kind: &domain::DataSourceKind) -> EvidenceContext {
     EvidenceContext {
         source_path: PathBuf::from(source_path),
         kind: source_kind.clone(),

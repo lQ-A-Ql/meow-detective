@@ -60,6 +60,8 @@ export const COMMANDS = {
     PREPARE: 'prepare_emulation',
     LAUNCH: 'launch_emulation',
     GET_PREFLIGHT: 'get_emulation_preflight',
+    BYPASS_ACCOUNTS: 'get_emulation_bypass_accounts',
+    APPLY_BYPASS: 'apply_emulation_bypass',
     GET_STATUS: 'get_emulation_status',
     LIST_SESSIONS: 'list_emulation_sessions',
     RELEASE: 'release_emulation',

@@ -66,6 +66,8 @@ pub enum EmulationRegistryError {
     Vmware(String),
     #[error("WinPE recovery media validation failed: {0}")]
     RecoveryMedia(String),
+    #[error("emulation bypass failed: {0}")]
+    Bypass(#[from] app_services::emulation_bypass::EmulationBypassError),
 }
 
 impl transport::ServiceErrorCategory for EmulationRegistryError {
@@ -77,6 +79,7 @@ impl transport::ServiceErrorCategory for EmulationRegistryError {
             Self::Block(_) | Self::Disk(_) | Self::Workspace(_) => transport::ErrorCategory::Io,
             Self::RecoveryMedia(_) => transport::ErrorCategory::Validation,
             Self::Backend(_) | Self::Vmware(_) => transport::ErrorCategory::External,
+            Self::Bypass(error) => error.category(),
         }
     }
 }
@@ -84,6 +87,14 @@ impl transport::ServiceErrorCategory for EmulationRegistryError {
 #[derive(Clone, Default)]
 pub struct EmulationRegistry {
     entries: Arc<Mutex<HashMap<String, EmulationEntry>>>,
+}
+
+/// Case-scoped references the registry needs to build the service context
+/// after resolving the session's data source.
+pub struct BypassCaseRef<'a> {
+    pub case_conn: &'a rusqlite::Connection,
+    pub case_root: &'a Path,
+    pub case_id: &'a CaseId,
 }
 
 struct EmulationEntry {
@@ -204,6 +215,42 @@ impl EmulationRegistry {
         entry.vmware = Some(control);
         entry.status.state = EmulationState::Running;
         Ok(entry.status.clone())
+    }
+
+    pub fn apply_bypass(
+        &self,
+        case: &BypassCaseRef<'_>,
+        session_id: &str,
+        partition_index: u32,
+        rid: u32,
+        action: transport::dto::EmulationBypassActionDto,
+    ) -> Result<transport::dto::EmulationBypassResultDto, EmulationRegistryError> {
+        let (disk, data_source_id) = {
+            let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
+            let entry = entries
+                .get(session_id)
+                .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
+            if entry.status.state != EmulationState::DescriptorReady {
+                return Err(EmulationRegistryError::Vmware(
+                    "bypass edits are only allowed before the guest is launched".to_string(),
+                ));
+            }
+            (Arc::clone(&entry.disk), entry.status.data_source_id.clone())
+        };
+        let mut result = app_services::emulation_bypass::apply_bypass(
+            &disk,
+            &app_services::emulation_bypass::BypassCaseContext {
+                case_conn: case.case_conn,
+                case_root: case.case_root,
+                case_id: case.case_id,
+                data_source_id: &DataSourceId(data_source_id),
+            },
+            partition_index,
+            rid,
+            action,
+        )?;
+        result.session_id = session_id.to_string();
+        Ok(result)
     }
 
     pub fn release(

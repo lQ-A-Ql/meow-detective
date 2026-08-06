@@ -82,9 +82,10 @@ pub use correlation::{
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
 pub use emulation::{
-    EmulationBootRouteDto, EmulationControlModeDto, EmulationInstallDto, EmulationOptionsDto,
-    EmulationPreflightDto, EmulationSessionStatusDto, EmulationStateDto,
-    PrepareEmulationRequestDto,
+    EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
+    EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
+    EmulationInstallDto, EmulationOptionsDto, EmulationPreflightDto, EmulationSessionStatusDto,
+    EmulationStateDto, PrepareEmulationRequestDto,
 };
 pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
 pub use exchange::{StixExportRequestDto, StixExportResultDto};

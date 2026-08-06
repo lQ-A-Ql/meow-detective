@@ -301,7 +301,7 @@ fn decrypt_hash(
 
 // ── Crypto primitives ────────────────────────────────────────────────────────
 
-fn md5(data: &[u8]) -> [u8; 16] {
+pub(crate) fn md5(data: &[u8]) -> [u8; 16] {
     let mut hasher = Md5::new();
     hasher.update(data);
     hasher.finalize().into()
@@ -313,7 +313,7 @@ fn rc4_decrypt(key: &[u8; 16], ciphertext: &[u8]) -> Option<Vec<u8>> {
 
 /// Pure-Rust RC4 keystream generator (avoids a separate rc4 crate and keeps
 /// the cipher dependency set on cipher 0.4 / aes / des only).
-fn rc4_crypt(key: &[u8], data: &[u8]) -> Vec<u8> {
+pub(crate) fn rc4_crypt(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut s: [u8; 256] = std::array::from_fn(|i| i as u8);
     let mut j: u8 = 0;
     for i in 0..256 {
@@ -334,7 +334,7 @@ fn rc4_crypt(key: &[u8], data: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn rid_to_des_keys(rid: u32) -> ([u8; 8], [u8; 8]) {
+pub(crate) fn rid_to_des_keys(rid: u32) -> ([u8; 8], [u8; 8]) {
     let rid_bytes = rid.to_le_bytes();
     let key1 = expand_des_key(&[
         rid_bytes[0],

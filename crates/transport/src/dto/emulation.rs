@@ -106,6 +106,45 @@ pub struct EmulationSessionStatusDto {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationBypassAccountDto {
+    pub rid: u32,
+    pub username: String,
+    pub disabled: bool,
+    pub locked_out: bool,
+    pub has_password: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationBypassActionDto {
+    ClearPassword,
+    EnableAndClearPassword,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationBypassApplyRequestDto {
+    pub session_id: String,
+    pub partition_index: u32,
+    pub rid: u32,
+    pub action: EmulationBypassActionDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationBypassResultDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    pub partition_index: u32,
+    pub rid: u32,
+    pub username: String,
+    pub password_cleared: bool,
+    pub account_enabled: bool,
+    pub already_passwordless: bool,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/emulation.rs"]
 mod tests;

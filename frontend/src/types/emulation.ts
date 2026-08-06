@@ -43,3 +43,30 @@ export interface EmulationSessionStatus {
   maintenanceMedia?: boolean;
   error?: string;
 }
+
+export interface EmulationBypassAccount {
+  rid: number;
+  username: string;
+  disabled: boolean;
+  lockedOut: boolean;
+  hasPassword: boolean;
+}
+
+export type EmulationBypassAction = 'clearPassword' | 'enableAndClearPassword';
+
+export interface EmulationBypassApplyRequest {
+  sessionId: string;
+  partitionIndex: number;
+  rid: number;
+  action: EmulationBypassAction;
+}
+
+export interface EmulationBypassResult {
+  sessionId: string;
+  partitionIndex: number;
+  rid: number;
+  username: string;
+  passwordCleared: boolean;
+  accountEnabled: boolean;
+  alreadyPasswordless: boolean;
+}

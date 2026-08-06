@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   dataSources: vi.fn(),
   listSessions: vi.fn(),
   preflight: vi.fn(),
+  bypassAccounts: vi.fn(),
+  applyBypass: vi.fn(),
   prepare: vi.fn(),
   launch: vi.fn(),
   release: vi.fn(),
@@ -22,6 +24,8 @@ vi.mock('@/features/case/hooks', () => ({
 
 vi.mock('@/lib/api/emulation', () => ({
   getEmulationPreflight: mocks.preflight,
+  getEmulationBypassAccounts: mocks.bypassAccounts,
+  applyEmulationBypass: mocks.applyBypass,
   listEmulationSessions: mocks.listSessions,
   prepareEmulation: mocks.prepare,
   launchEmulation: mocks.launch,
@@ -74,6 +78,7 @@ describe('useEmulationWorkspaceModel', () => {
       installs: [],
       recommendedBootRoute: 'directSystem',
     });
+    mocks.bypassAccounts.mockResolvedValue([]);
     mocks.prepare.mockResolvedValue({ sessionId: 'emulation-1' });
     mocks.launch.mockResolvedValue({ sessionId: 'emulation-1', state: 'running' });
     mocks.release.mockResolvedValue({ sessionId: 'emulation-1', state: 'released' });

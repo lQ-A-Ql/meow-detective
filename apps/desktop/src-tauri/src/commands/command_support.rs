@@ -17,6 +17,7 @@ pub(crate) enum EmulationAuditEvent {
     Prepare,
     Launch,
     Release,
+    Bypass,
 }
 
 impl EmulationAuditEvent {
@@ -25,6 +26,7 @@ impl EmulationAuditEvent {
             Self::Prepare => AuditAction::EmulationPrepare,
             Self::Launch => AuditAction::EmulationLaunch,
             Self::Release => AuditAction::EmulationRelease,
+            Self::Bypass => AuditAction::EmulationBypass,
         }
     }
 }
@@ -106,6 +108,29 @@ pub(crate) fn write_emulation_audit_log(
             "state": emulation_state,
             "controlMode": "interactiveOnly",
         }),
+    );
+}
+
+/// Bypass operations carry their own detail payload (partition, account,
+/// outcome) instead of the session-state shape.
+pub(crate) fn write_emulation_bypass_audit_log(
+    state: &AppState,
+    session_id: &str,
+    data_source_id: &str,
+    details: serde_json::Value,
+) {
+    let mut payload = serde_json::json!({
+        "sessionId": session_id,
+        "dataSourceId": data_source_id,
+    });
+    if let (Some(base), Some(extra)) = (payload.as_object_mut(), details.as_object()) {
+        base.extend(extra.clone());
+    }
+    write_audit_log(
+        state,
+        EmulationAuditEvent::Bypass.action(),
+        Some(session_id),
+        payload,
     );
 }
 

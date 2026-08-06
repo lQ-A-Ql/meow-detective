@@ -19,6 +19,7 @@ mod path;
 mod reader;
 mod recovery;
 mod utils;
+mod write_map;
 
 pub use attribute::{AttributeListEntry, DataAttributeExtent};
 pub use data_runs::DataRun;
@@ -27,6 +28,7 @@ pub use file_stream::NtfsFileReader;
 pub use mft::{NtfsPreviewFile, NtfsReader};
 pub use recovery::{NtfsAllocationState, NtfsDataExtent, NtfsDeletedFileRecord};
 pub use utils::parse_mft_data_real_size;
+pub use write_map::NtfsFileExtent;
 
 pub(crate) use evidence_core::filesystem::{
     file_not_found, fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size,

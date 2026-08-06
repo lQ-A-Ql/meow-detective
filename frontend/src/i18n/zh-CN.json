@@ -536,6 +536,17 @@
       "attached": "维护盘已挂载",
       "absent": "无维护盘"
     },
+    "bypass": {
+      "title": "系统绕密（离线 SAM 编辑，仅写入 overlay）",
+      "partition": "目标分区",
+      "account": "目标账户",
+      "action": "绕密方式",
+      "none": "不启用",
+      "clearPassword": "清空账户密码",
+      "enableAndClear": "启用账户并清空密码",
+      "disabled": "已禁用",
+      "noPassword": "无密码"
+    },
     "source": {
       "kind": "镜像类型",
       "platform": "平台",

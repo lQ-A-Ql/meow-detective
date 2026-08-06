@@ -263,3 +263,206 @@ fn osdata_removal_and_utilman_bypass_run_on_real_system_files() {
         "the evidence image must remain untouched"
     );
 }
+
+#[test]
+#[ignore = "requires a real Windows E01 image"]
+fn sam_bypass_writes_only_the_overlay_and_decrypts_to_empty() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        &temp.path().join("cases"),
+        "emulation-bypass",
+        Some("tester"),
+    )
+    .unwrap();
+    let image = sample_path();
+    let image_size = std::fs::metadata(&image).unwrap().len();
+    let data_source_id = import_image(&active, &image);
+
+    let (case_id, case_root) = (active.meta.id.clone(), active.case_root.clone());
+    let preflight = active
+        .with_conn(|case_conn| {
+            app_services::mount_service::emulation_preflight(
+                case_conn,
+                &case_root,
+                &case_id,
+                &data_source_id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    let install = preflight
+        .installs
+        .first()
+        .expect("the image must expose a Windows installation")
+        .clone();
+
+    let accounts = active
+        .with_conn(|case_conn| {
+            app_services::emulation_bypass::list_bypass_accounts(
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                install.partition_index,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert!(!accounts.is_empty(), "SAM accounts must be listed");
+    for account in &accounts {
+        eprintln!(
+            "account rid={} name={:?} disabled={} locked={} has_password={}",
+            account.rid,
+            account.username,
+            account.disabled,
+            account.locked_out,
+            account.has_password
+        );
+    }
+    let target = accounts
+        .iter()
+        .find(|account| account.has_password)
+        .or_else(|| accounts.first())
+        .expect("at least one account")
+        .clone();
+
+    let provider =
+        evidence_block::open_block_provider(&image, evidence_block::EvidenceImageKind::E01)
+            .unwrap();
+    let identity = evidence_emulation::ParentIdentity::new(provider.len(), [0x5au8; 32]).unwrap();
+    let overlay = temp.path().join("overlay.cow");
+    let disk = evidence_emulation::CowDisk::create(
+        &overlay,
+        provider,
+        identity,
+        evidence_emulation::CowDiskConfig::default(),
+    )
+    .unwrap();
+
+    let result = active
+        .with_conn(|case_conn| {
+            app_services::emulation_bypass::apply_bypass(
+                &disk,
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                install.partition_index,
+                target.rid,
+                transport::dto::EmulationBypassActionDto::EnableAndClearPassword,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    eprintln!("bypass result: {result:?}");
+    assert!(result.password_cleared || result.already_passwordless);
+
+    // Read the edited SAM hive back through the COW disk and prove the NT
+    // hash is now the canonical empty value.
+    let (fs, _) = open_windows_fs(&image).expect("Windows volume must open");
+    let extents = fs
+        .file_extent_map("Windows/System32/config/SAM")
+        .expect("SAM extent map");
+    let inode = fs
+        .preview_file("Windows/System32/config/SAM")
+        .unwrap()
+        .inode();
+    let hive_len = fs.file_size_by_inode(inode).unwrap().unwrap() as usize;
+    let mut overlay_hive = vec![0u8; hive_len];
+    eprintln!("readback: hive_len={hive_len} extents={}", extents.len());
+    for extent in &extents {
+        let start = extent.logical_offset as usize;
+        let end = (start + extent.length as usize).min(hive_len);
+        if start >= end {
+            continue;
+        }
+        disk.read_exact_at(extent.volume_offset, &mut overlay_hive[start..end])
+            .unwrap();
+    }
+    eprintln!("overlay hive head: {:02x?}", &overlay_hive[..16]);
+    let system_hive = fs
+        .read_file_range("Windows/System32/config/SYSTEM", 0, usize::MAX)
+        .or_else(|_| {
+            let inode = fs
+                .preview_file("Windows/System32/config/SYSTEM")
+                .unwrap()
+                .inode();
+            let size = fs.file_size_by_inode(inode).unwrap().unwrap() as usize;
+            fs.read_file_range("Windows/System32/config/SYSTEM", 0, size)
+        })
+        .expect("SYSTEM hive must be readable");
+    let boot_key = artifacts_windows::registry::sam_structs::extract_boot_key(&system_hive)
+        .expect("boot key from SYSTEM hive");
+    let info = artifacts_windows::registry::lookup::extract_sam_fields(
+        &overlay_hive,
+        "SAM",
+        Some(boot_key),
+    )
+    .expect("edited SAM hive must stay parseable");
+    let edited = info
+        .users
+        .iter()
+        .find(|user| user.rid == target.rid)
+        .expect("edited account must remain listed");
+    eprintln!(
+        "edited account: rid={} name={:?} hash={:?}",
+        edited.rid, edited.username, edited.password_hash
+    );
+    assert_eq!(
+        edited.password_hash.as_deref(),
+        Some("aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0"),
+        "LM and NT hashes must decrypt to the canonical empty values"
+    );
+
+    // The parent evidence must stay byte-identical to its pre-edit state.
+    let parent_hive = fs
+        .read_file_range("Windows/System32/config/SAM", 0, hive_len)
+        .expect("parent SAM must be readable");
+    assert_ne!(
+        overlay_hive, parent_hive,
+        "the overlay copy must differ after the bypass edit"
+    );
+    assert_eq!(std::fs::metadata(&image).unwrap().len(), image_size);
+}
+
+#[test]
+#[ignore = "debug helper: dumps the SAM hive from a real image"]
+fn debug_dump_sam_hive_layout() {
+    let image = sample_path();
+    let (fs, _) = open_windows_fs(&image).expect("Windows volume must open");
+    let inode = fs
+        .preview_file("Windows/System32/config/SAM")
+        .unwrap()
+        .inode();
+    let hive_len = fs.file_size_by_inode(inode).unwrap().unwrap() as usize;
+    let hive = fs
+        .read_file_range("Windows/System32/config/SAM", 0, hive_len)
+        .unwrap();
+    std::fs::write("D:/process/forensic/target/tmp/sam_hive_debug.bin", &hive).unwrap();
+    eprintln!("SAM hive dumped: {} bytes", hive.len());
+
+    // Cross-check the raw extent mapping against the logical read path.
+    // Extent offsets are absolute in the reader's coordinate space.
+    let extents = fs
+        .file_extent_map("Windows/System32/config/SAM")
+        .expect("extent map");
+    let mut raw = [0u8; 16];
+    {
+        use std::io::{Read as _, Seek as _, SeekFrom};
+        let mut reader = E01Reader::open(&image).unwrap();
+        reader
+            .seek(SeekFrom::Start(extents[0].volume_offset))
+            .unwrap();
+        reader.read_exact(&mut raw).unwrap();
+    }
+    eprintln!(
+        "extent check: extent0={:#x} raw_head={:02x?} hive_head={:02x?}",
+        extents[0].volume_offset,
+        raw,
+        &hive[..16]
+    );
+}

@@ -204,6 +204,65 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
           ))}
         </fieldset>
 
+        {model.preflight && model.preflight.installs.some((install) => install.samPresent) ? (
+          <fieldset className="space-y-2 border-b border-forensics-border py-3">
+            <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.title')}</legend>
+            <Select
+              value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
+              onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
+            >
+              <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.partition')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
+                {model.preflight.installs
+                  .filter((install) => install.samPresent)
+                  .map((install) => (
+                    <SelectItem key={install.partitionIndex} value={String(install.partitionIndex)}>
+                      [P{install.partitionIndex}]
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {model.bypassPartition !== undefined ? (
+              <>
+                <Select
+                  value={model.bypassRid === undefined ? 'none' : String(model.bypassRid)}
+                  onValueChange={(value) => model.selectBypassRid(value === 'none' ? undefined : Number(value))}
+                  disabled={model.bypassAccountsLoading}
+                >
+                  <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
+                    {model.bypassAccounts.map((account) => (
+                      <SelectItem key={account.rid} value={String(account.rid)}>
+                        {account.username || `RID ${account.rid}`}
+                        {account.disabled ? ` · ${t('emulationPage.bypass.disabled')}` : ''}
+                        {account.hasPassword ? '' : ` · ${t('emulationPage.bypass.noPassword')}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={model.bypassAction}
+                  onValueChange={(value) => model.selectBypassAction(value as typeof model.bypassAction)}
+                >
+                  <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.action')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="clearPassword">{t('emulationPage.bypass.clearPassword')}</SelectItem>
+                    <SelectItem value="enableAndClearPassword">{t('emulationPage.bypass.enableAndClear')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
+          </fieldset>
+        ) : null}
+
         {model.selectedSource ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-forensics-border py-3 text-[11px]">
             <div className="min-w-0">

@@ -23,8 +23,9 @@ pub(crate) use crate::commands::{
         open_case, remove_case_from_list, rename_data_source,
     },
     emulation_commands::{
-        get_emulation_preflight, get_emulation_status, launch_emulation, list_emulation_sessions,
-        prepare_emulation, release_emulation,
+        apply_emulation_bypass, get_emulation_bypass_accounts, get_emulation_preflight,
+        get_emulation_status, launch_emulation, list_emulation_sessions, prepare_emulation,
+        release_emulation,
     },
     file_commands::{
         close_file_handle, export_deleted_recovery, extract_file, forget_persisted_bitlocker_key,
@@ -33,8 +34,9 @@ pub(crate) use crate::commands::{
         get_image_preview, get_media_url, get_text_preview, import_unlocked_bitlocker_catalog,
         inspect_bitlocker_volume, list_deleted_recoveries, lock_bitlocker_volume, open_file_handle,
         open_file_handle_request, read_deleted_recovery_range, read_file_range, read_media_range,
-        restore_persisted_bitlocker_key, run_deleted_recovery, unlock_bitlocker_with_memory_image,
-        unlock_bitlocker_with_password, unlock_bitlocker_with_recovery_password,
+        restore_persisted_bitlocker_key, run_deleted_recovery, search_deleted_recoveries_by_hash,
+        unlock_bitlocker_with_memory_image, unlock_bitlocker_with_password,
+        unlock_bitlocker_with_recovery_password,
     },
     graph_commands::{
         get_graph_snapshot, get_node_neighborhood, get_provenance_chain, list_graph_nodes,

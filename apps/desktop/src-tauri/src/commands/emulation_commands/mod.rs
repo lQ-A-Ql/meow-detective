@@ -13,6 +13,12 @@ use crate::commands::command_support::{
 use crate::emulation_registry::{EmulationSessionStatus, EmulationState};
 use crate::state::AppState;
 
+mod bypass;
+mod preflight;
+
+pub use bypass::{apply_emulation_bypass, get_emulation_bypass_accounts};
+pub use preflight::get_emulation_preflight;
+
 #[tauri::command]
 pub async fn prepare_emulation(
     state: State<'_, AppState>,
@@ -104,33 +110,6 @@ pub async fn list_emulation_sessions(
 }
 
 #[tauri::command]
-pub async fn get_emulation_preflight(
-    state: State<'_, AppState>,
-    data_source_id: String,
-) -> Result<transport::dto::EmulationPreflightDto, CommandError> {
-    if data_source_id.trim().is_empty() {
-        return Err(CommandError::invalid_input("data source id is required"));
-    }
-    let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
-        let mut preflight = app_services::mount_service::emulation_preflight(
-            &connection,
-            &active.case_root,
-            &active.meta.id,
-            &domain::DataSourceId(data_source_id),
-        )
-        .map_err(CommandError::from_typed_service_error)?;
-        preflight.maintenance_tool_available =
-            crate::emulation_registry::maintenance_tool_available();
-        Ok(preflight)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
-}
-
-#[tauri::command]
 pub async fn release_emulation(
     state: State<'_, AppState>,
     session_id: String,
@@ -195,5 +174,5 @@ fn audit_emulation(
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/commands/emulation_commands.rs"]
+#[path = "../../../tests/unit/commands/emulation_commands.rs"]
 mod tests;
