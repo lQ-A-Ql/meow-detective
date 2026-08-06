@@ -1,8 +1,12 @@
 use std::path::PathBuf;
 
 use domain::{DataSourceId, DataSourceKind};
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::{
+    audit_repo::{AuditAction, AuditRepo},
+    datasource_repo::DataSourceRepo,
+};
 use rusqlite::Connection;
+use transport::dto::MountStatusDto;
 
 use super::source_validation::{
     mount_source_binding, validate_source_identity, validate_source_kind,
@@ -45,6 +49,29 @@ pub fn prepare_physical_mount_source(
             repo.source_fingerprint(data_source_id)?,
         ),
     })
+}
+
+pub fn record_physical_mount_audit(
+    case_conn: &Connection,
+    case_id: &domain::CaseId,
+    status: &MountStatusDto,
+) -> Result<(), MountServiceError> {
+    let details = serde_json::json!({
+        "status": "mounted",
+        "mode": "physicalDisk",
+        "mountId": status.target.mount_id,
+        "physicalDevicePath": status.target.physical_device_path,
+        "targetAddress": status.target.target_address,
+        "readOnly": true,
+    });
+    AuditRepo::new(case_conn).log(
+        Some(&case_id.0),
+        "system",
+        &AuditAction::ImageMount,
+        Some(&status.target.data_source_id),
+        &details.to_string(),
+    )?;
+    Ok(())
 }
 
 fn prepared_kind(

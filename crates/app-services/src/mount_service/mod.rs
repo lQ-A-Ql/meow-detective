@@ -13,5 +13,6 @@ pub use emulation::{prepare_emulation_source, PreparedEmulationSource};
 pub use error::MountServiceError;
 pub use open::prepare_mount_session;
 pub use physical::{
-    prepare_physical_mount_source, PreparedPhysicalImageKind, PreparedPhysicalMountSource,
+    prepare_physical_mount_source, record_physical_mount_audit, PreparedPhysicalImageKind,
+    PreparedPhysicalMountSource,
 };
