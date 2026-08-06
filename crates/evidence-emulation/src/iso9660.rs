@@ -150,7 +150,7 @@ fn write_root_directory(
 /// (1 for `.`/`..`, or name+`;1`).
 fn directory_record(extent: u32, length: u32, flags: u8, name_length: u8) -> Vec<u8> {
     let base = 33 + name_length as usize;
-    let total = base + usize::from(name_length % 2 == 0);
+    let total = base + usize::from(name_length.is_multiple_of(2));
     let mut record = vec![0u8; total.max(34)];
     record[0] = record.len() as u8;
     record[2..10].copy_from_slice(&both_endian_32(extent));

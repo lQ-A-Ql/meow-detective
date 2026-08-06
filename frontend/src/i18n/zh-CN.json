@@ -529,6 +529,13 @@
       "bypassAvailable": "可绕密",
       "bypassUnavailable": "不可绕密"
     },
+    "maintenance": {
+      "toolAvailable": "维护盘：自动生成",
+      "toolMissing": "维护工具未构建",
+      "buildHint": "运行 scripts/dev/build-winpe-maintenance.ps1 后自动附带维护盘",
+      "attached": "维护盘已挂载",
+      "absent": "无维护盘"
+    },
     "source": {
       "kind": "镜像类型",
       "platform": "平台",

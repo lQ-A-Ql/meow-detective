@@ -17,12 +17,13 @@ mod recovery_media;
 mod vmware;
 mod workspace;
 
+pub(crate) use materials::maintenance_tool_available;
 use materials::{
     build_maintenance_payload, detect_firmware, image_kind, prepare_machine_materials,
 };
 use recovery_media::RecoveryMedia;
 use vmware::VmwareControl;
-use workspace::SessionWorkspace;
+use workspace::{ProvenanceIds, SessionWorkspace};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmulationState {
@@ -39,6 +40,7 @@ pub struct EmulationSessionStatus {
     pub data_source_id: String,
     pub state: EmulationState,
     pub logical_length: u64,
+    pub maintenance_media: bool,
     pub error: Option<String>,
 }
 
@@ -140,9 +142,11 @@ impl EmulationRegistry {
             &workspace,
             &identity,
             firmware,
-            case_id,
-            data_source_id,
-            &session_id,
+            ProvenanceIds {
+                session_id: &session_id,
+                case_id: &case_id.0,
+                data_source_id: &data_source_id.0,
+            },
             recovery_media.as_ref(),
             options,
             maintenance.as_ref(),
@@ -157,6 +161,7 @@ impl EmulationRegistry {
             data_source_id: data_source_id.0.clone(),
             state: EmulationState::DescriptorReady,
             logical_length: identity.logical_length(),
+            maintenance_media: maintenance.is_some(),
             error: None,
         };
         self.insert_entry(
@@ -365,6 +370,8 @@ fn quiesce_entry(entry: &mut EmulationEntry) -> Result<(), EmulationRegistryErro
 }
 
 fn refresh_backend(entry: &mut EmulationEntry) {
+    entry.status.maintenance_media =
+        entry.status.maintenance_media && entry.workspace.maintenance_iso_present();
     if matches!(
         entry.status.state,
         EmulationState::Released | EmulationState::FailedCleanupPending

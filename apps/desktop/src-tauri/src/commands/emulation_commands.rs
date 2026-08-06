@@ -115,13 +115,16 @@ pub async fn get_emulation_preflight(
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
-        app_services::mount_service::emulation_preflight(
+        let mut preflight = app_services::mount_service::emulation_preflight(
             &connection,
             &active.case_root,
             &active.meta.id,
             &domain::DataSourceId(data_source_id),
         )
-        .map_err(CommandError::from_typed_service_error)
+        .map_err(CommandError::from_typed_service_error)?;
+        preflight.maintenance_tool_available =
+            crate::emulation_registry::maintenance_tool_available();
+        Ok(preflight)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -162,6 +165,7 @@ fn to_dto(status: EmulationSessionStatus) -> EmulationSessionStatusDto {
         state: state_to_dto(status.state),
         logical_length: status.logical_length,
         control_mode: EmulationControlModeDto::InteractiveOnly,
+        maintenance_media: status.maintenance_media,
         error: status.error,
     }
 }

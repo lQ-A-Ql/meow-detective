@@ -100,6 +100,7 @@ pub fn emulation_preflight(
         data_source_id: data_source_id.0.clone(),
         installs,
         recommended_boot_route,
+        maintenance_tool_available: false,
     })
 }
 

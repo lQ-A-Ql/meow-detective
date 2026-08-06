@@ -31,6 +31,7 @@ export interface EmulationPreflight {
   dataSourceId: string;
   installs: EmulationInstall[];
   recommendedBootRoute: 'recoveryMedia' | 'directSystem';
+  maintenanceToolAvailable?: boolean;
 }
 
 export interface EmulationSessionStatus {
@@ -39,5 +40,6 @@ export interface EmulationSessionStatus {
   state: EmulationState;
   logicalLength: number;
   controlMode: EmulationControlMode;
+  maintenanceMedia?: boolean;
   error?: string;
 }

@@ -118,6 +118,10 @@ impl SessionWorkspace {
         Ok(self.maintenance_iso.clone())
     }
 
+    pub(super) fn maintenance_iso_present(&self) -> bool {
+        self.maintenance_iso.is_file()
+    }
+
     /// Removes the whole session directory after a failed prepare. Best
     /// effort: a mounted backend must already be stopped by the caller, and a
     /// removal failure is logged rather than propagated.
@@ -160,11 +164,16 @@ pub(super) struct RecoveryMediaProvenance<'a> {
     pub(super) sha256: &'a str,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ProvenanceIds<'a> {
+    pub session_id: &'a str,
+    pub case_id: &'a str,
+    pub data_source_id: &'a str,
+}
+
 impl<'a> EmulationProvenance<'a> {
     pub(super) fn new(
-        session_id: &'a str,
-        case_id: &'a str,
-        data_source_id: &'a str,
+        ids: ProvenanceIds<'a>,
         identity: &ParentIdentity,
         firmware: VmwareFirmware,
         options: VmOptions,
@@ -173,9 +182,9 @@ impl<'a> EmulationProvenance<'a> {
     ) -> Self {
         Self {
             schema_version: 1,
-            session_id,
-            case_id,
-            data_source_id,
+            session_id: ids.session_id,
+            case_id: ids.case_id,
+            data_source_id: ids.data_source_id,
             parent_sha256: encode_hex(identity.sha256()),
             logical_length: identity.logical_length(),
             firmware: match firmware {

@@ -64,6 +64,11 @@ function SessionRow({
         <div className="truncate text-forensics-text-secondary">
           {t(`emulationPage.controlModes.${session.controlMode}`)}
         </div>
+        <div className="mt-1 truncate text-[10px] text-forensics-muted">
+          {t(session.maintenanceMedia
+            ? 'emulationPage.maintenance.attached'
+            : 'emulationPage.maintenance.absent')}
+        </div>
         {session.error ? (
           <div className="mt-1 truncate text-[10px] text-forensics-error-text" title={session.error}>
             {session.error}
@@ -242,6 +247,21 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
                 </Badge>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {model.preflight ? (
+          <div className="flex items-center gap-2 border-b border-forensics-border py-3 text-[11px]">
+            <Badge variant={model.preflight.maintenanceToolAvailable ? 'default' : 'secondary'}>
+              {t(model.preflight.maintenanceToolAvailable
+                ? 'emulationPage.maintenance.toolAvailable'
+                : 'emulationPage.maintenance.toolMissing')}
+            </Badge>
+            {!model.preflight.maintenanceToolAvailable ? (
+              <span className="text-[10px] text-forensics-muted">
+                {t('emulationPage.maintenance.buildHint')}
+              </span>
+            ) : null}
           </div>
         ) : null}
 

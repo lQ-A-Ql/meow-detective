@@ -529,6 +529,13 @@
       "bypassAvailable": "Bypass available",
       "bypassUnavailable": "Bypass unavailable"
     },
+    "maintenance": {
+      "toolAvailable": "Maintenance CD: auto-generated",
+      "toolMissing": "Maintenance tool not built",
+      "buildHint": "Run scripts/dev/build-winpe-maintenance.ps1 to include the maintenance CD",
+      "attached": "Maintenance CD attached",
+      "absent": "No maintenance CD"
+    },
     "source": {
       "kind": "Image type",
       "platform": "Platform",

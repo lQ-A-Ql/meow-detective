@@ -86,6 +86,11 @@ pub struct EmulationPreflightDto {
     pub data_source_id: String,
     pub installs: Vec<EmulationInstallDto>,
     pub recommended_boot_route: EmulationBootRouteDto,
+    /// Set by the command layer: whether the WinPE maintenance tool binary is
+    /// resolvable on this machine (the app-services layer does not know about
+    /// tool packaging).
+    #[serde(default)]
+    pub maintenance_tool_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -96,6 +101,8 @@ pub struct EmulationSessionStatusDto {
     pub state: EmulationStateDto,
     pub logical_length: u64,
     pub control_mode: EmulationControlModeDto,
+    #[serde(default)]
+    pub maintenance_media: bool,
     pub error: Option<String>,
 }
 

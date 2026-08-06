@@ -77,9 +77,13 @@ fn real_e01_mount_uses_a_descriptor_and_sparse_cow_without_materializing_the_dis
         &workspace,
         &identity,
         super::detect_firmware(&disk).unwrap(),
-        &domain::CaseId("poc-case".to_string()),
-        &domain::DataSourceId("poc-source".to_string()),
-        &session_id,
+        super::workspace::ProvenanceIds {
+            session_id: &session_id,
+            case_id: "poc-case",
+            data_source_id: "poc-source",
+        },
+        None,
+        evidence_emulation::VmOptions::default(),
         None,
     )
     .unwrap();
@@ -161,10 +165,14 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
         &workspace,
         &identity,
         super::detect_firmware(&disk).unwrap(),
-        &domain::CaseId("poc-case".to_string()),
-        &domain::DataSourceId("poc-source".to_string()),
-        &session_id,
+        super::workspace::ProvenanceIds {
+            session_id: &session_id,
+            case_id: "poc-case",
+            data_source_id: "poc-source",
+        },
         recovery_media.as_ref(),
+        evidence_emulation::VmOptions::default(),
+        None,
     )
     .unwrap();
 

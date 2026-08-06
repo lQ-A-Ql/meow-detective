@@ -12,7 +12,9 @@ use evidence_emulation::{
 };
 
 use super::recovery_media::RecoveryMedia;
-use super::workspace::{EmulationProvenance, RecoveryMediaProvenance, SessionWorkspace};
+use super::workspace::{
+    EmulationProvenance, ProvenanceIds, RecoveryMediaProvenance, SessionWorkspace,
+};
 use super::EmulationRegistryError;
 
 /// The helper executable is delivered read-only inside the guest; anything
@@ -67,6 +69,10 @@ pub(super) fn build_maintenance_payload(
     Ok(Some(MaintenancePayload { tool, targets_json }))
 }
 
+pub(crate) fn maintenance_tool_available() -> bool {
+    resolve_maintenance_tool().is_some()
+}
+
 /// Resolution order: explicit environment override, a `tools/` directory next
 /// to the running application, then the workspace build output used in
 /// development.
@@ -97,9 +103,7 @@ pub(super) fn prepare_machine_materials(
     workspace: &SessionWorkspace,
     identity: &ParentIdentity,
     firmware: VmwareFirmware,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-    session_id: &str,
+    ids: ProvenanceIds<'_>,
     recovery_media: Option<&RecoveryMedia>,
     options: VmOptions,
     maintenance: Option<&MaintenancePayload>,
@@ -163,9 +167,7 @@ pub(super) fn prepare_machine_materials(
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     workspace
         .write_provenance(&EmulationProvenance::new(
-            session_id,
-            &case_id.0,
-            &data_source_id.0,
+            ids,
             identity,
             firmware,
             options,
