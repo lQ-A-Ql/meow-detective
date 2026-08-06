@@ -44,6 +44,8 @@ rusqlite.workspace = true
 uuid.workspace = true
 encoding_rs.workspace = true
 sha2.workspace = true
+sha1.workspace = true
+md-5.workspace = true
 hex.workspace = true
 once_cell.workspace = true
 regex.workspace = true
@@ -60,6 +62,6 @@ base64.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-sha1.workspace = true
 sha2.workspace = true
 testing.workspace = true
+winpe-maintenance.workspace = true
