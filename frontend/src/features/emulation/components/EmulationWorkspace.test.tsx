@@ -35,6 +35,9 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     clearRecoveryIso: vi.fn(),
     options: { network: false, clipboard: false, timeSync: false },
     toggleOption: vi.fn(),
+    osdataCleanupPartition: undefined,
+    cleanupOsdata: true,
+    toggleCleanupOsdata: vi.fn(),
     bypassPartition: undefined,
     selectBypassPartition: vi.fn(),
     bypassAccounts: [],
@@ -83,8 +86,7 @@ describe('EmulationWorkspace', () => {
     expect(clearRecoveryIso).toHaveBeenCalledOnce();
   });
 
-  it('renders session state and releases the selected session by id', () => {
-    const release = vi.fn().mockResolvedValue(undefined);
+  it('renders session state and releases the selected session by id', () => {    const release = vi.fn().mockResolvedValue(undefined);
     render(<EmulationWorkspace model={createModel({
       sessions: [{
         sessionId: 'emulation-session-1',
@@ -105,5 +107,28 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('200.00 GB')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '释放 早起王的PC镜像 的仿真会话' }));
     expect(release).toHaveBeenCalledWith('emulation-session-1');
+  });
+
+  it('offers OSDATA cleanup when preflight detects the entry and delegates the toggle', () => {
+    const toggleCleanupOsdata = vi.fn();
+    render(<EmulationWorkspace model={createModel({
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 2,
+          osdataPresent: true,
+          samPresent: true,
+          utilmanBypassAvailable: true,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      osdataCleanupPartition: 2,
+      cleanupOsdata: true,
+      toggleCleanupOsdata,
+    })} />);
+
+    expect(screen.getByText('存在 OSDATA')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' }));
+    expect(toggleCleanupOsdata).toHaveBeenCalledOnce();
   });
 });

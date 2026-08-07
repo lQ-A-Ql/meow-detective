@@ -2,7 +2,7 @@ use tauri::State;
 use transport::CommandError;
 
 use crate::commands::command_support::{
-    get_case_connection, require_active_case, write_emulation_bypass_audit_log,
+    get_case_connection, require_active_case, write_emulation_edit_audit_log, EmulationAuditEvent,
 };
 use crate::state::AppState;
 
@@ -60,8 +60,9 @@ pub async fn apply_emulation_bypass(
                 request.action,
             )
             .map_err(CommandError::from_typed_service_error)?;
-        write_emulation_bypass_audit_log(
+        write_emulation_edit_audit_log(
             &app_state,
+            EmulationAuditEvent::Bypass,
             &request.session_id,
             &result.data_source_id,
             serde_json::json!({
@@ -72,6 +73,47 @@ pub async fn apply_emulation_bypass(
                 "passwordCleared": result.password_cleared,
                 "accountEnabled": result.account_enabled,
                 "alreadyPasswordless": result.already_passwordless,
+            }),
+        );
+        Ok(result)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
+pub async fn cleanup_emulation_osdata(
+    state: State<'_, AppState>,
+    request: transport::dto::EmulationOsdataCleanupRequestDto,
+) -> Result<transport::dto::EmulationOsdataCleanupDto, CommandError> {
+    if request.session_id.trim().is_empty() {
+        return Err(CommandError::invalid_input("session id is required"));
+    }
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let connection = get_case_connection(&app_state)?;
+        let result = app_state
+            .emulation_registry
+            .cleanup_osdata(
+                &crate::emulation_registry::BypassCaseRef {
+                    case_conn: &connection,
+                    case_root: &active.case_root,
+                    case_id: &active.meta.id,
+                },
+                &request.session_id,
+                request.partition_index,
+            )
+            .map_err(CommandError::from_typed_service_error)?;
+        write_emulation_edit_audit_log(
+            &app_state,
+            EmulationAuditEvent::OsdataCleanup,
+            &request.session_id,
+            &result.data_source_id,
+            serde_json::json!({
+                "partitionIndex": result.partition_index,
+                "state": format!("{:?}", result.state),
+                "editsApplied": result.edits_applied,
             }),
         );
         Ok(result)

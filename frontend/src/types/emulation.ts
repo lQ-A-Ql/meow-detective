@@ -70,3 +70,18 @@ export interface EmulationBypassResult {
   accountEnabled: boolean;
   alreadyPasswordless: boolean;
 }
+
+export interface EmulationOsdataCleanupRequest {
+  sessionId: string;
+  partitionIndex: number;
+}
+
+export type EmulationOsdataCleanupState = 'removed' | 'absent' | 'refusedNonEmpty';
+
+export interface EmulationOsdataCleanupResult {
+  sessionId: string;
+  dataSourceId: string;
+  partitionIndex: number;
+  state: EmulationOsdataCleanupState;
+  editsApplied: number;
+}

@@ -18,6 +18,7 @@ pub(crate) enum EmulationAuditEvent {
     Launch,
     Release,
     Bypass,
+    OsdataCleanup,
 }
 
 impl EmulationAuditEvent {
@@ -27,6 +28,7 @@ impl EmulationAuditEvent {
             Self::Launch => AuditAction::EmulationLaunch,
             Self::Release => AuditAction::EmulationRelease,
             Self::Bypass => AuditAction::EmulationBypass,
+            Self::OsdataCleanup => AuditAction::EmulationOsdataCleanup,
         }
     }
 }
@@ -111,10 +113,11 @@ pub(crate) fn write_emulation_audit_log(
     );
 }
 
-/// Bypass operations carry their own detail payload (partition, account,
-/// outcome) instead of the session-state shape.
-pub(crate) fn write_emulation_bypass_audit_log(
+/// Bypass-style operations carry their own detail payload (partition,
+/// account, outcome) instead of the session-state shape.
+pub(crate) fn write_emulation_edit_audit_log(
     state: &AppState,
+    event: EmulationAuditEvent,
     session_id: &str,
     data_source_id: &str,
     details: serde_json::Value,
@@ -126,12 +129,7 @@ pub(crate) fn write_emulation_bypass_audit_log(
     if let (Some(base), Some(extra)) = (payload.as_object_mut(), details.as_object()) {
         base.extend(extra.clone());
     }
-    write_audit_log(
-        state,
-        EmulationAuditEvent::Bypass.action(),
-        Some(session_id),
-        payload,
-    );
+    write_audit_log(state, event.action(), Some(session_id), payload);
 }
 
 #[cfg(test)]

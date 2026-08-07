@@ -1,5 +1,4 @@
 use super::{EmulationControlModeDto, PrepareEmulationRequestDto};
-
 #[test]
 fn prepare_request_validates_the_source_and_optional_iso() {
     let request = PrepareEmulationRequestDto {
@@ -47,4 +46,34 @@ fn prepare_request_requires_one_unambiguous_boot_authorization() {
 fn control_mode_serializes_as_interactive_only() {
     let value = serde_json::to_value(EmulationControlModeDto::InteractiveOnly).unwrap();
     assert_eq!(value, "interactiveOnly");
+}
+
+#[test]
+fn osdata_cleanup_round_trip_uses_camel_case() {
+    use super::{
+        EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto,
+    };
+
+    let request = EmulationOsdataCleanupRequestDto {
+        session_id: "emulation-1".to_string(),
+        partition_index: 2,
+    };
+    let value = serde_json::to_value(&request).unwrap();
+    assert_eq!(value["sessionId"], "emulation-1");
+    assert_eq!(value["partitionIndex"], 2);
+    let restored: EmulationOsdataCleanupRequestDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, request);
+
+    let result = EmulationOsdataCleanupDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        partition_index: 2,
+        state: EmulationOsdataCleanupStateDto::Removed,
+        edits_applied: 2,
+    };
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(value["state"], "removed");
+    assert_eq!(value["editsApplied"], 2);
+    let restored: EmulationOsdataCleanupDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, result);
 }

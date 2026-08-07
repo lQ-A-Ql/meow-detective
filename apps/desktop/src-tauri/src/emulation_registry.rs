@@ -253,6 +253,38 @@ impl EmulationRegistry {
         Ok(result)
     }
 
+    pub fn cleanup_osdata(
+        &self,
+        case: &BypassCaseRef<'_>,
+        session_id: &str,
+        partition_index: u32,
+    ) -> Result<transport::dto::EmulationOsdataCleanupDto, EmulationRegistryError> {
+        let (disk, data_source_id) = {
+            let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
+            let entry = entries
+                .get(session_id)
+                .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
+            if entry.status.state != EmulationState::DescriptorReady {
+                return Err(EmulationRegistryError::Vmware(
+                    "namespace edits are only allowed before the guest is launched".to_string(),
+                ));
+            }
+            (Arc::clone(&entry.disk), entry.status.data_source_id.clone())
+        };
+        let mut result = app_services::emulation_osdata::cleanup_osdata(
+            &disk,
+            &app_services::emulation_bypass::BypassCaseContext {
+                case_conn: case.case_conn,
+                case_root: case.case_root,
+                case_id: case.case_id,
+                data_source_id: &DataSourceId(data_source_id),
+            },
+            partition_index,
+        )?;
+        result.session_id = session_id.to_string();
+        Ok(result)
+    }
+
     pub fn release(
         &self,
         session_id: &str,

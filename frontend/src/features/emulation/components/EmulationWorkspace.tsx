@@ -306,6 +306,19 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
                 </Badge>
               </div>
             ))}
+            {model.osdataCleanupPartition !== undefined ? (
+              <label className="flex items-center gap-2 pt-1 text-[12px] text-forensics-text-secondary">
+                <Checkbox
+                  checked={model.cleanupOsdata}
+                  onCheckedChange={model.toggleCleanupOsdata}
+                  aria-label={t('emulationPage.preflight.cleanupOsdata')}
+                />
+                {t('emulationPage.preflight.cleanupOsdata')}
+                <span className="font-mono text-[10px] text-forensics-muted">
+                  [P{model.osdataCleanupPartition}]
+                </span>
+              </label>
+            ) : null}
           </div>
         ) : null}
 

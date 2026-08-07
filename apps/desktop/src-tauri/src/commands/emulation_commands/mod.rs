@@ -16,7 +16,7 @@ use crate::state::AppState;
 mod bypass;
 mod preflight;
 
-pub use bypass::{apply_emulation_bypass, get_emulation_bypass_accounts};
+pub use bypass::{apply_emulation_bypass, cleanup_emulation_osdata, get_emulation_bypass_accounts};
 pub use preflight::get_emulation_preflight;
 
 #[tauri::command]

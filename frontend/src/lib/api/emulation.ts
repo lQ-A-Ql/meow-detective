@@ -4,6 +4,8 @@ import type {
   EmulationBypassAccount,
   EmulationBypassApplyRequest,
   EmulationBypassResult,
+  EmulationOsdataCleanupRequest,
+  EmulationOsdataCleanupResult,
   EmulationPreflight,
   EmulationSessionStatus,
   PrepareEmulationRequest,
@@ -33,6 +35,14 @@ export async function applyEmulationBypass(
   request: EmulationBypassApplyRequest,
 ): Promise<EmulationBypassResult> {
   return apiClient.request<EmulationBypassResult>(COMMANDS.emulation.APPLY_BYPASS, { request });
+}
+
+export async function cleanupEmulationOsdata(
+  request: EmulationOsdataCleanupRequest,
+): Promise<EmulationOsdataCleanupResult> {
+  return apiClient.request<EmulationOsdataCleanupResult>(COMMANDS.emulation.CLEANUP_OSDATA, {
+    request,
+  });
 }
 
 export async function launchEmulation(sessionId: string): Promise<EmulationSessionStatus> {

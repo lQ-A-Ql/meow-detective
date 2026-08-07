@@ -47,9 +47,9 @@ impl transport::ServiceErrorCategory for EmulationBypassError {
     }
 }
 
-struct PartitionFilesystem {
-    fs: fs_ntfs::NtfsReader,
-    partition_offset: u64,
+pub(crate) struct PartitionFilesystem {
+    pub(crate) fs: fs_ntfs::NtfsReader,
+    pub(crate) partition_offset: u64,
 }
 
 /// Everything the bypass flow needs to reach the case and the source catalog.
@@ -129,7 +129,7 @@ pub fn apply_bypass(
     })
 }
 
-fn open_partition_filesystem(
+pub(crate) fn open_partition_filesystem(
     context: &BypassCaseContext<'_>,
     partition_index: u32,
 ) -> Result<PartitionFilesystem, EmulationBypassError> {

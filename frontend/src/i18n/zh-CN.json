@@ -526,6 +526,7 @@
       "title": "镜像预检（来自导入索引）",
       "osdataPresent": "存在 OSDATA",
       "osdataAbsent": "无 OSDATA",
+      "cleanupOsdata": "启动前清除 OSDATA（仅写入覆盖层）",
       "bypassAvailable": "可绕密",
       "bypassUnavailable": "不可绕密"
     },
@@ -591,6 +592,7 @@
     },
     "errors": {
       "sourceRequired": "请选择证据数据源。",
+      "osdataNonEmpty": "OSDATA 为非空目录，已拒绝自动清除。",
       "operationFailed": "仿真操作失败。"
     }
   },

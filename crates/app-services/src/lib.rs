@@ -27,6 +27,8 @@ mod derived_source_catalog;
 pub mod derived_source_service;
 mod e01_reader_cache;
 pub mod emulation_bypass;
+pub mod emulation_cow_reader;
+pub mod emulation_osdata;
 pub mod entity_extraction;
 pub mod entity_resolution;
 pub mod error_ext;

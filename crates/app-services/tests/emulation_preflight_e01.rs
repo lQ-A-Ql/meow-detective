@@ -430,6 +430,111 @@ fn sam_bypass_writes_only_the_overlay_and_decrypts_to_empty() {
 }
 
 #[test]
+#[ignore = "requires a real Windows E01 image"]
+fn osdata_cleanup_removes_the_entry_through_the_overlay() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let active = app_services::case_service::create_case(
+        &temp.path().join("cases"),
+        "emulation-osdata",
+        Some("tester"),
+    )
+    .unwrap();
+    let image = sample_path();
+    let image_size = std::fs::metadata(&image).unwrap().len();
+    let data_source_id = import_image(&active, &image);
+
+    let (case_id, case_root) = (active.meta.id.clone(), active.case_root.clone());
+    let preflight = active
+        .with_conn(|case_conn| {
+            app_services::mount_service::emulation_preflight(
+                case_conn,
+                &case_root,
+                &case_id,
+                &data_source_id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    let install = preflight
+        .installs
+        .iter()
+        .find(|install| install.osdata_present)
+        .expect("the image must expose an install with OSDATA")
+        .clone();
+    eprintln!("target install: P{}", install.partition_index);
+
+    let provider =
+        evidence_block::open_block_provider(&image, evidence_block::EvidenceImageKind::E01)
+            .unwrap();
+    let identity = evidence_emulation::ParentIdentity::new(provider.len(), [0x5au8; 32]).unwrap();
+    let overlay = temp.path().join("overlay-osdata.cow");
+    let disk = Arc::new(
+        evidence_emulation::CowDisk::create(
+            &overlay,
+            provider,
+            identity,
+            evidence_emulation::CowDiskConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    let result = active
+        .with_conn(|case_conn| {
+            app_services::emulation_osdata::cleanup_osdata(
+                &disk,
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                install.partition_index,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    eprintln!("cleanup result: {result:?}");
+    assert_eq!(
+        result.state,
+        transport::dto::EmulationOsdataCleanupStateDto::Removed,
+        "OSDATA must be removed through the overlay"
+    );
+    assert!(
+        result.edits_applied >= 2,
+        "index edit plus record retirement"
+    );
+
+    // A second run re-plans against the read-only evidence and re-applies
+    // the same edits: the operation is idempotent over the COW layer.
+    let second = active
+        .with_conn(|case_conn| {
+            app_services::emulation_osdata::cleanup_osdata(
+                &disk,
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                install.partition_index,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    eprintln!("second run: {second:?}");
+
+    // The parent evidence still lists OSDATA and remains byte-identical.
+    let (fs, _) = open_windows_fs(&image).expect("Windows volume must open");
+    let parent_has_osdata = fs
+        .list_children("Windows/System32/config")
+        .expect("parent config listing")
+        .iter()
+        .any(|node| node.name.eq_ignore_ascii_case("OSDATA"));
+    assert!(parent_has_osdata, "the evidence image must keep OSDATA");
+    assert_eq!(std::fs::metadata(&image).unwrap().len(), image_size);
+}
+
+#[test]
 #[ignore = "debug helper: dumps the SAM hive from a real image"]
 fn debug_dump_sam_hive_layout() {
     let image = sample_path();

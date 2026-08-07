@@ -145,6 +145,34 @@ pub struct EmulationBypassResultDto {
     pub already_passwordless: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationOsdataCleanupRequestDto {
+    pub session_id: String,
+    pub partition_index: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationOsdataCleanupStateDto {
+    /// The entry was excised from the parent index and the record retired.
+    Removed,
+    /// No `OSDATA` entry exists under `Windows/System32/config`.
+    Absent,
+    /// `OSDATA` is a non-empty directory; host-side removal is refused.
+    RefusedNonEmpty,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationOsdataCleanupDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    pub partition_index: u32,
+    pub state: EmulationOsdataCleanupStateDto,
+    pub edits_applied: u32,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/emulation.rs"]
 mod tests;

@@ -526,6 +526,7 @@
       "title": "Image preflight (from import index)",
       "osdataPresent": "OSDATA present",
       "osdataAbsent": "No OSDATA",
+      "cleanupOsdata": "Remove OSDATA before boot (overlay only)",
       "bypassAvailable": "Bypass available",
       "bypassUnavailable": "Bypass unavailable"
     },
@@ -591,6 +592,7 @@
     },
     "errors": {
       "sourceRequired": "Select an evidence source.",
+      "osdataNonEmpty": "OSDATA is a non-empty directory; automatic removal was refused.",
       "operationFailed": "Emulation operation failed."
     }
   },

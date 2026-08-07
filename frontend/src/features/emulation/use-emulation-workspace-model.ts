@@ -6,6 +6,7 @@ import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
   applyEmulationBypass,
+  cleanupEmulationOsdata,
   getEmulationBypassAccounts,
   getEmulationPreflight,
   launchEmulation,
@@ -55,6 +56,9 @@ export interface EmulationWorkspaceModel {
   clearRecoveryIso: () => void;
   options: EmulationOptions;
   toggleOption: (key: keyof EmulationOptions) => void;
+  osdataCleanupPartition?: number;
+  cleanupOsdata: boolean;
+  toggleCleanupOsdata: () => void;
   bypassPartition?: number;
   selectBypassPartition: (partition?: number) => void;
   bypassAccounts: EmulationBypassAccount[];
@@ -116,6 +120,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [bypassPartition, setBypassPartition] = useState<number | undefined>(undefined);
   const [bypassRid, setBypassRid] = useState<number | undefined>(undefined);
   const [bypassAction, setBypassAction] = useState<EmulationBypassAction>('clearPassword');
+  const [cleanupOsdata, setCleanupOsdata] = useState(true);
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -159,6 +164,10 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const invalidateSessions = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: EMULATION_SESSIONS_QUERY_KEY });
   }, [queryClient]);
+  const osdataCleanupPartition = useMemo(
+    () => preflightQuery.data?.installs.find((install) => install.osdataPresent)?.partitionIndex,
+    [preflightQuery.data],
+  );
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
       if (!selectedSourceId) {
@@ -170,6 +179,15 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         allowDirectBoot,
         options,
       });
+      if (cleanupOsdata && osdataCleanupPartition !== undefined) {
+        const cleanup = await cleanupEmulationOsdata({
+          sessionId: prepared.sessionId,
+          partitionIndex: osdataCleanupPartition,
+        });
+        if (cleanup.state === 'refusedNonEmpty') {
+          throw new Error(t('emulationPage.errors.osdataNonEmpty'));
+        }
+      }
       if (bypassRid !== undefined && bypassPartition !== undefined) {
         await applyEmulationBypass({
           sessionId: prepared.sessionId,
@@ -223,6 +241,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const toggleOption = useCallback((key: keyof EmulationOptions) => {
     setOptions((current) => ({ ...current, [key]: !current[key] }));
   }, []);
+  const toggleCleanupOsdata = useCallback(() => {
+    setCleanupOsdata((current) => !current);
+  }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
     if (!confirmEmulationBoot(recoveryIsoPath, t('fileBrowser.mount.directBootConfirm'))) return;
@@ -252,6 +273,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     clearRecoveryIso,
     options,
     toggleOption,
+    osdataCleanupPartition,
+    cleanupOsdata,
+    toggleCleanupOsdata,
     bypassPartition,
     selectBypassPartition: setBypassPartition,
     bypassAccounts: bypassAccountsQuery.data ?? [],
