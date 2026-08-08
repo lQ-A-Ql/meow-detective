@@ -505,14 +505,26 @@ fn processing_phase_heartbeat_refreshes_a_file_backed_lease() {
     let heartbeat = runner
         .start_heartbeat_with_interval(&attempt, Duration::from_millis(10))
         .expect("start heartbeat");
-    std::thread::sleep(Duration::from_millis(100));
+    // Poll until the heartbeat lands instead of sleeping a fixed window:
+    // a fixed 100ms sleep races thread scheduling on loaded hosts.
+    let repo = DataSourceProcessingPhaseRepo::new(&conn);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let stored = loop {
+        let stored = repo
+            .find(&source_id, ProcessingPhase::Search)
+            .expect("query search phase")
+            .expect("search phase exists");
+        if stored.heartbeat_at.as_deref() != Some("2000-01-01 00:00:00") {
+            break stored;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "heartbeat did not refresh the lease within 5s"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
     drop(heartbeat);
 
-    let stored = DataSourceProcessingPhaseRepo::new(&conn)
-        .find(&source_id, ProcessingPhase::Search)
-        .expect("query search phase")
-        .expect("search phase exists");
-    assert_ne!(stored.heartbeat_at.as_deref(), Some("2000-01-01 00:00:00"));
     assert_ne!(
         stored.lease_expires_at.as_deref(),
         Some("2000-01-01 00:00:01")

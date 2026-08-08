@@ -81,21 +81,33 @@ fn e01_registry_network_adapters_and_default_browser() {
         "Expected at least one adapter with IP or gateway"
     );
 
-    // Read an NTUSER.DAT and extract default browser if present.
-    let ntuser_paths = ["Users/Administrator/NTUSER.DAT", "Users/Default/NTUSER.DAT"];
+    // Read an NTUSER.DAT and extract default browser if present. Profiles are
+    // enumerated dynamically: accounts that never logged on (e.g. the
+    // built-in Administrator on this image) have no NTUSER.DAT.
     let mut browser_found = false;
-    for path in &ntuser_paths {
-        let bytes = read_file(&fs, path);
-        if !bytes.starts_with(b"regf") {
-            continue;
-        }
-        let info = extract_ntuser_fields(&bytes, path).expect("NTUSER parse failed");
-        if let Some(browser) = info.default_browser {
-            eprintln!("Default browser from {}: {}", path, browser);
-            browser_found = true;
-            break;
+    let mut profiles_seen = 0u32;
+    if let Ok(users) = fs.list_children("Users") {
+        for user_dir in users.iter().filter(|child| child.is_dir) {
+            let path = format!("Users/{}/NTUSER.DAT", user_dir.name);
+            let Some(bytes) = try_read_file(&fs, &path) else {
+                continue;
+            };
+            if !bytes.starts_with(b"regf") {
+                continue;
+            }
+            profiles_seen += 1;
+            let info = extract_ntuser_fields(&bytes, &path).expect("NTUSER parse failed");
+            if let Some(browser) = info.default_browser {
+                eprintln!("Default browser from {}: {}", path, browser);
+                browser_found = true;
+                break;
+            }
         }
     }
+    assert!(
+        profiles_seen > 0,
+        "expected at least one readable NTUSER.DAT profile hive"
+    );
     // Default browser is optional; just record whether it was found.
     eprintln!("Default browser found: {}", browser_found);
 
@@ -290,4 +302,11 @@ fn read_file(fs: &NtfsReader, path: &str) -> Vec<u8> {
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes).unwrap();
     bytes
+}
+
+fn try_read_file(fs: &NtfsReader, path: &str) -> Option<Vec<u8>> {
+    let mut reader = fs.open_file(path).ok()?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).ok()?;
+    Some(bytes)
 }
