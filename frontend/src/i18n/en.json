@@ -513,6 +513,7 @@
       "recoveryIso": "WinPE boot media",
       "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
       "bootRoute": "Boot route",
+      "recommendedRoute": "Preflight recommends: {{route}}",
       "options": "Guest integrations (all off by default)",
       "optionNetwork": "Host-only network",
       "optionClipboard": "Clipboard / drag-and-drop",

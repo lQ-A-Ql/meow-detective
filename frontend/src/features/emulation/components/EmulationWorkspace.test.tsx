@@ -35,7 +35,7 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     clearRecoveryIso: vi.fn(),
     options: { network: false, clipboard: false, timeSync: false },
     toggleOption: vi.fn(),
-    osdataCleanupPartition: undefined,
+    osdataCleanupPartitions: [],
     cleanupOsdata: true,
     toggleCleanupOsdata: vi.fn(),
     bypassPartition: undefined,
@@ -122,12 +122,13 @@ describe('EmulationWorkspace', () => {
         }],
         recommendedBootRoute: 'directSystem',
       },
-      osdataCleanupPartition: 2,
+      osdataCleanupPartitions: [2],
       cleanupOsdata: true,
       toggleCleanupOsdata,
     })} />);
 
     expect(screen.getByText('存在 OSDATA')).toBeInTheDocument();
+    expect(screen.getAllByText('[P2]')).toHaveLength(2);
     fireEvent.click(screen.getByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' }));
     expect(toggleCleanupOsdata).toHaveBeenCalledOnce();
   });

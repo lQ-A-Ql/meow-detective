@@ -14,7 +14,6 @@ use evidence_emulation::CowDisk;
 use transport::dto::{EmulationOsdataCleanupDto, EmulationOsdataCleanupStateDto};
 
 use crate::emulation_bypass::{open_partition_filesystem, BypassCaseContext, EmulationBypassError};
-use crate::emulation_cow_reader::CowDiskReader;
 
 const CONFIG_DIR_PATH: &str = "Windows/System32/config";
 const OSDATA_ENTRY_NAME: &str = "OSDATA";
@@ -100,12 +99,7 @@ fn verify_removal(
             ));
         }
     }
-    let reader = CowDiskReader::new(Arc::clone(disk));
-    let window =
-        evidence_core::PartitionWindowReader::new(Box::new(reader), context.partition_offset, None)
-            .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
-    let fs = fs_ntfs::NtfsReader::open(Box::new(window), 0)
-        .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
+    let fs = crate::emulation_bypass::open_partition_filesystem_over_overlay(disk, context)?;
     let still_listed = fs
         .list_subdir_children(CONFIG_DIR_PATH)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?

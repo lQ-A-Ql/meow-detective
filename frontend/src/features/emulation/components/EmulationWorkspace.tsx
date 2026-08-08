@@ -184,6 +184,13 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
               {t(`emulationPage.bootRoutes.${model.bootRoute}`)}
             </Badge>
           </div>
+          {model.preflight && model.preflight.recommendedBootRoute !== model.bootRoute ? (
+            <div className="mt-2 text-[10px] text-forensics-warning-text">
+              {t('emulationPage.launch.recommendedRoute', {
+                route: t(`emulationPage.bootRoutes.${model.preflight.recommendedBootRoute}`),
+              })}
+            </div>
+          ) : null}
         </div>
 
         <fieldset className="space-y-2 border-y border-forensics-border py-3">
@@ -306,7 +313,7 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
                 </Badge>
               </div>
             ))}
-            {model.osdataCleanupPartition !== undefined ? (
+            {model.osdataCleanupPartitions.length > 0 ? (
               <label className="flex items-center gap-2 pt-1 text-[12px] text-forensics-text-secondary">
                 <Checkbox
                   checked={model.cleanupOsdata}
@@ -315,7 +322,7 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
                 />
                 {t('emulationPage.preflight.cleanupOsdata')}
                 <span className="font-mono text-[10px] text-forensics-muted">
-                  [P{model.osdataCleanupPartition}]
+                  {model.osdataCleanupPartitions.map((partition) => `[P${partition}]`).join(' ')}
                 </span>
               </label>
             ) : null}

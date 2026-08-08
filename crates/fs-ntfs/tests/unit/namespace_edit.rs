@@ -68,7 +68,7 @@ fn find_entry_span_matches_name_case_insensitively() {
     let expected_len = 0x52 + 6 * 2;
     assert_eq!(start, 0x52 + 6 * 2);
     assert_eq!(len, expected_len);
-    assert_eq!(reference, 77);
+    assert_eq!(reference, (3u64 << 48) | 77);
     assert!(is_dir);
 }
 
@@ -99,7 +99,7 @@ fn edit_index_block_removes_entry_and_shrinks_used_size() {
     let used_before = u32::from_le_bytes(block[0x1C..0x20].try_into().expect("used"));
 
     let (reference, is_dir) = edit_index_block(&mut block, "OSDATA").expect("edit");
-    assert_eq!(reference, 77);
+    assert_eq!(reference, (3u64 << 48) | 77);
     assert!(is_dir);
     let used_after = u32::from_le_bytes(block[0x1C..0x20].try_into().expect("used"));
     assert_eq!(used_after, used_before - target_len as u32);

@@ -14,6 +14,7 @@ use crate::emulation_backend::{self, EmulationBackendHandle};
 
 mod materials;
 mod recovery_media;
+mod session_ops;
 mod vmware;
 mod workspace;
 
@@ -104,6 +105,11 @@ struct EmulationEntry {
     disk: Arc<CowDisk>,
     backend: Option<EmulationBackendHandle>,
     vmware: Option<VmwareControl>,
+    /// Serializes the long mutating operations (launch, host-side edits,
+    /// release) of this session. The global `entries` lock is only ever
+    /// taken briefly — to clone this Arc or to update status — and never
+    /// held while acquiring this lock, so there is no lock cycle.
+    op_lock: Arc<Mutex<()>>,
 }
 
 impl EmulationRegistry {
@@ -184,131 +190,10 @@ impl EmulationRegistry {
                 disk,
                 backend: Some(backend),
                 vmware: None,
+                op_lock: Arc::new(Mutex::new(())),
             },
         )?;
         Ok(status)
-    }
-
-    pub fn launch(
-        &self,
-        session_id: &str,
-    ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
-        let vmx_path = {
-            let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
-            let entry = entries
-                .get_mut(session_id)
-                .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
-            refresh_backend(entry);
-            if entry.status.state != EmulationState::DescriptorReady {
-                return Err(EmulationRegistryError::Vmware(
-                    "session is not ready for launch".to_string(),
-                ));
-            }
-            entry.workspace.vmx_path().to_path_buf()
-        };
-        let control = vmware::launch(&vmx_path)
-            .map_err(|error| EmulationRegistryError::Vmware(error.to_string()))?;
-        let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
-        let entry = entries
-            .get_mut(session_id)
-            .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
-        entry.vmware = Some(control);
-        entry.status.state = EmulationState::Running;
-        Ok(entry.status.clone())
-    }
-
-    pub fn apply_bypass(
-        &self,
-        case: &BypassCaseRef<'_>,
-        session_id: &str,
-        partition_index: u32,
-        rid: u32,
-        action: transport::dto::EmulationBypassActionDto,
-    ) -> Result<transport::dto::EmulationBypassResultDto, EmulationRegistryError> {
-        let (disk, data_source_id) = {
-            let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
-            let entry = entries
-                .get(session_id)
-                .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
-            if entry.status.state != EmulationState::DescriptorReady {
-                return Err(EmulationRegistryError::Vmware(
-                    "bypass edits are only allowed before the guest is launched".to_string(),
-                ));
-            }
-            (Arc::clone(&entry.disk), entry.status.data_source_id.clone())
-        };
-        let mut result = app_services::emulation_bypass::apply_bypass(
-            &disk,
-            &app_services::emulation_bypass::BypassCaseContext {
-                case_conn: case.case_conn,
-                case_root: case.case_root,
-                case_id: case.case_id,
-                data_source_id: &DataSourceId(data_source_id),
-            },
-            partition_index,
-            rid,
-            action,
-        )?;
-        result.session_id = session_id.to_string();
-        Ok(result)
-    }
-
-    pub fn cleanup_osdata(
-        &self,
-        case: &BypassCaseRef<'_>,
-        session_id: &str,
-        partition_index: u32,
-    ) -> Result<transport::dto::EmulationOsdataCleanupDto, EmulationRegistryError> {
-        let (disk, data_source_id) = {
-            let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
-            let entry = entries
-                .get(session_id)
-                .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
-            if entry.status.state != EmulationState::DescriptorReady {
-                return Err(EmulationRegistryError::Vmware(
-                    "namespace edits are only allowed before the guest is launched".to_string(),
-                ));
-            }
-            (Arc::clone(&entry.disk), entry.status.data_source_id.clone())
-        };
-        let mut result = app_services::emulation_osdata::cleanup_osdata(
-            &disk,
-            &app_services::emulation_bypass::BypassCaseContext {
-                case_conn: case.case_conn,
-                case_root: case.case_root,
-                case_id: case.case_id,
-                data_source_id: &DataSourceId(data_source_id),
-            },
-            partition_index,
-        )?;
-        result.session_id = session_id.to_string();
-        Ok(result)
-    }
-
-    pub fn release(
-        &self,
-        session_id: &str,
-    ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
-        let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
-        let entry = entries
-            .get_mut(session_id)
-            .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
-        if entry.status.state == EmulationState::Released {
-            return Ok(entry.status.clone());
-        }
-        entry.status.state = EmulationState::Quiescing;
-        match quiesce_entry(entry) {
-            Ok(()) => {
-                entry.status.state = EmulationState::Released;
-                entry.status.error = None;
-                Ok(entry.status.clone())
-            }
-            Err(error) => {
-                entry.status.state = EmulationState::FailedCleanupPending;
-                entry.status.error = Some(error.to_string());
-                Err(error)
-            }
-        }
     }
 
     pub fn status(
@@ -431,30 +316,14 @@ fn build_session_disk(
     Ok((disk, firmware, backend))
 }
 
-fn quiesce_entry(entry: &mut EmulationEntry) -> Result<(), EmulationRegistryError> {
-    if let Some(control) = entry.vmware.as_ref() {
-        control
-            .stop_bounded()
-            .map_err(|error| EmulationRegistryError::Vmware(error.to_string()))?;
-        entry.vmware = None;
-    }
-    entry.disk.flush()?;
-    if let Some(backend) = entry.backend.as_ref() {
-        backend
-            .stop()
-            .map_err(|error| EmulationRegistryError::Backend(error.to_string()))?;
-    }
-    entry.backend = None;
-    Ok(())
-}
-
 fn refresh_backend(entry: &mut EmulationEntry) {
     entry.status.maintenance_media =
         entry.status.maintenance_media && entry.workspace.maintenance_iso_present();
     if matches!(
         entry.status.state,
-        EmulationState::Released | EmulationState::FailedCleanupPending
+        EmulationState::Released | EmulationState::FailedCleanupPending | EmulationState::Quiescing
     ) {
+        // Quiescing legitimately has its handles checked out by `release`.
         return;
     }
     let Some(backend) = entry.backend.as_ref() else {

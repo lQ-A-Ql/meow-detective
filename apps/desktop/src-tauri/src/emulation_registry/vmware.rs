@@ -89,7 +89,19 @@ pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
         .stderr(Stdio::null())
         .spawn()
         .map_err(VmwareError::Start)?;
-    wait_for_control(child)?;
+    if let Err(error) = wait_for_control(child) {
+        // vmrun may have actually started the VM before the wait timed out;
+        // without a control handle the guest would be orphaned.
+        let _ = Command::new(&vmrun)
+            .arg("stop")
+            .arg(&vmx)
+            .arg("hard")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        return Err(error);
+    }
     Ok(VmwareControl { vmrun, vmx })
 }
 

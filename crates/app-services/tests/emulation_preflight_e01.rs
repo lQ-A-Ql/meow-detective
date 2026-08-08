@@ -333,13 +333,15 @@ fn sam_bypass_writes_only_the_overlay_and_decrypts_to_empty() {
             .unwrap();
     let identity = evidence_emulation::ParentIdentity::new(provider.len(), [0x5au8; 32]).unwrap();
     let overlay = temp.path().join("overlay.cow");
-    let disk = evidence_emulation::CowDisk::create(
-        &overlay,
-        provider,
-        identity,
-        evidence_emulation::CowDiskConfig::default(),
-    )
-    .unwrap();
+    let disk = Arc::new(
+        evidence_emulation::CowDisk::create(
+            &overlay,
+            provider,
+            identity,
+            evidence_emulation::CowDiskConfig::default(),
+        )
+        .unwrap(),
+    );
 
     let result = active
         .with_conn(|case_conn| {
@@ -360,6 +362,34 @@ fn sam_bypass_writes_only_the_overlay_and_decrypts_to_empty() {
         .unwrap();
     eprintln!("bypass result: {result:?}");
     assert!(result.password_cleared || result.already_passwordless);
+
+    // A second bypass on a different account must compose with the first:
+    // the service reads SAM through the overlay, so the earlier edit stays.
+    let second = accounts
+        .iter()
+        .find(|account| account.rid != target.rid && account.has_password)
+        .cloned();
+    if let Some(second) = &second {
+        let second_result = active
+            .with_conn(|case_conn| {
+                app_services::emulation_bypass::apply_bypass(
+                    &disk,
+                    &app_services::emulation_bypass::BypassCaseContext {
+                        case_conn,
+                        case_root: &case_root,
+                        case_id: &case_id,
+                        data_source_id: &data_source_id,
+                    },
+                    install.partition_index,
+                    second.rid,
+                    transport::dto::EmulationBypassActionDto::ClearPassword,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+            })
+            .unwrap();
+        eprintln!("second bypass result: {second_result:?}");
+        assert!(second_result.password_cleared || second_result.already_passwordless);
+    }
 
     // Read the edited SAM hive back through the COW disk and prove the NT
     // hash is now the canonical empty value.
@@ -417,6 +447,22 @@ fn sam_bypass_writes_only_the_overlay_and_decrypts_to_empty() {
         Some("aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0"),
         "LM and NT hashes must decrypt to the canonical empty values"
     );
+    if let Some(second) = &second {
+        let second_edited = info
+            .users
+            .iter()
+            .find(|user| user.rid == second.rid)
+            .expect("second edited account must remain listed");
+        eprintln!(
+            "second edited account: rid={} name={:?} hash={:?}",
+            second_edited.rid, second_edited.username, second_edited.password_hash
+        );
+        assert_eq!(
+            second_edited.password_hash.as_deref(),
+            Some("aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0"),
+            "the second bypass must also decrypt to empty without reverting the first"
+        );
+    }
 
     // The parent evidence must stay byte-identical to its pre-edit state.
     let parent_hive = fs

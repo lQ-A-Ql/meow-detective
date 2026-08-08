@@ -56,7 +56,7 @@ export interface EmulationWorkspaceModel {
   clearRecoveryIso: () => void;
   options: EmulationOptions;
   toggleOption: (key: keyof EmulationOptions) => void;
-  osdataCleanupPartition?: number;
+  osdataCleanupPartitions: number[];
   cleanupOsdata: boolean;
   toggleCleanupOsdata: () => void;
   bypassPartition?: number;
@@ -164,8 +164,10 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const invalidateSessions = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: EMULATION_SESSIONS_QUERY_KEY });
   }, [queryClient]);
-  const osdataCleanupPartition = useMemo(
-    () => preflightQuery.data?.installs.find((install) => install.osdataPresent)?.partitionIndex,
+  const osdataCleanupPartitions = useMemo(
+    () => (preflightQuery.data?.installs ?? [])
+      .filter((install) => install.osdataPresent)
+      .map((install) => install.partitionIndex),
     [preflightQuery.data],
   );
   const startMutation = useMutation({
@@ -179,13 +181,15 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         allowDirectBoot,
         options,
       });
-      if (cleanupOsdata && osdataCleanupPartition !== undefined) {
-        const cleanup = await cleanupEmulationOsdata({
-          sessionId: prepared.sessionId,
-          partitionIndex: osdataCleanupPartition,
-        });
-        if (cleanup.state === 'refusedNonEmpty') {
-          throw new Error(t('emulationPage.errors.osdataNonEmpty'));
+      if (cleanupOsdata) {
+        for (const partitionIndex of osdataCleanupPartitions) {
+          const cleanup = await cleanupEmulationOsdata({
+            sessionId: prepared.sessionId,
+            partitionIndex,
+          });
+          if (cleanup.state === 'refusedNonEmpty') {
+            throw new Error(t('emulationPage.errors.osdataNonEmpty'));
+          }
         }
       }
       if (bypassRid !== undefined && bypassPartition !== undefined) {
@@ -273,7 +277,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     clearRecoveryIso,
     options,
     toggleOption,
-    osdataCleanupPartition,
+    osdataCleanupPartitions,
     cleanupOsdata,
     toggleCleanupOsdata,
     bypassPartition,

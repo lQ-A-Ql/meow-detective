@@ -51,7 +51,7 @@ impl crate::NtfsReader {
             return Err(file_not_found(&format!("{dir_path}/{entry_name}")));
         };
         let mut edits = Vec::new();
-        let (removed_inode, was_directory) = match site {
+        let (removed_ref, was_directory) = match site {
             EntrySite::IndexRoot => {
                 let mut edited = record.clone();
                 let info = self.edit_index_root(&mut edited, entry_name)?;
@@ -76,8 +76,19 @@ impl crate::NtfsReader {
             }
         };
 
+        // The index entry carries the MFT sequence in the high 16 bits of the
+        // file reference. A stale entry (name matches, inode already reused
+        // by an unrelated live file — common in $I30 slack) must never cause
+        // that live record to be retired.
+        let removed_inode = removed_ref & 0x0000_FFFF_FFFF_FFFF;
+        let expected_sequence = (removed_ref >> 48) as u16;
         let mut child = self.read_mft_record(removed_inode)?;
         validate_file_record(&child, removed_inode)?;
+        if crate::utils::file_record_sequence(&child) != Some(expected_sequence) {
+            return Err(invalid_fs_data(
+                "index entry is stale: child record sequence does not match the file reference",
+            ));
+        }
         let flags = u16::from_le_bytes([child[0x16], child[0x17]]);
         if flags & FILE_RECORD_IN_USE != 0 {
             child[0x16] = (flags & !FILE_RECORD_IN_USE).to_le_bytes()[0];
@@ -313,7 +324,7 @@ fn find_entry_span(
             return Ok(Some((
                 offset,
                 entry_len,
-                file_ref & 0x0000_FFFF_FFFF_FFFF,
+                file_ref,
                 file_flags & 0x1000_0000 != 0,
             )));
         }

@@ -1,9 +1,12 @@
 //! Host-side SAM bypass for emulation sessions.
 //!
-//! The SAM hive is read from the evidence image (read-only), edited in
-//! memory with same-size cell writes, and written back through the session's
-//! copy-on-write overlay disk. The evidence image is never written: the only
-//! writable parameter in this module is the session `CowDisk`.
+//! The SAM hive is read through the session's copy-on-write overlay (so
+//! bypasses of multiple accounts in one session compose), edited in memory
+//! with same-size cell writes, and written back through the same overlay.
+//! The evidence image is never written: the only writable parameter in this
+//! module is the session `CowDisk`.
+
+use std::sync::Arc;
 
 use domain::{CaseId, DataSourceId};
 use evidence_emulation::CowDisk;
@@ -50,6 +53,7 @@ impl transport::ServiceErrorCategory for EmulationBypassError {
 pub(crate) struct PartitionFilesystem {
     pub(crate) fs: fs_ntfs::NtfsReader,
     pub(crate) partition_offset: u64,
+    pub(crate) partition_length: Option<u64>,
 }
 
 /// Everything the bypass flow needs to reach the case and the source catalog.
@@ -81,7 +85,7 @@ pub fn list_bypass_accounts(
 }
 
 pub fn apply_bypass(
-    disk: &CowDisk,
+    disk: &Arc<CowDisk>,
     case_context: &BypassCaseContext<'_>,
     partition_index: u32,
     rid: u32,
@@ -89,7 +93,11 @@ pub fn apply_bypass(
 ) -> Result<EmulationBypassResultDto, EmulationBypassError> {
     let context = open_partition_filesystem(case_context, partition_index)?;
     let system = read_whole_file(&context.fs, SYSTEM_HIVE_PATH)?;
-    let mut sam = read_whole_file(&context.fs, SAM_HIVE_PATH)?;
+    // Read SAM through the overlay: a bypass applied earlier in this session
+    // must be visible so multi-account bypasses compose instead of each edit
+    // being written over the previous one.
+    let overlay_fs = open_partition_filesystem_over_overlay(disk, &context)?;
+    let mut sam = read_whole_file(&overlay_fs, SAM_HIVE_PATH)?;
     let hbootkey = artifacts_windows::registry::sam_edit::derive_hbootkey_from_hives(&system, &sam)
         .ok_or_else(|| {
             EmulationBypassError::Edit(
@@ -158,7 +166,25 @@ pub(crate) fn open_partition_filesystem(
     Ok(PartitionFilesystem {
         fs,
         partition_offset: partition.offset,
+        partition_length: length,
     })
+}
+
+/// Open the same partition through the session overlay, so host-side edits
+/// made earlier in the session are visible to later operations.
+pub(crate) fn open_partition_filesystem_over_overlay(
+    disk: &Arc<CowDisk>,
+    context: &PartitionFilesystem,
+) -> Result<fs_ntfs::NtfsReader, EmulationBypassError> {
+    let reader = crate::emulation_cow_reader::CowDiskReader::new(Arc::clone(disk));
+    let window = evidence_core::PartitionWindowReader::new(
+        Box::new(reader),
+        context.partition_offset,
+        context.partition_length,
+    )
+    .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
+    fs_ntfs::NtfsReader::open(Box::new(window), 0)
+        .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))
 }
 
 fn read_whole_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, EmulationBypassError> {

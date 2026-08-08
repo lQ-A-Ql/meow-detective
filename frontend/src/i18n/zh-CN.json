@@ -513,6 +513,7 @@
       "recoveryIso": "WinPE 启动介质",
       "recoveryPlaceholder": "未选择，确认后启动原系统",
       "bootRoute": "启动路径",
+      "recommendedRoute": "预检推荐：{{route}}",
       "options": "客机集成（默认全部关闭）",
       "optionNetwork": "仅主机网络（host-only）",
       "optionClipboard": "剪贴板 / 拖放",
