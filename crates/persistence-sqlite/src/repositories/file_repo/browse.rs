@@ -104,29 +104,6 @@ impl FileRepo<'_> {
         collect_entries(rows)
     }
 
-    pub fn find_children_page_visible(
-        &self,
-        parent_id: &FileEntryId,
-        offset: u64,
-        limit: u32,
-        show_hidden: bool,
-    ) -> DbResult<Vec<FileEntry>> {
-        if show_hidden {
-            return self.find_children_page(parent_id, offset, limit);
-        }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id = ?1 AND hidden = 0 AND system = 0
-             ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            params![parent_id.0, limit as i64, offset as i64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
-    }
-
     pub fn find_children_visible(
         &self,
         parent_id: &FileEntryId,
@@ -153,22 +130,6 @@ impl FileRepo<'_> {
         Ok(count as u64)
     }
 
-    pub fn count_children_visible(
-        &self,
-        parent_id: &FileEntryId,
-        show_hidden: bool,
-    ) -> DbResult<u64> {
-        if show_hidden {
-            return self.count_children(parent_id);
-        }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND hidden = 0 AND system = 0",
-            params![parent_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
-    }
-
     pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC",
@@ -181,25 +142,6 @@ impl FileRepo<'_> {
     pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
-        collect_entries(rows)
-    }
-
-    pub fn find_root_entries_page_visible(
-        &self,
-        offset: u64,
-        limit: u32,
-        show_hidden: bool,
-    ) -> DbResult<Vec<FileEntry>> {
-        if show_hidden {
-            return self.find_root_entries_page(offset, limit);
-        }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id IS NULL AND hidden = 0 AND system = 0
-             ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
         );
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
@@ -222,18 +164,6 @@ impl FileRepo<'_> {
     pub fn count_root_entries(&self) -> DbResult<u64> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
-    }
-
-    pub fn count_root_entries_visible(&self, show_hidden: bool) -> DbResult<u64> {
-        if show_hidden {
-            return self.count_root_entries();
-        }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL AND hidden = 0 AND system = 0",
             [],
             |row| row.get(0),
         )?;
@@ -266,29 +196,6 @@ impl FileRepo<'_> {
         collect_entries(rows)
     }
 
-    pub fn find_child_directories_page_visible(
-        &self,
-        parent_id: &FileEntryId,
-        offset: u64,
-        limit: u32,
-        show_hidden: bool,
-    ) -> DbResult<Vec<FileEntry>> {
-        if show_hidden {
-            return self.find_child_directories_page(parent_id, offset, limit);
-        }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
-             ORDER BY name ASC LIMIT ?2 OFFSET ?3",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            params![parent_id.0, limit as i64, offset as i64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
-    }
-
     pub fn find_child_directories_visible(
         &self,
         parent_id: &FileEntryId,
@@ -309,22 +216,6 @@ impl FileRepo<'_> {
     pub fn count_child_directories(&self, parent_id: &FileEntryId) -> DbResult<u64> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
-            params![parent_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
-    }
-
-    pub fn count_child_directories_visible(
-        &self,
-        parent_id: &FileEntryId,
-        show_hidden: bool,
-    ) -> DbResult<u64> {
-        if show_hidden {
-            return self.count_child_directories(parent_id);
-        }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0",
             params![parent_id.0],
             |row| row.get(0),
         )?;

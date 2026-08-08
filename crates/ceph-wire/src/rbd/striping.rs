@@ -50,16 +50,6 @@ impl RbdHeadImageLayout {
         )
     }
 
-    pub fn try_new(
-        image_size: u64,
-        order: u8,
-        object_prefix: impl Into<String>,
-        stripe_unit: u64,
-        stripe_count: u64,
-    ) -> Result<Self> {
-        Self::new(image_size, order, object_prefix, stripe_unit, stripe_count)
-    }
-
     pub fn new_with_features(
         image_size: u64,
         order: u8,

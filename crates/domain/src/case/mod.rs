@@ -58,11 +58,6 @@ pub struct CaseSession {
 
 /// Domain behavior for CaseSession
 impl CaseSession {
-    /// Check if this session is still valid (case root exists).
-    pub fn is_open(&self) -> bool {
-        self.case_root.exists()
-    }
-
     /// Get the path to the case database file.
     pub fn db_path(&self) -> PathBuf {
         self.case_root.join("forensics.db")
@@ -71,16 +66,6 @@ impl CaseSession {
     /// Get the path to the case indexes directory.
     pub fn indexes_path(&self) -> PathBuf {
         self.case_root.join("indexes")
-    }
-
-    /// Get the path to the case exports directory.
-    pub fn exports_path(&self) -> PathBuf {
-        self.case_root.join("exports")
-    }
-
-    /// Get the path to the case metadata file.
-    pub fn meta_path(&self) -> PathBuf {
-        self.case_root.join("case.json")
     }
 
     /// Get how long this session has been open.

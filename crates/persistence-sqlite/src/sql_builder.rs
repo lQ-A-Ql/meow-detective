@@ -94,10 +94,6 @@ impl ClauseBuilder {
     pub fn param_refs(&self) -> Vec<&dyn ToSql> {
         self.params.iter().map(|p| p.as_ref()).collect()
     }
-
-    pub fn into_params(self) -> Vec<Box<dyn ToSql>> {
-        self.params
-    }
 }
 
 #[cfg(test)]

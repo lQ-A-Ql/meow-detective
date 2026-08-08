@@ -291,27 +291,6 @@ pub fn query_entity_nodes(
     Ok(rows)
 }
 
-/// Query graph nodes by type for a case (id, label, summary).
-pub fn query_nodes_by_type(
-    conn: &Connection,
-    case_id: &str,
-    node_type: &str,
-) -> DbResult<Vec<(String, String, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, label, summary FROM graph_nodes WHERE case_id = ?1 AND node_type = ?2",
-    )?;
-    let rows = stmt
-        .query_map(params![case_id, node_type], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows)
-}
-
 /// Get artifact ids for a case.
 pub fn get_artifact_ids_for_case(conn: &Connection, case_id: &str) -> DbResult<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM artifacts WHERE case_id = ?1")?;

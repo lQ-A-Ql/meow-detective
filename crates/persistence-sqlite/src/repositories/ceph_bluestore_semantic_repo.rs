@@ -82,15 +82,6 @@ impl<'a> CephBluestoreSemanticRepo<'a> {
         )
     }
 
-    pub fn ensure_object_catalog_complete(&self, inventory_id: &str) -> DbResult<()> {
-        let Some(scan) = query::find_scan(self.conn, inventory_id)? else {
-            return Err(crate::connection::DbError::System(
-                "BlueStore object catalog is unavailable".to_string(),
-            ));
-        };
-        validation::validate_scan_for_read(&scan)
-    }
-
     pub fn list_objects_by_pool_after(
         &self,
         inventory_id: &str,

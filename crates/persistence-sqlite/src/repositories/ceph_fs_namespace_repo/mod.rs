@@ -116,9 +116,3 @@ impl<'a> CephFsNamespaceRepo<'a> {
         write::replace(self.conn, projection)
     }
 }
-
-pub fn validate_cephfs_namespace_projection(
-    projection: &CephFsNamespaceProjection,
-) -> CephFsNamespaceRepoResult<()> {
-    validation::validate_projection(projection)
-}

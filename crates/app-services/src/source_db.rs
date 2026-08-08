@@ -430,27 +430,6 @@ impl SourceDbLocator {
     }
 }
 
-pub fn wrap_file_entry_id(entry: &mut domain::FileEntry) {
-    if entry.id.0.starts_with("ds:") {
-        return;
-    }
-    let data_source_id = entry.data_source_id.clone();
-    entry.id = GlobalFileId::new(data_source_id.clone(), entry.id.clone()).encode();
-    if let Some(parent_id) = entry.parent_id.clone() {
-        entry.parent_id = if parent_id.0.starts_with("ds:") {
-            Some(parent_id)
-        } else {
-            Some(GlobalFileId::new(data_source_id, parent_id).encode())
-        };
-    }
-}
-
-pub fn wrap_file_entry_ids(entries: &mut [domain::FileEntry]) {
-    for entry in entries {
-        wrap_file_entry_id(entry);
-    }
-}
-
 #[cfg(test)]
 #[path = "../tests/unit/source_db.rs"]
 mod tests;

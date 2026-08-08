@@ -100,16 +100,6 @@ impl<'a> HandleRepo<'a> {
         )?;
         Ok(count as u64)
     }
-
-    /// Count handles for a case.
-    pub fn count_case(&self, case_id: &str) -> Result<u64> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_handles WHERE case_id = ?1",
-            params![case_id],
-            |r| r.get(0),
-        )?;
-        Ok(count as u64)
-    }
 }
 
 fn parse_datetime(s: &str) -> DateTime<Utc> {

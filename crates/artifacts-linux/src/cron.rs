@@ -139,12 +139,6 @@ pub fn parse_crontab_with_source(
     Ok(jobs)
 }
 
-/// Alias kept for convenience — same as `parse_crontab`.
-#[deprecated(note = "Use parse_crontab instead")]
-pub fn parse_crontab_file(content: &str) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
-    parse_crontab(content)
-}
-
 #[cfg(test)]
 #[path = "../tests/unit/cron.rs"]
 mod tests;

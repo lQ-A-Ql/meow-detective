@@ -141,12 +141,6 @@ impl ImportState {
         self.updated_at = chrono::Utc::now().to_rfc3339();
     }
 
-    /// Update last processed path
-    pub fn set_last_processed(&mut self, path: String) {
-        self.last_processed_path = Some(path);
-        self.updated_at = chrono::Utc::now().to_rfc3339();
-    }
-
     /// Check if import can be resumed
     pub fn can_resume(&self) -> bool {
         matches!(self.phase, ImportPhase::Paused | ImportPhase::Failed)

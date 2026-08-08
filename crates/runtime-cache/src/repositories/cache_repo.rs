@@ -186,16 +186,6 @@ impl<'a> CacheRepo<'a> {
         )?;
         Ok(count as u64)
     }
-
-    /// Count entries in a namespace.
-    pub fn count_namespace(&self, namespace: &str) -> Result<u64> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM cache_entries WHERE namespace = ?1",
-            params![namespace],
-            |r| r.get(0),
-        )?;
-        Ok(count as u64)
-    }
 }
 
 fn parse_datetime(s: &str) -> DateTime<Utc> {

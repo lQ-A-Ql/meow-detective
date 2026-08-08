@@ -52,7 +52,3 @@ pub fn insert_cephfs_lineage_in_transaction(
     validation::validate_ownership(conn, aggregate)?;
     write::insert(conn, aggregate)
 }
-
-pub fn validate_cephfs_lineage(aggregate: &CephFsDerivedLineageAggregate) -> DbResult<()> {
-    validation::validate_aggregate(aggregate)
-}

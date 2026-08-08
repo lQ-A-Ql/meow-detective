@@ -23,18 +23,6 @@ pub struct IndexStats {
 }
 
 #[derive(Debug, Clone)]
-pub struct InstrumentedIndexStats {
-    pub stats: IndexStats,
-    pub performance_report: PerformanceReportDto,
-}
-
-#[derive(Debug, Clone)]
-pub struct InstrumentedSearchResult {
-    pub page: SearchResultPageDto,
-    pub performance_report: PerformanceReportDto,
-}
-
-#[derive(Debug, Clone)]
 pub struct InstrumentedFileSearchResult {
     pub page: SearchFileResultPageDto,
     pub performance_report: PerformanceReportDto,
@@ -99,27 +87,6 @@ pub fn index_files(
         warning_count,
         skipped_count,
         failed_count,
-    })
-}
-
-pub fn index_files_instrumented(
-    conn: &Connection,
-    index_dir: &Path,
-    file_ids: &[FileEntryId],
-    reader_fn: impl Fn(&FileEntryId) -> Option<Box<dyn std::io::Read>>,
-) -> Result<InstrumentedIndexStats, SearchError> {
-    let (stats, sample) = measure_rows(file_ids.len() as u64, || {
-        index_files(conn, index_dir, file_ids, reader_fn)
-    });
-    let stats = stats?;
-    let sample = PerfSample {
-        rows: stats.indexed_count,
-        ..sample
-    };
-    let performance_report = search_index_report(sample, &stats);
-    Ok(InstrumentedIndexStats {
-        stats,
-        performance_report,
     })
 }
 
@@ -190,25 +157,6 @@ pub fn search_files_real(
         took_ms,
         items,
         next_cursor: None,
-    })
-}
-
-pub fn search_files_real_instrumented(
-    index_dir: &Path,
-    query: &str,
-    offset: u64,
-    limit: u32,
-) -> Result<InstrumentedSearchResult, SearchError> {
-    let (page, sample) = measure_rows(0, || search_files_real(index_dir, query, offset, limit));
-    let page = page?;
-    let sample = PerfSample {
-        elapsed_ms: page.took_ms.max(sample.elapsed_ms),
-        rows: page.items.len() as u64,
-    };
-    let performance_report = search_query_report(sample, page.total);
-    Ok(InstrumentedSearchResult {
-        page,
-        performance_report,
     })
 }
 
@@ -288,33 +236,6 @@ fn search_query_report(sample: PerfSample, total: u64) -> PerformanceReportDto {
         format!(
             "Search query returned {} rows in {} ms",
             sample.rows, sample.elapsed_ms
-        ),
-        metrics,
-    )
-}
-
-fn search_index_report(sample: PerfSample, stats: &IndexStats) -> PerformanceReportDto {
-    let mut metrics = vec![
-        metric("search.index.elapsedMs", sample.elapsed_ms as f64, "ms"),
-        metric("search.index.rows", stats.indexed_count as f64, "rows"),
-        metric("search.index.skipped", stats.skipped_count as f64, "rows"),
-        metric(
-            "search.index.warnings",
-            stats.warning_count as f64,
-            "warnings",
-        ),
-        metric("search.index.failed", stats.failed_count as f64, "rows"),
-    ];
-    if let Some(rows_per_sec) = sample.rows_per_sec() {
-        metrics.push(metric("search.index.rowsPerSec", rows_per_sec, "rows/s"));
-    }
-    report(
-        format!("search.index:{}:{}", sample.elapsed_ms, stats.indexed_count),
-        None,
-        sample.elapsed_ms,
-        format!(
-            "Search indexing processed {} rows in {} ms",
-            stats.indexed_count, sample.elapsed_ms
         ),
         metrics,
     )

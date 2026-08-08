@@ -1,40 +1,5 @@
 //! Application configuration layer.
 
-use std::path::PathBuf;
-
-const APP_CODE_NAME: &str = "Meow_Detective";
-
-/// Returns the canonical root directory for storing forensic cases.
-///
-/// On Windows: `%APPDATA%/Meow_Detective/cases/`
-/// On other platforms: `$HOME/.Meow_Detective/cases/`
-///
-/// This is the only directory from which `delete_case` is permitted to
-/// remove subdirectories, preventing arbitrary directory deletion.
-pub fn safe_cases_root() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        let appdata = std::env::var("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(r"C:\"));
-        appdata.join(APP_CODE_NAME).join("cases")
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home)
-            .join(format!(".{APP_CODE_NAME}"))
-            .join("cases")
-    }
-}
-
-/// Validate that a case root path is within the safe cases root directory.
-///
-/// Performs `canonicalize()` on both paths to resolve symlinks and `..` components,
-/// then checks that `case_root` is a direct child of `safe_cases_root()`.
-///
-/// # Errors
-/// Returns an error message if the path is outside the safe root or cannot be resolved.
 /// Validate that a case root path is within a specific allowed root directory.
 ///
 /// Performs `canonicalize()` on both paths to resolve symlinks and `..` components,
@@ -69,12 +34,4 @@ pub fn validate_case_root_is_within(
     }
 
     Ok(())
-}
-
-/// Validate that a case root path is within the default safe cases root directory.
-///
-/// Uses `safe_cases_root()` as the allowed root. See `validate_case_root_is_within`
-/// for the parameterized version.
-pub fn validate_case_root_is_safe(case_root: &std::path::Path) -> Result<(), String> {
-    validate_case_root_is_within(case_root, &safe_cases_root())
 }

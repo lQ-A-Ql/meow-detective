@@ -18,9 +18,6 @@ pub enum RegistryError {
     #[error("missing registry key: {0}")]
     MissingKey(String),
 
-    #[error("missing registry value: {0}")]
-    MissingValue(String),
-
     #[error("unsupported cipher or hash algorithm: {0}")]
     UnsupportedCipher(String),
 
@@ -86,9 +83,5 @@ impl RegistryError {
 
     pub fn missing_key<S: Into<String>>(path: S) -> Self {
         Self::MissingKey(path.into())
-    }
-
-    pub fn missing_value<S: Into<String>>(name: S) -> Self {
-        Self::MissingValue(name.into())
     }
 }

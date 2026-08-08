@@ -219,21 +219,6 @@ impl ExfatBootSector {
     pub fn revision_minor(&self) -> u8 {
         (self.file_system_revision & 0xFF) as u8
     }
-
-    /// Check if the ActiveFat flag indicates the second FAT is active.
-    pub fn is_second_fat_active(&self) -> bool {
-        self.volume_flags & 0x0001 != 0
-    }
-
-    /// Check if the volume dirty flag is set.
-    pub fn is_volume_dirty(&self) -> bool {
-        self.volume_flags & 0x0002 != 0
-    }
-
-    /// Check if media failure has been reported.
-    pub fn has_media_failure(&self) -> bool {
-        self.volume_flags & 0x0004 != 0
-    }
 }
 
 #[cfg(test)]
