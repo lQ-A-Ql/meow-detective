@@ -1,4 +1,11 @@
 //! Copy-on-write virtual disks for controlled forensic emulation.
+//!
+//! Design note: an overlay is a single-session, write-only journal. It is
+//! never re-opened after its session ends, so there is no crash-recovery
+//! protocol by design — a crash discards the overlay exactly like a power
+//! loss discards a physical machine's unflushed writes. Host-side edits
+//! (SAM bypass, OSDATA removal) are scripted and cheap to replay into a
+//! fresh session.
 
 mod cache;
 mod crc32c;

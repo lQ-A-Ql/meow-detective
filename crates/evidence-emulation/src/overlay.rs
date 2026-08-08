@@ -6,10 +6,7 @@ use std::sync::Arc;
 
 use evidence_block::BlockProvider;
 
-use crate::format::{
-    write_commit_record, write_data_record, write_superblock_slot, write_superblocks, DataPointer,
-    Superblock,
-};
+use crate::format::{write_data_record, write_superblocks, DataPointer, Superblock};
 use crate::{EmulationError, ParentIdentity};
 
 pub(crate) struct Overlay {
@@ -41,7 +38,12 @@ impl Overlay {
                 }
             })?;
         let header = Superblock::new(parent, cluster_size);
-        write_superblocks(&mut file, &header)?;
+        if let Err(error) = write_superblocks(&mut file, &header) {
+            // Do not strand a half-written overlay: it would block every
+            // later create on the same path with `OverlayExists`.
+            let _ = std::fs::remove_file(path);
+            return Err(error);
+        }
         Ok(Self {
             file,
             header,
@@ -97,34 +99,26 @@ impl Overlay {
     }
 
     fn commit_clusters_inner(&mut self, clusters: &[(u64, Vec<u8>)]) -> Result<(), EmulationError> {
-        let generation = self
-            .header
-            .generation
-            .checked_add(1)
-            .ok_or(EmulationError::ArithmeticOverflow)?;
-        let mut pending = Vec::with_capacity(clusters.len());
+        let mut pointers = Vec::with_capacity(clusters.len());
         for (cluster_index, data) in clusters {
             if data.len() != self.header.cluster_size as usize {
                 return Err(EmulationError::CorruptOverlay(
                     "transaction contains a partial cluster".to_string(),
                 ));
             }
-            pending.push(write_data_record(
-                &mut self.file,
-                generation,
+            pointers.push((
                 *cluster_index,
-                data,
-            )?);
+                write_data_record(&mut self.file, *cluster_index, data)?,
+            ));
         }
-        write_commit_record(&mut self.file, generation, &pending)?;
-        let mut next_header = self.header.clone();
-        next_header.generation = generation;
-        for item in &pending {
-            self.index.insert(item.cluster_index, item.pointer);
+        // The in-memory index is updated only after every record reached the
+        // file, so a failed transaction leaves unreachable bytes behind but
+        // never pollutes the logical view.
+        for (cluster_index, pointer) in pointers {
+            self.index.insert(cluster_index, pointer);
         }
-        self.header = next_header;
         self.unsynced_bytes = self.unsynced_bytes.saturating_add(
-            pending
+            clusters
                 .len()
                 .saturating_mul(self.header.cluster_size as usize) as u64,
         );
@@ -138,11 +132,6 @@ impl Overlay {
         if self.unsynced_bytes == 0 {
             return Ok(());
         }
-        // Publish the generation only after all data and commit records have
-        // reached stable storage. Recovery can then safely truncate any
-        // transaction whose generation is absent from the superblock.
-        self.file.sync_all()?;
-        write_superblock_slot(&mut self.file, &self.header)?;
         self.file.sync_all()?;
         self.unsynced_bytes = 0;
         Ok(())
