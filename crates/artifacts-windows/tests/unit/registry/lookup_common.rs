@@ -296,6 +296,25 @@ pub(crate) fn make_sam_v_record(
     data
 }
 
+/// SAM per-user `F` value in the validated on-disk layout: last logon at
+/// `0x08`, last password change at `0x18`, RID at `0x30`, ACB flags at
+/// `0x38`, total logon count at `0x42`.
+pub(crate) fn make_sam_f_record(
+    last_login: u64,
+    password_last_set: u64,
+    rid: u32,
+    account_control: u16,
+    logon_count: u16,
+) -> Vec<u8> {
+    let mut data = vec![0u8; 80];
+    data[0x08..0x10].copy_from_slice(&last_login.to_le_bytes());
+    data[0x18..0x20].copy_from_slice(&password_last_set.to_le_bytes());
+    data[0x30..0x34].copy_from_slice(&rid.to_le_bytes());
+    data[0x38..0x3a].copy_from_slice(&account_control.to_le_bytes());
+    data[0x42..0x44].copy_from_slice(&logon_count.to_le_bytes());
+    data
+}
+
 pub(crate) fn make_sid(sub_authorities: &[u32]) -> Vec<u8> {
     let mut data = Vec::with_capacity(8 + sub_authorities.len() * 4);
     data.push(1);
@@ -406,7 +425,7 @@ pub(crate) fn synthetic_sam_hive() -> Vec<u8> {
     write_dword_value(&mut data, 0x1100, "", 500);
     write_nk(&mut data, 0x380, "Guest", &[], &[0x1120]);
     write_dword_value(&mut data, 0x1120, "", 501);
-    write_nk(&mut data, 0x400, "000001F4", &[], &[0x1140]);
+    write_nk(&mut data, 0x400, "000001F4", &[], &[0x1140, 0x1280]);
     write_binary_value(
         &mut data,
         0x1140,
@@ -414,13 +433,35 @@ pub(crate) fn synthetic_sam_hive() -> Vec<u8> {
         &make_sam_v_record(133_600_000_000_000_000, 133_500_000_000_000_000, 500, 0, 3),
         0x5000,
     );
-    write_nk(&mut data, 0x480, "000001F5", &[], &[0x1160]);
+    // Administrator: enabled normal account (ACB 0x0214), 7 logons.
+    write_binary_value(
+        &mut data,
+        0x1280,
+        "F",
+        &make_sam_f_record(
+            133_600_000_000_000_000,
+            133_500_000_000_000_000,
+            500,
+            0x0214,
+            7,
+        ),
+        0x5700,
+    );
+    write_nk(&mut data, 0x480, "000001F5", &[], &[0x1160, 0x12a0]);
     write_binary_value(
         &mut data,
         0x1160,
         "V",
         &make_sam_v_record(0, 133_400_000_000_000_000, 501, SAM_ACCOUNT_DISABLED, 0),
         0x5100,
+    );
+    // Guest: disabled account (ACB disabled bit set), 0 logons.
+    write_binary_value(
+        &mut data,
+        0x12a0,
+        "F",
+        &make_sam_f_record(0, 133_400_000_000_000_000, 501, 0x0211, 0),
+        0x5800,
     );
     write_nk(
         &mut data,

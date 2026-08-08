@@ -1,10 +1,10 @@
 use super::*;
 
-fn make_user_f(rid: u32, logon_count: u16, user_attribute: u32) -> Vec<u8> {
+fn make_user_f(rid: u32, logon_count: u16, account_control: u16) -> Vec<u8> {
     let mut data = vec![0u8; 80];
     data[0x30..0x34].copy_from_slice(&rid.to_le_bytes());
-    data[0x34..0x38].copy_from_slice(&user_attribute.to_le_bytes());
-    data[0x38..0x3a].copy_from_slice(&logon_count.to_le_bytes());
+    data[0x38..0x3a].copy_from_slice(&account_control.to_le_bytes());
+    data[0x42..0x44].copy_from_slice(&logon_count.to_le_bytes());
     data
 }
 

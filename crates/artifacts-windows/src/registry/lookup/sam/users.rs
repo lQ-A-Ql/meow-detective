@@ -4,7 +4,7 @@ use super::super::{
     filetime_to_utc, RegistryHiveReader, RegistryValue, SamUser, REG_DWORD, SAM_ACCOUNT_DISABLED,
     SAM_ACCOUNT_LOCKED, VK_SIGNATURE,
 };
-use super::records::{parse_sam_f_record, parse_sam_v_record};
+use super::records::parse_sam_f_record;
 
 pub(super) fn build_sam_name_to_rid(
     hive: &RegistryHiveReader<'_>,
@@ -151,7 +151,6 @@ pub(super) fn extract_sam_user(
         }
     };
     let profile = crate::registry::sam_structs::parse_user_v(&value_data).unwrap_or_default();
-    let value_record = parse_sam_v_record(&value_data, warnings);
     let f_data = match hive.lookup_value(&path, "F") {
         Ok(Some(RegistryValue::Binary(data))) => Some(data),
         Ok(Some(other)) => {
@@ -164,15 +163,17 @@ pub(super) fn extract_sam_user(
         }
         _ => None,
     };
-    let (last_login, password_last_set, login_count) =
-        resolve_timestamps(f_data.as_deref(), value_record, warnings)?;
-    let account_control = value_record.map(|record| record.3).unwrap_or_else(|| {
-        f_data
-            .as_deref()
-            .and_then(|data| parse_sam_f_record(data, warnings))
-            .map(|record| record.2)
-            .unwrap_or(0)
-    });
+    // The F record is the sole authoritative carrier of per-user timestamps,
+    // logon counters and the ACB account-control flags. The V value holds no
+    // such fields; its header words were formerly misread as timestamps,
+    // flags and an admin count (removed as outdated semantics).
+    let f_record = f_data
+        .as_deref()
+        .and_then(|data| parse_sam_f_record(data, warnings));
+    let (last_login, password_last_set, login_count) = f_record
+        .map(|record| (record.0, record.1, record.3))
+        .unwrap_or((0, 0, 0));
+    let account_control = f_record.map(|record| record.2).unwrap_or(0);
     let effective_rid = f_data
         .as_deref()
         .and_then(crate::registry::sam_structs::parse_user_f)
@@ -208,24 +209,13 @@ pub(super) fn extract_sam_user(
         password_last_set: filetime_to_utc(password_last_set),
         account_disabled: account_control & SAM_ACCOUNT_DISABLED != 0,
         account_locked: account_control & SAM_ACCOUNT_LOCKED != 0,
-        admin_count: value_record.map(|record| record.4).unwrap_or(0),
+        // No reliable on-disk source in the SAM hive; kept for DTO stability.
+        admin_count: 0,
         login_count,
         group_memberships: Vec::new(),
         password_hash,
         password_hash_type,
     })
-}
-
-fn resolve_timestamps(
-    f_data: Option<&[u8]>,
-    value_record: Option<(u64, u64, u32, u32, u32)>,
-    warnings: &mut Vec<String>,
-) -> Option<(u64, u64, u32)> {
-    if let Some(record) = f_data.and_then(|data| parse_sam_f_record(data, warnings)) {
-        Some((record.0, record.1, record.3))
-    } else {
-        value_record.map(|record| (record.0, record.1, 0))
-    }
 }
 
 fn decrypt_hashes(

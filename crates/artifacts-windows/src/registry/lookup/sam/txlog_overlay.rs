@@ -1,7 +1,7 @@
 use super::super::txlog_util::find_best_txlog_match;
-use super::super::{filetime_to_utc, TxlogTimestampInfo, SAM_ACCOUNT_DISABLED, SAM_ACCOUNT_LOCKED};
+use super::super::{filetime_to_utc, TxlogTimestampInfo};
 use super::extraction::extract_sam_fields;
-use super::records::{parse_sam_f_record, parse_sam_v_record};
+use super::records::parse_sam_f_record;
 use super::sid::machine_sid_from_v_data;
 use crate::registry::txlog::parse_and_merge_txlogs;
 use crate::registry::RegistryError;
@@ -56,21 +56,13 @@ pub fn extract_sam_fields_with_txlog(
         let path = format!(r"SAM\Domains\Account\Users\{rid_hex}");
         if let Some(transaction) = find_best_txlog_match(&transactions, &path, "V") {
             if let Some(data) = transaction.data_after.as_deref() {
+                // Only profile fields are applied from V: its header words do
+                // not carry timestamps, account-control flags or admin counts.
                 if let Some(profile) = crate::registry::sam_structs::parse_user_v(data) {
                     user.full_name = profile.full_name;
                     user.comment = profile.comment;
                     user.home_dir = profile.home_dir;
                     user.profile_path = profile.profile_path;
-                    applied = true;
-                }
-                if let Some((last_login, password_set, _, control, admin_count)) =
-                    parse_sam_v_record(data, &mut info.warnings)
-                {
-                    user.last_login = filetime_to_utc(last_login);
-                    user.password_last_set = filetime_to_utc(password_set);
-                    user.account_disabled = control & SAM_ACCOUNT_DISABLED != 0;
-                    user.account_locked = control & SAM_ACCOUNT_LOCKED != 0;
-                    user.admin_count = admin_count;
                     applied = true;
                 }
             }

@@ -36,7 +36,8 @@ fn preserves_sam_rid_and_account_control_semantics() {
     assert_eq!(guest.rid, 501);
     assert!(!administrator.account_disabled);
     assert!(guest.account_disabled);
-    assert_eq!(administrator.admin_count, 3);
+    assert!(!administrator.account_locked);
+    assert!(!guest.account_locked);
 }
 
 #[test]
@@ -91,10 +92,16 @@ fn short_v_record_is_reported_without_panic() {
     data[value_record_absolute + 8..value_record_absolute + 12]
         .copy_from_slice(&4u32.to_le_bytes());
     let info = extract_sam_fields(&data, "Windows/System32/config/SAM", None).unwrap();
-    assert!(info
-        .warnings
+    // A truncated V degrades the profile fields only; the F value still
+    // drives identity, timestamps and account-control flags.
+    let administrator = info
+        .users
         .iter()
-        .any(|warning| warning.contains("V record") && warning.contains("expected at least")));
+        .find(|user| user.username == "Administrator")
+        .unwrap();
+    assert_eq!(administrator.rid, 500);
+    assert!(!administrator.account_disabled);
+    assert!(administrator.last_login.is_some());
 }
 
 #[test]

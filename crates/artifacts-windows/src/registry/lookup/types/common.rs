@@ -13,7 +13,7 @@ pub(crate) const HBIN_MAGIC: &[u8; 4] = b"hbin";
 pub(crate) const MAX_KEY_LOOKUP_DEPTH: usize = 64;
 pub(crate) const USER_ASSIST_ENTRY_SIZE: usize = 72;
 pub(crate) const SAM_ACCOUNT_DISABLED: u32 = 0x0001;
-pub(crate) const SAM_ACCOUNT_LOCKED: u32 = 0x0010;
+pub(crate) const SAM_ACCOUNT_LOCKED: u32 = 0x0400;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedRegistryField {
