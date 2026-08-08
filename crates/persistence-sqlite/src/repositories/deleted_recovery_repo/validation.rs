@@ -83,8 +83,17 @@ pub(super) fn validate_recovery(recovery: &DeletedRecoveryRecord) -> DbResult<()
     }
     validate_allocation_state(&recovery.allocation_state)?;
     validate_optional_text("transaction ID", recovery.transaction_id.as_deref())?;
+    if let Some(hash) = recovery.content_md5.as_deref() {
+        validate_hex_digest("content MD5", hash, 32)?;
+    }
+    if let Some(hash) = recovery.content_sha1.as_deref() {
+        validate_hex_digest("content SHA-1", hash, 40)?;
+    }
     if let Some(hash) = recovery.content_sha256.as_deref() {
         validate_sha256("content hash", hash)?;
+    }
+    if recovery.content_md5.is_some() != recovery.content_sha1.is_some() {
+        return invalid("content MD5 and SHA-1 digests must be stored together");
     }
     validate_warnings(&recovery.warnings)?;
     validate_ranges(recovery)
@@ -122,6 +131,8 @@ fn validate_content_claim(
     if recovery.completeness == "metadata_only" {
         if !content_ranges.is_empty()
             || recovery.recoverable_bytes != 0
+            || recovery.content_md5.is_some()
+            || recovery.content_sha1.is_some()
             || recovery.content_sha256.is_some()
         {
             return invalid("metadata-only recovery cannot claim recovered content");
@@ -168,7 +179,10 @@ fn validate_content_claim(
             ) {
                 return invalid("partial recovery allocation state is inconsistent");
             }
-            if recovery.content_sha256.is_some() {
+            if recovery.content_md5.is_some()
+                || recovery.content_sha1.is_some()
+                || recovery.content_sha256.is_some()
+            {
                 return invalid("partial recovery cannot claim a complete-content digest");
             }
         }
@@ -313,12 +327,16 @@ fn validate_text(label: &str, value: &str, allow_empty: bool) -> DbResult<()> {
 }
 
 fn validate_sha256(label: &str, value: &str) -> DbResult<()> {
-    if value.len() != 64
+    validate_hex_digest(label, value, 64)
+}
+
+fn validate_hex_digest(label: &str, value: &str, expected_len: usize) -> DbResult<()> {
+    if value.len() != expected_len
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
     {
-        return invalid(format!("{label} must be a lowercase SHA-256 value"));
+        return invalid(format!("{label} must be a lowercase hexadecimal digest"));
     }
     Ok(())
 }

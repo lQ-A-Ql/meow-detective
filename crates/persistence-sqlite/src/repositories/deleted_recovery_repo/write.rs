@@ -61,8 +61,9 @@ fn insert_recoveries(conn: &Connection, aggregate: &DeletedRecoveryAggregate) ->
             id, scan_id, inode, original_path, entry_type, mode, mft_sequence, deleted_at_unix,
             declared_size, recoverable_bytes,
             completeness, recovery_method, confidence, allocation_state,
-            transaction_id, log_sequence, log_cycle, content_sha256, warnings_json
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            transaction_id, log_sequence, log_cycle, content_md5, content_sha1,
+            content_sha256, warnings_json
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
     )?;
     let mut range_statement = conn.prepare_cached(
         "INSERT INTO deleted_file_recovery_ranges (
@@ -98,6 +99,8 @@ fn insert_recoveries(conn: &Connection, aggregate: &DeletedRecoveryAggregate) ->
                 .log_cycle
                 .map(|value| sqlite_u64("log cycle", value))
                 .transpose()?,
+            recovery.content_md5,
+            recovery.content_sha1,
             recovery.content_sha256,
             serde_json::to_string(&recovery.warnings).map_err(|error| {
                 crate::connection::DbError::System(format!(

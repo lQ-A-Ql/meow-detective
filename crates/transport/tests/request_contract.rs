@@ -5,7 +5,7 @@ use transport::commands::{
     GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest,
     GetTimelineFacetsRequest, GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto,
     ImportTargetPlatformDto, ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
-    RunDeletedRecoveryRequest, SearchFilesRequest,
+    RunDeletedRecoveryRequest, SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
 };
 use transport::dto::EvtxEventViewDto;
 
@@ -317,6 +317,36 @@ fn deleted_recovery_requests_validate_source_and_bound_page_size() {
         partition_index: None,
     };
     assert!(invalid.validate().is_err());
+}
+
+#[test]
+fn deleted_recovery_hash_search_normalizes_case_and_infers_algorithm() {
+    let mut request: SearchDeletedRecoveriesByHashRequest = serde_json::from_str(
+        r#"{"dataSourceId":"source-1","hash":"  D41D8CD98F00B204E9800998ECF8427E "}"#,
+    )
+    .unwrap();
+    request.validate().unwrap();
+    assert_eq!(request.hash, "d41d8cd98f00b204e9800998ecf8427e");
+    assert_eq!(
+        request.algorithm().unwrap(),
+        transport::dto::RecoveryHashAlgorithmDto::Md5
+    );
+
+    request.hash = "A".repeat(40);
+    request.validate().unwrap();
+    assert_eq!(
+        request.algorithm().unwrap(),
+        transport::dto::RecoveryHashAlgorithmDto::Sha1
+    );
+    request.hash = "B".repeat(64);
+    request.validate().unwrap();
+    assert_eq!(
+        request.algorithm().unwrap(),
+        transport::dto::RecoveryHashAlgorithmDto::Sha256
+    );
+
+    request.hash = "z".repeat(32);
+    assert!(request.validate().is_err());
 }
 
 #[test]

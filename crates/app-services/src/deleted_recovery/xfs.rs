@@ -142,6 +142,8 @@ fn deleted_candidate_record(
         transaction_id: None,
         log_sequence: None,
         log_cycle: Some(cycle),
+        content_md5: None,
+        content_sha1: None,
         content_sha256: None,
         warnings: vec![proof_warning.to_string()],
         ranges: provenance_ranges(snapshot, &candidate.provenance)?,

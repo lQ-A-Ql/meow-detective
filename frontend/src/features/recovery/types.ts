@@ -2,6 +2,7 @@ import type {
   DataSourcePartition,
   DeletedFileRecovery,
   DeletedRecoveryExport,
+  DeletedRecoveryHashSearch,
   DeletedRecoveryFailure,
   DeletedRecoveryPage,
   RecoveryProvenanceRange,
@@ -41,7 +42,15 @@ export interface DeletedRecoveryViewModel {
   selectRange: (ordinal: number) => void;
   preview?: DeletedRecoveryPreviewWindow;
   lastExport?: DeletedRecoveryExport;
+  hashQuery: string;
+  hashQueryValid: boolean;
+  hashSearch?: DeletedRecoveryHashSearch;
+  hashSearchError?: string;
+  setHashQuery: (value: string) => void;
+  runHashSearch: () => void;
+  clearHashSearch: () => void;
   scanning: boolean;
+  hashSearching: boolean;
   reading: boolean;
   exporting: boolean;
   runScan: () => void;

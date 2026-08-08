@@ -30,6 +30,8 @@ fn maps_exact_journal_inode_provenance_instead_of_the_whole_payload_block() {
             data_allocation_state: fs_ext4::journal::RecoveryAllocationState::Unverified,
             ranges: Vec::new(),
             recoverable_bytes: 0,
+            content_md5: None,
+            content_sha1: None,
             content_sha256: None,
             issue: None,
         },
@@ -76,6 +78,8 @@ fn persists_only_verified_free_content_and_emits_an_honest_complete_claim() {
     assert_eq!(recovery.completeness, "complete");
     assert_eq!(recovery.allocation_state, "free");
     assert_eq!(recovery.recoverable_bytes, 4);
+    assert_eq!(recovery.content_md5, Some("a".repeat(32)));
+    assert_eq!(recovery.content_sha1, Some("b".repeat(40)));
     assert_eq!(recovery.content_sha256, Some(sha256_hex(&content)));
     assert_eq!(recovery.ranges.len(), 2);
     assert_eq!(recovery.ranges[1].range_role, "content");
@@ -170,6 +174,8 @@ fn candidate_with_content(
             data_allocation_state,
             ranges,
             recoverable_bytes,
+            content_md5: content_sha256.as_ref().map(|_| "a".repeat(32)),
+            content_sha1: content_sha256.as_ref().map(|_| "b".repeat(40)),
             content_sha256,
             issue: None,
         },

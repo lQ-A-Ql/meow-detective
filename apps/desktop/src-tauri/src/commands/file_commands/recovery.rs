@@ -8,10 +8,11 @@ use transport::{
     commands::{
         ExportDeletedRecoveryRequest, ListDeletedRecoveriesRequest,
         ReadDeletedRecoveryRangeRequest, RunDeletedRecoveryRequest,
+        SearchDeletedRecoveriesByHashRequest,
     },
     dto::{
-        DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto, DeletedRecoveryPageDto,
-        DeletedRecoveryRunDto,
+        DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto, DeletedRecoveryHashSearchDto,
+        DeletedRecoveryPageDto, DeletedRecoveryRunDto,
     },
     CommandError,
 };
@@ -37,6 +38,31 @@ pub async fn list_deleted_recoveries(
             request.partition_index,
             request.offset,
             request.limit,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn search_deleted_recoveries_by_hash(
+    state: State<'_, AppState>,
+    mut request: SearchDeletedRecoveriesByHashRequest,
+) -> Result<DeletedRecoveryHashSearchDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    let algorithm = request.algorithm().map_err(CommandError::invalid_input)?;
+    let data_source_id = DataSourceId(request.data_source_id);
+    let normalized_hash = request.hash;
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        deleted_recovery::search_deleted_recoveries_by_hash(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
+            algorithm,
+            &normalized_hash,
         )
         .map_err(CommandError::from_typed_service_error)
     })

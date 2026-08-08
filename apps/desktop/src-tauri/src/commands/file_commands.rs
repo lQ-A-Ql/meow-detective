@@ -22,7 +22,7 @@ pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
 pub use recovery::{
     export_deleted_recovery, list_deleted_recoveries, read_deleted_recovery_range,
-    run_deleted_recovery,
+    run_deleted_recovery, search_deleted_recoveries_by_hash,
 };
 pub use viewer::{
     close_file_handle, get_document_preview, get_image_preview, get_text_preview, open_file_handle,

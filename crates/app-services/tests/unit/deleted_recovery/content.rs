@@ -96,6 +96,8 @@ fn recovery(
         transaction_id: None,
         log_sequence: None,
         log_cycle: None,
+        content_md5: None,
+        content_sha1: None,
         content_sha256,
         warnings: Vec::new(),
         ranges,

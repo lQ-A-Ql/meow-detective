@@ -106,7 +106,7 @@ fn find_recovery_record(
         "SELECT id, inode, original_path, entry_type, mode, mft_sequence, deleted_at_unix,
                 declared_size, recoverable_bytes, completeness, recovery_method,
                 confidence, allocation_state, transaction_id, log_sequence,
-                log_cycle, content_sha256, warnings_json
+                log_cycle, content_md5, content_sha1, content_sha256, warnings_json
          FROM deleted_file_recoveries WHERE scan_id = ?1 AND id = ?2",
     )?;
     let mut rows = statement.query(params![scan_id, recovery_id])?;
@@ -184,7 +184,8 @@ fn list_recoveries_query(
         "SELECT id, inode, original_path, entry_type, mode, mft_sequence, deleted_at_unix,
                 declared_size, recoverable_bytes,
                 completeness, recovery_method, confidence, allocation_state,
-                transaction_id, log_sequence, log_cycle, content_sha256, warnings_json
+                transaction_id, log_sequence, log_cycle, content_md5, content_sha1,
+                content_sha256, warnings_json
          FROM deleted_file_recoveries
          WHERE scan_id = ?1
          ORDER BY CAST(inode AS INTEGER), id{page_clause}"
@@ -227,6 +228,8 @@ struct RecoveryRowValues {
     transaction_id: Option<String>,
     log_sequence: Option<i64>,
     log_cycle: Option<i64>,
+    content_md5: Option<String>,
+    content_sha1: Option<String>,
     content_sha256: Option<String>,
     warnings_json: String,
 }
@@ -250,8 +253,10 @@ impl RecoveryRowValues {
             transaction_id: row.get(13)?,
             log_sequence: row.get(14)?,
             log_cycle: row.get(15)?,
-            content_sha256: row.get(16)?,
-            warnings_json: row.get(17)?,
+            content_md5: row.get(16)?,
+            content_sha1: row.get(17)?,
+            content_sha256: row.get(18)?,
+            warnings_json: row.get(19)?,
         })
     }
 
@@ -282,6 +287,8 @@ impl RecoveryRowValues {
                 .log_cycle
                 .map(|value| record_u64("log cycle", value))
                 .transpose()?,
+            content_md5: self.content_md5,
+            content_sha1: self.content_sha1,
             content_sha256: self.content_sha256,
             warnings: decode_warnings(self.warnings_json)?,
             ranges,

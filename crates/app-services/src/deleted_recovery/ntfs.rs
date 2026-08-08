@@ -128,6 +128,8 @@ fn metadata_only_record(
         transaction_id: None,
         log_sequence: None,
         log_cycle: None,
+        content_md5: None,
+        content_sha1: None,
         content_sha256: None,
         warnings: vec![
             format!(
@@ -153,7 +155,7 @@ fn candidate_record(
         candidate.parent_ref
     )];
     let mut content = NtfsContentAccumulator::new();
-    let (allocation_state, completeness, content_sha256) =
+    let (allocation_state, completeness, content_hashes) =
         classify_candidate_content(filesystem, bitmap, candidate, &mut content, &mut warnings);
 
     if completeness == "metadata_only" {
@@ -217,7 +219,9 @@ fn candidate_record(
         transaction_id: None,
         log_sequence: None,
         log_cycle: None,
-        content_sha256,
+        content_md5: content_hashes.as_ref().map(|hashes| hashes.md5.clone()),
+        content_sha1: content_hashes.as_ref().map(|hashes| hashes.sha1.clone()),
+        content_sha256: content_hashes.map(|hashes| hashes.sha256),
         warnings,
         ranges: content.ranges,
     })

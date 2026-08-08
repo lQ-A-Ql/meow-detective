@@ -115,10 +115,12 @@ fn candidate_record(
     let mut warnings = candidate_warnings(&candidate);
     let (ranges, persisted_recoverable_bytes) =
         recovery_ranges(journal, &candidate, &mut warnings)?;
-    let (completeness, allocation_state, content_sha256) = recovery_claim(
+    let (completeness, allocation_state, content_hashes) = recovery_claim(
         candidate.declared_size,
         candidate.recoverable_bytes,
         persisted_recoverable_bytes,
+        candidate.content_mapping.content_md5.clone(),
+        candidate.content_mapping.content_sha1.clone(),
         candidate.content_mapping.content_sha256.clone(),
         candidate.content_mapping.data_allocation_state,
     );
@@ -157,7 +159,9 @@ fn candidate_record(
         transaction_id: Some(sequence),
         log_sequence: Some(u64::from(candidate.transaction_sequence)),
         log_cycle: None,
-        content_sha256,
+        content_md5: content_hashes.as_ref().map(|hashes| hashes.0.clone()),
+        content_sha1: content_hashes.as_ref().map(|hashes| hashes.1.clone()),
+        content_sha256: content_hashes.map(|hashes| hashes.2),
         warnings,
         ranges,
     })
@@ -251,9 +255,11 @@ fn recovery_claim(
     declared_size: u64,
     mapped_recoverable_bytes: u64,
     persisted_recoverable_bytes: u64,
+    content_md5: Option<String>,
+    content_sha1: Option<String>,
     content_sha256: Option<String>,
     data_allocation_state: fs_ext4::journal::RecoveryAllocationState,
-) -> (String, String, Option<String>) {
+) -> (String, String, Option<(String, String, String)>) {
     let allocation_state = match data_allocation_state {
         fs_ext4::journal::RecoveryAllocationState::Unverified => "unverified",
         fs_ext4::journal::RecoveryAllocationState::Free => "free",
@@ -264,8 +270,12 @@ fn recovery_claim(
     if mapped_recoverable_bytes != persisted_recoverable_bytes {
         return ("metadata_only".to_string(), allocation_state, None);
     }
-    if persisted_recoverable_bytes == declared_size && content_sha256.is_some() {
-        return ("complete".to_string(), "free".to_string(), content_sha256);
+    let content_hashes = content_md5
+        .zip(content_sha1)
+        .zip(content_sha256)
+        .map(|((md5, sha1), sha256)| (md5, sha1, sha256));
+    if persisted_recoverable_bytes == declared_size && content_hashes.is_some() {
+        return ("complete".to_string(), "free".to_string(), content_hashes);
     }
     if persisted_recoverable_bytes > 0 && persisted_recoverable_bytes < declared_size {
         return ("partial".to_string(), allocation_state, None);

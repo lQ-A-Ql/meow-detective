@@ -5,6 +5,7 @@ import {
   FileTreeNode,
   DeletedRecoveryContentRange,
   DeletedRecoveryExport,
+  DeletedRecoveryHashSearch,
   DeletedRecoveryPage,
   DeletedRecoveryRun,
   DocumentPreviewResponse,
@@ -256,6 +257,16 @@ export async function runDeletedRecovery(
   return apiClient.request<DeletedRecoveryRun>(COMMANDS.files.RUN_DELETED_RECOVERY, {
     request: { dataSourceId, partitionIndex: partitionIndex ?? null },
   });
+}
+
+export async function searchDeletedRecoveriesByHash(
+  dataSourceId: string,
+  hash: string,
+): Promise<DeletedRecoveryHashSearch> {
+  return apiClient.request<DeletedRecoveryHashSearch>(
+    COMMANDS.files.SEARCH_DELETED_RECOVERIES_BY_HASH,
+    { request: { dataSourceId, hash } },
+  );
 }
 
 export async function readDeletedRecoveryRange(

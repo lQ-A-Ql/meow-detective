@@ -33,6 +33,14 @@ pub enum RecoveryIssueSeverityDto {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecoveryHashAlgorithmDto {
+    Md5,
+    Sha1,
+    Sha256,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryProvenanceRangeDto {
@@ -100,6 +108,10 @@ pub struct DeletedFileRecoveryDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_cycle: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_md5: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_sha1: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_sha256: Option<String>,
     pub provenance_ranges: Vec<RecoveryProvenanceRangeDto>,
     pub warnings: Vec<String>,
@@ -134,6 +146,14 @@ pub struct DeletedRecoveryPageDto {
     pub offset: u64,
     pub limit: u32,
     pub total: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedRecoveryHashSearchDto {
+    pub algorithm: RecoveryHashAlgorithmDto,
+    pub normalized_hash: String,
+    pub matches: Vec<DeletedFileRecoveryDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -7,6 +7,7 @@ import {
   listDeletedRecoveries,
   readDeletedRecoveryRange,
   runDeletedRecovery,
+  searchDeletedRecoveriesByHash,
 } from '@/lib/api/files';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import { saveDialog } from '@/lib/platform/dialog';
@@ -42,6 +43,10 @@ function isMissingScan(error: unknown) {
 function decodeBase64(value: string) {
   const encoded = atob(value);
   return Array.from(encoded, (character) => character.charCodeAt(0));
+}
+
+function isValidRecoveryHash(value: string) {
+  return /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
 }
 
 function recoveredFileName(recovery: DeletedFileRecovery) {
@@ -82,6 +87,7 @@ export function useDeletedRecoveryModel(
   const [selectedRecoveryId, setSelectedRecoveryId] = useState<string>();
   const [selectedRangeOrdinal, setSelectedRangeOrdinal] = useState<number>();
   const [preview, setPreview] = useState<DeletedRecoveryPreviewWindow>();
+  const [hashQuery, setHashQueryState] = useState('');
   const sourceIdRef = useRef(source?.id);
   sourceIdRef.current = source?.id;
 
@@ -91,6 +97,7 @@ export function useDeletedRecoveryModel(
     setSelectedRecoveryId(undefined);
     setSelectedRangeOrdinal(undefined);
     setPreview(undefined);
+    setHashQueryState('');
   }, [partitionIdentity, source?.id]);
 
   const queryKey = [
@@ -117,6 +124,19 @@ export function useDeletedRecoveryModel(
     retry: false,
   });
 
+  const hashMutation = useMutation({
+    mutationFn: ({ dataSourceId, hash }: { dataSourceId: string; hash: string }) =>
+      searchDeletedRecoveriesByHash(dataSourceId, hash),
+    onSuccess: (result, request) => {
+      if (request.dataSourceId === sourceIdRef.current) {
+        setHashQueryState(result.normalizedHash);
+        setSelectedRecoveryId(undefined);
+        setSelectedRangeOrdinal(undefined);
+        setPreview(undefined);
+      }
+    },
+  });
+
   const scanMutation = useMutation({
     mutationFn: ({
       dataSourceId,
@@ -132,6 +152,7 @@ export function useDeletedRecoveryModel(
       setOffset(0);
       setSelectedRecoveryId(undefined);
       setPreview(undefined);
+      hashMutation.reset();
       await queryClient.invalidateQueries({
         queryKey: ['recovery', 'deleted', currentCase.data?.id ?? null, source?.id ?? null],
       });
@@ -194,13 +215,25 @@ export function useDeletedRecoveryModel(
   const resetScanMutation = scanMutation.reset;
   const resetReadMutation = readMutation.reset;
   const resetExportMutation = exportMutation.reset;
+  const resetHashMutation = hashMutation.reset;
   useEffect(() => {
     resetScanMutation();
     resetReadMutation();
     resetExportMutation();
-  }, [partitionIdentity, resetExportMutation, resetReadMutation, resetScanMutation, source?.id]);
+    resetHashMutation();
+  }, [
+    partitionIdentity,
+    resetExportMutation,
+    resetHashMutation,
+    resetReadMutation,
+    resetScanMutation,
+    source?.id,
+  ]);
 
-  const recoveries = recoveryQuery.data?.recoveries ?? [];
+  const hashSearch = hashMutation.variables?.dataSourceId === source?.id
+    ? hashMutation.data
+    : undefined;
+  const recoveries = hashSearch?.matches ?? recoveryQuery.data?.recoveries ?? [];
   const selectedRecovery = recoveries.find((recovery) => recovery.id === selectedRecoveryId);
   const contentRanges = useMemo(
     () => verifiedContentRanges(selectedRecovery),
@@ -227,6 +260,8 @@ export function useDeletedRecoveryModel(
     state = 'unsupported';
   } else if (recoveryQuery.isLoading) {
     state = 'loading';
+  } else if (hashSearch) {
+    state = 'ready';
   } else if (missingScan) {
     state = 'unscanned';
   } else if (recoveryQuery.error) {
@@ -245,6 +280,9 @@ export function useDeletedRecoveryModel(
     : undefined;
   const exportError = exportMutation.variables?.dataSourceId === source?.id
     ? exportMutation.error
+    : undefined;
+  const hashError = hashMutation.variables?.dataSourceId === source?.id
+    ? hashMutation.error
     : undefined;
   const operationError = scanError ?? readError ?? exportError;
   const error = recoveryQuery.error && !missingScan
@@ -265,6 +303,7 @@ export function useDeletedRecoveryModel(
     scanMutation.reset();
     readMutation.reset();
     exportMutation.reset();
+    hashMutation.reset();
   }
 
   function selectRecovery(recoveryId: string) {
@@ -290,7 +329,7 @@ export function useDeletedRecoveryModel(
     error,
     page: recoveryQuery.data,
     recoveries,
-    total: recoveryQuery.data?.total ?? 0,
+    total: hashSearch?.matches.length ?? recoveryQuery.data?.total ?? 0,
     failures: scanResult && scanResult.dataSourceId === source?.id ? scanResult.failures : [],
     selectedRecovery,
     selectedRecoveryId,
@@ -305,7 +344,31 @@ export function useDeletedRecoveryModel(
     lastExport: exportResult && exportResult.dataSourceId === source?.id
       ? exportResult.result
       : undefined,
+    hashQuery,
+    hashQueryValid: isValidRecoveryHash(hashQuery),
+    hashSearch,
+    hashSearchError: hashError ? errorMessage(hashError) : undefined,
+    setHashQuery: (value) => {
+      const normalized = value.trim().toLowerCase();
+      setHashQueryState(normalized);
+      if (hashSearch && normalized !== hashSearch.normalizedHash) {
+        hashMutation.reset();
+      }
+    },
+    runHashSearch: () => {
+      if (source?.id && isValidRecoveryHash(hashQuery)) {
+        hashMutation.mutate({ dataSourceId: source.id, hash: hashQuery });
+      }
+    },
+    clearHashSearch: () => {
+      setHashQueryState('');
+      hashMutation.reset();
+      setSelectedRecoveryId(undefined);
+      setSelectedRangeOrdinal(undefined);
+      setPreview(undefined);
+    },
     scanning: scanMutation.isPending,
+    hashSearching: hashMutation.isPending,
     reading: readMutation.isPending,
     exporting: exportMutation.isPending,
     runScan: () => {
@@ -323,8 +386,8 @@ export function useDeletedRecoveryModel(
         exportMutation.mutate(selectedRecovery);
       }
     },
-    hasPreviousPage: offset > 0,
-    hasNextPage: offset + recoveries.length < (recoveryQuery.data?.total ?? 0),
+    hasPreviousPage: !hashSearch && offset > 0,
+    hasNextPage: !hashSearch && offset + recoveries.length < (recoveryQuery.data?.total ?? 0),
     previousPage: () => changePage(Math.max(0, offset - PAGE_SIZE)),
     nextPage: () => changePage(offset + PAGE_SIZE),
   };

@@ -333,7 +333,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_031_mount_directory_index"
+        "source_032_deleted_recovery_hashes"
     );
     for table in [
         "ceph_rocksdb_manifests",

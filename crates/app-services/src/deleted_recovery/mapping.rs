@@ -65,7 +65,7 @@ pub(super) fn scan_to_dto(
     })
 }
 
-fn recovery_to_dto(
+pub(super) fn recovery_to_dto(
     recovery: DeletedRecoveryRecord,
     data_source_id: &str,
     partition_index: u32,
@@ -93,6 +93,8 @@ fn recovery_to_dto(
         transaction_id: recovery.transaction_id,
         log_sequence: recovery.log_sequence,
         log_cycle: recovery.log_cycle,
+        content_md5: recovery.content_md5,
+        content_sha1: recovery.content_sha1,
         content_sha256: recovery.content_sha256,
         provenance_ranges: recovery
             .ranges

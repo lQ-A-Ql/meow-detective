@@ -56,6 +56,8 @@ fn aggregate(scan_id: &str, inode: &str) -> DeletedRecoveryAggregate {
             transaction_id: Some("tx-7".to_string()),
             log_sequence: Some(7),
             log_cycle: None,
+            content_md5: None,
+            content_sha1: None,
             content_sha256: None,
             warnings: vec!["Content extents were not allocation-verified".to_string()],
             ranges: vec![RecoveryRangeRecord {
@@ -162,6 +164,38 @@ fn recovery_lookup_is_scoped_to_the_requested_data_source() {
         .find_recovery("source-2", "candidate-42")
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn searches_complete_recoveries_by_indexed_hash_across_partitions() {
+    let connection = source_connection();
+    let repo = DeletedRecoveryRepo::new(&connection);
+    let mut complete = aggregate("scan-hash", "84");
+    complete.scan.partition_index = 3;
+    complete.recoveries[0].id = "candidate-84".to_string();
+    complete.recoveries[0].inode = "84".to_string();
+    complete.recoveries[0].declared_size = 0;
+    complete.recoveries[0].completeness = "complete".to_string();
+    complete.recoveries[0].allocation_state = "free".to_string();
+    complete.recoveries[0].content_md5 = Some("d41d8cd98f00b204e9800998ecf8427e".to_string());
+    complete.recoveries[0].content_sha1 =
+        Some("da39a3ee5e6b4b0d3255bfef95601890afd80709".to_string());
+    complete.recoveries[0].content_sha256 =
+        Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string());
+    complete.recoveries[0].ranges.clear();
+    repo.replace_scan(&complete).unwrap();
+
+    let matches = repo
+        .search_by_hash(
+            "source-1",
+            persistence_sqlite::repositories::deleted_recovery_repo::DeletedRecoveryHashAlgorithm::Md5,
+            "d41d8cd98f00b204e9800998ecf8427e",
+            100,
+        )
+        .unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].0.partition_index, 3);
+    assert_eq!(matches[0].1.id, "candidate-84");
 }
 
 #[test]

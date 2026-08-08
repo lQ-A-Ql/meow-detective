@@ -1,5 +1,6 @@
 use super::*;
 use crate::format::Ext4Extent;
+use sha2::Digest;
 
 const DATA_BLOCK_A: u64 = 30;
 const DATA_BLOCK_B: u64 = 31;
@@ -39,6 +40,14 @@ fn free_inode_and_free_extent_blocks_produce_complete_hashed_content() {
     assert_eq!(
         candidate.content_mapping.content_sha256.as_deref(),
         Some(crate::journal::checksum::sha256_hex(&expected).as_str())
+    );
+    assert_eq!(
+        candidate.content_mapping.content_md5,
+        Some(hex::encode(md5::Md5::digest(&expected)))
+    );
+    assert_eq!(
+        candidate.content_mapping.content_sha1,
+        Some(hex::encode(sha1::Sha1::digest(&expected)))
     );
 }
 

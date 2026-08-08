@@ -1,7 +1,8 @@
+use md5::Md5;
 use persistence_sqlite::repositories::deleted_recovery_repo::RecoveryRangeRecord;
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
-use super::super::identity::sha256_hex;
 use super::super::DeletedRecoveryError;
 
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
@@ -9,7 +10,7 @@ pub(super) const MAX_RECOVERY_RANGE_BYTES: u64 = 8 * 1024 * 1024;
 
 pub(super) struct NtfsContentAccumulator {
     pub(super) ranges: Vec<RecoveryRangeRecord>,
-    full_hasher: Sha256,
+    full_hashers: ContentHashers,
     full_expected_offset: u64,
     full_coverage: bool,
 }
@@ -18,9 +19,47 @@ impl NtfsContentAccumulator {
     pub(super) fn new() -> Self {
         Self {
             ranges: Vec::new(),
-            full_hasher: Sha256::new(),
+            full_hashers: ContentHashers::new(),
             full_expected_offset: 0,
             full_coverage: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct CompleteContentHashes {
+    pub(super) md5: String,
+    pub(super) sha1: String,
+    pub(super) sha256: String,
+}
+
+#[derive(Clone)]
+pub(super) struct ContentHashers {
+    md5: Md5,
+    sha1: Sha1,
+    sha256: Sha256,
+}
+
+impl ContentHashers {
+    pub(super) fn new() -> Self {
+        Self {
+            md5: Md5::new(),
+            sha1: Sha1::new(),
+            sha256: Sha256::new(),
+        }
+    }
+
+    pub(super) fn update(&mut self, bytes: &[u8]) {
+        self.md5.update(bytes);
+        self.sha1.update(bytes);
+        self.sha256.update(bytes);
+    }
+
+    fn finalize(self) -> CompleteContentHashes {
+        CompleteContentHashes {
+            md5: hex::encode(self.md5.finalize()),
+            sha1: hex::encode(self.sha1.finalize()),
+            sha256: hex::encode(self.sha256.finalize()),
         }
     }
 }
@@ -31,7 +70,7 @@ pub(super) fn classify_candidate_content(
     candidate: &fs_ntfs::NtfsDeletedFileRecord,
     content: &mut NtfsContentAccumulator,
     warnings: &mut Vec<String>,
-) -> (&'static str, &'static str, Option<String>) {
+) -> (&'static str, &'static str, Option<CompleteContentHashes>) {
     if candidate.is_dir {
         warnings.push(
             "Deleted directory metadata is retained; directory export is unsupported".to_string(),
@@ -42,7 +81,7 @@ pub(super) fn classify_candidate_content(
         return classification;
     }
     if candidate.size == 0 {
-        return ("free", "complete", Some(sha256_hex(&[])));
+        return ("free", "complete", Some(ContentHashers::new().finalize()));
     }
     if candidate.has_attribute_list {
         warnings.push(
@@ -61,7 +100,7 @@ pub(super) fn classify_candidate_content(
         candidate.size,
         content.full_expected_offset,
         content.full_coverage,
-        content.full_hasher.clone(),
+        content.full_hashers.clone(),
         &content.ranges,
     )
 }
@@ -69,7 +108,7 @@ pub(super) fn classify_candidate_content(
 pub(super) fn classify_file_level_efs(
     candidate: &fs_ntfs::NtfsDeletedFileRecord,
     warnings: &mut Vec<String>,
-) -> Option<(&'static str, &'static str, Option<String>)> {
+) -> Option<(&'static str, &'static str, Option<CompleteContentHashes>)> {
     if !candidate.encrypted {
         return None;
     }
@@ -183,7 +222,7 @@ fn append_verified_run_ranges(
             filesystem,
             chunk_source_offset,
             chunk_length,
-            include_in_full.then_some(&mut content.full_hasher),
+            include_in_full.then_some(&mut content.full_hashers),
         )?;
         if include_in_full {
             content.full_expected_offset = content
@@ -244,7 +283,7 @@ fn hash_source_range(
     filesystem: &fs_ntfs::NtfsReader,
     source_offset: u64,
     length: u64,
-    mut full_hasher: Option<&mut Sha256>,
+    mut full_hashers: Option<&mut ContentHashers>,
 ) -> Result<String, DeletedRecoveryError> {
     let mut range_hasher = Sha256::new();
     let mut remaining = length;
@@ -256,8 +295,8 @@ fn hash_source_range(
         })?;
         filesystem.read_source_range(offset, &mut buffer[..chunk_len])?;
         range_hasher.update(&buffer[..chunk_len]);
-        if let Some(hasher) = full_hasher.as_deref_mut() {
-            hasher.update(&buffer[..chunk_len]);
+        if let Some(hashers) = full_hashers.as_deref_mut() {
+            hashers.update(&buffer[..chunk_len]);
         }
         offset = offset.saturating_add(chunk_len as u64);
         remaining -= chunk_len as u64;
@@ -269,9 +308,9 @@ pub(super) fn content_claim(
     declared_size: u64,
     covered_size: u64,
     full_coverage: bool,
-    full_hasher: Sha256,
+    full_hashers: ContentHashers,
     ranges: &[RecoveryRangeRecord],
-) -> (&'static str, &'static str, Option<String>) {
+) -> (&'static str, &'static str, Option<CompleteContentHashes>) {
     if declared_size > 0 && ranges.is_empty() {
         return ("unverified", "metadata_only", None);
     }
@@ -293,9 +332,5 @@ pub(super) fn content_claim(
     if expected != declared_size || covered_size != declared_size || !full_coverage {
         return ("partially_overwritten", "partial", None);
     }
-    (
-        "free",
-        "complete",
-        Some(hex::encode(full_hasher.finalize())),
-    )
+    ("free", "complete", Some(full_hashers.finalize()))
 }

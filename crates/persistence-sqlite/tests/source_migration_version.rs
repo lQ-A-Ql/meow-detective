@@ -58,6 +58,10 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_031_mount_directory_index",
         "source_030_analysis_file_feed_index"
     ));
+    assert!(runner::source_version_is_at_least(
+        "source_032_deleted_recovery_hashes",
+        "source_031_mount_directory_index"
+    ));
 }
 
 #[test]
@@ -77,7 +81,7 @@ fn source_version_order_rejects_older_and_unknown_versions() {
 }
 
 #[test]
-fn source_024_through_031_upgrade_preserves_rows_and_adds_query_indexes() {
+fn source_024_through_032_upgrade_preserves_rows_and_adds_query_indexes() {
     let connection = persistence_sqlite::open_in_memory().unwrap();
     connection
         .execute_batch(
@@ -166,7 +170,7 @@ fn source_024_through_031_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 8);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 9);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(
@@ -278,6 +282,20 @@ fn source_024_through_031_upgrade_preserves_rows_and_adds_query_indexes() {
     assert!(mount_index_sql.contains("parent_id"));
     assert!(mount_index_sql.contains("name COLLATE NOCASE"));
     assert!(!mount_index_sql.contains("WHERE deleted = 0"));
+
+    let hash_index_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index' AND name IN (
+                 'idx_deleted_file_recoveries_content_md5',
+                 'idx_deleted_file_recoveries_content_sha1',
+                 'idx_deleted_file_recoveries_content_sha256'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(hash_index_count, 3);
 }
 
 #[test]

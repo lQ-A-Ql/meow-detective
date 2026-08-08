@@ -6,6 +6,7 @@ export type RecoveryAllocationState =
   | 'allocated'
   | 'partially_overwritten';
 export type RecoveryIssueSeverity = 'info' | 'warning' | 'error';
+export type RecoveryHashAlgorithm = 'md5' | 'sha1' | 'sha256';
 
 export interface RecoveryProvenanceRange {
   ordinal: number;
@@ -49,6 +50,8 @@ export interface DeletedFileRecovery {
   transactionId?: string;
   logSequence?: number;
   logCycle?: number;
+  contentMd5?: string;
+  contentSha1?: string;
   contentSha256?: string;
   provenanceRanges: RecoveryProvenanceRange[];
   warnings: string[];
@@ -78,6 +81,12 @@ export interface DeletedRecoveryPage {
   offset: number;
   limit: number;
   total: number;
+}
+
+export interface DeletedRecoveryHashSearch {
+  algorithm: RecoveryHashAlgorithm;
+  normalizedHash: string;
+  matches: DeletedFileRecovery[];
 }
 
 export interface DeletedRecoveryFailure {

@@ -234,6 +234,40 @@ pub struct ListDeletedRecoveriesRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SearchDeletedRecoveriesByHashRequest {
+    pub data_source_id: String,
+    pub hash: String,
+}
+
+impl SearchDeletedRecoveriesByHashRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        validate_data_source_id(&self.data_source_id)?;
+        self.hash = self.hash.trim().to_ascii_lowercase();
+        if !matches!(self.hash.len(), 32 | 40 | 64) {
+            return Err("hash must be a 32, 40, or 64 character hexadecimal digest".to_string());
+        }
+        if !self
+            .hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        {
+            return Err("hash must contain only hexadecimal characters".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn algorithm(&self) -> Result<crate::dto::RecoveryHashAlgorithmDto, String> {
+        match self.hash.len() {
+            32 => Ok(crate::dto::RecoveryHashAlgorithmDto::Md5),
+            40 => Ok(crate::dto::RecoveryHashAlgorithmDto::Sha1),
+            64 => Ok(crate::dto::RecoveryHashAlgorithmDto::Sha256),
+            _ => Err("hash must be a 32, 40, or 64 character hexadecimal digest".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadDeletedRecoveryRangeRequest {
     pub data_source_id: String,
     pub recovery_id: String,

@@ -22,6 +22,8 @@ fn recovery() -> DeletedFileRecoveryDto {
         transaction_id: Some("tx-7".to_string()),
         log_sequence: Some(7),
         log_cycle: None,
+        content_md5: None,
+        content_sha1: None,
         content_sha256: None,
         provenance_ranges: vec![RecoveryProvenanceRangeDto {
             ordinal: 0,
@@ -67,6 +69,26 @@ fn ntfs_recovery_round_trips_mft_sequence_in_camel_case() {
 
     let decoded: DeletedFileRecoveryDto = serde_json::from_value(value).unwrap();
     assert_eq!(decoded, ntfs);
+}
+
+#[test]
+fn recovery_hashes_and_search_results_serialize_with_normalized_contract_names() {
+    let mut hashed = recovery();
+    hashed.content_md5 = Some("a".repeat(32));
+    hashed.content_sha1 = Some("b".repeat(40));
+    hashed.content_sha256 = Some("c".repeat(64));
+    let search = DeletedRecoveryHashSearchDto {
+        algorithm: RecoveryHashAlgorithmDto::Sha256,
+        normalized_hash: "c".repeat(64),
+        matches: vec![hashed],
+    };
+
+    let value = serde_json::to_value(search).unwrap();
+    assert_eq!(value["algorithm"], "sha256");
+    assert_eq!(value["normalizedHash"], "c".repeat(64));
+    assert_eq!(value["matches"][0]["contentMd5"], "a".repeat(32));
+    assert_eq!(value["matches"][0]["contentSha1"], "b".repeat(40));
+    assert_eq!(value["matches"][0]["contentSha256"], "c".repeat(64));
 }
 
 #[test]

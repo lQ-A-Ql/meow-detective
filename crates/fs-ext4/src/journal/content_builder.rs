@@ -1,3 +1,5 @@
+use md5::Md5;
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 use super::content::{
@@ -12,7 +14,9 @@ pub(super) struct MappingBuilder {
     recoverable_bytes: u64,
     saw_free: bool,
     saw_allocated: bool,
-    content_hasher: Sha256,
+    content_md5: Md5,
+    content_sha1: Sha1,
+    content_sha256: Sha256,
     hashed_bytes: u64,
     content_hash_valid: bool,
 }
@@ -25,7 +29,9 @@ impl MappingBuilder {
             recoverable_bytes: 0,
             saw_free: false,
             saw_allocated: false,
-            content_hasher: Sha256::new(),
+            content_md5: Md5::new(),
+            content_sha1: Sha1::new(),
+            content_sha256: Sha256::new(),
             hashed_bytes: 0,
             content_hash_valid: true,
         }
@@ -45,7 +51,9 @@ impl MappingBuilder {
             self.content_hash_valid = false;
             return Ok(());
         }
-        self.content_hasher.update(bytes);
+        self.content_md5.update(bytes);
+        self.content_sha1.update(bytes);
+        self.content_sha256.update(bytes);
         self.hashed_bytes = self
             .hashed_bytes
             .checked_add(bytes.len() as u64)
@@ -126,16 +134,21 @@ impl MappingBuilder {
             (false, true) => RecoveryAllocationState::Allocated,
             (false, false) => RecoveryAllocationState::Unverified,
         };
-        let content_sha256 = (self.content_hash_valid
+        let has_complete_hashes = self.content_hash_valid
             && self.inode_allocation_state == RecoveryAllocationState::Free
-            && self.hashed_bytes == self.recoverable_bytes)
-            .then(|| hex::encode(self.content_hasher.finalize()));
+            && self.hashed_bytes == self.recoverable_bytes;
+        let content_md5 = has_complete_hashes.then(|| hex::encode(self.content_md5.finalize()));
+        let content_sha1 = has_complete_hashes.then(|| hex::encode(self.content_sha1.finalize()));
+        let content_sha256 =
+            has_complete_hashes.then(|| hex::encode(self.content_sha256.finalize()));
         DeletedContentMapping {
             state: DeletedContentMappingState::Mapped,
             inode_allocation_state: self.inode_allocation_state,
             data_allocation_state,
             ranges: self.ranges,
             recoverable_bytes: self.recoverable_bytes,
+            content_md5,
+            content_sha1,
             content_sha256,
             issue: None,
         }

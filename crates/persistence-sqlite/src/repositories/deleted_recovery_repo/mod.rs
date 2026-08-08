@@ -1,11 +1,12 @@
+mod hash_query;
 mod query;
 mod records;
 mod validation;
 mod write;
 
 pub use records::{
-    DeletedRecoveryAggregate, DeletedRecoveryPageRecord, DeletedRecoveryRecord,
-    RecoveryIssueRecord, RecoveryRangeRecord, RecoveryScanRecord,
+    DeletedRecoveryAggregate, DeletedRecoveryHashAlgorithm, DeletedRecoveryPageRecord,
+    DeletedRecoveryRecord, RecoveryIssueRecord, RecoveryRangeRecord, RecoveryScanRecord,
 };
 
 use rusqlite::Connection;

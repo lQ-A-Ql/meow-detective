@@ -568,7 +568,7 @@ fn source_019_is_latest_and_reapplication_is_idempotent() {
     let (conn, _) = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_031_mount_directory_index"
+        "source_032_deleted_recovery_hashes"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     for table in [

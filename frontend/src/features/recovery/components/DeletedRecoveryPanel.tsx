@@ -3,11 +3,14 @@ import {
   Eye,
   LoaderCircle,
   RefreshCw,
+  Search,
   ScanSearch,
+  X,
 } from 'lucide-react';
 import { useCallback } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Select,
@@ -28,6 +31,12 @@ const COMPLETENESS_LABELS: Record<DeletedFileRecovery['completeness'], string> =
   partial: '部分内容',
   complete: '完整内容',
 };
+
+const HASH_ALGORITHM_LABELS = {
+  md5: 'MD5',
+  sha1: 'SHA-1',
+  sha256: 'SHA-256',
+} as const;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -68,6 +77,20 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
         mono
         valueClassName="break-all"
       />
+
+      {recovery.contentMd5 || recovery.contentSha1 || recovery.contentSha256 ? (
+        <div className="space-y-2 border-t border-forensics-border-light pt-3">
+          {recovery.contentMd5 ? (
+            <KeyValueField label="MD5" value={recovery.contentMd5} mono valueClassName="break-all" />
+          ) : null}
+          {recovery.contentSha1 ? (
+            <KeyValueField label="SHA-1" value={recovery.contentSha1} mono valueClassName="break-all" />
+          ) : null}
+          {recovery.contentSha256 ? (
+            <KeyValueField label="SHA-256" value={recovery.contentSha256} mono valueClassName="break-all" />
+          ) : null}
+        </div>
+      ) : null}
 
       {recovery.warnings.length > 0 ? (
         <div className="border border-forensics-warning-border bg-forensics-warning-bg p-2 text-[11px] text-forensics-warning-text">
@@ -150,6 +173,12 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
 // Module-level columns: stable reference keeps DenseDataTable row memoization
 // intact across model state updates.
 const columns: DenseColumn<DeletedFileRecovery>[] = [
+  {
+    key: 'partition',
+    title: '分区',
+    className: 'w-[64px]',
+    render: (row) => `P${row.partitionIndex}`,
+  },
   {
     key: 'inode',
     title: 'Inode',
@@ -237,6 +266,68 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
         </div>
       )}
 
+      {model.partitions.length > 0 ? (
+        <div className="flex flex-wrap items-start gap-2 border-b border-forensics-border-light pb-3">
+          <div className="min-w-[20rem] max-w-2xl flex-1">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-forensics-muted-light" />
+              <Input
+                aria-label="恢复文件哈希"
+                aria-invalid={Boolean(model.hashQuery) && !model.hashQueryValid}
+                className="pl-7 pr-8"
+                inputSize="compact"
+                placeholder="MD5 / SHA-1 / SHA-256"
+                spellCheck={false}
+                value={model.hashQuery}
+                variant="mono"
+                onChange={(event) => model.setHashQuery(event.target.value.toLowerCase())}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && model.hashQueryValid && !model.hashSearching) {
+                    model.runHashSearch();
+                  }
+                }}
+              />
+              {model.hashQuery ? (
+                <Button
+                  aria-label="清除哈希搜索"
+                  className="absolute right-0.5 top-0.5"
+                  size="iconXs"
+                  title="清除哈希搜索"
+                  type="button"
+                  variant="forensicsGhost"
+                  onClick={model.clearHashSearch}
+                >
+                  <X />
+                </Button>
+              ) : null}
+            </div>
+            {model.hashQuery && !model.hashQueryValid ? (
+              <div className="mt-1 text-[10px] text-forensics-error-text">
+                哈希必须是 32、40 或 64 位十六进制值
+              </div>
+            ) : null}
+            {model.hashSearchError ? (
+              <div className="mt-1 text-[10px] text-forensics-error-text">{model.hashSearchError}</div>
+            ) : null}
+          </div>
+          <Button
+            disabled={!model.hashQueryValid || model.hashSearching}
+            size="sm"
+            type="button"
+            variant="forensicsOutline"
+            onClick={model.runHashSearch}
+          >
+            {model.hashSearching ? <LoaderCircle className="animate-spin" /> : <Search />}
+            按哈希查找
+          </Button>
+          {model.hashSearch ? (
+            <Badge variant="outline" className="mt-1">
+              {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {model.hashSearch.matches.length} 项匹配
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
       {model.error ? (
         <div className="border border-forensics-error-border bg-forensics-error-bg p-3 text-[11px] text-forensics-error-text">
           {model.error}
@@ -271,7 +362,11 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               />
             </DenseDataTableFrame>
             <div className="flex shrink-0 items-center justify-between border-t border-forensics-border px-2 py-1 text-[10px] text-forensics-muted">
-              <span>显示 {model.page?.offset ?? 0}-{(model.page?.offset ?? 0) + model.recoveries.length} / {model.total}</span>
+              <span>
+                {model.hashSearch
+                  ? `哈希匹配 ${model.recoveries.length} / ${model.total}`
+                  : `显示 ${model.page?.offset ?? 0}-${(model.page?.offset ?? 0) + model.recoveries.length} / ${model.total}`}
+              </span>
               <div className="flex gap-1">
                 <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}>上一组</Button>
                 <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}>下一组</Button>

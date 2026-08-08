@@ -24,7 +24,8 @@ pub use files::{
     ExportDeletedRecoveryRequest, ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto,
     GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,
     ListDeletedRecoveriesRequest, OpenFileHandleRequest, ReadDeletedRecoveryRangeRequest,
-    RunDeletedRecoveryRequest, SearchEntryTypeDto, SearchFilesRequest, SearchSortKeyDto,
+    RunDeletedRecoveryRequest, SearchDeletedRecoveriesByHashRequest, SearchEntryTypeDto,
+    SearchFilesRequest, SearchSortKeyDto,
 };
 pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;

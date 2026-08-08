@@ -34,9 +34,18 @@ pub struct DeletedRecoveryRecord {
     pub transaction_id: Option<String>,
     pub log_sequence: Option<u64>,
     pub log_cycle: Option<u64>,
+    pub content_md5: Option<String>,
+    pub content_sha1: Option<String>,
     pub content_sha256: Option<String>,
     pub warnings: Vec<String>,
     pub ranges: Vec<RecoveryRangeRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeletedRecoveryHashAlgorithm {
+    Md5,
+    Sha1,
+    Sha256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -16,5 +16,5 @@ pub use content::read_deleted_recovery_range;
 pub use context::DeletedRecoveryContext;
 pub use error::DeletedRecoveryError;
 pub use export::export_deleted_recovery;
-pub use query::list_deleted_recoveries;
+pub use query::{list_deleted_recoveries, search_deleted_recoveries_by_hash};
 pub use scan::run_deleted_recovery;

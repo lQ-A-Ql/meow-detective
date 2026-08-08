@@ -62,6 +62,10 @@ pub struct DeletedContentMapping {
     pub ranges: Vec<DeletedContentRange>,
     pub recoverable_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_md5: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_sha1: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_sha256: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issue: Option<String>,
@@ -75,6 +79,8 @@ impl DeletedContentMapping {
             data_allocation_state: RecoveryAllocationState::Unverified,
             ranges: Vec::new(),
             recoverable_bytes: 0,
+            content_md5: None,
+            content_sha1: None,
             content_sha256: None,
             issue: None,
         }
@@ -91,6 +97,8 @@ impl DeletedContentMapping {
             data_allocation_state: RecoveryAllocationState::Unverified,
             ranges: Vec::new(),
             recoverable_bytes: 0,
+            content_md5: None,
+            content_sha1: None,
             content_sha256: None,
             issue: Some(error.to_string()),
         }
@@ -148,6 +156,8 @@ pub(crate) fn map_deleted_inode_content(
             data_allocation_state: RecoveryAllocationState::Unverified,
             ranges: Vec::new(),
             recoverable_bytes: 0,
+            content_md5: None,
+            content_sha1: None,
             content_sha256: None,
             issue: Some(
                 "the inode is currently allocated, so its historical extent mapping was not trusted"

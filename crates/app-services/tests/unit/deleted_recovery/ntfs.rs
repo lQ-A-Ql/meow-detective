@@ -2,7 +2,8 @@ use persistence_sqlite::repositories::deleted_recovery_repo::RecoveryRangeRecord
 use sha2::{Digest, Sha256};
 
 use super::content::{
-    bounded_range_chunks, classify_file_level_efs, content_claim, MAX_RECOVERY_RANGE_BYTES,
+    bounded_range_chunks, classify_file_level_efs, content_claim, ContentHashers,
+    MAX_RECOVERY_RANGE_BYTES,
 };
 
 fn content_range(ordinal: u32, logical_offset: u64, length: u64) -> RecoveryRangeRecord {
@@ -19,8 +20,8 @@ fn content_range(ordinal: u32, logical_offset: u64, length: u64) -> RecoveryRang
     }
 }
 
-fn hasher_for(bytes: &[u8]) -> Sha256 {
-    let mut hasher = Sha256::new();
+fn hasher_for(bytes: &[u8]) -> ContentHashers {
+    let mut hasher = ContentHashers::new();
     hasher.update(bytes);
     hasher
 }
@@ -33,7 +34,18 @@ fn content_claim_requires_contiguous_free_ranges_for_complete_recovery() {
 
     assert_eq!(allocation_state, "free");
     assert_eq!(completeness, "complete");
-    assert_eq!(digest, Some(hex::encode(Sha256::digest(b"12345678"))));
+    assert_eq!(
+        digest.as_ref().map(|hashes| hashes.sha256.clone()),
+        Some(hex::encode(Sha256::digest(b"12345678")))
+    );
+    assert_eq!(
+        digest.as_ref().map(|hashes| hashes.md5.as_str()),
+        Some("25d55ad283aa400af464c76d713c07ad")
+    );
+    assert_eq!(
+        digest.as_ref().map(|hashes| hashes.sha1.as_str()),
+        Some("7c222fb2927d828af22f592134e8932480637c0d")
+    );
 }
 
 #[test]
@@ -62,7 +74,10 @@ fn complete_empty_file_has_a_stable_empty_content_digest() {
 
     assert_eq!(allocation_state, "free");
     assert_eq!(completeness, "complete");
-    assert_eq!(digest, Some(hex::encode(Sha256::digest([]))));
+    assert_eq!(
+        digest.as_ref().map(|hashes| hashes.sha256.clone()),
+        Some(hex::encode(Sha256::digest([])))
+    );
 }
 
 #[test]

@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_031_mount_directory_index"
+        "source_032_deleted_recovery_hashes"
     );
     for table in [
         "ceph_bluefs_superblocks",

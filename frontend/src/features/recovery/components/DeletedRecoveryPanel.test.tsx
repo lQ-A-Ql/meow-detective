@@ -78,7 +78,13 @@ function model(overrides: Partial<DeletedRecoveryViewModel> = {}): DeletedRecove
     selectRecovery: vi.fn(),
     contentRanges: [],
     selectRange: vi.fn(),
+    hashQuery: '',
+    hashQueryValid: false,
+    setHashQuery: vi.fn(),
+    runHashSearch: vi.fn(),
+    clearHashSearch: vi.fn(),
     scanning: false,
+    hashSearching: false,
     reading: false,
     exporting: false,
     runScan: vi.fn(),
@@ -143,6 +149,38 @@ describe('DeletedRecoveryPanel', () => {
 
     expect(screen.getByText('MFT sequence')).toBeDefined();
     expect(screen.getByText('9')).toBeDefined();
+  });
+
+  it('shows common content hashes and lowercases hash search input', () => {
+    const recovery = candidate({
+      contentMd5: 'a'.repeat(32),
+      contentSha1: 'b'.repeat(40),
+      contentSha256: 'c'.repeat(64),
+    });
+    const setHashQuery = vi.fn();
+    const runHashSearch = vi.fn();
+    render(<DeletedRecoveryPanel model={model({
+      state: 'ready',
+      page: page([recovery]),
+      recoveries: [recovery],
+      total: 1,
+      selectedRecovery: recovery,
+      selectedRecoveryId: recovery.id,
+      hashQuery: 'a'.repeat(32),
+      hashQueryValid: true,
+      setHashQuery,
+      runHashSearch,
+    })} />);
+
+    expect(screen.getByText('MD5')).toBeDefined();
+    expect(screen.getByText('SHA-1')).toBeDefined();
+    expect(screen.getByText('SHA-256')).toBeDefined();
+    fireEvent.change(screen.getByRole('textbox', { name: '恢复文件哈希' }), {
+      target: { value: 'ABCDEF' },
+    });
+    expect(setHashQuery).toHaveBeenCalledWith('abcdef');
+    fireEvent.click(screen.getByRole('button', { name: '按哈希查找' }));
+    expect(runHashSearch).toHaveBeenCalledTimes(1);
   });
 
   it('reads only the selected verified provenance range', () => {

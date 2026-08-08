@@ -120,4 +120,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_031_mount_directory_index",
         include_str!("scripts/source_031_mount_directory_index.sql"),
     ),
+    (
+        "source_032_deleted_recovery_hashes",
+        include_str!("scripts/source_032_deleted_recovery_hashes.sql"),
+    ),
 ];
