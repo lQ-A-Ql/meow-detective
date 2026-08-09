@@ -16,12 +16,24 @@ use rusqlite::{Connection, OpenFlags};
 use std::{fs, path::Path};
 
 pub fn open_case(root: &Path) -> Result<ActiveCase> {
+    let started = std::time::Instant::now();
     let (case_from_json, db_path) = validate_case_workspace(root)?;
     let stored = preflight_case_workspace(&db_path, &case_from_json.id)?;
+    let after_preflight = started.elapsed();
     let active = ActiveCase::new(stored, root.to_path_buf(), open_existing(&db_path)?);
+    let after_db_open = started.elapsed();
     active.with_conn(|conn| {
         crate::source_db::migrate_ready_source_databases(conn, root, &active.meta.id)
     })?;
+    // Stage timing is the factual basis for case cold-start optimization;
+    // keep it at info level so it shows up in the regular log.
+    tracing::info!(
+        preflight_ms = after_preflight.as_millis(),
+        db_open_ms = (after_db_open - after_preflight).as_millis(),
+        source_migration_ms = (started.elapsed() - after_db_open).as_millis(),
+        total_ms = started.elapsed().as_millis(),
+        "case open stage timing"
+    );
     let _ = active.with_conn(|conn| {
         AuditRepo::new(conn).log_simple(
             Some(&active.meta.id.0),

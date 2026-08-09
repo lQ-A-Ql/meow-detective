@@ -166,6 +166,7 @@ dependencies = [
  "timeline",
  "toml 0.8.2",
  "tracing",
+ "tracing-subscriber",
  "transport",
  "unicode-normalization",
  "uuid",

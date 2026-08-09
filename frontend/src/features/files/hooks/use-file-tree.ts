@@ -86,6 +86,24 @@ export function useFileTree({
 
   const { data: rootTree } = useFileTreeQuery(showHidden);
 
+  const showHiddenMountedRef = useRef(false);
+  useEffect(() => {
+    // Skip the reset on initial mount: firing here would race with (and wipe out)
+    // the data-source children pre-population effect below, since both effects
+    // run in declaration order during the same commit.
+    //
+    // This effect is declared BEFORE the pre-population and merge effects so
+    // that on a visibility toggle the wipe lands first and those effects can
+    // immediately repopulate from the current (possibly referentially
+    // unchanged) query data in the same commit.
+    if (!showHiddenMountedRef.current) {
+      showHiddenMountedRef.current = true;
+      return;
+    }
+    setTreeChildren({});
+    setTreeChildOffsets({});
+  }, [showHidden]);
+
   // Synthesize data-source parent nodes: wrap only each source's own root
   // directories/partition placeholders under that source. The backend tree nodes
   // carry dataSourceId, so we can avoid duplicating the whole case tree under
@@ -112,6 +130,13 @@ export function useFileTree({
   // React 18 batching can cause the effect to see stale current state
   // where the DS slot was never populated, while the wrappedRootTree memo
   // has already computed hasChildren=true from the fresh rootTree.
+  //
+  // `showHidden` is a dependency on purpose: the reset effect below wipes
+  // the children map on every visibility toggle, and react-query's
+  // placeholderData + structural sharing can keep `rootTree` referentially
+  // identical across a quick A→B→A toggle. Without re-running here, the DS
+  // children would stay wiped and the tree could not expand until the next
+  // fetch produced a new rootTree reference.
   useEffect(() => {
     if (!dataSources || dataSources.length === 0) return;
     setTreeChildren((current) => {
@@ -126,7 +151,7 @@ export function useFileTree({
       }
       return next;
     });
-  }, [dataSources, rootTree, wrappedRootTree]);
+  }, [dataSources, rootTree, wrappedRootTree, showHidden]);
 
   const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
 
@@ -161,19 +186,6 @@ export function useFileTree({
   );
   const activeChildren = activeChildrenPage?.children;
 
-  const showHiddenMountedRef = useRef(false);
-  useEffect(() => {
-    // Skip the reset on initial mount: firing here would race with (and wipe out)
-    // the data-source children pre-population effect above, since both effects
-    // run in declaration order during the same commit.
-    if (!showHiddenMountedRef.current) {
-      showHiddenMountedRef.current = true;
-      return;
-    }
-    setTreeChildren({});
-    setTreeChildOffsets({});
-  }, [showHidden]);
-
   useEffect(() => {
     if (!activeDirectoryId || activeDirectoryIsDataSource || !activeChildren) return;
     const pageOffset = activeChildrenOffset;
@@ -203,6 +215,9 @@ export function useFileTree({
       }
       return { ...current, [activeDirectoryId]: nextChildren };
     });
+    // `showHidden` is included so the cached children page is re-merged after
+    // the visibility-reset wipe even when the query data reference is
+    // unchanged (placeholderData / structural sharing).
   }, [
     activeChildren,
     activeChildrenOffset,
@@ -211,6 +226,7 @@ export function useFileTree({
     expandedDirectoryIds,
     rootNodes,
     treeChildren,
+    showHidden,
   ]);
 
   useEffect(() => {
