@@ -54,6 +54,16 @@ pub fn apply_bypass(windows_root: &Path) -> Result<BypassState, MaintenanceError
     Ok(BypassState::Applied)
 }
 
+/// Both binaries must exist as regular files (no reparse points) for the
+/// Utilman bypass to be applicable; mirrors the host-side preflight probe.
+pub fn utilman_bypass_available(windows_root: &Path) -> bool {
+    [UTILMAN, COMMAND_SHELL].iter().all(|relative| {
+        fs::symlink_metadata(windows_root.join(relative))
+            .map(|metadata| metadata.is_file() && !is_reparse_point(&metadata))
+            .unwrap_or(false)
+    })
+}
+
 pub fn restore_bypass(windows_root: &Path) -> Result<BypassState, MaintenanceError> {
     let utilman = windows_root.join(UTILMAN);
     let backup = windows_root.join(UTILMAN_BACKUP);

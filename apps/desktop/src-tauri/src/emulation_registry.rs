@@ -287,10 +287,23 @@ impl EmulationRegistry {
             .filter(|(_, entry)| predicate(entry) && entry.status.state != EmulationState::Released)
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
-        for id in ids {
-            self.release(&id)?;
+        let mut failures = Vec::new();
+        for id in &ids {
+            if let Err(error) = self.release(id) {
+                tracing::warn!(session_id = %id, error = %error, "emulation session release failed during cleanup");
+                failures.push(format!("{id}: {error}"));
+            }
         }
-        Ok(())
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(EmulationRegistryError::Backend(format!(
+                "{} of {} sessions failed to release: {}",
+                failures.len(),
+                ids.len(),
+                failures.join("; ")
+            )))
+        }
     }
 
     fn lock_error() -> EmulationRegistryError {
@@ -355,7 +368,9 @@ impl Drop for EmulationRegistry {
             .map(|entries| entries.keys().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
         for id in ids {
-            let _ = self.release(&id);
+            if let Err(error) = self.release(&id) {
+                tracing::warn!(session_id = %id, error = %error, "emulation session release failed during registry drop");
+            }
         }
     }
 }

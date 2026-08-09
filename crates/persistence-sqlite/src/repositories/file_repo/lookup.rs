@@ -68,7 +68,7 @@ impl FileRepo<'_> {
             params![
                 data_source_id.0,
                 partition_index as u64,
-                path,
+                normalized,
                 partition_prefixed,
                 leading_slash
             ],

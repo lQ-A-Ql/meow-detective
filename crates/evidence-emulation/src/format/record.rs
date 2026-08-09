@@ -67,6 +67,13 @@ fn aligned_end(file: &mut File) -> Result<u64, EmulationError> {
     Ok(aligned)
 }
 
+/// On-disk footprint of a record carrying `payload_length` bytes: the header,
+/// the payload, and the alignment padding that follows them.
+pub(crate) fn aligned_record_length(payload_length: usize) -> u64 {
+    let value = RECORD_HEADER_SIZE as u64 + payload_length as u64;
+    (value + RECORD_ALIGNMENT - 1) & !(RECORD_ALIGNMENT - 1)
+}
+
 fn record_checksum(header: &[u8; RECORD_HEADER_SIZE], payload: &[u8]) -> u32 {
     crc32c::checksum_parts(&[&header[..44], payload])
 }

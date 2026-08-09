@@ -1,4 +1,4 @@
-use super::{validate_boot_descriptors, RecoveryMedia};
+use super::{validate_boot_descriptors, RecoveryMedia, RecoveryMediaError};
 
 #[test]
 fn bootable_iso_is_validated_and_fingerprinted() {
@@ -11,7 +11,8 @@ fn bootable_iso_is_validated_and_fingerprinted() {
     assert!(media.vmware_path().ends_with("WinPE.iso"));
     assert_eq!(media.length(), 19 * 2048);
     assert_eq!(media.sha256().len(), 64);
-    assert!(validate_boot_descriptors(&path).is_ok());
+    let mut file = std::fs::File::open(&path).unwrap();
+    assert!(validate_boot_descriptors(&mut file).is_ok());
 }
 
 #[test]
@@ -21,6 +22,25 @@ fn iso_without_el_torito_descriptor_is_rejected() {
     write_iso(&path, false);
 
     assert!(RecoveryMedia::open(&path).is_err());
+}
+
+#[test]
+fn iso_truncated_before_descriptor_terminator_is_not_bootable() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("short.iso");
+    // Exactly the minimum length: valid primary and boot descriptors but no
+    // terminator sector, so validation runs into the end of the file.
+    let mut bytes = vec![0u8; 19 * 2048];
+    write_descriptor(&mut bytes, 16, 1, b"");
+    write_descriptor(&mut bytes, 17, 0, b"EL TORITO SPECIFICATION");
+    write_descriptor(&mut bytes, 18, 2, b"SUPPLEMENTARY");
+    std::fs::write(&path, bytes).unwrap();
+
+    let error = match RecoveryMedia::open(&path) {
+        Ok(_) => panic!("a descriptor set without a terminator must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, RecoveryMediaError::NotBootableIso));
 }
 
 fn write_iso(path: &std::path::Path, bootable: bool) {

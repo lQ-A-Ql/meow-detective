@@ -53,7 +53,12 @@ impl SessionWorkspace {
         let root = base.join(directory_name);
         fs::create_dir(&root)?;
         let mount = root.join("mount");
-        fs::create_dir(&mount)?;
+        if let Err(error) = fs::create_dir(&mount) {
+            // Roll back the partially created session root so a failed
+            // prepare never leaves an orphan directory behind.
+            let _ = fs::remove_dir_all(&root);
+            return Err(error.into());
+        }
         Ok(Self {
             overlay: root.join("overlay.cow"),
             vmdk: root.join("disk.vmdk"),
@@ -122,10 +127,12 @@ impl SessionWorkspace {
         self.maintenance_iso.is_file()
     }
 
-    /// Removes the whole session directory after a failed prepare. Best
-    /// effort: a mounted backend must already be stopped by the caller, and a
-    /// removal failure is logged rather than propagated.
-    pub(super) fn remove_best_effort(self) {
+    /// Removes the whole session directory. Used both for prepare rollback
+    /// and after a successful release, since the overlay and materials are
+    /// single-session disposable artifacts. Best effort: a mounted backend
+    /// must already be stopped by the caller, and a removal failure is
+    /// logged rather than propagated.
+    pub(super) fn remove_best_effort(&self) {
         if let Err(error) = fs::remove_dir_all(&self.root) {
             tracing::warn!(
                 error = %error,

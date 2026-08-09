@@ -80,8 +80,18 @@ fn lists_accounts_with_flags_and_password_state() {
     assert_eq!(account.rid, 500);
     assert!(account.disabled);
     assert_eq!(account.username, "TestUser");
-    assert!(account.locked_out);
+    // 7 failed logons but no ACB_AUTO_LOCKED: history alone is not a lockout.
+    assert!(!account.locked_out);
     assert!(account.has_password);
+}
+
+#[test]
+fn lockout_requires_the_auto_locked_flag() {
+    let mut hive = build_hive(true);
+    // Set ACB_AUTO_LOCKED in the F value (cell header is 4 bytes at 0x6600).
+    let f_flags = 0x1000 + 0x5600 + 4 + F_ACB_OFFSET;
+    hive[f_flags..f_flags + 2].copy_from_slice(&ACB_AUTO_LOCKED.to_le_bytes());
+    assert!(list_accounts(&hive).unwrap()[0].locked_out);
 }
 
 #[test]
@@ -136,4 +146,33 @@ fn a_passwordless_account_reports_already_clear() {
     let outcome = apply_bypass(&mut hive, 500, SamBypassAction::ClearPassword, &hbootkey).unwrap();
     assert!(!outcome.password_cleared);
     assert!(outcome.already_passwordless);
+}
+
+#[test]
+fn a_corrupt_v_hash_pointer_is_refused() {
+    let mut hive = build_hive(true);
+    // The NT blob pointer escapes the V value cell (204 + 0x200 bytes at
+    // 0x6004) while staying inside the hive: the rewrite must not land
+    // outside the cell.
+    let v_nt_offset = 0x1000 + 0x5000 + 4 + V_NT_OFFSET_FIELD;
+    hive[v_nt_offset..v_nt_offset + 4].copy_from_slice(&0x400u32.to_le_bytes());
+    let hbootkey = Zeroizing::new([0x42; 32]);
+    let error = apply_bypass(&mut hive, 500, SamBypassAction::ClearPassword, &hbootkey)
+        .expect_err("corrupt V pointer must be refused");
+    assert!(
+        error.contains("escapes the V value cell"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_cleared_password_verifies_as_blank() {
+    let mut hive = build_hive(true);
+    let hbootkey = Zeroizing::new([0x42; 32]);
+    assert!(!account_password_is_blank(&hive, 500, &hbootkey).unwrap());
+    apply_bypass(&mut hive, 500, SamBypassAction::ClearPassword, &hbootkey).unwrap();
+    assert!(account_password_is_blank(&hive, 500, &hbootkey).unwrap());
+    // An account with no stored hash is blank regardless of the key.
+    let passwordless = build_hive(false);
+    assert!(account_password_is_blank(&passwordless, 500, &hbootkey).unwrap());
 }

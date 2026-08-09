@@ -314,17 +314,23 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
               </div>
             ))}
             {model.osdataCleanupPartitions.length > 0 ? (
-              <label className="flex items-center gap-2 pt-1 text-[12px] text-forensics-text-secondary">
-                <Checkbox
-                  checked={model.cleanupOsdata}
-                  onCheckedChange={model.toggleCleanupOsdata}
-                  aria-label={t('emulationPage.preflight.cleanupOsdata')}
-                />
-                {t('emulationPage.preflight.cleanupOsdata')}
-                <span className="font-mono text-[10px] text-forensics-muted">
-                  {model.osdataCleanupPartitions.map((partition) => `[P${partition}]`).join(' ')}
-                </span>
-              </label>
+              model.preflight.installs.some((install) => install.osdataEmpty === false) ? (
+                <div className="pt-1 text-[11px] text-forensics-warning-text">
+                  {t('emulationPage.preflight.osdataNonEmptyHint')}
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 pt-1 text-[12px] text-forensics-text-secondary">
+                  <Checkbox
+                    checked={model.cleanupOsdata}
+                    onCheckedChange={model.toggleCleanupOsdata}
+                    aria-label={t('emulationPage.preflight.cleanupOsdata')}
+                  />
+                  {t('emulationPage.preflight.cleanupOsdata')}
+                  <span className="font-mono text-[10px] text-forensics-muted">
+                    {model.osdataCleanupPartitions.map((partition) => `[P${partition}]`).join(' ')}
+                  </span>
+                </label>
+              )
             ) : null}
           </div>
         ) : null}
@@ -341,6 +347,12 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
                 {t('emulationPage.maintenance.buildHint')}
               </span>
             ) : null}
+          </div>
+        ) : null}
+
+        {model.recoveryIsoPath && model.preflight?.maintenanceToolAvailable === false ? (
+          <div className="border-b border-forensics-border py-3 text-[11px] text-forensics-warning-text">
+            {t('emulationPage.maintenance.peWithoutTool')}
           </div>
         ) : null}
 

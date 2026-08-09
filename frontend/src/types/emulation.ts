@@ -25,6 +25,7 @@ export interface EmulationInstall {
   osdataPresent: boolean;
   samPresent: boolean;
   utilmanBypassAvailable: boolean;
+  osdataEmpty?: boolean;
 }
 
 export interface EmulationPreflight {

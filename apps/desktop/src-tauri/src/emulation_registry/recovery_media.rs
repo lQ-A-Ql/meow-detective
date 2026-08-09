@@ -38,14 +38,19 @@ impl RecoveryMedia {
         {
             return Err(RecoveryMediaError::InvalidFile);
         }
-        validate_boot_descriptors(&path)?;
         let file_name = path
             .file_name()
             .and_then(|value| value.to_str())
             .filter(|value| !value.is_empty())
             .ok_or(RecoveryMediaError::InvalidFile)?
             .to_string();
-        let sha256 = infrastructure::hashing::sha256_file(&path)?;
+        // Validate the boot descriptors and hash the media through a single
+        // open handle so the bytes that were validated are exactly the bytes
+        // that were hashed (no validate-then-reopen TOCTOU window).
+        let mut file = File::open(&path)?;
+        validate_boot_descriptors(&mut file)?;
+        file.seek(SeekFrom::Start(0))?;
+        let sha256 = infrastructure::hashing::sha256_reader(&mut file)?;
         let vmware_path = vmware_path(&path)?;
         Ok(Self {
             vmware_path,
@@ -72,14 +77,21 @@ impl RecoveryMedia {
     }
 }
 
-fn validate_boot_descriptors(path: &Path) -> Result<(), RecoveryMediaError> {
-    let mut file = File::open(path)?;
+fn validate_boot_descriptors(file: &mut File) -> Result<(), RecoveryMediaError> {
     file.seek(SeekFrom::Start(FIRST_VOLUME_DESCRIPTOR * ISO_SECTOR_SIZE))?;
     let mut sector = [0u8; ISO_SECTOR_SIZE as usize];
     let mut saw_primary = false;
     let mut saw_el_torito = false;
     for _ in FIRST_VOLUME_DESCRIPTOR..MAX_VOLUME_DESCRIPTORS {
-        file.read_exact(&mut sector)?;
+        // A short file that simply ends inside the descriptor set is not an
+        // I/O failure; it is an ISO without a boot descriptor terminator.
+        file.read_exact(&mut sector).map_err(|error| {
+            if error.kind() == io::ErrorKind::UnexpectedEof {
+                RecoveryMediaError::NotBootableIso
+            } else {
+                RecoveryMediaError::Io(error)
+            }
+        })?;
         if &sector[1..6] != b"CD001" || sector[6] != 1 {
             return Err(RecoveryMediaError::NotBootableIso);
         }

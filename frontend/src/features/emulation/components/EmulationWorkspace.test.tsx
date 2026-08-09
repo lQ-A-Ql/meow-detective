@@ -132,4 +132,39 @@ describe('EmulationWorkspace', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' }));
     expect(toggleCleanupOsdata).toHaveBeenCalledOnce();
   });
+
+  it('replaces the OSDATA cleanup checkbox with a hint when OSDATA is not empty', () => {
+    render(<EmulationWorkspace model={createModel({
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 2,
+          osdataPresent: true,
+          osdataEmpty: false,
+          samPresent: true,
+          utilmanBypassAvailable: true,
+        }],
+        recommendedBootRoute: 'recoveryMedia',
+      },
+      osdataCleanupPartitions: [2],
+    })} />);
+
+    expect(screen.getByText('OSDATA 非空，无法自动清除，请使用 PE 路线')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' })).not.toBeInTheDocument();
+  });
+
+  it('warns when PE media is selected but the maintenance tool is unavailable', () => {
+    render(<EmulationWorkspace model={createModel({
+      recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
+      bootRoute: 'recoveryMedia',
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [],
+        recommendedBootRoute: 'recoveryMedia',
+        maintenanceToolAvailable: false,
+      },
+    })} />);
+
+    expect(screen.getByText('PE 中将没有维护工具，只能手动操作')).toBeInTheDocument();
+  });
 });

@@ -26,9 +26,13 @@ const MAINTENANCE_README: &str = "Meow~Detective maintenance media\r\n\
 1. Open a command prompt in WinPE.\r\n\
 2. Locate this CD-ROM drive (it contains TARGETS.JSON and MEOWMTN.EXE).\r\n\
 3. Run: MEOWMTN.EXE run\r\n\
-   The tool reads TARGETS.JSON, verifies the expected Windows installation,\r\n\
-   removes a leftover OSDATA node when present, and can apply or restore the\r\n\
-   Utilman logon bypass on request (see MEOWMTN.EXE usage output).\r\n\
+   The tool reads TARGETS.JSON and cross-checks the expected OSDATA and\r\n\
+   Utilman-bypass state against what the guest actually sees; any mismatch\r\n\
+   aborts before changes are made. When the check passes it removes a\r\n\
+   leftover OSDATA node, and it can apply or restore the Utilman logon\r\n\
+   bypass on request (see MEOWMTN.EXE usage output).\r\n\
+   Auto-detection supports exactly one offline Windows installation; pass\r\n\
+   --drive <letter> (e.g. MEOWMTN.EXE run --drive D:) to pick one.\r\n\
 \r\n\
 All writes land on the copy-on-write overlay; the evidence image is never\r\n\
 modified.\r\n";

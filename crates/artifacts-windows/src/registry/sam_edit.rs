@@ -31,6 +31,9 @@ pub struct SamAccountInfo {
     pub rid: u32,
     pub username: String,
     pub disabled: bool,
+    /// True only while the account's ACB_AUTO_LOCKED bit is set. The
+    /// failed-logon counter alone just records history — any past failed
+    /// logon would otherwise be misreported as a live lockout.
     pub locked_out: bool,
     pub has_password: bool,
 }
@@ -86,12 +89,12 @@ pub fn list_accounts(hive: &[u8]) -> Result<Vec<SamAccountInfo>, String> {
         };
         let v = reader.read_raw_value_bytes(&user_node, "V")?;
         let f = reader.read_raw_value_bytes(&user_node, "F")?;
-        let (flags, failed_count) = f.as_deref().and_then(read_f_flags).unwrap_or((0, 0));
+        let flags = f.as_deref().and_then(read_f_flags).unwrap_or(0);
         accounts.push(SamAccountInfo {
             rid,
             username: v.as_deref().and_then(username_from_v).unwrap_or_default(),
             disabled: flags & ACB_DISABLED != 0,
-            locked_out: flags & ACB_AUTO_LOCKED != 0 || failed_count > 0,
+            locked_out: flags & ACB_AUTO_LOCKED != 0,
             has_password: v.as_deref().map(nt_hash_present).unwrap_or(false),
         });
     }
@@ -153,6 +156,13 @@ pub fn apply_bypass(
             // Salt-only blob: the system stores no hash at all here.
             continue;
         }
+        // A corrupt V pointer table must not push the rewrite outside the V
+        // value cell: the blob would land anywhere in the hive while the
+        // overall verification still passes.
+        let v_end = v_off + v_len;
+        if blob_off < v_off || blob_off.checked_add(length).is_none_or(|end| end > v_end) {
+            return Err("hash blob pointer escapes the V value cell".to_string());
+        }
         let rewritten = {
             let blob = hive
                 .get(blob_off..blob_off + length)
@@ -188,6 +198,46 @@ pub fn apply_bypass(
         outcome.account_enabled = cleared != flags;
     }
     Ok(outcome)
+}
+
+/// Semantic ground truth after a bypass edit: the account's stored NT hash
+/// is the canonical empty hash. `list_accounts` cannot answer this — the
+/// in-place rewrite preserves the V pointer-table lengths, so a freshly
+/// cleared account still reports `has_password`. Re-encrypting the empty
+/// hash under the same key and salt is deterministic, so it must reproduce
+/// the stored blob byte-for-byte.
+pub fn account_password_is_blank(
+    hive: &[u8],
+    rid: u32,
+    hashed_boot_key: &[u8; 32],
+) -> Result<bool, String> {
+    let reader = RegistryHiveReader::new(hive)?;
+    let rid_hex = format!("{rid:08X}");
+    let path = ["SAM", "Domains", "Account", "Users", rid_hex.as_str()];
+    let node = reader
+        .navigate_to(&path)?
+        .ok_or_else(|| format!("account RID {rid} was not found in the SAM hive"))?;
+    let v = reader
+        .read_raw_value_bytes(&node, "V")?
+        .ok_or_else(|| "account V value not found".to_string())?;
+    if !nt_hash_present(&v) {
+        return Ok(true);
+    }
+    let relative = read_u32_at(&v, V_NT_OFFSET_FIELD)? as usize;
+    let length = read_u32_at(&v, V_NT_LENGTH_FIELD)? as usize;
+    let blob = USER_V_HEADER_LEN
+        .checked_add(relative)
+        .and_then(|start| start.checked_add(length).map(|end| (start, end)))
+        .and_then(|(start, end)| v.get(start..end))
+        .ok_or_else(|| "hash blob is out of bounds".to_string())?;
+    Ok(encrypt_hash_into_blob(
+        hashed_boot_key,
+        rid,
+        EMPTY_NT_HASH,
+        NTPASSWORD_CONSTANT,
+        blob,
+    )
+    .is_some_and(|rewritten| rewritten == blob))
 }
 
 fn locate_value(hive: &[u8], path: &[&str], value: &str) -> Result<(usize, usize), String> {
@@ -231,14 +281,10 @@ fn username_from_v(v: &[u8]) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
-fn read_f_flags(data: &[u8]) -> Option<(u16, u16)> {
-    let flags = u16::from_le_bytes(data.get(F_ACB_OFFSET..F_ACB_OFFSET + 2)?.try_into().ok()?);
-    let failed = u16::from_le_bytes(
-        data.get(F_FAILED_LOGON_OFFSET..F_FAILED_LOGON_OFFSET + 2)?
-            .try_into()
-            .ok()?,
-    );
-    Some((flags, failed))
+fn read_f_flags(data: &[u8]) -> Option<u16> {
+    Some(u16::from_le_bytes(
+        data.get(F_ACB_OFFSET..F_ACB_OFFSET + 2)?.try_into().ok()?,
+    ))
 }
 
 fn read_u16_at(data: &[u8], offset: usize) -> Result<u16, String> {

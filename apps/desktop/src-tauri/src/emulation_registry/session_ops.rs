@@ -6,6 +6,13 @@
 //! op-lock, so there is no lock cycle. Once the op guard is held, no other
 //! operation can flip the session state, which is why the state is
 //! re-verified after the guard is acquired rather than trusted from before.
+//!
+//! Workspace retention policy: the overlay, generated VM materials and the
+//! maintenance ISO are single-session disposable artifacts. A release that
+//! reaches `Released` therefore removes the session workspace best-effort.
+//! A release that fails leaves the session in `FailedCleanupPending` with
+//! the workspace intact so a retry can attempt the full stop/flush/unmount
+//! sequence again and the artifacts remain available for inspection.
 
 use std::sync::{Arc, Mutex};
 
@@ -197,7 +204,11 @@ impl EmulationRegistry {
             Ok(()) => {
                 entry.status.state = EmulationState::Released;
                 entry.status.error = None;
-                Ok(entry.status.clone())
+                let status = entry.status.clone();
+                // The overlay and materials are single-session disposable
+                // artifacts; the backend is stopped, so drop the workspace.
+                entry.workspace.remove_best_effort();
+                Ok(status)
             }
             Err(error) => {
                 // Put the handles back so a retry attempts the full sequence

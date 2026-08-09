@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(30);
+const SOFT_STOP_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const SOFT_STOP_CONFIRM_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Error)]
 pub(super) enum VmwareError {
@@ -51,7 +53,7 @@ impl VmwareControl {
 
     pub(super) fn stop_bounded(&self) -> Result<(), VmwareError> {
         match self.stop_soft() {
-            Ok(()) => Ok(()),
+            Ok(()) => self.confirm_soft_stop(),
             Err(soft_error) => {
                 if !self.is_running()? {
                     return Ok(());
@@ -59,6 +61,26 @@ impl VmwareControl {
                 tracing::warn!(error = %soft_error, "VMware soft stop failed; forcing COW-backed VM off");
                 self.stop_hard()
             }
+        }
+    }
+
+    /// `vmrun stop soft` reports success when the ACPI shutdown request was
+    /// delivered, not when the guest actually powered off. Poll until the VM
+    /// disappears from `vmrun list`; if it is still running past the confirm
+    /// window, fall back to a hard stop so the COW overlay can be flushed.
+    fn confirm_soft_stop(&self) -> Result<(), VmwareError> {
+        let deadline = Instant::now() + SOFT_STOP_CONFIRM_TIMEOUT;
+        loop {
+            if !self.is_running()? {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                tracing::warn!(
+                    "VMware guest still running after soft stop; forcing COW-backed VM off"
+                );
+                return self.stop_hard();
+            }
+            thread::sleep(SOFT_STOP_POLL_INTERVAL);
         }
     }
 
@@ -175,17 +197,19 @@ fn discover() -> Result<(PathBuf, PathBuf), VmwareError> {
         let Some(root) = std::env::var_os(variable) else {
             continue;
         };
-        let directory = PathBuf::from(root)
-            .join("VMware")
-            .join("VMware Workstation");
-        if let Some(pair) = probe_installation(&directory) {
-            return Ok(pair);
+        for product in ["VMware Workstation", "VMware Player"] {
+            let directory = PathBuf::from(&root).join("VMware").join(product);
+            if let Some(pair) = probe_installation(&directory) {
+                return Ok(pair);
+            }
         }
     }
     #[cfg(windows)]
-    if let Some(directory) = registry_install_path() {
-        if let Some(pair) = probe_installation(&directory) {
-            return Ok(pair);
+    for product in ["VMware Workstation", "VMware Player"] {
+        if let Some(directory) = registry_install_path(product) {
+            if let Some(pair) = probe_installation(&directory) {
+                return Ok(pair);
+            }
         }
     }
     Err(VmwareError::NotInstalled)
@@ -197,14 +221,15 @@ fn probe_installation(directory: &Path) -> Option<(PathBuf, PathBuf)> {
     (workstation.is_file() && vmrun.is_file()).then_some((workstation, vmrun))
 }
 
-/// Fallback discovery for machines where VMware Workstation is not installed
-/// under the default Program Files layout.
+/// Fallback discovery for machines where VMware Workstation or Player is not
+/// installed under the default Program Files layout. Workstation is probed
+/// before Player by the caller.
 #[cfg(windows)]
-fn registry_install_path() -> Option<PathBuf> {
+fn registry_install_path(product: &str) -> Option<PathBuf> {
     use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
 
-    let subkey = HSTRING::from(r"SOFTWARE\VMware, Inc.\VMware Workstation");
+    let subkey = HSTRING::from(format!(r"SOFTWARE\VMware, Inc.\{product}"));
     let value = HSTRING::from("InstallPath");
     let mut byte_len = 0u32;
     // SAFETY: all pointers reference valid NUL-terminated UTF-16 strings or

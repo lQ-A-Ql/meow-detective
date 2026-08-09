@@ -523,11 +523,15 @@
       "recoveryMedia": "PE ISO 优先",
       "directSystem": "原系统（需确认）"
     },
+    "boot": {
+      "directBootConfirm": "未选择可信的 WinPE 启动介质。\n\n确认后将直接启动镜像中的原系统。所有磁盘写入仍仅保存到案件 COW overlay，不会修改原始证据。是否继续？"
+    },
     "preflight": {
       "title": "镜像预检（来自导入索引）",
       "osdataPresent": "存在 OSDATA",
       "osdataAbsent": "无 OSDATA",
       "cleanupOsdata": "启动前清除 OSDATA（仅写入覆盖层）",
+      "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
       "bypassUnavailable": "不可绕密"
     },
@@ -535,6 +539,7 @@
       "toolAvailable": "维护盘：自动生成",
       "toolMissing": "维护工具未构建",
       "buildHint": "运行 scripts/dev/build-winpe-maintenance.ps1 后自动附带维护盘",
+      "peWithoutTool": "PE 中将没有维护工具，只能手动操作",
       "attached": "维护盘已挂载",
       "absent": "无维护盘"
     },

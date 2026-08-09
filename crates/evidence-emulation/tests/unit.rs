@@ -109,6 +109,49 @@ fn cow_disk_cluster_cache_serves_repeated_reads_and_tracks_writes() {
 }
 
 #[test]
+fn cow_disk_full_cluster_write_skips_the_parent_read_through() {
+    let directory = tempdir().unwrap();
+    let bytes: Vec<u8> = (0..DISK_LENGTH).map(|index| (index % 251) as u8).collect();
+    let reads = Arc::new(AtomicU64::new(0));
+    let provider: Arc<dyn BlockProvider> = Arc::new(CountingProvider {
+        bytes,
+        reads: Arc::clone(&reads),
+    });
+    let identity = ParentIdentity::new(provider.len(), [0x42; 32]).unwrap();
+    let config = CowDiskConfig {
+        cluster_size: 4096,
+        max_write_length: 64 * 1024,
+    };
+    let disk = CowDisk::create(
+        &directory.path().join("overlay.cow"),
+        provider,
+        identity,
+        config,
+    )
+    .unwrap();
+
+    // Two fully covered clusters: the write must not read the parent at all.
+    let patch = vec![0xa5; 8192];
+    disk.write_all_at(4096, &patch).unwrap();
+    assert_eq!(reads.load(Ordering::Relaxed), 0);
+
+    // The committed clusters come back exactly as written, independent of
+    // whatever the parent holds underneath them.
+    let mut actual = vec![0u8; 8192];
+    disk.read_exact_at(4096, &mut actual).unwrap();
+    assert_eq!(actual, patch);
+    assert_eq!(reads.load(Ordering::Relaxed), 0);
+
+    // A partial write still merges with the parent contents as before.
+    disk.write_all_at(1024, &[0x5a; 512]).unwrap();
+    let mut expected: Vec<u8> = (0..2048).map(|index| (index % 251) as u8).collect();
+    expected[1024..1536].fill(0x5a);
+    let mut head = [0u8; 2048];
+    disk.read_exact_at(0, &mut head).unwrap();
+    assert_eq!(&head[..], &expected[..]);
+}
+
+#[test]
 fn parent_identity_mismatch_is_rejected() {
     let directory = tempdir().unwrap();
     let overlay = directory.path().join("overlay.cow");
@@ -186,6 +229,13 @@ fn vmx_disables_host_integrations_and_networking() {
     assert!(rendered.contains("sharedFolder.maxNum = \"0\""));
     assert!(rendered.contains("usb.present = \"FALSE\""));
     assert!(rendered.contains("floppy0.present = \"FALSE\""));
+    assert!(rendered.contains("isolation.tools.getCreds.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.unity.push.update.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.ghi.autologon.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.hgfsServerSet.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.memSchedFakeSampleStats.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.device.connectable.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.device.edit.disable = \"TRUE\""));
     assert!(rendered.contains("firmware = \"efi\""));
     assert!(rendered.contains("ide0:0.deviceType = \"disk\""));
     assert!(!rendered.contains("scsi0:0.fileName"));
@@ -277,6 +327,34 @@ fn parse_iso_root(sector: &[u8]) -> std::collections::HashMap<String, (u32, u32)
 }
 
 #[test]
+fn iso9660_root_directory_overflow_is_a_typed_error_not_a_panic() {
+    use evidence_emulation::{build_iso, IsoFile};
+
+    // 20-character names produce 56-byte directory records; 40 of them need
+    // 2308 bytes, which cannot fit into the single 2048-byte root sector.
+    let payload = [0x55u8; 16];
+    let names: Vec<String> = (0..40)
+        .map(|index| format!("PAYLOAD_FILE_{index:03}.DAT"))
+        .collect();
+    let files: Vec<IsoFile<'_>> = names
+        .iter()
+        .map(|name| IsoFile {
+            name,
+            data: &payload,
+        })
+        .collect();
+    let error = match build_iso(&files) {
+        Ok(_) => panic!("an overflowing root directory must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, EmulationError::WriteTooLarge { .. }));
+
+    // 30 of the same records fit (68 + 30 * 56 = 1748 bytes) and still build.
+    let image = build_iso(&files[..30]).unwrap();
+    assert_eq!(image.len() % 2048, 0);
+}
+
+#[test]
 fn vmx_options_enable_exactly_one_isolation_exception_each() {
     let network = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
         .unwrap()
@@ -347,6 +425,31 @@ fn vmx_validator_rejects_mixed_or_missing_evidence_disk_controllers() {
         "{rendered}ide0:0.deviceType = \"disk\"\nide0:0.fileName = \"disk.vmdk\"\nide0:0.present = \"TRUE\"\n"
     ))
     .is_err());
+}
+
+#[test]
+fn vmx_validator_detects_missing_broadcom_hardening_keys() {
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .render();
+
+    for key in [
+        "isolation.tools.getCreds.disable",
+        "isolation.tools.unity.push.update.disable",
+        "isolation.tools.ghi.autologon.disable",
+        "isolation.tools.hgfsServerSet.disable",
+        "isolation.tools.memSchedFakeSampleStats.disable",
+        "isolation.device.connectable.disable",
+        "isolation.device.edit.disable",
+    ] {
+        let line = format!("{key} = \"TRUE\"\n");
+        assert!(rendered.contains(&line), "rendered VMX must set {key}");
+        let tampered = rendered.replace(&line, "");
+        assert!(
+            validate_default(&tampered).is_err(),
+            "validator must detect a missing {key}"
+        );
+    }
 }
 
 #[test]

@@ -116,6 +116,64 @@ fn edit_index_block_removes_entry_and_shrinks_used_size() {
     .is_none());
 }
 
+/// Build a 1 KiB FILE record carrying one resident $INDEX_ROOT whose entry
+/// region holds `entries`; `used_override` corrupts the used-size field when
+/// set.
+fn index_root_record(entries: &[Vec<u8>], used_override: Option<u32>) -> Vec<u8> {
+    let mut record = vec![0u8; 1024];
+    record[0..4].copy_from_slice(b"FILE");
+    record[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    let list = entry_list(entries);
+    let content_len = 0x20 + list.len();
+    let attr_pos = 0x38usize;
+    let attr_len = 0x18 + content_len;
+    record[attr_pos..attr_pos + 4].copy_from_slice(&ATTR_TYPE_INDEX_ROOT.to_le_bytes());
+    record[attr_pos + 4..attr_pos + 8].copy_from_slice(&(attr_len as u32).to_le_bytes());
+    // Resident flag (attr byte 8) stays zero.
+    record[attr_pos + 0x10..attr_pos + 0x14].copy_from_slice(&(content_len as u32).to_le_bytes());
+    record[attr_pos + 0x14..attr_pos + 0x16].copy_from_slice(&0x18u16.to_le_bytes());
+    let header = attr_pos + 0x18 + 0x10;
+    let used = used_override.unwrap_or(0x10 + list.len() as u32);
+    record[header..header + 4].copy_from_slice(&0x10u32.to_le_bytes());
+    record[header + 4..header + 8].copy_from_slice(&used.to_le_bytes());
+    record[header + 0x10..header + 0x10 + list.len()].copy_from_slice(&list);
+    record
+}
+
+#[test]
+fn edit_index_root_removes_entry_and_shrinks_used_size() {
+    let target = index_entry((3u64 << 48) | 77, "OSDATA", 0, 0x1000_0000);
+    let keep = index_entry((3u64 << 48) | 12, "SYSTEM", 0, 0);
+    let target_len = target.len();
+    let mut record = index_root_record(&[target, keep.clone()], None);
+    let header = 0x38 + 0x18 + 0x10;
+    let used_before = u32::from_le_bytes(record[header + 4..header + 8].try_into().expect("used"));
+
+    let (reference, is_dir) = edit_index_root(&mut record, "OSDATA").expect("edit");
+    assert_eq!(reference, (3u64 << 48) | 77);
+    assert!(is_dir);
+    let used_after = u32::from_le_bytes(record[header + 4..header + 8].try_into().expect("used"));
+    assert_eq!(used_after, used_before - target_len as u32);
+    // The surviving entry shifted into the removed entry's slot and the tail
+    // gap is zeroed.
+    let region_start = header + 0x10;
+    assert_eq!(&record[region_start..region_start + keep.len()], &keep[..]);
+    let tail = header + used_before as usize;
+    assert!(record[tail - target_len..tail]
+        .iter()
+        .all(|byte| *byte == 0));
+}
+
+#[test]
+fn edit_index_root_rejects_used_size_past_attribute_content() {
+    let target = index_entry((3u64 << 48) | 77, "OSDATA", 0, 0x1000_0000);
+    // This used_size stays inside the MFT record but runs past the resident
+    // attribute content: the edit must not shift the next attribute's bytes.
+    let mut record = index_root_record(&[target], Some(900));
+    let error = edit_index_root(&mut record, "OSDATA").expect_err("must refuse");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+}
+
 #[test]
 fn inverse_record_fixup_round_trips_through_apply() {
     let target = index_entry((3u64 << 48) | 77, "OSDATA", 0, 0x1000_0000);

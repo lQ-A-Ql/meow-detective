@@ -138,11 +138,30 @@ fn finish_start(
             Err(EmulationBackendError::Backend(error))
         }
         Err(mpsc::RecvTimeoutError::Timeout) => {
-            let _ = dokan::unmount(&requested);
-            let _ = join_handle.join();
+            if dokan::unmount(&requested) {
+                // The worker should now exit on its own; join to reap it.
+                let _ = join_handle.join();
+            } else {
+                // Without a successful unmount the worker may stay blocked
+                // inside Dokan; joining here could hang prepare forever, so
+                // detach the thread instead of reaping it.
+                tracing::warn!(
+                    "Dokan unmount after startup timeout failed; detaching the extent mount worker"
+                );
+                drop(join_handle);
+            }
             Err(EmulationBackendError::StartupTimeout)
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
+            if !dokan::unmount(&requested) {
+                tracing::warn!(
+                    "Dokan unmount after worker disconnect failed; detaching the extent mount worker"
+                );
+                drop(join_handle);
+                return Err(EmulationBackendError::Backend(
+                    "extent worker exited before publication".to_string(),
+                ));
+            }
             let error = join_handle
                 .join()
                 .map_err(|_| backend_error("extent mount thread panicked"))?

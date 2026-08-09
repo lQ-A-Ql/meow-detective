@@ -28,4 +28,8 @@ pub enum MaintenanceError {
     BypassTargetMissing,
     #[error("maintenance targets manifest is invalid: {0}")]
     InvalidTargets(String),
+    #[error("--drive expects a single drive letter such as D or D:")]
+    InvalidDriveArgument,
+    #[error("guest state does not match the host TARGETS.JSON manifest")]
+    CrosscheckMismatch,
 }

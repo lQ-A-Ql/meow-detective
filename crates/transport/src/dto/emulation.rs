@@ -78,6 +78,10 @@ pub struct EmulationInstallDto {
     pub osdata_present: bool,
     pub sam_present: bool,
     pub utilman_bypass_available: bool,
+    /// Whether the OSDATA directory is empty; `None` when OSDATA is absent,
+    /// not a directory, or the filesystem could not be listed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osdata_empty: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

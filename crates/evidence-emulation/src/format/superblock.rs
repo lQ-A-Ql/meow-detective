@@ -54,3 +54,7 @@ pub(crate) fn write_superblocks(
     file.sync_all()?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/format/superblock.rs"]
+mod tests;

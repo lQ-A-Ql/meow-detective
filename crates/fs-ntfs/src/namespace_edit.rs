@@ -7,10 +7,18 @@
 //! them through the COW overlay. Allocation sizes are never changed — the
 //! index area keeps its allocation and only the used-size fields shrink, so
 //! no attribute or record layout is disturbed.
+//!
+//! Two deliberate limitations. Deleting a leaf index entry does not refill
+//! the parent's routing key: a B-tree separator key can keep naming the
+//! deleted entry, which ntfs.sys tolerates on lookup while chkdsk reports an
+//! index inconsistency — accepted industry practice. And when the child
+//! record owns $ATTRIBUTE_LIST extension records, only the base record is
+//! retired and the extension records leak (the OSDATA scenario never
+//! triggers this).
 
 use std::io;
 
-use crate::attribute::DataAttributeExtent;
+use crate::attribute::{resident_attr_content, DataAttributeExtent};
 use crate::utils::validate_file_record;
 use crate::{file_not_found, invalid_fs_data, ATTR_TYPE_INDEX_ALLOCATION, ATTR_TYPE_INDEX_ROOT};
 
@@ -54,7 +62,7 @@ impl crate::NtfsReader {
         let (removed_ref, was_directory) = match site {
             EntrySite::IndexRoot => {
                 let mut edited = record.clone();
-                let info = self.edit_index_root(&mut edited, entry_name)?;
+                let info = edit_index_root(&mut edited, entry_name)?;
                 inverse_record_fixup(&mut edited, self.bytes_per_sector())?;
                 edits.push(PlannedDiskEdit {
                     offset: self.mft_record_source_offset(inode)?,
@@ -175,37 +183,6 @@ impl crate::NtfsReader {
         Ok(None)
     }
 
-    fn edit_index_root(&self, record: &mut [u8], entry_name: &str) -> io::Result<(u64, bool)> {
-        let root_pos = find_index_root_attr(record)
-            .ok_or_else(|| invalid_fs_data("directory has no $INDEX_ROOT"))?;
-        let content_start = root_pos + resident_content_offset(record, root_pos)?;
-        let header = content_start + 0x10;
-        let entries_offset = read_u32_at(record, header)?;
-        let used_size = read_u32_at(record, header + 4)?;
-        let region_start = (header as usize)
-            .checked_add(entries_offset as usize)
-            .ok_or_else(|| invalid_fs_data("index entries offset overflow"))?;
-        let region_end = (header as usize)
-            .checked_add(used_size as usize)
-            .ok_or_else(|| invalid_fs_data("index used size overflow"))?;
-        if region_end > record.len() || region_start >= region_end {
-            return Err(invalid_fs_data("index root range out of bounds"));
-        }
-        let (entry_start, entry_len, child_ref, is_dir) =
-            find_entry_span(&record[region_start..region_end], entry_name)?
-                .ok_or_else(|| invalid_fs_data("index entry disappeared during edit"))?;
-        let absolute = region_start + entry_start;
-        record.copy_within(absolute + entry_len..region_end, absolute);
-        for byte in &mut record[region_end - entry_len..region_end] {
-            *byte = 0;
-        }
-        let new_used = (used_size as usize)
-            .checked_sub(entry_len)
-            .ok_or_else(|| invalid_fs_data("index used size underflow"))?;
-        record[header + 4..header + 8].copy_from_slice(&(new_used as u32).to_le_bytes());
-        Ok((child_ref, is_dir))
-    }
-
     fn read_at(&self, offset: u64, buffer: &mut [u8]) -> io::Result<()> {
         let mut reader = self.reader.borrow_mut();
         reader.seek(std::io::SeekFrom::Start(offset))?;
@@ -220,6 +197,50 @@ impl crate::NtfsReader {
 enum EntrySite {
     IndexRoot,
     IndexBlock { disk_offset: u64 },
+}
+
+fn edit_index_root(record: &mut [u8], entry_name: &str) -> io::Result<(u64, bool)> {
+    let root_pos = find_index_root_attr(record)
+        .ok_or_else(|| invalid_fs_data("directory has no $INDEX_ROOT"))?;
+    let attr_len = attr_len_at(record, root_pos)?;
+    let content_len = resident_attr_content(record, root_pos, attr_len)
+        .ok_or_else(|| invalid_fs_data("$INDEX_ROOT is not a resident attribute"))?
+        .len();
+    // resident_content_offset already returns the absolute content position
+    // (attribute position + relative offset); do not add root_pos again.
+    let content_start = resident_content_offset(record, root_pos)?;
+    // The entry region must stay inside the resident attribute's content
+    // (same convention as index_entries_region, which bounds by
+    // content.len()): bounding by the whole MFT record would let a corrupt
+    // used_size shift the bytes of the following attribute.
+    let content_end = content_start
+        .checked_add(content_len)
+        .ok_or_else(|| invalid_fs_data("index root content end overflow"))?;
+    let header = content_start + 0x10;
+    let entries_offset = read_u32_at(record, header)?;
+    let used_size = read_u32_at(record, header + 4)?;
+    let region_start = (header as usize)
+        .checked_add(entries_offset as usize)
+        .ok_or_else(|| invalid_fs_data("index entries offset overflow"))?;
+    let region_end = (header as usize)
+        .checked_add(used_size as usize)
+        .ok_or_else(|| invalid_fs_data("index used size overflow"))?;
+    if region_end > content_end || region_start >= region_end {
+        return Err(invalid_fs_data("index root range out of bounds"));
+    }
+    let (entry_start, entry_len, child_ref, is_dir) =
+        find_entry_span(&record[region_start..region_end], entry_name)?
+            .ok_or_else(|| invalid_fs_data("index entry disappeared during edit"))?;
+    let absolute = region_start + entry_start;
+    record.copy_within(absolute + entry_len..region_end, absolute);
+    for byte in &mut record[region_end - entry_len..region_end] {
+        *byte = 0;
+    }
+    let new_used = (used_size as usize)
+        .checked_sub(entry_len)
+        .ok_or_else(|| invalid_fs_data("index used size underflow"))?;
+    record[header + 4..header + 8].copy_from_slice(&(new_used as u32).to_le_bytes());
+    Ok((child_ref, is_dir))
 }
 
 fn edit_index_block(block: &mut [u8], entry_name: &str) -> io::Result<(u64, bool)> {

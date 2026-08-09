@@ -155,6 +155,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   useEffect(() => {
     setBypassPartition(undefined);
     setBypassRid(undefined);
+    setCleanupOsdata(true);
   }, [selectedSourceId]);
 
   useEffect(() => {
@@ -181,26 +182,33 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         allowDirectBoot,
         options,
       });
-      if (cleanupOsdata) {
-        for (const partitionIndex of osdataCleanupPartitions) {
-          const cleanup = await cleanupEmulationOsdata({
-            sessionId: prepared.sessionId,
-            partitionIndex,
-          });
-          if (cleanup.state === 'refusedNonEmpty') {
-            throw new Error(t('emulationPage.errors.osdataNonEmpty'));
+      try {
+        if (cleanupOsdata) {
+          for (const partitionIndex of osdataCleanupPartitions) {
+            const cleanup = await cleanupEmulationOsdata({
+              sessionId: prepared.sessionId,
+              partitionIndex,
+            });
+            if (cleanup.state === 'refusedNonEmpty') {
+              throw new Error(t('emulationPage.errors.osdataNonEmpty'));
+            }
           }
         }
+        if (bypassRid !== undefined && bypassPartition !== undefined) {
+          await applyEmulationBypass({
+            sessionId: prepared.sessionId,
+            partitionIndex: bypassPartition,
+            rid: bypassRid,
+            action: bypassAction,
+          });
+        }
+        return await launchEmulation(prepared.sessionId);
+      } catch (error) {
+        // The prepared session must not leak when a post-prepare step fails;
+        // releasing is best-effort and never masks the original error.
+        await releaseEmulation(prepared.sessionId).catch(() => undefined);
+        throw error;
       }
-      if (bypassRid !== undefined && bypassPartition !== undefined) {
-        await applyEmulationBypass({
-          sessionId: prepared.sessionId,
-          partitionIndex: bypassPartition,
-          rid: bypassRid,
-          action: bypassAction,
-        });
-      }
-      return launchEmulation(prepared.sessionId);
     },
     onSuccess: invalidateSessions,
   });
@@ -250,7 +258,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
-    if (!confirmEmulationBoot(recoveryIsoPath, t('fileBrowser.mount.directBootConfirm'))) return;
+    if (!confirmEmulationBoot(recoveryIsoPath, t('emulationPage.boot.directBootConfirm'))) return;
     await startMutation.mutateAsync(allowDirectBoot);
   }, [recoveryIsoPath, startMutation, t]);
   const release = useCallback(async (sessionId: string) => {

@@ -4,7 +4,9 @@
 //! bypasses of multiple accounts in one session compose), edited in memory
 //! with same-size cell writes, and written back through the same overlay.
 //! The evidence image is never written: the only writable parameter in this
-//! module is the session `CowDisk`.
+//! module is the session `CowDisk`. A write is verified twice: byte-for-byte
+//! read-back of the written extents, then a semantic re-read through a fresh
+//! filesystem view over the overlay (account flags, blank NT hash).
 
 use std::sync::Arc;
 
@@ -125,6 +127,7 @@ pub fn apply_bypass(
             .map_err(EmulationBypassError::Edit)?;
     write_hive_through_overlay(disk, &context, &sam)?;
     verify_overlay_write(disk, &context, &sam)?;
+    verify_bypass_applied(disk, &context, rid, edit_action, &hbootkey)?;
     Ok(EmulationBypassResultDto {
         session_id: String::new(),
         data_source_id: case_context.data_source_id.0.clone(),
@@ -256,6 +259,55 @@ fn verify_overlay_write(
     if readback != hive {
         return Err(EmulationBypassError::OverlayWrite(
             "overlay read-back does not match the edited hive".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Semantic re-check beyond the byte-level read-back (the same pattern as
+/// `emulation_osdata::verify_removal`): re-read the SAM hive through a fresh
+/// filesystem view over the overlay and confirm the edit took effect on the
+/// target account. The stored NT hash must be the canonical empty hash —
+/// `has_password` cannot prove this because the in-place rewrite preserves
+/// the V pointer-table lengths — and an enable action must have cleared the
+/// disabled flag.
+fn verify_bypass_applied(
+    disk: &Arc<CowDisk>,
+    context: &PartitionFilesystem,
+    rid: u32,
+    action: artifacts_windows::registry::sam_edit::SamBypassAction,
+    hashed_boot_key: &[u8; 32],
+) -> Result<(), EmulationBypassError> {
+    let fs = open_partition_filesystem_over_overlay(disk, context)?;
+    let sam = read_whole_file(&fs, SAM_HIVE_PATH)?;
+    let accounts = artifacts_windows::registry::sam_edit::list_accounts(&sam)
+        .map_err(EmulationBypassError::Edit)?;
+    let account = accounts
+        .iter()
+        .find(|candidate| candidate.rid == rid)
+        .ok_or_else(|| {
+            EmulationBypassError::OverlayWrite(format!(
+                "account RID {rid} is missing from the edited hive"
+            ))
+        })?;
+    if matches!(
+        action,
+        artifacts_windows::registry::sam_edit::SamBypassAction::EnableAndClearPassword
+    ) && account.disabled
+    {
+        return Err(EmulationBypassError::OverlayWrite(
+            "the account is still disabled in the edited hive".to_string(),
+        ));
+    }
+    let blank = artifacts_windows::registry::sam_edit::account_password_is_blank(
+        &sam,
+        rid,
+        hashed_boot_key,
+    )
+    .map_err(EmulationBypassError::Edit)?;
+    if !blank {
+        return Err(EmulationBypassError::OverlayWrite(
+            "the edited hive still stores a non-empty NT hash".to_string(),
         ));
     }
     Ok(())

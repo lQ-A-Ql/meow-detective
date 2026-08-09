@@ -30,6 +30,40 @@ pub struct InstallTarget {
     pub utilman_bypass_available: bool,
 }
 
+/// One field where the guest-observed state contradicts the host preflight
+/// manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrosscheckMismatch {
+    pub field: &'static str,
+    pub expected: bool,
+    pub observed: bool,
+}
+
+/// Compares one manifest entry against what the guest actually measured. An
+/// empty result means the host preflight and the guest view agree.
+pub fn crosscheck_install(
+    install: &InstallTarget,
+    osdata_present: bool,
+    utilman_bypass_available: bool,
+) -> Vec<CrosscheckMismatch> {
+    let mut mismatches = Vec::new();
+    if install.osdata_present != osdata_present {
+        mismatches.push(CrosscheckMismatch {
+            field: "osdata_present",
+            expected: install.osdata_present,
+            observed: osdata_present,
+        });
+    }
+    if install.utilman_bypass_available != utilman_bypass_available {
+        mismatches.push(CrosscheckMismatch {
+            field: "utilman_bypass_available",
+            expected: install.utilman_bypass_available,
+            observed: utilman_bypass_available,
+        });
+    }
+    mismatches
+}
+
 pub fn load_targets() -> Result<Option<(PathBuf, MaintenanceTargets)>, MaintenanceError> {
     for root in windows_drive_roots() {
         let candidate = root.join(TARGETS_FILE);

@@ -35,9 +35,9 @@ pub fn prepare_emulation_source(
     })
 }
 
-/// Read-only pre-flight against the import-built file catalog: locates the
-/// Windows installations, their OSDATA/SAM hives, and utilman bypass
-/// feasibility without touching the evidence image itself.
+/// Read-only pre-flight: locates the Windows installations, their OSDATA/SAM
+/// hives, and utilman bypass feasibility from the import-built file catalog,
+/// with an NTFS directory-index fallback when the catalog cannot answer.
 pub fn emulation_preflight(
     case_conn: &Connection,
     case_root: &std::path::Path,
@@ -94,14 +94,24 @@ pub fn emulation_preflight(
                 "Windows/System32/config/SAM",
             )?,
             utilman_bypass_available: utilman && cmd,
+            osdata_empty: None,
         });
     }
+    let partition_count =
+        PartitionRepo::new(&source.connection).count_by_data_source(&data_source_id.0)?;
+    if partition_count as usize > MAX_PREFLIGHT_PARTITIONS {
+        tracing::warn!(
+            partition_count,
+            max = MAX_PREFLIGHT_PARTITIONS,
+            "emulation preflight partition scan truncated"
+        );
+    }
+    enrich_installs_from_fs(case_conn, data_source_id, &source, &mut installs);
     let recommended_boot_route = if installs.iter().any(|install| install.osdata_present) {
         EmulationBootRouteDto::RecoveryMedia
     } else {
         EmulationBootRouteDto::DirectSystem
     };
-    enrich_bypass_from_fs(case_conn, data_source_id, &source, &mut installs);
     Ok(EmulationPreflightDto {
         data_source_id: data_source_id.0.clone(),
         installs,
@@ -123,21 +133,17 @@ fn path_present(
 
 /// The file catalog is inode-keyed: hard-linked system binaries such as
 /// `cmd.exe` and `Utilman.exe` appear only under their WinSxS payload name,
-/// so a catalog miss must fall back to the NTFS directory index (ground
-/// truth) before declaring the Utilman bypass unavailable. Failures here are
-/// non-fatal — the catalog verdict stands.
-fn enrich_bypass_from_fs(
+/// and OSDATA/SAM probes can likewise miss, so a catalog miss must fall back
+/// to the NTFS directory index (ground truth) before declaring a capability
+/// absent. The same listing also decides whether a present OSDATA directory
+/// is empty. Failures here are non-fatal — the catalog verdict stands.
+fn enrich_installs_from_fs(
     case_conn: &Connection,
     data_source_id: &DataSourceId,
     source: &crate::source_db::ReadySourceConnection,
     installs: &mut [EmulationInstallDto],
 ) {
-    let missing: Vec<u32> = installs
-        .iter()
-        .filter(|install| !install.utilman_bypass_available)
-        .map(|install| install.partition_index)
-        .collect();
-    if missing.is_empty() {
+    if installs.is_empty() {
         return;
     }
     let repo = DataSourceRepo::new(case_conn);
@@ -147,33 +153,30 @@ fn enrich_bypass_from_fs(
     {
         Ok(parts) => parts,
         Err(error) => {
-            tracing::warn!(error = %error, "bypass fs fallback: source metadata unavailable");
+            tracing::warn!(error = %error, "install fs fallback: source metadata unavailable");
             return;
         }
     };
+    let context = repo_context(&source_path, &source_kind);
     let partitions = PartitionRepo::new(&source.connection);
-    for partition_index in missing {
-        match probe_bypass_binaries(
-            &repo_context(&source_path, &source_kind),
+    for install in installs.iter_mut() {
+        let Some(probe) = probe_install_from_fs(
+            &context,
             &partitions,
             data_source_id,
-            partition_index,
-        ) {
-            Some(true) => {
-                if let Some(install) = installs
-                    .iter_mut()
-                    .find(|install| install.partition_index == partition_index)
-                {
-                    install.utilman_bypass_available = true;
-                }
-            }
-            Some(false) => {}
-            None => {
-                tracing::warn!(
-                    partition_index,
-                    "bypass fs fallback: partition could not be probed"
-                );
-            }
+            install.partition_index,
+        ) else {
+            tracing::warn!(
+                partition_index = install.partition_index,
+                "install fs fallback: partition could not be probed"
+            );
+            continue;
+        };
+        install.utilman_bypass_available |= probe.utilman_bypass_available;
+        install.osdata_present |= probe.osdata_present;
+        install.sam_present |= probe.sam_present;
+        if install.osdata_present {
+            install.osdata_empty = probe.osdata_empty;
         }
     }
 }
@@ -190,14 +193,24 @@ fn repo_context(source_path: &str, source_kind: &domain::DataSourceKind) -> Evid
     }
 }
 
-/// Returns `Some(true/false)` when the filesystem could be listed, `None`
-/// when the partition is unavailable for a filesystem-level probe.
-fn probe_bypass_binaries(
+/// Ground-truth capability probe from the NTFS directory index.
+struct FsInstallProbe {
+    utilman_bypass_available: bool,
+    osdata_present: bool,
+    /// `Some` only when OSDATA exists as a directory whose children could be
+    /// listed.
+    osdata_empty: Option<bool>,
+    sam_present: bool,
+}
+
+/// Returns `None` when the partition is unavailable for a filesystem-level
+/// probe.
+fn probe_install_from_fs(
     context: &EvidenceContext,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     partition_index: u32,
-) -> Option<bool> {
+) -> Option<FsInstallProbe> {
     let record = partitions
         .find_by_data_source_and_index(&data_source_id.0, partition_index as usize)
         .ok()??;
@@ -207,13 +220,30 @@ fn probe_bypass_binaries(
     let length = (record.length > 0).then_some(record.length);
     let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length).ok()?;
     let fs = fs_ntfs::NtfsReader::open(Box::new(window), 0).ok()?;
-    let children = fs.list_children("Windows/System32").ok()?;
-    let present = |name: &str| {
-        children
+    let system32 = fs.list_children("Windows/System32").ok()?;
+    let config = fs.list_children("Windows/System32/config").ok()?;
+    let present = |nodes: &[evidence_core::FsNode], name: &str| {
+        nodes
             .iter()
             .any(|node| !node.is_dir && node.name.eq_ignore_ascii_case(name))
     };
-    Some(present("utilman.exe") && present("cmd.exe"))
+    let osdata_node = config
+        .iter()
+        .find(|node| node.name.eq_ignore_ascii_case("OSDATA"));
+    let osdata_empty = match osdata_node {
+        Some(node) if node.is_dir => fs
+            .list_children("Windows/System32/config/OSDATA")
+            .ok()
+            .map(|children| children.is_empty()),
+        _ => None,
+    };
+    Some(FsInstallProbe {
+        utilman_bypass_available: present(&system32, "utilman.exe")
+            && present(&system32, "cmd.exe"),
+        osdata_present: osdata_node.is_some(),
+        osdata_empty,
+        sam_present: present(&config, "SAM"),
+    })
 }
 
 fn preflight_source_error(error: ReadySourceError) -> MountServiceError {

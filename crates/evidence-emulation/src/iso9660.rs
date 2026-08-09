@@ -31,6 +31,15 @@ pub fn build_iso(files: &[IsoFile<'_>]) -> Result<Vec<u8>, EmulationError> {
         extents.push(next_sector);
         next_sector += sector_count(file.data.len());
     }
+    // The root directory occupies exactly one sector; fail with a typed error
+    // instead of overflowing it when the records do not fit.
+    let root_bytes = root_directory_bytes(files);
+    if root_bytes > SECTOR_SIZE {
+        return Err(EmulationError::WriteTooLarge {
+            requested: root_bytes,
+            maximum: SECTOR_SIZE,
+        });
+    }
     let total_sectors = next_sector;
 
     let mut image = vec![0u8; total_sectors as usize * SECTOR_SIZE];
@@ -145,13 +154,22 @@ fn write_root_directory(
     }
 }
 
+/// Total bytes the root directory records (`.`, `..`, then one per file)
+/// would occupy inside the single root directory sector.
+fn root_directory_bytes(files: &[IsoFile<'_>]) -> usize {
+    let mut total = 2 * directory_record_length(1);
+    for file in files {
+        // The writer appends the `;1` version suffix to every file name.
+        total += directory_record_length(file.name.len() as u8 + 2);
+    }
+    total
+}
+
 /// Builds a directory record with the file identifier area left zeroed; the
 /// caller fills the name. `name_length` is the byte length of the identifier
 /// (1 for `.`/`..`, or name+`;1`).
 fn directory_record(extent: u32, length: u32, flags: u8, name_length: u8) -> Vec<u8> {
-    let base = 33 + name_length as usize;
-    let total = base + usize::from(name_length.is_multiple_of(2));
-    let mut record = vec![0u8; total.max(34)];
+    let mut record = vec![0u8; directory_record_length(name_length)];
     record[0] = record.len() as u8;
     record[2..10].copy_from_slice(&both_endian_32(extent));
     record[10..18].copy_from_slice(&both_endian_32(length));
@@ -160,4 +178,9 @@ fn directory_record(extent: u32, length: u32, flags: u8, name_length: u8) -> Vec
     record[28..32].copy_from_slice(&both_endian_16(1));
     record[32] = name_length;
     record
+}
+
+fn directory_record_length(name_length: u8) -> usize {
+    let base = 33 + name_length as usize;
+    (base + usize::from(name_length.is_multiple_of(2))).max(34)
 }

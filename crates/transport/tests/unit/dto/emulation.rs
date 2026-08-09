@@ -49,6 +49,31 @@ fn control_mode_serializes_as_interactive_only() {
 }
 
 #[test]
+fn install_dto_omits_unknown_osdata_emptiness() {
+    use super::EmulationInstallDto;
+
+    let install = EmulationInstallDto {
+        partition_index: 2,
+        osdata_present: true,
+        sam_present: true,
+        utilman_bypass_available: true,
+        osdata_empty: None,
+    };
+    let value = serde_json::to_value(&install).unwrap();
+    assert_eq!(value["partitionIndex"], 2);
+    assert!(value.get("osdataEmpty").is_none());
+    let restored: EmulationInstallDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, install);
+
+    let value = serde_json::to_value(EmulationInstallDto {
+        osdata_empty: Some(false),
+        ..install.clone()
+    })
+    .unwrap();
+    assert_eq!(value["osdataEmpty"], false);
+}
+
+#[test]
 fn osdata_cleanup_round_trip_uses_camel_case() {
     use super::{
         EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto,

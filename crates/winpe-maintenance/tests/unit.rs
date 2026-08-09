@@ -2,8 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use winpe_maintenance::{
-    apply_bypass, find_single_windows_installation, inspect_bypass, inspect_osdata, remove_osdata,
-    restore_bypass, BypassState, MaintenanceError, OsdataState,
+    apply_bypass, crosscheck_install, find_single_windows_installation, inspect_bypass,
+    inspect_osdata, remove_osdata, restore_bypass, split_drive_flag, utilman_bypass_available,
+    BypassState, CrosscheckMismatch, InstallTarget, MaintenanceError, OsdataState,
 };
 
 #[test]
@@ -143,4 +144,68 @@ fn refuses_ambiguous_windows_installations() {
         find_single_windows_installation(roots),
         Err(MaintenanceError::MultipleWindowsInstallations)
     ));
+}
+
+#[test]
+fn drive_flag_selects_the_installation_root_explicitly() {
+    let (arguments, drive) = split_drive_flag(vec![
+        "run".to_string(),
+        "--drive".to_string(),
+        "d:".to_string(),
+    ])
+    .unwrap();
+    assert_eq!(arguments, vec!["run".to_string()]);
+    assert_eq!(drive.unwrap(), Path::new("D:\\"));
+
+    let (arguments, drive) = split_drive_flag(vec!["run".to_string()]).unwrap();
+    assert_eq!(arguments, vec!["run".to_string()]);
+    assert!(drive.is_none());
+
+    for arguments in [
+        vec!["run".to_string(), "--drive".to_string()],
+        vec!["--drive".to_string(), "1:".to_string()],
+        vec!["--drive".to_string(), "DD".to_string()],
+        vec!["--drive".to_string(), "D:".to_string(), "run".to_string()],
+    ] {
+        assert!(matches!(
+            split_drive_flag(arguments),
+            Err(MaintenanceError::InvalidDriveArgument)
+        ));
+    }
+}
+
+#[test]
+fn crosscheck_reports_each_field_that_contradicts_the_manifest() {
+    let install = InstallTarget {
+        partition_index: 2,
+        osdata_present: true,
+        utilman_bypass_available: false,
+    };
+
+    assert!(crosscheck_install(&install, true, false).is_empty());
+    assert_eq!(
+        crosscheck_install(&install, false, true),
+        vec![
+            CrosscheckMismatch {
+                field: "osdata_present",
+                expected: true,
+                observed: false,
+            },
+            CrosscheckMismatch {
+                field: "utilman_bypass_available",
+                expected: false,
+                observed: true,
+            },
+        ]
+    );
+}
+
+#[test]
+fn utilman_bypass_availability_requires_both_binaries() {
+    let directory = tempfile::tempdir().unwrap();
+    create_windows_root(directory.path());
+    assert!(!utilman_bypass_available(directory.path()));
+
+    create_utilman_pair(directory.path());
+    assert!(utilman_bypass_available(directory.path()));
 }

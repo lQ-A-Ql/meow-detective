@@ -33,3 +33,7 @@ pub(crate) fn checksum_parts(parts: &[&[u8]]) -> u32 {
     }
     !crc
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/crc32c.rs"]
+mod tests;

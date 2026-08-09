@@ -523,11 +523,15 @@
       "recoveryMedia": "PE ISO first",
       "directSystem": "Original system (confirm)"
     },
+    "boot": {
+      "directBootConfirm": "No trusted WinPE boot media is selected.\n\nContinuing will boot the operating system inside the image. All disk writes remain in the case COW overlay and cannot modify original evidence. Continue?"
+    },
     "preflight": {
       "title": "Image preflight (from import index)",
       "osdataPresent": "OSDATA present",
       "osdataAbsent": "No OSDATA",
       "cleanupOsdata": "Remove OSDATA before boot (overlay only)",
+      "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
       "bypassUnavailable": "Bypass unavailable"
     },
@@ -535,6 +539,7 @@
       "toolAvailable": "Maintenance CD: auto-generated",
       "toolMissing": "Maintenance tool not built",
       "buildHint": "Run scripts/dev/build-winpe-maintenance.ps1 to include the maintenance CD",
+      "peWithoutTool": "No maintenance tool in PE; manual operations only",
       "attached": "Maintenance CD attached",
       "absent": "No maintenance CD"
     },

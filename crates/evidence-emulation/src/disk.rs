@@ -114,18 +114,20 @@ impl CowDisk {
         let mut clusters = Vec::with_capacity((last - first + 1) as usize);
         let mut consumed = 0usize;
         for cluster_index in first..=last {
-            let mut cluster = vec![0u8; cluster_size];
-            if !state.cache.copy_to(cluster_index, &mut cluster) {
-                state
-                    .overlay
-                    .read_cluster(&self.parent, cluster_index, &mut cluster)?;
-                state.cache.insert(cluster_index, &cluster);
-            }
             let cluster_start = cluster_index * cluster_size as u64;
             let write_start = offset.max(cluster_start);
             let write_end = (offset + buffer.len() as u64).min(cluster_start + cluster_size as u64);
             let intra = (write_start - cluster_start) as usize;
             let count = (write_end - write_start) as usize;
+            let mut cluster = vec![0u8; cluster_size];
+            // A write covering the whole cluster makes the previous contents
+            // irrelevant, so skip the overlay/parent read-through entirely.
+            if count != cluster_size && !state.cache.copy_to(cluster_index, &mut cluster) {
+                state
+                    .overlay
+                    .read_cluster(&self.parent, cluster_index, &mut cluster)?;
+                state.cache.insert(cluster_index, &cluster);
+            }
             cluster[intra..intra + count].copy_from_slice(&buffer[consumed..consumed + count]);
             consumed += count;
             clusters.push((cluster_index, cluster));

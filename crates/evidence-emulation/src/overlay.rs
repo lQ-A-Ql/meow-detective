@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use evidence_block::BlockProvider;
 
-use crate::format::{write_data_record, write_superblocks, DataPointer, Superblock};
+use crate::format::{
+    aligned_record_length, write_data_record, write_superblocks, DataPointer, Superblock,
+};
 use crate::{EmulationError, ParentIdentity};
 
 pub(crate) struct Overlay {
@@ -117,11 +119,14 @@ impl Overlay {
         for (cluster_index, pointer) in pointers {
             self.index.insert(cluster_index, pointer);
         }
-        self.unsynced_bytes = self.unsynced_bytes.saturating_add(
-            clusters
-                .len()
-                .saturating_mul(self.header.cluster_size as usize) as u64,
-        );
+        // Account for the real on-disk footprint of each record (header plus
+        // alignment padding), not just the cluster payload, so the sync
+        // threshold reflects the actual unsynced byte volume.
+        self.unsynced_bytes = clusters
+            .iter()
+            .fold(self.unsynced_bytes, |total, (_, data)| {
+                total.saturating_add(aligned_record_length(data.len()))
+            });
         if self.unsynced_bytes >= SYNC_BATCH_BYTES {
             self.sync_pending()?;
         }
