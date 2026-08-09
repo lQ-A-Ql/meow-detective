@@ -112,3 +112,24 @@ fn flags_btrfs_roots_and_missing_boot_assets() {
     let probe = probe_linux_fs_root(&fs, "Ext4");
     assert!(probe.is_none(), "a root without /etc is not a system root");
 }
+
+#[test]
+fn flags_missing_kernel_and_fstab() {
+    let fs = open_fs(testing::builders::ext4::linux_root_ext4_image_without_boot_assets());
+    let probe = probe_linux_fs_root(&fs, "Ext4").expect("probe succeeds");
+    assert!(!probe.kernel_present);
+    assert!(!probe.fstab_present);
+    assert!(probe.risk_notes.iter().any(|note| note == "no-kernel"));
+    assert!(probe.risk_notes.iter().any(|note| note == "no-fstab"));
+    assert!(!probe.risk_notes.iter().any(|note| note == "no-init"));
+}
+
+#[test]
+fn reads_os_release_from_the_usr_lib_fallback() {
+    let fs = open_fs(testing::builders::ext4::linux_root_ext4_image_usr_lib_os_release());
+    let probe = probe_linux_fs_root(&fs, "Ext4").expect("probe succeeds");
+    assert_eq!(probe.pretty_name.as_deref(), Some("CentOS Linux 7 (Core)"));
+    assert!(probe.kernel_present);
+    assert!(!probe.fstab_present);
+    assert!(probe.risk_notes.iter().any(|note| note == "no-fstab"));
+}

@@ -511,6 +511,7 @@
       "sourcePlaceholder": "Select an E01 or RAW source",
       "noSources": "This case has no fingerprinted E01/RAW source available for emulation.",
       "recoveryIso": "WinPE boot media",
+      "liveIsoHint": "Linux source: attach a live ISO such as SystemRescue; the maintenance CD carries TARGETS.JSON and the rescue README.",
       "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
       "bootRoute": "Boot route",
       "recommendedRoute": "Preflight recommends: {{route}}",

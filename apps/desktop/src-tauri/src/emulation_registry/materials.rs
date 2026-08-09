@@ -37,9 +37,71 @@ const MAINTENANCE_README: &str = "Meow~Detective maintenance media\r\n\
 All writes land on the copy-on-write overlay; the evidence image is never\r\n\
 modified.\r\n";
 
+/// Manual delivered on the Linux rescue CD (no in-guest tool exists for
+/// Linux; the CD carries the TARGETS.JSON map and this guide instead).
+pub(super) const LINUX_RESCUE_README: &str = "Meow~Detective Linux rescue media\r\n\
+\r\n\
+This CD accompanies a user-selected Linux live/rescue ISO. It contains\r\n\
+TARGETS.JSON: the host-side preflight map of the Linux installations\r\n\
+(distro, partitions, boot-risk notes) for the disk attached to this VM.\r\n\
+\r\n\
+Suggested workflow inside the live system:\r\n\
+1. Identify the disk: lsblk -f  (the evidence disk appears read-only to\r\n\
+   the host; guest writes land on the copy-on-write overlay only).\r\n\
+2. Inspect mounts from TARGETS.JSON, then mount the root volume, e.g.\r\n\
+      mount -o ro /dev/sda3 /mnt        # read-only inspection\r\n\
+3. Account recovery without host tooling:\r\n\
+   - simplest: reboot, press 'e' in GRUB, append init=/bin/bash to the\r\n\
+     linux line, Ctrl-X; then 'mount -o remount,rw /' and 'passwd'.\r\n\
+   - offline: edit /mnt/etc/shadow and clear the second (hash) field of\r\n\
+     the target account, then remount read-only again.\r\n\
+4. Boot repairs: chroot /mnt and rebuild grub.cfg or the initramfs when\r\n\
+   TARGETS.JSON reports no-kernel/no-fstab style risks.\r\n\
+\r\n\
+All writes land on the copy-on-write overlay; the evidence image is never\r\n\
+modified.\r\n";
+
+/// Structured TARGETS.JSON content for the Linux rescue CD. The Windows PE
+/// tool consumes its own flat preflight shape; this envelope is the
+/// Linux-side generalization and has no in-guest consumer yet — it is
+/// documentation for the investigator.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LinuxRescueTargets<'a> {
+    schema_version: u32,
+    platform: &'static str,
+    data_source_id: &'a str,
+    installs: &'a [transport::dto::EmulationInstallDto],
+    recommended_actions: &'static [&'static str],
+}
+
+const LINUX_RESCUE_ACTIONS: &[&str] = &[
+    "boot-live-iso",
+    "inspect-targets-json",
+    "grub-init-bash-bypass",
+    "offline-shadow-edit",
+    "chroot-repair",
+];
+
+pub(super) fn linux_rescue_targets_json(
+    data_source_id: &str,
+    installs: &[transport::dto::EmulationInstallDto],
+) -> Result<Vec<u8>, EmulationRegistryError> {
+    let targets = LinuxRescueTargets {
+        schema_version: 1,
+        platform: "linux",
+        data_source_id,
+        installs,
+        recommended_actions: LINUX_RESCUE_ACTIONS,
+    };
+    serde_json::to_vec_pretty(&targets)
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))
+}
+
 pub(super) struct MaintenancePayload {
-    pub tool: Vec<u8>,
+    pub tool: Option<Vec<u8>>,
     pub targets_json: Vec<u8>,
+    pub readme: &'static str,
 }
 
 pub(super) fn build_maintenance_payload(
@@ -70,7 +132,34 @@ pub(super) fn build_maintenance_payload(
     .map_err(EmulationRegistryError::Source)?;
     let targets_json = serde_json::to_vec_pretty(&preflight)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    Ok(Some(MaintenancePayload { tool, targets_json }))
+    Ok(Some(MaintenancePayload {
+        tool: Some(tool),
+        targets_json,
+        readme: MAINTENANCE_README,
+    }))
+}
+
+/// Linux rescue media: no in-guest tool, just the TARGETS.JSON map and the
+/// rescue README. Built whenever the user supplies a live/rescue ISO.
+pub(super) fn build_linux_rescue_payload(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<Option<MaintenancePayload>, EmulationRegistryError> {
+    let preflight = app_services::mount_service::emulation_preflight(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )
+    .map_err(EmulationRegistryError::Source)?;
+    let targets_json = linux_rescue_targets_json(&data_source_id.0, &preflight.installs)?;
+    Ok(Some(MaintenancePayload {
+        tool: None,
+        targets_json,
+        readme: LINUX_RESCUE_README,
+    }))
 }
 
 pub(crate) fn maintenance_tool_available() -> bool {
@@ -149,20 +238,26 @@ pub(super) fn prepare_machine_materials(
         vmx = vmx.with_recovery_iso(media.vmware_path())?;
     }
     if let Some(payload) = maintenance {
-        let iso = build_iso(&[
-            IsoFile {
-                name: "MEOWMTN.EXE",
-                data: &payload.tool,
-            },
+        let mut iso_files = vec![
             IsoFile {
                 name: "TARGETS.JSON",
                 data: &payload.targets_json,
             },
             IsoFile {
                 name: "README.TXT",
-                data: MAINTENANCE_README.as_bytes(),
+                data: payload.readme.as_bytes(),
             },
-        ])?;
+        ];
+        if let Some(tool) = &payload.tool {
+            iso_files.insert(
+                0,
+                IsoFile {
+                    name: "MEOWMTN.EXE",
+                    data: tool,
+                },
+            );
+        }
+        let iso = build_iso(&iso_files)?;
         let iso_path = workspace
             .write_maintenance_iso(&iso)
             .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;

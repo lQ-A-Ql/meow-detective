@@ -165,3 +165,7 @@ fn read_u32(data: &[u8], offset: usize) -> io::Result<u32> {
         .map(u32::from_le_bytes)
         .ok_or_else(|| invalid_fs_data("inode field out of bounds"))
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/write_map.rs"]
+mod tests;

@@ -142,11 +142,16 @@ impl EmulationRegistry {
                 return Err(error);
             }
         };
-        // The maintenance CD only makes sense on the PE boot route of a
-        // Windows install; building it needs the import index, so it runs
-        // before material generation and shares the same rollback path.
-        let maintenance = if recovery_media.is_some() && !is_linux {
-            match build_maintenance_payload(case_conn, case_root, case_id, data_source_id) {
+        // The maintenance CD rides the recovery-media route: Windows installs
+        // get the WinPE helper tool, Linux installs get the rescue CD with
+        // TARGETS.JSON and the rescue README (no in-guest tool for Linux).
+        let maintenance = if recovery_media.is_some() {
+            let payload = if is_linux {
+                materials::build_linux_rescue_payload(case_conn, case_root, case_id, data_source_id)
+            } else {
+                build_maintenance_payload(case_conn, case_root, case_id, data_source_id)
+            };
+            match payload {
                 Ok(payload) => payload,
                 Err(error) => {
                     let _ = backend.stop();

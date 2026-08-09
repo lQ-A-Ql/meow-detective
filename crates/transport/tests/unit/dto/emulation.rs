@@ -180,3 +180,43 @@ fn osdata_cleanup_round_trip_uses_camel_case() {
     let restored: EmulationOsdataCleanupDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, result);
 }
+
+#[test]
+fn linux_bypass_dtos_round_trip_in_camel_case() {
+    use super::{
+        EmulationLinuxAccountDto, EmulationLinuxBypassRequestDto, EmulationLinuxBypassResultDto,
+    };
+
+    let account = EmulationLinuxAccountDto {
+        username: "root".to_string(),
+        has_password: true,
+        locked: false,
+    };
+    let value = serde_json::to_value(&account).unwrap();
+    assert_eq!(value["hasPassword"], true);
+    let restored: EmulationLinuxAccountDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, account);
+
+    let request = EmulationLinuxBypassRequestDto {
+        session_id: "emulation-1".to_string(),
+        partition_index: 5,
+        username: "root".to_string(),
+    };
+    let value = serde_json::to_value(&request).unwrap();
+    assert_eq!(value["partitionIndex"], 5);
+    let restored: EmulationLinuxBypassRequestDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, request);
+
+    let result = EmulationLinuxBypassResultDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        partition_index: 5,
+        username: "root".to_string(),
+        password_cleared: true,
+        already_passwordless: false,
+    };
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(value["passwordCleared"], true);
+    let restored: EmulationLinuxBypassResultDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, result);
+}

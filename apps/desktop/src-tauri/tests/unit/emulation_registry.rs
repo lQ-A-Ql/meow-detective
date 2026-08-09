@@ -273,3 +273,35 @@ fn sampled_test_identity(
     digest.update(last);
     ParentIdentity::new(provider.len(), digest.finalize().into()).unwrap()
 }
+
+#[test]
+fn linux_rescue_targets_carry_platform_installs_and_actions() {
+    let installs = vec![transport::dto::EmulationInstallDto {
+        partition_index: 5,
+        platform: transport::dto::EmulationInstallPlatformDto::Linux,
+        osdata_present: false,
+        sam_present: false,
+        utilman_bypass_available: false,
+        osdata_empty: None,
+        os_release_pretty_name: Some("CentOS Linux 7 (Core)".to_string()),
+        kernel_present: Some(true),
+        fstab_present: Some(true),
+        boot_risk_notes: vec![],
+    }];
+    let json = super::materials::linux_rescue_targets_json("source-7", &installs).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&json).unwrap();
+    assert_eq!(value["schemaVersion"], 1);
+    assert_eq!(value["platform"], "linux");
+    assert_eq!(value["dataSourceId"], "source-7");
+    assert_eq!(value["installs"][0]["partitionIndex"], 5);
+    assert_eq!(
+        value["installs"][0]["osReleasePrettyName"],
+        "CentOS Linux 7 (Core)"
+    );
+    assert!(value["recommendedActions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|action| action == "grub-init-bash-bypass"));
+    assert!(super::materials::LINUX_RESCUE_README.contains("init=/bin/bash"));
+}

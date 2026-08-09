@@ -511,6 +511,7 @@
       "sourcePlaceholder": "选择 E01 或 RAW 数据源",
       "noSources": "当前案件没有具备可信指纹的 E01/RAW 数据源。",
       "recoveryIso": "WinPE 启动介质",
+      "liveIsoHint": "Linux 源：可挂 SystemRescue 等 live ISO 救援盘；维护 CD 将附带 TARGETS.JSON 与救援手册。",
       "recoveryPlaceholder": "未选择，确认后启动原系统",
       "bootRoute": "启动路径",
       "recommendedRoute": "预检推荐：{{route}}",

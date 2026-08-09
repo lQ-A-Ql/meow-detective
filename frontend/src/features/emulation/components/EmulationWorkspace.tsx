@@ -175,6 +175,9 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
               <FolderOpen />
             </Button>
           </div>
+          {model.selectedSource?.platform === 'LINUX' ? (
+            <FieldHint>{t('emulationPage.launch.liveIsoHint')}</FieldHint>
+          ) : null}
         </Field>
 
         <div className="border-y border-forensics-border py-3">

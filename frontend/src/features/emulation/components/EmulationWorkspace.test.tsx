@@ -195,8 +195,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
   });
 
-  it('renders linux installs with distro, boot risks and the GRUB bypass hint', () => {
-    render(<EmulationWorkspace model={createModel({
+  it('renders linux installs with distro, boot risks and the GRUB bypass hint', () => {    render(<EmulationWorkspace model={createModel({
       preflight: {
         dataSourceId: 'source-1',
         installs: [{
@@ -220,5 +219,21 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('无内核')).toBeInTheDocument();
     expect(screen.getByText(/GRUB 菜单按 e/)).toBeInTheDocument();
     expect(screen.queryByText('可绕密')).not.toBeInTheDocument();
+  });
+
+  it('shows the live ISO hint for linux sources only', () => {
+    const { rerender } = render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+    })} />);
+    expect(screen.getByText(/SystemRescue/)).toBeInTheDocument();
+
+    rerender(<EmulationWorkspace model={createModel()} />);
+    expect(screen.queryByText(/SystemRescue/)).not.toBeInTheDocument();
   });
 });
