@@ -14,6 +14,7 @@ import {
   removeCaseFromList,
   renameDataSource,
 } from '@/lib/api/case';
+import { getFileTree } from '@/lib/api/files';
 
 export function useCurrentCase() {
   return useQuery({ queryKey: ['case', 'current'], queryFn: getCurrentCase, retry: false });
@@ -69,6 +70,14 @@ export function useOpenCase() {
       qc.invalidateQueries({ queryKey: ['case'] });
       qc.invalidateQueries({ queryKey: ['files'] });
       qc.invalidateQueries({ queryKey: ['jobs'] });
+      // Warm the file-tree query right away: the first fetch against a cold
+      // database takes seconds, and prefetching here lets the user reach the
+      // file browser with the tree already cached (same key as useFileTree).
+      void qc.prefetchQuery({
+        queryKey: ['files', 'tree', false],
+        queryFn: () => getFileTree(false),
+        staleTime: 10_000,
+      });
     },
   });
 }

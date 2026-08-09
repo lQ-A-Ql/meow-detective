@@ -9,13 +9,14 @@ const mocks = vi.hoisted(() => ({
   deleteCase: vi.fn(),
   deleteDataSource: vi.fn(),
   renameDataSource: vi.fn(),
+  openCase: vi.fn(),
 }));
 
 vi.mock('@/lib/api/case', () => ({
   getCurrentCase: mocks.getCurrentCase,
   deleteCase: mocks.deleteCase,
   createCase: vi.fn(),
-  openCase: vi.fn(),
+  openCase: mocks.openCase,
   closeCase: vi.fn(),
   renameDataSource: mocks.renameDataSource,
   deleteDataSource: mocks.deleteDataSource,
@@ -35,6 +36,7 @@ import {
   useDataSources,
   useDeleteCase,
   useDeleteDataSource,
+  useOpenCase,
   useRenameDataSource,
 } from './hooks';
 
@@ -158,6 +160,26 @@ describe('case hooks', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['analysis', 'case-overview'],
     });
+  });
+
+  it('prefetches the file tree after a case is opened', async () => {
+    mocks.openCase.mockResolvedValue({ id: 'case-1', name: 'Test Case' });
+    const queryClient = createQueryClient();
+    const prefetchSpy = vi
+      .spyOn(queryClient, 'prefetchQuery')
+      .mockResolvedValue(undefined);
+    const { result } = renderHook(() => useOpenCase(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await result.current.mutateAsync('D:/cases/test');
+
+    expect(prefetchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ['files', 'tree', false],
+        staleTime: 10_000,
+      }),
+    );
   });
 
   it('invalidates all analysis projections after a data source is deleted', async () => {
