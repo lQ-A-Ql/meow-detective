@@ -10,6 +10,7 @@ import type { DataSourceSummary, FileTreeNode } from '@/types/models';
 
 export interface FileTreePanelProps {
   filteredTreeNodes: FileTreeNode[];
+  treeLoading?: boolean;
   activeDirectoryId?: string;
   expandedIds: ReadonlySet<string>;
   activeChildrenPage: { truncated?: boolean; limit?: number; totalCount: number } | undefined;
@@ -96,6 +97,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
 
 export function FileTreePanel({
   filteredTreeNodes,
+  treeLoading,
   activeDirectoryId,
   expandedIds,
   activeChildrenPage,
@@ -135,7 +137,10 @@ export function FileTreePanel({
         viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
         viewportProps={{ tabIndex: 0 }}
       >
-        {filteredTreeNodes.length === 0 ? (
+        {treeLoading ? (
+          <div className="px-3 py-2 text-forensics-muted-light">正在加载目录树...</div>
+        ) : null}
+        {filteredTreeNodes.length === 0 && !treeLoading ? (
           <div className="px-3 py-4 text-forensics-muted-light">
             {filterQuery ? '没有匹配的目录。' : '导入数据源后显示目录树。'}
           </div>

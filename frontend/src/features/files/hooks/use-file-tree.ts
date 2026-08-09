@@ -84,7 +84,7 @@ export function useFileTree({
     storageKey: 'fileTreeWidth',
   });
 
-  const { data: rootTree } = useFileTreeQuery(showHidden);
+  const { data: rootTree, isFetching: rootTreeFetching } = useFileTreeQuery(showHidden);
 
   const showHiddenMountedRef = useRef(false);
   useEffect(() => {
@@ -343,6 +343,7 @@ export function useFileTree({
 
   return {
     rootTree: rootNodes,
+    treeLoading: rootTreeFetching && rootTree === undefined,
     treeChildren,
     expandedDirectoryIds,
     setExpandedDirectoryIds,

@@ -42,12 +42,12 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 | app-services source modules | 35 |
 | SQLite repositories | 43 logical repositories |
 | SQLite migration scripts | 78 |
-| frontend test files | 109 |
+| frontend test files | 110 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 11 |
-| `frontend/src/**/*.test.ts(x)` | 109 |
+| `frontend/src/**/*.test.ts(x)` | 110 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 130 |
 
 治理事实源：
