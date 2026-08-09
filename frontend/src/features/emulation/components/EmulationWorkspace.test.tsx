@@ -169,7 +169,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('PE 中将没有维护工具，只能手动操作')).toBeInTheDocument();
   });
 
-  it('delegates network mode selection and resource sizing', () => {
+  it('delegates network mode selection and resource sizing via sliders', () => {
     const selectNetworkMode = vi.fn();
     const setResourceValue = vi.fn();
     render(<EmulationWorkspace model={createModel({
@@ -178,12 +178,16 @@ describe('EmulationWorkspace', () => {
       setResourceValue,
     })} />);
 
-    expect(screen.getByDisplayValue('4')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('8192')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('CPU 核心数'), { target: { value: '8' } });
-    expect(setResourceValue).toHaveBeenCalledWith('processorCount', 8);
-    fireEvent.change(screen.getByLabelText('内存 (MiB)'), { target: { value: '16384' } });
-    expect(setResourceValue).toHaveBeenCalledWith('memoryMib', 16384);
+    expect(screen.getByText('CPU 核心数: 4')).toBeInTheDocument();
+    expect(screen.getByText('内存 (MiB): 8192')).toBeInTheDocument();
+    const cores = screen.getByRole('slider', { name: 'CPU 核心数' });
+    expect(cores).toHaveAttribute('aria-valuenow', '4');
+    fireEvent.keyDown(cores, { key: 'ArrowRight' });
+    expect(setResourceValue).toHaveBeenCalledWith('processorCount', 5);
+    const memory = screen.getByRole('slider', { name: '内存 (MiB)' });
+    expect(memory).toHaveAttribute('aria-valuenow', '8192');
+    fireEvent.keyDown(memory, { key: 'ArrowRight' });
+    expect(setResourceValue).toHaveBeenCalledWith('memoryMib', 8704);
     expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
   });
 });

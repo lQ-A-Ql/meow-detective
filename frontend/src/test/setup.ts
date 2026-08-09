@@ -18,6 +18,16 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => undefined;
 }
 
+// Radix measurement primitives (slider, popper) require ResizeObserver,
+// which jsdom does not implement.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // jsdom intentionally leaves media playback unimplemented. Keep viewer tests
 // deterministic without changing the production evidence-media path.
 Object.defineProperty(HTMLMediaElement.prototype, 'pause', {

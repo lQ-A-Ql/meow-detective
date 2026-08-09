@@ -18,6 +18,7 @@ import { Field, FieldHint, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Slider } from '@/app/components/ui/slider';
 import type {
   EmulationSessionView,
   EmulationWorkspaceModel,
@@ -197,27 +198,34 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
           <legend className="text-[11px] text-forensics-muted">{t('emulationPage.launch.options')}</legend>
           <div className="grid grid-cols-2 gap-2">
             <Field>
-              <FieldLabel htmlFor="emulation-cores">{t('emulationPage.launch.optionCores')}</FieldLabel>
-              <Input
+              <FieldLabel htmlFor="emulation-cores">
+                {t('emulationPage.launch.optionCores')}: {model.options.processorCount}
+              </FieldLabel>
+              <Slider
                 id="emulation-cores"
-                type="number"
                 min={1}
                 max={64}
-                value={model.options.processorCount}
-                onChange={(event) => model.setResourceValue('processorCount', Number(event.target.value))}
+                step={1}
+                value={[model.options.processorCount]}
+                onValueChange={([value]) => {
+                  if (value !== undefined) model.setResourceValue('processorCount', value);
+                }}
                 aria-label={t('emulationPage.launch.optionCores')}
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="emulation-memory">{t('emulationPage.launch.optionMemory')}</FieldLabel>
-              <Input
+              <FieldLabel htmlFor="emulation-memory">
+                {t('emulationPage.launch.optionMemory')}: {model.options.memoryMib}
+              </FieldLabel>
+              <Slider
                 id="emulation-memory"
-                type="number"
                 min={512}
-                max={262144}
+                max={65536}
                 step={512}
-                value={model.options.memoryMib}
-                onChange={(event) => model.setResourceValue('memoryMib', Number(event.target.value))}
+                value={[Math.min(65536, Math.max(512, model.options.memoryMib))]}
+                onValueChange={([value]) => {
+                  if (value !== undefined) model.setResourceValue('memoryMib', value);
+                }}
                 aria-label={t('emulationPage.launch.optionMemory')}
               />
             </Field>
