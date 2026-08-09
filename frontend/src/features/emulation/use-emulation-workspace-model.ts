@@ -16,7 +16,7 @@ import {
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
 import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
-import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
+import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationNetworkMode, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([
   'descriptorReady',
@@ -55,7 +55,9 @@ export interface EmulationWorkspaceModel {
   pickRecoveryIso: () => Promise<void>;
   clearRecoveryIso: () => void;
   options: EmulationOptions;
-  toggleOption: (key: keyof EmulationOptions) => void;
+  toggleOption: (key: 'clipboard' | 'timeSync') => void;
+  selectNetworkMode: (mode: EmulationNetworkMode) => void;
+  setResourceValue: (key: 'processorCount' | 'memoryMib', value: number) => void;
   osdataCleanupPartitions: number[];
   cleanupOsdata: boolean;
   toggleCleanupOsdata: () => void;
@@ -113,9 +115,11 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [selectedSourceId, setSelectedSourceId] = useState('');
   const [recoveryIsoPath, setRecoveryIsoPath] = useState('');
   const [options, setOptions] = useState<EmulationOptions>({
-    network: false,
+    networkMode: 'off',
     clipboard: false,
     timeSync: false,
+    processorCount: 2,
+    memoryMib: 4096,
   });
   const [bypassPartition, setBypassPartition] = useState<number | undefined>(undefined);
   const [bypassRid, setBypassRid] = useState<number | undefined>(undefined);
@@ -250,8 +254,17 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     if (path) setRecoveryIsoPath(path);
   }, []);
   const clearRecoveryIso = useCallback(() => setRecoveryIsoPath(''), []);
-  const toggleOption = useCallback((key: keyof EmulationOptions) => {
+  const toggleOption = useCallback((key: 'clipboard' | 'timeSync') => {
     setOptions((current) => ({ ...current, [key]: !current[key] }));
+  }, []);
+  const selectNetworkMode = useCallback((networkMode: EmulationNetworkMode) => {
+    setOptions((current) => ({ ...current, networkMode }));
+  }, []);
+  const setResourceValue = useCallback((key: 'processorCount' | 'memoryMib', value: number) => {
+    setOptions((current) => ({
+      ...current,
+      [key]: Number.isFinite(value) ? Math.max(0, Math.floor(value)) : current[key],
+    }));
   }, []);
   const toggleCleanupOsdata = useCallback(() => {
     setCleanupOsdata((current) => !current);
@@ -285,6 +298,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     clearRecoveryIso,
     options,
     toggleOption,
+    selectNetworkMode,
+    setResourceValue,
     osdataCleanupPartitions,
     cleanupOsdata,
     toggleCleanupOsdata,

@@ -23,7 +23,7 @@ import type {
   EmulationWorkspaceModel,
 } from '@/features/emulation/use-emulation-workspace-model';
 import { formatBytes } from '@/lib/format-bytes';
-import type { EmulationState } from '@/types/models';
+import type { EmulationNetworkMode, EmulationState } from '@/types/models';
 
 interface EmulationWorkspaceProps {
   model: EmulationWorkspaceModel;
@@ -195,8 +195,52 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
 
         <fieldset className="space-y-2 border-y border-forensics-border py-3">
           <legend className="text-[11px] text-forensics-muted">{t('emulationPage.launch.options')}</legend>
+          <div className="grid grid-cols-2 gap-2">
+            <Field>
+              <FieldLabel htmlFor="emulation-cores">{t('emulationPage.launch.optionCores')}</FieldLabel>
+              <Input
+                id="emulation-cores"
+                type="number"
+                min={1}
+                max={64}
+                value={model.options.processorCount}
+                onChange={(event) => model.setResourceValue('processorCount', Number(event.target.value))}
+                aria-label={t('emulationPage.launch.optionCores')}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="emulation-memory">{t('emulationPage.launch.optionMemory')}</FieldLabel>
+              <Input
+                id="emulation-memory"
+                type="number"
+                min={512}
+                max={262144}
+                step={512}
+                value={model.options.memoryMib}
+                onChange={(event) => model.setResourceValue('memoryMib', Number(event.target.value))}
+                aria-label={t('emulationPage.launch.optionMemory')}
+              />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel htmlFor="emulation-network-mode">{t('emulationPage.launch.optionNetworkMode')}</FieldLabel>
+            <Select
+              value={model.options.networkMode}
+              onValueChange={(value) => model.selectNetworkMode(value as EmulationNetworkMode)}
+            >
+              <SelectTrigger id="emulation-network-mode" variant="forensics" aria-label={t('emulationPage.launch.optionNetworkMode')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['off', 'hostOnly', 'nat', 'bridged'] as const).map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {t(`emulationPage.launch.networkModes.${mode}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           {([
-            ['network', 'emulationPage.launch.optionNetwork'],
             ['clipboard', 'emulationPage.launch.optionClipboard'],
             ['timeSync', 'emulationPage.launch.optionTimeSync'],
           ] as const).map(([key, labelKey]) => (

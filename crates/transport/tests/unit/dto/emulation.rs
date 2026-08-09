@@ -43,6 +43,42 @@ fn prepare_request_requires_one_unambiguous_boot_authorization() {
 }
 
 #[test]
+fn prepare_request_rejects_out_of_range_guest_resources() {
+    use super::{EmulationNetworkModeDto, EmulationOptionsDto};
+
+    let base = PrepareEmulationRequestDto {
+        data_source_id: "source-1".to_string(),
+        recovery_iso_path: None,
+        allow_direct_boot: true,
+        options: Default::default(),
+    };
+    let zero_cores = PrepareEmulationRequestDto {
+        options: EmulationOptionsDto {
+            processor_count: 0,
+            ..Default::default()
+        },
+        ..base.clone()
+    };
+    assert!(zero_cores.validate().is_err());
+    let tiny_memory = PrepareEmulationRequestDto {
+        options: EmulationOptionsDto {
+            memory_mib: 128,
+            ..Default::default()
+        },
+        ..base
+    };
+    assert!(tiny_memory.validate().is_err());
+
+    let value = serde_json::to_value(EmulationNetworkModeDto::HostOnly).unwrap();
+    assert_eq!(value, "hostOnly");
+    let options = EmulationOptionsDto::default();
+    let value = serde_json::to_value(options).unwrap();
+    assert_eq!(value["networkMode"], "off");
+    assert_eq!(value["processorCount"], 2);
+    assert_eq!(value["memoryMib"], 4096);
+}
+
+#[test]
 fn control_mode_serializes_as_interactive_only() {
     let value = serde_json::to_value(EmulationControlModeDto::InteractiveOnly).unwrap();
     assert_eq!(value, "interactiveOnly");

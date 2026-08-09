@@ -23,4 +23,4 @@ pub use error::EmulationError;
 pub use identity::ParentIdentity;
 pub use iso9660::{build_iso, IsoFile};
 pub use vmdk::{VmdkAdapter, VmdkDescriptor};
-pub use vmx::{VmOptions, VmwareFirmware, VmxConfig};
+pub use vmx::{VmNetworkMode, VmOptions, VmwareFirmware, VmxConfig};

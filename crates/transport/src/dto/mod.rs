@@ -84,7 +84,7 @@ pub use correlation::{
 pub use emulation::{
     EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
     EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
-    EmulationInstallDto, EmulationOptionsDto, EmulationOsdataCleanupDto,
+    EmulationInstallDto, EmulationNetworkModeDto, EmulationOptionsDto, EmulationOsdataCleanupDto,
     EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto, EmulationPreflightDto,
     EmulationSessionStatusDto, EmulationStateDto, PrepareEmulationRequestDto,
 };

@@ -98,7 +98,7 @@ describe('useEmulationWorkspaceModel', () => {
       dataSourceId: 'source-1',
       recoveryIsoPath: undefined,
       allowDirectBoot: true,
-      options: { network: false, clipboard: false, timeSync: false },
+      options: { networkMode: 'off', clipboard: false, timeSync: false, processorCount: 2, memoryMib: 4096 },
     });
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
@@ -118,7 +118,7 @@ describe('useEmulationWorkspaceModel', () => {
       dataSourceId: 'source-1',
       recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
       allowDirectBoot: false,
-      options: { network: false, clipboard: false, timeSync: false },
+      options: { networkMode: 'off', clipboard: false, timeSync: false, processorCount: 2, memoryMib: 4096 },
     });
   });
 

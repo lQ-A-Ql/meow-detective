@@ -30,10 +30,22 @@ pub async fn prepare_emulation(
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let recovery_iso = request.recovery_iso_path.map(PathBuf::from);
+        let network_mode = match request.options.network_mode {
+            transport::dto::EmulationNetworkModeDto::Off => evidence_emulation::VmNetworkMode::Off,
+            transport::dto::EmulationNetworkModeDto::HostOnly => {
+                evidence_emulation::VmNetworkMode::HostOnly
+            }
+            transport::dto::EmulationNetworkModeDto::Nat => evidence_emulation::VmNetworkMode::Nat,
+            transport::dto::EmulationNetworkModeDto::Bridged => {
+                evidence_emulation::VmNetworkMode::Bridged
+            }
+        };
         let options = evidence_emulation::VmOptions {
-            network: request.options.network,
+            network_mode,
             clipboard: request.options.clipboard,
             time_sync: request.options.time_sync,
+            processor_count: request.options.processor_count,
+            memory_mib: request.options.memory_mib,
         };
         let status = app_state
             .emulation_registry

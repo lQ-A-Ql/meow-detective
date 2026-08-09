@@ -158,6 +158,8 @@ pub(super) struct EmulationProvenance<'a> {
     guest_network: &'static str,
     guest_clipboard: bool,
     guest_time_sync: bool,
+    guest_processor_count: u8,
+    guest_memory_mib: u32,
     maintenance_media: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     recovery_media: Option<RecoveryMediaProvenance<'a>>,
@@ -200,13 +202,16 @@ impl<'a> EmulationProvenance<'a> {
             },
             created_at: chrono::Utc::now().to_rfc3339(),
             evidence_access: "read-only-parent-with-application-cow",
-            guest_network: if options.network {
-                "host-only"
-            } else {
-                "disabled"
+            guest_network: match options.network_mode {
+                evidence_emulation::VmNetworkMode::Off => "disabled",
+                evidence_emulation::VmNetworkMode::HostOnly => "host-only",
+                evidence_emulation::VmNetworkMode::Nat => "nat",
+                evidence_emulation::VmNetworkMode::Bridged => "bridged",
             },
             guest_clipboard: options.clipboard,
             guest_time_sync: options.time_sync,
+            guest_processor_count: options.processor_count,
+            guest_memory_mib: options.memory_mib,
             maintenance_media,
             recovery_media,
         }

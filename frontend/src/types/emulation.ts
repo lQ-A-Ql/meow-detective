@@ -7,10 +7,14 @@ export type EmulationState =
 
 export type EmulationControlMode = 'interactiveOnly';
 
+export type EmulationNetworkMode = 'off' | 'hostOnly' | 'nat' | 'bridged';
+
 export interface EmulationOptions {
-  network: boolean;
+  networkMode: EmulationNetworkMode;
   clipboard: boolean;
   timeSync: boolean;
+  processorCount: number;
+  memoryMib: number;
 }
 
 export interface PrepareEmulationRequest {

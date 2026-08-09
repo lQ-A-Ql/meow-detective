@@ -2,13 +2,47 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub enum EmulationNetworkModeDto {
+    #[default]
+    Off,
+    HostOnly,
+    Nat,
+    Bridged,
+}
+
+fn default_processor_count() -> u8 {
+    2
+}
+
+fn default_memory_mib() -> u32 {
+    4096
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct EmulationOptionsDto {
     #[serde(default)]
-    pub network: bool,
+    pub network_mode: EmulationNetworkModeDto,
     #[serde(default)]
     pub clipboard: bool,
     #[serde(default)]
     pub time_sync: bool,
+    #[serde(default = "default_processor_count")]
+    pub processor_count: u8,
+    #[serde(default = "default_memory_mib")]
+    pub memory_mib: u32,
+}
+
+impl Default for EmulationOptionsDto {
+    fn default() -> Self {
+        Self {
+            network_mode: EmulationNetworkModeDto::Off,
+            clipboard: false,
+            time_sync: false,
+            processor_count: default_processor_count(),
+            memory_mib: default_memory_mib(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +77,12 @@ impl PrepareEmulationRequestDto {
                 return Err("direct boot confirmation cannot be combined with recovery media");
             }
             _ => {}
+        }
+        if !(1..=64).contains(&self.options.processor_count) {
+            return Err("processor count must be within 1..=64");
+        }
+        if !(512..=262_144).contains(&self.options.memory_mib) {
+            return Err("memory size must be within 512..=262144 MiB");
         }
         Ok(())
     }

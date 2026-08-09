@@ -33,8 +33,10 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     bootRoute: 'directSystem',
     pickRecoveryIso: vi.fn().mockResolvedValue(undefined),
     clearRecoveryIso: vi.fn(),
-    options: { network: false, clipboard: false, timeSync: false },
+    options: { networkMode: 'off', clipboard: false, timeSync: false, processorCount: 2, memoryMib: 4096 },
     toggleOption: vi.fn(),
+    selectNetworkMode: vi.fn(),
+    setResourceValue: vi.fn(),
     osdataCleanupPartitions: [],
     cleanupOsdata: true,
     toggleCleanupOsdata: vi.fn(),
@@ -109,8 +111,7 @@ describe('EmulationWorkspace', () => {
     expect(release).toHaveBeenCalledWith('emulation-session-1');
   });
 
-  it('offers OSDATA cleanup when preflight detects the entry and delegates the toggle', () => {
-    const toggleCleanupOsdata = vi.fn();
+  it('offers OSDATA cleanup when preflight detects the entry and delegates the toggle', () => {    const toggleCleanupOsdata = vi.fn();
     render(<EmulationWorkspace model={createModel({
       preflight: {
         dataSourceId: 'source-1',
@@ -166,5 +167,23 @@ describe('EmulationWorkspace', () => {
     })} />);
 
     expect(screen.getByText('PE 中将没有维护工具，只能手动操作')).toBeInTheDocument();
+  });
+
+  it('delegates network mode selection and resource sizing', () => {
+    const selectNetworkMode = vi.fn();
+    const setResourceValue = vi.fn();
+    render(<EmulationWorkspace model={createModel({
+      options: { networkMode: 'nat', clipboard: false, timeSync: false, processorCount: 4, memoryMib: 8192 },
+      selectNetworkMode,
+      setResourceValue,
+    })} />);
+
+    expect(screen.getByDisplayValue('4')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('8192')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('CPU 核心数'), { target: { value: '8' } });
+    expect(setResourceValue).toHaveBeenCalledWith('processorCount', 8);
+    fireEvent.change(screen.getByLabelText('内存 (MiB)'), { target: { value: '16384' } });
+    expect(setResourceValue).toHaveBeenCalledWith('memoryMib', 16384);
+    expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
   });
 });

@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use evidence_block::{BlockDeviceError, BlockProvider};
 use evidence_emulation::{
-    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmOptions, VmdkAdapter, VmdkDescriptor,
-    VmwareFirmware, VmxConfig,
+    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmNetworkMode, VmOptions, VmdkAdapter,
+    VmdkDescriptor, VmwareFirmware, VmxConfig,
 };
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
@@ -359,17 +359,16 @@ fn vmx_options_enable_exactly_one_isolation_exception_each() {
     let network = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
         .unwrap()
         .with_options(VmOptions {
-            network: true,
-            clipboard: false,
-            time_sync: false,
+            network_mode: evidence_emulation::VmNetworkMode::HostOnly,
+            ..VmOptions::default()
         })
+        .unwrap()
         .render();
     VmxConfig::validate_rendered(
         &network,
         VmOptions {
-            network: true,
-            clipboard: false,
-            time_sync: false,
+            network_mode: evidence_emulation::VmNetworkMode::HostOnly,
+            ..VmOptions::default()
         },
         false,
     )
@@ -381,17 +380,18 @@ fn vmx_options_enable_exactly_one_isolation_exception_each() {
     let clipboard = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
         .unwrap()
         .with_options(VmOptions {
-            network: false,
             clipboard: true,
             time_sync: true,
+            ..VmOptions::default()
         })
+        .unwrap()
         .render();
     VmxConfig::validate_rendered(
         &clipboard,
         VmOptions {
-            network: false,
             clipboard: true,
             time_sync: true,
+            ..VmOptions::default()
         },
         false,
     )
@@ -400,6 +400,81 @@ fn vmx_options_enable_exactly_one_isolation_exception_each() {
     assert!(clipboard.contains("tools.syncTime = \"TRUE\""));
     assert!(!clipboard.contains("time.synchronize"));
     assert!(clipboard.contains("ethernet0.present = \"FALSE\""));
+}
+
+#[test]
+fn vmx_renders_nat_and_bridged_network_modes() {
+    for (mode, connection_type) in [
+        (VmNetworkMode::Nat, "nat"),
+        (VmNetworkMode::Bridged, "bridged"),
+    ] {
+        let options = VmOptions {
+            network_mode: mode,
+            ..VmOptions::default()
+        };
+        let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+            .unwrap()
+            .with_options(options)
+            .unwrap()
+            .render();
+        VmxConfig::validate_rendered(&rendered, options, false).unwrap();
+        assert!(rendered.contains("ethernet0.present = \"TRUE\""));
+        assert!(rendered.contains(&format!("ethernet0.connectionType = \"{connection_type}\"")));
+    }
+}
+
+#[test]
+fn vmx_renders_custom_resources_and_rejects_out_of_range_values() {
+    let options = VmOptions {
+        processor_count: 8,
+        memory_mib: 16384,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_options(options)
+        .unwrap()
+        .render();
+    assert!(rendered.contains("numvcpus = \"8\""));
+    assert!(rendered.contains("memsize = \"16384\""));
+
+    for invalid in [
+        VmOptions {
+            processor_count: 0,
+            ..VmOptions::default()
+        },
+        VmOptions {
+            processor_count: 65,
+            ..VmOptions::default()
+        },
+        VmOptions {
+            memory_mib: 256,
+            ..VmOptions::default()
+        },
+    ] {
+        assert!(VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+            .unwrap()
+            .with_options(invalid)
+            .is_err());
+    }
+}
+
+#[test]
+fn vmx_validator_rejects_connection_type_contradicting_the_mode() {
+    let options = VmOptions {
+        network_mode: VmNetworkMode::Nat,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_options(options)
+        .unwrap()
+        .render()
+        .replace(
+            "ethernet0.connectionType = \"nat\"",
+            "ethernet0.connectionType = \"bridged\"",
+        );
+    assert!(VmxConfig::validate_rendered(&rendered, options, false).is_err());
 }
 
 #[test]

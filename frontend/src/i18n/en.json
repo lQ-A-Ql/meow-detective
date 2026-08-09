@@ -514,8 +514,16 @@
       "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
       "bootRoute": "Boot route",
       "recommendedRoute": "Preflight recommends: {{route}}",
-      "options": "Guest integrations (all off by default)",
-      "optionNetwork": "Host-only network",
+      "options": "Guest integrations and resources",
+      "optionCores": "CPU cores",
+      "optionMemory": "Memory (MiB)",
+      "optionNetworkMode": "Network mode",
+      "networkModes": {
+        "off": "Off",
+        "hostOnly": "Host-only",
+        "nat": "NAT",
+        "bridged": "Bridged"
+      },
       "optionClipboard": "Clipboard / drag-and-drop",
       "optionTimeSync": "Guest time synchronization"
     },

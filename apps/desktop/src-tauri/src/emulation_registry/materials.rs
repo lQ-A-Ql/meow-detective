@@ -135,7 +135,7 @@ pub(super) fn prepare_machine_materials(
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     let mut vmx = VmxConfig::new("disk.vmdk", firmware)?
         .with_disk_adapter(disk_adapter)
-        .with_options(options);
+        .with_options(options)?;
     if let Some(media) = recovery_media {
         vmx = vmx.with_recovery_iso(media.vmware_path())?;
     }

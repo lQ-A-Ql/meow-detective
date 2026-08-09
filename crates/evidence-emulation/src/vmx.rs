@@ -20,18 +20,80 @@ impl VmwareFirmware {
     }
 }
 
-/// Investigator-selectable guest integrations. All default to off; enabling
+/// Network attachment mode for the guest's single virtual NIC.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum VmNetworkMode {
+    /// No network adapter: the strongest isolation and the default.
+    #[default]
+    Off,
+    /// Host-only network: guest and host can talk, nothing leaves the host.
+    HostOnly,
+    /// NAT: the guest reaches external networks through the host's address.
+    Nat,
+    /// Bridged: the guest appears as a peer on the host's physical network.
+    Bridged,
+}
+
+impl VmNetworkMode {
+    pub(crate) fn connection_type(self) -> Option<&'static str> {
+        match self {
+            Self::Off => None,
+            Self::HostOnly => Some("hostonly"),
+            Self::Nat => Some("nat"),
+            Self::Bridged => Some("bridged"),
+        }
+    }
+}
+
+/// Investigator-selectable guest resources and integrations. Resource values
+/// default to 2 vCPUs and 4096 MiB; integrations default to off, and enabling
 /// one loosens exactly one isolation control and is recorded in the session
 /// provenance.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VmOptions {
-    /// Attach a host-only virtual NIC. NAT/bridged modes are intentionally
-    /// not offered.
-    pub network: bool,
+    /// Network attachment mode for the guest NIC.
+    pub network_mode: VmNetworkMode,
     /// Allow copy/paste and drag-and-drop between host and guest.
     pub clipboard: bool,
     /// Let VMware Tools synchronize the guest clock with the host.
     pub time_sync: bool,
+    /// Virtual CPU count (1..=64).
+    pub processor_count: u8,
+    /// Guest memory in MiB (512..=262144).
+    pub memory_mib: u32,
+}
+
+pub const MIN_PROCESSOR_COUNT: u8 = 1;
+pub const MAX_PROCESSOR_COUNT: u8 = 64;
+pub const MIN_MEMORY_MIB: u32 = 512;
+pub const MAX_MEMORY_MIB: u32 = 262_144;
+
+impl Default for VmOptions {
+    fn default() -> Self {
+        Self {
+            network_mode: VmNetworkMode::Off,
+            clipboard: false,
+            time_sync: false,
+            processor_count: 2,
+            memory_mib: 4096,
+        }
+    }
+}
+
+impl VmOptions {
+    pub fn validate(&self) -> Result<(), EmulationError> {
+        if !(MIN_PROCESSOR_COUNT..=MAX_PROCESSOR_COUNT).contains(&self.processor_count) {
+            return Err(invalid_vmx(format!(
+                "processor count must be within {MIN_PROCESSOR_COUNT}..={MAX_PROCESSOR_COUNT}"
+            )));
+        }
+        if !(MIN_MEMORY_MIB..=MAX_MEMORY_MIB).contains(&self.memory_mib) {
+            return Err(invalid_vmx(format!(
+                "memory size must be within {MIN_MEMORY_MIB}..={MAX_MEMORY_MIB} MiB"
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,8 +103,6 @@ pub struct VmxConfig {
     recovery_iso_path: Option<String>,
     maintenance_iso_path: Option<String>,
     firmware: VmwareFirmware,
-    memory_mib: u32,
-    processor_count: u8,
     options: VmOptions,
 }
 
@@ -57,8 +117,6 @@ impl VmxConfig {
             recovery_iso_path: None,
             maintenance_iso_path: None,
             firmware,
-            memory_mib: 4096,
-            processor_count: 2,
             options: VmOptions::default(),
         })
     }
@@ -74,9 +132,10 @@ impl VmxConfig {
         self
     }
 
-    pub fn with_options(mut self, options: VmOptions) -> Self {
+    pub fn with_options(mut self, options: VmOptions) -> Result<Self, EmulationError> {
+        options.validate()?;
         self.options = options;
-        self
+        Ok(self)
     }
 
     /// Attaches the generated maintenance CD as the second optical drive. The
@@ -136,8 +195,8 @@ impl VmxConfig {
             ("displayName", "Meow Detective Emulation".to_string()),
             ("firmware", self.firmware.value().to_string()),
             ("guestOS", "windows9-64".to_string()),
-            ("memsize", self.memory_mib.to_string()),
-            ("numvcpus", self.processor_count.to_string()),
+            ("memsize", self.options.memory_mib.to_string()),
+            ("numvcpus", self.options.processor_count.to_string()),
             ("virtualHW.version", "16".to_string()),
         ]);
         match self.disk_adapter {
@@ -202,11 +261,14 @@ fn base_security_settings() -> [(&'static str, &'static str); 13] {
 
 fn conditional_security_settings(options: VmOptions) -> Vec<(&'static str, &'static str)> {
     let mut settings = Vec::new();
-    if options.network {
-        settings.push(("ethernet0.present", "TRUE"));
-        settings.push(("ethernet0.connectionType", "hostonly"));
-    } else {
-        settings.push(("ethernet0.present", "FALSE"));
+    match options.network_mode.connection_type() {
+        Some(connection_type) => {
+            settings.push(("ethernet0.present", "TRUE"));
+            settings.push(("ethernet0.connectionType", connection_type));
+        }
+        None => {
+            settings.push(("ethernet0.present", "FALSE"));
+        }
     }
     if !options.clipboard {
         settings.push(("isolation.tools.copy.disable", "TRUE"));
@@ -232,17 +294,24 @@ fn validate_isolation_exceptions(
     let ethernet_true = settings
         .iter()
         .any(|(key, value)| key.starts_with("ethernet") && value.eq_ignore_ascii_case("TRUE"));
-    if !options.network && ethernet_true {
+    if options.network_mode == VmNetworkMode::Off && ethernet_true {
         return Err(invalid_vmx("network adapters must remain disabled"));
     }
-    if options.network
+    if options.network_mode != VmNetworkMode::Off
         && settings
             .keys()
             .any(|key| key.starts_with("ethernet") && !key.starts_with("ethernet0."))
     {
         return Err(invalid_vmx(
-            "only the single host-only adapter may be enabled",
+            "only the single configured adapter may be enabled",
         ));
+    }
+    if let Some(connection_type) = options.network_mode.connection_type() {
+        if settings.get("ethernet0.connectionType").map(String::as_str) != Some(connection_type) {
+            return Err(invalid_vmx(
+                "ethernet0 connection type contradicts the network mode option",
+            ));
+        }
     }
     if options.clipboard
         && [

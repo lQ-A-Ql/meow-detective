@@ -514,8 +514,16 @@
       "recoveryPlaceholder": "未选择，确认后启动原系统",
       "bootRoute": "启动路径",
       "recommendedRoute": "预检推荐：{{route}}",
-      "options": "客机集成（默认全部关闭）",
-      "optionNetwork": "仅主机网络（host-only）",
+      "options": "客机资源与集成",
+      "optionCores": "CPU 核心数",
+      "optionMemory": "内存 (MiB)",
+      "optionNetworkMode": "网络模式",
+      "networkModes": {
+        "off": "关闭",
+        "hostOnly": "仅主机 (host-only)",
+        "nat": "NAT",
+        "bridged": "桥接"
+      },
       "optionClipboard": "剪贴板 / 拖放",
       "optionTimeSync": "客机时间同步"
     },
