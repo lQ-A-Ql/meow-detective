@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Component, Path};
 
+use crate::vm_options::{
+    conditional_security_settings, validate_isolation_exceptions, VmOptions, GUEST_OS_WHITELIST,
+};
 use crate::vmdk::VmdkAdapter;
 use crate::EmulationError;
 
@@ -20,82 +23,6 @@ impl VmwareFirmware {
     }
 }
 
-/// Network attachment mode for the guest's single virtual NIC.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum VmNetworkMode {
-    /// No network adapter: the strongest isolation and the default.
-    #[default]
-    Off,
-    /// Host-only network: guest and host can talk, nothing leaves the host.
-    HostOnly,
-    /// NAT: the guest reaches external networks through the host's address.
-    Nat,
-    /// Bridged: the guest appears as a peer on the host's physical network.
-    Bridged,
-}
-
-impl VmNetworkMode {
-    pub(crate) fn connection_type(self) -> Option<&'static str> {
-        match self {
-            Self::Off => None,
-            Self::HostOnly => Some("hostonly"),
-            Self::Nat => Some("nat"),
-            Self::Bridged => Some("bridged"),
-        }
-    }
-}
-
-/// Investigator-selectable guest resources and integrations. Resource values
-/// default to 2 vCPUs and 4096 MiB; integrations default to off, and enabling
-/// one loosens exactly one isolation control and is recorded in the session
-/// provenance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VmOptions {
-    /// Network attachment mode for the guest NIC.
-    pub network_mode: VmNetworkMode,
-    /// Allow copy/paste and drag-and-drop between host and guest.
-    pub clipboard: bool,
-    /// Let VMware Tools synchronize the guest clock with the host.
-    pub time_sync: bool,
-    /// Virtual CPU count (1..=64).
-    pub processor_count: u8,
-    /// Guest memory in MiB (512..=262144).
-    pub memory_mib: u32,
-}
-
-pub const MIN_PROCESSOR_COUNT: u8 = 1;
-pub const MAX_PROCESSOR_COUNT: u8 = 64;
-pub const MIN_MEMORY_MIB: u32 = 512;
-pub const MAX_MEMORY_MIB: u32 = 262_144;
-
-impl Default for VmOptions {
-    fn default() -> Self {
-        Self {
-            network_mode: VmNetworkMode::Off,
-            clipboard: false,
-            time_sync: false,
-            processor_count: 2,
-            memory_mib: 4096,
-        }
-    }
-}
-
-impl VmOptions {
-    pub fn validate(&self) -> Result<(), EmulationError> {
-        if !(MIN_PROCESSOR_COUNT..=MAX_PROCESSOR_COUNT).contains(&self.processor_count) {
-            return Err(invalid_vmx(format!(
-                "processor count must be within {MIN_PROCESSOR_COUNT}..={MAX_PROCESSOR_COUNT}"
-            )));
-        }
-        if !(MIN_MEMORY_MIB..=MAX_MEMORY_MIB).contains(&self.memory_mib) {
-            return Err(invalid_vmx(format!(
-                "memory size must be within {MIN_MEMORY_MIB}..={MAX_MEMORY_MIB} MiB"
-            )));
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmxConfig {
     disk_path: String,
@@ -103,6 +30,7 @@ pub struct VmxConfig {
     recovery_iso_path: Option<String>,
     maintenance_iso_path: Option<String>,
     firmware: VmwareFirmware,
+    guest_os: String,
     options: VmOptions,
 }
 
@@ -117,8 +45,20 @@ impl VmxConfig {
             recovery_iso_path: None,
             maintenance_iso_path: None,
             firmware,
+            guest_os: "windows9-64".to_string(),
             options: VmOptions::default(),
         })
+    }
+
+    /// Set the VMware guest OS identifier (see [`GUEST_OS_WHITELIST`]).
+    pub fn with_guest_os(mut self, guest_os: &str) -> Result<Self, EmulationError> {
+        if !GUEST_OS_WHITELIST.contains(&guest_os) {
+            return Err(invalid_vmx(format!(
+                "guest OS '{guest_os}' is not in the supported whitelist"
+            )));
+        }
+        self.guest_os = guest_os.to_string();
+        Ok(self)
     }
 
     pub fn with_recovery_iso(mut self, iso_path: &str) -> Result<Self, EmulationError> {
@@ -175,6 +115,10 @@ impl VmxConfig {
         }
         validate_isolation_exceptions(&settings, options)?;
         validate_disk_settings(&settings)?;
+        match settings.get("guestOS").map(String::as_str) {
+            Some(id) if GUEST_OS_WHITELIST.contains(&id) => {}
+            _ => return Err(invalid_vmx("guestOS is not in the supported whitelist")),
+        }
         validate_recovery_media_settings(&settings)?;
         validate_maintenance_media_settings(&settings, has_maintenance_media)?;
         Ok(())
@@ -194,7 +138,7 @@ impl VmxConfig {
             ("config.version", "8".to_string()),
             ("displayName", "Meow Detective Emulation".to_string()),
             ("firmware", self.firmware.value().to_string()),
-            ("guestOS", "windows9-64".to_string()),
+            ("guestOS", self.guest_os.clone()),
             ("memsize", self.options.memory_mib.to_string()),
             ("numvcpus", self.options.processor_count.to_string()),
             ("virtualHW.version", "16".to_string()),
@@ -257,85 +201,6 @@ fn base_security_settings() -> [(&'static str, &'static str); 13] {
         ("sound.present", "FALSE"),
         ("usb.present", "FALSE"),
     ]
-}
-
-fn conditional_security_settings(options: VmOptions) -> Vec<(&'static str, &'static str)> {
-    let mut settings = Vec::new();
-    match options.network_mode.connection_type() {
-        Some(connection_type) => {
-            settings.push(("ethernet0.present", "TRUE"));
-            settings.push(("ethernet0.connectionType", connection_type));
-        }
-        None => {
-            settings.push(("ethernet0.present", "FALSE"));
-        }
-    }
-    if !options.clipboard {
-        settings.push(("isolation.tools.copy.disable", "TRUE"));
-        settings.push(("isolation.tools.dnd.disable", "TRUE"));
-        settings.push(("isolation.tools.paste.disable", "TRUE"));
-    }
-    if options.time_sync {
-        settings.push(("tools.syncTime", "TRUE"));
-    } else {
-        settings.push(("time.synchronize.continue", "FALSE"));
-        settings.push(("time.synchronize.restore", "FALSE"));
-        settings.push(("time.synchronize.resume.disk", "FALSE"));
-        settings.push(("time.synchronize.shrink", "FALSE"));
-        settings.push(("tools.syncTime", "FALSE"));
-    }
-    settings
-}
-
-fn validate_isolation_exceptions(
-    settings: &BTreeMap<String, String>,
-    options: VmOptions,
-) -> Result<(), EmulationError> {
-    let ethernet_true = settings
-        .iter()
-        .any(|(key, value)| key.starts_with("ethernet") && value.eq_ignore_ascii_case("TRUE"));
-    if options.network_mode == VmNetworkMode::Off && ethernet_true {
-        return Err(invalid_vmx("network adapters must remain disabled"));
-    }
-    if options.network_mode != VmNetworkMode::Off
-        && settings
-            .keys()
-            .any(|key| key.starts_with("ethernet") && !key.starts_with("ethernet0."))
-    {
-        return Err(invalid_vmx(
-            "only the single configured adapter may be enabled",
-        ));
-    }
-    if let Some(connection_type) = options.network_mode.connection_type() {
-        if settings.get("ethernet0.connectionType").map(String::as_str) != Some(connection_type) {
-            return Err(invalid_vmx(
-                "ethernet0 connection type contradicts the network mode option",
-            ));
-        }
-    }
-    if options.clipboard
-        && [
-            "isolation.tools.copy.disable",
-            "isolation.tools.dnd.disable",
-            "isolation.tools.paste.disable",
-        ]
-        .into_iter()
-        .any(|key| settings.get(key).map(String::as_str) == Some("TRUE"))
-    {
-        return Err(invalid_vmx(
-            "clipboard isolation contradicts the clipboard option",
-        ));
-    }
-    if options.time_sync
-        && settings
-            .iter()
-            .any(|(key, value)| key.starts_with("time.synchronize") && value == "FALSE")
-    {
-        return Err(invalid_vmx(
-            "time synchronization contradicts the time sync option",
-        ));
-    }
-    Ok(())
 }
 
 fn validate_disk_settings(settings: &BTreeMap<String, String>) -> Result<(), EmulationError> {
@@ -492,6 +357,6 @@ fn validate_recovery_iso_path(value: &str) -> Result<(), EmulationError> {
     Ok(())
 }
 
-fn invalid_vmx(message: impl Into<String>) -> EmulationError {
+pub(crate) fn invalid_vmx(message: impl Into<String>) -> EmulationError {
     EmulationError::InvalidVmx(message.into())
 }

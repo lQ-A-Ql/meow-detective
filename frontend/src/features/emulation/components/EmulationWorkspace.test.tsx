@@ -154,8 +154,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.queryByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' })).not.toBeInTheDocument();
   });
 
-  it('warns when PE media is selected but the maintenance tool is unavailable', () => {
-    render(<EmulationWorkspace model={createModel({
+  it('warns when PE media is selected but the maintenance tool is unavailable', () => {    render(<EmulationWorkspace model={createModel({
       recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
       bootRoute: 'recoveryMedia',
       preflight: {
@@ -189,5 +188,32 @@ describe('EmulationWorkspace', () => {
     fireEvent.keyDown(memory, { key: 'ArrowRight' });
     expect(setResourceValue).toHaveBeenCalledWith('memoryMib', 8704);
     expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
+  });
+
+  it('renders linux installs with distro, boot risks and the GRUB bypass hint', () => {
+    render(<EmulationWorkspace model={createModel({
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          osReleasePrettyName: 'CentOS Linux 7 (Core)',
+          kernelPresent: false,
+          fstabPresent: true,
+          bootRiskNotes: ['no-kernel'],
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+    })} />);
+
+    expect(screen.getByText('[P5]')).toBeInTheDocument();
+    expect(screen.getByText('Linux')).toBeInTheDocument();
+    expect(screen.getByText('CentOS Linux 7 (Core)')).toBeInTheDocument();
+    expect(screen.getByText('无内核')).toBeInTheDocument();
+    expect(screen.getByText(/GRUB 菜单按 e/)).toBeInTheDocument();
+    expect(screen.queryByText('可绕密')).not.toBeInTheDocument();
   });
 });

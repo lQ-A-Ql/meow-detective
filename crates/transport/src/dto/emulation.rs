@@ -111,10 +111,22 @@ pub enum EmulationBootRouteDto {
     DirectSystem,
 }
 
+/// Platform of a detected installation. Defaults to `windows` so pre-change
+/// payloads keep parsing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationInstallPlatformDto {
+    #[default]
+    Windows,
+    Linux,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct EmulationInstallDto {
     pub partition_index: u32,
+    #[serde(default)]
+    pub platform: EmulationInstallPlatformDto,
     pub osdata_present: bool,
     pub sam_present: bool,
     pub utilman_bypass_available: bool,
@@ -122,6 +134,19 @@ pub struct EmulationInstallDto {
     /// not a directory, or the filesystem could not be listed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osdata_empty: Option<bool>,
+    /// Linux: `PRETTY_NAME` from `/etc/os-release`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_release_pretty_name: Option<String>,
+    /// Linux: a bootable kernel image exists under `/boot`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_present: Option<bool>,
+    /// Linux: `/etc/fstab` exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fstab_present: Option<bool>,
+    /// Linux: structured boot-risk annotations (e.g. `no-kernel`, `no-fstab`,
+    /// `btrfs-root`); empty when none apply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boot_risk_notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

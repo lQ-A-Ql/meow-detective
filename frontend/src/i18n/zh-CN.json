@@ -539,6 +539,11 @@
       "osdataPresent": "存在 OSDATA",
       "osdataAbsent": "无 OSDATA",
       "cleanupOsdata": "启动前清除 OSDATA（仅写入覆盖层）",
+      "linuxInstall": "Linux",
+      "noKernel": "无内核",
+      "noFstab": "无 fstab",
+      "btrfsRoot": "btrfs 根",
+      "linuxBypassHint": "Linux 绕密：在 GRUB 菜单按 e，在 linux 行追加 init=/bin/bash（或 systemd.unit=rescue.target），Ctrl-X 启动即得 root shell；执行 mount -o remount,rw / 后可用 passwd 重置任意账户。所有改动仅落在 COW 覆盖层。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
       "bypassUnavailable": "不可绕密"

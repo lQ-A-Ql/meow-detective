@@ -7,7 +7,7 @@ const TOTAL_BLOCKS: usize = 10;
 /// `subdir/hello.dat`.
 pub fn minimal_ext4_image() -> Vec<u8> {
     let mut image = vec![0u8; TOTAL_BLOCKS * BLOCK_SIZE];
-    write_superblock(&mut image);
+    write_superblock(&mut image, TOTAL_BLOCKS as u32);
     image[BLOCK_SIZE + 0x08..BLOCK_SIZE + 0x0c].copy_from_slice(&2u32.to_le_bytes());
 
     write_extent_inode(&mut image, 2, 0x41ed, BLOCK_SIZE as u64, 3);
@@ -23,16 +23,65 @@ pub fn minimal_ext4_image() -> Vec<u8> {
     image
 }
 
-fn write_superblock(image: &mut [u8]) {
+fn write_superblock(image: &mut [u8], total_blocks: u32) {
     let superblock = &mut image[1024..2048];
     superblock[0x00..0x04].copy_from_slice(&16u32.to_le_bytes());
-    superblock[0x04..0x08].copy_from_slice(&(TOTAL_BLOCKS as u32).to_le_bytes());
+    superblock[0x04..0x08].copy_from_slice(&total_blocks.to_le_bytes());
     superblock[0x14..0x18].copy_from_slice(&0u32.to_le_bytes());
     superblock[0x18..0x1c].copy_from_slice(&2u32.to_le_bytes());
     superblock[0x20..0x24].copy_from_slice(&32768u32.to_le_bytes());
     superblock[0x28..0x2c].copy_from_slice(&16u32.to_le_bytes());
     superblock[0x38..0x3a].copy_from_slice(&0xef53u16.to_le_bytes());
     superblock[0x58..0x5a].copy_from_slice(&256u16.to_le_bytes());
+}
+
+const OS_RELEASE: &[u8] =
+    b"NAME=\"CentOS Linux\"\nID=\"centos\"\nPRETTY_NAME=\"CentOS Linux 7 (Core)\"\n";
+
+/// Builds a minimal ext4 image shaped like a Linux system root:
+/// `/etc/os-release`, `/etc/fstab`, `/boot/vmlinuz-5.14.0` and `/sbin/init`.
+pub fn linux_root_ext4_image() -> Vec<u8> {
+    const LINUX_BLOCKS: usize = 16;
+    let mut image = vec![0u8; LINUX_BLOCKS * BLOCK_SIZE];
+    write_superblock(&mut image, LINUX_BLOCKS as u32);
+    image[BLOCK_SIZE + 0x08..BLOCK_SIZE + 0x0c].copy_from_slice(&2u32.to_le_bytes());
+
+    write_extent_inode(&mut image, 2, 0x41ed, BLOCK_SIZE as u64, 3); // /
+    write_extent_inode(&mut image, 3, 0x41ed, BLOCK_SIZE as u64, 4); // /etc
+    write_extent_inode(&mut image, 4, 0x81a4, OS_RELEASE.len() as u64, 5);
+    write_extent_inode(&mut image, 5, 0x81a4, 12, 6); // fstab
+    write_extent_inode(&mut image, 6, 0x41ed, BLOCK_SIZE as u64, 7); // /boot
+    write_extent_inode(&mut image, 7, 0x81a4, 4, 8); // vmlinuz-5.14.0
+    write_extent_inode(&mut image, 8, 0x41ed, BLOCK_SIZE as u64, 9); // /sbin
+    write_extent_inode(&mut image, 9, 0x81a4, 4, 10); // init
+
+    let root = &mut image[3 * BLOCK_SIZE..4 * BLOCK_SIZE];
+    write_directory_entry(root, 0, 2, 12, 2, ".");
+    write_directory_entry(root, 12, 2, 12, 2, "..");
+    write_directory_entry(root, 24, 3, 12, 2, "etc");
+    write_directory_entry(root, 36, 6, 12, 2, "boot");
+    write_directory_entry(root, 48, 8, (BLOCK_SIZE - 48) as u16, 2, "sbin");
+
+    let etc = &mut image[4 * BLOCK_SIZE..5 * BLOCK_SIZE];
+    write_directory_entry(etc, 0, 3, 12, 2, ".");
+    write_directory_entry(etc, 12, 2, 12, 2, "..");
+    write_directory_entry(etc, 24, 4, 20, 1, "os-release");
+    write_directory_entry(etc, 44, 5, (BLOCK_SIZE - 44) as u16, 1, "fstab");
+    image[5 * BLOCK_SIZE..5 * BLOCK_SIZE + OS_RELEASE.len()].copy_from_slice(OS_RELEASE);
+    image[6 * BLOCK_SIZE..6 * BLOCK_SIZE + 12].copy_from_slice(b"# fake fstab");
+
+    let boot = &mut image[7 * BLOCK_SIZE..8 * BLOCK_SIZE];
+    write_directory_entry(boot, 0, 6, 12, 2, ".");
+    write_directory_entry(boot, 12, 2, 12, 2, "..");
+    write_directory_entry(boot, 24, 7, (BLOCK_SIZE - 24) as u16, 1, "vmlinuz-5.14.0");
+    image[8 * BLOCK_SIZE..8 * BLOCK_SIZE + 4].copy_from_slice(b"KERN");
+
+    let sbin = &mut image[9 * BLOCK_SIZE..10 * BLOCK_SIZE];
+    write_directory_entry(sbin, 0, 8, 12, 2, ".");
+    write_directory_entry(sbin, 12, 2, 12, 2, "..");
+    write_directory_entry(sbin, 24, 9, (BLOCK_SIZE - 24) as u16, 1, "init");
+    image[10 * BLOCK_SIZE..10 * BLOCK_SIZE + 4].copy_from_slice(b"INIT");
+    image
 }
 
 fn write_extent_inode(image: &mut [u8], inode: usize, mode: u16, size: u64, block: u32) {

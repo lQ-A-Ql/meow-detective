@@ -353,18 +353,43 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
             {model.preflight.installs.map((install) => (
               <div key={install.partitionIndex} className="flex items-center gap-2 text-[11px]">
                 <span className="font-mono text-forensics-text">[P{install.partitionIndex}]</span>
-                <Badge variant={install.osdataPresent ? 'secondary' : 'outline'}>
-                  {t(install.osdataPresent
-                    ? 'emulationPage.preflight.osdataPresent'
-                    : 'emulationPage.preflight.osdataAbsent')}
-                </Badge>
-                <Badge variant={install.utilmanBypassAvailable ? 'default' : 'outline'}>
-                  {t(install.utilmanBypassAvailable
-                    ? 'emulationPage.preflight.bypassAvailable'
-                    : 'emulationPage.preflight.bypassUnavailable')}
-                </Badge>
+                {install.platform === 'linux' ? (
+                  <>
+                    <Badge variant="outline">{t('emulationPage.preflight.linuxInstall')}</Badge>
+                    {install.osReleasePrettyName ? (
+                      <span className="truncate text-forensics-text-secondary">{install.osReleasePrettyName}</span>
+                    ) : null}
+                    {install.kernelPresent === false ? (
+                      <Badge variant="secondary">{t('emulationPage.preflight.noKernel')}</Badge>
+                    ) : null}
+                    {install.fstabPresent === false ? (
+                      <Badge variant="secondary">{t('emulationPage.preflight.noFstab')}</Badge>
+                    ) : null}
+                    {(install.bootRiskNotes ?? []).includes('btrfs-root') ? (
+                      <Badge variant="secondary">{t('emulationPage.preflight.btrfsRoot')}</Badge>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <Badge variant={install.osdataPresent ? 'secondary' : 'outline'}>
+                      {t(install.osdataPresent
+                        ? 'emulationPage.preflight.osdataPresent'
+                        : 'emulationPage.preflight.osdataAbsent')}
+                    </Badge>
+                    <Badge variant={install.utilmanBypassAvailable ? 'default' : 'outline'}>
+                      {t(install.utilmanBypassAvailable
+                        ? 'emulationPage.preflight.bypassAvailable'
+                        : 'emulationPage.preflight.bypassUnavailable')}
+                    </Badge>
+                  </>
+                )}
               </div>
             ))}
+            {model.preflight.installs.some((install) => install.platform === 'linux') ? (
+              <div className="pt-1 text-[10px] leading-4 text-forensics-muted">
+                {t('emulationPage.preflight.linuxBypassHint')}
+              </div>
+            ) : null}
             {model.osdataCleanupPartitions.length > 0 ? (
               model.preflight.installs.some((install) => install.osdataEmpty === false) ? (
                 <div className="pt-1 text-[11px] text-forensics-warning-text">

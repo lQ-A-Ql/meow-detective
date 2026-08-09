@@ -128,6 +128,8 @@ impl EmulationRegistry {
             .transpose()
             .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
         let prepared = prepare_emulation_source(case_conn, data_source_id)?;
+        let (is_linux, guest_os, disk_adapter) =
+            guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
         let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
@@ -140,10 +142,10 @@ impl EmulationRegistry {
                 return Err(error);
             }
         };
-        // The maintenance CD only makes sense on the PE boot route; building
-        // it needs the import index, so it runs before material generation
-        // and shares the same rollback path.
-        let maintenance = if recovery_media.is_some() {
+        // The maintenance CD only makes sense on the PE boot route of a
+        // Windows install; building it needs the import index, so it runs
+        // before material generation and shares the same rollback path.
+        let maintenance = if recovery_media.is_some() && !is_linux {
             match build_maintenance_payload(case_conn, case_root, case_id, data_source_id) {
                 Ok(payload) => payload,
                 Err(error) => {
@@ -159,6 +161,8 @@ impl EmulationRegistry {
             &workspace,
             &identity,
             firmware,
+            &guest_os,
+            disk_adapter,
             ProvenanceIds {
                 session_id: &session_id,
                 case_id: &case_id.0,
@@ -308,6 +312,43 @@ impl EmulationRegistry {
 
     fn lock_error() -> EmulationRegistryError {
         EmulationRegistryError::LockPoisoned
+    }
+}
+
+/// Pick the guest OS profile for the source: Linux guests boot LsiLogic
+/// with a distro-derived guestid; Windows keeps the inbox IDE path and the
+/// windows9-64 profile. The guestOS value is whitelist-checked again by
+/// `VmxConfig::with_guest_os`.
+fn guest_profile_for_source(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<(bool, String, evidence_emulation::VmdkAdapter), EmulationRegistryError> {
+    let is_linux =
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_conn)
+            .find_storage(data_source_id)
+            .map_err(MountServiceError::from)?
+            .map(|storage| storage.platform == "linux")
+            .unwrap_or(false);
+    if is_linux {
+        let profile = app_services::mount_service::linux_guest_profile(
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+        )?;
+        Ok((
+            true,
+            profile.guest_os,
+            evidence_emulation::VmdkAdapter::LsiLogic,
+        ))
+    } else {
+        Ok((
+            false,
+            "windows9-64".to_string(),
+            evidence_emulation::VmdkAdapter::Ide,
+        ))
     }
 }
 

@@ -77,6 +77,8 @@ fn real_e01_mount_uses_a_descriptor_and_sparse_cow_without_materializing_the_dis
         &workspace,
         &identity,
         super::detect_firmware(&disk).unwrap(),
+        "windows9-64",
+        evidence_emulation::VmdkAdapter::Ide,
         super::workspace::ProvenanceIds {
             session_id: &session_id,
             case_id: "poc-case",
@@ -165,6 +167,8 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
         &workspace,
         &identity,
         super::detect_firmware(&disk).unwrap(),
+        "windows9-64",
+        evidence_emulation::VmdkAdapter::Ide,
         super::workspace::ProvenanceIds {
             session_id: &session_id,
             case_id: "poc-case",

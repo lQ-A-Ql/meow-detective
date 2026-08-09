@@ -26,10 +26,15 @@ export interface PrepareEmulationRequest {
 
 export interface EmulationInstall {
   partitionIndex: number;
+  platform?: 'windows' | 'linux';
   osdataPresent: boolean;
   samPresent: boolean;
   utilmanBypassAvailable: boolean;
   osdataEmpty?: boolean;
+  osReleasePrettyName?: string;
+  kernelPresent?: boolean;
+  fstabPresent?: boolean;
+  bootRiskNotes?: string[];
 }
 
 export interface EmulationPreflight {

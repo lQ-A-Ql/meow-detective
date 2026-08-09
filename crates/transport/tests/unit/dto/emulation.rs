@@ -90,13 +90,19 @@ fn install_dto_omits_unknown_osdata_emptiness() {
 
     let install = EmulationInstallDto {
         partition_index: 2,
+        platform: Default::default(),
         osdata_present: true,
         sam_present: true,
         utilman_bypass_available: true,
         osdata_empty: None,
+        os_release_pretty_name: None,
+        kernel_present: None,
+        fstab_present: None,
+        boot_risk_notes: Vec::new(),
     };
     let value = serde_json::to_value(&install).unwrap();
     assert_eq!(value["partitionIndex"], 2);
+    assert_eq!(value["platform"], "windows");
     assert!(value.get("osdataEmpty").is_none());
     let restored: EmulationInstallDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, install);
@@ -107,6 +113,42 @@ fn install_dto_omits_unknown_osdata_emptiness() {
     })
     .unwrap();
     assert_eq!(value["osdataEmpty"], false);
+}
+
+#[test]
+fn linux_install_serializes_linux_fields_and_omits_windows_ones() {
+    use super::{EmulationInstallDto, EmulationInstallPlatformDto};
+
+    let install = EmulationInstallDto {
+        partition_index: 5,
+        platform: EmulationInstallPlatformDto::Linux,
+        osdata_present: false,
+        sam_present: false,
+        utilman_bypass_available: false,
+        osdata_empty: None,
+        os_release_pretty_name: Some("CentOS Linux 7 (Core)".to_string()),
+        kernel_present: Some(true),
+        fstab_present: Some(true),
+        boot_risk_notes: vec!["btrfs-root".to_string()],
+    };
+    let value = serde_json::to_value(&install).unwrap();
+    assert_eq!(value["platform"], "linux");
+    assert_eq!(value["osReleasePrettyName"], "CentOS Linux 7 (Core)");
+    assert_eq!(value["kernelPresent"], true);
+    assert_eq!(value["fstabPresent"], true);
+    assert_eq!(value["bootRiskNotes"][0], "btrfs-root");
+    let restored: EmulationInstallDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, install);
+
+    // Payloads from before the platform field existed keep parsing.
+    let legacy = serde_json::json!({
+        "partitionIndex": 2,
+        "osdataPresent": true,
+        "samPresent": true,
+        "utilmanBypassAvailable": false
+    });
+    let restored: EmulationInstallDto = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.platform, EmulationInstallPlatformDto::Windows);
 }
 
 #[test]

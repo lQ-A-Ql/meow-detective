@@ -539,6 +539,11 @@
       "osdataPresent": "OSDATA present",
       "osdataAbsent": "No OSDATA",
       "cleanupOsdata": "Remove OSDATA before boot (overlay only)",
+      "linuxInstall": "Linux",
+      "noKernel": "No kernel",
+      "noFstab": "No fstab",
+      "btrfsRoot": "btrfs root",
+      "linuxBypassHint": "Linux logon bypass: press 'e' in the GRUB menu, append init=/bin/bash (or systemd.unit=rescue.target) to the linux line and boot with Ctrl-X for a root shell; run 'mount -o remount,rw /' then 'passwd'. All writes stay in the COW overlay.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
       "bypassUnavailable": "Bypass unavailable"

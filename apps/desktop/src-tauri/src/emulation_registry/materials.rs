@@ -107,14 +107,16 @@ pub(super) fn prepare_machine_materials(
     workspace: &SessionWorkspace,
     identity: &ParentIdentity,
     firmware: VmwareFirmware,
+    guest_os: &str,
+    disk_adapter: VmdkAdapter,
     ids: ProvenanceIds<'_>,
     recovery_media: Option<&RecoveryMedia>,
     options: VmOptions,
     maintenance: Option<&MaintenancePayload>,
 ) -> Result<(), EmulationRegistryError> {
-    // Windows and the user-selected PE must not depend on an optional LSI
-    // Logic driver; the inbox IDE path keeps both boot routes enumerable.
-    let disk_adapter = VmdkAdapter::Ide;
+    // Windows and the user-selected PE boot from the inbox IDE path; Linux
+    // guests get LsiLogic (the driver ships in the kernel and mainstream
+    // initramfs images). The caller picks the adapter per platform.
     let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", disk_adapter)?;
     let rendered = descriptor.render();
     if VmdkDescriptor::parse(&rendered)? != descriptor {
@@ -134,6 +136,7 @@ pub(super) fn prepare_machine_materials(
         .write_vmdk(&rendered)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     let mut vmx = VmxConfig::new("disk.vmdk", firmware)?
+        .with_guest_os(guest_os)?
         .with_disk_adapter(disk_adapter)
         .with_options(options)?;
     if let Some(media) = recovery_media {

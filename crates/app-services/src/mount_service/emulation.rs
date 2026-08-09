@@ -35,9 +35,12 @@ pub fn prepare_emulation_source(
     })
 }
 
-/// Read-only pre-flight: locates the Windows installations, their OSDATA/SAM
-/// hives, and utilman bypass feasibility from the import-built file catalog,
-/// with an NTFS directory-index fallback when the catalog cannot answer.
+/// Read-only pre-flight: locates the operating system installations and
+/// their bypass feasibility. The probe branches on the data source platform
+/// recorded at import: Windows installs are located from their registry
+/// hives (OSDATA/SAM/utilman), Linux installs from `/etc/os-release`. An
+/// `unknown` platform is probed for Windows first, then Linux — the
+/// persisted platform is never rewritten.
 pub fn emulation_preflight(
     case_conn: &Connection,
     case_root: &std::path::Path,
@@ -48,7 +51,30 @@ pub fn emulation_preflight(
     let source =
         source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, data_source_id)
             .map_err(preflight_source_error)?;
+    let platform = DataSourceRepo::new(case_conn)
+        .find_storage(data_source_id)?
+        .map(|storage| storage.platform)
+        .unwrap_or_default();
     let repo = FileRepo::new(&source.connection);
+    match platform.as_str() {
+        "linux" => linux_preflight(case_conn, &source, &repo, data_source_id),
+        "windows" => windows_preflight(case_conn, &source, &repo, data_source_id),
+        _ => {
+            let mut dto = windows_preflight(case_conn, &source, &repo, data_source_id)?;
+            if dto.installs.is_empty() {
+                dto = linux_preflight(case_conn, &source, &repo, data_source_id)?;
+            }
+            Ok(dto)
+        }
+    }
+}
+
+fn windows_preflight(
+    case_conn: &Connection,
+    source: &crate::source_db::ReadySourceConnection,
+    repo: &FileRepo<'_>,
+    data_source_id: &DataSourceId,
+) -> Result<EmulationPreflightDto, MountServiceError> {
     let mut installs = Vec::new();
     for partition_index in 0..MAX_PREFLIGHT_PARTITIONS {
         // Partition indices are not guaranteed dense: an import may skip
@@ -60,7 +86,7 @@ pub fn emulation_preflight(
             continue;
         }
         if !path_present(
-            &repo,
+            repo,
             data_source_id,
             partition_index,
             "Windows/System32/config/SYSTEM",
@@ -68,33 +94,38 @@ pub fn emulation_preflight(
             continue;
         }
         let utilman = path_present(
-            &repo,
+            repo,
             data_source_id,
             partition_index,
             "Windows/System32/utilman.exe",
         )?;
         let cmd = path_present(
-            &repo,
+            repo,
             data_source_id,
             partition_index,
             "Windows/System32/cmd.exe",
         )?;
         installs.push(EmulationInstallDto {
             partition_index: partition_index as u32,
+            platform: transport::dto::EmulationInstallPlatformDto::Windows,
             osdata_present: path_present(
-                &repo,
+                repo,
                 data_source_id,
                 partition_index,
                 "Windows/System32/config/OSDATA",
             )?,
             sam_present: path_present(
-                &repo,
+                repo,
                 data_source_id,
                 partition_index,
                 "Windows/System32/config/SAM",
             )?,
             utilman_bypass_available: utilman && cmd,
             osdata_empty: None,
+            os_release_pretty_name: None,
+            kernel_present: None,
+            fstab_present: None,
+            boot_risk_notes: Vec::new(),
         });
     }
     let partition_count =
@@ -106,7 +137,7 @@ pub fn emulation_preflight(
             "emulation preflight partition scan truncated"
         );
     }
-    enrich_installs_from_fs(case_conn, data_source_id, &source, &mut installs);
+    enrich_installs_from_fs(case_conn, data_source_id, source, &mut installs);
     let recommended_boot_route = if installs.iter().any(|install| install.osdata_present) {
         EmulationBootRouteDto::RecoveryMedia
     } else {
@@ -116,6 +147,44 @@ pub fn emulation_preflight(
         data_source_id: data_source_id.0.clone(),
         installs,
         recommended_boot_route,
+        maintenance_tool_available: false,
+    })
+}
+
+/// Linux pre-flight: catalog detection plus a filesystem enrichment that
+/// reads the distro identity and boot prerequisites. Direct boot is always
+/// the recommended route — no OSDATA-style blocker exists and the
+/// maintenance CD is a Windows PE concept.
+fn linux_preflight(
+    case_conn: &Connection,
+    source: &crate::source_db::ReadySourceConnection,
+    repo: &FileRepo<'_>,
+    data_source_id: &DataSourceId,
+) -> Result<EmulationPreflightDto, MountServiceError> {
+    let mut installs = super::emulation_linux::linux_installs_from_catalog(repo, data_source_id)?;
+    let partitions = PartitionRepo::new(&source.connection);
+    let ds_repo = DataSourceRepo::new(case_conn);
+    match ds_repo
+        .source_path(data_source_id)
+        .and_then(|path| ds_repo.source_kind(data_source_id).map(|kind| (path, kind)))
+    {
+        Ok((path, kind)) => {
+            super::emulation_linux::enrich_linux_installs_from_fs(
+                std::path::Path::new(&path),
+                &kind,
+                &partitions,
+                data_source_id,
+                &mut installs,
+            );
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "linux preflight: source metadata unavailable");
+        }
+    }
+    Ok(EmulationPreflightDto {
+        data_source_id: data_source_id.0.clone(),
+        installs,
+        recommended_boot_route: EmulationBootRouteDto::DirectSystem,
         maintenance_tool_available: false,
     })
 }
@@ -181,9 +250,9 @@ fn enrich_installs_from_fs(
     }
 }
 
-struct EvidenceContext {
-    source_path: std::path::PathBuf,
-    kind: domain::DataSourceKind,
+pub(crate) struct EvidenceContext {
+    pub(crate) source_path: std::path::PathBuf,
+    pub(crate) kind: domain::DataSourceKind,
 }
 
 fn repo_context(source_path: &str, source_kind: &domain::DataSourceKind) -> EvidenceContext {
