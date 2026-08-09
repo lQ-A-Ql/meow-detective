@@ -160,9 +160,11 @@ impl EmulationRegistry {
         let materials = prepare_machine_materials(
             &workspace,
             &identity,
-            firmware,
-            &guest_os,
-            disk_adapter,
+            materials::MachineSpec {
+                firmware,
+                guest_os: &guest_os,
+                disk_adapter,
+            },
             ProvenanceIds {
                 session_id: &session_id,
                 case_id: &case_id.0,

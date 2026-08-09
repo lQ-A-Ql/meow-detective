@@ -263,7 +263,7 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
           ))}
         </fieldset>
 
-        {model.preflight && model.preflight.installs.some((install) => install.samPresent) ? (
+        {model.preflight && model.preflight.installs.some((install) => install.samPresent || install.platform === 'linux') ? (
           <fieldset className="space-y-2 border-b border-forensics-border py-3">
             <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.title')}</legend>
             <Select
@@ -276,15 +276,37 @@ function LaunchPanel({ model }: EmulationWorkspaceProps) {
               <SelectContent>
                 <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
                 {model.preflight.installs
-                  .filter((install) => install.samPresent)
+                  .filter((install) => install.samPresent || install.platform === 'linux')
                   .map((install) => (
                     <SelectItem key={install.partitionIndex} value={String(install.partitionIndex)}>
                       [P{install.partitionIndex}]
+                      {install.platform === 'linux' ? ` · ${t('emulationPage.preflight.linuxInstall')}` : ''}
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
-            {model.bypassPartition !== undefined ? (
+            {model.bypassPartition !== undefined && model.bypassIsLinux ? (
+              <Select
+                value={model.linuxUsername === undefined ? 'none' : model.linuxUsername}
+                onValueChange={(value) => model.selectLinuxUsername(value === 'none' ? undefined : value)}
+                disabled={model.linuxAccountsLoading}
+              >
+                <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
+                  {model.linuxAccounts.map((account) => (
+                    <SelectItem key={account.username} value={account.username}>
+                      {account.username}
+                      {account.locked ? ` · ${t('emulationPage.bypass.disabled')}` : ''}
+                      {account.hasPassword ? '' : ` · ${t('emulationPage.bypass.noPassword')}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+            {model.bypassPartition !== undefined && !model.bypassIsLinux ? (
               <>
                 <Select
                   value={model.bypassRid === undefined ? 'none' : String(model.bypassRid)}

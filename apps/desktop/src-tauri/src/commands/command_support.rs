@@ -19,6 +19,7 @@ pub(crate) enum EmulationAuditEvent {
     Release,
     Bypass,
     OsdataCleanup,
+    LinuxBypass,
 }
 
 impl EmulationAuditEvent {
@@ -29,6 +30,7 @@ impl EmulationAuditEvent {
             Self::Release => AuditAction::EmulationRelease,
             Self::Bypass => AuditAction::EmulationBypass,
             Self::OsdataCleanup => AuditAction::EmulationOsdataCleanup,
+            Self::LinuxBypass => AuditAction::EmulationLinuxBypass,
         }
     }
 }

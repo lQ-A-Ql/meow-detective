@@ -95,3 +95,24 @@ export interface EmulationOsdataCleanupResult {
   state: EmulationOsdataCleanupState;
   editsApplied: number;
 }
+
+export interface EmulationLinuxAccount {
+  username: string;
+  hasPassword: boolean;
+  locked: boolean;
+}
+
+export interface EmulationLinuxBypassRequest {
+  sessionId: string;
+  partitionIndex: number;
+  username: string;
+}
+
+export interface EmulationLinuxBypassResult {
+  sessionId: string;
+  dataSourceId: string;
+  partitionIndex: number;
+  username: string;
+  passwordCleared: boolean;
+  alreadyPasswordless: boolean;
+}

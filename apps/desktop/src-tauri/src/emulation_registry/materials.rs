@@ -103,12 +103,17 @@ fn resolve_maintenance_tool() -> Option<PathBuf> {
     dev.is_file().then_some(dev)
 }
 
+/// The guest identity the VMX/VMDK pair is rendered for.
+pub(super) struct MachineSpec<'a> {
+    pub firmware: VmwareFirmware,
+    pub guest_os: &'a str,
+    pub disk_adapter: VmdkAdapter,
+}
+
 pub(super) fn prepare_machine_materials(
     workspace: &SessionWorkspace,
     identity: &ParentIdentity,
-    firmware: VmwareFirmware,
-    guest_os: &str,
-    disk_adapter: VmdkAdapter,
+    spec: MachineSpec<'_>,
     ids: ProvenanceIds<'_>,
     recovery_media: Option<&RecoveryMedia>,
     options: VmOptions,
@@ -117,6 +122,7 @@ pub(super) fn prepare_machine_materials(
     // Windows and the user-selected PE boot from the inbox IDE path; Linux
     // guests get LsiLogic (the driver ships in the kernel and mainstream
     // initramfs images). The caller picks the adapter per platform.
+    let disk_adapter = spec.disk_adapter;
     let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", disk_adapter)?;
     let rendered = descriptor.render();
     if VmdkDescriptor::parse(&rendered)? != descriptor {
@@ -135,8 +141,8 @@ pub(super) fn prepare_machine_materials(
     workspace
         .write_vmdk(&rendered)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    let mut vmx = VmxConfig::new("disk.vmdk", firmware)?
-        .with_guest_os(guest_os)?
+    let mut vmx = VmxConfig::new("disk.vmdk", spec.firmware)?
+        .with_guest_os(spec.guest_os)?
         .with_disk_adapter(disk_adapter)
         .with_options(options)?;
     if let Some(media) = recovery_media {
@@ -176,7 +182,7 @@ pub(super) fn prepare_machine_materials(
         .write_provenance(&EmulationProvenance::new(
             ids,
             identity,
-            firmware,
+            spec.firmware,
             options,
             maintenance.is_some(),
             recovery_media.map(|media| RecoveryMediaProvenance {

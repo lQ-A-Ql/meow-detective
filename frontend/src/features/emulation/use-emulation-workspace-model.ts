@@ -6,8 +6,10 @@ import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
   applyEmulationBypass,
+  applyEmulationLinuxBypass,
   cleanupEmulationOsdata,
   getEmulationBypassAccounts,
+  getEmulationLinuxAccounts,
   getEmulationPreflight,
   launchEmulation,
   listEmulationSessions,
@@ -16,7 +18,7 @@ import {
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
 import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
-import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationNetworkMode, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
+import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationLinuxAccount, EmulationNetworkMode, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([
   'descriptorReady',
@@ -63,12 +65,17 @@ export interface EmulationWorkspaceModel {
   toggleCleanupOsdata: () => void;
   bypassPartition?: number;
   selectBypassPartition: (partition?: number) => void;
+  bypassIsLinux: boolean;
   bypassAccounts: EmulationBypassAccount[];
   bypassAccountsLoading: boolean;
   bypassRid?: number;
   selectBypassRid: (rid?: number) => void;
   bypassAction: EmulationBypassAction;
   selectBypassAction: (action: EmulationBypassAction) => void;
+  linuxAccounts: EmulationLinuxAccount[];
+  linuxAccountsLoading: boolean;
+  linuxUsername?: string;
+  selectLinuxUsername: (username?: string) => void;
   sessions: EmulationSessionView[];
   metrics: {
     sourceCount: number;
@@ -124,6 +131,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [bypassPartition, setBypassPartition] = useState<number | undefined>(undefined);
   const [bypassRid, setBypassRid] = useState<number | undefined>(undefined);
   const [bypassAction, setBypassAction] = useState<EmulationBypassAction>('clearPassword');
+  const [linuxUsername, setLinuxUsername] = useState<string | undefined>(undefined);
   const [cleanupOsdata, setCleanupOsdata] = useState(true);
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
@@ -149,21 +157,32 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     enabled: Boolean(selectedSourceId),
     retry: false,
   });
+  const bypassIsLinux = preflightQuery.data?.installs.find(
+    (install) => install.partitionIndex === bypassPartition,
+  )?.platform === 'linux';
   const bypassAccountsQuery = useQuery({
     queryKey: ['emulation', 'bypass-accounts', selectedSourceId, bypassPartition],
     queryFn: () => getEmulationBypassAccounts(selectedSourceId, bypassPartition!),
-    enabled: Boolean(selectedSourceId) && bypassPartition !== undefined,
+    enabled: Boolean(selectedSourceId) && bypassPartition !== undefined && !bypassIsLinux,
+    retry: false,
+  });
+  const linuxAccountsQuery = useQuery({
+    queryKey: ['emulation', 'linux-accounts', selectedSourceId, bypassPartition],
+    queryFn: () => getEmulationLinuxAccounts(selectedSourceId, bypassPartition!),
+    enabled: Boolean(selectedSourceId) && bypassPartition !== undefined && bypassIsLinux,
     retry: false,
   });
 
   useEffect(() => {
     setBypassPartition(undefined);
     setBypassRid(undefined);
+    setLinuxUsername(undefined);
     setCleanupOsdata(true);
   }, [selectedSourceId]);
 
   useEffect(() => {
     setBypassRid(undefined);
+    setLinuxUsername(undefined);
   }, [bypassPartition]);
 
   const invalidateSessions = useCallback(() => {
@@ -198,7 +217,13 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
             }
           }
         }
-        if (bypassRid !== undefined && bypassPartition !== undefined) {
+        if (bypassIsLinux && bypassPartition !== undefined && linuxUsername) {
+          await applyEmulationLinuxBypass({
+            sessionId: prepared.sessionId,
+            partitionIndex: bypassPartition,
+            username: linuxUsername,
+          });
+        } else if (bypassRid !== undefined && bypassPartition !== undefined) {
           await applyEmulationBypass({
             sessionId: prepared.sessionId,
             partitionIndex: bypassPartition,
@@ -305,12 +330,17 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     toggleCleanupOsdata,
     bypassPartition,
     selectBypassPartition: setBypassPartition,
+    bypassIsLinux,
     bypassAccounts: bypassAccountsQuery.data ?? [],
     bypassAccountsLoading: bypassAccountsQuery.isFetching,
     bypassRid,
     selectBypassRid: setBypassRid,
     bypassAction,
     selectBypassAction: setBypassAction,
+    linuxAccounts: linuxAccountsQuery.data ?? [],
+    linuxAccountsLoading: linuxAccountsQuery.isFetching,
+    linuxUsername,
+    selectLinuxUsername: setLinuxUsername,
     sessions,
     metrics: {
       sourceCount: sourceOptions.length,

@@ -125,6 +125,34 @@ impl EmulationRegistry {
         Ok(result)
     }
 
+    pub fn apply_linux_bypass(
+        &self,
+        case: &BypassCaseRef<'_>,
+        session_id: &str,
+        partition_index: u32,
+        username: &str,
+    ) -> Result<transport::dto::EmulationLinuxBypassResultDto, EmulationRegistryError> {
+        let session = self.edit_session_entry(
+            session_id,
+            "bypass edits are only allowed before the guest is launched",
+        )?;
+        let _op_guard = session.op_lock.lock().map_err(|_| Self::lock_error())?;
+        self.require_state(session_id, EmulationState::DescriptorReady)?;
+        let mut result = app_services::emulation_linux_bypass::apply_linux_bypass(
+            &session.disk,
+            &app_services::emulation_bypass::BypassCaseContext {
+                case_conn: case.case_conn,
+                case_root: case.case_root,
+                case_id: case.case_id,
+                data_source_id: &DataSourceId(session.data_source_id),
+            },
+            partition_index,
+            username,
+        )?;
+        result.session_id = session_id.to_string();
+        Ok(result)
+    }
+
     /// Resolve a session in `DescriptorReady` for a host-side edit.
     fn edit_session_entry(
         &self,

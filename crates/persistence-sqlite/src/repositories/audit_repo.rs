@@ -44,6 +44,7 @@ pub enum AuditAction {
     EmulationRelease,
     EmulationBypass,
     EmulationOsdataCleanup,
+    EmulationLinuxBypass,
     SearchExecute,
     ReportGenerate,
     ReportExport,
@@ -84,6 +85,7 @@ impl AuditAction {
             Self::EmulationRelease => "emulation.release",
             Self::EmulationBypass => "emulation.bypass",
             Self::EmulationOsdataCleanup => "emulation.osdata_cleanup",
+            Self::EmulationLinuxBypass => "emulation.linux_bypass",
             Self::SearchExecute => "search.execute",
             Self::ReportGenerate => "report.generate",
             Self::ReportExport => "report.export",
@@ -118,7 +120,8 @@ impl AuditAction {
             | Self::EmulationLaunch
             | Self::EmulationRelease
             | Self::EmulationBypass
-            | Self::EmulationOsdataCleanup => "emulation",
+            | Self::EmulationOsdataCleanup
+            | Self::EmulationLinuxBypass => "emulation",
             Self::SearchExecute => "search",
             Self::ReportGenerate | Self::ReportExport => "report",
             Self::ArtifactView => "artifact",

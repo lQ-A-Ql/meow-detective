@@ -242,6 +242,33 @@ pub struct EmulationOsdataCleanupDto {
     pub edits_applied: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationLinuxAccountDto {
+    pub username: String,
+    pub has_password: bool,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationLinuxBypassRequestDto {
+    pub session_id: String,
+    pub partition_index: u32,
+    pub username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationLinuxBypassResultDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    pub partition_index: u32,
+    pub username: String,
+    pub password_cleared: bool,
+    pub already_passwordless: bool,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/emulation.rs"]
 mod tests;

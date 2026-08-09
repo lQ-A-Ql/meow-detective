@@ -38,6 +38,9 @@ fn write_superblock(image: &mut [u8], total_blocks: u32) {
 const OS_RELEASE: &[u8] =
     b"NAME=\"CentOS Linux\"\nID=\"centos\"\nPRETTY_NAME=\"CentOS Linux 7 (Core)\"\n";
 
+const SHADOW: &[u8] =
+    b"root:$6$saltsalt$abc123def456:19000:0:99999:7:::\nuser::19001:0:99999:7:::\n";
+
 /// Builds a minimal ext4 image shaped like a Linux system root:
 /// `/etc/os-release`, `/etc/fstab`, `/boot/vmlinuz-5.14.0` and `/sbin/init`.
 pub fn linux_root_ext4_image() -> Vec<u8> {
@@ -54,6 +57,7 @@ pub fn linux_root_ext4_image() -> Vec<u8> {
     write_extent_inode(&mut image, 7, 0x81a4, 4, 8); // vmlinuz-5.14.0
     write_extent_inode(&mut image, 8, 0x41ed, BLOCK_SIZE as u64, 9); // /sbin
     write_extent_inode(&mut image, 9, 0x81a4, 4, 10); // init
+    write_extent_inode(&mut image, 10, 0x81a4, SHADOW.len() as u64, 11); // /etc/shadow
 
     let root = &mut image[3 * BLOCK_SIZE..4 * BLOCK_SIZE];
     write_directory_entry(root, 0, 2, 12, 2, ".");
@@ -66,9 +70,11 @@ pub fn linux_root_ext4_image() -> Vec<u8> {
     write_directory_entry(etc, 0, 3, 12, 2, ".");
     write_directory_entry(etc, 12, 2, 12, 2, "..");
     write_directory_entry(etc, 24, 4, 20, 1, "os-release");
-    write_directory_entry(etc, 44, 5, (BLOCK_SIZE - 44) as u16, 1, "fstab");
+    write_directory_entry(etc, 44, 5, 16, 1, "fstab");
+    write_directory_entry(etc, 60, 10, (BLOCK_SIZE - 60) as u16, 1, "shadow");
     image[5 * BLOCK_SIZE..5 * BLOCK_SIZE + OS_RELEASE.len()].copy_from_slice(OS_RELEASE);
     image[6 * BLOCK_SIZE..6 * BLOCK_SIZE + 12].copy_from_slice(b"# fake fstab");
+    image[11 * BLOCK_SIZE..11 * BLOCK_SIZE + SHADOW.len()].copy_from_slice(SHADOW);
 
     let boot = &mut image[7 * BLOCK_SIZE..8 * BLOCK_SIZE];
     write_directory_entry(boot, 0, 6, 12, 2, ".");
@@ -90,6 +96,7 @@ fn write_extent_inode(image: &mut [u8], inode: usize, mode: u16, size: u64, bloc
     bytes[0x00..0x02].copy_from_slice(&mode.to_le_bytes());
     bytes[0x04..0x08].copy_from_slice(&(size as u32).to_le_bytes());
     bytes[0x1c..0x20].copy_from_slice(&8u32.to_le_bytes());
+    bytes[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
     bytes[0x28..0x2a].copy_from_slice(&0xf30au16.to_le_bytes());
     bytes[0x2a..0x2c].copy_from_slice(&1u16.to_le_bytes());
     bytes[0x2c..0x2e].copy_from_slice(&4u16.to_le_bytes());

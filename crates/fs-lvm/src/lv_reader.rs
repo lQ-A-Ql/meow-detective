@@ -89,6 +89,15 @@ impl LvReader {
         }
     }
 
+    /// The resolved logical→physical extent map backing this volume.
+    /// Physical offsets are absolute in the coordinate space of the device
+    /// readers the pool was discovered from (the disk image for the usual
+    /// `LvmPool::discover` call sites). Read-only exposure; writes stay the
+    /// caller's responsibility.
+    pub fn extent_map(&self) -> &[LvExtent] {
+        &self.extent_map
+    }
+
     /// Find the extent that contains the given logical byte offset.
     /// Returns `(extent_index, offset_within_extent)`.
     fn locate(&self, logical_offset: u64) -> Option<(usize, u64)> {

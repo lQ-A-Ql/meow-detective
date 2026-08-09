@@ -4,6 +4,9 @@ import type {
   EmulationBypassAccount,
   EmulationBypassApplyRequest,
   EmulationBypassResult,
+  EmulationLinuxAccount,
+  EmulationLinuxBypassRequest,
+  EmulationLinuxBypassResult,
   EmulationOsdataCleanupRequest,
   EmulationOsdataCleanupResult,
   EmulationPreflight,
@@ -41,6 +44,24 @@ export async function cleanupEmulationOsdata(
   request: EmulationOsdataCleanupRequest,
 ): Promise<EmulationOsdataCleanupResult> {
   return apiClient.request<EmulationOsdataCleanupResult>(COMMANDS.emulation.CLEANUP_OSDATA, {
+    request,
+  });
+}
+
+export async function getEmulationLinuxAccounts(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<EmulationLinuxAccount[]> {
+  return apiClient.request<EmulationLinuxAccount[]>(COMMANDS.emulation.LINUX_ACCOUNTS, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function applyEmulationLinuxBypass(
+  request: EmulationLinuxBypassRequest,
+): Promise<EmulationLinuxBypassResult> {
+  return apiClient.request<EmulationLinuxBypassResult>(COMMANDS.emulation.APPLY_LINUX_BYPASS, {
     request,
   });
 }

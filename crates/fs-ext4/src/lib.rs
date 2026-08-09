@@ -12,8 +12,10 @@ mod format;
 pub mod journal;
 mod reader;
 mod superblock;
+mod write_map;
 
 pub use reader::Ext4Reader;
+pub use write_map::Ext4FileExtent;
 
 #[cfg(test)]
 #[path = "../tests/unit/ext4.rs"]
