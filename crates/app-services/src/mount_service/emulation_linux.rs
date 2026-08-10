@@ -77,7 +77,10 @@ fn path_present(
 }
 
 /// Ground-truth enrichment from the filesystem. Non-fatal per install: a
-/// partition that cannot be opened keeps its catalog-only verdict.
+/// partition that cannot be opened keeps its catalog-only verdict. A
+/// separate /boot partition is the standard server layout, so a root
+/// without its own kernel image is only flagged when no other partition of
+/// the image carries one either.
 pub(crate) fn enrich_linux_installs_from_fs(
     source_path: &std::path::Path,
     source_kind: &domain::DataSourceKind,
@@ -110,6 +113,45 @@ pub(crate) fn enrich_linux_installs_from_fs(
             }
         }
     }
+    if installs
+        .iter()
+        .all(|install| install.kernel_present != Some(false))
+    {
+        return;
+    }
+    // Second pass: a kernel on ANY Linux partition satisfies the boot
+    // requirement (separate /boot partition layout).
+    let all_partitions = partitions
+        .find_by_data_source(&data_source_id.0)
+        .unwrap_or_default();
+    let kernel_elsewhere = all_partitions.iter().any(|record| {
+        if installs
+            .iter()
+            .any(|install| install.partition_index == record.partition_index)
+        {
+            return false;
+        }
+        open_linux_fs(&context, record)
+            .map(|fs| {
+                // A dedicated boot partition carries the kernels at its own
+                // root; a shared root carries them under /boot.
+                let at_boot = fs.list_children("boot").unwrap_or_default();
+                let at_root = fs.list_children("").unwrap_or_default();
+                at_boot.iter().chain(at_root.iter()).any(|node| {
+                    !node.is_dir
+                        && (node.name.starts_with("vmlinuz") || node.name.starts_with("bzImage"))
+                })
+            })
+            .unwrap_or(false)
+    });
+    if kernel_elsewhere {
+        for install in installs.iter_mut() {
+            if install.kernel_present == Some(false) {
+                install.kernel_present = Some(true);
+                install.boot_risk_notes.retain(|note| note != "no-kernel");
+            }
+        }
+    }
 }
 
 pub(crate) struct LinuxFsProbe {
@@ -138,8 +180,11 @@ pub(crate) fn probe_linux_fs_root(
     fs_label: &str,
 ) -> Option<LinuxFsProbe> {
     let etc = fs.list_children("etc").ok()?;
+    // /sbin/init is a symlink chain on usrmerge/systemd layouts; check the
+    // physical target too in case the reader does not follow symlinks.
     let has_init = has_file(fs, "sbin/init")
         || has_file(fs, "lib/systemd/systemd")
+        || has_file(fs, "usr/lib/systemd/systemd")
         || has_file(fs, "bin/init");
     let pretty_name = read_os_release_pretty_name(fs);
     let kernel_present = fs

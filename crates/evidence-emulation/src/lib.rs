@@ -23,6 +23,6 @@ pub use disk::{CowDisk, CowDiskConfig};
 pub use error::EmulationError;
 pub use identity::ParentIdentity;
 pub use iso9660::{build_iso, IsoFile};
-pub use vm_options::{VmNetworkMode, VmOptions};
+pub use vm_options::{VmNetworkMode, VmOptions, GUEST_OS_WHITELIST};
 pub use vmdk::{VmdkAdapter, VmdkDescriptor};
 pub use vmx::{VmwareFirmware, VmxConfig};

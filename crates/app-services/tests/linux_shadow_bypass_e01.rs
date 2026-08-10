@@ -67,7 +67,7 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
 
     let (case_id, case_root) = (active.meta.id.clone(), active.case_root.clone());
     // Find the first ext4 partition (direct or LVM LV) from the source DB.
-    let partition_index = active
+    let ext4_partition = active
         .with_conn(|case_conn| {
             let source_conn = app_services::source_db::open_ready_source_read_only_by_id(
                 case_conn,
@@ -78,17 +78,58 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             let partitions = PartitionRepo::new(&source_conn.connection)
                 .find_by_data_source(&data_source_id.0)?;
-            let record = partitions
+            for record in &partitions {
+                eprintln!(
+                    "partition P{} fs={:?} lv={:?}",
+                    record.partition_index, record.filesystem, record.lvm_lv_name
+                );
+            }
+            Ok(partitions
                 .iter()
                 .find(|record| record.filesystem.as_deref() == Some("Ext4"))
-                .expect("the Linux image must expose an ext4 partition");
-            eprintln!(
-                "target partition P{} fs={:?} lv={:?}",
-                record.partition_index, record.filesystem, record.lvm_lv_name
-            );
-            Ok(record.partition_index)
+                .map(|record| record.partition_index))
         })
         .unwrap();
+
+    let Some(partition_index) = ext4_partition else {
+        // No ext4 partition (e.g. an XFS-only image): the bypass must refuse
+        // with a typed Unsupported error rather than misbehaving.
+        let first = active
+            .with_conn(|case_conn| {
+                let source_conn = app_services::source_db::open_ready_source_read_only_by_id(
+                    case_conn,
+                    &case_root,
+                    &case_id,
+                    &data_source_id,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+                let partitions = PartitionRepo::new(&source_conn.connection)
+                    .find_by_data_source(&data_source_id.0)?;
+                Ok(partitions
+                    .first()
+                    .map(|record| record.partition_index)
+                    .expect("the image has at least one partition"))
+            })
+            .unwrap();
+        let outcome = active
+            .with_conn(|case_conn| {
+                Ok(app_services::emulation_linux_bypass::list_linux_accounts(
+                    &app_services::emulation_bypass::BypassCaseContext {
+                        case_conn,
+                        case_root: &case_root,
+                        case_id: &case_id,
+                        data_source_id: &data_source_id,
+                    },
+                    first,
+                )
+                .map_err(|error| error.to_string()))
+            })
+            .expect("query the non-ext4 partition");
+        let error = outcome.expect_err("non-ext4 partitions must be refused");
+        eprintln!("non-ext4 refusal: {error}");
+        assert!(error.contains("not ext4") || error.contains("Unsupported"));
+        return;
+    };
 
     let accounts = active
         .with_conn(|case_conn| {
