@@ -124,4 +124,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_032_deleted_recovery_hashes",
         include_str!("scripts/source_032_deleted_recovery_hashes.sql"),
     ),
+    (
+        "source_033_timeline_case_id_index",
+        include_str!("scripts/source_033_timeline_case_id_index.sql"),
+    ),
 ];

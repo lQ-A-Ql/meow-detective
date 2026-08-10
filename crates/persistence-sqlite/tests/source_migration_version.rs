@@ -59,7 +59,7 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_030_analysis_file_feed_index"
     ));
     assert!(runner::source_version_is_at_least(
-        "source_032_deleted_recovery_hashes",
+        "source_033_timeline_case_id_index",
         "source_031_mount_directory_index"
     ));
 }
@@ -170,7 +170,7 @@ fn source_024_through_032_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 9);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 10);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(

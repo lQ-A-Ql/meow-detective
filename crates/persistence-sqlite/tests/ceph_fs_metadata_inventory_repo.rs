@@ -386,7 +386,7 @@ fn source_migrations_are_current_and_reapplication_is_idempotent() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_032_deleted_recovery_hashes"
+        "source_033_timeline_case_id_index"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     let index_count: u64 = conn

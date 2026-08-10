@@ -253,6 +253,8 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
                 ensure_analysis_file_feed_index(conn, sql)
             } else if *name == "source_031_mount_directory_index" {
                 super::mount_directory_index::ensure(conn, sql)
+            } else if *name == "source_033_timeline_case_id_index" {
+                ensure_timeline_case_id_index(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -392,6 +394,25 @@ fn source_analysis_file_feed_index_sql() -> &'static str {
         .iter()
         .find_map(|(name, sql)| (*name == "source_030_analysis_file_feed_index").then_some(*sql))
         .expect("source analysis feed migration must be registered")
+}
+
+fn ensure_timeline_case_id_index(conn: &Connection, sql: &str) -> DbResult<()> {
+    // Staging and legacy catalogs may not carry timeline_events (or its
+    // case_id column); the covering index only applies where the canonical
+    // timeline schema exists.
+    let has_case_id: bool = conn.query_row(
+        "SELECT COUNT(*) = 1
+         FROM sqlite_master, pragma_table_info('timeline_events') AS info
+         WHERE sqlite_master.type = 'table'
+           AND sqlite_master.name = 'timeline_events'
+           AND info.name = 'case_id'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_case_id {
+        conn.execute_batch(sql).map_err(DbError::from)?;
+    }
+    Ok(())
 }
 
 fn ensure_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()> {

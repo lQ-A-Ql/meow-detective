@@ -75,34 +75,54 @@ pub fn materialize_file_activity_with_identity(
         return Ok(already_projected_stats());
     }
 
-    let started = Instant::now();
-    let events_started = Instant::now();
-    let inserted_count = if file_events_done {
-        0
-    } else {
-        let inserted = replace_file_activity_events(conn, platform, cancel_token)?;
-        mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
-        inserted
-    };
-    let events_elapsed_ms = events_started.elapsed().as_millis();
-    let graph_started = Instant::now();
-    let warnings = if graph_done {
-        Vec::new()
-    } else {
-        populate_graph_non_fatal(conn, cancel_token, input_identity)?
-    };
-    let graph_elapsed_ms = graph_started.elapsed().as_millis();
-    let graph_complete = !graph_supported
-        || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
-    Ok(TimelineProjectionStats {
-        inserted_count,
-        elapsed_ms: started.elapsed().as_millis(),
-        events_elapsed_ms,
-        graph_elapsed_ms,
-        already_projected: false,
-        graph_complete,
-        warnings,
+    with_timeline_page_cache(conn, || {
+        let started = Instant::now();
+        let events_started = Instant::now();
+        let inserted_count = if file_events_done {
+            0
+        } else {
+            let inserted = replace_file_activity_events(conn, platform, cancel_token)?;
+            mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
+            inserted
+        };
+        let events_elapsed_ms = events_started.elapsed().as_millis();
+        let graph_started = Instant::now();
+        let warnings = if graph_done {
+            Vec::new()
+        } else {
+            populate_graph_non_fatal(conn, cancel_token, input_identity)?
+        };
+        let graph_elapsed_ms = graph_started.elapsed().as_millis();
+        let graph_complete = !graph_supported
+            || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
+        Ok(TimelineProjectionStats {
+            inserted_count,
+            elapsed_ms: started.elapsed().as_millis(),
+            events_elapsed_ms,
+            graph_elapsed_ms,
+            already_projected: false,
+            graph_complete,
+            warnings,
+        })
     })
+}
+
+/// Timeline materialization is dominated by random B-tree descends on
+/// multi-gigabyte sources; a large page cache cut the write-side cost by
+/// 5-8x in real-image measurements. Run the phase with a ~1 GiB cache and
+/// restore the previous setting afterwards (the value is per-connection).
+fn with_timeline_page_cache<T>(
+    conn: &Connection,
+    f: impl FnOnce() -> Result<T, TimelineServiceError>,
+) -> Result<T, TimelineServiceError> {
+    let previous: i64 = conn
+        .query_row("PRAGMA cache_size", [], |row| row.get(0))
+        .map_err(|error| TimelineServiceError::Other(format!("read cache_size: {error}")))?;
+    conn.execute_batch("PRAGMA cache_size = -1000000")
+        .map_err(|error| TimelineServiceError::Other(format!("raise cache_size: {error}")))?;
+    let result = f();
+    let _ = conn.execute_batch(&format!("PRAGMA cache_size = {previous}"));
+    result
 }
 
 fn replace_file_activity_events(

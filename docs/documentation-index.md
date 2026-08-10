@@ -41,7 +41,7 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 | Tauri commands | 132 |
 | app-services source modules | 36 |
 | SQLite repositories | 43 logical repositories |
-| SQLite migration scripts | 78 |
+| SQLite migration scripts | 79 |
 | frontend test files | 110 |
 
 | 路径 | 数量 |
