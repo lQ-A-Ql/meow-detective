@@ -12,6 +12,7 @@ mod operation;
 mod record;
 mod record_validation;
 mod recovery;
+mod state;
 mod transaction;
 mod wire;
 
@@ -25,6 +26,7 @@ pub use record::{
     LogRecordHeader, XfsLogChecksumStatus, XfsLogRecord, XfsLogRecordProvenance, XfsLogSourceSpan,
 };
 pub use recovery::{analyze_log_snapshot, XfsLogAnalysis, XfsLogParseLimits, XfsParsedLogRecord};
+pub use state::{assess_log_state, XfsLogState};
 pub use transaction::{
     XfsDeletedFileCandidate, XfsDeletionProof, XfsDeletionStatus, XfsLogTransaction,
     XfsMetadataCandidate, XfsMetadataCandidateKind, XfsRecoveryCompleteness, XfsTransactionHeader,

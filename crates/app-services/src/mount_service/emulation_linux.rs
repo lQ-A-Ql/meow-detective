@@ -292,20 +292,29 @@ fn open_linux_fs(
     record: &DataSourcePartitionRecord,
 ) -> Option<Box<dyn FileSystemReader>> {
     let fs_label = record.filesystem.as_deref()?;
+    let reader = open_linux_volume_reader(context, record)?;
+    open_fs_by_label(reader, fs_label)
+}
+
+/// The volume-level reader beneath the filesystem: a partition window for
+/// direct partitions, the LV reader for LVM logical volumes.
+fn open_linux_volume_reader(
+    context: &EvidenceContext,
+    record: &DataSourcePartitionRecord,
+) -> Option<Box<dyn EvidenceReader>> {
     let reader = open_evidence_reader(&context.source_path, &context.kind).ok()?;
     if record.lvm_lv_name.is_some() {
-        return open_lvm_lv_fs(reader, record, fs_label);
+        return open_lvm_lv_reader(reader, record);
     }
     let length = (record.length > 0).then_some(record.length);
     let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length).ok()?;
-    open_fs_by_label(Box::new(window), fs_label)
+    Some(Box::new(window))
 }
 
-fn open_lvm_lv_fs(
+fn open_lvm_lv_reader(
     reader: Box<dyn EvidenceReader>,
     record: &DataSourcePartitionRecord,
-    fs_label: &str,
-) -> Option<Box<dyn FileSystemReader>> {
+) -> Option<Box<dyn EvidenceReader>> {
     let pv_offsets: Vec<u64> = record
         .lvm_pv_offsets_json
         .as_deref()
@@ -320,7 +329,7 @@ fn open_lvm_lv_fs(
             && Some(volume.uuid.as_str()) == record.lvm_lv_uuid.as_deref()
     })?;
     let lv = pool.open_volume(lv_index).ok()?;
-    open_fs_by_label(Box::new(lv), fs_label)
+    Some(Box::new(lv))
 }
 
 fn open_fs_by_label(
@@ -338,6 +347,65 @@ fn open_fs_by_label(
             .ok()
             .map(|fs| Box::new(fs) as Box<dyn FileSystemReader>),
         _ => None,
+    }
+}
+
+/// XFS log annotation for the boot path: a volume captured with pending
+/// log transactions blocks the RHEL/CentOS GRUB builds before the kernel is
+/// even reached. Every install on the disk is annotated when ANY XFS volume
+/// is dirty — the separate-/boot layout makes a non-root XFS volume just as
+/// boot-critical. Reads stay bounded by the snapshot limit and failures are
+/// silent (no evidence, no annotation).
+pub(crate) fn annotate_xfs_log_risk(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partitions: &PartitionRepo<'_>,
+    data_source_id: &DataSourceId,
+    installs: &mut [EmulationInstallDto],
+) {
+    use fs_xfs::log::{assess_log_state, XfsLogState, XFS_LOG_MAX_SNAPSHOT_BYTES};
+
+    if installs.is_empty() {
+        return;
+    }
+    let context = EvidenceContext {
+        source_path: source_path.to_path_buf(),
+        kind: source_kind.clone(),
+    };
+    let records = partitions
+        .find_by_data_source(&data_source_id.0)
+        .unwrap_or_default();
+    let mut any_dirty = false;
+    for record in records
+        .iter()
+        .filter(|record| record.filesystem.as_deref() == Some("XFS"))
+    {
+        let Some(reader) = open_linux_volume_reader(&context, record) else {
+            continue;
+        };
+        let Ok(xfs) = fs_xfs::XfsReader::open(reader, 0) else {
+            continue;
+        };
+        let dirty = xfs
+            .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
+            .map(|snapshot| assess_log_state(&snapshot) == XfsLogState::Dirty)
+            .unwrap_or(false);
+        if dirty {
+            any_dirty = true;
+            break;
+        }
+    }
+    if !any_dirty {
+        return;
+    }
+    for install in installs.iter_mut() {
+        if !install
+            .boot_risk_notes
+            .iter()
+            .any(|note| note == "xfs-log-dirty")
+        {
+            install.boot_risk_notes.push("xfs-log-dirty".to_string());
+        }
     }
 }
 
