@@ -138,6 +138,62 @@ fn rejects_the_old_u16_feed_synthetic_header() {
 }
 
 #[test]
+fn empty_snapshot_is_rejected_before_parsing() {
+    let image = build_filesystem_image(LOG_START_FSB as u64, LOG_BLOCKS as u32);
+    let reader = open_reader(image);
+    let snapshot = XfsLogSnapshot {
+        geometry: reader.log_geometry().clone(),
+        bytes: Vec::new(),
+        complete: false,
+        byte_limit: 0,
+        source_offset: 0,
+    };
+
+    let error = analyze_log_snapshot(&snapshot, XfsLogParseLimits::default()).unwrap_err();
+
+    assert!(matches!(error, XfsLogError::InvalidGeometry(_)));
+    assert!(error.to_string().contains("empty"));
+}
+
+#[test]
+fn record_body_byte_budget_stops_collection_with_limit_issue() {
+    let operations = committed_inode_transaction(0xAABB_CCDD, 99);
+    let image = filesystem_with_record(0, 7, 32 * 1024, &operations);
+    let reader = open_reader(image);
+    let snapshot = reader
+        .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
+        .unwrap();
+    let limits = XfsLogParseLimits {
+        max_body_bytes: 1,
+        ..XfsLogParseLimits::default()
+    };
+
+    let analysis = analyze_log_snapshot(&snapshot, limits).unwrap();
+
+    assert!(analysis.records.is_empty());
+    assert!(analysis.issues.iter().any(|issue| {
+        issue.kind == XfsLogIssueKind::LimitReached && issue.message.contains("body byte limit")
+    }));
+}
+
+#[test]
+fn zero_body_byte_limit_is_rejected() {
+    let image = build_filesystem_image(LOG_START_FSB as u64, LOG_BLOCKS as u32);
+    let reader = open_reader(image);
+    let snapshot = reader
+        .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
+        .unwrap();
+    let limits = XfsLogParseLimits {
+        max_body_bytes: 0,
+        ..XfsLogParseLimits::default()
+    };
+
+    let error = analyze_log_snapshot(&snapshot, limits).unwrap_err();
+
+    assert!(matches!(error, XfsLogError::InvalidGeometry(_)));
+}
+
+#[test]
 fn bounded_snapshot_reports_a_truncated_record_without_guessing() {
     let image = filesystem_with_record(0, 3, 32 * 1024, &committed_inode_transaction(7, 42));
     let reader = open_reader(image);

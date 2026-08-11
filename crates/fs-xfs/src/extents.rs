@@ -1,11 +1,12 @@
 use crate::{
     be_u16, be_u32, be_u64, di_off, XfsExtent, XfsReader, BMA3_MAGIC, BMAP_MAGIC,
     BMBT_BLOCK_HDR_SIZE, BMBT_CRC_BLOCK_HDR_SIZE, BMBT_REC_SIZE, BMBT_SHORT_ROOT_HDR_SIZE,
-    FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL,
+    FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL, MAX_BMBT_TREE_DEPTH, MAX_BUFFERED_FILE_BYTES,
 };
 use evidence_core::filesystem::{
     fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size,
 };
+use std::collections::HashSet;
 use std::io;
 
 impl XfsReader {
@@ -35,6 +36,11 @@ impl XfsReader {
     }
 
     fn read_extents_data(&self, extents: &[XfsExtent], file_size: u64) -> io::Result<Vec<u8>> {
+        if file_size > MAX_BUFFERED_FILE_BYTES {
+            return Err(invalid_fs_data(format!(
+                "buffered XFS file read exceeds the {MAX_BUFFERED_FILE_BYTES} byte limit (declared {file_size} bytes)"
+            )));
+        }
         let capacity = usize::try_from(file_size)
             .map_err(|_| fs_out_of_memory("xfs file exceeds addressable memory"))?;
         let mut data = Vec::with_capacity(capacity);
@@ -68,16 +74,8 @@ impl XfsReader {
 
     pub(crate) fn collect_btree_extents(&self, inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
         let data_fork = Self::data_fork(inode)?;
-        if data_fork.len() < BMBT_SHORT_ROOT_HDR_SIZE {
-            return Ok(Vec::new());
-        }
-
         let mut extents = Vec::new();
-        if data_fork.len() >= 8 && be_u32(data_fork, 0) == BMAP_MAGIC {
-            self.walk_btree_node_extents(data_fork, true, &mut extents)?;
-        } else {
-            self.walk_bmdr_root_extents(data_fork, &mut extents)?;
-        }
+        self.walk_bmdr_root_extents(data_fork, &mut extents)?;
         Ok(extents)
     }
 
@@ -121,7 +119,13 @@ impl XfsReader {
             }
             return Ok(());
         }
+        if level > MAX_BMBT_TREE_DEPTH {
+            return Err(invalid_fs_data(format!(
+                "bmbt root level {level} exceeds the supported depth {MAX_BMBT_TREE_DEPTH}"
+            )));
+        }
 
+        let mut visited = HashSet::new();
         let maxrecs = Self::bmdr_maxrecs(node.len(), false);
         let pointers_start = BMBT_SHORT_ROOT_HDR_SIZE + maxrecs * 8;
         for index in 0..numrecs {
@@ -131,7 +135,13 @@ impl XfsReader {
             }
             let child_ptr = be_u64(node, offset);
             let child_block = self.read_block(child_ptr)?;
-            self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
+            self.walk_btree_child_extents(
+                child_ptr,
+                &child_block,
+                level - 1,
+                extents,
+                &mut visited,
+            )?;
         }
         Ok(())
     }
@@ -140,9 +150,21 @@ impl XfsReader {
         &self,
         fsb: u64,
         node: &[u8],
+        expected_level: u16,
         extents: &mut Vec<XfsExtent>,
+        visited: &mut HashSet<u64>,
     ) -> io::Result<()> {
+        if !visited.insert(fsb) {
+            return Err(invalid_fs_data(format!(
+                "bmbt block cycle: FSB {fsb} is referenced more than once"
+            )));
+        }
         let (header_size, level, numrecs) = Self::parse_btree_block_header(node, fsb)?;
+        if level != expected_level {
+            return Err(invalid_fs_data(format!(
+                "bmbt child block at FSB {fsb} has level {level}, expected {expected_level}"
+            )));
+        }
         if level == 0 {
             for index in 0..numrecs {
                 let offset = header_size + index * BMBT_REC_SIZE;
@@ -163,7 +185,13 @@ impl XfsReader {
             }
             let child_ptr = be_u64(node, offset);
             let child_block = self.read_block(child_ptr)?;
-            self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
+            self.walk_btree_child_extents(
+                child_ptr,
+                &child_block,
+                expected_level - 1,
+                extents,
+                visited,
+            )?;
         }
         Ok(())
     }
@@ -210,43 +238,6 @@ impl XfsReader {
             )));
         }
         Ok((header_size, be_u16(node, 4), usize::from(be_u16(node, 6))))
-    }
-
-    fn walk_btree_node_extents(
-        &self,
-        node: &[u8],
-        is_inode_root: bool,
-        extents: &mut Vec<XfsExtent>,
-    ) -> io::Result<()> {
-        let header_size = if is_inode_root { 8 } else { 24 };
-        if node.len() < header_size {
-            return Ok(());
-        }
-        let level = be_u16(node, 4);
-        let numrecs = usize::from(be_u16(node, 6));
-        if level == 0 {
-            const LEAF_SLOT: usize = 24;
-            for index in 0..numrecs {
-                let offset = header_size + index * LEAF_SLOT;
-                if offset + LEAF_SLOT > node.len() {
-                    break;
-                }
-                extents.push(Self::decode_extent(&node[offset + 8..offset + 24]));
-            }
-            return Ok(());
-        }
-
-        const INTERNAL_SLOT: usize = 16;
-        for index in 0..numrecs {
-            let offset = header_size + index * INTERNAL_SLOT;
-            if offset + INTERNAL_SLOT > node.len() {
-                break;
-            }
-            let child_ptr = be_u64(node, offset + 8);
-            let child_block = self.read_block(child_ptr)?;
-            self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
-        }
-        Ok(())
     }
 
     fn read_extent_range(
@@ -323,8 +314,10 @@ impl XfsReader {
 
     pub(crate) fn read_file_content_from_inode(&self, inode: &[u8]) -> io::Result<Vec<u8>> {
         Self::validate_inode_magic(inode)?;
-        let format = inode[di_off::FORMAT];
+        Self::validate_inode_core_length(inode)?;
+        let format = Self::inode_format(inode)?;
         let size = be_u64(inode, di_off::SIZE);
+        self.validate_declared_file_size(size)?;
         match format {
             FORMAT_LOCAL => {
                 let data_fork = Self::data_fork(inode)?;
@@ -353,7 +346,8 @@ impl XfsReader {
         length: usize,
     ) -> io::Result<Vec<u8>> {
         Self::validate_inode_magic(inode)?;
-        let format = inode[di_off::FORMAT];
+        Self::validate_inode_core_length(inode)?;
+        let format = Self::inode_format(inode)?;
         let size = be_u64(inode, di_off::SIZE);
         if length == 0 || offset >= size {
             return Ok(Vec::new());

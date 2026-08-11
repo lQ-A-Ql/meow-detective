@@ -142,6 +142,7 @@ pub(crate) struct RecordCollection {
 pub(crate) fn collect_log_records(
     snapshot: &XfsLogSnapshot,
     max_records: usize,
+    max_body_bytes: u64,
 ) -> Result<RecordCollection, XfsLogError> {
     snapshot.geometry.validate()?;
     validate_snapshot(snapshot)?;
@@ -150,6 +151,7 @@ pub(crate) fn collect_log_records(
         .map_err(|_| XfsLogError::InvalidGeometry("log is too large to index".into()))?;
     let mut records = Vec::new();
     let mut issues = Vec::new();
+    let mut total_body_bytes = 0u64;
 
     for block in 0..available_blocks {
         let offset = block * XLOG_BASIC_BLOCK_SIZE;
@@ -165,7 +167,19 @@ pub(crate) fn collect_log_records(
             break;
         }
         match decode_record(snapshot, block, total_blocks) {
-            Ok(record) => records.push(record),
+            Ok(record) => {
+                let new_total = total_body_bytes.saturating_add(record.body.len() as u64);
+                if new_total > max_body_bytes {
+                    issues.push(XfsLogIssue::new(
+                        XfsLogIssueKind::LimitReached,
+                        Some(block as u64),
+                        format!("record body byte limit {max_body_bytes} reached"),
+                    ));
+                    break;
+                }
+                total_body_bytes = new_total;
+                records.push(record);
+            }
             Err(issue) => issues.push(issue),
         }
     }

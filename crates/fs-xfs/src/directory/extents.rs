@@ -2,7 +2,7 @@ use super::{
     DirectoryReadOutcome, XfsDirectoryEntry, XFS_DIR2_DATA_SPACE, XFS_DIR2_LEAF_SPACE,
     XFS_DIR2_SPACE_SIZE,
 };
-use crate::{XfsExtent, XfsReader, BMBT_REC_SIZE};
+use crate::{XfsExtent, XfsReader, BMBT_REC_SIZE, MAX_DIRECTORY_SCAN_BYTES};
 use evidence_core::filesystem::{
     fs_out_of_memory, invalid_fs_data, FileSystemDiagnostic, FileSystemDiagnosticKind,
 };
@@ -87,11 +87,19 @@ impl XfsReader {
 
             let remaining = extent.block_count.saturating_sub(relative_fsb);
             let read_fsblocks = remaining.min(step);
+            let scan_bytes = read_fsblocks.saturating_mul(self.block_size);
+            if outcome.scanned_bytes.saturating_add(scan_bytes) > MAX_DIRECTORY_SCAN_BYTES {
+                outcome.record_error(invalid_fs_data(format!(
+                    "XFS directory scan exceeds the {MAX_DIRECTORY_SCAN_BYTES} byte limit"
+                )));
+                return;
+            }
             match self
                 .add_fsblocks_within_ag(extent.start_block, relative_fsb)
                 .and_then(|start_fsb| self.read_directory_block(start_fsb, read_fsblocks))
             {
                 Ok(block_data) => {
+                    outcome.scanned_bytes = outcome.scanned_bytes.saturating_add(scan_bytes);
                     let mut parse = self.parse_block_dir_entries_lossy(&block_data);
                     outcome.saw_recoverable_block |= parse.saw_recoverable_block;
                     outcome.entries.append(&mut parse.entries);
@@ -164,6 +172,7 @@ impl XfsReader {
         let extents = Self::inline_extents(inode)?;
         let dir_block_fsblocks = self.directory_block_fsblocks()?;
         let mut saw_block = false;
+        let mut scanned_bytes = 0u64;
         for extent in extents {
             if extent.unwritten {
                 continue;
@@ -177,8 +186,15 @@ impl XfsReader {
                     continue;
                 }
                 let read_fsblocks = extent.block_count.saturating_sub(relative_fsb).min(step);
+                let scan_bytes = read_fsblocks.saturating_mul(self.block_size);
+                if scanned_bytes.saturating_add(scan_bytes) > MAX_DIRECTORY_SCAN_BYTES {
+                    return Err(invalid_fs_data(format!(
+                        "XFS directory zero probe exceeds the {MAX_DIRECTORY_SCAN_BYTES} byte limit"
+                    )));
+                }
                 let start_fsb = self.add_fsblocks_within_ag(extent.start_block, relative_fsb)?;
                 let block_data = self.read_directory_block(start_fsb, read_fsblocks)?;
+                scanned_bytes = scanned_bytes.saturating_add(scan_bytes);
                 saw_block = true;
                 if block_data.iter().any(|byte| *byte != 0) {
                     return Ok(false);

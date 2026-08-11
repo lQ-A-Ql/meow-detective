@@ -200,7 +200,9 @@ fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
 
     let sb = &mut data[1024..2048];
     sb[0x00..0x04].copy_from_slice(&16u32.to_le_bytes());
-    sb[0x04..0x08].copy_from_slice(&(TOTAL_BLOCKS as u32).to_le_bytes());
+    // The declared file size (128 MiB sparse) must fit the filesystem
+    // capacity the parser now enforces.
+    sb[0x04..0x08].copy_from_slice(&40960u32.to_le_bytes());
     sb[0x14..0x18].copy_from_slice(&0u32.to_le_bytes());
     sb[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
     sb[0x20..0x24].copy_from_slice(&32768u32.to_le_bytes());
@@ -212,6 +214,7 @@ fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
 
     let root_inode = &mut data[INODE_TABLE_OFF + 256..INODE_TABLE_OFF + 512];
     root_inode[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes());
+    root_inode[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
     root_inode[0x04..0x08].copy_from_slice(&BLOCK_SIZE.to_le_bytes()[..4]);
     root_inode[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
     root_inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());
@@ -222,6 +225,7 @@ fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
 
     let file_inode = &mut data[INODE_TABLE_OFF + 512..INODE_TABLE_OFF + 768];
     file_inode[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes());
+    file_inode[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
     file_inode[0x04..0x08].copy_from_slice(&(file_size as u32).to_le_bytes());
     file_inode[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
     file_inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());

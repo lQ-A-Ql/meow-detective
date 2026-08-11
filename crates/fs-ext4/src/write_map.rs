@@ -6,11 +6,15 @@
 //! inode record. Everything here is computed read-only; only the caller's
 //! overlay disk is ever written.
 
+use std::collections::HashSet;
 use std::io;
 
 use evidence_core::filesystem::invalid_fs_data;
 
-use crate::format::{inode_table_block_from_descriptor, Ext4Extent, Ext4ExtentHeader};
+use crate::format::{
+    inode_table_block_from_descriptor, Ext4Extent, Ext4ExtentHeader, EXT4_EXTENTS_FL,
+    EXT4_INLINE_DATA_FL, I_FLAGS_OFFSET,
+};
 
 /// One contiguous byte range of a file, expressed in the reader's
 /// coordinate space (including any volume base the reader was opened with).
@@ -21,13 +25,10 @@ pub struct Ext4FileExtent {
     pub length: u64,
 }
 
-const I_FLAGS_OFFSET: usize = 0x20;
 const I_SIZE_LO_OFFSET: usize = 0x04;
 const I_SIZE_HI_OFFSET: usize = 0x6C;
-const EXT4_EXTENTS_FL: u32 = 0x0008_0000;
 const EXT4_ENCRYPT_FL: u32 = 0x0000_0800;
 const EXT4_VERITY_FL: u32 = 0x0000_8000;
-const EXT4_INLINE_DATA_FL: u32 = 0x1000_0000;
 
 impl crate::Ext4Reader {
     /// Map a regular file's extents to physical byte ranges. Files without
@@ -48,7 +49,10 @@ impl crate::Ext4Reader {
             )));
         }
         let mut extents = Vec::new();
-        self.collect_extents(Self::inode_i_block(&inode), &mut extents)?;
+        let i_block = Self::inode_i_block(&inode);
+        let depth = Ext4ExtentHeader::parse(i_block)?.eh_depth;
+        let mut visited = HashSet::new();
+        self.collect_extents(i_block, depth, &mut visited, &mut extents)?;
         Ok(extents)
     }
 
@@ -95,22 +99,43 @@ impl crate::Ext4Reader {
         }
     }
 
+    /// Walks the extent tree. `expected_depth` is threaded down from the
+    /// inode's header so a child block cannot lie about its level, and every
+    /// extent-tree block read from disk is tracked in `visited` so cyclic or
+    /// duplicated index references are rejected instead of recursing forever.
     fn collect_extents(
         &self,
         node_data: &[u8],
+        expected_depth: u16,
+        visited: &mut HashSet<u64>,
         output: &mut Vec<Ext4FileExtent>,
     ) -> io::Result<()> {
         let header = Ext4ExtentHeader::parse(node_data)?;
+        if header.eh_depth != expected_depth {
+            return Err(invalid_fs_data(format!(
+                "extent tree depth {} does not match expected depth {}",
+                header.eh_depth, expected_depth
+            )));
+        }
         if header.eh_depth == 0 {
+            let mut previous_end = 0u64;
             for extent in parse_leaf_extents(node_data, header.eh_entries)? {
                 if extent.is_unwritten() {
                     return Err(invalid_fs_data(
                         "file has unwritten extents; refusing to edit in place",
                     ));
                 }
+                let logical_block = u64::from(extent.ee_block);
+                let logical_end = logical_block
+                    .checked_add(u64::from(extent.block_count()))
+                    .ok_or_else(|| invalid_fs_data("ext4 extent logical end overflows"))?;
+                if logical_block < previous_end {
+                    return Err(invalid_fs_data("ext4 extents overlap or are not ordered"));
+                }
+                previous_end = logical_end;
                 let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
                 output.push(Ext4FileExtent {
-                    logical_offset: u64::from(extent.ee_block)
+                    logical_offset: logical_block
                         .checked_mul(self.block_size)
                         .ok_or_else(|| invalid_fs_data("ext4 extent logical offset overflows"))?,
                     volume_offset: self.block_to_offset(start_block)?,
@@ -122,8 +147,13 @@ impl crate::Ext4Reader {
             return Ok(());
         }
         for child_block in index_child_blocks(node_data, header.eh_entries)? {
+            if !visited.insert(child_block) {
+                return Err(invalid_fs_data(format!(
+                    "extent index block {child_block} is referenced more than once"
+                )));
+            }
             let child_data = self.read_block(child_block)?;
-            self.collect_extents(&child_data, output)?;
+            self.collect_extents(&child_data, expected_depth - 1, visited, output)?;
         }
         Ok(())
     }

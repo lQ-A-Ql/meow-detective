@@ -1,4 +1,4 @@
-use crate::format::{I_BLOCK_SIZE, S_IFDIR};
+use crate::format::{require_extents_layout, I_BLOCK_SIZE, S_IFDIR};
 use crate::Ext4Reader;
 use evidence_core::filesystem::{invalid_fs_data, path_components};
 use std::io;
@@ -39,12 +39,13 @@ impl Ext4Reader {
         inode_number: u32,
     ) -> io::Result<Vec<(String, u32, u8)>> {
         let inode = self.read_inode(inode_number)?;
-        if Self::inode_mode(&inode) & S_IFDIR == 0 {
+        if Self::inode_mode(&inode)? & S_IFDIR == 0 {
             return Err(invalid_fs_data(format!(
                 "inode {} is not a directory",
                 inode_number
             )));
         }
+        require_extents_layout(&inode, &format!("directory inode {inode_number}"))?;
         let data = self.read_extent_data(Self::inode_i_block(&inode), Self::inode_size(&inode)?)?;
         Self::parse_directory_entries(&data)
     }

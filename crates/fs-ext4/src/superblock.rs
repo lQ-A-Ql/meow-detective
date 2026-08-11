@@ -92,13 +92,13 @@ impl Ext4Superblock {
             has_64bit,
             group_descriptor_size,
         )?;
-        let num_block_groups = block_group_count(
-            blocks_count,
-            first_data_block,
-            blocks_per_group,
-            inodes_count,
-            inodes_per_group,
-        )?;
+        let num_block_groups = block_group_count(blocks_count, first_data_block, blocks_per_group)?;
+        let inode_capacity = u64::from(num_block_groups) * u64::from(inodes_per_group);
+        if u64::from(inodes_count) > inode_capacity {
+            return Err(invalid_fs_data(format!(
+                "ext4 inodes count {inodes_count} exceeds the {inode_capacity} inodes addressable by {num_block_groups} block groups"
+            )));
+        }
 
         Ok(Self {
             block_size,
@@ -148,15 +148,11 @@ fn block_group_count(
     blocks_count: u64,
     first_data_block: u64,
     blocks_per_group: u32,
-    inodes_count: u32,
-    inodes_per_group: u32,
 ) -> io::Result<u32> {
     let block_groups = blocks_count
         .saturating_sub(first_data_block)
         .div_ceil(u64::from(blocks_per_group));
-    let inode_groups = u64::from(inodes_count).div_ceil(u64::from(inodes_per_group));
-    u32::try_from(block_groups.max(inode_groups))
-        .map_err(|_| invalid_fs_data("ext4 block group count exceeds u32"))
+    u32::try_from(block_groups).map_err(|_| invalid_fs_data("ext4 block group count exceeds u32"))
 }
 
 fn read_u32(data: &[u8], offset: usize) -> io::Result<u32> {

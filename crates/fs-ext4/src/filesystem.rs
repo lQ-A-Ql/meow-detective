@@ -1,4 +1,4 @@
-use crate::format::{S_IFDIR, S_IFLNK};
+use crate::format::{require_extents_layout, S_IFDIR, S_IFLNK};
 use crate::Ext4Reader;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps,
@@ -28,10 +28,10 @@ impl FileSystemReader for Ext4Reader {
             let node = self
                 .read_inode(child_inode)
                 .and_then(|inode| {
-                    let is_dir = Self::inode_mode(&inode) & 0xF000 == S_IFDIR;
+                    let mode = Self::inode_mode(&inode)?;
+                    let is_dir = mode & 0xF000 == S_IFDIR;
                     let size = if is_dir { 0 } else { Self::inode_size(&inode)? };
                     let mut node = fs_node_without_timestamps(name.clone(), is_dir, size);
-                    let mode = Self::inode_mode(&inode);
                     node.read_only = mode & 0o222 == 0;
                     node.created_at = Self::inode_created_at(&inode);
                     node.modified_at = Self::inode_modified_at(&inode);
@@ -47,18 +47,19 @@ impl FileSystemReader for Ext4Reader {
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
         let inode = self.resolve_file_inode(path)?;
-        if Self::inode_mode(&inode) & 0xF000 == S_IFLNK {
+        if Self::inode_mode(&inode)? & 0xF000 == S_IFLNK {
             return Ok(Box::new(io::Cursor::new(
                 self.read_symlink_target(&inode)?.into_bytes(),
             )));
         }
+        require_extents_layout(&inode, path)?;
         let data = self.read_extent_data(Self::inode_i_block(&inode), Self::inode_size(&inode)?)?;
         Ok(Box::new(io::Cursor::new(data)))
     }
 
     fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
         let inode = self.resolve_file_inode(path)?;
-        if Self::inode_mode(&inode) & 0xF000 == S_IFLNK {
+        if Self::inode_mode(&inode)? & 0xF000 == S_IFLNK {
             let target = self.read_symlink_target(&inode)?.into_bytes();
             let start = usize::try_from(offset)
                 .ok()
@@ -67,6 +68,7 @@ impl FileSystemReader for Ext4Reader {
             let end = start.saturating_add(length).min(target.len());
             return Ok(target[start..end].to_vec());
         }
+        require_extents_layout(&inode, path)?;
         self.read_extent_data_range(
             Self::inode_i_block(&inode),
             Self::inode_size(&inode)?,

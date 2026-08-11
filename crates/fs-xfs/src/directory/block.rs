@@ -279,27 +279,10 @@ fn align_up(value: usize, align: usize) -> Option<usize> {
     value.checked_add(add).map(|result| result & !add)
 }
 
+/// Structural-only plausibility check for the primary parse path. XFS
+/// directory names are arbitrary non-NUL byte strings (commonly UTF-8), so a
+/// character whitelist here would silently drop valid evidence; the raw
+/// recovery heuristics apply their own stricter name rules.
 fn is_plausible_directory_entry_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 255
-        && !name.contains('\0')
-        && !matches!(name, "." | "..")
-        && name.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric()
-                || matches!(
-                    byte,
-                    b' ' | b'.'
-                        | b'_'
-                        | b'-'
-                        | b'+'
-                        | b','
-                        | b'@'
-                        | b'='
-                        | b':'
-                        | b'['
-                        | b']'
-                        | b'('
-                        | b')'
-                )
-        })
+    !name.is_empty() && name.len() <= 255 && !name.contains('\0') && !matches!(name, "." | "..")
 }

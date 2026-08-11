@@ -1,7 +1,9 @@
 use crate::directory::BoundedDirectoryEntryCache;
 use crate::inode_cache::BoundedInodeBlockCache;
 use crate::log::XfsLogGeometry;
-use evidence_core::filesystem::{invalid_fs_data, FileSystemDiagnostic, FileSystemReadMetrics};
+use evidence_core::filesystem::{
+    invalid_fs_data, unsupported_fs, FileSystemDiagnostic, FileSystemReadMetrics,
+};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -26,6 +28,31 @@ pub(crate) const BMBT_BLOCK_HDR_SIZE: usize = 24;
 pub(crate) const BMBT_CRC_BLOCK_HDR_SIZE: usize = 72;
 const XFS_SB_VERSION2_FTYPE: u32 = 0x0000_0200;
 pub(crate) const XFS_SB_FEAT_INCOMPAT_FTYPE: u32 = 1 << 0;
+pub(crate) const XFS_SB_FEAT_INCOMPAT_SPINODES: u32 = 1 << 1;
+pub(crate) const XFS_SB_FEAT_INCOMPAT_META_UUID: u32 = 1 << 2;
+pub(crate) const XFS_SB_FEAT_INCOMPAT_BIGTIME: u32 = 1 << 3;
+pub(crate) const XFS_SB_FEAT_INCOMPAT_NEEDSREPAIR: u32 = 1 << 4;
+pub(crate) const XFS_SB_FEAT_INCOMPAT_NREXT64: u32 = 1 << 5;
+/// Incompatible-feature bits whose on-disk dinode/directory layout this
+/// parser understands. Anything outside this mask may change the layout, so
+/// the filesystem is rejected instead of being misparsed.
+pub(crate) const XFS_SB_FEAT_INCOMPAT_SUPPORTED: u32 = XFS_SB_FEAT_INCOMPAT_FTYPE
+    | XFS_SB_FEAT_INCOMPAT_SPINODES
+    | XFS_SB_FEAT_INCOMPAT_META_UUID
+    | XFS_SB_FEAT_INCOMPAT_BIGTIME
+    | XFS_SB_FEAT_INCOMPAT_NEEDSREPAIR
+    | XFS_SB_FEAT_INCOMPAT_NREXT64;
+const XFS_SB_VERSION_NUMBITS: u16 = 0x000F;
+const XFS_SB_VERSION_5: u16 = 5;
+const MIN_BLOCK_SIZE: u64 = 512;
+const MAX_BLOCK_SIZE: u64 = 65536;
+/// Cap on a fully buffered file read, mirroring fs-ntfs.
+pub(crate) const MAX_BUFFERED_FILE_BYTES: u64 = 256 * 1024 * 1024;
+/// Cap on the total bytes a single directory enumeration may read.
+pub(crate) const MAX_DIRECTORY_SCAN_BYTES: u64 = 256 * 1024 * 1024;
+/// Deepest bmbt root level accepted; each child must sit exactly one level
+/// below its parent, so this also bounds the recursion depth.
+pub(crate) const MAX_BMBT_TREE_DEPTH: u16 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct XfsExtent {
@@ -142,12 +169,21 @@ impl XfsReader {
         let inopblock = be_u16(&sb_buf, sb_off::INOPBLOCK);
         let root_ino = be_u64(&sb_buf, sb_off::ROOTINO);
 
-        if block_size == 0 || dblocks == 0 || ag_count == 0 {
+        if !(MIN_BLOCK_SIZE..=MAX_BLOCK_SIZE).contains(&block_size) || !block_size.is_power_of_two()
+        {
+            return Err(invalid_fs_data(format!(
+                "invalid XFS block size {block_size} (need a power of two in {MIN_BLOCK_SIZE}..={MAX_BLOCK_SIZE})"
+            )));
+        }
+        if dblocks == 0 || ag_count == 0 {
             return Err(invalid_fs_data("invalid XFS superblock geometry"));
         }
-        if inode_size < INODE_CORE_SIZE as u16 {
+        if !inode_size.is_power_of_two()
+            || inode_size < INODE_CORE_SIZE_V3 as u16
+            || u64::from(inode_size) > block_size
+        {
             return Err(invalid_fs_data(format!(
-                "inode size {inode_size} too small (need >= {INODE_CORE_SIZE})"
+                "invalid XFS inode size {inode_size} (need a power of two in {INODE_CORE_SIZE_V3}..={block_size})"
             )));
         }
         let ag_blocks = if ag_blocks_from_sb != 0 {
@@ -160,6 +196,15 @@ impl XfsReader {
         let dirblklog = sb_buf[sb_off::DIRBLKLOG];
         let features2 = be_u32(&sb_buf, sb_off::FEATURES2) | be_u32(&sb_buf, sb_off::BAD_FEATURES2);
         let features_incompat = be_u32(&sb_buf, sb_off::FEATURES_INCOMPAT);
+        let version_major = be_u16(&sb_buf, sb_off::VERSIONNUM) & XFS_SB_VERSION_NUMBITS;
+        if version_major == XFS_SB_VERSION_5 {
+            let unknown = features_incompat & !XFS_SB_FEAT_INCOMPAT_SUPPORTED;
+            if unknown != 0 {
+                return Err(unsupported_fs(format!(
+                    "XFS v5 superblock sets unknown sb_features_incompat bits 0x{unknown:08X}"
+                )));
+            }
+        }
         let has_ftype = (features2 & XFS_SB_VERSION2_FTYPE) != 0
             || (features_incompat & XFS_SB_FEAT_INCOMPAT_FTYPE) != 0;
         let log_geometry = XfsLogGeometry::from_superblock(&sb_buf);
@@ -316,11 +361,23 @@ impl XfsReader {
 
     pub(crate) fn data_fork(inode: &[u8]) -> io::Result<&[u8]> {
         let core_size = Self::inode_core_size(inode);
-        let literal = &inode[core_size..];
-        if inode[di_off::FORMAT] == FORMAT_LOCAL {
+        let format = *inode
+            .get(di_off::FORMAT)
+            .ok_or_else(|| invalid_fs_data("inode truncated before di_format"))?;
+        let literal = inode.get(core_size..).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "inode buffer of {} bytes is shorter than the v3 core ({core_size} bytes)",
+                inode.len()
+            ))
+        })?;
+        if format == FORMAT_LOCAL {
             return Ok(literal);
         }
-        let forkoff_units = usize::from(inode[di_off::FORKOFF]);
+        let forkoff_units = usize::from(
+            *inode
+                .get(di_off::FORKOFF)
+                .ok_or_else(|| invalid_fs_data("inode truncated before di_forkoff"))?,
+        );
         if forkoff_units == 0 {
             return Ok(literal);
         }
@@ -354,6 +411,46 @@ impl XfsReader {
             block_count: l1 & 0x1F_FFFF,
             unwritten: (l0 >> 63) != 0,
         }
+    }
+
+    /// Inode buffers shorter than the v1/v2 core cannot even address
+    /// `di_format`/`di_size`; reject them before any field read.
+    pub(crate) fn validate_inode_core_length(inode: &[u8]) -> io::Result<()> {
+        if inode.len() < INODE_CORE_SIZE {
+            return Err(invalid_fs_data(format!(
+                "inode buffer of {} bytes is shorter than the inode core ({INODE_CORE_SIZE} bytes)",
+                inode.len()
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn inode_format(inode: &[u8]) -> io::Result<u8> {
+        inode
+            .get(di_off::FORMAT)
+            .copied()
+            .ok_or_else(|| invalid_fs_data("inode truncated before di_format"))
+    }
+
+    /// Reject a declared `di_size` that cannot exist on this filesystem or
+    /// that would buffer more than the parser maximum, so raw on-disk sizes
+    /// never drive unbounded allocation or zero-fill.
+    pub(crate) fn validate_declared_file_size(&self, size: u64) -> io::Result<()> {
+        let capacity = self
+            .dblocks
+            .checked_mul(self.block_size)
+            .ok_or_else(|| invalid_fs_data("XFS filesystem capacity overflows"))?;
+        if size > capacity {
+            return Err(invalid_fs_data(format!(
+                "declared file size {size} exceeds XFS filesystem capacity {capacity}"
+            )));
+        }
+        if size > MAX_BUFFERED_FILE_BYTES {
+            return Err(invalid_fs_data(format!(
+                "declared file size {size} exceeds the {MAX_BUFFERED_FILE_BYTES} byte buffered-read limit"
+            )));
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_inode_magic(inode: &[u8]) -> io::Result<()> {

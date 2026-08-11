@@ -4,11 +4,12 @@ use super::{
     XFS_DIR3_DATA_MAGIC, XFS_DIR3_FT_DIR,
 };
 use crate::reader::{
-    sb_off, INODE_CORE_SIZE, S_IFDIR, XFS_INODE_MAGIC, XFS_SB_FEAT_INCOMPAT_FTYPE, XFS_SUPER_MAGIC,
+    sb_off, INODE_CORE_SIZE, S_IFDIR, XFS_INODE_MAGIC, XFS_SB_FEAT_INCOMPAT_FTYPE,
+    XFS_SB_FEAT_INCOMPAT_SUPPORTED, XFS_SUPER_MAGIC,
 };
 use crate::{
-    be_u16, di_off, XfsReader, BMAP_MAGIC, BMBT_SHORT_ROOT_HDR_SIZE, FORMAT_BTREE, FORMAT_EXTENTS,
-    FORMAT_LOCAL,
+    be_u16, di_off, XfsReader, BMAP_MAGIC, BMBT_BLOCK_HDR_SIZE, BMBT_SHORT_ROOT_HDR_SIZE,
+    FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL, MAX_BUFFERED_FILE_BYTES,
 };
 use evidence_core::filesystem::FileSystemReader;
 use evidence_core::EvidenceReader;
@@ -364,16 +365,12 @@ fn build_xfs_fixture() -> Vec<u8> {
     hi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&13u64.to_be_bytes()); // "Hello subdir!"
     hi[di_off::FORKOFF] = 0;
 
-    // Bmbt root block header (in data fork).
+    // Bmbd root in the data fork: level 0 (leaf), one record. A real bmdr
+    // root carries no magic; leaf records start right after the 4-byte header.
     let df_hi = &mut hi[INODE_CORE_SIZE..];
-    df_hi[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes()); // bb_magic
-    df_hi[4..6].copy_from_slice(&0u16.to_be_bytes()); // bb_level = 0 (leaf)
-    df_hi[6..8].copy_from_slice(&1u16.to_be_bytes()); // bb_numrecs = 1
-                                                      // bmdr header is 8 bytes; leaf records follow immediately.
-                                                      // Leaf record: key(8) + extent l0(8) + extent l1(8) = 24 bytes.
-    let rec_off: usize = 8;
-    df_hi[rec_off..rec_off + 8].copy_from_slice(&0u64.to_be_bytes()); // key = file block 0
-    df_hi[rec_off + 8..rec_off + 24].copy_from_slice(&encode_bmbt_extent(0, 6, 1));
+    df_hi[0..2].copy_from_slice(&0u16.to_be_bytes()); // bb_level = 0 (leaf)
+    df_hi[2..4].copy_from_slice(&1u16.to_be_bytes()); // bb_numrecs = 1
+    df_hi[4..20].copy_from_slice(&encode_bmbt_extent(0, 6, 1));
 
     // ---- Block 4: test.txt data "Hello World" ----
     img[16384..16384 + 11].copy_from_slice(b"Hello World");
@@ -1783,13 +1780,10 @@ fn build_xfs_fixture_with_btree_xdd3_directory_and_truncated_second_block() -> V
     fi[di_off::FORKOFF] = 0;
 
     let df = &mut fi[INODE_CORE_SIZE..];
-    df[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes());
-    df[4..6].copy_from_slice(&0u16.to_be_bytes());
-    df[6..8].copy_from_slice(&2u16.to_be_bytes());
-    df[8..16].copy_from_slice(&0u64.to_be_bytes());
-    df[16..32].copy_from_slice(&encode_bmbt_extent(0, 7, 1));
-    df[32..40].copy_from_slice(&1u64.to_be_bytes());
-    df[40..56].copy_from_slice(&encode_bmbt_extent(1, 8, 1));
+    df[0..2].copy_from_slice(&0u16.to_be_bytes());
+    df[2..4].copy_from_slice(&2u16.to_be_bytes());
+    df[4..20].copy_from_slice(&encode_bmbt_extent(0, 7, 1));
+    df[20..36].copy_from_slice(&encode_bmbt_extent(1, 8, 1));
 
     img.truncate(8 * block_size);
     img
@@ -2194,4 +2188,359 @@ fn test_multi_fsb_directory_block_is_read_as_one_directory_block() {
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "subdir");
     assert!(children[0].is_dir);
+}
+
+// -----------------------------------------------------------------------
+// Hostile-input regression tests
+// -----------------------------------------------------------------------
+
+/// Fake reader that zero-fills beyond the image instead of hitting EOF, so
+/// tests can model a huge on-disk extent without a huge in-memory image.
+struct SparseTailReader {
+    data: Vec<u8>,
+    pos: u64,
+    info: ReaderInfo,
+}
+
+impl SparseTailReader {
+    fn new(data: Vec<u8>) -> Self {
+        let size = data.len() as u64;
+        Self {
+            data,
+            pos: 0,
+            info: ReaderInfo {
+                path: std::path::PathBuf::from("sparse-tail-xfs"),
+                size,
+                kind: "sparse-tail-xfs".to_string(),
+            },
+        }
+    }
+}
+
+impl Read for SparseTailReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let start = (self.pos as usize).min(self.data.len());
+        let available = self.data.len() - start;
+        let n = available.min(buf.len());
+        buf[..n].copy_from_slice(&self.data[start..start + n]);
+        buf[n..].fill(0);
+        self.pos += buf.len() as u64;
+        Ok(buf.len())
+    }
+}
+
+impl Seek for SparseTailReader {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.pos = match pos {
+            SeekFrom::Start(p) => p,
+            SeekFrom::End(p) => (self.data.len() as i64 + p).max(0) as u64,
+            SeekFrom::Current(p) => (self.pos as i64 + p).max(0) as u64,
+        };
+        Ok(self.pos)
+    }
+}
+
+impl EvidenceReader for SparseTailReader {
+    fn info(&self) -> &ReaderInfo {
+        &self.info
+    }
+}
+
+/// Inode 3 ("test.txt") as a BTREE file whose bmdr root sits at
+/// `root_level` and points at child FSB 7.
+fn build_btree_root_pointer_fixture(root_level: u16) -> Vec<u8> {
+    let mut img = build_xfs_fixture();
+
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::FORMAT] = FORMAT_BTREE;
+    fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&1u64.to_be_bytes());
+    fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
+    fi[di_off::FORKOFF] = 0;
+
+    let df = &mut fi[INODE_CORE_SIZE..];
+    df.fill(0);
+    df[0..2].copy_from_slice(&root_level.to_be_bytes());
+    df[2..4].copy_from_slice(&1u16.to_be_bytes());
+    let maxrecs = (df.len() - BMBT_SHORT_ROOT_HDR_SIZE) / 16;
+    let pointers = BMBT_SHORT_ROOT_HDR_SIZE + maxrecs * 8;
+    df[pointers..pointers + 8].copy_from_slice(&7u64.to_be_bytes());
+    img
+}
+
+/// Inode 3 as an EXTENTS directory backed by a single extent of 70,000
+/// blocks (~280 MiB), past the directory-scan byte budget.
+fn build_xfs_fixture_with_oversized_extent_directory() -> Vec<u8> {
+    let mut img = build_xfs_fixture();
+    let block_size = 4096u64;
+
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+    fi[di_off::FORMAT] = FORMAT_EXTENTS;
+    fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&block_size.to_be_bytes());
+    fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
+    fi[di_off::FORKOFF] = 0;
+    fi[INODE_CORE_SIZE..INODE_CORE_SIZE + 16].copy_from_slice(&encode_bmbt_extent(0, 8, 70_000));
+    img
+}
+
+#[test]
+fn open_rejects_out_of_range_or_non_power_of_two_block_size() {
+    for block_size in [256u32, 1536, 131_072] {
+        let mut img = build_xfs_fixture();
+        img[sb_off::BLOCKSIZE..sb_off::BLOCKSIZE + 4].copy_from_slice(&block_size.to_be_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+
+        let err = match XfsReader::open(reader, 0) {
+            Ok(_) => panic!("expected the hostile superblock to fail"),
+            Err(err) => err,
+        };
+
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidData,
+            "block_size {block_size}"
+        );
+        assert!(
+            err.to_string().contains("block size"),
+            "block_size {block_size}: {err}"
+        );
+    }
+}
+
+#[test]
+fn open_rejects_invalid_inode_size() {
+    for inode_size in [128u16, 384, 8192] {
+        let mut img = build_xfs_fixture();
+        img[sb_off::INODESIZE..sb_off::INODESIZE + 2].copy_from_slice(&inode_size.to_be_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+
+        let err = match XfsReader::open(reader, 0) {
+            Ok(_) => panic!("expected the hostile superblock to fail"),
+            Err(err) => err,
+        };
+
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidData,
+            "inode_size {inode_size}"
+        );
+        assert!(
+            err.to_string().contains("inode size"),
+            "inode_size {inode_size}: {err}"
+        );
+    }
+}
+
+#[test]
+fn open_rejects_unknown_v5_incompat_feature_bits() {
+    let mut img = build_xfs_fixture();
+    img[sb_off::VERSIONNUM..sb_off::VERSIONNUM + 2].copy_from_slice(&5u16.to_be_bytes());
+    img[sb_off::FEATURES_INCOMPAT..sb_off::FEATURES_INCOMPAT + 4]
+        .copy_from_slice(&(1u32 << 12).to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+
+    let err = match XfsReader::open(reader, 0) {
+        Ok(_) => panic!("expected the hostile superblock to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+    assert!(err.to_string().contains("sb_features_incompat"));
+}
+
+#[test]
+fn open_accepts_supported_v5_incompat_feature_bits() {
+    let mut img = build_xfs_fixture();
+    img[sb_off::VERSIONNUM..sb_off::VERSIONNUM + 2].copy_from_slice(&5u16.to_be_bytes());
+    img[sb_off::FEATURES_INCOMPAT..sb_off::FEATURES_INCOMPAT + 4]
+        .copy_from_slice(&XFS_SB_FEAT_INCOMPAT_SUPPORTED.to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+
+    XfsReader::open(reader, 0).unwrap();
+}
+
+#[test]
+fn data_fork_rejects_inode_shorter_than_v3_core() {
+    let mut inode = vec![0u8; INODE_CORE_SIZE];
+    inode[di_off::VERSION] = 3;
+
+    let err = XfsReader::data_fork(&inode).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("core"));
+}
+
+#[test]
+fn read_file_content_rejects_inode_shorter_than_core() {
+    let img = build_xfs_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+    let mut inode = vec![0u8; 8];
+    inode[di_off::MAGIC..di_off::MAGIC + 2].copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
+
+    let err = xfs.read_file_content_from_inode(&inode).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("inode core"));
+}
+
+#[test]
+fn file_content_rejects_declared_size_beyond_filesystem_capacity() {
+    let mut img = build_xfs_fixture();
+    // The fixture filesystem holds 10 * 4096 = 40960 bytes.
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&40_961u64.to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("filesystem capacity"));
+}
+
+#[test]
+fn file_content_rejects_declared_size_beyond_buffered_read_limit() {
+    let mut img = build_xfs_fixture();
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::SIZE..di_off::SIZE + 8]
+        .copy_from_slice(&(MAX_BUFFERED_FILE_BYTES + 1).to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    // Raise the on-disk capacity so only the parser maximum can fire.
+    xfs.dblocks = 1_000_000;
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("buffered-read limit"));
+}
+
+#[test]
+fn btree_root_level_beyond_depth_cap_is_rejected() {
+    let img = build_btree_root_pointer_fixture(9);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("exceeds the supported depth"));
+}
+
+#[test]
+fn btree_root_with_bmap_magic_is_rejected_as_crafted() {
+    // A real bmdr root carries no magic; the legacy misparsed layout started
+    // with BMAP_MAGIC, which reads as an absurd bmdr level.
+    let mut img = build_btree_root_pointer_fixture(0);
+    let df = &mut img[8192 + 2 * 256 + INODE_CORE_SIZE..8192 + 3 * 256];
+    df[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("exceeds the supported depth"));
+}
+
+#[test]
+fn btree_child_level_mismatch_is_rejected() {
+    let mut img = build_btree_root_pointer_fixture(1);
+    let block7 = 7 * 4096;
+    img[block7..block7 + 4].copy_from_slice(&BMAP_MAGIC.to_be_bytes());
+    // The child claims level 1 while the root at level 1 expects a leaf.
+    img[block7 + 4..block7 + 6].copy_from_slice(&1u16.to_be_bytes());
+    img[block7 + 6..block7 + 8].copy_from_slice(&0u16.to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("expected 0"));
+}
+
+#[test]
+fn btree_child_self_reference_cycle_is_rejected() {
+    let mut img = build_btree_root_pointer_fixture(2);
+    let block7 = 7 * 4096;
+    img[block7..block7 + 4].copy_from_slice(&BMAP_MAGIC.to_be_bytes());
+    img[block7 + 4..block7 + 6].copy_from_slice(&1u16.to_be_bytes());
+    img[block7 + 6..block7 + 8].copy_from_slice(&1u16.to_be_bytes());
+    // Internal node pointing back at itself.
+    let maxrecs = (4096 - BMBT_BLOCK_HDR_SIZE) / 16;
+    let pointers = block7 + BMBT_BLOCK_HDR_SIZE + maxrecs * 8;
+    img[pointers..pointers + 8].copy_from_slice(&7u64.to_be_bytes());
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected the hostile fixture to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("more than once"));
+}
+
+#[test]
+fn test_parse_data_dir_v5_retains_utf8_names() {
+    let mut buf = vec![0u8; 512];
+    buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+    write_xdd3_entry(
+        &mut buf,
+        XFS_DIR3_DATA_HDR_SIZE,
+        0x0100_0040,
+        "报告-déjà.txt".as_bytes(),
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+
+    let entries = parse_block_dir_entries(&buf).unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "报告-déjà.txt");
+    assert_eq!(entries[0].inode, 0x0100_0040);
+}
+
+#[test]
+fn directory_scan_byte_budget_stops_oversized_extent_directory() {
+    let img = build_xfs_fixture_with_oversized_extent_directory();
+    let reader: Box<dyn EvidenceReader> = Box::new(SparseTailReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.dblocks = 200_000;
+
+    let err = xfs.list_children("test.txt").unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("directory scan exceeds"));
+}
+
+#[test]
+fn directory_zero_probe_honors_scan_byte_budget() {
+    let img = build_xfs_fixture_with_oversized_extent_directory();
+    let reader: Box<dyn EvidenceReader> = Box::new(SparseTailReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.dblocks = 200_000;
+    let inode = xfs.read_inode(3).unwrap();
+
+    let err = xfs.extent_directory_data_is_all_zero(&inode).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("zero probe exceeds"));
 }

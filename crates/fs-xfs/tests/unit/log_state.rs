@@ -110,6 +110,16 @@ fn garbage_log_is_dirty() {
 }
 
 #[test]
+fn zeroed_head_with_live_record_later_is_dirty() {
+    // Torn zeroing: the head block reads as cycle 0, but a live record sits
+    // later in the snapshot. Only a fully zeroed log may be reported Clean.
+    let mut bytes = vec![0u8; 64 * BB];
+    write_record(&mut bytes, 20, 3, 512, 1, false);
+    let snap = snapshot(bytes, 2);
+    assert_eq!(assess_log_state(&snap), XfsLogState::Dirty);
+}
+
+#[test]
 fn truncated_snapshot_is_dirty() {
     let snap = snapshot(vec![0u8; BB / 2], 2);
     assert_eq!(assess_log_state(&snap), XfsLogState::Dirty);

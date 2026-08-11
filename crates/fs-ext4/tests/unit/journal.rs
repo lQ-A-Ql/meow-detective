@@ -491,6 +491,47 @@ mod cases {
             .transactions
             .is_empty());
     }
+
+    #[test]
+    fn history_scan_bounds_total_scanned_blocks_across_candidates() {
+        let spec = SuperblockSpec::default();
+        let superblock = parsed_superblock(spec);
+        let mut journal = journal_image(spec);
+        // Every one of the 11 ring blocks carries descriptor magic with a
+        // distinct sequence and enough tags to walk the entire ring without
+        // ever committing: a full scan per candidate would be quadratic.
+        for block in 1u32..12 {
+            let sequence = 100 + block;
+            let mut tags = Vec::new();
+            let mut payloads = Vec::new();
+            for index in 0..10u32 {
+                let flags = if index == 9 {
+                    JBD2_FLAG_SAME_UUID | JBD2_FLAG_LAST_TAG
+                } else if index == 0 {
+                    0
+                } else {
+                    JBD2_FLAG_SAME_UUID
+                };
+                tags.push(TagSpec::new(u64::from(500 + index), flags));
+                payloads.push(payload((index + 1) as u8));
+            }
+            let descriptor = build_descriptor(&superblock, sequence, &tags, &payloads);
+            put_block(&mut journal, block, &descriptor);
+        }
+
+        let history = parse_journal_history(&journal).unwrap();
+
+        assert!(history.transactions.is_empty());
+        assert!(
+            !history.rejected_candidates.is_empty(),
+            "the first candidates are still scanned and reported"
+        );
+        assert!(
+            history.rejected_candidates.len() < 11,
+            "the shared scan budget must stop per-candidate full-ring rescans, got {} rejections",
+            history.rejected_candidates.len()
+        );
+    }
 }
 
 #[derive(Clone, Copy)]

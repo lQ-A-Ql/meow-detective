@@ -30,7 +30,7 @@ impl Ext4Reader {
             (true, Some(inode)) => inode,
         };
         let inode = self.read_inode(journal_inode)?;
-        let mode = Self::inode_mode(&inode);
+        let mode = Self::inode_mode(&inode)?;
         if mode & EXT4_S_IFMT != EXT4_S_IFREG {
             return Err(JournalError::Invalid(format!(
                 "journal inode {journal_inode} is not a regular file"

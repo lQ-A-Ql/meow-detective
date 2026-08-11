@@ -64,10 +64,31 @@ impl Ext4Reader {
     }
 
     pub(crate) fn block_to_offset(&self, block: u64) -> io::Result<u64> {
+        if block < self.first_data_block || block >= self.blocks_count {
+            return Err(invalid_fs_data(format!(
+                "ext4 block {} is outside filesystem bounds {}..{}",
+                block, self.first_data_block, self.blocks_count
+            )));
+        }
         block
             .checked_mul(self.block_size)
             .and_then(|offset| self.volume_offset.checked_add(offset))
             .ok_or_else(|| invalid_fs_data(format!("ext4 block {} offset overflows", block)))
+    }
+
+    /// Rejects inode sizes that cannot exist on this filesystem: no file can
+    /// be larger than the total block geometry.
+    pub(crate) fn validate_declared_size(&self, file_size: u64) -> io::Result<()> {
+        let capacity = self
+            .blocks_count
+            .checked_mul(self.block_size)
+            .ok_or_else(|| invalid_fs_data("ext4 filesystem byte capacity overflows"))?;
+        if file_size > capacity {
+            return Err(invalid_fs_data(format!(
+                "ext4 i_size {file_size} exceeds filesystem capacity {capacity}"
+            )));
+        }
+        Ok(())
     }
 
     pub(crate) fn read_block(&self, block: u64) -> io::Result<Vec<u8>> {
@@ -174,8 +195,11 @@ impl Ext4Reader {
         Ok(inode)
     }
 
-    pub fn inode_mode(inode: &[u8]) -> u16 {
-        u16::from_le_bytes([inode[0], inode[1]])
+    pub fn inode_mode(inode: &[u8]) -> io::Result<u16> {
+        let bytes = inode
+            .get(0..2)
+            .ok_or_else(|| invalid_fs_data("inode is too short to contain a mode"))?;
+        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
     }
 
     pub fn inode_size(inode: &[u8]) -> io::Result<u64> {

@@ -43,6 +43,7 @@ pub(super) struct DirectoryReadOutcome {
     pub(super) entries: Vec<XfsDirectoryEntry>,
     pub(super) first_error: Option<io::Error>,
     pub(super) saw_recoverable_block: bool,
+    pub(super) scanned_bytes: u64,
 }
 
 impl DirectoryReadOutcome {

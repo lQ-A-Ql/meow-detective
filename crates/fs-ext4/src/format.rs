@@ -1,4 +1,4 @@
-use evidence_core::filesystem::invalid_fs_data;
+use evidence_core::filesystem::{invalid_fs_data, unsupported_fs};
 use std::io;
 
 pub(crate) const EXT4_SUPERBLOCK_OFFSET: u64 = 1024;
@@ -16,6 +16,11 @@ pub(crate) const EXT4_METADATA_CACHE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const S_IFDIR: u16 = 0x4000;
 pub(crate) const S_IFLNK: u16 = 0xA000;
 pub(crate) const I_BLOCK_SIZE: usize = 60;
+pub(crate) const I_FLAGS_OFFSET: usize = 0x20;
+pub(crate) const EXT4_EXTENTS_FL: u32 = 0x0008_0000;
+pub(crate) const EXT4_INLINE_DATA_FL: u32 = 0x1000_0000;
+/// On-disk maximum depth of an ext4 extent tree.
+pub(crate) const EXT4_EXTENT_MAX_DEPTH: u16 = 5;
 
 #[derive(Debug)]
 pub(crate) struct Ext4ExtentHeader {
@@ -35,11 +40,38 @@ impl Ext4ExtentHeader {
                 magic
             )));
         }
+        let eh_depth = u16::from_le_bytes([data[6], data[7]]);
+        if eh_depth > EXT4_EXTENT_MAX_DEPTH {
+            return Err(invalid_fs_data(format!(
+                "extent tree depth {eh_depth} exceeds on-disk maximum {EXT4_EXTENT_MAX_DEPTH}"
+            )));
+        }
         Ok(Self {
             eh_entries: u16::from_le_bytes([data[2], data[3]]),
-            eh_depth: u16::from_le_bytes([data[6], data[7]]),
+            eh_depth,
         })
     }
+}
+
+/// Refuses to interpret `i_block` as an extent tree unless the inode declares
+/// the extents layout and does not carry inline data.
+pub(crate) fn require_extents_layout(inode: &[u8], subject: &str) -> io::Result<()> {
+    let flags = inode
+        .get(I_FLAGS_OFFSET..I_FLAGS_OFFSET + 4)
+        .and_then(|bytes| bytes.try_into().ok())
+        .map(u32::from_le_bytes)
+        .ok_or_else(|| invalid_fs_data("inode field out of bounds"))?;
+    if flags & EXT4_INLINE_DATA_FL != 0 {
+        return Err(unsupported_fs(format!(
+            "{subject} uses inline data; extent reads are unsupported"
+        )));
+    }
+    if flags & EXT4_EXTENTS_FL == 0 {
+        return Err(invalid_fs_data(format!(
+            "{subject} does not use extents; refusing to parse i_block as extents"
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

@@ -115,6 +115,9 @@ mod cases {
     fn build_large_sparse_ext4_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
         const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
         let mut img = minimal_ext4_image();
+        // Inflate blocks_count so the oversized i_size stays within the
+        // filesystem capacity enforced by validate_declared_size.
+        img[1024 + 0x04..1024 + 0x08].copy_from_slice(&40_000u32.to_le_bytes());
         let block_size = 4096u64;
         let logical_block = (LOGICAL_OFFSET / block_size) as u32;
         let physical_block = 7u32;
@@ -210,11 +213,17 @@ mod cases {
         let ext4 = Ext4Reader::open(reader, 0).unwrap();
 
         let root_inode = ext4.read_inode(2).unwrap();
-        assert_eq!(Ext4Reader::inode_mode(&root_inode) & 0x4000, 0x4000);
+        assert_eq!(
+            Ext4Reader::inode_mode(&root_inode).unwrap() & 0x4000,
+            0x4000
+        );
         assert_eq!(Ext4Reader::inode_size(&root_inode).unwrap(), 4096);
 
         let file_inode = ext4.read_inode(3).unwrap();
-        assert_eq!(Ext4Reader::inode_mode(&file_inode) & 0x8000, 0x8000);
+        assert_eq!(
+            Ext4Reader::inode_mode(&file_inode).unwrap() & 0x8000,
+            0x8000
+        );
         assert_eq!(Ext4Reader::inode_size(&file_inode).unwrap(), 11);
     }
 
@@ -388,7 +397,7 @@ mod cases {
         let ext4 = Ext4Reader::open(reader, 0).unwrap();
 
         let sym_inode = ext4.read_inode(6).unwrap();
-        let mode = Ext4Reader::inode_mode(&sym_inode);
+        let mode = Ext4Reader::inode_mode(&sym_inode).unwrap();
         assert_eq!(mode & 0xF000, S_IFLNK, "inode 6 should be a symlink");
 
         let target = ext4.read_symlink_target(&sym_inode).unwrap();
@@ -425,6 +434,7 @@ mod cases {
         ri[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes()); // dir
         ri[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes()); // i_size
         ri[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
+        ri[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
         ri[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
         ri[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
         ri[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
@@ -464,6 +474,7 @@ mod cases {
         fi[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes());
         fi[0x04..0x08].copy_from_slice(&11u32.to_le_bytes());
         fi[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
+        fi[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
         fi[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
         fi[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes());
         fi[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes());
@@ -532,5 +543,175 @@ mod cases {
 
         let err = ext4.list_children("no_such_dir").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
+    }
+
+    // -----------------------------------------------------------------------
+    // Hostile-input regression tests
+    // -----------------------------------------------------------------------
+
+    const FILE_INODE_OFFSET: usize = 8192 + 512; // inode 3 (test.txt)
+    const SUBDIR_INODE_OFFSET: usize = 8192 + 768; // inode 4 (subdir)
+
+    #[test]
+    fn test_extent_header_rejects_depth_above_on_disk_maximum() {
+        let mut header = [0u8; 12];
+        header[0..2].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        header[6..8].copy_from_slice(&6u16.to_le_bytes());
+        let error = Ext4ExtentHeader::parse(&header).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("depth"));
+
+        header[6..8].copy_from_slice(&5u16.to_le_bytes());
+        assert!(Ext4ExtentHeader::parse(&header).is_ok());
+    }
+
+    #[test]
+    fn test_extent_tree_depth_above_max_rejected_on_read() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + 0x2E..FILE_INODE_OFFSET + 0x30]
+            .copy_from_slice(&6u16.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("depth"));
+    }
+
+    #[test]
+    fn test_declared_size_beyond_filesystem_capacity_rejected() {
+        let mut img = build_ext4_fixture();
+        // The fixture holds 10 blocks of 4096 bytes (40960); claim one more.
+        img[FILE_INODE_OFFSET + 0x04..FILE_INODE_OFFSET + 0x08]
+            .copy_from_slice(&40961u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("capacity"));
+
+        let error = ext4.read_file_range("test.txt", 0, 16).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_full_read_is_bounded_by_declared_size() {
+        let mut img = build_ext4_fixture();
+        // The extent claims 9 blocks starting at block 4, running past the
+        // 10-block filesystem; i_size stays 11, so only block 4 may be read.
+        img[FILE_INODE_OFFSET + 0x38..FILE_INODE_OFFSET + 0x3A]
+            .copy_from_slice(&9u16.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let mut file = ext4.open_file("test.txt").unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "Hello World");
+    }
+
+    #[test]
+    fn test_unwritten_extent_zero_fill_bounded_by_declared_size() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + 0x04..FILE_INODE_OFFSET + 0x08]
+            .copy_from_slice(&16u32.to_le_bytes());
+        // Unwritten extent claiming 32767 blocks (~128 MiB of zero-fill).
+        img[FILE_INODE_OFFSET + 0x38..FILE_INODE_OFFSET + 0x3A]
+            .copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let mut file = ext4.open_file("test.txt").unwrap();
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+        assert_eq!(content, vec![0u8; 16]);
+    }
+
+    #[test]
+    fn test_inodes_count_beyond_block_group_capacity_rejected() {
+        let mut img = build_ext4_fixture();
+        // 10 blocks / 32768 blocks-per-group yields a single block group with
+        // 16 inodes; claiming 33 inodes is impossible geometry.
+        img[1024..1024 + 0x04].copy_from_slice(&33u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let error = Ext4Reader::open(reader, 0).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("inodes count"));
+    }
+
+    #[test]
+    fn test_open_file_requires_extents_flag() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + 0x20..FILE_INODE_OFFSET + 0x24]
+            .copy_from_slice(&0u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("does not use extents"));
+
+        let error = ext4.read_file_range("test.txt", 0, 4).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_open_file_rejects_inline_data_with_typed_unsupported() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + 0x20..FILE_INODE_OFFSET + 0x24]
+            .copy_from_slice(&0x1008_0000u32.to_le_bytes()); // EXTENTS | INLINE_DATA
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn test_directory_listing_requires_extents_flag() {
+        let mut img = build_ext4_fixture();
+        img[SUBDIR_INODE_OFFSET + 0x20..SUBDIR_INODE_OFFSET + 0x24]
+            .copy_from_slice(&0u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.list_children("subdir").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("does not use extents"));
+    }
+
+    #[test]
+    fn test_block_to_offset_rejects_out_of_range_blocks() {
+        let img = build_ext4_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+
+        assert!(ext4.block_to_offset(0).is_ok()); // first_data_block == 0
+        assert!(ext4.block_to_offset(9).is_ok());
+        let error = ext4.block_to_offset(10).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("outside filesystem bounds"));
+    }
+
+    #[test]
+    fn test_extent_data_block_outside_filesystem_rejected() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + 0x3C..FILE_INODE_OFFSET + 0x40]
+            .copy_from_slice(&10u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("outside filesystem bounds"));
+    }
+
+    #[test]
+    fn test_inode_mode_rejects_short_input() {
+        assert!(Ext4Reader::inode_mode(&[]).is_err());
+        assert!(Ext4Reader::inode_mode(&[0xA4]).is_err());
+        assert_eq!(Ext4Reader::inode_mode(&[0xA4, 0x81]).unwrap(), 0x81A4);
     }
 }

@@ -45,9 +45,14 @@ fn assess(bytes: &[u8], record_version: u32) -> XfsLogState {
     }
     let cycle0 = cycle_at(bytes, 0);
     if cycle0 == Some(0) {
-        // A zeroed log head means there is nothing to replay (mkfs writes a
-        // dummy unmount record, so a genuinely fresh log is not all zero).
-        return XfsLogState::Clean;
+        // Only a fully zeroed log is certainly empty (mkfs writes a dummy
+        // unmount record, so a genuinely fresh log is not all zero). A zeroed
+        // head with live data later in the snapshot is ambiguous — a torn
+        // zeroing pass looks exactly like this — so fail safe to Dirty.
+        if bytes.iter().all(|byte| *byte == 0) {
+            return XfsLogState::Clean;
+        }
+        return XfsLogState::Dirty;
     }
     let cycle_last = cycle_at(bytes, bbcount - 1);
     let (Some(first_cycle), Some(last_cycle)) = (cycle0, cycle_last) else {

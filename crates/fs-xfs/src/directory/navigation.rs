@@ -3,7 +3,7 @@ use super::{
     XFS_DIR3_FT_MAX, XFS_DIR3_FT_UNKNOWN,
 };
 use crate::inode::XfsInodeMetadata;
-use crate::{di_off, XfsReader, FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL};
+use crate::{XfsReader, FORMAT_BTREE, FORMAT_EXTENTS, FORMAT_LOCAL};
 use evidence_core::filesystem::{
     invalid_fs_data, path_components, FileSystemDiagnostic, FileSystemDiagnosticKind,
 };
@@ -49,7 +49,8 @@ impl XfsReader {
         }
 
         let diagnostic_count = self.diagnostics.borrow().len();
-        let (entries, cacheable) = match inode[di_off::FORMAT] {
+        let format = Self::inode_format(inode)?;
+        let (entries, cacheable) = match format {
             FORMAT_LOCAL => {
                 let data_fork = Self::data_fork(inode)?;
                 let raw = Self::parse_shortform_dir(data_fork, self.has_ftype)?;
@@ -68,7 +69,12 @@ impl XfsReader {
                         return Err(block_error);
                     }
                     let data_fork = Self::data_fork(inode)?;
-                    let full_literal = &inode[Self::inode_core_size(inode)..];
+                    let full_literal =
+                        inode.get(Self::inode_core_size(inode)..).ok_or_else(|| {
+                            invalid_fs_data(format!(
+                                "directory inode {ino} buffer is shorter than its core"
+                            ))
+                        })?;
                     let recovered = self
                         .recover_shortform_dir_entries_raw(
                             &[data_fork, full_literal],

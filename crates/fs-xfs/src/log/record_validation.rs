@@ -256,6 +256,11 @@ pub(super) fn truncated_issue(block: usize, section: &str) -> XfsLogIssue {
 }
 
 pub(super) fn validate_snapshot(snapshot: &XfsLogSnapshot) -> Result<(), XfsLogError> {
+    if snapshot.bytes.is_empty() {
+        return Err(XfsLogError::InvalidGeometry(
+            "snapshot is empty".to_string(),
+        ));
+    }
     if !snapshot.bytes.len().is_multiple_of(XLOG_BASIC_BLOCK_SIZE) {
         return Err(XfsLogError::InvalidGeometry(format!(
             "snapshot length {} is not 512-byte aligned",

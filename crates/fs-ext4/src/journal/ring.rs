@@ -7,7 +7,7 @@ use super::types::{
     JournalHeader, JournalHistoryScan, JournalRevoke, JournalScan, JournalScanIssue,
     JournalSuperblock, JournalTransaction, JBD2_MAGIC_NUMBER,
 };
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 pub fn parse_journal(journal_data: &[u8]) -> JournalResult<JournalScan> {
     let superblock = JournalSuperblock::parse(journal_data)?;
@@ -63,13 +63,23 @@ pub fn parse_journal(journal_data: &[u8]) -> JournalResult<JournalScan> {
 
 /// Scans committed historical transactions even when `s_start == 0`.
 /// Structurally invalid candidate chains are reported and never published.
+/// Total scanning is bounded at twice the ring size, and blocks consumed by
+/// an accepted transaction are skipped as later candidates, so a
+/// magic-sprayed ring cannot force quadratic work.
 pub fn parse_journal_history(journal_data: &[u8]) -> JournalResult<JournalHistoryScan> {
     let superblock = JournalSuperblock::parse(journal_data)?;
     let view = JournalView::new(journal_data, &superblock)?;
     let mut candidates = HashMap::<u32, (usize, u32, JournalTransaction)>::new();
     let mut rejected_candidates = Vec::new();
+    let mut scan_state = HistoryScanState {
+        remaining_budget: u64::from(view.capacity()).saturating_mul(2),
+        consumed_blocks: HashSet::new(),
+    };
 
     for block in view.first..view.last {
+        if scan_state.consumed_blocks.contains(&block) {
+            continue;
+        }
         let data = view.block(block)?;
         if !has_journal_magic(data) {
             continue;
@@ -81,10 +91,11 @@ pub fn parse_journal_history(journal_data: &[u8]) -> JournalResult<JournalHistor
                 continue;
             }
         };
-        if !matches!(
+        let candidate = matches!(
             header.block_type,
             JournalBlockType::Descriptor | JournalBlockType::Revoke
-        ) {
+        );
+        if !candidate || scan_state.remaining_budget == 0 {
             continue;
         }
         collect_history_candidate(
@@ -92,6 +103,7 @@ pub fn parse_journal_history(journal_data: &[u8]) -> JournalResult<JournalHistor
             &superblock,
             block,
             header.sequence,
+            &mut scan_state,
             &mut candidates,
             &mut rejected_candidates,
         );
@@ -124,20 +136,33 @@ fn collect_history_candidate(
     superblock: &JournalSuperblock,
     block: u32,
     sequence: u32,
+    state: &mut HistoryScanState,
     candidates: &mut HashMap<u32, (usize, u32, JournalTransaction)>,
     rejected: &mut Vec<JournalScanIssue>,
 ) {
-    let attempt = match scan_transaction(view, superblock, block, sequence, view.capacity()) {
+    let budget = view
+        .capacity()
+        .min(u32::try_from(state.remaining_budget).unwrap_or(u32::MAX));
+    let attempt = match scan_transaction(view, superblock, block, sequence, budget) {
         Ok(attempt) => attempt,
         Err(error) => {
+            state.remaining_budget = state.remaining_budget.saturating_sub(1);
             rejected.push(scan_issue(block, Some(sequence), error.to_string()));
             return;
         }
     };
+    state.remaining_budget = state
+        .remaining_budget
+        .saturating_sub(u64::from(attempt.consumed).max(1));
     let Some(transaction) = attempt.transaction else {
         rejected.push(scan_issue(block, Some(sequence), attempt.reason));
         return;
     };
+    let mut cursor = attempt.start_block;
+    for _ in 0..attempt.consumed {
+        state.consumed_blocks.insert(cursor);
+        cursor = view.next(cursor);
+    }
     let score =
         transaction.mappings.len() + transaction.descriptors.len() + transaction.revokes.len();
     match candidates.entry(sequence) {
@@ -364,6 +389,11 @@ fn has_journal_magic(data: &[u8]) -> bool {
         .and_then(|bytes| bytes.try_into().ok())
         .map(u32::from_be_bytes)
         == Some(JBD2_MAGIC_NUMBER)
+}
+
+struct HistoryScanState {
+    remaining_budget: u64,
+    consumed_blocks: HashSet<u32>,
 }
 
 struct TransactionState {

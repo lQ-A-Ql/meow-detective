@@ -1,20 +1,19 @@
 use crate::format::{Ext4Extent, Ext4ExtentHeader};
 use crate::Ext4Reader;
-use evidence_core::filesystem::{
-    fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size,
-};
+use evidence_core::filesystem::{fs_out_of_memory, invalid_fs_data};
 use std::io;
 
 impl Ext4Reader {
     pub(crate) fn read_extent_data(&self, i_block: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
+        self.validate_declared_size(file_size)?;
         if i_block.len() < 12 {
             return Ok(Vec::new());
         }
         let header = Ext4ExtentHeader::parse(i_block)?;
         if header.eh_depth == 0 {
-            self.read_extent_leaves(i_block, file_size)
+            self.read_extent_leaves(i_block, file_size, 0)
         } else {
-            self.walk_extent_tree(i_block, file_size, header.eh_depth)
+            self.walk_extent_tree(i_block, file_size, 0, header.eh_depth)
         }
     }
 
@@ -25,6 +24,7 @@ impl Ext4Reader {
         offset: u64,
         length: usize,
     ) -> io::Result<Vec<u8>> {
+        self.validate_declared_size(file_size)?;
         if i_block.len() < 12 || length == 0 || offset >= file_size {
             return Ok(Vec::new());
         }
@@ -50,21 +50,58 @@ impl Ext4Reader {
         Ok(data)
     }
 
-    fn read_extent_leaves(&self, node_data: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
+    /// Reads leaf extents, accumulating at most `file_size - collected` bytes
+    /// so a crafted extent list cannot inflate memory beyond the declared
+    /// inode size. Extents starting at or past `file_size` hold no file data
+    /// and are skipped.
+    fn read_extent_leaves(
+        &self,
+        node_data: &[u8],
+        file_size: u64,
+        collected: u64,
+    ) -> io::Result<Vec<u8>> {
         let header = Ext4ExtentHeader::parse(node_data)?;
         let mut data = Vec::new();
         for extent in parse_extents(node_data, header.eh_entries)? {
+            let gathered = collected.saturating_add(data.len() as u64);
+            if gathered >= file_size {
+                break;
+            }
+            let logical_start = u64::from(extent.ee_block).saturating_mul(self.block_size);
+            if logical_start >= file_size {
+                continue;
+            }
+            let remaining = file_size - gathered;
             let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
-            let block_count = extent.block_count() as u64;
+            let block_count = u64::from(extent.block_count());
             if extent.is_unwritten() {
-                append_zeroes(&mut data, block_count.saturating_mul(self.block_size))?;
+                let zeroes = block_count.saturating_mul(self.block_size).min(remaining);
+                append_zeroes(&mut data, zeroes)?;
             } else {
-                for block in 0..block_count {
-                    data.extend_from_slice(&self.read_block(start_block + block)?);
-                }
+                self.append_extent_blocks(&mut data, start_block, block_count, remaining)?;
             }
         }
-        Ok(truncate_data_to_declared_size(data, file_size))
+        Ok(data)
+    }
+
+    fn append_extent_blocks(
+        &self,
+        data: &mut Vec<u8>,
+        start_block: u64,
+        block_count: u64,
+        budget: u64,
+    ) -> io::Result<()> {
+        let mut remaining = budget;
+        for block in start_block..start_block.saturating_add(block_count) {
+            if remaining == 0 {
+                break;
+            }
+            let block_data = self.read_block(block)?;
+            let take = (block_data.len() as u64).min(remaining);
+            data.extend_from_slice(&block_data[..take as usize]);
+            remaining -= take;
+        }
+        Ok(())
     }
 
     fn read_extent_leaves_range(
@@ -120,20 +157,25 @@ impl Ext4Reader {
         &self,
         node_data: &[u8],
         file_size: u64,
+        collected: u64,
         depth: u16,
     ) -> io::Result<Vec<u8>> {
         let header = Ext4ExtentHeader::parse(node_data)?;
         let mut data = Vec::new();
         for child_block in parse_index_blocks(node_data, header.eh_entries)? {
+            let gathered = collected.saturating_add(data.len() as u64);
+            if gathered >= file_size {
+                break;
+            }
             let child_data = self.read_block(child_block)?;
             let mut chunk = if depth == 1 {
-                self.read_extent_leaves(&child_data, u64::MAX)?
+                self.read_extent_leaves(&child_data, file_size, gathered)?
             } else {
-                self.walk_extent_tree(&child_data, u64::MAX, depth - 1)?
+                self.walk_extent_tree(&child_data, file_size, gathered, depth - 1)?
             };
             data.append(&mut chunk);
         }
-        Ok(truncate_data_to_declared_size(data, file_size))
+        Ok(data)
     }
 
     fn walk_extent_tree_range(

@@ -10,6 +10,9 @@ use super::{
 pub struct XfsLogParseLimits {
     pub max_records: usize,
     pub max_operations: usize,
+    /// Total record-body bytes the collection loop may buffer before it
+    /// stops with a `LimitReached` issue.
+    pub max_body_bytes: u64,
 }
 
 impl Default for XfsLogParseLimits {
@@ -17,6 +20,7 @@ impl Default for XfsLogParseLimits {
         Self {
             max_records: 4096,
             max_operations: 262_144,
+            max_body_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -40,13 +44,13 @@ pub fn analyze_log_snapshot(
     snapshot: &XfsLogSnapshot,
     limits: XfsLogParseLimits,
 ) -> Result<XfsLogAnalysis, XfsLogError> {
-    if limits.max_records == 0 || limits.max_operations == 0 {
+    if limits.max_records == 0 || limits.max_operations == 0 || limits.max_body_bytes == 0 {
         return Err(XfsLogError::InvalidGeometry(
             "log parse limits must be non-zero".into(),
         ));
     }
 
-    let collection = collect_log_records(snapshot, limits.max_records)?;
+    let collection = collect_log_records(snapshot, limits.max_records, limits.max_body_bytes)?;
     let mut parsed_records = Vec::with_capacity(collection.records.len());
     let mut issues = collection.issues;
     let mut operation_count = 0usize;
