@@ -3,6 +3,7 @@ import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import {
   getEmulationStatus,
+  installEmulationEfiFallback,
   launchEmulation,
   listEmulationSessions,
   prepareEmulation,
@@ -57,5 +58,24 @@ describe('emulation API', () => {
     expect(requestMock).toHaveBeenNthCalledWith(4, COMMANDS.emulation.RELEASE, {
       sessionId: 'emulation-1',
     });
+  });
+
+  it('installs the EFI fallback loader through the registered command', async () => {
+    requestMock.mockResolvedValueOnce({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      espPartitionIndex: 1,
+      strategy: 'grub',
+      filesWritten: ['\\EFI\\BOOT\\BOOTX64.EFI'],
+      alreadyPresent: false,
+    } as never);
+
+    const result = await installEmulationEfiFallback('emulation-1');
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.INSTALL_EFI_FALLBACK, {
+      sessionId: 'emulation-1',
+    });
+    expect(result.strategy).toBe('grub');
+    expect(result.alreadyPresent).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import type {
   EmulationBypassAccount,
   EmulationBypassApplyRequest,
   EmulationBypassResult,
+  EmulationEfiFallbackResult,
   EmulationLinuxAccount,
   EmulationLinuxBypassRequest,
   EmulationLinuxBypassResult,
@@ -68,6 +69,15 @@ export async function applyEmulationLinuxBypass(
 
 export async function launchEmulation(sessionId: string): Promise<EmulationSessionStatus> {
   return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.LAUNCH, { sessionId });
+}
+
+export async function installEmulationEfiFallback(
+  sessionId: string,
+): Promise<EmulationEfiFallbackResult> {
+  return apiClient.request<EmulationEfiFallbackResult>(
+    COMMANDS.emulation.INSTALL_EFI_FALLBACK,
+    { sessionId },
+  );
 }
 
 export async function getEmulationStatus(sessionId: string): Promise<EmulationSessionStatus> {

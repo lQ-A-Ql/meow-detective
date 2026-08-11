@@ -11,6 +11,7 @@ import {
   getEmulationBypassAccounts,
   getEmulationLinuxAccounts,
   getEmulationPreflight,
+  installEmulationEfiFallback,
   launchEmulation,
   listEmulationSessions,
   prepareEmulation,
@@ -63,6 +64,9 @@ export interface EmulationWorkspaceModel {
   osdataCleanupPartitions: number[];
   cleanupOsdata: boolean;
   toggleCleanupOsdata: () => void;
+  needsEfiFallback: boolean;
+  installEfiFallback: boolean;
+  toggleInstallEfiFallback: () => void;
   bypassPartition?: number;
   selectBypassPartition: (partition?: number) => void;
   bypassIsLinux: boolean;
@@ -133,6 +137,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [bypassAction, setBypassAction] = useState<EmulationBypassAction>('clearPassword');
   const [linuxUsername, setLinuxUsername] = useState<string | undefined>(undefined);
   const [cleanupOsdata, setCleanupOsdata] = useState(true);
+  const [installEfiFallback, setInstallEfiFallback] = useState(true);
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -178,6 +183,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     setBypassRid(undefined);
     setLinuxUsername(undefined);
     setCleanupOsdata(true);
+    setInstallEfiFallback(true);
   }, [selectedSourceId]);
 
   useEffect(() => {
@@ -194,6 +200,13 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       .map((install) => install.partitionIndex),
     [preflightQuery.data],
   );
+  const needsEfiFallback = useMemo(
+    () => (preflightQuery.data?.installs ?? [])
+      .some((install) => (install.bootRiskNotes ?? []).includes('no-efi-fallback')),
+    [preflightQuery.data],
+  );
+  const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
+  const isLinuxSource = selectedSource?.platform === 'LINUX';
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
       if (!selectedSourceId) {
@@ -231,6 +244,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
             action: bypassAction,
           });
         }
+        if (isLinuxSource && needsEfiFallback && installEfiFallback) {
+          await installEmulationEfiFallback(prepared.sessionId);
+        }
         return await launchEmulation(prepared.sessionId);
       } catch (error) {
         // The prepared session must not leak when a post-prepare step fails;
@@ -262,7 +278,6 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     () => new Set(sessions.filter((session) => session.active).map((session) => session.dataSourceId)),
     [sessions],
   );
-  const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
   const combinedError = currentCase.error
     ?? dataSourcesQuery.error
     ?? sessionsQuery.error
@@ -293,6 +308,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   }, []);
   const toggleCleanupOsdata = useCallback(() => {
     setCleanupOsdata((current) => !current);
+  }, []);
+  const toggleInstallEfiFallback = useCallback(() => {
+    setInstallEfiFallback((current) => !current);
   }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
@@ -328,6 +346,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     osdataCleanupPartitions,
     cleanupOsdata,
     toggleCleanupOsdata,
+    needsEfiFallback,
+    installEfiFallback,
+    toggleInstallEfiFallback,
     bypassPartition,
     selectBypassPartition: setBypassPartition,
     bypassIsLinux,

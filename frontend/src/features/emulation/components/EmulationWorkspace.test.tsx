@@ -40,6 +40,9 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     osdataCleanupPartitions: [],
     cleanupOsdata: true,
     toggleCleanupOsdata: vi.fn(),
+    needsEfiFallback: false,
+    installEfiFallback: true,
+    toggleInstallEfiFallback: vi.fn(),
     bypassPartition: undefined,
     selectBypassPartition: vi.fn(),
     bypassIsLinux: false,
@@ -196,6 +199,13 @@ describe('EmulationWorkspace', () => {
   });
 
   it('renders linux installs with distro, boot risks and the GRUB bypass hint', () => {    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
       preflight: {
         dataSourceId: 'source-1',
         installs: [{
@@ -235,5 +245,93 @@ describe('EmulationWorkspace', () => {
 
     rerender(<EmulationWorkspace model={createModel()} />);
     expect(screen.queryByText(/SystemRescue/)).not.toBeInTheDocument();
+  });
+
+  it('renders the Linux panel for linux sources without the Windows bypass selects', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      bypassPartition: 5,
+      bypassIsLinux: true,
+      linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
+    })} />);
+
+    expect(screen.getByRole('combobox', { name: '目标分区' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '目标账户' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '绕密方式' })).not.toBeInTheDocument();
+    expect(screen.queryByText('维护盘：自动生成')).not.toBeInTheDocument();
+  });
+
+  it('renders the Windows panel with SAM bypass selects for windows sources', () => {
+    render(<EmulationWorkspace model={createModel({
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 2,
+          osdataPresent: true,
+          samPresent: true,
+          utilmanBypassAvailable: true,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      bypassPartition: 2,
+      bypassAccounts: [{ rid: 500, username: 'Administrator', disabled: false, lockedOut: false, hasPassword: true }],
+    })} />);
+
+    expect(screen.getByRole('combobox', { name: '目标账户' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '绕密方式' })).toBeInTheDocument();
+    expect(screen.queryByText(/GRUB 菜单按 e/)).not.toBeInTheDocument();
+  });
+
+  it('shows the EFI fallback row only when preflight reports no-efi-fallback', () => {
+    const toggleInstallEfiFallback = vi.fn();
+    const linuxPreflight = (bootRiskNotes?: string[]) => createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'Kali 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 2,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 2,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          bootRiskNotes,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      needsEfiFallback: (bootRiskNotes ?? []).includes('no-efi-fallback'),
+      toggleInstallEfiFallback,
+    });
+
+    const { rerender } = render(<EmulationWorkspace model={linuxPreflight(['no-efi-fallback'])} />);
+    expect(screen.getByText('无 EFI fallback 引导')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: '启动前安装 EFI fallback 引导（仅写入覆盖层）' }));
+    expect(toggleInstallEfiFallback).toHaveBeenCalledOnce();
+
+    rerender(<EmulationWorkspace model={linuxPreflight(undefined)} />);
+    expect(screen.queryByText('无 EFI fallback 引导')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启动前安装 EFI fallback 引导（仅写入覆盖层）' })).not.toBeInTheDocument();
   });
 });

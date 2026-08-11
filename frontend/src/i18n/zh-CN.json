@@ -526,7 +526,9 @@
         "bridged": "桥接"
       },
       "optionClipboard": "剪贴板 / 拖放",
-      "optionTimeSync": "客机时间同步"
+      "optionTimeSync": "客机时间同步",
+      "installEfiFallback": "启动前安装 EFI fallback 引导（仅写入覆盖层）",
+      "installEfiFallbackHint": "GPT 磁盘缺少 ESP 回退引导器，虚拟机会落入固件启动菜单；勾选后将在 ESP 安装 BOOTX64.EFI，仅写入 COW 覆盖层，不改动原始证据。"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO 优先",
@@ -544,6 +546,7 @@
       "noKernel": "无内核",
       "noFstab": "无 fstab",
       "btrfsRoot": "btrfs 根",
+      "noEfiFallback": "无 EFI fallback 引导",
       "linuxBypassHint": "Linux 绕密：在 GRUB 菜单按 e，在 linux 行追加 init=/bin/bash（或 systemd.unit=rescue.target），Ctrl-X 启动即得 root shell；执行 mount -o remount,rw / 后可用 passwd 重置任意账户。所有改动仅落在 COW 覆盖层。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",

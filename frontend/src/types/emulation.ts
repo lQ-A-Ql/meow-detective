@@ -108,6 +108,17 @@ export interface EmulationLinuxBypassRequest {
   username: string;
 }
 
+export type EmulationEfiFallbackStrategy = 'shim' | 'grub' | 'systemdBoot';
+
+export interface EmulationEfiFallbackResult {
+  sessionId: string;
+  dataSourceId: string;
+  espPartitionIndex: number;
+  strategy?: EmulationEfiFallbackStrategy | null;
+  filesWritten: string[];
+  alreadyPresent: boolean;
+}
+
 export interface EmulationLinuxBypassResult {
   sessionId: string;
   dataSourceId: string;

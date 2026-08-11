@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   bypassAccounts: vi.fn(),
   applyBypass: vi.fn(),
   cleanupOsdata: vi.fn(),
+  installEfiFallback: vi.fn(),
   prepare: vi.fn(),
   launch: vi.fn(),
   release: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('@/lib/api/emulation', () => ({
   getEmulationBypassAccounts: mocks.bypassAccounts,
   applyEmulationBypass: mocks.applyBypass,
   cleanupEmulationOsdata: mocks.cleanupOsdata,
+  installEmulationEfiFallback: mocks.installEfiFallback,
   listEmulationSessions: mocks.listSessions,
   prepareEmulation: mocks.prepare,
   launchEmulation: mocks.launch,
@@ -193,5 +195,106 @@ describe('useEmulationWorkspaceModel', () => {
     act(() => result.current.selectSource('source-2'));
 
     await waitFor(() => expect(result.current.cleanupOsdata).toBe(true));
+  });
+
+  function useLinuxEfiSource() {
+    mocks.dataSources.mockReturnValue(queryResult([{
+      id: 'source-1',
+      name: 'Kali 镜像',
+      kind: 'e01',
+      platform: 'linux',
+      importState: 'ready',
+      sourceHash: 'c'.repeat(64),
+      sourcePath: 'E:\\kali.E01',
+      importedAt: '2026-08-06T00:00:00Z',
+      partitions: [],
+    }]));
+    mocks.preflight.mockResolvedValue({
+      dataSourceId: 'source-1',
+      installs: [{
+        partitionIndex: 2,
+        platform: 'linux',
+        osdataPresent: false,
+        samPresent: false,
+        utilmanBypassAvailable: false,
+        bootRiskNotes: ['no-efi-fallback'],
+      }],
+      recommendedBootRoute: 'directSystem',
+    });
+  }
+
+  it('installs the EFI fallback after prepare and before launch when the linux source needs it', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource();
+    mocks.installEfiFallback.mockResolvedValue({
+      sessionId: 'emulation-1',
+      espPartitionIndex: 1,
+      strategy: 'grub',
+      alreadyPresent: false,
+    });
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
+    await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
+    expect(result.current.installEfiFallback).toBe(true);
+
+    await act(async () => result.current.start());
+
+    expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.installEfiFallback.mock.invocationCallOrder[0])
+      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
+    expect(mocks.installEfiFallback.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+  });
+
+  it('skips the EFI fallback install when the investigator unchecks it', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource();
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
+
+    act(() => result.current.toggleInstallEfiFallback());
+    expect(result.current.installEfiFallback).toBe(false);
+    await act(async () => result.current.start());
+
+    expect(mocks.installEfiFallback).not.toHaveBeenCalled();
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+  });
+
+  it('does not install the EFI fallback for windows sources even when the note appears', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.preflight.mockResolvedValue({
+      dataSourceId: 'source-1',
+      installs: [{
+        partitionIndex: 2,
+        osdataPresent: false,
+        samPresent: true,
+        utilmanBypassAvailable: true,
+        bootRiskNotes: ['no-efi-fallback'],
+      }],
+      recommendedBootRoute: 'directSystem',
+    });
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
+
+    await act(async () => result.current.start());
+
+    expect(mocks.installEfiFallback).not.toHaveBeenCalled();
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+  });
+
+  it('releases the prepared session when the EFI fallback install fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource();
+    mocks.installEfiFallback.mockRejectedValue(new Error('esp write failed'));
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
+
+    await act(async () => {
+      await expect(result.current.start()).rejects.toThrow('esp write failed');
+    });
+
+    expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.release).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.launch).not.toHaveBeenCalled();
   });
 });

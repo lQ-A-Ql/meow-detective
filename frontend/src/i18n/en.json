@@ -526,7 +526,9 @@
         "bridged": "Bridged"
       },
       "optionClipboard": "Clipboard / drag-and-drop",
-      "optionTimeSync": "Guest time synchronization"
+      "optionTimeSync": "Guest time synchronization",
+      "installEfiFallback": "Install EFI fallback bootloader before launch (overlay only)",
+      "installEfiFallbackHint": "The GPT disk has no ESP fallback loader, so the VM would land in the firmware boot manager; when enabled, BOOTX64.EFI is installed into the ESP through the COW overlay and original evidence is never written."
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO first",
@@ -544,6 +546,7 @@
       "noKernel": "No kernel",
       "noFstab": "No fstab",
       "btrfsRoot": "btrfs root",
+      "noEfiFallback": "No EFI fallback loader",
       "linuxBypassHint": "Linux logon bypass: press 'e' in the GRUB menu, append init=/bin/bash (or systemd.unit=rescue.target) to the linux line and boot with Ctrl-X for a root shell; run 'mount -o remount,rw /' then 'passwd'. All writes stay in the COW overlay.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",

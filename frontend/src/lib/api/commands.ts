@@ -65,6 +65,7 @@ export const COMMANDS = {
     CLEANUP_OSDATA: 'cleanup_emulation_osdata',
     LINUX_ACCOUNTS: 'get_emulation_linux_accounts',
     APPLY_LINUX_BYPASS: 'apply_emulation_linux_bypass',
+    INSTALL_EFI_FALLBACK: 'install_emulation_efi_fallback',
     GET_STATUS: 'get_emulation_status',
     LIST_SESSIONS: 'list_emulation_sessions',
     RELEASE: 'release_emulation',
