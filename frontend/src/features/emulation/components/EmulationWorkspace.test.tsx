@@ -54,6 +54,7 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     selectBypassAction: vi.fn(),
     linuxAccounts: [],
     linuxAccountsLoading: false,
+    linuxAccountsError: undefined,
     linuxUsername: undefined,
     selectLinuxUsername: vi.fn(),
     sessions: [],
@@ -333,5 +334,121 @@ describe('EmulationWorkspace', () => {
     rerender(<EmulationWorkspace model={linuxPreflight(undefined)} />);
     expect(screen.queryByText('无 EFI fallback 引导')).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: '启动前安装 EFI fallback 引导（仅写入覆盖层）' })).not.toBeInTheDocument();
+  });
+
+  it('uses the Linux bypass title without SAM wording', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+    })} />);
+
+    expect(screen.getByText('系统绕密：清除账户密码（仅写入覆盖层）')).toBeInTheDocument();
+    expect(screen.queryByText(/SAM/)).not.toBeInTheDocument();
+  });
+
+  it('surfaces the linux account query error under the username selector', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      bypassPartition: 5,
+      bypassIsLinux: true,
+      linuxAccountsError: '该文件系统不支持离线绕密',
+    })} />);
+
+    expect(screen.getByText('该文件系统不支持离线绕密')).toBeInTheDocument();
+    expect(screen.queryByText('未在该分区找到可清除密码的 Linux 账户')).not.toBeInTheDocument();
+  });
+
+  it('shows an explicit hint when the linux account list loads empty', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      bypassPartition: 5,
+      bypassIsLinux: true,
+      linuxAccounts: [],
+      linuxAccountsLoading: false,
+    })} />);
+
+    expect(screen.getByText('未在该分区找到可清除密码的 Linux 账户')).toBeInTheDocument();
+  });
+
+  it('shows the in-guest xfs_repair guidance only when preflight reports xfs-log-dirty', () => {
+    const linuxModel = (bootRiskNotes?: string[]) => createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          bootRiskNotes,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+    });
+
+    const { rerender } = render(<EmulationWorkspace model={linuxModel(['xfs-log-dirty'])} />);
+    expect(screen.getByText('XFS 日志脏')).toBeInTheDocument();
+    expect(screen.getByText(/xfs_repair/)).toBeInTheDocument();
+
+    rerender(<EmulationWorkspace model={linuxModel(undefined)} />);
+    expect(screen.queryByText('XFS 日志脏')).not.toBeInTheDocument();
+    expect(screen.queryByText(/xfs_repair/)).not.toBeInTheDocument();
   });
 });

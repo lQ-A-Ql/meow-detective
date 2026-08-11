@@ -547,6 +547,8 @@
       "noFstab": "No fstab",
       "btrfsRoot": "btrfs root",
       "noEfiFallback": "No EFI fallback loader",
+      "xfsLogDirty": "XFS log dirty",
+      "xfsLogDirtyHint": "Unreplayed XFS log detected: attach a live/rescue ISO and run xfs_repair on the dirty volumes in the guest (xfs_repair -L only as a last resort) before direct-booting the installed system; the host never rewrites evidence.",
       "linuxBypassHint": "Linux logon bypass: press 'e' in the GRUB menu, append init=/bin/bash (or systemd.unit=rescue.target) to the linux line and boot with Ctrl-X for a root shell; run 'mount -o remount,rw /' then 'passwd'. All writes stay in the COW overlay.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
@@ -562,6 +564,7 @@
     },
     "bypass": {
       "title": "Logon bypass (offline SAM edit, overlay only)",
+      "titleLinux": "Logon bypass: clear account password (overlay only)",
       "partition": "Target partition",
       "account": "Target account",
       "action": "Bypass action",
@@ -569,7 +572,8 @@
       "clearPassword": "Clear account password",
       "enableAndClear": "Enable account and clear password",
       "disabled": "disabled",
-      "noPassword": "no password"
+      "noPassword": "no password",
+      "noAccounts": "No Linux accounts with a clearable password found on this partition"
     },
     "source": {
       "kind": "Image type",

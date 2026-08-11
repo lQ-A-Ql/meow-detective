@@ -25,7 +25,7 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
   if (linuxInstalls.length === 0) return null;
   return (
     <fieldset className="space-y-2 border-b border-forensics-border py-3">
-      <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.title')}</legend>
+      <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.titleLinux')}</legend>
       <Select
         value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
         onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
@@ -64,6 +64,19 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
           </SelectContent>
         </Select>
       ) : null}
+      {model.bypassPartition !== undefined && model.linuxAccountsError ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {model.linuxAccountsError}
+        </div>
+      ) : null}
+      {model.bypassPartition !== undefined
+        && !model.linuxAccountsError
+        && !model.linuxAccountsLoading
+        && model.linuxAccounts.length === 0 ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-muted">
+          {t('emulationPage.bypass.noAccounts')}
+        </div>
+      ) : null}
     </fieldset>
   );
 }
@@ -71,6 +84,8 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
 function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.preflight || model.preflight.installs.length === 0) return null;
+  const hasDirtyXfsLog = model.preflight.installs
+    .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty'));
   return (
     <div className="space-y-1.5 border-y border-forensics-border py-3">
       <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
@@ -93,8 +108,16 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
           {(install.bootRiskNotes ?? []).includes('no-efi-fallback') ? (
             <Badge variant="secondary">{t('emulationPage.preflight.noEfiFallback')}</Badge>
           ) : null}
+          {(install.bootRiskNotes ?? []).includes('xfs-log-dirty') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.xfsLogDirty')}</Badge>
+          ) : null}
         </div>
       ))}
+      {hasDirtyXfsLog ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.xfsLogDirtyHint')}
+        </div>
+      ) : null}
       <div className="pt-1 text-[10px] leading-4 text-forensics-muted">
         {t('emulationPage.preflight.linuxBypassHint')}
       </div>

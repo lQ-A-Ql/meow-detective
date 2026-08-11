@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listSessions: vi.fn(),
   preflight: vi.fn(),
   bypassAccounts: vi.fn(),
+  linuxAccounts: vi.fn(),
   applyBypass: vi.fn(),
   cleanupOsdata: vi.fn(),
   installEfiFallback: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@/features/case/hooks', () => ({
 vi.mock('@/lib/api/emulation', () => ({
   getEmulationPreflight: mocks.preflight,
   getEmulationBypassAccounts: mocks.bypassAccounts,
+  getEmulationLinuxAccounts: mocks.linuxAccounts,
   applyEmulationBypass: mocks.applyBypass,
   cleanupEmulationOsdata: mocks.cleanupOsdata,
   installEmulationEfiFallback: mocks.installEfiFallback,
@@ -197,7 +199,7 @@ describe('useEmulationWorkspaceModel', () => {
     await waitFor(() => expect(result.current.cleanupOsdata).toBe(true));
   });
 
-  function useLinuxEfiSource() {
+  function useLinuxEfiSource(bootRiskNotes: string[] = ['no-efi-fallback']) {
     mocks.dataSources.mockReturnValue(queryResult([{
       id: 'source-1',
       name: 'Kali 镜像',
@@ -217,7 +219,7 @@ describe('useEmulationWorkspaceModel', () => {
         osdataPresent: false,
         samPresent: false,
         utilmanBypassAvailable: false,
-        bootRiskNotes: ['no-efi-fallback'],
+        bootRiskNotes,
       }],
       recommendedBootRoute: 'directSystem',
     });
@@ -296,5 +298,17 @@ describe('useEmulationWorkspaceModel', () => {
     expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');
     expect(mocks.release).toHaveBeenCalledWith('emulation-1');
     expect(mocks.launch).not.toHaveBeenCalled();
+  });
+
+  it('exposes the linux accounts query failure as a display message', async () => {
+    useLinuxEfiSource();
+    mocks.linuxAccounts.mockRejectedValue(new Error('linux accounts unsupported'));
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
+    expect(result.current.linuxAccountsError).toBeUndefined();
+
+    act(() => result.current.selectBypassPartition(2));
+
+    await waitFor(() => expect(result.current.linuxAccountsError).toBe('linux accounts unsupported'));
   });
 });

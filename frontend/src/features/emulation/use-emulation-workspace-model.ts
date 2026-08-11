@@ -78,6 +78,7 @@ export interface EmulationWorkspaceModel {
   selectBypassAction: (action: EmulationBypassAction) => void;
   linuxAccounts: EmulationLinuxAccount[];
   linuxAccountsLoading: boolean;
+  linuxAccountsError?: string;
   linuxUsername?: string;
   selectLinuxUsername: (username?: string) => void;
   sessions: EmulationSessionView[];
@@ -360,6 +361,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     selectBypassAction: setBypassAction,
     linuxAccounts: linuxAccountsQuery.data ?? [],
     linuxAccountsLoading: linuxAccountsQuery.isFetching,
+    linuxAccountsError: linuxAccountsQuery.error
+      ? errorMessage(linuxAccountsQuery.error, t('emulationPage.errors.operationFailed'))
+      : undefined,
     linuxUsername,
     selectLinuxUsername: setLinuxUsername,
     sessions,

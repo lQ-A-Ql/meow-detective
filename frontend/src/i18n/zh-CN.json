@@ -547,6 +547,8 @@
       "noFstab": "无 fstab",
       "btrfsRoot": "btrfs 根",
       "noEfiFallback": "无 EFI fallback 引导",
+      "xfsLogDirty": "XFS 日志脏",
+      "xfsLogDirtyHint": "检测到未回放的 XFS 日志：请挂载 live/rescue ISO，在救援环境对脏卷执行 xfs_repair（无法回放时用 xfs_repair -L），确认后再直接启动系统；主机侧不改写证据。",
       "linuxBypassHint": "Linux 绕密：在 GRUB 菜单按 e，在 linux 行追加 init=/bin/bash（或 systemd.unit=rescue.target），Ctrl-X 启动即得 root shell；执行 mount -o remount,rw / 后可用 passwd 重置任意账户。所有改动仅落在 COW 覆盖层。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
@@ -562,6 +564,7 @@
     },
     "bypass": {
       "title": "系统绕密（离线 SAM 编辑，仅写入 overlay）",
+      "titleLinux": "系统绕密：清除账户密码（仅写入覆盖层）",
       "partition": "目标分区",
       "account": "目标账户",
       "action": "绕密方式",
@@ -569,7 +572,8 @@
       "clearPassword": "清空账户密码",
       "enableAndClear": "启用账户并清空密码",
       "disabled": "已禁用",
-      "noPassword": "无密码"
+      "noPassword": "无密码",
+      "noAccounts": "未在该分区找到可清除密码的 Linux 账户"
     },
     "source": {
       "kind": "镜像类型",
