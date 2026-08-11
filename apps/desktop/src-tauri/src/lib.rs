@@ -148,6 +148,7 @@ macro_rules! desktop_command_handler {
             cleanup_emulation_osdata,
             get_emulation_linux_accounts,
             apply_emulation_linux_bypass,
+            install_emulation_efi_fallback,
             get_emulation_status,
             list_emulation_sessions,
             release_emulation,

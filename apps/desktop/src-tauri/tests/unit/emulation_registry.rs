@@ -305,3 +305,60 @@ fn linux_rescue_targets_carry_platform_installs_and_actions() {
         .any(|action| action == "grub-init-bash-bypass"));
     assert!(super::materials::LINUX_RESCUE_README.contains("init=/bin/bash"));
 }
+
+fn firmware_test_disk(bytes: Vec<u8>, directory: &tempfile::TempDir) -> CowDisk {
+    let provider: Arc<dyn BlockProvider> = Arc::new(MemoryProvider(bytes));
+    let identity = ParentIdentity::new(provider.len(), [1; 32]).unwrap();
+    CowDisk::create(
+        &directory.path().join("overlay.cow"),
+        provider,
+        identity,
+        CowDiskConfig::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn gpt_with_bios_boot_partition_prefers_legacy_firmware() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut bytes = vec![0u8; 2 * 512 + 128 * 128];
+    bytes[512..520].copy_from_slice(b"EFI PART");
+    bytes[512 + 12..512 + 16].copy_from_slice(&92u32.to_le_bytes());
+    bytes[512 + 72..512 + 80].copy_from_slice(&2u64.to_le_bytes());
+    bytes[512 + 80..512 + 84].copy_from_slice(&128u32.to_le_bytes());
+    bytes[512 + 84..512 + 88].copy_from_slice(&128u32.to_le_bytes());
+    // First entry: GRUB's BIOS boot partition ("Hah!IdontNeedEFI").
+    let entry = 2 * 512;
+    bytes[entry..entry + 16].copy_from_slice(b"Hah!IdontNeedEFI");
+    bytes[entry + 32..entry + 40].copy_from_slice(&34u64.to_le_bytes());
+    bytes[entry + 40..entry + 48].copy_from_slice(&2047u64.to_le_bytes());
+    let disk = firmware_test_disk(bytes, &directory);
+    assert_eq!(
+        detect_firmware(&disk).unwrap(),
+        evidence_emulation::VmwareFirmware::Bios
+    );
+}
+
+#[test]
+fn gpt_without_bios_boot_partition_keeps_efi_firmware() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut bytes = vec![0u8; 2 * 512 + 128 * 128];
+    bytes[512..520].copy_from_slice(b"EFI PART");
+    bytes[512 + 12..512 + 16].copy_from_slice(&92u32.to_le_bytes());
+    bytes[512 + 72..512 + 80].copy_from_slice(&2u64.to_le_bytes());
+    bytes[512 + 80..512 + 84].copy_from_slice(&128u32.to_le_bytes());
+    bytes[512 + 84..512 + 88].copy_from_slice(&128u32.to_le_bytes());
+    // First entry: a Linux filesystem partition, no BIOS boot partition.
+    let entry = 2 * 512;
+    bytes[entry..entry + 16].copy_from_slice(&[
+        0xAF, 0x3D, 0xC6, 0x0F, 0x83, 0x84, 0x72, 0x47, 0x8E, 0x79, 0x3D, 0x69, 0xD8, 0x47, 0x7D,
+        0xE4,
+    ]);
+    bytes[entry + 32..entry + 40].copy_from_slice(&4096u64.to_le_bytes());
+    bytes[entry + 40..entry + 48].copy_from_slice(&8191u64.to_le_bytes());
+    let disk = firmware_test_disk(bytes, &directory);
+    assert_eq!(
+        detect_firmware(&disk).unwrap(),
+        evidence_emulation::VmwareFirmware::Efi
+    );
+}

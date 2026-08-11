@@ -3,9 +3,11 @@
 mod boot_sector;
 mod cluster_chain;
 mod directory;
+mod esp_fallback;
 mod reader;
 mod types;
 
+pub use esp_fallback::{install_efi_fallback, EspFallbackInstall, FatBlockIo};
 pub use types::FatReader;
 
 #[cfg(test)]

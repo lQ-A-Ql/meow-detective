@@ -176,6 +176,11 @@ fn linux_preflight(
                 data_source_id,
                 &mut installs,
             );
+            super::emulation_linux::annotate_boot_path_risk(
+                std::path::Path::new(&path),
+                &kind,
+                &mut installs,
+            );
         }
         Err(error) => {
             tracing::warn!(error = %error, "linux preflight: source metadata unavailable");

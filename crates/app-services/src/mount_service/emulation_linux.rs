@@ -341,6 +341,81 @@ fn open_fs_by_label(
     }
 }
 
+/// Disk-level boot-path annotation for GPT images. A fresh VM has an empty
+/// NVRAM, so a GPT disk can only boot through GRUB's BIOS boot partition or
+/// the ESP fallback loader `\EFI\BOOT\BOOTX64.EFI`; when neither exists the
+/// firmware drops into its boot manager, which the `no-efi-fallback` note
+/// surfaces to the investigator (the session-level EFI fallback installation
+/// remediates it). MBR disks boot legacy and need no annotation.
+pub(crate) fn annotate_boot_path_risk(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    installs: &mut [EmulationInstallDto],
+) {
+    if installs.is_empty() {
+        return;
+    }
+    let missing = gpt_disk_missing_boot_paths(source_path, source_kind);
+    if missing != Some(true) {
+        return;
+    }
+    for install in installs.iter_mut() {
+        if !install
+            .boot_risk_notes
+            .iter()
+            .any(|note| note == "no-efi-fallback")
+        {
+            install.boot_risk_notes.push("no-efi-fallback".to_string());
+        }
+    }
+}
+
+/// `Some(true)` when the disk is GPT and neither a BIOS boot partition nor an
+/// ESP fallback loader exists; `None` when the disk layout could not be
+/// determined (no annotation without evidence).
+fn gpt_disk_missing_boot_paths(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) -> Option<bool> {
+    use evidence_core::volume::gpt::{
+        classify_partition_type, parse_gpt_entries, parse_gpt_header, GptPartitionType,
+    };
+    use std::io::{Read, Seek, SeekFrom};
+
+    const BIOS_BOOT_PARTITION: [u8; 16] = *b"Hah!IdontNeedEFI";
+    let mut reader = open_evidence_reader(source_path, source_kind).ok()?;
+    let mut header = [0u8; 512];
+    reader.seek(SeekFrom::Start(512)).ok()?;
+    reader.read_exact(&mut header).ok()?;
+    let header = parse_gpt_header(&header)?;
+    let count = header.partition_count.min(4096);
+    let entry_size = header.entry_size.clamp(128, 4096);
+    let byte_len = count as usize * entry_size as usize;
+    reader
+        .seek(SeekFrom::Start(header.partition_entry_lba * 512))
+        .ok()?;
+    let mut entries = vec![0u8; byte_len];
+    reader.read_exact(&mut entries).ok()?;
+    let partitions = parse_gpt_entries(&entries, entry_size, count);
+    if partitions
+        .iter()
+        .any(|partition| partition.type_guid == BIOS_BOOT_PARTITION)
+    {
+        return Some(false);
+    }
+    let esp = partitions.iter().find(|partition| {
+        classify_partition_type(&partition.type_guid) == GptPartitionType::EfiSystem
+    })?;
+    let window = evidence_core::PartitionWindowReader::new(
+        reader,
+        esp.start_lba * 512,
+        Some((esp.end_lba - esp.start_lba + 1) * 512),
+    )
+    .ok()?;
+    let fs = fs_fat::FatReader::open(Box::new(window), 0).ok()?;
+    Some(fs.open_file("EFI/BOOT/BOOTX64.EFI").is_err())
+}
+
 /// The guest profile a Linux data source should boot with: the VMware
 /// guestid derived from the distro's os-release ID.
 pub fn linux_guest_profile(

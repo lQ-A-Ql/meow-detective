@@ -37,6 +37,8 @@ pub enum EmulationBypassError {
     Unsupported(String),
     #[error("SAM edit failed: {0}")]
     Edit(String),
+    #[error("ESP edit failed: {0}")]
+    EspEdit(String),
 }
 
 impl transport::ServiceErrorCategory for EmulationBypassError {
@@ -47,7 +49,7 @@ impl transport::ServiceErrorCategory for EmulationBypassError {
             }
             Self::PartitionNotFound { .. } => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
-            Self::Edit(_) => transport::ErrorCategory::Parser,
+            Self::Edit(_) | Self::EspEdit(_) => transport::ErrorCategory::Parser,
         }
     }
 }

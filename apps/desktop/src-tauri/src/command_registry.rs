@@ -25,8 +25,8 @@ pub(crate) use crate::commands::{
     emulation_commands::{
         apply_emulation_bypass, apply_emulation_linux_bypass, cleanup_emulation_osdata,
         get_emulation_bypass_accounts, get_emulation_linux_accounts, get_emulation_preflight,
-        get_emulation_status, launch_emulation, list_emulation_sessions, prepare_emulation,
-        release_emulation,
+        get_emulation_status, install_emulation_efi_fallback, launch_emulation,
+        list_emulation_sessions, prepare_emulation, release_emulation,
     },
     file_commands::{
         close_file_handle, export_deleted_recovery, extract_file, forget_persisted_bitlocker_key,

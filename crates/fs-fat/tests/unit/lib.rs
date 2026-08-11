@@ -213,3 +213,5 @@ fn fat_range_read_nonzero_offset_reads_only_target_cluster_data() {
         vec![((FIRST_DATA_SECTOR + 2) * SECTOR_SIZE + 7, 9)]
     );
 }
+
+mod esp_fallback;

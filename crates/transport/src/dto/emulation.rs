@@ -269,6 +269,31 @@ pub struct EmulationLinuxBypassResultDto {
     pub already_passwordless: bool,
 }
 
+/// Which loader the EFI fallback path was populated from.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationEfiFallbackStrategyDto {
+    /// `\EFI\<vendor>\shimx64.efi` plus its GRUB/MokManager companions.
+    Shim,
+    /// A vendor `grubx64.efi` copied directly as the fallback loader.
+    Grub,
+    /// `systemd-bootx64.efi` copied as the fallback loader.
+    SystemdBoot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationEfiFallbackResultDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    /// GPT index of the EFI system partition that received the fallback.
+    pub esp_partition_index: u32,
+    pub strategy: Option<EmulationEfiFallbackStrategyDto>,
+    pub files_written: Vec<String>,
+    /// `\EFI\BOOT\BOOTX64.EFI` already existed; nothing was changed.
+    pub already_present: bool,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/emulation.rs"]
 mod tests;

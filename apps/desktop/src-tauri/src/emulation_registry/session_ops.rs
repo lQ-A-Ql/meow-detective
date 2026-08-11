@@ -153,6 +153,26 @@ impl EmulationRegistry {
         Ok(result)
     }
 
+    /// Install the UEFI fallback boot path (`\EFI\BOOT\BOOTX64.EFI`) into the
+    /// session overlay. Pure disk edit: no case database access is needed.
+    pub fn install_efi_fallback(
+        &self,
+        session_id: &str,
+    ) -> Result<transport::dto::EmulationEfiFallbackResultDto, EmulationRegistryError> {
+        let session = self.edit_session_entry(
+            session_id,
+            "ESP edits are only allowed before the guest is launched",
+        )?;
+        let _op_guard = session.op_lock.lock().map_err(|_| Self::lock_error())?;
+        self.require_state(session_id, EmulationState::DescriptorReady)?;
+        let mut result = app_services::emulation_efi_fallback::install_efi_fallback(
+            &session.disk,
+            &session.data_source_id,
+        )?;
+        result.session_id = session_id.to_string();
+        Ok(result)
+    }
+
     /// Resolve a session in `DescriptorReady` for a host-side edit.
     fn edit_session_entry(
         &self,

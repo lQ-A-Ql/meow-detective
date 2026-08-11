@@ -220,3 +220,37 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
     let restored: EmulationLinuxBypassResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, result);
 }
+
+#[test]
+fn efi_fallback_dtos_round_trip_in_camel_case() {
+    use super::{EmulationEfiFallbackResultDto, EmulationEfiFallbackStrategyDto};
+
+    let result = EmulationEfiFallbackResultDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        esp_partition_index: 2,
+        strategy: Some(EmulationEfiFallbackStrategyDto::Shim),
+        files_written: vec!["BOOTX64.EFI".to_string(), "GRUBX64.EFI".to_string()],
+        already_present: false,
+    };
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(value["espPartitionIndex"], 2);
+    assert_eq!(value["strategy"], "shim");
+    assert_eq!(value["alreadyPresent"], false);
+    let restored: EmulationEfiFallbackResultDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, result);
+
+    let absent = EmulationEfiFallbackResultDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        esp_partition_index: 2,
+        strategy: None,
+        files_written: Vec::new(),
+        already_present: true,
+    };
+    let value = serde_json::to_value(&absent).unwrap();
+    assert_eq!(value["alreadyPresent"], true);
+    assert!(value["strategy"].is_null());
+    let restored: EmulationEfiFallbackResultDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, absent);
+}

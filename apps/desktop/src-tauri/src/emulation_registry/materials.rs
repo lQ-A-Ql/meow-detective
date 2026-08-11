@@ -295,11 +295,55 @@ pub(super) fn detect_firmware(disk: &CowDisk) -> Result<VmwareFirmware, Emulatio
     }
     let mut gpt_header = [0u8; 512];
     disk.read_exact_at(512, &mut gpt_header)?;
-    Ok(if &gpt_header[..8] == b"EFI PART" {
-        VmwareFirmware::Efi
-    } else {
+    if &gpt_header[..8] != b"EFI PART" {
+        return Ok(VmwareFirmware::Bios);
+    }
+    // A GPT disk carrying GRUB's BIOS boot partition boots legacy: the core
+    // image embedded there does not depend on an ESP fallback loader, which
+    // a fresh VM (empty NVRAM) cannot substitute when it is missing. A
+    // header that fails to parse keeps the EFI verdict of the magic check.
+    let Some(header) = evidence_core::volume::gpt::parse_gpt_header(&gpt_header) else {
+        return Ok(VmwareFirmware::Efi);
+    };
+    Ok(if gpt_has_bios_boot_partition(disk, &header)? {
         VmwareFirmware::Bios
+    } else {
+        VmwareFirmware::Efi
     })
+}
+
+/// GRUB's BIOS boot partition type GUID — the on-disk bytes literally spell
+/// "Hah!IdontNeedEFI".
+const GPT_BIOS_BOOT_PARTITION: [u8; 16] = *b"Hah!IdontNeedEFI";
+
+/// Sanity bounds for the GPT entry array read: real tables hold a handful of
+/// 128-byte entries; anything larger indicates a malformed header, not a
+/// legitimate layout.
+const MAX_GPT_ENTRY_COUNT: u32 = 4096;
+const MAX_GPT_ENTRY_SIZE: u32 = 4096;
+
+fn gpt_has_bios_boot_partition(
+    disk: &CowDisk,
+    header: &evidence_core::volume::gpt::GptHeader,
+) -> Result<bool, EmulationError> {
+    let count = header.partition_count.min(MAX_GPT_ENTRY_COUNT);
+    let entry_size = header.entry_size.clamp(128, MAX_GPT_ENTRY_SIZE);
+    let byte_len = count as usize * entry_size as usize;
+    let offset = header.partition_entry_lba * 512;
+    if byte_len == 0
+        || offset
+            .checked_add(byte_len as u64)
+            .is_none_or(|end| end > disk.len())
+    {
+        return Ok(false);
+    }
+    let mut entries = vec![0u8; byte_len];
+    disk.read_exact_at(offset, &mut entries)?;
+    Ok(
+        evidence_core::volume::gpt::parse_gpt_entries(&entries, entry_size, count)
+            .iter()
+            .any(|partition| partition.type_guid == GPT_BIOS_BOOT_PARTITION),
+    )
 }
 
 pub(super) fn image_kind(
