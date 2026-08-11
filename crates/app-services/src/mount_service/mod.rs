@@ -3,6 +3,7 @@ mod catalog;
 mod directory_cache;
 mod emulation;
 mod emulation_linux;
+mod emulation_linux_boot;
 mod error;
 mod filesystem_factory;
 mod handle;

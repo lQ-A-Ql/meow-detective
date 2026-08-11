@@ -146,6 +146,15 @@ impl CowDisk {
             .overlay
             .flush()
     }
+
+    /// True after a failed write poisoned the overlay. A poisoned overlay
+    /// cannot be flushed or extended; the session must be released.
+    pub fn is_poisoned(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.overlay.is_poisoned())
+            .unwrap_or(true)
+    }
 }
 
 fn validate_config(

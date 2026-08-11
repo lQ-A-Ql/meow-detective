@@ -192,6 +192,10 @@ pub(crate) fn open_partition_filesystem_over_overlay(
         .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))
 }
 
+/// Registry hives on a workstation are megabytes; the cap only trips on
+/// corrupt metadata.
+const MAX_HIVE_BYTES: u64 = 512 * 1024 * 1024;
+
 fn read_whole_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, EmulationBypassError> {
     let inode = fs
         .preview_file(path)
@@ -201,10 +205,37 @@ fn read_whole_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, Emul
         .file_size_by_inode(inode)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?
         .ok_or_else(|| EmulationBypassError::Unsupported(format!("{path} has no data stream")))?;
+    if size > MAX_HIVE_BYTES {
+        return Err(EmulationBypassError::Unsupported(format!(
+            "{path} declares {size} bytes, above the hive sanity cap"
+        )));
+    }
     let length = usize::try_from(size)
         .map_err(|_| EmulationBypassError::Unsupported(format!("{path} is too large")))?;
     fs.read_file_range(path, 0, length)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))
+}
+
+/// Bounds-check one extent write against the declared partition length.
+fn check_extent_write(
+    context: &PartitionFilesystem,
+    extent_offset: u64,
+    length: u64,
+) -> Result<u64, EmulationBypassError> {
+    if let Some(partition_length) = context.partition_length {
+        let end = extent_offset
+            .checked_add(length)
+            .ok_or_else(|| EmulationBypassError::Unsupported("extent address overflows".into()))?;
+        if end > partition_length {
+            return Err(EmulationBypassError::Unsupported(
+                "extent write crosses the partition end".to_string(),
+            ));
+        }
+    }
+    context
+        .partition_offset
+        .checked_add(extent_offset)
+        .ok_or_else(|| EmulationBypassError::Unsupported("extent address overflows".into()))
 }
 
 fn write_hive_through_overlay(
@@ -223,10 +254,7 @@ fn write_hive_through_overlay(
         if start >= end {
             continue;
         }
-        let absolute = context
-            .partition_offset
-            .checked_add(extent.volume_offset)
-            .ok_or_else(|| EmulationBypassError::Unsupported("extent address overflows".into()))?;
+        let absolute = check_extent_write(context, extent.volume_offset, (end - start) as u64)?;
         disk.write_all_at(absolute, &hive[start..end])
             .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
     }
@@ -251,10 +279,7 @@ fn verify_overlay_write(
         if start >= end {
             continue;
         }
-        let absolute = context
-            .partition_offset
-            .checked_add(extent.volume_offset)
-            .ok_or_else(|| EmulationBypassError::Unsupported("extent address overflows".into()))?;
+        let absolute = check_extent_write(context, extent.volume_offset, (end - start) as u64)?;
         disk.read_exact_at(absolute, &mut readback[start..end])
             .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
     }

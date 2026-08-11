@@ -290,3 +290,58 @@ fn extends_a_full_directory_chain() {
     assert!(names.iter().any(|name| name == "BOOT"));
     assert!(names.iter().any(|name| name == "FILL15"));
 }
+
+#[test]
+fn inserts_into_the_physical_cluster_holding_the_free_slot() {
+    // The EFI directory chain is already two clusters: cluster 3 (full)
+    // linked to the NON-contiguous cluster 7, whose last slot is free.
+    // Cluster 4 is occupied padding — it is the physical successor of
+    // cluster 3, which is exactly where a concatenated-chain index would
+    // wrongly write.
+    let mut fixture = build_esp_fixture();
+    let efi = cluster_pos(3);
+    for slot in 3..16 {
+        let name = format!("FILL{slot:02}");
+        put_dir_entry(&mut fixture[efi..efi + BPS], slot, &name, "", 0x20, 5, 1);
+    }
+    let ext = cluster_pos(7);
+    for slot in 0..15 {
+        let name = format!("EXT{slot:03}");
+        put_dir_entry(&mut fixture[ext..ext + BPS], slot, &name, "", 0x20, 5, 1);
+    }
+    for fat in 0..FAT_COUNT {
+        // EFI chain: 3 -> 7 -> EOC; cluster 4 is FAT-occupied padding
+        // (marked used, content zero — any write into it is a bug).
+        fixture[fat_pos(fat, 3)..fat_pos(fat, 3) + 4].copy_from_slice(&7u32.to_le_bytes());
+        fixture[fat_pos(fat, 4)..fat_pos(fat, 4) + 4]
+            .copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes());
+        fixture[fat_pos(fat, 7)..fat_pos(fat, 7) + 4]
+            .copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes());
+    }
+    // Cluster 4 holds the fixture's KALI directory — the physical successor
+    // of cluster 3. A concatenated-chain index would corrupt it.
+    let kali_before = fixture[cluster_pos(4)..cluster_pos(4) + BPS].to_vec();
+    let data = Arc::new(Mutex::new(fixture));
+    let result = install(&data);
+    assert!(result.created_boot_directory);
+
+    let raw = data.lock().unwrap();
+    // The BOOT entry landed in the free slot of cluster 7...
+    let slot = &raw[cluster_pos(7) + 15 * 32..cluster_pos(7) + 15 * 32 + 8];
+    assert_eq!(slot, b"BOOT    ");
+    // ...and the physically-adjacent KALI directory is byte-identical.
+    assert_eq!(
+        &raw[cluster_pos(4)..cluster_pos(4) + BPS],
+        kali_before.as_slice()
+    );
+    drop(raw);
+    let fs = open_installed(&data);
+    let names: Vec<String> = fs
+        .list_children("EFI")
+        .unwrap()
+        .into_iter()
+        .map(|node| node.name)
+        .collect();
+    assert!(names.iter().any(|name| name == "BOOT"));
+    assert!(names.iter().any(|name| name == "EXT014"));
+}

@@ -163,6 +163,14 @@ fn linux_preflight(
 ) -> Result<EmulationPreflightDto, MountServiceError> {
     let mut installs = super::emulation_linux::linux_installs_from_catalog(repo, data_source_id)?;
     let partitions = PartitionRepo::new(&source.connection);
+    let partition_count = partitions.count_by_data_source(&data_source_id.0)?;
+    if partition_count as usize > super::emulation_linux::MAX_LINUX_PRECHECK_PARTITIONS {
+        tracing::warn!(
+            partition_count,
+            max = super::emulation_linux::MAX_LINUX_PRECHECK_PARTITIONS,
+            "linux preflight partition scan truncated"
+        );
+    }
     let ds_repo = DataSourceRepo::new(case_conn);
     match ds_repo
         .source_path(data_source_id)
@@ -176,12 +184,12 @@ fn linux_preflight(
                 data_source_id,
                 &mut installs,
             );
-            super::emulation_linux::annotate_boot_path_risk(
+            super::emulation_linux_boot::annotate_boot_path_risk(
                 std::path::Path::new(&path),
                 &kind,
                 &mut installs,
             );
-            super::emulation_linux::annotate_xfs_log_risk(
+            super::emulation_linux_boot::annotate_xfs_log_risk(
                 std::path::Path::new(&path),
                 &kind,
                 &partitions,

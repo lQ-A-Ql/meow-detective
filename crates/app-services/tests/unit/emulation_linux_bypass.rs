@@ -42,6 +42,7 @@ fn shadow_bypass_rewrites_and_truncates_through_the_overlay() {
         fs: open_overlay_fs(&disk),
         mapping: WriteMapping::Direct {
             partition_offset: 0,
+            partition_length: parent_bytes.len() as u64,
         },
     };
     write_shadow_through_overlay(&disk, &partition, edited.as_bytes()).unwrap();
@@ -98,4 +99,37 @@ fn extent_map_reports_physical_layout_of_shadow() {
         0,
         "inode records are inode-size aligned"
     );
+}
+
+#[test]
+fn direct_mapping_bounds_writes_to_the_partition() {
+    let mapping = WriteMapping::Direct {
+        partition_offset: 512,
+        partition_length: 4096,
+    };
+    assert_eq!(mapping.translate_run(0).unwrap(), (512, 4096));
+    assert_eq!(mapping.translate_run(4095).unwrap(), (512 + 4095, 1));
+    assert!(mapping.translate_run(4096).is_err());
+}
+
+#[test]
+fn lvm_mapping_splits_runs_at_extent_boundaries() {
+    let extents = vec![
+        fs_lvm::LvExtent {
+            logical_start: 0,
+            physical_offset: 10_000,
+            length: 100,
+            pv_index: 0,
+        },
+        fs_lvm::LvExtent {
+            logical_start: 100,
+            physical_offset: 20_000,
+            length: 100,
+            pv_index: 0,
+        },
+    ];
+    let mapping = WriteMapping::Lvm { extents };
+    assert_eq!(mapping.translate_run(50).unwrap(), (10_050, 50));
+    assert_eq!(mapping.translate_run(100).unwrap(), (20_000, 100));
+    assert!(mapping.translate_run(200).is_err());
 }

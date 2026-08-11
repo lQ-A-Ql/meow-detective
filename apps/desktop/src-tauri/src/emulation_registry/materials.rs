@@ -339,7 +339,9 @@ fn gpt_has_bios_boot_partition(
     let count = header.partition_count.min(MAX_GPT_ENTRY_COUNT);
     let entry_size = header.entry_size.clamp(128, MAX_GPT_ENTRY_SIZE);
     let byte_len = count as usize * entry_size as usize;
-    let offset = header.partition_entry_lba * 512;
+    let Some(offset) = header.partition_entry_lba.checked_mul(512) else {
+        return Ok(false);
+    };
     if byte_len == 0
         || offset
             .checked_add(byte_len as u64)

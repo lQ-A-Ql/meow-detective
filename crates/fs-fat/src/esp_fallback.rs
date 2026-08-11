@@ -45,6 +45,15 @@ const ATTR_LFN: u8 = 0x0F;
 const ENTRY_FREE: u8 = 0xE5;
 const ENTRY_END: u8 = 0x00;
 
+/// Allocation bookkeeping for one install run: the clusters taken (for the
+/// FSInfo accounting) and a monotonically advancing next-free cursor so
+/// successive chains do not rescan the FAT from cluster 2.
+#[derive(Default)]
+struct AllocState {
+    allocated: Vec<u32>,
+    next_free: u32,
+}
+
 /// Create `\EFI\BOOT` when missing and place `files` (8.3 uppercase names)
 /// into it. Existing files are never overwritten — they are reported in
 /// `files_skipped` so the caller can decide whether anything was needed.
@@ -70,10 +79,9 @@ pub fn install_efi_fallback(
             return Err(invalid_fs_data(format!("boot chain file {name} is empty")));
         }
     }
-    let mut allocated = Vec::new();
-    let (efi_cluster, _) =
-        ensure_directory(&layout, io, layout.root_cluster, "EFI", &mut allocated)?;
-    let (boot_cluster, created) = ensure_boot_directory(&layout, io, efi_cluster, &mut allocated)?;
+    let mut state = AllocState::default();
+    let (efi_cluster, _) = ensure_directory(&layout, io, layout.root_cluster, "EFI", &mut state)?;
+    let (boot_cluster, created) = ensure_boot_directory(&layout, io, efi_cluster, &mut state)?;
     let mut result = EspFallbackInstall {
         created_boot_directory: created,
         ..EspFallbackInstall::default()
@@ -83,23 +91,18 @@ pub fn install_efi_fallback(
             result.files_skipped.push(name.clone());
             continue;
         }
-        let chain = allocate_clusters(
-            &layout,
-            io,
-            chain_length(&layout, data.len()),
-            &mut allocated,
-        )?;
+        let chain = allocate_clusters(&layout, io, chain_length(&layout, data.len()), &mut state)?;
         write_chain_data(&layout, io, &chain, data)?;
         insert_directory_entry(
             &layout,
             io,
             boot_cluster,
             &sfn_file_entry(name, chain[0], data.len() as u32),
-            &mut allocated,
+            &mut state,
         )?;
         result.files_written.push(name.clone());
     }
-    update_fsinfo(&layout, io, &allocated)?;
+    update_fsinfo(&layout, io, &state)?;
     Ok(result)
 }
 
@@ -150,10 +153,10 @@ fn allocate_clusters(
     layout: &FatReader,
     io: &dyn FatBlockIo,
     count: u32,
-    allocated: &mut Vec<u32>,
+    state: &mut AllocState,
 ) -> io::Result<Vec<u32>> {
     let mut chain = Vec::with_capacity(count as usize);
-    let mut candidate = 2u32;
+    let mut candidate = state.next_free.max(2);
     while chain.len() < count as usize {
         if candidate >= layout.cluster_count + 2 {
             return Err(invalid_fs_data("FAT32 volume has no free clusters"));
@@ -163,6 +166,7 @@ fn allocate_clusters(
         }
         candidate += 1;
     }
+    state.next_free = candidate;
     for (index, &cluster) in chain.iter().enumerate() {
         let next = chain.get(index + 1).copied().unwrap_or(FAT32_EOC);
         write_fat_entry(layout, io, cluster, next)?;
@@ -171,7 +175,7 @@ fn allocate_clusters(
             &vec![0u8; layout.cluster_size as usize],
         )?;
     }
-    allocated.extend_from_slice(&chain);
+    state.allocated.extend_from_slice(&chain);
     Ok(chain)
 }
 
@@ -194,7 +198,7 @@ fn ensure_directory(
     io: &dyn FatBlockIo,
     parent_cluster: u32,
     name: &str,
-    allocated: &mut Vec<u32>,
+    state: &mut AllocState,
 ) -> io::Result<(u32, bool)> {
     if let Some(entry) = find_sfn_entry(layout, parent_cluster, name)? {
         if !entry.is_dir {
@@ -204,7 +208,7 @@ fn ensure_directory(
         }
         return Ok((entry.cluster, false));
     }
-    let cluster = allocate_clusters(layout, io, 1, allocated)?[0];
+    let cluster = allocate_clusters(layout, io, 1, state)?[0];
     let parent_ref = if parent_cluster == layout.root_cluster {
         0
     } else {
@@ -219,7 +223,7 @@ fn ensure_directory(
         io,
         parent_cluster,
         &sfn_dir_entry(name, cluster),
-        allocated,
+        state,
     )?;
     Ok((cluster, true))
 }
@@ -228,9 +232,9 @@ fn ensure_boot_directory(
     layout: &FatReader,
     io: &dyn FatBlockIo,
     efi_cluster: u32,
-    allocated: &mut Vec<u32>,
+    state: &mut AllocState,
 ) -> io::Result<(u32, bool)> {
-    ensure_directory(layout, io, efi_cluster, "BOOT", allocated)
+    ensure_directory(layout, io, efi_cluster, "BOOT", state)
 }
 
 struct FoundEntry {
@@ -267,25 +271,48 @@ fn find_sfn_entry(
 
 /// Write a 32-byte entry into the first free slot of the directory chain,
 /// extending the chain with a fresh cluster when every slot is occupied.
+/// The chain is walked cluster by cluster (with the same cycle guard the
+/// reader uses) so the write offset always lands in the cluster that
+/// actually holds the free slot — a concatenated-chain index would
+/// misplace writes on fragmented directories.
 fn insert_directory_entry(
     layout: &FatReader,
     io: &dyn FatBlockIo,
     dir_cluster: u32,
     entry: &[u8; 32],
-    allocated: &mut Vec<u32>,
+    state: &mut AllocState,
 ) -> io::Result<()> {
+    let mut visited = std::collections::HashSet::new();
     let mut cluster = dir_cluster;
     loop {
-        let data = layout.walk_cluster_chain(cluster)?;
+        if !visited.insert(cluster) || visited.len() > layout.cluster_count as usize {
+            return Err(invalid_fs_data(
+                "cycle or overrun in directory cluster chain",
+            ));
+        }
+        let base = cluster_offset(layout, cluster)?;
+        let mut data = vec![0u8; layout.cluster_size as usize];
+        io.read_at(base, &mut data)?;
         for (index, slot) in data.chunks_exact(32).enumerate() {
             if slot[0] == ENTRY_FREE || slot[0] == ENTRY_END {
-                let offset = cluster_offset(layout, cluster)? + (index * 32) as u64;
-                return io.write_at(offset, entry);
+                let offset = base + (index * 32) as u64;
+                io.write_at(offset, entry)?;
+                if slot[0] == ENTRY_END {
+                    // The end-of-directory marker moved one slot forward;
+                    // keep a terminator behind the new entry so readers
+                    // never scan into stale garbage.
+                    if let Some(next) = data.get((index + 1) * 32..(index + 2) * 32) {
+                        if next[0] != ENTRY_END {
+                            io.write_at(offset + 32, &[0u8; 32])?;
+                        }
+                    }
+                }
+                return Ok(());
             }
         }
         let next = read_fat_entry(layout, io, cluster)?;
         if next >= FAT32_BAD_OR_EOC_MIN {
-            let extension = allocate_clusters(layout, io, 1, allocated)?[0];
+            let extension = allocate_clusters(layout, io, 1, state)?[0];
             write_fat_entry(layout, io, cluster, extension)?;
             cluster = extension;
         } else {
@@ -298,7 +325,8 @@ fn insert_directory_entry(
 /// unknown; a known count is decremented by what this run allocated. The
 /// FSInfo sector number is the spec default (1); the signature check makes a
 /// non-standard layout a no-op rather than a corrupting write.
-fn update_fsinfo(layout: &FatReader, io: &dyn FatBlockIo, allocated: &[u32]) -> io::Result<()> {
+fn update_fsinfo(layout: &FatReader, io: &dyn FatBlockIo, state: &AllocState) -> io::Result<()> {
+    let allocated = &state.allocated;
     if allocated.is_empty() {
         return Ok(());
     }
@@ -315,7 +343,7 @@ fn update_fsinfo(layout: &FatReader, io: &dyn FatBlockIo, allocated: &[u32]) -> 
         let remaining = free.saturating_sub(allocated.len() as u32);
         sector[488..492].copy_from_slice(&remaining.to_le_bytes());
     }
-    let hint = allocated.first().copied().unwrap_or(2);
+    let hint = allocated.last().copied().unwrap_or(1) + 1;
     sector[492..496].copy_from_slice(&hint.to_le_bytes());
     io.write_at(info_offset, &sector)
 }

@@ -150,6 +150,10 @@ impl Overlay {
         }
         Ok(())
     }
+
+    pub(crate) fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
 }
 
 impl Drop for Overlay {

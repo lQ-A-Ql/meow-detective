@@ -19,6 +19,8 @@ pub(super) enum VmwareError {
     ControlTimeout,
     #[error("VMware control command failed with status {0}")]
     ControlFailed(ExitStatus),
+    #[error("the VMX path is not valid Unicode and cannot be matched against vmrun output")]
+    NonUnicodePath,
 }
 
 #[derive(Clone)]
@@ -45,10 +47,12 @@ impl VmwareControl {
         if !output.status.success() {
             return Err(VmwareError::ControlFailed(output.status));
         }
-        let expected = self.vmx.to_string_lossy();
+        // A non-Unicode VMX path can never match vmrun's listing; failing
+        // closed keeps release from reporting a running guest as stopped.
+        let expected = self.vmx.to_str().ok_or(VmwareError::NonUnicodePath)?;
         Ok(String::from_utf8_lossy(&output.stdout)
             .lines()
-            .any(|line| line.trim().eq_ignore_ascii_case(&expected)))
+            .any(|line| line.trim().eq_ignore_ascii_case(expected)))
     }
 
     pub(super) fn stop_bounded(&self) -> Result<(), VmwareError> {

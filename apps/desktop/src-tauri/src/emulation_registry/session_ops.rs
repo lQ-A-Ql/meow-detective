@@ -285,7 +285,16 @@ fn quiesce_resources(
             .stop_bounded()
             .map_err(|error| EmulationRegistryError::Vmware(error.to_string()))?;
     }
-    disk.flush()?;
+    if let Err(error) = disk.flush() {
+        // A poisoned overlay cannot flush by design; the workspace is
+        // disposable either way, so do not trap the session in
+        // FailedCleanupPending over an unwinnable retry.
+        if disk.is_poisoned() {
+            tracing::warn!(error = %error, "release: overlay is poisoned, skipping flush");
+        } else {
+            return Err(error.into());
+        }
+    }
     if let Some(backend) = backend {
         backend
             .stop()

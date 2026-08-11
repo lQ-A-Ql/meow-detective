@@ -28,12 +28,60 @@ const I_SIZE_HI_OFFSET: u64 = 0x6C;
 enum WriteMapping {
     Direct {
         partition_offset: u64,
+        /// Declared partition length; every write run must stay inside it.
+        partition_length: u64,
     },
     /// LVM extent physical offsets are already disk-absolute in the
     /// coordinate space of the readers the pool was discovered from.
-    Lvm {
-        extents: Vec<fs_lvm::LvExtent>,
-    },
+    Lvm { extents: Vec<fs_lvm::LvExtent> },
+}
+
+impl WriteMapping {
+    /// Translate `volume_offset` to an absolute disk offset plus the number
+    /// of contiguous bytes the mapping covers from it. A run that starts
+    /// outside the mapped range is an error; callers split longer writes at
+    /// the returned boundary.
+    fn translate_run(&self, volume_offset: u64) -> Result<(u64, u64), EmulationBypassError> {
+        match self {
+            Self::Direct {
+                partition_offset,
+                partition_length,
+            } => {
+                if volume_offset >= *partition_length {
+                    return Err(EmulationBypassError::Edit(
+                        "write starts beyond the partition end".to_string(),
+                    ));
+                }
+                let absolute = partition_offset
+                    .checked_add(volume_offset)
+                    .ok_or_else(|| EmulationBypassError::Edit("extent address overflows".into()))?;
+                Ok((absolute, partition_length - volume_offset))
+            }
+            Self::Lvm { extents } => {
+                let index = extents
+                    .partition_point(|extent| extent.logical_start <= volume_offset)
+                    .checked_sub(1)
+                    .ok_or_else(|| {
+                        EmulationBypassError::Edit("offset below the LV extent map".into())
+                    })?;
+                let extent = &extents[index];
+                let extent_end = extent
+                    .logical_start
+                    .checked_add(extent.length)
+                    .ok_or_else(|| EmulationBypassError::Edit("LV extent overflows".into()))?;
+                if volume_offset >= extent_end {
+                    return Err(EmulationBypassError::Edit(
+                        "offset is not covered by the LV extent map".to_string(),
+                    ));
+                }
+                let absolute = extent
+                    .physical_offset
+                    .checked_add(volume_offset - extent.logical_start)
+                    .ok_or_else(|| EmulationBypassError::Edit("extent address overflows".into()))?;
+                Ok((absolute, extent_end - volume_offset))
+            }
+        }
+    }
 }
 
 struct LinuxExt4Partition {
@@ -125,7 +173,8 @@ fn write_shadow_through_overlay(
             old_len,
         )?;
     }
-    let new_len = content.len() as u32;
+    let new_len = u32::try_from(content.len())
+        .map_err(|_| EmulationBypassError::Edit("edited shadow exceeds u32 i_size".into()))?;
     let inode_offset = fs
         .inode_source_offset(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
@@ -197,32 +246,21 @@ fn write_absolute(
     volume_offset: u64,
     bytes: &[u8],
 ) -> Result<(), EmulationBypassError> {
-    let absolute = translate(mapping, volume_offset)?;
-    disk.write_all_at(absolute, bytes)
-        .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))
-}
-
-fn translate(mapping: &WriteMapping, volume_offset: u64) -> Result<u64, EmulationBypassError> {
-    match mapping {
-        WriteMapping::Direct { partition_offset } => partition_offset
-            .checked_add(volume_offset)
-            .ok_or_else(|| EmulationBypassError::Edit("extent address overflows".to_string())),
-        WriteMapping::Lvm { extents } => {
-            let index = extents
-                .partition_point(|extent| extent.logical_start <= volume_offset)
-                .checked_sub(1)
-                .ok_or_else(|| {
-                    EmulationBypassError::Edit("offset below the LV extent map".into())
-                })?;
-            let extent = &extents[index];
-            if volume_offset >= extent.logical_start + extent.length {
-                return Err(EmulationBypassError::Edit(
-                    "offset is not covered by the LV extent map".to_string(),
-                ));
-            }
-            Ok(extent.physical_offset + (volume_offset - extent.logical_start))
+    let mut written = 0u64;
+    while (written as usize) < bytes.len() {
+        let (absolute, run) = mapping.translate_run(volume_offset + written)?;
+        let remaining = bytes.len() - written as usize;
+        let chunk = (run as usize).min(remaining);
+        if chunk == 0 {
+            return Err(EmulationBypassError::Edit(
+                "write run maps to a zero-length gap".to_string(),
+            ));
         }
+        disk.write_all_at(absolute, &bytes[written as usize..written as usize + chunk])
+            .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
+        written += chunk as u64;
     }
+    Ok(())
 }
 
 /// Byte read-back plus a semantic re-parse through a fresh overlay view:
@@ -251,10 +289,19 @@ fn verify_shadow_write(
     }
 }
 
+/// A real /etc/shadow is a few KiB; anything larger is a corrupt inode, not
+/// a workload.
+const MAX_SHADOW_BYTES: u64 = 8 * 1024 * 1024;
+
 fn read_shadow(fs: &fs_ext4::Ext4Reader) -> Result<String, EmulationBypassError> {
     let size = fs
         .file_size_by_path(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
+    if size > MAX_SHADOW_BYTES {
+        return Err(EmulationBypassError::Unsupported(format!(
+            "shadow file declares {size} bytes, above the {MAX_SHADOW_BYTES}-byte sanity cap"
+        )));
+    }
     let length = usize::try_from(size)
         .map_err(|_| EmulationBypassError::Unsupported("shadow file is too large".into()))?;
     let bytes = fs
@@ -290,32 +337,66 @@ fn open_linux_ext4(
             record.filesystem
         )));
     }
-    let reader: Box<dyn evidence_core::EvidenceReader> = match overlay {
-        Some(disk) => Box::new(crate::emulation_cow_reader::CowDiskReader::new(Arc::clone(
-            disk,
-        ))),
-        None => crate::datasource_service::open_evidence_reader(&source.source_path, &source.kind)
-            .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?,
+    let reader_for = |overlay: Option<&Arc<CowDisk>>, count: usize| {
+        (0..count)
+            .map(
+                |_| -> Result<Box<dyn evidence_core::EvidenceReader>, EmulationBypassError> {
+                    match overlay {
+                        Some(disk) => Ok(Box::new(
+                            crate::emulation_cow_reader::CowDiskReader::new(Arc::clone(disk)),
+                        )),
+                        None => crate::datasource_service::open_evidence_reader(
+                            &source.source_path,
+                            &source.kind,
+                        )
+                        .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string())),
+                    }
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()
     };
     if record.lvm_lv_name.is_some() {
-        open_lvm_ext4(reader, &record)
+        let pv_count = record
+            .lvm_pv_offsets_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<Vec<u64>>(json).ok())
+            .map(|offsets| offsets.len())
+            .unwrap_or(0);
+        if pv_count == 0 {
+            return Err(EmulationBypassError::Unsupported(
+                "LV has no persisted PV offsets".to_string(),
+            ));
+        }
+        // Multi-PV volume groups need one reader per PV even when every PV
+        // lives on the same disk image.
+        open_lvm_ext4(reader_for(overlay, pv_count)?, &record)
     } else {
-        let length = (record.length > 0).then_some(record.length);
-        let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length)
-            .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
+        if record.length == 0 {
+            return Err(EmulationBypassError::Unsupported(
+                "partition has no declared length; writes cannot be bounded".to_string(),
+            ));
+        }
+        let mut readers = reader_for(overlay, 1)?;
+        let window = evidence_core::PartitionWindowReader::new(
+            readers.remove(0),
+            record.offset,
+            Some(record.length),
+        )
+        .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
         let fs = fs_ext4::Ext4Reader::open(Box::new(window), 0)
             .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
         Ok(LinuxExt4Partition {
             fs,
             mapping: WriteMapping::Direct {
                 partition_offset: record.offset,
+                partition_length: record.length,
             },
         })
     }
 }
 
 fn open_lvm_ext4(
-    reader: Box<dyn evidence_core::EvidenceReader>,
+    readers: Vec<Box<dyn evidence_core::EvidenceReader>>,
     record: &persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord,
 ) -> Result<LinuxExt4Partition, EmulationBypassError> {
     let pv_offsets: Vec<u64> = record
@@ -326,7 +407,12 @@ fn open_lvm_ext4(
         .ok_or_else(|| {
             EmulationBypassError::Unsupported("LV has no persisted PV offsets".to_string())
         })?;
-    let pool = fs_lvm::LvmPool::discover(vec![reader], pv_offsets)
+    if readers.len() != pv_offsets.len() {
+        return Err(EmulationBypassError::Unsupported(
+            "reader count does not match the LV's PV layout".to_string(),
+        ));
+    }
+    let pool = fs_lvm::LvmPool::discover(readers, pv_offsets)
         .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
     let volumes = pool.list_volumes();
     let lv_index = volumes

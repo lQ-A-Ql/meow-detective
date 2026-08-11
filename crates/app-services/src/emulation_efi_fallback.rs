@@ -39,18 +39,40 @@ const MAX_GPT_ENTRY_SIZE: u32 = 4096;
 struct CowFatIo {
     disk: Arc<CowDisk>,
     partition_offset: u64,
+    partition_length: u64,
+}
+
+impl CowFatIo {
+    fn absolute(&self, offset: u64, length: usize) -> std::io::Result<u64> {
+        // A corrupt FAT layout may compute offsets past the ESP; writes must
+        // stay inside the partition window.
+        offset
+            .checked_add(length as u64)
+            .filter(|end| *end <= self.partition_length)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "FAT write escapes the EFI system partition",
+                )
+            })?;
+        self.partition_offset
+            .checked_add(offset)
+            .ok_or_else(|| std::io::Error::other("ESP offset overflow"))
+    }
 }
 
 impl fs_fat::FatBlockIo for CowFatIo {
     fn read_at(&self, offset: u64, buffer: &mut [u8]) -> std::io::Result<()> {
+        let absolute = self.absolute(offset, buffer.len())?;
         self.disk
-            .read_exact_at(self.partition_offset + offset, buffer)
+            .read_exact_at(absolute, buffer)
             .map_err(std::io::Error::other)
     }
 
     fn write_at(&self, offset: u64, data: &[u8]) -> std::io::Result<()> {
+        let absolute = self.absolute(offset, data.len())?;
         self.disk
-            .write_all_at(self.partition_offset + offset, data)
+            .write_all_at(absolute, data)
             .map_err(std::io::Error::other)
     }
 }
@@ -78,7 +100,15 @@ fn locate_esp(disk: &Arc<CowDisk>) -> Result<EspLocation, EmulationBypassError> 
     let count = header.partition_count.min(MAX_GPT_ENTRY_COUNT);
     let entry_size = header.entry_size.clamp(128, MAX_GPT_ENTRY_SIZE);
     let byte_len = count as usize * entry_size as usize;
-    let offset = header.partition_entry_lba * 512;
+    let Some(offset) = header
+        .partition_entry_lba
+        .checked_mul(512)
+        .filter(|offset| offset + byte_len as u64 <= disk.len())
+    else {
+        return Err(EmulationBypassError::Unsupported(
+            "the GPT entry array lies outside the disk".to_string(),
+        ));
+    };
     let mut entries = vec![0u8; byte_len];
     disk.read_exact_at(offset, &mut entries)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
@@ -87,10 +117,18 @@ fn locate_esp(disk: &Arc<CowDisk>) -> Result<EspLocation, EmulationBypassError> 
         .find(|partition| {
             classify_partition_type(&partition.type_guid) == GptPartitionType::EfiSystem
         })
-        .map(|partition| EspLocation {
-            gpt_index: partition.index as u32,
-            offset: partition.start_lba * 512,
-            length: (partition.end_lba - partition.start_lba + 1) * 512,
+        .and_then(|partition| {
+            let offset = partition.start_lba.checked_mul(512)?;
+            let length = partition
+                .end_lba
+                .checked_sub(partition.start_lba)?
+                .checked_add(1)?
+                .checked_mul(512)?;
+            (offset + length <= disk.len()).then_some(EspLocation {
+                gpt_index: partition.index as u32,
+                offset,
+                length,
+            })
         })
         .ok_or_else(|| {
             EmulationBypassError::Unsupported(
@@ -211,6 +249,7 @@ pub fn install_efi_fallback(
         let io = CowFatIo {
             disk: Arc::clone(disk),
             partition_offset: esp.offset,
+            partition_length: esp.length,
         };
         let window = PartitionWindowReader::new(
             Box::new(CowDiskReader::new(Arc::clone(disk))) as Box<dyn EvidenceReader>,

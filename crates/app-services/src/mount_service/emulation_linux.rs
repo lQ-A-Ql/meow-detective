@@ -298,21 +298,21 @@ fn open_linux_fs(
 
 /// The volume-level reader beneath the filesystem: a partition window for
 /// direct partitions, the LV reader for LVM logical volumes.
-fn open_linux_volume_reader(
+pub(super) fn open_linux_volume_reader(
     context: &EvidenceContext,
     record: &DataSourcePartitionRecord,
 ) -> Option<Box<dyn EvidenceReader>> {
-    let reader = open_evidence_reader(&context.source_path, &context.kind).ok()?;
     if record.lvm_lv_name.is_some() {
-        return open_lvm_lv_reader(reader, record);
+        return open_lvm_lv_reader(context, record);
     }
+    let reader = open_evidence_reader(&context.source_path, &context.kind).ok()?;
     let length = (record.length > 0).then_some(record.length);
     let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length).ok()?;
     Some(Box::new(window))
 }
 
 fn open_lvm_lv_reader(
-    reader: Box<dyn EvidenceReader>,
+    context: &EvidenceContext,
     record: &DataSourcePartitionRecord,
 ) -> Option<Box<dyn EvidenceReader>> {
     let pv_offsets: Vec<u64> = record
@@ -322,7 +322,16 @@ fn open_lvm_lv_reader(
     if pv_offsets.is_empty() {
         return None;
     }
-    let pool = fs_lvm::LvmPool::discover(vec![reader], pv_offsets).ok()?;
+    // One reader per PV, even when every PV lives on the same disk image.
+    let readers = pv_offsets
+        .iter()
+        .map(|_| {
+            open_evidence_reader(&context.source_path, &context.kind)
+                .map(|reader| reader as Box<dyn EvidenceReader>)
+                .ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let pool = fs_lvm::LvmPool::discover(readers, pv_offsets).ok()?;
     let volumes = pool.list_volumes();
     let lv_index = volumes.iter().position(|volume| {
         Some(volume.name.as_str()) == record.lvm_lv_name.as_deref()
@@ -348,140 +357,6 @@ fn open_fs_by_label(
             .map(|fs| Box::new(fs) as Box<dyn FileSystemReader>),
         _ => None,
     }
-}
-
-/// XFS log annotation for the boot path: a volume captured with pending
-/// log transactions blocks the RHEL/CentOS GRUB builds before the kernel is
-/// even reached. Every install on the disk is annotated when ANY XFS volume
-/// is dirty — the separate-/boot layout makes a non-root XFS volume just as
-/// boot-critical. Reads stay bounded by the snapshot limit and failures are
-/// silent (no evidence, no annotation).
-pub(crate) fn annotate_xfs_log_risk(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
-    partitions: &PartitionRepo<'_>,
-    data_source_id: &DataSourceId,
-    installs: &mut [EmulationInstallDto],
-) {
-    use fs_xfs::log::{assess_log_state, XfsLogState, XFS_LOG_MAX_SNAPSHOT_BYTES};
-
-    if installs.is_empty() {
-        return;
-    }
-    let context = EvidenceContext {
-        source_path: source_path.to_path_buf(),
-        kind: source_kind.clone(),
-    };
-    let records = partitions
-        .find_by_data_source(&data_source_id.0)
-        .unwrap_or_default();
-    let mut any_dirty = false;
-    for record in records
-        .iter()
-        .filter(|record| record.filesystem.as_deref() == Some("XFS"))
-    {
-        let Some(reader) = open_linux_volume_reader(&context, record) else {
-            continue;
-        };
-        let Ok(xfs) = fs_xfs::XfsReader::open(reader, 0) else {
-            continue;
-        };
-        let dirty = xfs
-            .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
-            .map(|snapshot| assess_log_state(&snapshot) == XfsLogState::Dirty)
-            .unwrap_or(false);
-        if dirty {
-            any_dirty = true;
-            break;
-        }
-    }
-    if !any_dirty {
-        return;
-    }
-    for install in installs.iter_mut() {
-        if !install
-            .boot_risk_notes
-            .iter()
-            .any(|note| note == "xfs-log-dirty")
-        {
-            install.boot_risk_notes.push("xfs-log-dirty".to_string());
-        }
-    }
-}
-
-/// Disk-level boot-path annotation for GPT images. A fresh VM has an empty
-/// NVRAM, so a GPT disk can only boot through GRUB's BIOS boot partition or
-/// the ESP fallback loader `\EFI\BOOT\BOOTX64.EFI`; when neither exists the
-/// firmware drops into its boot manager, which the `no-efi-fallback` note
-/// surfaces to the investigator (the session-level EFI fallback installation
-/// remediates it). MBR disks boot legacy and need no annotation.
-pub(crate) fn annotate_boot_path_risk(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
-    installs: &mut [EmulationInstallDto],
-) {
-    if installs.is_empty() {
-        return;
-    }
-    let missing = gpt_disk_missing_boot_paths(source_path, source_kind);
-    if missing != Some(true) {
-        return;
-    }
-    for install in installs.iter_mut() {
-        if !install
-            .boot_risk_notes
-            .iter()
-            .any(|note| note == "no-efi-fallback")
-        {
-            install.boot_risk_notes.push("no-efi-fallback".to_string());
-        }
-    }
-}
-
-/// `Some(true)` when the disk is GPT and neither a BIOS boot partition nor an
-/// ESP fallback loader exists; `None` when the disk layout could not be
-/// determined (no annotation without evidence).
-fn gpt_disk_missing_boot_paths(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
-) -> Option<bool> {
-    use evidence_core::volume::gpt::{
-        classify_partition_type, parse_gpt_entries, parse_gpt_header, GptPartitionType,
-    };
-    use std::io::{Read, Seek, SeekFrom};
-
-    const BIOS_BOOT_PARTITION: [u8; 16] = *b"Hah!IdontNeedEFI";
-    let mut reader = open_evidence_reader(source_path, source_kind).ok()?;
-    let mut header = [0u8; 512];
-    reader.seek(SeekFrom::Start(512)).ok()?;
-    reader.read_exact(&mut header).ok()?;
-    let header = parse_gpt_header(&header)?;
-    let count = header.partition_count.min(4096);
-    let entry_size = header.entry_size.clamp(128, 4096);
-    let byte_len = count as usize * entry_size as usize;
-    reader
-        .seek(SeekFrom::Start(header.partition_entry_lba * 512))
-        .ok()?;
-    let mut entries = vec![0u8; byte_len];
-    reader.read_exact(&mut entries).ok()?;
-    let partitions = parse_gpt_entries(&entries, entry_size, count);
-    if partitions
-        .iter()
-        .any(|partition| partition.type_guid == BIOS_BOOT_PARTITION)
-    {
-        return Some(false);
-    }
-    let esp = partitions.iter().find(|partition| {
-        classify_partition_type(&partition.type_guid) == GptPartitionType::EfiSystem
-    })?;
-    let window = evidence_core::PartitionWindowReader::new(
-        reader,
-        esp.start_lba * 512,
-        Some((esp.end_lba - esp.start_lba + 1) * 512),
-    )
-    .ok()?;
-    let fs = fs_fat::FatReader::open(Box::new(window), 0).ok()?;
-    Some(fs.open_file("EFI/BOOT/BOOTX64.EFI").is_err())
 }
 
 /// The guest profile a Linux data source should boot with: the VMware
