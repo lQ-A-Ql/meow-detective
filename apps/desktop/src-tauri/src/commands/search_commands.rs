@@ -98,12 +98,15 @@ pub async fn search_files_request(
                 .to_string();
                 let _ = step_recorder::record_step(
                     &conn,
-                    case_id,
-                    "search",
-                    &params_json,
-                    elapsed_ms,
-                    true,
-                    None,
+                    &case_root,
+                    step_recorder::CaseStepInput {
+                        case_id,
+                        step_kind: "search",
+                        params_json: &params_json,
+                        duration_ms: elapsed_ms,
+                        success: true,
+                        error_code: None,
+                    },
                 );
             }
         }

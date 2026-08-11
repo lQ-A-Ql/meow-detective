@@ -175,12 +175,15 @@ fn record_import_step(
     .to_string();
     let _ = step_recorder::record_step(
         ctx.conn,
-        &ctx.case_id.0,
-        "import",
-        &params,
-        import_started.elapsed().as_millis() as u32,
-        true,
-        None,
+        ctx.case_root,
+        step_recorder::CaseStepInput {
+            case_id: &ctx.case_id.0,
+            step_kind: "import",
+            params_json: &params,
+            duration_ms: import_started.elapsed().as_millis() as u32,
+            success: true,
+            error_code: None,
+        },
     );
 }
 

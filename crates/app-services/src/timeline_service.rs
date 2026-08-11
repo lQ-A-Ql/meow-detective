@@ -5,6 +5,7 @@ mod ingestion;
 mod pagination;
 mod projection;
 mod projection_graph;
+mod projection_meta;
 mod query;
 
 pub use error::TimelineServiceError;
