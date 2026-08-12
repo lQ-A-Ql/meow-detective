@@ -189,6 +189,7 @@ export function LinuxArtifactsPanel({
           getRowKey={(row) => (row as { artifactId: string }).artifactId}
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
+          filterable
           loadContextKey={tableLoadContextKey}
           loadStateKey={loadStateKey}
           hasMore={hasMore && family.loaded < family.total}
@@ -316,6 +317,7 @@ export function LinuxArtifactsPanel({
       title={t('linuxArtifacts.title')}
       status={info.status}
       generatedAt={info.generatedAt}
+      notes={extractionRunning ? [] : (info.coverageNotes ?? [])}
       warnings={extractionRunning ? [] : info.warnings}
       stats={[]}
     >

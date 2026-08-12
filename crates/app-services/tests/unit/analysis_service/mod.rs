@@ -1611,6 +1611,19 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
             file_with_ds("hostname", &ds_id, "cl/root/etc/hostname", 10),
             file_with_ds("passwd", &ds_id, "cl/root/etc/passwd", 10),
             file_with_ds("shadow", &ds_id, "cl/root/etc/shadow", 10),
+            // Not extraction candidates; kernel versions come from file paths.
+            file_with_ds(
+                "vmlinuz-9",
+                &ds_id,
+                "cl/root/boot/vmlinuz-5.14.0-9.el9.x86_64",
+                10,
+            ),
+            file_with_ds(
+                "vmlinuz-100",
+                &ds_id,
+                "cl/root/boot/vmlinuz-5.14.0-100.el9.x86_64",
+                10,
+            ),
         ])
         .unwrap();
 
@@ -1646,6 +1659,79 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
     assert_eq!(system_info.account_count, 3);
     assert_eq!(system_info.user_account_count, 2);
     assert_eq!(system_info.locked_account_count, 1);
+
+    // Newest kernel first; numeric segments compare numerically (100 > 9).
+    assert_eq!(
+        system_info.kernel_versions,
+        vec![
+            "5.14.0-100.el9.x86_64".to_string(),
+            "5.14.0-9.el9.x86_64".to_string(),
+        ]
+    );
+
+    // passwd rows merged with shadow password state, sorted by uid ascending.
+    assert_eq!(system_info.accounts.len(), 3);
+    let root = &system_info.accounts[0];
+    assert_eq!(root.username, "root");
+    assert_eq!(root.uid, Some(0));
+    assert_eq!(root.gid, Some(0));
+    assert_eq!(root.home.as_deref(), Some("/root"));
+    assert_eq!(root.shell.as_deref(), Some("/bin/bash"));
+    assert_eq!(root.locked, Some(false));
+    assert_eq!(root.has_password, Some(true));
+    let alice = &system_info.accounts[1];
+    assert_eq!(alice.username, "alice");
+    assert_eq!(alice.uid, Some(1000));
+    assert_eq!(alice.locked, Some(true));
+    assert_eq!(alice.has_password, Some(false));
+    let bob = &system_info.accounts[2];
+    assert_eq!(bob.username, "bob");
+    assert_eq!(bob.uid, Some(1001));
+    assert_eq!(bob.shell.as_deref(), Some("/bin/sh"));
+    assert_eq!(bob.locked, Some(false));
+    assert_eq!(bob.has_password, Some(false));
+}
+
+#[test]
+fn get_linux_artifact_summary_falls_back_to_lib_modules_kernel_versions() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    FileRepo::new(&conn)
+        .insert_batch(&[
+            file_with_ds(
+                "module-xfs",
+                &ds_id,
+                "cl/root/lib/modules/5.14.0-427.el9.x86_64/kernel/fs/xfs/xfs.ko",
+                10,
+            ),
+            file_with_ds(
+                "module-ext4",
+                &ds_id,
+                "cl/root/lib/modules/5.14.0-100.el9.x86_64/kernel/fs/ext4/ext4.ko",
+                10,
+            ),
+            file_with_ds(
+                "module-ext4-dup-dir",
+                &ds_id,
+                "cl/root/lib/modules/5.14.0-100.el9.x86_64/modules.dep",
+                10,
+            ),
+        ])
+        .unwrap();
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    let system_info = summary
+        .system_info
+        .expect("kernel versions alone should produce a system info block");
+
+    assert_eq!(
+        system_info.kernel_versions,
+        vec![
+            "5.14.0-427.el9.x86_64".to_string(),
+            "5.14.0-100.el9.x86_64".to_string(),
+        ],
+        "duplicate module directories must collapse to one version entry"
+    );
+    assert!(system_info.accounts.is_empty());
 }
 
 #[test]
@@ -1768,9 +1854,9 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
     assert!(summary.truncated);
     assert_eq!(summary.coverage_ratio, 0.0);
     assert!(summary
-        .warnings
+        .coverage_notes
         .iter()
-        .any(|warning| warning.contains("Found 2 Linux artifact candidate")));
+        .any(|note| note.contains("Found 2 Linux artifact candidate")));
     assert!(summary
         .warnings
         .iter()

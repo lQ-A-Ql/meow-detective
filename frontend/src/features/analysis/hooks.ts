@@ -87,6 +87,7 @@ function mergeLinuxPages(pages: LinuxArtifactSummary[]): LinuxArtifactSummary | 
     mysqlLogs: pages.flatMap((page) => page.mysqlLogs),
     mysqlFindings: pages.flatMap((page) => page.mysqlFindings),
     warnings: [...new Set(pages.flatMap((page) => page.warnings))],
+    coverageNotes: [...new Set(pages.flatMap((page) => page.coverageNotes ?? []))],
   };
 }
 

@@ -782,7 +782,10 @@
       "confidence": "置信度",
       "evidence": "证据片段",
       "section": "配置段",
-      "threadId": "线程 ID"
+      "threadId": "线程 ID",
+      "username": "用户名",
+      "locked": "锁定",
+      "hasPassword": "有密码"
     },
     "values": {
       "yes": "是",
@@ -799,6 +802,8 @@
       "accountCount": "账户总数",
       "userAccountCount": "普通用户",
       "lockedAccountCount": "锁定账户",
+      "kernelVersions": "内核版本",
+      "accountsTitle": "用户账户",
       "unavailable": "已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。"
     },
     "empty": {
@@ -863,6 +868,13 @@
         "description": "候选路径：/var/log/mysql/error.log、/var/log/mariadb/mariadb.log、/var/log/mysqld.log。"
       }
     }
+  },
+  "denseTable": {
+    "searchPlaceholder": "搜索已加载行…",
+    "filterAll": "全部",
+    "filterSummary": "筛选 {{filtered}} / 已加载 {{loaded}}",
+    "filterScopeNote": "仅覆盖已加载行",
+    "noMatch": "没有匹配当前筛选条件的已加载行。"
   },
   "errorBoundary": {
     "title": "应用发生错误",

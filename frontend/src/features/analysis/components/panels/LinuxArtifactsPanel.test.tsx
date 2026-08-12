@@ -57,16 +57,31 @@ describe('LinuxArtifactsPanel', () => {
   });
 
   it('does not present the persisted coverage summary as live extraction progress', () => {
-    const warning = 'Structured output coverage is 414 of 749 Linux artifact candidate source(s).';
-    const summary = baseSummary({ warnings: [warning] });
-    const { rerender } = render(createElement(LinuxArtifactsPanel, {
+    const note = 'Structured output coverage is 414 of 749 Linux artifact candidate source(s).';
+    const summary = baseSummary({ coverageNotes: [note] });
+    const { container, rerender } = render(createElement(LinuxArtifactsPanel, {
       summary,
       extractionRunning: true,
     }));
 
-    expect(screen.queryByText(warning)).toBeNull();
+    expect(screen.queryByText(note)).toBeNull();
     rerender(createElement(LinuxArtifactsPanel, { summary, extractionRunning: false }));
-    expect(screen.getByText(warning)).toBeDefined();
+    expect(screen.getByText(note)).toBeDefined();
+    // 覆盖摘要是 muted 信息条，而不是 WarningList 黄块。
+    expect(container.querySelector('.bg-forensics-warning-bg')).toBeNull();
+  });
+
+  it('keeps real warnings on the warning list while coverage notes stay muted', () => {
+    const summary = baseSummary({
+      warnings: ['auth.log truncated mid-line'],
+      coverageNotes: ['Structured output coverage is 414 of 749 Linux artifact candidate source(s).'],
+    });
+    const { container } = render(createElement(LinuxArtifactsPanel, { summary }));
+    expect(screen.getByText('auth.log truncated mid-line')).toBeDefined();
+    expect(container.querySelector('.bg-forensics-warning-bg')).not.toBeNull();
+    expect(
+      screen.getByText('Structured output coverage is 414 of 749 Linux artifact candidate source(s).'),
+    ).toBeDefined();
   });
 
   it('renders journal content when activeTab is journal', () => {
@@ -321,9 +336,10 @@ describe('LinuxArtifactsPanel', () => {
       ],
     });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'journal' }));
-    expect(screen.getByText('日志来源')).toBeDefined();
-    expect(screen.getByText('journald')).toBeDefined();
-    expect(screen.getByText('syslog')).toBeDefined();
+    // 列筛选下拉会重复渲染列标题与取值，断言至少出现一次即可。
+    expect(screen.getAllByText('日志来源').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('journald').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('syslog').length).toBeGreaterThan(0);
   });
 
   it('renders the system info overview when systemInfo is present', () => {
@@ -354,5 +370,68 @@ describe('LinuxArtifactsPanel', () => {
     expect(
       screen.getByText('已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。'),
     ).toBeDefined();
+  });
+
+  it('renders the kernel versions card and the account table on overview', () => {
+    const summary = baseSummary({
+      systemConfigCount: 2,
+      totalCount: 2,
+      systemInfo: {
+        osPrettyName: 'Ubuntu 22.04 LTS',
+        hostname: 'forensic-host',
+        accountCount: 2,
+        userAccountCount: 1,
+        lockedAccountCount: 1,
+        kernelVersions: ['5.15.0-91-generic', '6.5.0-14-generic'],
+        accounts: [
+          {
+            username: 'root',
+            uid: 0,
+            gid: 0,
+            home: '/root',
+            shell: '/bin/bash',
+            locked: false,
+            hasPassword: true,
+          },
+          {
+            username: 'alice',
+            uid: 1000,
+            gid: 1000,
+            home: '/home/alice',
+            shell: '/bin/zsh',
+            locked: true,
+            hasPassword: false,
+          },
+        ],
+      },
+    });
+    render(createElement(LinuxArtifactsPanel, { summary }));
+    expect(screen.getByText('内核版本')).toBeDefined();
+    expect(screen.getByText('5.15.0-91-generic、6.5.0-14-generic')).toBeDefined();
+    expect(screen.getByText('用户账户')).toBeDefined();
+    expect(screen.getByText('alice')).toBeDefined();
+    expect(screen.getByText('/home/alice')).toBeDefined();
+    expect(screen.getAllByText('/bin/bash').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('有密码').length).toBeGreaterThan(0);
+  });
+
+  it('shows 未解析 for an empty kernel version list and hides the account table without accounts', () => {
+    const summary = baseSummary({
+      systemConfigCount: 1,
+      totalCount: 1,
+      systemInfo: {
+        osPrettyName: 'Debian GNU/Linux 12',
+        hostname: 'forensic-host',
+        accountCount: 0,
+        userAccountCount: 0,
+        lockedAccountCount: 0,
+        kernelVersions: [],
+        accounts: [],
+      },
+    });
+    render(createElement(LinuxArtifactsPanel, { summary }));
+    expect(screen.getByText('内核版本')).toBeDefined();
+    expect(screen.getAllByText('未解析').length).toBeGreaterThan(0);
+    expect(screen.queryByText('用户账户')).toBeNull();
   });
 });

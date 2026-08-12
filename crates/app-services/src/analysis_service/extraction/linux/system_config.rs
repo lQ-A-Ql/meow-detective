@@ -84,6 +84,36 @@ pub(super) fn extract_text_config(
     config_kind: &str,
     outcome: &mut ExtractionOutcome,
 ) {
+    extract_text_config_filtered(candidate, bytes, parser, config_kind, None, outcome);
+}
+
+/// systemd unit files are INI-style: `[Unit]` / `[Service]` / `[Install]`
+/// section headers carry no key/value content and would surface as keyless
+/// `-` rows in the UI, so they are filtered out here. Only the systemdUnit
+/// route uses this; every other text config keeps section-like lines.
+pub(super) fn extract_systemd_unit_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    extract_text_config_filtered(
+        candidate,
+        bytes,
+        "linux.systemd_unit",
+        "systemdUnit",
+        Some(is_ini_section_header),
+        outcome,
+    );
+}
+
+fn extract_text_config_filtered(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    parser: &str,
+    config_kind: &str,
+    skip_line: Option<fn(&str) -> bool>,
+    outcome: &mut ExtractionOutcome,
+) {
     if std::str::from_utf8(bytes).is_err() {
         outcome.warnings.push(format!(
             "{} contains non-UTF-8 bytes; invalid sequences were replaced before Linux config extraction",
@@ -98,6 +128,7 @@ pub(super) fn extract_text_config(
         parser,
         config_kind,
         "Linux config",
+        skip_line,
         outcome,
     );
     if emitted == 0 {
@@ -106,6 +137,15 @@ pub(super) fn extract_text_config(
             candidate.path
         ));
     }
+}
+
+/// A trimmed line that is exactly one INI section header (`[Unit]`), with no
+/// nested brackets inside.
+fn is_ini_section_header(line: &str) -> bool {
+    let Some(inner) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) else {
+        return false;
+    };
+    !inner.contains('[') && !inner.contains(']')
 }
 
 fn extract_os_release(candidate: &EvidenceCandidate, text: &str, outcome: &mut ExtractionOutcome) {
@@ -306,6 +346,7 @@ fn extract_key_value_or_lines(
         parser,
         "textConfig",
         "Linux config",
+        None,
         outcome,
     );
 }
@@ -316,12 +357,16 @@ fn extract_key_value_or_lines_with_kind(
     parser: &str,
     config_kind: &str,
     title_prefix: &str,
+    skip_line: Option<fn(&str) -> bool>,
     outcome: &mut ExtractionOutcome,
 ) -> usize {
     let mut emitted = 0usize;
     for (line_number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if skip_line.is_some_and(|skip| skip(trimmed)) {
             continue;
         }
         if emitted >= MAX_TEXT_LOG_EVENTS_PER_SOURCE {
@@ -386,3 +431,7 @@ fn is_interactive_shell(shell: &str) -> bool {
         || lower == "false"
         || lower == "nologin")
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/analysis_service/extraction/linux/system_config.rs"]
+mod tests;

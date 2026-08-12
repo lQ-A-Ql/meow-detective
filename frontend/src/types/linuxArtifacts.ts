@@ -187,6 +187,17 @@ export interface LinuxMysqlFinding {
   lineNumber: number;
 }
 
+/** Linux user account row — mirrors Rust `LinuxAccountDto`. */
+export interface LinuxAccount {
+  username: string;
+  uid?: number;
+  gid?: number;
+  home?: string;
+  shell?: string;
+  locked?: boolean;
+  hasPassword?: boolean;
+}
+
 /** Linux host overview — mirrors Rust `LinuxSystemInfoDto`. Derived unpaged. */
 export interface LinuxSystemInfo {
   osPrettyName?: string;
@@ -196,6 +207,8 @@ export interface LinuxSystemInfo {
   accountCount: number;
   userAccountCount: number;
   lockedAccountCount: number;
+  kernelVersions?: string[];
+  accounts?: LinuxAccount[];
 }
 
 /** Linux artifact summary — mirrors Rust `LinuxArtifactSummaryDto`. */
@@ -236,4 +249,6 @@ export interface LinuxArtifactSummary {
   systemInfo?: LinuxSystemInfo;
   generatedAt: string;
   warnings: string[];
+  /** Standing coverage notes (moved out of `warnings` by the backend); rendered as a muted info strip. */
+  coverageNotes?: string[];
 }

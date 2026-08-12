@@ -125,13 +125,9 @@ fn dispatch_candidate(
         LinuxArtifactRouteKind::SshConfig => {
             extract_text_config(candidate, bytes, "linux.ssh_config", "sshConfig", outcome)
         }
-        LinuxArtifactRouteKind::SystemdUnit => extract_text_config(
-            candidate,
-            bytes,
-            "linux.systemd_unit",
-            "systemdUnit",
-            outcome,
-        ),
+        LinuxArtifactRouteKind::SystemdUnit => {
+            system_config::extract_systemd_unit_config(candidate, bytes, outcome)
+        }
         LinuxArtifactRouteKind::InitScript => {
             extract_text_config(candidate, bytes, "linux.init_script", "initScript", outcome)
         }

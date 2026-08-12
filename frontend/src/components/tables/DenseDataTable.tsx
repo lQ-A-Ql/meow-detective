@@ -14,6 +14,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useVirtualizer,
   type Rect,
@@ -32,6 +33,9 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTableRow } from './DenseDataTableRow';
 import { DENSE_TABLE_ROW_HEIGHT } from './dense-table-metrics';
 import { SortIndicator } from './SortIndicator';
+import { DenseTableFilterBar } from './DenseTableFilterBar';
+import { DenseTableStatusRows } from './DenseTableStatusRows';
+import { useDenseTableFilter } from './useDenseTableFilter';
 
 export interface DenseColumn<T> {
   key: string;
@@ -41,6 +45,10 @@ export interface DenseColumn<T> {
   sortable?: boolean;
   /** 排序键 (用于回调) */
   sortKey?: string;
+  /** 搜索/列筛选用的文本提取；不提供则该列不参与匹配。 */
+  text?: (row: T) => string;
+  /** 该列出现在工具条的列筛选下拉中（需要同时提供 text）。 */
+  filterable?: boolean;
   render: (row: T) => ReactNode;
 }
 
@@ -80,6 +88,8 @@ interface DenseDataTableProps<T> {
   /** 为动态多列表格保留最小列宽，并允许整个表格横向滚动。 */
   horizontalScroll?: boolean;
   minColumnWidth?: number;
+  /** 开启客户端搜索/列筛选工具条；过滤只作用于当前已加载行。 */
+  filterable?: boolean;
 }
 
 const OVERSCAN_ROWS = 8;
@@ -138,15 +148,24 @@ export function DenseDataTable<T>({
   onRetryInitialLoad,
   horizontalScroll = false,
   minColumnWidth = 140,
+  filterable = false,
 }: DenseDataTableProps<T>) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
   const automaticRetryKeyRef = useRef<string | undefined>(undefined);
   const automaticRetryTimerRef = useRef<number | undefined>(undefined);
   const retryInFlightRef = useRef(false);
   const wasLoadingMoreRef = useRef(false);
+  const filter = useDenseTableFilter({
+    columns,
+    rows,
+    enabled: filterable,
+    resetKey: loadContextKey,
+  });
+  const visibleRows = filter.visibleRows;
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: visibleRows.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => DENSE_TABLE_ROW_HEIGHT,
     overscan: OVERSCAN_ROWS,
@@ -314,7 +333,7 @@ export function DenseDataTable<T>({
       }
     : undefined;
 
-  return (
+  const table = (
     <ScrollArea
       className="min-h-0 flex-1 overflow-hidden bg-transparent font-mono text-[11px]"
       viewportRef={containerRef}
@@ -359,40 +378,19 @@ export function DenseDataTable<T>({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 && initialLoadFailed ? (
-            <TableRow aria-live="polite" className="hover:bg-transparent">
-              <TableCell colSpan={columns.length} className="px-4 py-8">
-                <div className="flex items-center justify-center gap-2 text-forensics-error-text">
-                  <span>{initialLoadErrorText}</span>
-                  {onRetryInitialLoad ? (
-                    <Button
-                      type="button"
-                      variant="forensicsOutline"
-                      size="compact"
-                      onClick={onRetryInitialLoad}
-                    >
-                      {retryInitialLoadLabel}
-                    </Button>
-                  ) : null}
-                </div>
-              </TableCell>
-            </TableRow>
-          ) : null}
-          {rows.length === 0 && !initialLoadFailed ? (
-            <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={columns.length} className="px-4 py-8">
-                <div className="space-y-1 text-center font-serif">
-                  <div className="text-[12px] font-light text-forensics-text">
-                    {emptyTitle}
-                  </div>
-                  <div className="text-[11px] text-forensics-muted">
-                    {emptyDescription}
-                  </div>
-                </div>
-              </TableCell>
-            </TableRow>
-          ) : null}
-          {rows.length > 0 && topSpacerHeight > 0 ? (
+          <DenseTableStatusRows
+            columnCount={columns.length}
+            loadedCount={rows.length}
+            visibleCount={visibleRows.length}
+            initialLoadFailed={initialLoadFailed}
+            initialLoadErrorText={initialLoadErrorText}
+            retryInitialLoadLabel={retryInitialLoadLabel}
+            onRetryInitialLoad={onRetryInitialLoad}
+            emptyTitle={emptyTitle}
+            emptyDescription={emptyDescription}
+            noMatchText={t('denseTable.noMatch')}
+          />
+          {visibleRows.length > 0 && topSpacerHeight > 0 ? (
             <TableRow aria-hidden="true" className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
@@ -402,7 +400,7 @@ export function DenseDataTable<T>({
             </TableRow>
           ) : null}
           {virtualRows.map((virtualRow) => {
-            const row = rows[virtualRow.index];
+            const row = visibleRows[virtualRow.index];
             if (!row) return null;
             const key = getRowKey(row);
             const selected = key === selectedRowKey;
@@ -418,7 +416,7 @@ export function DenseDataTable<T>({
               />
             );
           })}
-          {rows.length > 0 && bottomSpacerHeight > 0 ? (
+          {visibleRows.length > 0 && bottomSpacerHeight > 0 ? (
             <TableRow aria-hidden="true" className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
@@ -460,5 +458,22 @@ export function DenseDataTable<T>({
         </TableBody>
       </Table>
     </ScrollArea>
+  );
+
+  if (!filterable) return table;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DenseTableFilterBar
+        keyword={filter.keywordInput}
+        onKeywordChange={filter.setKeywordInput}
+        selects={filter.selects}
+        onSelectChange={filter.setSelectValue}
+        filterActive={filter.filterActive}
+        filteredCount={visibleRows.length}
+        loadedCount={rows.length}
+      />
+      {table}
+    </div>
   );
 }

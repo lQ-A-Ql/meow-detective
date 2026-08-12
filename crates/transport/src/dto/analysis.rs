@@ -21,10 +21,11 @@ pub use crate::dto::analysis_evtx::{
     EvtxSecurityEventDto,
 };
 pub use crate::dto::analysis_linux::{
-    LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
-    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto,
-    LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto,
-    LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto,
+    LinuxAccountDto, LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto,
+    LinuxCronJobDto, LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxMysqlConfigDto,
+    LinuxMysqlFindingDto, LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto,
+    LinuxSystemInfoDto, LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto,
+    LinuxWebSiteDto,
 };
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,

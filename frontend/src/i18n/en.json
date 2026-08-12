@@ -782,7 +782,10 @@
       "confidence": "Confidence",
       "evidence": "Evidence",
       "section": "Section",
-      "threadId": "Thread ID"
+      "threadId": "Thread ID",
+      "username": "Username",
+      "locked": "Locked",
+      "hasPassword": "Has Password"
     },
     "values": {
       "yes": "Yes",
@@ -799,6 +802,8 @@
       "accountCount": "Accounts",
       "userAccountCount": "Regular Users",
       "lockedAccountCount": "Locked Accounts",
+      "kernelVersions": "Kernel Versions",
+      "accountsTitle": "User Accounts",
       "unavailable": "Linux artifacts were found, but no system identity (os-release/hostname/accounts) could be derived."
     },
     "empty": {
@@ -863,6 +868,13 @@
         "description": "Candidate paths: /var/log/mysql/error.log, /var/log/mariadb/mariadb.log, and /var/log/mysqld.log."
       }
     }
+  },
+  "denseTable": {
+    "searchPlaceholder": "Search loaded rows…",
+    "filterAll": "All",
+    "filterSummary": "Filtered {{filtered}} / loaded {{loaded}}",
+    "filterScopeNote": "covers loaded rows only",
+    "noMatch": "No loaded rows match the current filters."
   },
   "errorBoundary": {
     "title": "Application Error",

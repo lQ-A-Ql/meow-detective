@@ -186,6 +186,7 @@ export function ExtractionTableSection({
   status,
   generatedAt,
   warnings,
+  notes,
   stats,
   children,
 }: {
@@ -193,6 +194,8 @@ export function ExtractionTableSection({
   status: string;
   generatedAt: string;
   warnings: string[];
+  /** 常驻覆盖摘要等信息性文案，渲染为标题下方的 muted 信息条（非告警）。 */
+  notes?: string[];
   stats: Array<[string, string]>;
   children: React.ReactNode;
 }) {
@@ -207,6 +210,13 @@ export function ExtractionTableSection({
           </div>
         </div>
       </div>
+      {notes && notes.length > 0 ? (
+        <div className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] leading-5 text-forensics-muted">
+          {notes.map((note) => (
+            <div key={note}>{note}</div>
+          ))}
+        </div>
+      ) : null}
       {stats.length > 0 ? <SummaryStrip items={stats} /> : null}
       {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
       {children}

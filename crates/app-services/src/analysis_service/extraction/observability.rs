@@ -15,6 +15,7 @@ pub(super) struct LinuxSummaryObservability {
     pub(super) coverage_ratio: f32,
     pub(super) truncated: bool,
     pub(super) warnings: Vec<String>,
+    pub(super) coverage_notes: Vec<String>,
 }
 
 pub(super) fn linux_summary_observability(
@@ -37,18 +38,19 @@ pub(super) fn linux_summary_observability(
     } else {
         parsed_candidate_count as f32 / candidate_count as f32
     };
-    let mut warnings = Vec::new();
+    let mut coverage_notes = Vec::new();
     if candidate_count > 0 && total_count == 0 {
-        warnings.push(format!(
+        coverage_notes.push(format!(
             "Found {candidate_count} Linux artifact candidate(s), but no structured artifacts have been extracted yet. Run LinuxArtifacts extraction or review parser support warnings."
         ));
     } else if candidate_count > parsed_candidate_count && total_count > 0 {
-        warnings.push(format!(
+        coverage_notes.push(format!(
             "Structured output coverage is {parsed_candidate_count} of {candidate_count} Linux artifact candidate source(s). Sources without structured output may be empty, unsupported, or handled by the generic text parser; this is a coverage summary, not live extraction progress."
         ));
     }
 
     let mut truncated = false;
+    let mut warnings = Vec::new();
     let unsupported_count = candidates
         .iter()
         .filter(|candidate| {
@@ -80,12 +82,12 @@ pub(super) fn linux_summary_observability(
         }
     }
     if unsupported_count > 0 {
-        warnings.push(format!(
+        coverage_notes.push(format!(
             "{unsupported_count} Linux candidate source(s) are detected for coverage but do not yet have a structured first-pass parser."
         ));
     }
     if text_fallback_count > 0 {
-        warnings.push(format!(
+        coverage_notes.push(format!(
             "{text_fallback_count} Linux text log/source file(s) are covered with generic line-level extraction."
         ));
     }
@@ -95,6 +97,7 @@ pub(super) fn linux_summary_observability(
         coverage_ratio,
         truncated,
         warnings,
+        coverage_notes,
     })
 }
 

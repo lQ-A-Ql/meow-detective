@@ -369,6 +369,60 @@ pub(super) fn query_linux_system_config_by_kind(
     )
 }
 
+/// Fetch passwdAccount and shadowAccount rows for the merged account list.
+/// Unpaged on purpose: local account counts are in the low hundreds at most.
+pub(super) fn query_linux_account_rows(
+    conn: &Connection,
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
+         FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') IN ('passwdAccount', 'shadowAccount')
+         ORDER BY id ASC";
+    query_artifact_rows_with_statement(conn, sql, &[])
+}
+
+/// Kernel version suffixes taken from `boot/vmlinuz-*` file names. Source
+/// paths carry no leading slash (e.g. `cl/root/boot/vmlinuz-3.10.0-...`), so
+/// the match anchors on the `boot/vmlinuz-` segment anywhere in the path.
+pub(super) fn query_linux_kernel_image_versions(
+    conn: &Connection,
+) -> Result<Vec<String>, AnalysisServiceError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT SUBSTR(path, INSTR(path, 'boot/vmlinuz-') + 13)
+         FROM file_entries
+         WHERE path LIKE '%boot/vmlinuz-%'",
+    )?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let mut versions = Vec::new();
+    for row in rows {
+        versions.push(row?);
+    }
+    Ok(versions)
+}
+
+/// `/lib/modules/<version>/...` directory names (first path segment after
+/// `lib/modules/`), used as the kernel-version fallback when the image has no
+/// `boot/vmlinuz-*` file.
+pub(super) fn query_linux_module_dir_versions(
+    conn: &Connection,
+) -> Result<Vec<String>, AnalysisServiceError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT SUBSTR(path, INSTR(path, 'lib/modules/') + 12)
+         FROM file_entries
+         WHERE path LIKE '%lib/modules/%'",
+    )?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let mut versions = Vec::new();
+    for row in rows {
+        let suffix = row?;
+        if let Some(version) = suffix.split('/').next().filter(|part| !part.is_empty()) {
+            versions.push(version.to_string());
+        }
+    }
+    Ok(versions)
+}
+
 /// Fetch `/etc/hostname` text-config rows ordered by source line number so the
 /// first non-empty line wins.
 pub(super) fn query_linux_hostname_rows(

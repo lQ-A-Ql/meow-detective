@@ -65,5 +65,6 @@ pub fn get_linux_artifact_summary(
         system_info,
         generated_at: Utc::now().to_rfc3339(),
         warnings: observability.warnings,
+        coverage_notes: observability.coverage_notes,
     })
 }

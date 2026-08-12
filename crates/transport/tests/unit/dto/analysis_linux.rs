@@ -137,6 +137,9 @@ fn linux_artifact_summary_serializes_camel_case() {
         }],
         generated_at: "2026-01-01T00:00:00Z".to_string(),
         warnings: Vec::new(),
+        coverage_notes: vec![
+            "Structured output coverage is 1 of 2 Linux artifact candidate source(s).".to_string(),
+        ],
         system_info: Some(LinuxSystemInfoDto {
             os_pretty_name: Some("CentOS Stream 9".to_string()),
             os_id: Some("centos".to_string()),
@@ -145,6 +148,16 @@ fn linux_artifact_summary_serializes_camel_case() {
             account_count: 3,
             user_account_count: 1,
             locked_account_count: 2,
+            kernel_versions: vec!["5.14.0-427.el9.x86_64".to_string()],
+            accounts: vec![LinuxAccountDto {
+                username: "root".to_string(),
+                uid: Some(0),
+                gid: Some(0),
+                home: Some("/root".to_string()),
+                shell: Some("/bin/bash".to_string()),
+                locked: Some(false),
+                has_password: Some(true),
+            }],
         }),
     };
 
@@ -186,6 +199,17 @@ fn linux_artifact_summary_serializes_camel_case() {
     assert_eq!(value["systemInfo"]["accountCount"], 3);
     assert_eq!(value["systemInfo"]["userAccountCount"], 1);
     assert_eq!(value["systemInfo"]["lockedAccountCount"], 2);
+    assert_eq!(
+        value["systemInfo"]["kernelVersions"][0],
+        "5.14.0-427.el9.x86_64"
+    );
+    assert_eq!(value["systemInfo"]["accounts"][0]["username"], "root");
+    assert_eq!(value["systemInfo"]["accounts"][0]["uid"], 0);
+    assert_eq!(value["systemInfo"]["accounts"][0]["hasPassword"], true);
+    assert_eq!(
+        value["coverageNotes"][0],
+        "Structured output coverage is 1 of 2 Linux artifact candidate source(s)."
+    );
 }
 
 #[test]
@@ -198,15 +222,42 @@ fn linux_system_info_omits_none_fields() {
         account_count: 0,
         user_account_count: 0,
         locked_account_count: 0,
+        kernel_versions: Vec::new(),
+        accounts: Vec::new(),
     };
 
     let value = serde_json::to_value(dto).unwrap();
 
     assert_eq!(value["osId"], "debian");
     assert_eq!(value["accountCount"], 0);
+    assert_eq!(value["kernelVersions"], serde_json::json!([]));
+    assert_eq!(value["accounts"], serde_json::json!([]));
     assert!(value.get("osPrettyName").is_none());
     assert!(value.get("osVersionId").is_none());
     assert!(value.get("hostname").is_none());
+}
+
+#[test]
+fn linux_account_omits_none_fields() {
+    let dto = LinuxAccountDto {
+        username: "daemon".to_string(),
+        uid: Some(1),
+        gid: None,
+        home: None,
+        shell: None,
+        locked: Some(true),
+        has_password: None,
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["username"], "daemon");
+    assert_eq!(value["uid"], 1);
+    assert_eq!(value["locked"], true);
+    assert!(value.get("gid").is_none());
+    assert!(value.get("home").is_none());
+    assert!(value.get("shell").is_none());
+    assert!(value.get("hasPassword").is_none());
 }
 
 #[test]

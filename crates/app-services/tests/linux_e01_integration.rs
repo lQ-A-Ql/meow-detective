@@ -2054,28 +2054,28 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
     assert_eq!(pre_summary.coverage_ratio, 0.0);
     assert!(
         pre_summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("Linux artifact candidate(s)")
-                && warning.contains("no structured artifacts")),
+            .any(|note| note.contains("Linux artifact candidate(s)")
+                && note.contains("no structured artifacts")),
         "pre-extraction summary should report candidate coverage: {:?}",
-        pre_summary.warnings
+        pre_summary.coverage_notes
     );
     assert!(
         pre_summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("do not yet have a structured first-pass parser")),
+            .any(|note| note.contains("do not yet have a structured first-pass parser")),
         "pre-extraction summary should report unsupported candidate sources: {:?}",
-        pre_summary.warnings
+        pre_summary.coverage_notes
     );
     assert!(
         pre_summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("generic line-level extraction")),
+            .any(|note| note.contains("generic line-level extraction")),
         "pre-extraction summary should report covered Linux text fallback sources: {:?}",
-        pre_summary.warnings
+        pre_summary.coverage_notes
     );
 
     let run = run_analysis_extraction_with_reader_limits(
@@ -2107,28 +2107,28 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
     );
     assert!(
         summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("Structured output coverage is")
-                && warning.contains("coverage summary, not live extraction progress")),
+            .any(|note| note.contains("Structured output coverage is")
+                && note.contains("coverage summary, not live extraction progress")),
         "post-extraction summary should report parsed/candidate coverage: {:?}",
-        summary.warnings
+        summary.coverage_notes
     );
     assert!(
         summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("do not yet have a structured first-pass parser")),
+            .any(|note| note.contains("do not yet have a structured first-pass parser")),
         "post-extraction summary should retain unsupported-source contract: {:?}",
-        summary.warnings
+        summary.coverage_notes
     );
     assert!(
         summary
-            .warnings
+            .coverage_notes
             .iter()
-            .any(|warning| warning.contains("generic line-level extraction")),
+            .any(|note| note.contains("generic line-level extraction")),
         "post-extraction summary should retain text fallback coverage contract: {:?}",
-        summary.warnings
+        summary.coverage_notes
     );
 }
 

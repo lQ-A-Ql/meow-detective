@@ -47,6 +47,11 @@ pub struct LinuxArtifactSummaryDto {
     pub system_info: Option<LinuxSystemInfoDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
+    /// Informational coverage statements (candidate coverage, unsupported
+    /// sources, text fallback) split out of `warnings` so the UI can render
+    /// them as low-noise notes instead of actionable warnings.
+    #[serde(default)]
+    pub coverage_notes: Vec<String>,
 }
 
 /// Derived Linux host overview: os-release identity, hostname, and account
@@ -65,6 +70,37 @@ pub struct LinuxSystemInfoDto {
     pub account_count: u64,
     pub user_account_count: u64,
     pub locked_account_count: u64,
+    /// Kernel versions discovered from `boot/vmlinuz-*` file names (falling
+    /// back to `/lib/modules/` directory names), newest first. Empty when the
+    /// image exposes neither.
+    #[serde(default)]
+    pub kernel_versions: Vec<String>,
+    /// Merged passwd/shadow account rows, sorted by uid ascending (accounts
+    /// without a uid last, by name). Unpaged: account counts are in the low
+    /// hundreds at most.
+    #[serde(default)]
+    pub accounts: Vec<LinuxAccountDto>,
+}
+
+/// One Linux local account, merged from its `passwdAccount` and
+/// `shadowAccount` rows by username. Shadow-only accounts carry just the
+/// password-state fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxAccountDto {
+    pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_password: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

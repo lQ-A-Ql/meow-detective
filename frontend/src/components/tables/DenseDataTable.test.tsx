@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DenseDataTable, type DenseColumn } from './DenseDataTable';
 
@@ -552,5 +552,152 @@ describe('DenseDataTable', () => {
     expect(screen.queryByText('No matching records')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(onRetryInitialLoad).toHaveBeenCalledTimes(1);
+  });
+});
+
+interface FilterRow {
+  id: string;
+  name: string;
+  kind: string;
+}
+
+const filterRows: FilterRow[] = [
+  { id: 'row-a', name: 'Alpha', kind: 'journald' },
+  { id: 'row-b', name: 'Bravo', kind: 'syslog' },
+  { id: 'row-c', name: 'Charlie', kind: 'journald' },
+];
+
+const filterColumns: DenseColumn<FilterRow>[] = [
+  { key: 'name', title: 'Name', render: (row) => row.name, text: (row) => row.name },
+  {
+    key: 'kind',
+    title: 'Kind',
+    filterable: true,
+    render: (row) => row.kind,
+    text: (row) => row.kind,
+  },
+];
+
+describe('DenseDataTable filterable toolbar', () => {
+  it('stays hidden and leaves rows untouched when filterable is not set', () => {
+    render(
+      <DenseDataTable
+        columns={filterColumns}
+        rows={filterRows}
+        getRowKey={(row) => row.id}
+      />,
+    );
+
+    expect(screen.queryByPlaceholderText('搜索已加载行…')).toBeNull();
+    expect(screen.getByText('Alpha')).toBeDefined();
+    expect(screen.getByText('Bravo')).toBeDefined();
+    expect(screen.getByText('Charlie')).toBeDefined();
+  });
+
+  it('narrows rows by debounced case-insensitive keyword search', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <DenseDataTable
+          columns={filterColumns}
+          rows={filterRows}
+          getRowKey={(row) => row.id}
+          filterable
+        />,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText('搜索已加载行…'), {
+        target: { value: 'ALPHA' },
+      });
+      // 关键词防抖 ~200ms：输入后立即断言不过滤，推进计时器后生效。
+      expect(screen.getByText('Bravo')).toBeDefined();
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      expect(screen.queryByText('Bravo')).toBeNull();
+      expect(screen.getByText('Alpha')).toBeDefined();
+      expect(screen.queryByText('Charlie')).toBeNull();
+      expect(screen.getByText(/筛选 1 \/ 已加载 3/)).toBeDefined();
+      expect(screen.getByText('仅覆盖已加载行')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('filters rows through the single-select column dropdown', () => {
+    render(
+      <DenseDataTable
+        columns={filterColumns}
+        rows={filterRows}
+        getRowKey={(row) => row.id}
+        filterable
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'syslog' } });
+
+    expect(screen.queryByText('Alpha')).toBeNull();
+    expect(screen.getByText('Bravo')).toBeDefined();
+    expect(screen.queryByText('Charlie')).toBeNull();
+    expect(screen.getByText(/筛选 1 \/ 已加载 3/)).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: '' } });
+    expect(screen.getByText('Alpha')).toBeDefined();
+    expect(screen.getByText('Charlie')).toBeDefined();
+  });
+
+  it('shows a no-match hint when filters exclude every loaded row', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <DenseDataTable
+          columns={filterColumns}
+          rows={filterRows}
+          getRowKey={(row) => row.id}
+          filterable
+        />,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText('搜索已加载行…'), {
+        target: { value: 'no-such-row' },
+      });
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      expect(screen.getByText('没有匹配当前筛选条件的已加载行。')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps onReachEnd continuation alive while a filter is active', () => {
+    const onReachEnd = vi.fn();
+    const manyRows = Array.from({ length: 60 }, (_, index) => ({
+      id: `row-${index}`,
+      name: `Row ${index}`,
+      kind: 'journald',
+    }));
+    const { container } = render(
+      <DenseDataTable
+        columns={filterColumns}
+        rows={manyRows}
+        getRowKey={(row) => row.id}
+        filterable
+        hasMore
+        onReachEnd={onReachEnd}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'journald' } });
+
+    const scrollContainer = getScrollViewport(container);
+    Object.defineProperties(scrollContainer, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 3_100 },
+    });
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
+    expect(onReachEnd).toHaveBeenCalledTimes(1);
   });
 });
