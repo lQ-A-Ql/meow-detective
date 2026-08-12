@@ -1,8 +1,11 @@
 //! Read-only parsing of the native XFS journal wire format.
 //!
 //! The implementation follows `xfs_log_format.h`, `xfs_log_recover.c`, and
-//! xfsprogs' log-print/recovery code. It reports transaction metadata only;
-//! journal regions are never presented as recovered file contents.
+//! xfsprogs' log-print/recovery code. Analysis reports transaction metadata
+//! only; journal regions are never presented as recovered file contents.
+//! The `replay` submodule additionally turns committed transactions into
+//! volume-relative repair patches (the host-side equivalent of mount-time
+//! log recovery); it only computes patches and never writes to the evidence.
 
 mod checksum;
 mod error;
@@ -12,6 +15,7 @@ mod operation;
 mod record;
 mod record_validation;
 mod recovery;
+pub(crate) mod replay;
 mod state;
 mod transaction;
 mod wire;
@@ -26,7 +30,7 @@ pub use record::{
     LogRecordHeader, XfsLogChecksumStatus, XfsLogRecord, XfsLogRecordProvenance, XfsLogSourceSpan,
 };
 pub use recovery::{analyze_log_snapshot, XfsLogAnalysis, XfsLogParseLimits, XfsParsedLogRecord};
-pub use state::{assess_log_state, XfsLogState};
+pub use state::{assess_log_state, dummy_unmount_record, XfsLogState};
 pub use transaction::{
     XfsDeletedFileCandidate, XfsDeletionProof, XfsDeletionStatus, XfsLogTransaction,
     XfsMetadataCandidate, XfsMetadataCandidateKind, XfsRecoveryCompleteness, XfsTransactionHeader,

@@ -15,6 +15,7 @@ import {
   launchEmulation,
   listEmulationSessions,
   prepareEmulation,
+  repairEmulationFsJournals,
   releaseEmulation,
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
@@ -67,6 +68,9 @@ export interface EmulationWorkspaceModel {
   needsEfiFallback: boolean;
   installEfiFallback: boolean;
   toggleInstallEfiFallback: () => void;
+  needsFsRepair: boolean;
+  repairFilesystems: boolean;
+  toggleRepairFilesystems: () => void;
   bypassPartition?: number;
   selectBypassPartition: (partition?: number) => void;
   bypassIsLinux: boolean;
@@ -139,6 +143,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [linuxUsername, setLinuxUsername] = useState<string | undefined>(undefined);
   const [cleanupOsdata, setCleanupOsdata] = useState(true);
   const [installEfiFallback, setInstallEfiFallback] = useState(true);
+  const [repairFilesystems, setRepairFilesystems] = useState(true);
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -185,6 +190,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     setLinuxUsername(undefined);
     setCleanupOsdata(true);
     setInstallEfiFallback(true);
+    setRepairFilesystems(true);
   }, [selectedSourceId]);
 
   useEffect(() => {
@@ -206,6 +212,11 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       .some((install) => (install.bootRiskNotes ?? []).includes('no-efi-fallback')),
     [preflightQuery.data],
   );
+  const needsFsRepair = useMemo(
+    () => (preflightQuery.data?.installs ?? [])
+      .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty')),
+    [preflightQuery.data],
+  );
   const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
   const isLinuxSource = selectedSource?.platform === 'LINUX';
   const startMutation = useMutation({
@@ -220,6 +231,12 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         options,
       });
       try {
+        if (isLinuxSource && needsFsRepair && repairFilesystems) {
+          const repair = await repairEmulationFsJournals(prepared.sessionId);
+          if (repair.items.some((item) => item.state === 'unsupported')) {
+            throw new Error(t('emulationPage.errors.fsRepairUnsupported'));
+          }
+        }
         if (cleanupOsdata) {
           for (const partitionIndex of osdataCleanupPartitions) {
             const cleanup = await cleanupEmulationOsdata({
@@ -313,6 +330,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const toggleInstallEfiFallback = useCallback(() => {
     setInstallEfiFallback((current) => !current);
   }, []);
+  const toggleRepairFilesystems = useCallback(() => {
+    setRepairFilesystems((current) => !current);
+  }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
     if (!confirmEmulationBoot(recoveryIsoPath, t('emulationPage.boot.directBootConfirm'))) return;
@@ -350,6 +370,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     needsEfiFallback,
     installEfiFallback,
     toggleInstallEfiFallback,
+    needsFsRepair,
+    repairFilesystems,
+    toggleRepairFilesystems,
     bypassPartition,
     selectBypassPartition: setBypassPartition,
     bypassIsLinux,

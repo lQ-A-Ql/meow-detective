@@ -12,8 +12,10 @@ mod inode;
 mod inode_cache;
 mod locator;
 mod reader;
+mod repair;
 
 pub mod log;
+pub use repair::{XfsLogClearPlan, XfsRepairPatch};
 
 pub use reader::XfsReader;
 

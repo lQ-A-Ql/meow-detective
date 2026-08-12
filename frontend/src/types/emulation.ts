@@ -119,6 +119,21 @@ export interface EmulationEfiFallbackResult {
   alreadyPresent: boolean;
 }
 
+export type EmulationFsVolumeState = 'clean' | 'dirty' | 'unsupported';
+
+export interface EmulationFsRepairItem {
+  partitionIndex: number;
+  state: EmulationFsVolumeState;
+  repaired: boolean;
+  logBytes: number;
+}
+
+export interface EmulationFsRepairResult {
+  sessionId: string;
+  dataSourceId: string;
+  items: EmulationFsRepairItem[];
+}
+
 export interface EmulationLinuxBypassResult {
   sessionId: string;
   dataSourceId: string;

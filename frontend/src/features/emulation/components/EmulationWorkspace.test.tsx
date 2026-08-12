@@ -43,6 +43,9 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     needsEfiFallback: false,
     installEfiFallback: true,
     toggleInstallEfiFallback: vi.fn(),
+    needsFsRepair: false,
+    repairFilesystems: true,
+    toggleRepairFilesystems: vi.fn(),
     bypassPartition: undefined,
     selectBypassPartition: vi.fn(),
     bypassIsLinux: false,
@@ -420,7 +423,8 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('未在该分区找到可清除密码的 Linux 账户')).toBeInTheDocument();
   });
 
-  it('shows the in-guest xfs_repair guidance only when preflight reports xfs-log-dirty', () => {
+  it('offers host-side XFS repair only when preflight reports xfs-log-dirty', () => {
+    const toggleRepairFilesystems = vi.fn();
     const linuxModel = (bootRiskNotes?: string[]) => createModel({
       selectedSource: {
         id: 'source-1',
@@ -441,14 +445,17 @@ describe('EmulationWorkspace', () => {
         }],
         recommendedBootRoute: 'directSystem',
       },
+      needsFsRepair: (bootRiskNotes ?? []).includes('xfs-log-dirty'),
+      toggleRepairFilesystems,
     });
 
     const { rerender } = render(<EmulationWorkspace model={linuxModel(['xfs-log-dirty'])} />);
     expect(screen.getByText('XFS 日志脏')).toBeInTheDocument();
-    expect(screen.getByText(/xfs_repair/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' }));
+    expect(toggleRepairFilesystems).toHaveBeenCalledOnce();
 
     rerender(<EmulationWorkspace model={linuxModel(undefined)} />);
     expect(screen.queryByText('XFS 日志脏')).not.toBeInTheDocument();
-    expect(screen.queryByText(/xfs_repair/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' })).not.toBeInTheDocument();
   });
 });

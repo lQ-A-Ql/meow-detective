@@ -15,6 +15,7 @@ use crate::state::AppState;
 
 mod bypass;
 mod efi_fallback;
+mod fs_repair;
 mod preflight;
 
 pub use bypass::{
@@ -22,6 +23,7 @@ pub use bypass::{
     get_emulation_bypass_accounts, get_emulation_linux_accounts,
 };
 pub use efi_fallback::install_emulation_efi_fallback;
+pub use fs_repair::repair_emulation_fs_journals;
 pub use preflight::get_emulation_preflight;
 
 #[tauri::command]

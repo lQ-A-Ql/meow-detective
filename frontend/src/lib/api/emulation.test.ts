@@ -7,6 +7,7 @@ import {
   launchEmulation,
   listEmulationSessions,
   prepareEmulation,
+  repairEmulationFsJournals,
   releaseEmulation,
 } from './emulation';
 
@@ -77,5 +78,20 @@ describe('emulation API', () => {
     });
     expect(result.strategy).toBe('grub');
     expect(result.alreadyPresent).toBe(false);
+  });
+
+  it('repairs filesystem journals through the prepared session', async () => {
+    requestMock.mockResolvedValueOnce({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      items: [{ partitionIndex: 2, state: 'dirty', repaired: true, logBytes: 10_485_760 }],
+    } as never);
+
+    const result = await repairEmulationFsJournals('emulation-1');
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.REPAIR_FS_JOURNALS, {
+      sessionId: 'emulation-1',
+    });
+    expect(result.items[0]?.repaired).toBe(true);
   });
 });

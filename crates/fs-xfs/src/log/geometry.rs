@@ -6,6 +6,7 @@ pub const XFS_LOG_MAX_SNAPSHOT_BYTES: usize = 64 * 1024 * 1024;
 const XFS_SB_VERSION_NUMBITS: u16 = 0x000F;
 const XFS_SB_VERSION_5: u16 = 5;
 const XFS_SB_VERSION_LOGV2BIT: u16 = 0x0400;
+const XFS_SB_FEAT_INCOMPAT_META_UUID: u32 = 1 << 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XfsLogLocation {
@@ -35,8 +36,14 @@ impl XfsLogGeometry {
         } else {
             log_sector_size
         };
+        let features_incompat = be_u32(superblock, sb_off::FEATURES_INCOMPAT);
+        let uuid_offset = if features_incompat & XFS_SB_FEAT_INCOMPAT_META_UUID != 0 {
+            sb_off::META_UUID
+        } else {
+            sb_off::UUID
+        };
         let mut fs_uuid = [0u8; 16];
-        fs_uuid.copy_from_slice(&superblock[sb_off::UUID..sb_off::UUID + 16]);
+        fs_uuid.copy_from_slice(&superblock[uuid_offset..uuid_offset + 16]);
 
         Self {
             location: if log_start == 0 {

@@ -254,3 +254,26 @@ fn efi_fallback_dtos_round_trip_in_camel_case() {
     let restored: EmulationEfiFallbackResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, absent);
 }
+
+#[test]
+fn fs_repair_dtos_round_trip_in_camel_case() {
+    use super::{EmulationFsRepairItemDto, EmulationFsRepairResultDto, EmulationFsVolumeStateDto};
+
+    let result = EmulationFsRepairResultDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        items: vec![EmulationFsRepairItemDto {
+            partition_index: 2,
+            state: EmulationFsVolumeStateDto::Dirty,
+            repaired: true,
+            log_bytes: 10 * 1024 * 1024,
+        }],
+    };
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(value["sessionId"], "emulation-1");
+    assert_eq!(value["items"][0]["partitionIndex"], 2);
+    assert_eq!(value["items"][0]["state"], "dirty");
+    assert_eq!(value["items"][0]["logBytes"], 10 * 1024 * 1024);
+    let restored: EmulationFsRepairResultDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, result);
+}

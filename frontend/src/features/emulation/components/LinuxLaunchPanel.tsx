@@ -145,6 +145,26 @@ function EfiFallbackRow({ model }: LinuxLaunchPanelProps) {
   );
 }
 
+function FsRepairRow({ model }: LinuxLaunchPanelProps) {
+  const { t } = useTranslation();
+  if (!model.needsFsRepair) return null;
+  return (
+    <div className="border-b border-forensics-border py-3">
+      <label className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
+        <Checkbox
+          checked={model.repairFilesystems}
+          onCheckedChange={model.toggleRepairFilesystems}
+          aria-label={t('emulationPage.launch.repairFilesystems')}
+        />
+        {t('emulationPage.launch.repairFilesystems')}
+      </label>
+      <div className="mt-1 pl-6 text-[10px] leading-4 text-forensics-muted">
+        {t('emulationPage.launch.repairFilesystemsHint')}
+      </div>
+    </div>
+  );
+}
+
 export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   return (
@@ -156,6 +176,7 @@ export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
       <LinuxBypassFieldset model={model} />
       <SourceInfoList model={model} />
       <LinuxPreflightList model={model} />
+      <FsRepairRow model={model} />
       <EfiFallbackRow model={model} />
       <ProtectionNote />
       <ErrorNote model={model} />

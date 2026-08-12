@@ -21,6 +21,7 @@ pub(crate) enum EmulationAuditEvent {
     OsdataCleanup,
     LinuxBypass,
     EfiFallback,
+    FsRepair,
 }
 
 impl EmulationAuditEvent {
@@ -33,6 +34,7 @@ impl EmulationAuditEvent {
             Self::OsdataCleanup => AuditAction::EmulationOsdataCleanup,
             Self::LinuxBypass => AuditAction::EmulationLinuxBypass,
             Self::EfiFallback => AuditAction::EmulationEfiFallback,
+            Self::FsRepair => AuditAction::EmulationFsRepair,
         }
     }
 }

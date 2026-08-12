@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   applyBypass: vi.fn(),
   cleanupOsdata: vi.fn(),
   installEfiFallback: vi.fn(),
+  repairFsJournals: vi.fn(),
   prepare: vi.fn(),
   launch: vi.fn(),
   release: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/lib/api/emulation', () => ({
   applyEmulationBypass: mocks.applyBypass,
   cleanupEmulationOsdata: mocks.cleanupOsdata,
   installEmulationEfiFallback: mocks.installEfiFallback,
+  repairEmulationFsJournals: mocks.repairFsJournals,
   listEmulationSessions: mocks.listSessions,
   prepareEmulation: mocks.prepare,
   launchEmulation: mocks.launch,
@@ -88,6 +90,11 @@ describe('useEmulationWorkspaceModel', () => {
     mocks.prepare.mockResolvedValue({ sessionId: 'emulation-1' });
     mocks.launch.mockResolvedValue({ sessionId: 'emulation-1', state: 'running' });
     mocks.release.mockResolvedValue({ sessionId: 'emulation-1', state: 'released' });
+    mocks.repairFsJournals.mockResolvedValue({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      items: [{ partitionIndex: 2, state: 'dirty', repaired: true, logBytes: 10_485_760 }],
+    });
   });
 
   it('owns direct-boot confirmation and sends explicit authorization after approval', async () => {
@@ -260,6 +267,54 @@ describe('useEmulationWorkspaceModel', () => {
 
     expect(mocks.installEfiFallback).not.toHaveBeenCalled();
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+  });
+
+  it('repairs dirty XFS logs after prepare and before launch', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource(['xfs-log-dirty']);
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
+    expect(result.current.repairFilesystems).toBe(true);
+
+    await act(async () => result.current.start());
+
+    expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
+      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+  });
+
+  it('allows the investigator to skip the XFS log repair', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource(['xfs-log-dirty']);
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
+
+    act(() => result.current.toggleRepairFilesystems());
+    await act(async () => result.current.start());
+
+    expect(mocks.repairFsJournals).not.toHaveBeenCalled();
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+  });
+
+  it('releases the prepared session when an XFS volume is unsupported', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource(['xfs-log-dirty']);
+    mocks.repairFsJournals.mockResolvedValue({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      items: [{ partitionIndex: 2, state: 'unsupported', repaired: false, logBytes: 10_485_760 }],
+    });
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
+
+    await act(async () => {
+      await expect(result.current.start()).rejects.toThrow();
+    });
+
+    expect(mocks.release).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.launch).not.toHaveBeenCalled();
   });
 
   it('does not install the EFI fallback for windows sources even when the note appears', async () => {

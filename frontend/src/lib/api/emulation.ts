@@ -5,6 +5,7 @@ import type {
   EmulationBypassApplyRequest,
   EmulationBypassResult,
   EmulationEfiFallbackResult,
+  EmulationFsRepairResult,
   EmulationLinuxAccount,
   EmulationLinuxBypassRequest,
   EmulationLinuxBypassResult,
@@ -76,6 +77,15 @@ export async function installEmulationEfiFallback(
 ): Promise<EmulationEfiFallbackResult> {
   return apiClient.request<EmulationEfiFallbackResult>(
     COMMANDS.emulation.INSTALL_EFI_FALLBACK,
+    { sessionId },
+  );
+}
+
+export async function repairEmulationFsJournals(
+  sessionId: string,
+): Promise<EmulationFsRepairResult> {
+  return apiClient.request<EmulationFsRepairResult>(
+    COMMANDS.emulation.REPAIR_FS_JOURNALS,
     { sessionId },
   );
 }

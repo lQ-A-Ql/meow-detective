@@ -173,6 +173,33 @@ impl EmulationRegistry {
         Ok(result)
     }
 
+    /// Assess and repair dirty XFS logs through the session overlay. Needs
+    /// the case context because the volume layout comes from the source
+    /// catalog.
+    pub fn repair_fs_journals(
+        &self,
+        case: &BypassCaseRef<'_>,
+        session_id: &str,
+    ) -> Result<transport::dto::EmulationFsRepairResultDto, EmulationRegistryError> {
+        let session = self.edit_session_entry(
+            session_id,
+            "filesystem repairs are only allowed before the guest is launched",
+        )?;
+        let _op_guard = session.op_lock.lock().map_err(|_| Self::lock_error())?;
+        self.require_state(session_id, EmulationState::DescriptorReady)?;
+        let mut result = app_services::emulation_fs_repair::repair_xfs_logs(
+            &session.disk,
+            &app_services::emulation_bypass::BypassCaseContext {
+                case_conn: case.case_conn,
+                case_root: case.case_root,
+                case_id: case.case_id,
+                data_source_id: &DataSourceId(session.data_source_id),
+            },
+        )?;
+        result.session_id = session_id.to_string();
+        Ok(result)
+    }
+
     /// Resolve a session in `DescriptorReady` for a host-side edit.
     fn edit_session_entry(
         &self,

@@ -294,6 +294,35 @@ pub struct EmulationEfiFallbackResultDto {
     pub already_present: bool,
 }
 
+/// The assessed state of one XFS volume's log before any repair ran.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationFsVolumeStateDto {
+    /// Unmount record at the log head; nothing to replay.
+    Clean,
+    /// Pending transactions; the log-clear repair was applied.
+    Dirty,
+    /// External log device or unreadable layout; skipped.
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationFsRepairItemDto {
+    pub partition_index: u32,
+    pub state: EmulationFsVolumeStateDto,
+    pub repaired: bool,
+    pub log_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationFsRepairResultDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    pub items: Vec<EmulationFsRepairItemDto>,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/emulation.rs"]
 mod tests;

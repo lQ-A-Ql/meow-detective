@@ -85,7 +85,8 @@ pub use correlation::{
 pub use emulation::{
     EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
     EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
-    EmulationEfiFallbackResultDto, EmulationEfiFallbackStrategyDto, EmulationInstallDto,
+    EmulationEfiFallbackResultDto, EmulationEfiFallbackStrategyDto, EmulationFsRepairItemDto,
+    EmulationFsRepairResultDto, EmulationFsVolumeStateDto, EmulationInstallDto,
     EmulationInstallPlatformDto, EmulationLinuxAccountDto, EmulationLinuxBypassRequestDto,
     EmulationLinuxBypassResultDto, EmulationNetworkModeDto, EmulationOptionsDto,
     EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto,

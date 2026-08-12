@@ -205,6 +205,60 @@ fn be_u32_checked(bytes: &[u8], offset: usize) -> Option<u32> {
     Some(u32::from_be_bytes(chunk.try_into().ok()?))
 }
 
+/// The `oh_tid` marker mkfs stores in `h_cycle_data[0]` (the sacrificed
+/// first word of the data block).
+const LOG_UNMOUNT_TID_MARKER: u32 = 0xB0C0_D0D0;
+/// `xfs_unmount_log_format.magic` ("Un"), stored little-endian on x86.
+const UNMOUNT_MAGIC_LE: u16 = 0x556E;
+
+/// Build the mkfs/xfs_repair-style dummy unmount record that terminates a
+/// cleared log: a one-operation record header carrying the filesystem UUID,
+/// and its data block with the cycle stamp, the unmount op flag and the
+/// unmount magic. A totally zeroed log is NOT mountable (observed: CentOS 7
+/// fails with "log mount failed"), so the cleared log must keep this record.
+/// The record carries a valid CRC32C so kernels with torn-write
+/// verification (the RHEL 7 backports) accept it.
+///
+/// The record mirrors a real RHEL7 clean-unmount terminator, with
+/// `h_lsn = (cycle, header_block)` and
+/// `h_tail_lsn = (cycle, tail_block)`.
+pub fn dummy_unmount_record(
+    fs_uuid: &[u8; 16],
+    record_version: u32,
+    cycle: u32,
+    header_block: u64,
+    tail_block: u64,
+) -> [u8; 1024] {
+    let mut record = [0u8; 2 * XLOG_BASIC_BLOCK_SIZE];
+    record[0..4].copy_from_slice(&XLOG_HEADER_MAGIC_NUM.to_be_bytes());
+    record[4..8].copy_from_slice(&cycle.to_be_bytes());
+    record[8..12].copy_from_slice(&record_version.to_be_bytes());
+    record[12..16].copy_from_slice(&(XLOG_BASIC_BLOCK_SIZE as u32).to_be_bytes());
+    let lsn = ((u64::from(cycle) << 32) | header_block).to_be_bytes();
+    let tail_lsn = ((u64::from(cycle) << 32) | tail_block).to_be_bytes();
+    record[16..24].copy_from_slice(&lsn);
+    record[24..32].copy_from_slice(&tail_lsn);
+    record[36..40].copy_from_slice(&u32::MAX.to_be_bytes());
+    record[40..44].copy_from_slice(&1u32.to_be_bytes());
+    record[44..48].copy_from_slice(&LOG_UNMOUNT_TID_MARKER.to_be_bytes());
+    record[300..304].copy_from_slice(&1u32.to_be_bytes()); // XLOG_FMT_LINUX_LE
+    record[304..320].copy_from_slice(fs_uuid);
+    record[320..324].copy_from_slice(&(32 * 1024u32).to_be_bytes());
+    let data = XLOG_BASIC_BLOCK_SIZE;
+    record[data..data + 4].copy_from_slice(&cycle.to_be_bytes());
+    record[data + 4..data + 8].copy_from_slice(&8u32.to_be_bytes());
+    record[data + 8] = 0xAA; // XFS_LOG client id, as written by mkfs
+    record[data + 9] = XLOG_UNMOUNT_TRANS;
+    record[data + 12..data + 14].copy_from_slice(&UNMOUNT_MAGIC_LE.to_le_bytes());
+    // Seal the record with its CRC32C (over the 328-byte v2 header with
+    // the CRC field zeroed, plus the 512-byte payload).
+    let (header, body) = record.split_at(XLOG_BASIC_BLOCK_SIZE);
+    if let Some(crc) = super::checksum::xlog_checksum(header, body, 328) {
+        record[32..36].copy_from_slice(&crc.to_le_bytes());
+    }
+    record
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/log_state.rs"]
 mod tests;

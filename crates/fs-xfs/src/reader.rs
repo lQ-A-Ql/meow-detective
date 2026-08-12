@@ -81,6 +81,8 @@ pub(crate) mod sb_off {
     pub const FEATURES2: usize = 0xC8;
     pub const BAD_FEATURES2: usize = 0xCC;
     pub const FEATURES_INCOMPAT: usize = 0xD8;
+    pub const LSN: usize = 0xF0;
+    pub const META_UUID: usize = 0xF8;
     pub const DIRBLKLOG: usize = 0xC0;
     pub const LOGSECTSIZE: usize = 0xC2;
 }
@@ -146,6 +148,8 @@ pub struct XfsReader {
     pub(crate) dirblklog: u8,
     pub(crate) has_ftype: bool,
     pub(crate) log_geometry: XfsLogGeometry,
+    pub(crate) superblock_lsn: u64,
+    pub(crate) metadata_uuid: [u8; 16],
 }
 
 impl XfsReader {
@@ -208,6 +212,12 @@ impl XfsReader {
         let has_ftype = (features2 & XFS_SB_VERSION2_FTYPE) != 0
             || (features_incompat & XFS_SB_FEAT_INCOMPAT_FTYPE) != 0;
         let log_geometry = XfsLogGeometry::from_superblock(&sb_buf);
+        let superblock_lsn = if version_major == XFS_SB_VERSION_5 {
+            be_u64(&sb_buf, sb_off::LSN)
+        } else {
+            0
+        };
+        let metadata_uuid = log_geometry.fs_uuid;
         let inode_cache_page_size =
             aligned_inode_cache_page_size(block_size, reader.preferred_read_granularity());
         let mut directory_path_cache = HashMap::new();
@@ -238,6 +248,8 @@ impl XfsReader {
             dirblklog,
             has_ftype,
             log_geometry,
+            superblock_lsn,
+            metadata_uuid,
         })
     }
 

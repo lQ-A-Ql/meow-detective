@@ -66,6 +66,7 @@ export const COMMANDS = {
     LINUX_ACCOUNTS: 'get_emulation_linux_accounts',
     APPLY_LINUX_BYPASS: 'apply_emulation_linux_bypass',
     INSTALL_EFI_FALLBACK: 'install_emulation_efi_fallback',
+    REPAIR_FS_JOURNALS: 'repair_emulation_fs_journals',
     GET_STATUS: 'get_emulation_status',
     LIST_SESSIONS: 'list_emulation_sessions',
     RELEASE: 'release_emulation',
