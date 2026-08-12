@@ -151,7 +151,9 @@ fn parse_crontab_impl(
 
 /// Split a non-comment crontab line into (schedule, user, command start).
 ///
-/// Returns `None` for incomplete lines.
+/// Returns `None` for incomplete lines and for lines whose schedule fields
+/// are not cron syntax at all (e.g. shell lines from a misrouted
+/// `/etc/cron.daily/*` script).
 fn split_entry_fields(
     fields: &[&str],
     kind: CrontabKind,
@@ -172,12 +174,25 @@ fn split_entry_fields(
     if fields.len() < 6 {
         return None;
     }
+    if !fields[..5].iter().all(|field| is_schedule_field(field)) {
+        return None;
+    }
 
     let schedule_str = fields[..5].join(" ");
     if kind == CrontabKind::System && fields.len() >= 7 && looks_like_username(fields[5]) {
         return Some((schedule_str, Some(fields[5].to_string()), 6));
     }
     Some((schedule_str, None, 5))
+}
+
+/// A cron schedule field only contains digits and the `,` `*` `/` `-`
+/// list/range/step operators. Anything else (shell words, `$VARS`, quotes,
+/// `[` brackets) means the line is not a crontab entry.
+fn is_schedule_field(field: &str) -> bool {
+    !field.is_empty()
+        && field
+            .bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b',' | b'*' | b'/' | b'-'))
 }
 
 /// A username field is a bare account name — never a path or option.

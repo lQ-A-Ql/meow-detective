@@ -10,7 +10,10 @@ pub mod system;
 pub mod web;
 pub mod wtmp;
 
-pub use apt::{parse_apt_history, parse_dpkg_log, parse_rpm_package_log, AptEvent};
+pub use apt::{
+    parse_apt_history, parse_dpkg_log, parse_rpm_package_log, parse_rpm_package_log_with_reference,
+    AptEvent,
+};
 pub use bash::{parse_bash_history, BashCommand};
 pub use cron::{
     parse_crontab, parse_crontab_with_kind, parse_crontab_with_source,

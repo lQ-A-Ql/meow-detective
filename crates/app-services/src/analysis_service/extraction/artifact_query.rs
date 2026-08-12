@@ -378,7 +378,7 @@ pub(super) fn query_linux_hostname_rows(
     let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
-           AND json_extract(attrs, '$.sourcePath') LIKE '%/etc/hostname'
+           AND SUBSTR(json_extract(attrs, '$.sourcePath'), -13) IN ('/etc/hostname', 'etc/hostname')
          ORDER BY CAST(json_extract(attrs, '$.lineNumber') AS INTEGER) ASC, id ASC
          LIMIT ?1";
     query_artifact_rows_with_statement(conn, sql, &[&(limit as i64)])

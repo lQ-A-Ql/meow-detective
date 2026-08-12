@@ -57,7 +57,7 @@ pub(super) fn extract_rpm_package_log(
     outcome: &mut ExtractionOutcome,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_rpm_package_log(&text) {
+    match artifacts_linux::parse_rpm_package_log(&text, candidate.modified_at) {
         Ok(events) => push_events(candidate, events, outcome),
         Err(error) => outcome.warnings.push(format!(
             "{} rpm package log parse failed: {}",

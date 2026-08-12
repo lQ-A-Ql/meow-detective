@@ -27,7 +27,7 @@
 //!   time zone, but the zone is not recorded in the log. They are parsed as
 //!   if they were UTC; treat the resulting timestamps as approximate.
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 /// An APT package management event.
@@ -206,9 +206,29 @@ fn select_dpkg_version(action: &str, version_columns: &str) -> Option<String> {
 
 /// Parse RHEL/CentOS/Fedora yum/dnf package logs.
 ///
+/// `reference` anchors the year-less syslog timestamps of yum.log (typically
+/// the log file's mtime from the evidence file entry). When `None`, the
+/// current time is used. A parsed timestamp that would land after the
+/// reference is moved back one year, because syslog timestamps carry no
+/// year. dnf.log RFC3339 timestamps are unaffected by the reference.
+///
 /// The returned DTO family is still named `AptEvent` for historical frontend
 /// compatibility; semantically these are generic Linux package-manager events.
-pub fn parse_rpm_package_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
+pub fn parse_rpm_package_log(
+    content: &str,
+    reference: Option<DateTime<Utc>>,
+) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
+    parse_rpm_package_log_with_reference(content, reference.unwrap_or_else(Utc::now))
+}
+
+/// Parse yum/dnf package logs with an explicit reference time.
+///
+/// Equivalent to [`parse_rpm_package_log`] with `Some(reference)`; convenient
+/// for tests and forensic flows that always have an anchor time.
+pub fn parse_rpm_package_log_with_reference(
+    content: &str,
+    reference: DateTime<Utc>,
+) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events = Vec::new();
 
     for line in content.lines() {
@@ -225,7 +245,7 @@ pub fn parse_rpm_package_log(content: &str) -> Result<Vec<AptEvent>, crate::Linu
             action,
             package,
             version,
-            timestamp: parse_rpm_timestamp(trimmed),
+            timestamp: parse_rpm_timestamp(trimmed, reference),
             requested_by: None,
             command_line: None,
         });
@@ -272,11 +292,31 @@ fn parse_rpm_action_line(line: &str) -> Option<(String, &str)> {
     None
 }
 
-fn parse_rpm_timestamp(line: &str) -> Option<DateTime<Utc>> {
-    let first = line.split_whitespace().next()?;
-    DateTime::parse_from_str(first, "%Y-%m-%dT%H:%M:%S%z")
-        .map(|dt| dt.with_timezone(&Utc))
-        .ok()
+/// Parse the timestamp of a yum/dnf log line.
+///
+/// - dnf.log leads with an RFC3339 token, parsed directly.
+/// - yum.log uses classic syslog `Mon DD HH:MM:SS` (15 bytes, no year): the
+///   year is taken from `reference`; if the result is later than `reference`
+///   it is moved back one year (a log rotated in January can still hold
+///   December entries).
+fn parse_rpm_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    if let Some(first) = line.split_whitespace().next() {
+        if let Ok(dt) = DateTime::parse_from_str(first, "%Y-%m-%dT%H:%M:%S%z") {
+            return Some(dt.with_timezone(&Utc));
+        }
+    }
+
+    let prefix = line.get(..15)?;
+    let year = reference.year();
+    let stamped = format!("{year} {prefix}");
+    let naive = NaiveDateTime::parse_from_str(&stamped, "%Y %b %e %H:%M:%S").ok()?;
+    let dt = Utc.from_utc_datetime(&naive);
+    if dt > reference {
+        if let Some(shifted) = naive.with_year(year - 1) {
+            return Some(Utc.from_utc_datetime(&shifted));
+        }
+    }
+    Some(dt)
 }
 
 fn parse_rpm_nevra(token: &str) -> (String, Option<String>) {

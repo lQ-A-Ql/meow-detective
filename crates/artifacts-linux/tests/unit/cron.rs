@@ -136,3 +136,38 @@ fn legacy_parse_crontab_defaults_to_system_semantics() {
     assert_eq!(jobs[0].user.as_deref(), Some("root"));
     assert_eq!(jobs[0].command, "/usr/bin/task");
 }
+
+#[test]
+fn shell_script_lines_are_not_cron_jobs() {
+    // /etc/cron.daily/* style scripts must never be split into fake
+    // schedules and commands.
+    let input = "\
+#!/bin/sh
+if [ \"$CRON\" = \"no\" ]; then
+    exit 0
+fi
+ionice -c3 -p $$ >/dev/null 2>&1
+/usr/sbin/logrotate /etc/logrotate.conf
+EXITVALUE=$?
+0 3 * * * /usr/bin/weekly-task";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].schedule, "0 3 * * *");
+    assert_eq!(jobs[0].command, "/usr/bin/weekly-task");
+}
+
+#[test]
+fn schedule_fields_accept_list_range_step() {
+    let input = "5,15 1-3 */2 * 1,5 /usr/bin/combo";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].schedule, "5,15 1-3 */2 * 1,5");
+    assert_eq!(jobs[0].command, "/usr/bin/combo");
+}
+
+#[test]
+fn unknown_at_keyword_is_rejected() {
+    let jobs = parse_crontab_with_kind("@fortnightly /usr/bin/task", CrontabKind::User)
+        .expect("should parse");
+    assert!(jobs.is_empty());
+}

@@ -141,3 +141,132 @@ fn runlevel_record_unpacks_packed_pid() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].user, "runlevel-5");
 }
+
+fn build_wtmp_record_32(
+    ut_type: i32,
+    ut_pid: i32,
+    user: &str,
+    line: &str,
+    host: &str,
+    tv_sec: i32,
+) -> Vec<u8> {
+    let mut buf = vec![0u8; WTMP_SIZE_32];
+    buf[0..4].copy_from_slice(&ut_type.to_le_bytes());
+    buf[4..8].copy_from_slice(&ut_pid.to_le_bytes());
+    let line_bytes = line.as_bytes();
+    let copy_len = line_bytes.len().min(32);
+    buf[8..8 + copy_len].copy_from_slice(&line_bytes[..copy_len]);
+    let user_bytes = user.as_bytes();
+    let copy_len = user_bytes.len().min(32);
+    buf[44..44 + copy_len].copy_from_slice(&user_bytes[..copy_len]);
+    let host_bytes = host.as_bytes();
+    let copy_len = host_bytes.len().min(256);
+    buf[76..76 + copy_len].copy_from_slice(&host_bytes[..copy_len]);
+    buf[340..344].copy_from_slice(&tv_sec.to_le_bytes());
+    buf[344..348].copy_from_slice(&0i32.to_le_bytes());
+    buf
+}
+
+#[test]
+fn detect_layout_prefers_exact_divisor_384() {
+    // Real CentOS 7 wtmp semantics: 384-byte records, file length an exact
+    // multiple of 384 but not of 400. The 400 layout must not win just
+    // because it is declared first.
+    let mut data = Vec::new();
+    data.extend(build_wtmp_record_32(
+        BOOT_TIME,
+        0,
+        "reboot",
+        "~",
+        "3.10.0-1160.el7.x86_64",
+        1_700_000_000,
+    ));
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        1234,
+        "root",
+        "pts/0",
+        "192.168.56.1",
+        1_700_000_100,
+    ));
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        2345,
+        "alice",
+        "pts/1",
+        "10.0.0.2",
+        1_700_000_200,
+    ));
+    assert!(data.len().is_multiple_of(WTMP_SIZE_32));
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_64));
+
+    let records = parse_wtmp(&data).expect("should parse 384-byte wtmp");
+    assert_eq!(records.len(), 3);
+    assert_eq!(records[0].user, "reboot");
+    assert_eq!(records[0].record_type, BOOT_TIME);
+    assert_eq!(records[1].user, "root");
+    assert_eq!(records[1].terminal, "pts/0");
+    assert_eq!(records[1].host, "192.168.56.1");
+    assert_eq!(
+        records[1].login_time.expect("login timestamp").timestamp(),
+        1_700_000_100
+    );
+    assert_eq!(records[2].user, "alice");
+}
+
+#[test]
+fn padding_records_are_neutral_during_layout_detection() {
+    // Interleaved all-zero records must not count for or against a layout;
+    // the real records alone validate it.
+    let mut data = Vec::new();
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        111,
+        "bob",
+        "tty1",
+        "",
+        1_700_000_300,
+    ));
+    data.extend(vec![0u8; WTMP_SIZE_32]);
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        222,
+        "carol",
+        "tty2",
+        "",
+        1_700_000_400,
+    ));
+    data.extend(vec![0u8; WTMP_SIZE_32]);
+
+    let records = parse_wtmp(&data).expect("should parse with padding records");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].user, "bob");
+    assert_eq!(records[1].user, "carol");
+}
+
+#[test]
+fn divisible_tie_breaks_on_plausible_record_count() {
+    // 19200 bytes divides both 384 (50 records) and 400 (48 records): the
+    // layout yielding more plausible non-empty records must win.
+    let mut data = Vec::new();
+    for index in 0..50i32 {
+        data.extend(build_wtmp_record_32(
+            USER_PROCESS,
+            1000 + index,
+            "operator",
+            "pts/0",
+            "10.1.1.1",
+            1_700_000_000 + index * 60,
+        ));
+    }
+    assert_eq!(data.len(), 19200);
+    assert!(data.len().is_multiple_of(WTMP_SIZE_32));
+    assert!(data.len().is_multiple_of(WTMP_SIZE_64));
+
+    let records = parse_wtmp(&data).expect("should parse 50-record wtmp");
+    assert_eq!(records.len(), 50);
+    assert!(
+        records.iter().all(|record| record.user == "operator"),
+        "every record must decode under the 384-byte layout"
+    );
+}

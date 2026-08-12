@@ -434,9 +434,9 @@ fn linux_crontab_kind_follows_source_path() {
         .find(|artifact| artifact.family == "LinuxCronJob")
         .expect("user crontab job");
     assert_eq!(
-        artifact_attr(job, "user"),
-        None,
-        "user crontab entries must not invent a user field"
+        artifact_attr(job, "user").and_then(|value| value.as_str()),
+        Some("alice"),
+        "user crontab entries inherit the spool file owner"
     );
 
     let nested = candidate("/var/spool/cron/atjobs/pending");
@@ -501,6 +501,143 @@ fn linux_apache_error_log_parses_timestamp_and_second_bracket_severity() {
         artifact_attr(artifact, "severity").and_then(|value| value.as_str()),
         Some("core:error"),
         "Apache severity comes from the module:level bracket, not the timestamp bracket"
+    );
+    assert_eq!(outcome.timeline_events.len(), 1);
+}
+
+#[test]
+fn linux_hostname_emits_single_value_config() {
+    let candidate = candidate("/etc/hostname");
+    let outcome = extract_linux_candidate(&candidate, b"localhost.localdomain\n");
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxSystemConfig")
+        .expect("hostname artifact");
+    assert_eq!(
+        artifact_attr(artifact, "configKind").and_then(|value| value.as_str()),
+        Some("textConfig")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "line").and_then(|value| value.as_str()),
+        Some("localhost.localdomain")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "lineNumber").and_then(|value| value.as_u64()),
+        Some(1)
+    );
+    assert!(
+        outcome
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.family == "LinuxSystemConfig")
+            .count()
+            == 1,
+        "hostname must emit exactly one record: {:?}",
+        outcome.artifacts.len()
+    );
+}
+
+#[test]
+fn linux_empty_hostname_emits_nothing() {
+    let candidate = candidate("/etc/hostname");
+    let outcome = extract_linux_candidate(&candidate, b"\n");
+    assert!(outcome.artifacts.is_empty());
+}
+
+#[test]
+fn linux_machine_id_emits_single_value_config() {
+    let candidate = candidate("/etc/machine-id");
+    let outcome = extract_linux_candidate(&candidate, b"0123456789abcdef0123456789abcdef\n");
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxSystemConfig")
+        .expect("machine-id artifact");
+    assert_eq!(
+        artifact_attr(artifact, "line").and_then(|value| value.as_str()),
+        Some("0123456789abcdef0123456789abcdef")
+    );
+}
+
+#[test]
+fn linux_os_release_symlink_target_is_skipped_silently() {
+    // On XFS/ext4 /etc/os-release commonly symlinks to ../usr/lib/os-release;
+    // readers that surface the raw target must not produce parse warnings —
+    // the real content arrives via the /usr/lib/os-release candidate.
+    let candidate = candidate("/etc/os-release");
+    let outcome = extract_linux_candidate(&candidate, b"../usr/lib/os-release");
+    assert!(outcome.artifacts.is_empty());
+    assert!(
+        outcome.warnings.is_empty(),
+        "symlink target content must not warn: {:?}",
+        outcome.warnings
+    );
+}
+
+#[test]
+fn linux_cron_script_dirs_never_produce_cron_jobs() {
+    let input = "\
+#!/bin/sh
+if [ \"$CRON\" = \"no\" ]; then
+    exit 0
+fi
+ionice -c3 -p $$ >/dev/null 2>&1
+/usr/sbin/logrotate /etc/logrotate.conf
+";
+    for path in [
+        "/etc/cron.daily/logrotate",
+        "/etc/cron.hourly/0yum.cron",
+        "/etc/cron.weekly/99-raid-check",
+        "/etc/cron.monthly/readahead",
+    ] {
+        let candidate = candidate(path);
+        let outcome = extract_linux_candidate(&candidate, input.as_bytes());
+        assert!(
+            outcome
+                .artifacts
+                .iter()
+                .all(|artifact| artifact.family != "LinuxCronJob"),
+            "{path} must not produce cron jobs from shell lines"
+        );
+        assert!(
+            outcome
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.family == "LinuxSystemConfig"),
+            "{path} should fall back to generic text config"
+        );
+    }
+}
+
+#[test]
+fn linux_spool_crontab_backfills_owner_from_filename() {
+    let candidate = candidate("/var/spool/cron/root");
+    let outcome = extract_linux_candidate(&candidate, "15 3 * * * /usr/bin/nightly\n".as_bytes());
+    let job = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxCronJob")
+        .expect("spool crontab job");
+    assert_eq!(
+        artifact_attr(job, "user").and_then(|value| value.as_str()),
+        Some("root")
+    );
+}
+
+#[test]
+fn linux_yum_log_syslog_timestamp_uses_mtime_year() {
+    let candidate = candidate_with_mtime("/var/log/yum.log", "2024-01-05T00:00:00Z");
+    let input = "Dec 20 03:22:01 Installed: kernel-3.10.0-1160.el7.x86_64\n";
+    let outcome = extract_linux_candidate(&candidate, input.as_bytes());
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxAptEvent")
+        .expect("yum install artifact");
+    assert_eq!(
+        artifact_attr(artifact, "timestamp").and_then(|value| value.as_str()),
+        Some("2023-12-20T03:22:01+00:00")
     );
     assert_eq!(outcome.timeline_events.len(), 1);
 }

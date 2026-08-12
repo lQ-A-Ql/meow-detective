@@ -4,8 +4,9 @@
 //! It shares the utmp(5) structure layout. On 32-bit systems the struct is
 //! typically 384 bytes; on 64-bit glibc systems it is 400 bytes.
 //!
-//! This parser auto-detects the struct size by validating sampled records
-//! against each candidate layout (utmp has no magic bytes).
+//! This parser auto-detects the struct size by preferring candidate layouts
+//! that divide the file length exactly, then validating sampled records
+//! against the surviving candidates (utmp has no magic bytes).
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -125,11 +126,32 @@ struct Layout {
 fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
     let candidates = [layout_64(), layout_32(), layout_musl()];
 
-    // utmp has no magic bytes, so a bare length match is not enough: each
-    // candidate must also pass content validation on its leading records.
-    // A truncated trailing record (len % size != 0) is tolerated.
+    // utmp has no magic bytes, so layout detection combines two signals:
+    // divisibility (a real wtmp holds a whole number of records) and content
+    // validation. Exact divisors are evaluated first: a 384-byte-record file
+    // mis-sampled at 400 bytes yields all-zero "records" that are worthless
+    // as evidence, and divisibility breaks that tie before content sampling
+    // even runs. Among divisible candidates the one with the most plausible
+    // non-empty records wins.
+    let mut best: Option<(&Layout, usize)> = None;
+    for layout in candidates
+        .iter()
+        .filter(|layout| data.len().is_multiple_of(layout.record_size))
+    {
+        let score = content_score(data, layout);
+        if score.accepts() && best.is_none_or(|(_, plausible)| score.plausible > plausible) {
+            best = Some((layout, score.plausible));
+        }
+    }
+    if let Some((layout, _)) = best {
+        return Ok(layout.clone());
+    }
+
+    // Fallback: a truncated trailing record (len % size != 0) is tolerated,
+    // so non-dividing candidates still get a content-validation pass in
+    // declaration order.
     for layout in &candidates {
-        if data.len() >= layout.record_size && content_matches_layout(data, layout) {
+        if data.len() >= layout.record_size && content_score(data, layout).accepts() {
             return Ok(layout.clone());
         }
     }
@@ -141,34 +163,70 @@ fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
     })
 }
 
-/// Sample the leading complete records and require that at least half of
-/// them (minimum one) look like plausible utmp entries.
-fn content_matches_layout(data: &[u8], layout: &Layout) -> bool {
+/// Content-validation tally for one candidate layout.
+struct ContentScore {
+    /// Records that carry any content at all (not all-zero padding).
+    non_empty: usize,
+    /// Non-empty records that look like plausible utmp entries.
+    plausible: usize,
+}
+
+impl ContentScore {
+    /// A layout is accepted when at least one non-empty record is plausible
+    /// and plausible records form at least half of the non-empty ones.
+    fn accepts(&self) -> bool {
+        self.plausible >= 1 && self.plausible * 2 >= self.non_empty
+    }
+}
+
+/// Sample the leading complete records (up to 8) and tally them. All-zero
+/// padding records are neutral: they prove nothing for or against a layout.
+fn content_score(data: &[u8], layout: &Layout) -> ContentScore {
     let sampled = (data.len() / layout.record_size).min(8);
-    let mut plausible = 0usize;
+    let mut score = ContentScore {
+        non_empty: 0,
+        plausible: 0,
+    };
     for index in 0..sampled {
         let start = index * layout.record_size;
         let Some(record) = read_utmp_record(&data[start..start + layout.record_size], layout)
         else {
             continue;
         };
+        if record_is_padding(&record) {
+            continue;
+        }
+        score.non_empty += 1;
         if record_is_plausible(&record) {
-            plausible += 1;
+            score.plausible += 1;
         }
     }
-    plausible >= 1 && plausible * 2 >= sampled
+    score
+}
+
+/// An all-zero record (EMPTY type, no user/line/host, no timestamp) is
+/// alignment padding on the wrong layout and a genuine EMPTY slot on the
+/// right one — neutral evidence in both cases.
+fn record_is_padding(record: &UtmpRecord) -> bool {
+    record.ut_type == EMPTY
+        && record.ut_pid == 0
+        && record.ut_user.is_empty()
+        && record.ut_line.is_empty()
+        && record.ut_host.is_empty()
+        && record.ut_tv_sec == 0
 }
 
 fn record_is_plausible(record: &UtmpRecord) -> bool {
-    if !(EMPTY..=_ACCOUNTING).contains(&record.ut_type) {
+    if !(RUN_LVL..=_ACCOUNTING).contains(&record.ut_type) {
         return false;
     }
     if !record.ut_user.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
         return false;
     }
-    // Zero timestamps occur on EMPTY/padding records; otherwise the login
-    // time must sit within a sane 1990..2100 window.
-    record.ut_tv_sec == 0 || (631_152_000..=4_102_444_800).contains(&record.ut_tv_sec)
+    // A plausible record carries a printable non-empty user (login records)
+    // or a sane 1990..2100 timestamp (boot/logout records leave ut_user
+    // empty but always stamp the event).
+    !record.ut_user.is_empty() || (631_152_000..=4_102_444_800).contains(&record.ut_tv_sec)
 }
 
 fn layout_64() -> Layout {

@@ -1,4 +1,9 @@
 use super::*;
+use chrono::TimeZone;
+
+fn reference(y: i32, m: u32, d: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(y, m, d, 12, 0, 0).unwrap()
+}
 
 #[test]
 fn parse_apt_history_install() {
@@ -127,16 +132,51 @@ Jan 15 10:30:00 Installed: curl-7.61.1-33.el8.x86_64
 2024-01-15T10:32:00+0000 INFO --- Erased: oldpkg-1.0-1.el8.x86_64
 ";
 
-    let events = parse_rpm_package_log(input).expect("should parse rpm package logs");
+    let reference = reference(2024, 1, 20);
+    let events = parse_rpm_package_log(input, Some(reference)).expect("should parse rpm logs");
     assert_eq!(events.len(), 3);
     assert_eq!(events[0].action, "install");
     assert_eq!(events[0].package, "curl");
     assert_eq!(events[0].version.as_deref(), Some("7.61.1-33.el8.x86_64"));
-    assert!(events[0].timestamp.is_none());
+    // yum.log syslog timestamp anchored to the reference year.
+    assert_eq!(
+        events[0].timestamp.expect("yum timestamp").to_rfc3339(),
+        "2024-01-15T10:30:00+00:00"
+    );
     assert_eq!(events[1].action, "upgrade");
     assert_eq!(events[1].package, "python3-libdnf");
-    assert!(events[1].timestamp.is_some());
+    // dnf.log RFC3339 timestamps ignore the reference.
+    assert_eq!(
+        events[1].timestamp.expect("dnf timestamp").to_rfc3339(),
+        "2024-01-15T10:31:00+00:00"
+    );
     assert_eq!(events[2].action, "remove");
+}
+
+#[test]
+fn yum_syslog_timestamp_rolls_back_year_after_reference() {
+    // A yum.log last modified in January still holds December entries from
+    // the tail of the previous log year.
+    let input = "Dec 20 03:22:01 Installed: kernel-3.10.0-1160.el7.x86_64\n";
+    let events =
+        parse_rpm_package_log(input, Some(reference(2024, 1, 5))).expect("should parse yum log");
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].timestamp.expect("timestamp").to_rfc3339(),
+        "2023-12-20T03:22:01+00:00"
+    );
+}
+
+#[test]
+fn yum_syslog_timestamp_keeps_reference_year_when_not_in_future() {
+    let input = "May 11 15:39:06 Installed: wget-1.14-18.el7.x86_64\n";
+    let events =
+        parse_rpm_package_log(input, Some(reference(2024, 6, 1))).expect("should parse yum log");
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].timestamp.expect("timestamp").to_rfc3339(),
+        "2024-05-11T15:39:06+00:00"
+    );
 }
 
 #[test]

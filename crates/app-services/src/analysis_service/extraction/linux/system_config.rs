@@ -18,6 +18,12 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
         || normalized.ends_with("/etc/machine-id")
         || normalized.ends_with("/etc/login.defs")
         || normalized.ends_with("/etc/anacrontab")
+        // cron.{hourly,daily,weekly,monthly} hold executable scripts, not
+        // crontabs; they are audited as generic text config lines.
+        || normalized.contains("/etc/cron.hourly/")
+        || normalized.contains("/etc/cron.daily/")
+        || normalized.contains("/etc/cron.weekly/")
+        || normalized.contains("/etc/cron.monthly/")
 }
 
 pub(in crate::analysis_service::extraction) fn is_sudoers_path(normalized: &str) -> bool {
@@ -64,6 +70,8 @@ pub(super) fn extract(
         extract_passwd(candidate, &text, outcome);
     } else if normalized.ends_with("/etc/shadow") || normalized.ends_with("/etc/gshadow") {
         extract_shadow(candidate, &text, &normalized, outcome);
+    } else if normalized.ends_with("/etc/hostname") || normalized.ends_with("/etc/machine-id") {
+        extract_single_value_config(candidate, &text, outcome);
     } else {
         extract_key_value_or_lines(candidate, &text, "linux.system_config", outcome);
     }
@@ -101,6 +109,14 @@ pub(super) fn extract_text_config(
 }
 
 fn extract_os_release(candidate: &EvidenceCandidate, text: &str, outcome: &mut ExtractionOutcome) {
+    // On XFS/ext4 systems /etc/os-release is usually a symlink to
+    // ../usr/lib/os-release; some readers surface the raw symlink target as
+    // the file content (a single bare path line). That is not os-release
+    // data: skip it silently instead of logging a parse warning — the real
+    // key=value content arrives via the /usr/lib/os-release candidate.
+    if looks_like_symlink_target(text) {
+        return;
+    }
     match artifacts_linux::parse_os_release(text) {
         Ok(info) => {
             let mut attrs = base_attrs(candidate);
@@ -232,6 +248,50 @@ fn extract_shadow(
             attrs,
         ));
     }
+}
+
+/// A raw symlink target reads as one bare path line: no `=`, starting with
+/// `/` or `..` (e.g. `../usr/lib/os-release`). Real os-release content is
+/// multi-line `KEY=value` pairs and never matches this shape.
+fn looks_like_symlink_target(text: &str) -> bool {
+    let trimmed = text.trim();
+    !trimmed.is_empty()
+        && !trimmed.contains('\n')
+        && !trimmed.contains('=')
+        && (trimmed.starts_with('/') || trimmed.starts_with(".."))
+}
+
+/// `/etc/hostname` and `/etc/machine-id` are single-value files: the first
+/// line IS the value, with no `key=value` structure. Emit exactly one
+/// text-config record (`line` = first line, `lineNumber` = 1) so the summary
+/// hostname query (`query_linux_hostname_rows`) resolves; an empty file
+/// emits nothing.
+fn extract_single_value_config(
+    candidate: &EvidenceCandidate,
+    text: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let line = text.lines().next().unwrap_or("").trim();
+    if line.is_empty() {
+        return;
+    }
+
+    let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "configKind".to_string(),
+        Value::String("textConfig".to_string()),
+    );
+    attrs.insert("line".to_string(), Value::String(line.to_string()));
+    attrs.insert("lineNumber".to_string(), Value::Number(1.into()));
+
+    outcome.artifacts.push(make_artifact(
+        "LinuxSystemConfig",
+        format!("Linux config: {}", truncate(line, 80)),
+        line.to_string(),
+        candidate,
+        "linux.system_config",
+        attrs,
+    ));
 }
 
 fn extract_key_value_or_lines(
