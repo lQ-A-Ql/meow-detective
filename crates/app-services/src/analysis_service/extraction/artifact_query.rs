@@ -305,6 +305,85 @@ fn query_artifact_rows_with_statement(
     Ok(result)
 }
 
+/// Count `LinuxSystemConfig` rows of one `configKind` (passwdAccount,
+/// shadowAccount, osRelease, ...). Used by the unpaged system-info overview.
+pub(super) fn count_linux_system_config_by_kind(
+    conn: &Connection,
+    config_kind: &str,
+) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') = ?1",
+        [config_kind],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
+/// Count passwd account rows whose uid is in the regular-user range.
+pub(super) fn count_linux_user_accounts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') = 'passwdAccount'
+           AND CAST(json_extract(attrs, '$.uid') AS INTEGER) >= 1000",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
+/// Count shadow account rows flagged `locked`.
+pub(super) fn count_linux_locked_shadow_accounts(
+    conn: &Connection,
+) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') = 'shadowAccount'
+           AND json_extract(attrs, '$.locked') = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
+/// Fetch `LinuxSystemConfig` rows of one `configKind` without paging. The
+/// system-info overview needs them independent of the summary entry window.
+pub(super) fn query_linux_system_config_by_kind(
+    conn: &Connection,
+    config_kind: &str,
+    limit: u32,
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
+         FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') = ?1
+         ORDER BY id ASC
+         LIMIT ?2";
+    query_artifact_rows_with_statement(
+        conn,
+        sql,
+        &[&config_kind as &dyn rusqlite::types::ToSql, &(limit as i64)],
+    )
+}
+
+/// Fetch `/etc/hostname` text-config rows ordered by source line number so the
+/// first non-empty line wins.
+pub(super) fn query_linux_hostname_rows(
+    conn: &Connection,
+    limit: u32,
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
+         FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.sourcePath') LIKE '%/etc/hostname'
+         ORDER BY CAST(json_extract(attrs, '$.lineNumber') AS INTEGER) ASC, id ASC
+         LIMIT ?1";
+    query_artifact_rows_with_statement(conn, sql, &[&(limit as i64)])
+}
+
 pub(super) fn status_from_total(total: u64) -> AnalysisParseStatusDto {
     if total > 0 {
         AnalysisParseStatusDto::Parsed

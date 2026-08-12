@@ -325,4 +325,34 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('journald')).toBeDefined();
     expect(screen.getByText('syslog')).toBeDefined();
   });
+
+  it('renders the system info overview when systemInfo is present', () => {
+    const summary = baseSummary({
+      systemConfigCount: 5,
+      totalCount: 5,
+      systemInfo: {
+        osPrettyName: 'CentOS Stream 9',
+        osId: 'centos',
+        osVersionId: '9',
+        hostname: 'forensic-host',
+        accountCount: 3,
+        userAccountCount: 2,
+        lockedAccountCount: 1,
+      },
+    });
+    render(createElement(LinuxArtifactsPanel, { summary }));
+    expect(screen.getByText('操作系统')).toBeDefined();
+    expect(screen.getByText('CentOS Stream 9')).toBeDefined();
+    expect(screen.getByText('主机名')).toBeDefined();
+    expect(screen.getByText('forensic-host')).toBeDefined();
+    expect(screen.getByText('锁定账户')).toBeDefined();
+  });
+
+  it('falls back to a hint when artifacts exist without system info', () => {
+    const summary = baseSummary({ journalCount: 2, totalCount: 2 });
+    render(createElement(LinuxArtifactsPanel, { summary }));
+    expect(
+      screen.getByText('已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。'),
+    ).toBeDefined();
+  });
 });

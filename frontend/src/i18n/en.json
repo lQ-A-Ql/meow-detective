@@ -528,7 +528,9 @@
       "optionClipboard": "Clipboard / drag-and-drop",
       "optionTimeSync": "Guest time synchronization",
       "installEfiFallback": "Install EFI fallback bootloader before launch (overlay only)",
-      "installEfiFallbackHint": "The GPT disk has no ESP fallback loader, so the VM would land in the firmware boot manager; when enabled, BOOTX64.EFI is installed into the ESP through the COW overlay and original evidence is never written."
+      "installEfiFallbackHint": "The GPT disk has no ESP fallback loader, so the VM would land in the firmware boot manager; when enabled, BOOTX64.EFI is installed into the ESP through the COW overlay and original evidence is never written.",
+      "repairFilesystems": "Replay and repair XFS logs before launch (overlay only)",
+      "repairFilesystemsHint": "Unflushed XFS transactions were detected. The host replays committed transactions and writes a clean log only to this emulation session's COW overlay."
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO first",
@@ -548,7 +550,7 @@
       "btrfsRoot": "btrfs root",
       "noEfiFallback": "No EFI fallback loader",
       "xfsLogDirty": "XFS log dirty",
-      "xfsLogDirtyHint": "Unreplayed XFS log detected: attach a live/rescue ISO and run xfs_repair on the dirty volumes in the guest (xfs_repair -L only as a last resort) before direct-booting the installed system; the host never rewrites evidence.",
+      "xfsLogDirtyHint": "An unreplayed XFS log was detected. Keep the pre-launch host repair enabled; disabling it may send the installed system into rescue mode.",
       "linuxBypassHint": "Linux logon bypass: press 'e' in the GRUB menu, append init=/bin/bash (or systemd.unit=rescue.target) to the linux line and boot with Ctrl-X for a root shell; run 'mount -o remount,rw /' then 'passwd'. All writes stay in the COW overlay.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
@@ -620,6 +622,7 @@
     "errors": {
       "sourceRequired": "Select an evidence source.",
       "osdataNonEmpty": "OSDATA is a non-empty directory; automatic removal was refused.",
+      "fsRepairUnsupported": "At least one XFS volume could not be repaired safely. Launch was cancelled and the emulation session was released.",
       "operationFailed": "Emulation operation failed."
     }
   },
@@ -788,6 +791,16 @@
     "fallbackWarning": "Linux artifact summary is unavailable.",
     "loadProgress": "Loaded {{loaded}} / {{total}}",
     "truncatedWarning": "Results are truncated; only partial content is shown.",
+    "overview": {
+      "os": "Operating System",
+      "osId": "Distro ID",
+      "osVersion": "Version",
+      "hostname": "Hostname",
+      "accountCount": "Accounts",
+      "userAccountCount": "Regular Users",
+      "lockedAccountCount": "Locked Accounts",
+      "unavailable": "Linux artifacts were found, but no system identity (os-release/hostname/accounts) could be derived."
+    },
     "empty": {
       "overview": {
         "title": "No Linux artifacts",

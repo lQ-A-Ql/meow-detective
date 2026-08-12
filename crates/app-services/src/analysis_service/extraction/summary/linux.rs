@@ -1,6 +1,8 @@
 mod mapping;
+mod system_info;
 
 use self::mapping::{LinuxCounts, LinuxEntries};
+use self::system_info::load_linux_system_info;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::observability::{
     linux_summary_observability, linux_summary_status,
@@ -22,6 +24,7 @@ pub fn get_linux_artifact_summary(
 ) -> Result<LinuxArtifactSummaryDto, AnalysisServiceError> {
     let counts = LinuxCounts::load(conn)?;
     let entries = LinuxEntries::load(conn, offset, limit)?;
+    let system_info = load_linux_system_info(conn)?;
     let total_count = counts.total();
     let observability = linux_summary_observability(conn, total_count)?;
 
@@ -59,6 +62,7 @@ pub fn get_linux_artifact_summary(
         mysql_configs: entries.mysql_configs,
         mysql_logs: entries.mysql_logs,
         mysql_findings: entries.mysql_findings,
+        system_info,
         generated_at: Utc::now().to_rfc3339(),
         warnings: observability.warnings,
     })

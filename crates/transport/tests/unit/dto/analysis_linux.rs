@@ -137,6 +137,15 @@ fn linux_artifact_summary_serializes_camel_case() {
         }],
         generated_at: "2026-01-01T00:00:00Z".to_string(),
         warnings: Vec::new(),
+        system_info: Some(LinuxSystemInfoDto {
+            os_pretty_name: Some("CentOS Stream 9".to_string()),
+            os_id: Some("centos".to_string()),
+            os_version_id: Some("9".to_string()),
+            hostname: Some("forensic-host".to_string()),
+            account_count: 3,
+            user_account_count: 1,
+            locked_account_count: 2,
+        }),
     };
 
     let value = serde_json::to_value(dto).unwrap();
@@ -170,6 +179,34 @@ fn linux_artifact_summary_serializes_camel_case() {
     assert!(value["journalEntries"][0].get("executable").is_none());
     assert!(value.get("coverage_ratio").is_none());
     assert!(value.get("journal_count").is_none());
+    assert_eq!(value["systemInfo"]["osPrettyName"], "CentOS Stream 9");
+    assert_eq!(value["systemInfo"]["osId"], "centos");
+    assert_eq!(value["systemInfo"]["osVersionId"], "9");
+    assert_eq!(value["systemInfo"]["hostname"], "forensic-host");
+    assert_eq!(value["systemInfo"]["accountCount"], 3);
+    assert_eq!(value["systemInfo"]["userAccountCount"], 1);
+    assert_eq!(value["systemInfo"]["lockedAccountCount"], 2);
+}
+
+#[test]
+fn linux_system_info_omits_none_fields() {
+    let dto = LinuxSystemInfoDto {
+        os_pretty_name: None,
+        os_id: Some("debian".to_string()),
+        os_version_id: None,
+        hostname: None,
+        account_count: 0,
+        user_account_count: 0,
+        locked_account_count: 0,
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["osId"], "debian");
+    assert_eq!(value["accountCount"], 0);
+    assert!(value.get("osPrettyName").is_none());
+    assert!(value.get("osVersionId").is_none());
+    assert!(value.get("hostname").is_none());
 }
 
 #[test]

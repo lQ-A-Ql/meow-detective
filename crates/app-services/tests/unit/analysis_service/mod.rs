@@ -1586,6 +1586,66 @@ fn get_linux_artifact_summary_reports_not_found_without_artifacts() {
     assert!(!summary.truncated);
     assert_eq!(summary.coverage_ratio, 0.0);
     assert!(summary.bash_commands.is_empty());
+    assert!(summary.system_info.is_none());
+}
+
+#[test]
+fn get_linux_artifact_summary_derives_system_info_unpaged() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    let os_release = "PRETTY_NAME=\"CentOS Stream 9\"\nID=centos\nVERSION_ID=\"9\"\n";
+    let hostname = "forensic-host\n";
+    let passwd = "root:x:0:0:root:/root:/bin/bash\n\
+                  alice:x:1000:1000:Alice:/home/alice:/bin/bash\n\
+                  bob:x:1001:1001:Bob:/home/bob:/bin/sh\n";
+    let shadow = "root:$6$redacted:19000:0:99999:7:::\n\
+                  alice:!:19000:0:99999:7:::\n\
+                  bob:*:19000:0:99999:7:::\n";
+    let mut contents: HashMap<String, Vec<u8>> = HashMap::new();
+    contents.insert("os-release".to_string(), os_release.as_bytes().to_vec());
+    contents.insert("hostname".to_string(), hostname.as_bytes().to_vec());
+    contents.insert("passwd".to_string(), passwd.as_bytes().to_vec());
+    contents.insert("shadow".to_string(), shadow.as_bytes().to_vec());
+    FileRepo::new(&conn)
+        .insert_batch(&[
+            file_with_ds("os-release", &ds_id, "cl/root/etc/os-release", 10),
+            file_with_ds("hostname", &ds_id, "cl/root/etc/hostname", 10),
+            file_with_ds("passwd", &ds_id, "cl/root/etc/passwd", 10),
+            file_with_ds("shadow", &ds_id, "cl/root/etc/shadow", 10),
+        ])
+        .unwrap();
+
+    run_analysis_extraction_with_reader_limits(
+        &conn,
+        "case-analysis",
+        L,
+        &["LinuxArtifacts"],
+        |file_id, _read_limit| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        },
+    )
+    .unwrap();
+
+    // Deep offset + tiny limit: system info must not depend on the paged
+    // entry window.
+    let summary = get_linux_artifact_summary(&conn, 3, 1).unwrap();
+    let system_info = summary
+        .system_info
+        .expect("system info should be derived from os-release/hostname/accounts");
+
+    assert_eq!(
+        system_info.os_pretty_name.as_deref(),
+        Some("CentOS Stream 9")
+    );
+    assert_eq!(system_info.os_id.as_deref(), Some("centos"));
+    assert_eq!(system_info.os_version_id.as_deref(), Some("9"));
+    assert_eq!(system_info.hostname.as_deref(), Some("forensic-host"));
+    assert_eq!(system_info.account_count, 3);
+    assert_eq!(system_info.user_account_count, 2);
+    assert_eq!(system_info.locked_account_count, 1);
 }
 
 #[test]

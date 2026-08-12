@@ -41,8 +41,30 @@ pub struct LinuxArtifactSummaryDto {
     pub mysql_configs: Vec<LinuxMysqlConfigDto>,
     pub mysql_logs: Vec<LinuxMysqlLogEntryDto>,
     pub mysql_findings: Vec<LinuxMysqlFindingDto>,
+    /// Derived host identity / account overview. Independent of entry paging;
+    /// `None` when neither OS/hostname fields nor any account rows exist.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_info: Option<LinuxSystemInfoDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
+}
+
+/// Derived Linux host overview: os-release identity, hostname, and account
+/// statistics from passwd/shadow records.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxSystemInfoDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_pretty_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_version_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+    pub account_count: u64,
+    pub user_account_count: u64,
+    pub locked_account_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -187,6 +187,17 @@ export interface LinuxMysqlFinding {
   lineNumber: number;
 }
 
+/** Linux host overview — mirrors Rust `LinuxSystemInfoDto`. Derived unpaged. */
+export interface LinuxSystemInfo {
+  osPrettyName?: string;
+  osId?: string;
+  osVersionId?: string;
+  hostname?: string;
+  accountCount: number;
+  userAccountCount: number;
+  lockedAccountCount: number;
+}
+
 /** Linux artifact summary — mirrors Rust `LinuxArtifactSummaryDto`. */
 export interface LinuxArtifactSummary {
   status: AnalysisParseStatus;
@@ -222,6 +233,7 @@ export interface LinuxArtifactSummary {
   mysqlConfigs: LinuxMysqlConfig[];
   mysqlLogs: LinuxMysqlLogEntry[];
   mysqlFindings: LinuxMysqlFinding[];
+  systemInfo?: LinuxSystemInfo;
   generatedAt: string;
   warnings: string[];
 }

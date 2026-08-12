@@ -528,7 +528,9 @@
       "optionClipboard": "剪贴板 / 拖放",
       "optionTimeSync": "客机时间同步",
       "installEfiFallback": "启动前安装 EFI fallback 引导（仅写入覆盖层）",
-      "installEfiFallbackHint": "GPT 磁盘缺少 ESP 回退引导器，虚拟机会落入固件启动菜单；勾选后将在 ESP 安装 BOOTX64.EFI，仅写入 COW 覆盖层，不改动原始证据。"
+      "installEfiFallbackHint": "GPT 磁盘缺少 ESP 回退引导器，虚拟机会落入固件启动菜单；勾选后将在 ESP 安装 BOOTX64.EFI，仅写入 COW 覆盖层，不改动原始证据。",
+      "repairFilesystems": "启动前回放并修复 XFS 日志（仅写入覆盖层）",
+      "repairFilesystemsHint": "检测到采集时未落盘的 XFS 事务；勾选后将在主机侧重放已提交事务并生成干净日志，所有修改仅进入当前仿真 COW 覆盖层。"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO 优先",
@@ -548,7 +550,7 @@
       "btrfsRoot": "btrfs 根",
       "noEfiFallback": "无 EFI fallback 引导",
       "xfsLogDirty": "XFS 日志脏",
-      "xfsLogDirtyHint": "检测到未回放的 XFS 日志：请挂载 live/rescue ISO，在救援环境对脏卷执行 xfs_repair（无法回放时用 xfs_repair -L），确认后再直接启动系统；主机侧不改写证据。",
+      "xfsLogDirtyHint": "检测到未回放的 XFS 日志；建议保留启动前主机侧修复选项。若关闭该选项，原系统可能进入救援模式。",
       "linuxBypassHint": "Linux 绕密：在 GRUB 菜单按 e，在 linux 行追加 init=/bin/bash（或 systemd.unit=rescue.target），Ctrl-X 启动即得 root shell；执行 mount -o remount,rw / 后可用 passwd 重置任意账户。所有改动仅落在 COW 覆盖层。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
@@ -620,6 +622,7 @@
     "errors": {
       "sourceRequired": "请选择证据数据源。",
       "osdataNonEmpty": "OSDATA 为非空目录，已拒绝自动清除。",
+      "fsRepairUnsupported": "至少一个 XFS 卷无法安全修复，已取消启动并释放仿真会话。",
       "operationFailed": "仿真操作失败。"
     }
   },
@@ -788,6 +791,16 @@
     "fallbackWarning": "Linux 痕迹摘要暂不可用。",
     "loadProgress": "已加载 {{loaded}} / 共 {{total}}",
     "truncatedWarning": "结果已被截断，仅显示部分内容。",
+    "overview": {
+      "os": "操作系统",
+      "osId": "发行版 ID",
+      "osVersion": "版本",
+      "hostname": "主机名",
+      "accountCount": "账户总数",
+      "userAccountCount": "普通用户",
+      "lockedAccountCount": "锁定账户",
+      "unavailable": "已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。"
+    },
     "empty": {
       "overview": {
         "title": "暂无 Linux 痕迹",
