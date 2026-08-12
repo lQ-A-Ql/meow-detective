@@ -76,6 +76,47 @@ function createWrapper(queryClient = createQueryClient()) {
 const windowsSource = { id: 'ds-windows', platform: 'windows' } as const;
 const linuxSource = { id: 'ds-linux', platform: 'linux' } as const;
 
+function linuxSummaryFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'notFound',
+    journalCount: 0,
+    textLogCount: 0,
+    loginCount: 0,
+    bashCommandCount: 0,
+    aptEventCount: 0,
+    cronJobCount: 0,
+    sudoEventCount: 0,
+    systemConfigCount: 0,
+    webSiteCount: 0,
+    webAccessLogCount: 0,
+    webErrorLogCount: 0,
+    webFindingCount: 0,
+    mysqlConfigCount: 0,
+    mysqlLogCount: 0,
+    mysqlFindingCount: 0,
+    totalCount: 0,
+    truncated: false,
+    coverageRatio: 0,
+    journalEntries: [],
+    loginRecords: [],
+    bashCommands: [],
+    aptEvents: [],
+    cronJobs: [],
+    sudoEvents: [],
+    systemConfigs: [],
+    webSites: [],
+    webAccessLogs: [],
+    webErrorLogs: [],
+    webFindings: [],
+    mysqlConfigs: [],
+    mysqlLogs: [],
+    mysqlFindings: [],
+    generatedAt: '2026-06-01T10:16:00Z',
+    warnings: [],
+    ...overrides,
+  };
+}
+
 describe('analysis hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -198,12 +239,7 @@ describe('analysis hooks', () => {
       generatedAt: '2026-06-01T10:14:00Z',
       warnings: [],
     });
-    mocks.getLinuxArtifactSummary.mockResolvedValue({
-      status: 'notFound',
-      total: 0,
-      artifacts: [],
-      warnings: [],
-    });
+    mocks.getLinuxArtifactSummary.mockResolvedValue(linuxSummaryFixture());
     mocks.getV2GovernanceSnapshot.mockResolvedValue({
       generatedAt: '2026-06-12T00:00:00Z',
       factSources: [
@@ -605,6 +641,52 @@ describe('analysis hooks', () => {
     });
   });
 
+  it('merges Linux summary pages until every family is fully loaded', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+    const entry = (id: string) => ({
+      artifactId: id,
+      fileId: 'file-1',
+      sourcePath: '/var/log/journal/x.journal',
+      message: id,
+      logKind: 'journald',
+    });
+    mocks.getLinuxArtifactSummary
+      .mockResolvedValueOnce(linuxSummaryFixture({
+        status: 'parsed',
+        journalCount: 2,
+        totalCount: 2,
+        journalEntries: [entry('j-1')],
+      }))
+      .mockResolvedValueOnce(linuxSummaryFixture({
+        status: 'parsed',
+        journalCount: 2,
+        totalCount: 2,
+        journalEntries: [entry('j-2')],
+      }));
+
+    const { result } = renderHook(
+      () => useLinuxArtifactSummary({ source: linuxSource }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.journalEntries).toHaveLength(1);
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() => expect(result.current.data?.journalEntries).toHaveLength(2));
+    expect(mocks.getLinuxArtifactSummary).toHaveBeenLastCalledWith({
+      dataSourceId: 'ds-linux',
+      offset: 200,
+      limit: 200,
+    });
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
   it('runs analysis extraction mutation with selected categories', async () => {
     mocks.useCurrentCase.mockReturnValue({
       isSuccess: true,
@@ -638,11 +720,10 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
     let extracted = false;
-    mocks.getLinuxArtifactSummary.mockImplementation(async () => ({
+    mocks.getLinuxArtifactSummary.mockImplementation(async () => linuxSummaryFixture({
       status: extracted ? 'parsed' : 'candidateFound',
-      total: extracted ? 4 : 0,
-      artifacts: [],
-      warnings: [],
+      bashCommandCount: extracted ? 4 : 0,
+      totalCount: extracted ? 4 : 0,
     }));
     mocks.runAnalysisExtraction.mockImplementation(async () => {
       extracted = true;

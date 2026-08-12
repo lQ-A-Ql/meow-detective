@@ -1,4 +1,4 @@
-import type { AnalysisExtractionProgressInfo } from '@/features/analysis/components/AnalysisPanels';
+import type { AnalysisExtractionProgressInfo } from '@/features/analysis/types';
 import {
   EXTRACTION_CATEGORIES_BY_PLATFORM,
   LINUX_PROGRESS_CATEGORIES,

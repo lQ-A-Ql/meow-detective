@@ -74,6 +74,13 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             summaryLoading={model.linuxSummaryLoading}
             extractionRunning={model.extractionRunning}
             recoveryModel={model.recoveryModel}
+            hasMore={model.linuxSummaryHasMore}
+            loadingMore={model.linuxSummaryLoadingMore}
+            loadMoreFailed={model.linuxSummaryLoadMoreFailed}
+            loadStateKey={model.linuxSummaryLoadStateKey}
+            loadContextKey={model.linuxLoadContextKey}
+            onLoadMore={model.loadMoreLinuxSummary}
+            onRetryLoadMore={model.retryLinuxSummaryLoad}
           />
         ) : null}
       </div>

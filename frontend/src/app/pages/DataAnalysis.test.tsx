@@ -656,6 +656,7 @@ describe('DataAnalysis page', () => {
       data: {
         status: 'parsed',
         journalCount: 223,
+        textLogCount: 27,
         loginCount: 143,
         bashCommandCount: 50,
         aptEventCount: 0,
@@ -695,7 +696,8 @@ describe('DataAnalysis page', () => {
     fireEvent.click(screen.getByLabelText('Linux Server'));
 
     await waitFor(() => expect(screen.getByText('概览(31232)')).toBeDefined());
-    expect(screen.getByText('系统日志(223)')).toBeDefined();
+    // Journal badge matches the journal table content: journald + text-log fallback rows.
+    expect(screen.getByText('系统日志(250)')).toBeDefined();
     expect(screen.queryByText('31232')).toBeNull();
   });
 

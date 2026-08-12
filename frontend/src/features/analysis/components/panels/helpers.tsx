@@ -19,28 +19,10 @@ import {
   AnalysisFieldProvenance,
   AnalysisProvenance,
 } from '@/types/models';
-
-export type AnalysisExtractionProgressState = 'idle' | 'running' | 'success' | 'partial' | 'failed';
-
-export interface AnalysisExtractionProgressInfo {
-  label: string;
-  status: AnalysisExtractionProgressState;
-  scannedCount: number;
-  artifactCount: number;
-  timelineEventCount: number;
-  warnings: string[];
-  error?: string;
-  totalCandidateCount?: number;
-  processedCandidateCount?: number;
-  structuredCandidateCount?: number;
-  unsupportedCandidateCount?: number;
-  textFallbackCandidateCount?: number;
-  warningCandidateCount?: number;
-  checkpointHitCount?: number;
-  phase?: string;
-  currentPath?: string;
-  detail?: string;
-}
+import type {
+  AnalysisExtractionProgressInfo,
+  AnalysisExtractionProgressState,
+} from '@/features/analysis/types';
 
 export const CATEGORY_ICONS: Record<string, typeof Monitor> = {
   Executables: Shield,

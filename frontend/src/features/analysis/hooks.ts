@@ -21,6 +21,7 @@ import { useCurrentCase } from '@/features/case/hooks';
 import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
 import type { DataSourceSummary } from '@/types/models';
 import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
+import type { LinuxArtifactSummary } from '@/types/models';
 
 type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
 type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 'dataSourceId'> & {
@@ -39,6 +40,65 @@ const ANALYSIS_QUERY_OPTIONS = {
 } as const;
 
 const EVTX_PAGE_SIZE = 500;
+const LINUX_PAGE_SIZE = 200;
+
+/**
+ * Entry-array ↔ count-field pairing used by the Linux summary pager. The
+ * journal family combines journald rows and text-log fallback lines, so its
+ * total is journalCount + textLogCount.
+ */
+const LINUX_ENTRY_FAMILIES: ReadonlyArray<{
+  entries: (page: LinuxArtifactSummary) => readonly unknown[];
+  count: (page: LinuxArtifactSummary) => number;
+}> = [
+  { entries: (page) => page.journalEntries, count: (page) => page.journalCount + page.textLogCount },
+  { entries: (page) => page.loginRecords, count: (page) => page.loginCount },
+  { entries: (page) => page.bashCommands, count: (page) => page.bashCommandCount },
+  { entries: (page) => page.aptEvents, count: (page) => page.aptEventCount },
+  { entries: (page) => page.cronJobs, count: (page) => page.cronJobCount },
+  { entries: (page) => page.sudoEvents, count: (page) => page.sudoEventCount },
+  { entries: (page) => page.systemConfigs, count: (page) => page.systemConfigCount },
+  { entries: (page) => page.webSites, count: (page) => page.webSiteCount },
+  { entries: (page) => page.webAccessLogs, count: (page) => page.webAccessLogCount },
+  { entries: (page) => page.webErrorLogs, count: (page) => page.webErrorLogCount },
+  { entries: (page) => page.webFindings, count: (page) => page.webFindingCount },
+  { entries: (page) => page.mysqlConfigs, count: (page) => page.mysqlConfigCount },
+  { entries: (page) => page.mysqlLogs, count: (page) => page.mysqlLogCount },
+  { entries: (page) => page.mysqlFindings, count: (page) => page.mysqlFindingCount },
+];
+
+function mergeLinuxPages(pages: LinuxArtifactSummary[]): LinuxArtifactSummary | undefined {
+  const first = pages[0];
+  if (!first) return undefined;
+  return {
+    ...first,
+    journalEntries: pages.flatMap((page) => page.journalEntries),
+    loginRecords: pages.flatMap((page) => page.loginRecords),
+    bashCommands: pages.flatMap((page) => page.bashCommands),
+    aptEvents: pages.flatMap((page) => page.aptEvents),
+    cronJobs: pages.flatMap((page) => page.cronJobs),
+    sudoEvents: pages.flatMap((page) => page.sudoEvents),
+    systemConfigs: pages.flatMap((page) => page.systemConfigs),
+    webSites: pages.flatMap((page) => page.webSites),
+    webAccessLogs: pages.flatMap((page) => page.webAccessLogs),
+    webErrorLogs: pages.flatMap((page) => page.webErrorLogs),
+    webFindings: pages.flatMap((page) => page.webFindings),
+    mysqlConfigs: pages.flatMap((page) => page.mysqlConfigs),
+    mysqlLogs: pages.flatMap((page) => page.mysqlLogs),
+    mysqlFindings: pages.flatMap((page) => page.mysqlFindings),
+    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
+  };
+}
+
+/** True while at least one family still has unloaded rows beyond the merged pages. */
+function linuxSummaryHasUnloadedEntries(pages: LinuxArtifactSummary[]): boolean {
+  const last = pages[pages.length - 1];
+  if (!last) return false;
+  return LINUX_ENTRY_FAMILIES.some((family) => {
+    const loaded = pages.reduce((total, page) => total + family.entries(page).length, 0);
+    return loaded < family.count(last);
+  });
+}
 
 function caseOverviewQueryKey(caseId: string | null) {
   return ['analysis', 'case-overview', caseId] as const;
@@ -281,11 +341,25 @@ export function useEvtxEventSummary(
 export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
   const dataSourceId = request.source?.id;
-  const offset = request.offset ?? 0;
-  const limit = request.limit ?? 200;
-  return useQuery({
-    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, offset, limit],
-    queryFn: () => getLinuxArtifactSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+  const limit = Math.min(request.limit ?? LINUX_PAGE_SIZE, LINUX_PAGE_SIZE);
+  const query = useInfiniteQuery({
+    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, limit],
+    queryFn: ({ pageParam }) => getLinuxArtifactSummary({
+      dataSourceId: dataSourceId ?? '',
+      offset: pageParam,
+      limit,
+    }),
+    initialPageParam: request.offset ?? 0,
+    getNextPageParam: (lastPage, pages) => {
+      const lastPageItemCount = LINUX_ENTRY_FAMILIES.reduce(
+        (total, family) => total + family.entries(lastPage).length,
+        0,
+      );
+      if (lastPageItemCount === 0) return undefined;
+      return linuxSummaryHasUnloadedEntries(pages)
+        ? (request.offset ?? 0) + pages.length * limit
+        : undefined;
+    },
     enabled: currentCase.isSuccess
       && Boolean(currentCase.data)
       && Boolean(dataSourceId)
@@ -293,6 +367,10 @@ export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
+  return {
+    ...query,
+    data: mergeLinuxPages(query.data?.pages ?? []),
+  };
 }
 
 export function useV2GovernanceSnapshot() {

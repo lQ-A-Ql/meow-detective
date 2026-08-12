@@ -13,6 +13,8 @@ export interface LinuxJournalEntry {
   syslogIdentifier?: string;
   pid?: number;
   priority?: number;
+  /** Log origin: `journald` rows vs text-log fallback labels (syslog/auth/audit/pve/...). */
+  logKind?: string;
 }
 
 /** wtmp/btmp login record — mirrors Rust `LinuxLoginRecordDto`. */

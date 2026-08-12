@@ -46,20 +46,69 @@ const TABS: LinuxArtifactTabKey[] = [
   'mysqlServices',
 ];
 
+interface LinuxFamilyProgress {
+  loaded: number;
+  total: number;
+}
+
+/** "已加载 X / 共 Y" plus a truncation warning when the backend capped results. */
+function LoadProgressLine({
+  loaded,
+  total,
+  truncated,
+}: {
+  loaded: number;
+  total: number;
+  truncated: boolean;
+}) {
+  const { t } = useTranslation();
+  const showTruncated = truncated && total > 0;
+  if (loaded >= total && !showTruncated) {
+    return null;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-1 text-[11px]">
+      <span className="font-mono text-forensics-muted">
+        {t('linuxArtifacts.loadProgress', { loaded, total })}
+      </span>
+      {showTruncated ? (
+        <span className="text-forensics-warning-text">
+          {t('linuxArtifacts.truncatedWarning')}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function LinuxArtifactsPanel({
   summary,
   activeTab = 'overview',
   extractionRunning = false,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreFailed = false,
+  onLoadMore,
+  onRetryLoadMore,
+  loadContextKey,
+  loadStateKey,
 }: {
   summary?: LinuxArtifactSummary;
   activeTab?: LinuxArtifactTabKey;
   extractionRunning?: boolean;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  loadMoreFailed?: boolean;
+  onLoadMore?: () => void;
+  onRetryLoadMore?: () => unknown;
+  loadContextKey?: string;
+  loadStateKey?: string | number;
 }) {
   const { t } = useTranslation();
 
-  const fallbackInfo = {
-    status: 'unavailable' as const,
+  const fallbackInfo: LinuxArtifactSummary = {
+    status: 'unavailable',
     journalCount: 0,
+    textLogCount: 0,
     loginCount: 0,
     bashCommandCount: 0,
     aptEventCount: 0,
@@ -113,11 +162,32 @@ export function LinuxArtifactsPanel({
       }
     : fallbackInfo;
 
+  // Loaded rows vs backend counts per family; the journal family combines
+  // journald rows and text-log fallback lines.
+  const families: Record<string, LinuxFamilyProgress> = {
+    journal: { loaded: info.journalEntries.length, total: info.journalCount + info.textLogCount },
+    login: { loaded: info.loginRecords.length, total: info.loginCount },
+    commands: { loaded: info.bashCommands.length, total: info.bashCommandCount },
+    packages: { loaded: info.aptEvents.length, total: info.aptEventCount },
+    cron: { loaded: info.cronJobs.length, total: info.cronJobCount },
+    sudo: { loaded: info.sudoEvents.length, total: info.sudoEventCount },
+    systemConfig: { loaded: info.systemConfigs.length, total: info.systemConfigCount },
+    webSites: { loaded: info.webSites.length, total: info.webSiteCount },
+    webAccess: { loaded: info.webAccessLogs.length, total: info.webAccessLogCount },
+    webError: { loaded: info.webErrorLogs.length, total: info.webErrorLogCount },
+    webFindings: { loaded: info.webFindings.length, total: info.webFindingCount },
+    mysqlConfigs: { loaded: info.mysqlConfigs.length, total: info.mysqlConfigCount },
+    mysqlLogs: { loaded: info.mysqlLogs.length, total: info.mysqlLogCount },
+    mysqlFindings: { loaded: info.mysqlFindings.length, total: info.mysqlFindingCount },
+  };
+  const tableLoadContextKey = JSON.stringify([loadContextKey ?? null, info.generatedAt]);
+
   // Column titles are translated, so all column arrays are memoized on `t`
   // instead of being rebuilt on every render.
   const columns = useMemo(() => ({
     journal: [
     { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
+    { key: 'logKind', title: t('linuxArtifacts.columns.logKind'), className: 'w-[100px]', render: (row) => row.logKind ?? 'journald' },
     { key: 'priority', title: t('linuxArtifacts.columns.priority'), className: 'w-[70px]', render: (row) => row.priority?.toString() ?? '-' },
     { key: 'systemdUnit', title: t('linuxArtifacts.columns.systemdUnit'), className: 'w-[140px]', render: (row) => row.systemdUnit ?? '-' },
     { key: 'syslogIdentifier', title: t('linuxArtifacts.columns.syslogIdentifier'), className: 'w-[120px]', render: (row) => row.syslogIdentifier ?? '-' },
@@ -245,155 +315,145 @@ export function LinuxArtifactsPanel({
     ] as DenseColumn<LinuxMysqlLogEntry>[],
   }), [t]);
 
+  const renderFamilyTable = <T,>(
+    family: LinuxFamilyProgress,
+    rows: T[],
+    tableColumns: DenseColumn<T>[],
+    emptyTitle: string,
+    emptyDescription: string,
+  ) => (
+    <div className="space-y-1">
+      <LoadProgressLine
+        loaded={family.loaded}
+        total={family.total}
+        truncated={info.truncated}
+      />
+      <DenseDataTableFrame rowCount={rows.length}>
+        <DenseDataTable
+          rows={rows}
+          columns={tableColumns}
+          getRowKey={(row) => (row as { artifactId: string }).artifactId}
+          emptyTitle={emptyTitle}
+          emptyDescription={emptyDescription}
+          loadContextKey={tableLoadContextKey}
+          loadStateKey={loadStateKey}
+          hasMore={hasMore && family.loaded < family.total}
+          loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
+          onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
+        />
+      </DenseDataTableFrame>
+    </div>
+  );
+
   const tabContent: Record<LinuxArtifactTabKey, React.ReactNode> = {
     overview: info.totalCount === 0 ? <EmptyLine text={t('linuxArtifacts.empty.overview.description')} /> : null,
-    journal: (
-      <DenseDataTableFrame rowCount={info.journalEntries.length}>
-        <DenseDataTable
-          rows={info.journalEntries}
-          columns={columns.journal}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.journal.title')}
-          emptyDescription={t('linuxArtifacts.empty.journal.description')}
-        />
-      </DenseDataTableFrame>
+    journal: renderFamilyTable(
+      families.journal,
+      info.journalEntries,
+      columns.journal,
+      t('linuxArtifacts.empty.journal.title'),
+      t('linuxArtifacts.empty.journal.description'),
     ),
-    login: (
-      <DenseDataTableFrame rowCount={info.loginRecords.length}>
-        <DenseDataTable
-          rows={info.loginRecords}
-          columns={columns.login}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.login.title')}
-          emptyDescription={t('linuxArtifacts.empty.login.description')}
-        />
-      </DenseDataTableFrame>
+    login: renderFamilyTable(
+      families.login,
+      info.loginRecords,
+      columns.login,
+      t('linuxArtifacts.empty.login.title'),
+      t('linuxArtifacts.empty.login.description'),
     ),
-    commands: (
-      <DenseDataTableFrame rowCount={info.bashCommands.length}>
-        <DenseDataTable
-          rows={info.bashCommands}
-          columns={columns.command}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.commands.title')}
-          emptyDescription={t('linuxArtifacts.empty.commands.description')}
-        />
-      </DenseDataTableFrame>
+    commands: renderFamilyTable(
+      families.commands,
+      info.bashCommands,
+      columns.command,
+      t('linuxArtifacts.empty.commands.title'),
+      t('linuxArtifacts.empty.commands.description'),
     ),
-    packages: (
-      <DenseDataTableFrame rowCount={info.aptEvents.length}>
-        <DenseDataTable
-          rows={info.aptEvents}
-          columns={columns.package}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.packages.title')}
-          emptyDescription={t('linuxArtifacts.empty.packages.description')}
-        />
-      </DenseDataTableFrame>
+    packages: renderFamilyTable(
+      families.packages,
+      info.aptEvents,
+      columns.package,
+      t('linuxArtifacts.empty.packages.title'),
+      t('linuxArtifacts.empty.packages.description'),
     ),
-    cron: (
-      <DenseDataTableFrame rowCount={info.cronJobs.length}>
-        <DenseDataTable
-          rows={info.cronJobs}
-          columns={columns.cron}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.cron.title')}
-          emptyDescription={t('linuxArtifacts.empty.cron.description')}
-        />
-      </DenseDataTableFrame>
+    cron: renderFamilyTable(
+      families.cron,
+      info.cronJobs,
+      columns.cron,
+      t('linuxArtifacts.empty.cron.title'),
+      t('linuxArtifacts.empty.cron.description'),
     ),
-    sudo: (
-      <DenseDataTableFrame rowCount={info.sudoEvents.length}>
-        <DenseDataTable
-          rows={info.sudoEvents}
-          columns={columns.sudo}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.sudo.title')}
-          emptyDescription={t('linuxArtifacts.empty.sudo.description')}
-        />
-      </DenseDataTableFrame>
+    sudo: renderFamilyTable(
+      families.sudo,
+      info.sudoEvents,
+      columns.sudo,
+      t('linuxArtifacts.empty.sudo.title'),
+      t('linuxArtifacts.empty.sudo.description'),
     ),
-    systemConfig: (
-      <DenseDataTableFrame rowCount={info.systemConfigs.length}>
-        <DenseDataTable
-          rows={info.systemConfigs}
-          columns={columns.systemConfig}
-          getRowKey={(row) => row.artifactId}
-          emptyTitle={t('linuxArtifacts.empty.systemConfig.title')}
-          emptyDescription={t('linuxArtifacts.empty.systemConfig.description')}
-        />
-      </DenseDataTableFrame>
+    systemConfig: renderFamilyTable(
+      families.systemConfig,
+      info.systemConfigs,
+      columns.systemConfig,
+      t('linuxArtifacts.empty.systemConfig.title'),
+      t('linuxArtifacts.empty.systemConfig.description'),
     ),
     webServices: (
       <div className="space-y-3">
-        <DenseDataTableFrame rowCount={info.webFindings.length}>
-          <DenseDataTable
-            rows={info.webFindings}
-            columns={columns.webFinding}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.webFindings.title')}
-            emptyDescription={t('linuxArtifacts.empty.webFindings.description')}
-          />
-        </DenseDataTableFrame>
-        <DenseDataTableFrame rowCount={info.webSites.length}>
-          <DenseDataTable
-            rows={info.webSites}
-            columns={columns.webSite}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.webSites.title')}
-            emptyDescription={t('linuxArtifacts.empty.webSites.description')}
-          />
-        </DenseDataTableFrame>
-        <DenseDataTableFrame rowCount={info.webAccessLogs.length}>
-          <DenseDataTable
-            rows={info.webAccessLogs}
-            columns={columns.webAccess}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.webAccess.title')}
-            emptyDescription={t('linuxArtifacts.empty.webAccess.description')}
-          />
-        </DenseDataTableFrame>
-        <DenseDataTableFrame rowCount={info.webErrorLogs.length}>
-          <DenseDataTable
-            rows={info.webErrorLogs}
-            columns={columns.webError}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.webError.title')}
-            emptyDescription={t('linuxArtifacts.empty.webError.description')}
-          />
-        </DenseDataTableFrame>
+        {renderFamilyTable(
+          families.webFindings,
+          info.webFindings,
+          columns.webFinding,
+          t('linuxArtifacts.empty.webFindings.title'),
+          t('linuxArtifacts.empty.webFindings.description'),
+        )}
+        {renderFamilyTable(
+          families.webSites,
+          info.webSites,
+          columns.webSite,
+          t('linuxArtifacts.empty.webSites.title'),
+          t('linuxArtifacts.empty.webSites.description'),
+        )}
+        {renderFamilyTable(
+          families.webAccess,
+          info.webAccessLogs,
+          columns.webAccess,
+          t('linuxArtifacts.empty.webAccess.title'),
+          t('linuxArtifacts.empty.webAccess.description'),
+        )}
+        {renderFamilyTable(
+          families.webError,
+          info.webErrorLogs,
+          columns.webError,
+          t('linuxArtifacts.empty.webError.title'),
+          t('linuxArtifacts.empty.webError.description'),
+        )}
       </div>
     ),
 
     mysqlServices: (
       <div className="space-y-3">
-        <DenseDataTableFrame rowCount={info.mysqlFindings.length}>
-          <DenseDataTable
-            rows={info.mysqlFindings}
-            columns={columns.mysqlFinding}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.mysqlFindings.title')}
-            emptyDescription={t('linuxArtifacts.empty.mysqlFindings.description')}
-          />
-        </DenseDataTableFrame>
-        <DenseDataTableFrame rowCount={info.mysqlConfigs.length}>
-          <DenseDataTable
-            rows={info.mysqlConfigs}
-            columns={columns.mysqlConfig}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.mysqlConfigs.title')}
-            emptyDescription={t('linuxArtifacts.empty.mysqlConfigs.description')}
-          />
-        </DenseDataTableFrame>
-        <DenseDataTableFrame rowCount={info.mysqlLogs.length}>
-          <DenseDataTable
-            rows={info.mysqlLogs}
-            columns={columns.mysqlLog}
-            getRowKey={(row) => row.artifactId}
-            emptyTitle={t('linuxArtifacts.empty.mysqlLogs.title')}
-            emptyDescription={t('linuxArtifacts.empty.mysqlLogs.description')}
-          />
-        </DenseDataTableFrame>
+        {renderFamilyTable(
+          families.mysqlFindings,
+          info.mysqlFindings,
+          columns.mysqlFinding,
+          t('linuxArtifacts.empty.mysqlFindings.title'),
+          t('linuxArtifacts.empty.mysqlFindings.description'),
+        )}
+        {renderFamilyTable(
+          families.mysqlConfigs,
+          info.mysqlConfigs,
+          columns.mysqlConfig,
+          t('linuxArtifacts.empty.mysqlConfigs.title'),
+          t('linuxArtifacts.empty.mysqlConfigs.description'),
+        )}
+        {renderFamilyTable(
+          families.mysqlLogs,
+          info.mysqlLogs,
+          columns.mysqlLog,
+          t('linuxArtifacts.empty.mysqlLogs.title'),
+          t('linuxArtifacts.empty.mysqlLogs.description'),
+        )}
       </div>
     ),
   };

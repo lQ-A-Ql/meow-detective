@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { Tabs } from '@/app/components/ui/tabs';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   AnalysisErrorBanner,
@@ -21,11 +20,17 @@ export interface LinuxAnalysisViewProps {
   summaryLoading: boolean;
   extractionRunning: boolean;
   recoveryModel: DeletedRecoveryViewModel;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  loadMoreFailed?: boolean;
+  loadContextKey?: string;
+  loadStateKey?: string | number;
+  onLoadMore?: () => void;
+  onRetryLoadMore?: () => unknown;
 }
 
 export function LinuxAnalysisView({
   activeTab,
-  onActiveTabChange,
   error,
   onRetry,
   loading,
@@ -33,15 +38,18 @@ export function LinuxAnalysisView({
   summaryLoading,
   extractionRunning,
   recoveryModel,
+  hasMore,
+  loadingMore,
+  loadMoreFailed,
+  loadContextKey,
+  loadStateKey,
+  onLoadMore,
+  onRetryLoadMore,
 }: LinuxAnalysisViewProps) {
   const { t } = useTranslation();
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) => onActiveTabChange(value as LinuxAnalysisTabKey)}
-      className="h-full min-h-0 flex-1 gap-0"
-    >
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-0">
       <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {activeTab === 'deletedRecovery' ? (
@@ -55,9 +63,16 @@ export function LinuxAnalysisView({
             summary={summary}
             activeTab={activeTab}
             extractionRunning={extractionRunning}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            loadMoreFailed={loadMoreFailed}
+            loadContextKey={loadContextKey}
+            loadStateKey={loadStateKey}
+            onLoadMore={onLoadMore}
+            onRetryLoadMore={onRetryLoadMore}
           />
         )}
       </ScrollArea>
-    </Tabs>
+    </div>
   );
 }

@@ -1539,6 +1539,13 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     assert_eq!(summary.web_site_count, web_site_count as u64);
     assert_eq!(summary.web_access_log_count, web_access_count as u64);
     assert_eq!(summary.web_finding_count, web_finding_count as u64);
+    assert!(
+        summary
+            .journal_entries
+            .iter()
+            .any(|entry| entry.log_kind.as_deref() == Some("pve")),
+        "text-log fallback rows should expose their logKind label"
+    );
     assert_eq!(summary.web_sites[0].server_kind, "nginx");
     assert!(summary.web_sites[0]
         .document_roots

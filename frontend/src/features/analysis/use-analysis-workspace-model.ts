@@ -113,20 +113,20 @@ export function useAnalysisWorkspaceModel() {
     if (summary) {
       Object.assign(counts, {
         overview: summary.totalCount,
-        journal: summary.journalCount,
+        journal: summary.journalCount + summary.textLogCount,
         login: summary.loginCount,
         commands: summary.bashCommandCount,
         packages: summary.aptEventCount,
         cron: summary.cronJobCount,
         sudo: summary.sudoEventCount,
         systemConfig: summary.systemConfigCount,
-        webServices: (summary.webSiteCount ?? 0)
-          + (summary.webAccessLogCount ?? 0)
-          + (summary.webErrorLogCount ?? 0)
-          + (summary.webFindingCount ?? 0),
-        mysqlServices: (summary.mysqlConfigCount ?? 0)
-          + (summary.mysqlLogCount ?? 0)
-          + (summary.mysqlFindingCount ?? 0),
+        webServices: summary.webSiteCount
+          + summary.webAccessLogCount
+          + summary.webErrorLogCount
+          + summary.webFindingCount,
+        mysqlServices: summary.mysqlConfigCount
+          + summary.mysqlLogCount
+          + summary.mysqlFindingCount,
       });
     }
     if (deletedRecovery.state === 'ready') {
@@ -417,6 +417,15 @@ export function useAnalysisWorkspaceModel() {
     summaryPending: summaryMutation.isPending,
     linuxSummary: linuxSummary.data,
     linuxSummaryLoading: linuxSummary.isLoading,
+    linuxSummaryHasMore: Boolean(linuxSummary.hasNextPage),
+    linuxSummaryLoadingMore: linuxSummary.isFetchingNextPage,
+    linuxSummaryLoadMoreFailed: linuxSummary.isFetchNextPageError,
+    linuxSummaryLoadStateKey: linuxSummary.dataUpdatedAt,
+    linuxLoadContextKey: selectedSourceContextKey ?? '',
+    loadMoreLinuxSummary: () => {
+      void linuxSummary.fetchNextPage();
+    },
+    retryLinuxSummaryLoad: () => linuxSummary.refetch(),
     recoveryModel: deletedRecovery,
     refresh,
     runEvidenceScan,

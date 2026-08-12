@@ -277,4 +277,52 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('example.test')).toBeDefined();
     expect(screen.getByText('sqlmap/1.7')).toBeDefined();
   });
+  it('shows loaded/total progress and truncation warning for partially loaded families', () => {
+    const summary = baseSummary({
+      sudoEventCount: 3,
+      totalCount: 3,
+      truncated: true,
+      sudoEvents: [
+        {
+          artifactId: 'sudo-1',
+          fileId: 'file-1',
+          sourcePath: '/var/log/auth.log',
+          user: 'alice',
+          command: 'apt update',
+          success: true,
+        },
+      ],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'sudo' }));
+    expect(screen.getByText('已加载 1 / 共 3')).toBeDefined();
+    expect(screen.getByText('结果已被截断，仅显示部分内容。')).toBeDefined();
+  });
+
+  it('renders the journal log kind column distinguishing journald and text fallback rows', () => {
+    const summary = baseSummary({
+      journalCount: 1,
+      textLogCount: 1,
+      totalCount: 2,
+      journalEntries: [
+        {
+          artifactId: 'journal-1',
+          fileId: 'file-journal',
+          sourcePath: '/var/log/journal/system.journal',
+          message: 'Started ssh.service',
+          logKind: 'journald',
+        },
+        {
+          artifactId: 'journal-2',
+          fileId: 'file-syslog',
+          sourcePath: '/var/log/syslog',
+          message: 'cron job ran',
+          logKind: 'syslog',
+        },
+      ],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'journal' }));
+    expect(screen.getByText('日志来源')).toBeDefined();
+    expect(screen.getByText('journald')).toBeDefined();
+    expect(screen.getByText('syslog')).toBeDefined();
+  });
 });

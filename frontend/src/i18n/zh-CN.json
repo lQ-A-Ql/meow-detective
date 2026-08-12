@@ -730,6 +730,7 @@
     "columns": {
       "timestamp": "时间",
       "sourcePath": "来源",
+      "logKind": "日志来源",
       "message": "消息",
       "priority": "优先级",
       "systemdUnit": "Unit",
@@ -785,6 +786,8 @@
       "no": "否"
     },
     "fallbackWarning": "Linux 痕迹摘要暂不可用。",
+    "loadProgress": "已加载 {{loaded}} / 共 {{total}}",
+    "truncatedWarning": "结果已被截断，仅显示部分内容。",
     "empty": {
       "overview": {
         "title": "暂无 Linux 痕迹",

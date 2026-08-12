@@ -67,6 +67,10 @@ pub struct LinuxJournalEntryDto {
     pub pid: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<u32>,
+    /// Log origin discriminator: `journald` for real systemd journal rows,
+    /// otherwise the text-log fallback label (syslog/auth/audit/pve/...).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

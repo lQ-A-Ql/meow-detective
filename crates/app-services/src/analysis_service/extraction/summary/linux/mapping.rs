@@ -148,18 +148,28 @@ fn query(
 
 fn map_journal(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxJournalEntryDto> {
     rows.into_iter()
-        .map(|row| LinuxJournalEntryDto {
-            artifact_id: row.id,
-            file_id: row.source_object_id.unwrap_or_default(),
-            source_path: string_attr(&row.attrs, "sourcePath"),
-            timestamp: optional_string_attr(&row.attrs, "timestamp"),
-            message: optional_string_attr(&row.attrs, "message"),
-            executable: optional_string_attr(&row.attrs, "executable"),
-            systemd_unit: optional_string_attr(&row.attrs, "systemdUnit"),
-            hostname: optional_string_attr(&row.attrs, "hostname"),
-            syslog_identifier: optional_string_attr(&row.attrs, "syslogIdentifier"),
-            pid: optional_u32_attr(&row.attrs, "pid"),
-            priority: optional_u32_attr(&row.attrs, "priority"),
+        .map(|row| {
+            // Text-log fallback rows carry an explicit `logKind` attribute;
+            // rows produced by the structured journald extractor default to
+            // `journald` so the UI can tell the two channels apart.
+            let log_kind = optional_string_attr(&row.attrs, "logKind").or_else(|| {
+                (row.extractor_id.as_deref() == Some("linux.journal"))
+                    .then(|| "journald".to_string())
+            });
+            LinuxJournalEntryDto {
+                artifact_id: row.id,
+                file_id: row.source_object_id.unwrap_or_default(),
+                source_path: string_attr(&row.attrs, "sourcePath"),
+                timestamp: optional_string_attr(&row.attrs, "timestamp"),
+                message: optional_string_attr(&row.attrs, "message"),
+                executable: optional_string_attr(&row.attrs, "executable"),
+                systemd_unit: optional_string_attr(&row.attrs, "systemdUnit"),
+                hostname: optional_string_attr(&row.attrs, "hostname"),
+                syslog_identifier: optional_string_attr(&row.attrs, "syslogIdentifier"),
+                pid: optional_u32_attr(&row.attrs, "pid"),
+                priority: optional_u32_attr(&row.attrs, "priority"),
+                log_kind,
+            }
         })
         .collect()
 }

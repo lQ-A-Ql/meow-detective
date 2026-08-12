@@ -34,6 +34,7 @@ fn linux_artifact_summary_serializes_camel_case() {
             syslog_identifier: None,
             pid: Some(42),
             priority: None,
+            log_kind: Some("journald".to_string()),
         }],
         login_records: Vec::new(),
         bash_commands: Vec::new(),
@@ -157,6 +158,7 @@ fn linux_artifact_summary_serializes_camel_case() {
     assert!((value["coverageRatio"].as_f64().unwrap() - 0.75).abs() < 0.000_001);
     assert_eq!(value["journalEntries"][0]["artifactId"], "artifact-1");
     assert_eq!(value["journalEntries"][0]["pid"], 42);
+    assert_eq!(value["journalEntries"][0]["logKind"], "journald");
     assert_eq!(value["systemConfigs"][0]["configKind"], "passwdAccount");
     assert_eq!(value["systemConfigs"][0]["username"], "root");
     assert_eq!(value["webSites"][0]["serverKind"], "nginx");
@@ -168,6 +170,29 @@ fn linux_artifact_summary_serializes_camel_case() {
     assert!(value["journalEntries"][0].get("executable").is_none());
     assert!(value.get("coverage_ratio").is_none());
     assert!(value.get("journal_count").is_none());
+}
+
+#[test]
+fn linux_journal_entry_omits_log_kind_when_none() {
+    let dto = LinuxJournalEntryDto {
+        artifact_id: "artifact-3".to_string(),
+        file_id: "file-3".to_string(),
+        source_path: "/var/log/syslog".to_string(),
+        timestamp: None,
+        message: Some("line".to_string()),
+        executable: None,
+        systemd_unit: None,
+        hostname: None,
+        syslog_identifier: None,
+        pid: None,
+        priority: None,
+        log_kind: None,
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["artifactId"], "artifact-3");
+    assert!(value.get("logKind").is_none());
 }
 
 #[test]

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type {
   AnalysisExtractionProgressInfo,
   AnalysisExtractionProgressState,
-} from '@/features/analysis/components/AnalysisPanels';
+} from '@/features/analysis/types';
 import type {
   AnalysisTabKey,
   ExtractionCategory,

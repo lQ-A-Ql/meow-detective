@@ -1,6 +1,6 @@
 import { Activity } from 'lucide-react';
 import { AnalysisExtractionProgress } from '@/features/analysis/components/AnalysisPanels';
-import type { AnalysisExtractionProgressInfo } from '@/features/analysis/components/AnalysisPanels';
+import type { AnalysisExtractionProgressInfo } from '@/features/analysis/types';
 import type { DataSourceSummary } from '@/types/models';
 
 interface AnalysisProgressDrawerProps {

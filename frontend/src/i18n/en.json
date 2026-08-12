@@ -730,6 +730,7 @@
     "columns": {
       "timestamp": "Time",
       "sourcePath": "Source",
+      "logKind": "Log Kind",
       "message": "Message",
       "priority": "Priority",
       "systemdUnit": "Unit",
@@ -785,6 +786,8 @@
       "no": "No"
     },
     "fallbackWarning": "Linux artifact summary is unavailable.",
+    "loadProgress": "Loaded {{loaded}} / {{total}}",
+    "truncatedWarning": "Results are truncated; only partial content is shown.",
     "empty": {
       "overview": {
         "title": "No Linux artifacts",

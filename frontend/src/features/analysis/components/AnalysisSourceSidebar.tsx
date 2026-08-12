@@ -19,11 +19,11 @@ import { TreeConnector } from '@/components/tree/TreeConnector';
 import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
 import type { DataSourceSummary } from '@/types/models';
 import type {
+  AnalysisExtractionProgressInfo,
   AnalysisTabKey,
   ExtractionCategory,
   LinuxAnalysisTabKey,
 } from '@/features/analysis/types';
-import type { AnalysisExtractionProgressInfo } from '@/features/analysis/components/AnalysisPanels';
 
 type SourceTreeNode = {
   label: string;
