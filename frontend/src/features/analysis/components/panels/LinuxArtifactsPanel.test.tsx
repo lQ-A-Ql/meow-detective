@@ -8,6 +8,7 @@ function baseSummary(overrides: Partial<LinuxArtifactSummary> = {}): LinuxArtifa
   return {
     status: 'parsed',
     journalCount: 0,
+    textLogCount: 0,
     loginCount: 0,
     bashCommandCount: 0,
     aptEventCount: 0,

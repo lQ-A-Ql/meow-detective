@@ -48,6 +48,7 @@ fn make_evtx_candidate(
         size: 0,
         encrypted: false,
         content_identity: format!("test:{file_id}"),
+        modified_at: None,
         evidence_kind: "evtx_log".to_string(),
         parser: "evtx.structured".to_string(),
         category: "EventLogs".to_string(),

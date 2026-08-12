@@ -8,12 +8,16 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
     normalized.ends_with("/etc/os-release")
         || normalized.ends_with("/usr/lib/os-release")
         || normalized.ends_with("/etc/passwd")
+        || normalized.ends_with("/etc/shadow")
+        || normalized.ends_with("/etc/gshadow")
         || normalized.ends_with("/etc/group")
         || normalized.ends_with("/etc/hostname")
         || normalized.ends_with("/etc/hosts")
         || normalized.ends_with("/etc/fstab")
         || normalized.ends_with("/etc/resolv.conf")
         || normalized.ends_with("/etc/machine-id")
+        || normalized.ends_with("/etc/login.defs")
+        || normalized.ends_with("/etc/anacrontab")
 }
 
 pub(in crate::analysis_service::extraction) fn is_sudoers_path(normalized: &str) -> bool {
@@ -58,6 +62,8 @@ pub(super) fn extract(
         extract_os_release(candidate, &text, outcome);
     } else if normalized.ends_with("/etc/passwd") {
         extract_passwd(candidate, &text, outcome);
+    } else if normalized.ends_with("/etc/shadow") || normalized.ends_with("/etc/gshadow") {
+        extract_shadow(candidate, &text, &normalized, outcome);
     } else {
         extract_key_value_or_lines(candidate, &text, "linux.system_config", outcome);
     }
@@ -178,6 +184,53 @@ fn extract_passwd(candidate: &EvidenceCandidate, text: &str, outcome: &mut Extra
         Err(error) => outcome
             .warnings
             .push(format!("{} passwd parse failed: {}", candidate.path, error)),
+    }
+}
+
+/// Extract password-state (never the hash itself) from `/etc/shadow` and
+/// `/etc/gshadow` via the shared `parse_shadow_accounts` parser.
+fn extract_shadow(
+    candidate: &EvidenceCandidate,
+    text: &str,
+    normalized: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let (config_kind, title_kind) = if normalized.ends_with("/etc/gshadow") {
+        ("gshadowAccount", "Linux group")
+    } else {
+        ("shadowAccount", "Linux account")
+    };
+    let accounts = artifacts_linux::parse_shadow_accounts(text);
+    if accounts.is_empty() {
+        outcome.warnings.push(format!(
+            "{} contained no parseable account records",
+            candidate.path
+        ));
+    }
+    for account in accounts {
+        let mut attrs = base_attrs(candidate);
+        attrs.insert(
+            "configKind".to_string(),
+            Value::String(config_kind.to_string()),
+        );
+        attrs.insert(
+            "username".to_string(),
+            Value::String(account.username.clone()),
+        );
+        attrs.insert("hasPassword".to_string(), Value::Bool(account.has_password));
+        attrs.insert("locked".to_string(), Value::Bool(account.locked));
+
+        outcome.artifacts.push(make_artifact(
+            "LinuxSystemConfig",
+            format!("{title_kind} password state: {}", account.username),
+            format!(
+                "has_password={} locked={}",
+                account.has_password, account.locked
+            ),
+            candidate,
+            "linux.shadow",
+            attrs,
+        ));
     }
 }
 

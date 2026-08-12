@@ -34,3 +34,24 @@ fn parses_mysql_log_and_detects_auth_failure() {
     assert_eq!(entries[0].severity.as_deref(), Some("warning"));
     assert_eq!(findings[0].finding_kind, "accessDenied");
 }
+
+#[test]
+fn parses_legacy_short_year_timestamp() {
+    let content = "240815 10:30:00 [Note] Access denied for user 'root'@'localhost'\n";
+    let entries = parse_mysql_log(content).unwrap();
+    assert_eq!(entries.len(), 1);
+    let ts = entries[0].timestamp.expect("legacy timestamp must parse");
+    assert_eq!(ts.to_rfc3339(), "2024-08-15T10:30:00+00:00");
+    assert_eq!(entries[0].severity.as_deref(), Some("note"));
+}
+
+#[test]
+fn rejects_invalid_legacy_timestamp_candidate() {
+    // Digits/colon shape that is not a real date must fall through to no
+    // timestamp instead of panicking or mis-parsing.
+    let content = "249999 99:99:99 some message\n";
+    let entries = parse_mysql_log(content).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].timestamp, None);
+    assert!(entries[0].message.ends_with("some message"));
+}

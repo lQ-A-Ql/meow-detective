@@ -5,6 +5,7 @@ fn linux_artifact_summary_serializes_camel_case() {
     let dto = LinuxArtifactSummaryDto {
         status: AnalysisParseStatusDto::Parsed,
         journal_count: 1,
+        text_log_count: 15,
         login_count: 2,
         bash_command_count: 3,
         apt_event_count: 4,
@@ -18,7 +19,7 @@ fn linux_artifact_summary_serializes_camel_case() {
         mysql_config_count: 12,
         mysql_log_count: 13,
         mysql_finding_count: 14,
-        total_count: 105,
+        total_count: 120,
         truncated: true,
         coverage_ratio: 0.75,
         journal_entries: vec![LinuxJournalEntryDto {
@@ -140,6 +141,7 @@ fn linux_artifact_summary_serializes_camel_case() {
     let value = serde_json::to_value(dto).unwrap();
 
     assert_eq!(value["journalCount"], 1);
+    assert_eq!(value["textLogCount"], 15);
     assert_eq!(value["bashCommandCount"], 3);
     assert_eq!(value["sudoEventCount"], 6);
     assert_eq!(value["systemConfigCount"], 7);
@@ -150,7 +152,7 @@ fn linux_artifact_summary_serializes_camel_case() {
     assert_eq!(value["mysqlConfigCount"], 12);
     assert_eq!(value["mysqlLogCount"], 13);
     assert_eq!(value["mysqlFindingCount"], 14);
-    assert_eq!(value["totalCount"], 105);
+    assert_eq!(value["totalCount"], 120);
     assert_eq!(value["truncated"], true);
     assert!((value["coverageRatio"].as_f64().unwrap() - 0.75).abs() < 0.000_001);
     assert_eq!(value["journalEntries"][0]["artifactId"], "artifact-1");

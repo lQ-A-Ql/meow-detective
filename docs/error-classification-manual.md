@@ -60,6 +60,7 @@ V2 统一从三层表达错误：
 | `security` | 被安全策略拦截 | 路径越界、非法 handle、MCP policy block |
 | `external` | 外部依赖失败 | MCP SSE / stdio / 网络错误 |
 | `timeout` | 超时 | 外部连接超时、长任务超时 |
+| `cancelled` | 用户或系统主动取消 | 分析/导入任务取消（可恢复，非超时） |
 | `internal` | 其他内部错误 | join error、未分类异常 |
 
 ## 5. 脱敏口径

@@ -84,3 +84,55 @@ fn skip_env_assignments() {
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].command, "/usr/bin/task");
 }
+
+#[test]
+fn user_crontab_kind_treats_bare_word_as_command() {
+    let input = "0 0 * * * echo hello";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].user, None);
+    assert_eq!(jobs[0].command, "echo hello");
+}
+
+#[test]
+fn system_crontab_kind_reads_user_field() {
+    let input = "0 0 * * * echo hello";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].user.as_deref(), Some("echo"));
+    assert_eq!(jobs[0].command, "hello");
+}
+
+#[test]
+fn user_crontab_kind_keyword_schedule_has_no_user() {
+    let input = "@daily echo housekeeping";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].user, None);
+    assert_eq!(jobs[0].command, "echo housekeeping");
+}
+
+#[test]
+fn system_crontab_kind_keyword_schedule_with_user() {
+    let input = "@daily root /usr/bin/housekeeping";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].user.as_deref(), Some("root"));
+    assert_eq!(jobs[0].command, "/usr/bin/housekeeping");
+}
+
+#[test]
+fn midnight_keyword_is_a_schedule() {
+    let input = "@midnight /usr/bin/nightly";
+    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].schedule, "@midnight");
+    assert_eq!(jobs[0].command, "/usr/bin/nightly");
+}
+
+#[test]
+fn legacy_parse_crontab_defaults_to_system_semantics() {
+    let jobs = parse_crontab("0 0 * * * root /usr/bin/task").expect("should parse");
+    assert_eq!(jobs[0].user.as_deref(), Some("root"));
+    assert_eq!(jobs[0].command, "/usr/bin/task");
+}

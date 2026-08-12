@@ -15,6 +15,7 @@ export type ErrorCategory =
   | 'security'
   | 'external'
   | 'timeout'
+  | 'cancelled'
   | 'internal';
 
 export interface AppSettings {

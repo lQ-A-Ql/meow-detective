@@ -164,11 +164,19 @@ fn extract_text_config(
 }
 
 fn extract_auth_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut ExtractionOutcome) {
-    let before = outcome.artifacts.len();
+    // Dual channel: sudo lines are extracted as structured LinuxSudoEvent
+    // records; every other line (sshd, pam, cron sessions, ...) still flows
+    // through the text-log fallback. The filter keeps sudo lines out of the
+    // fallback so no line is emitted twice.
     sudo::extract(candidate, bytes, outcome);
-    if outcome.artifacts.len() == before {
-        text_log::extract(candidate, bytes, "linux.auth_log", "auth", outcome);
-    }
+    text_log::extract_with_filter(
+        candidate,
+        bytes,
+        "linux.auth_log",
+        "auth",
+        &sudo::is_sudo_event_line,
+        outcome,
+    );
 }
 
 fn warn_unsupported_candidate(candidate: &EvidenceCandidate, outcome: &mut ExtractionOutcome) {

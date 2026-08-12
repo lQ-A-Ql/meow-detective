@@ -124,6 +124,37 @@ pub(super) fn count_artifacts_by_type(
     Ok(count as u64)
 }
 
+/// Count artifacts of one type produced by a specific extractor. Used to keep
+/// the journal summary count limited to real systemd journal entries instead
+/// of the generic text-log fallback records that share the `LinuxJournal`
+/// artifact type.
+pub(super) fn count_artifacts_by_type_and_extractor(
+    conn: &Connection,
+    artifact_type: &str,
+    extractor_id: &str,
+) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1 AND extractor_id = ?2",
+        [artifact_type, extractor_id],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
+pub(super) fn count_artifacts_by_type_excluding_extractor(
+    conn: &Connection,
+    artifact_type: &str,
+    extractor_id: &str,
+) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts
+         WHERE artifact_type = ?1 AND COALESCE(extractor_id, '') != ?2",
+        [artifact_type, extractor_id],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
 pub(super) fn count_artifacts_by_family_prefix(
     conn: &Connection,
     prefix: &str,

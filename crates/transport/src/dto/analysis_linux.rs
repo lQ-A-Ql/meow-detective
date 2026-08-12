@@ -7,6 +7,10 @@ use crate::dto::analysis_base::AnalysisParseStatusDto;
 pub struct LinuxArtifactSummaryDto {
     pub status: AnalysisParseStatusDto,
     pub journal_count: u64,
+    /// Generic text-log fallback lines (syslog/messages/auth/audit/pve) that
+    /// share the `LinuxJournal` artifact type but are not systemd journal
+    /// entries.
+    pub text_log_count: u64,
     pub login_count: u64,
     pub bash_command_count: u64,
     pub apt_event_count: u64,

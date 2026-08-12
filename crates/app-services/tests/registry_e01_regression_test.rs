@@ -37,6 +37,7 @@ fn make_candidate(path: &str, file_id: &str) -> app_services::analysis_service::
         size: 0,
         encrypted: false,
         content_identity: format!("test:{file_id}"),
+        modified_at: None,
         evidence_kind: "registry_hive".to_string(),
         parser: "registry.hive".to_string(),
         category: "Registry".to_string(),

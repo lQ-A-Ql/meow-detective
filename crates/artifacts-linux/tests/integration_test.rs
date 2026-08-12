@@ -38,7 +38,7 @@ End-Date: 2024-06-01  14:00:05";
 
     assert_eq!(events[0].action, "install");
     assert_eq!(events[0].package, "curl:amd64");
-    assert_eq!(events[0].version, "7.88.1-10+deb12u5");
+    assert_eq!(events[0].version.as_deref(), Some("7.88.1-10+deb12u5"));
     assert!(events[0].timestamp.is_some());
 
     assert_eq!(events[4].action, "remove");
@@ -56,8 +56,8 @@ fn dpkg_log_parses_complete_fixture() {
     let events = parse_dpkg_log(input).expect("should parse dpkg log");
     assert_eq!(events.len(), 4);
     assert_eq!(events[0].action, "install");
-    assert_eq!(events[0].package, "curl");
-    assert_eq!(events[0].version, "7.88.1-10+deb12u5");
+    assert_eq!(events[0].package, "curl:amd64");
+    assert_eq!(events[0].version.as_deref(), Some("7.88.1-10+deb12u5"));
     assert!(events[0].timestamp.is_some());
 }
 
@@ -134,151 +134,16 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 // ── journal: parse_journal ──────────────────────────────────────────────────
 
-/// Build a minimal synthetic systemd journal binary with one entry.
-fn build_synthetic_journal() -> Vec<u8> {
-    // Reuse the same structure as the unit-test builder in journal.rs.
-    let header_size: u64 = 240;
-    let arena_size: u64 = 1024;
+mod common;
 
-    let mut buf = Vec::with_capacity(arena_size as usize);
-
-    // Header
-    buf.extend_from_slice(b"LPKSHHRH");
-    buf.extend_from_slice(&0u32.to_le_bytes()); // compatible_flags
-    buf.extend_from_slice(&0u32.to_le_bytes()); // incompatible_flags
-    buf.push(0u8); // state
-    buf.extend_from_slice(&[0u8; 7]); // reserved
-    buf.extend_from_slice(&[0u8; 16]); // file_id
-    buf.extend_from_slice(&[0u8; 16]); // machine_id
-    buf.extend_from_slice(&[0xABu8; 16]); // boot_id
-    buf.extend_from_slice(&[0u8; 16]); // seqnum_id
-    buf.extend_from_slice(&header_size.to_le_bytes());
-    buf.extend_from_slice(&arena_size.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes()); // data_hash_table_offset
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes()); // tail_object_offset
-    buf.extend_from_slice(&1u64.to_le_bytes()); // n_objects placeholder
-    buf.extend_from_slice(&1u64.to_le_bytes()); // n_entries
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes()); // entry_array_offset (patched later)
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    // Pad to 240
-    while buf.len() < header_size as usize {
-        buf.push(0);
-    }
-    // Extra header fields
-    buf.extend_from_slice(&3u64.to_le_bytes()); // n_data
-    buf.extend_from_slice(&2u64.to_le_bytes()); // n_fields
-    buf.extend_from_slice(&0u64.to_le_bytes()); // n_tags
-    buf.extend_from_slice(&1u64.to_le_bytes()); // n_entry_arrays
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    while buf.len() < 256 {
-        buf.push(0);
-    }
-
-    // Align at first object
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // Helper: push object header and return the offset where the object was placed
-    fn push_object_header(buf: &mut Vec<u8>, obj_type: u8, payload_size: u64) {
-        buf.push(obj_type);
-        buf.push(0); // flags
-        buf.extend_from_slice(&[0u8; 6]); // reserved
-        buf.extend_from_slice(&payload_size.to_le_bytes());
-    }
-
-    // FIELD object: MESSAGE (hash = 10)
-    push_object_header(&mut buf, 2, 16); // OBJECT_FIELD = 2
-    buf.extend_from_slice(&10u64.to_le_bytes()); // FIELD_MESSAGE = 10
-    buf.extend_from_slice(b"MESSAGE\0");
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // FIELD object: _PID (hash = 4)
-    push_object_header(&mut buf, 2, 13);
-    buf.extend_from_slice(&4u64.to_le_bytes()); // FIELD__PID = 4
-    buf.extend_from_slice(b"_PID\0");
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // DATA object: MESSAGE value
-    let data_msg_offset = buf.len() as u64;
-    let msg_text = b"Test journal message\n";
-    push_object_header(&mut buf, 1, 8 + msg_text.len() as u64);
-    buf.extend_from_slice(&10u64.to_le_bytes()); // hash
-    buf.extend_from_slice(msg_text);
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // DATA object: _PID value
-    let data_pid_offset = buf.len() as u64;
-    let pid_text = b"1234\n";
-    push_object_header(&mut buf, 1, 8 + pid_text.len() as u64);
-    buf.extend_from_slice(&4u64.to_le_bytes());
-    buf.extend_from_slice(pid_text);
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // DATA object: __REALTIME_TIMESTAMP value
-    let data_ts_offset = buf.len() as u64;
-    let ts_val: i64 = 1_700_000_000_000_000;
-    let ts_text = format!("{}\n", ts_val);
-    push_object_header(&mut buf, 1, 8 + ts_text.len() as u64);
-    buf.extend_from_slice(&0u64.to_le_bytes()); // FIELD__REALTIME_TIMESTAMP = 0
-    buf.extend_from_slice(ts_text.as_bytes());
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // ENTRY object: 3 items
-    let entry_offset = buf.len() as u64;
-    push_object_header(&mut buf, 3, 3 * 16); // OBJECT_ENTRY = 3
-                                             // item 1: timestamp
-    buf.extend_from_slice(&data_ts_offset.to_le_bytes());
-    buf.extend_from_slice(&0u64.to_le_bytes()); // FIELD__REALTIME_TIMESTAMP
-                                                // item 2: message
-    buf.extend_from_slice(&data_msg_offset.to_le_bytes());
-    buf.extend_from_slice(&10u64.to_le_bytes()); // FIELD_MESSAGE
-                                                 // item 3: pid
-    buf.extend_from_slice(&data_pid_offset.to_le_bytes());
-    buf.extend_from_slice(&4u64.to_le_bytes()); // FIELD__PID
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // ENTRY_ARRAY object: points to the entry
-    let entry_array_offset = buf.len() as u64;
-    push_object_header(&mut buf, 6, 8); // OBJECT_ENTRY_ARRAY = 6
-    buf.extend_from_slice(&entry_offset.to_le_bytes());
-    while buf.len() % 8 != 0 {
-        buf.push(0);
-    }
-
-    // Patch header: entry_array_offset at bytes 176-184
-    buf[176..184].copy_from_slice(&entry_array_offset.to_le_bytes());
-    // Patch header: tail_object_offset at bytes 136-144
-    buf[136..144].copy_from_slice(&entry_array_offset.to_le_bytes());
-
-    buf
-}
-
+/// The synthetic journal fixture lives in `tests/common/mod.rs` and follows
+/// the documented on-disk format (48-byte ENTRY header, 48-byte DATA header,
+/// ENTRY_ARRAY chain, real lookup3/SipHash payload hashes).
 #[test]
 fn journal_parses_synthetic_fixture() {
-    let data = build_synthetic_journal();
+    let data = common::build_journal(&common::base_spec());
     let entries = parse_journal(&data).expect("should parse synthetic journal");
-    assert!(!entries.is_empty(), "should find at least one entry");
+    assert_eq!(entries.len(), 2, "should find both entries");
 
     let entry = &entries[0];
     assert_eq!(entry.message.as_deref(), Some("Test journal message"));
@@ -296,7 +161,7 @@ Jan 15 10:30:05 ubuntu sudo: pam_unix(sudo:session): session opened for user roo
 Jan 15 10:32:00 ubuntu sudo:     bob : TTY=pts/1 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
 Jan 15 10:32:05 ubuntu sudo: pam_unix(sudo:session): session opened for user root by bob(uid=0)";
 
-    let events = parse_auth_log_sudo(input).expect("should parse auth log");
+    let events = parse_auth_log_sudo(input, None).expect("should parse auth log");
     let cmds: Vec<&SudoEvent> = events
         .iter()
         .filter(|e| !e.command.contains("authentication failure"))
@@ -418,7 +283,7 @@ fn cron_empty_input() {
 
 #[test]
 fn sudo_empty_input() {
-    assert!(parse_auth_log_sudo("").unwrap().is_empty());
+    assert!(parse_auth_log_sudo("", None).unwrap().is_empty());
 }
 
 #[test]

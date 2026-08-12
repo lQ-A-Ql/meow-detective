@@ -4,7 +4,6 @@ use super::PlatformAnalyzer;
 use crate::analysis_service::capability::{AnalysisCapability, LINUX_CAPABILITIES};
 
 pub(super) static LINUX_ANALYZER: LinuxAnalyzer = LinuxAnalyzer;
-const LINUX_EVIDENCE_DEFAULTS: &[&str] = &["LinuxArtifacts"];
 
 pub(super) struct LinuxAnalyzer;
 
@@ -18,6 +17,10 @@ impl PlatformAnalyzer for LinuxAnalyzer {
     }
 
     fn default_evidence_categories(&self) -> &'static [&'static str] {
-        LINUX_EVIDENCE_DEFAULTS
+        // Targeted evidence classification (`select_evidence_scan_categories`
+        // in platforms/evidence.rs) is Windows-only — Linux sources always run
+        // the full `run_analysis_extraction` umbrella, so no default category
+        // list is ever consulted for this platform.
+        &[]
     }
 }

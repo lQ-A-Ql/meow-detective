@@ -5,6 +5,7 @@ use super::common::{
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::Value;
 
 pub(in crate::analysis_service::extraction) fn is_nginx_config_path(normalized: &str) -> bool {
@@ -20,22 +21,41 @@ pub(in crate::analysis_service::extraction) fn is_apache_config_path(normalized:
         || (normalized.contains("/etc/httpd/conf.d/") && normalized.ends_with(".conf"))
 }
 
+enum WebLogKind {
+    Access,
+    Error,
+}
+
+/// Any `*.log` (including rotated `*.log.N`) under the nginx/apache2/httpd log
+/// directories is a web log — vhost names like `other_vhosts_access.log`,
+/// `ssl_access_log` or `example.com.access.log` included. Names containing
+/// "error" route to the error-log parser, everything else to access.
+fn web_log_kind(normalized: &str) -> Option<WebLogKind> {
+    const WEB_LOG_DIRS: &[&str] = &["/var/log/nginx/", "/var/log/apache2/", "/var/log/httpd/"];
+    if !WEB_LOG_DIRS.iter().any(|dir| normalized.contains(dir)) {
+        return None;
+    }
+    let name = normalized.rsplit('/').next()?;
+    let is_log = name.ends_with(".log")
+        || name.contains(".log.")
+        || name.ends_with("_log")
+        || name.contains("_log.");
+    if !is_log {
+        return None;
+    }
+    if name.contains("error") {
+        Some(WebLogKind::Error)
+    } else {
+        Some(WebLogKind::Access)
+    }
+}
+
 pub(in crate::analysis_service::extraction) fn is_web_access_log_path(normalized: &str) -> bool {
-    normalized.ends_with("/var/log/nginx/access.log")
-        || normalized.contains("/var/log/nginx/access.log.")
-        || normalized.ends_with("/var/log/apache2/access.log")
-        || normalized.contains("/var/log/apache2/access.log.")
-        || normalized.ends_with("/var/log/httpd/access_log")
-        || normalized.contains("/var/log/httpd/access_log.")
+    matches!(web_log_kind(normalized), Some(WebLogKind::Access))
 }
 
 pub(in crate::analysis_service::extraction) fn is_web_error_log_path(normalized: &str) -> bool {
-    normalized.ends_with("/var/log/nginx/error.log")
-        || normalized.contains("/var/log/nginx/error.log.")
-        || normalized.ends_with("/var/log/apache2/error.log")
-        || normalized.contains("/var/log/apache2/error.log.")
-        || normalized.ends_with("/var/log/httpd/error_log")
-        || normalized.contains("/var/log/httpd/error_log.")
+    matches!(web_log_kind(normalized), Some(WebLogKind::Error))
 }
 
 pub(in crate::analysis_service::extraction) fn is_web_root_script_path(normalized: &str) -> bool {
@@ -252,16 +272,71 @@ fn emit_error_log_entry(
         "lineNumber".to_string(),
         Value::Number(entry.line_number.into()),
     );
-    insert_opt(&mut attrs, "timestamp", entry.timestamp.clone());
-    insert_opt(&mut attrs, "severity", entry.severity.clone());
+    // artifacts-linux keeps the error-log timestamp as a raw string; parse it
+    // here so entries join the timeline. Unparseable values stay in attrs as
+    // the original text.
+    let timestamp = entry
+        .timestamp
+        .as_deref()
+        .and_then(parse_web_error_timestamp);
+    match timestamp {
+        Some(timestamp) => {
+            attrs.insert(
+                "timestamp".to_string(),
+                Value::String(timestamp.to_rfc3339()),
+            );
+        }
+        None => insert_opt(&mut attrs, "timestamp", entry.timestamp.clone()),
+    }
+    // artifacts-linux reads severity from the first bracket, which on Apache
+    // error lines is the timestamp — severity would always be None. Recover
+    // `module:level` from the second bracket here instead.
+    let severity = entry
+        .severity
+        .clone()
+        .or_else(|| second_bracketed_severity(&entry.message));
+    insert_opt(&mut attrs, "severity", severity);
     outcome.artifacts.push(make_artifact(
         "LinuxWebErrorLog",
         format!("Web error: {}", truncate(&entry.message, 80)),
-        entry.message,
+        entry.message.clone(),
         candidate,
         "linux.web_error_log",
-        attrs,
+        attrs.clone(),
     ));
+    if let Some(timestamp) = timestamp {
+        outcome.timeline_events.push(make_timeline_event(
+            &candidate.file_id,
+            "linux.web_error_log",
+            timestamp,
+            format!("Web error: {}", truncate(&entry.message, 80)),
+            entry.message,
+            attrs,
+            "linux.web_error_log",
+        ));
+    }
+}
+
+/// Apache `[Mon Jan 15 10:30:00.123456 2024]` (brackets already stripped) and
+/// nginx `2024/01/15 10:30:00` error-log timestamps.
+fn parse_web_error_timestamp(raw: &str) -> Option<DateTime<Utc>> {
+    if let Ok(naive) = NaiveDateTime::parse_from_str(raw, "%a %b %d %H:%M:%S%.f %Y") {
+        return Some(Utc.from_utc_datetime(&naive));
+    }
+    if let Ok(naive) = NaiveDateTime::parse_from_str(raw, "%Y/%m/%d %H:%M:%S") {
+        return Some(Utc.from_utc_datetime(&naive));
+    }
+    None
+}
+
+/// The `[module:level]` bracket following the Apache error-log timestamp.
+fn second_bracketed_severity(message: &str) -> Option<String> {
+    let first_end = message.find(']')?;
+    let rest = message.get(first_end + 1..)?.trim_start();
+    let inner = rest.strip_prefix('[')?;
+    let end = inner.find(']')?;
+    let value = inner[..end].trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn emit_finding(

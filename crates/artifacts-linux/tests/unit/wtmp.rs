@@ -88,3 +88,56 @@ fn parse_wtmp_32bit_layout() {
 fn reject_empty_data() {
     assert!(parse_wtmp(&[]).is_err());
 }
+
+#[test]
+fn parse_wtmp_32bit_timestamp_with_usec() {
+    // 32-bit layout stores tv_sec/tv_usec as separate 4-byte fields; a
+    // non-zero usec must not bleed into tv_sec's high bytes.
+    let mut buf = vec![0u8; WTMP_SIZE_32];
+    buf[0..4].copy_from_slice(&USER_PROCESS.to_le_bytes());
+    buf[4..8].copy_from_slice(&4242i32.to_le_bytes());
+    buf[8..13].copy_from_slice(b"pts/3");
+    buf[44..49].copy_from_slice(b"carol");
+    let login_ts = 1_700_000_000i32;
+    buf[340..344].copy_from_slice(&login_ts.to_le_bytes());
+    buf[344..348].copy_from_slice(&500_000i32.to_le_bytes());
+    let records = parse_wtmp(&buf).expect("should parse 32-bit wtmp");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "carol");
+    assert_eq!(
+        records[0].login_time.expect("login timestamp").timestamp(),
+        1_700_000_000
+    );
+}
+
+#[test]
+fn reject_non_wtmp_content() {
+    // 1000 bytes of ASCII text is >= one 400-byte record but must not be
+    // accepted as wtmp just because of its length.
+    let data = b"the quick brown fox jumps over the lazy dog\n".repeat(25);
+    assert!(parse_wtmp(&data).is_err());
+}
+
+#[test]
+fn tolerate_truncated_trailing_record() {
+    let mut data = build_wtmp_record_64(USER_PROCESS, 777, "dave", "pts/4", "", 1_700_000_000, 0);
+    data.extend_from_slice(&[0xAAu8; 150]); // partial trailing record
+    let records = parse_wtmp(&data).expect("should parse with truncated tail");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "dave");
+    assert_eq!(
+        records[0].login_time.expect("login timestamp").timestamp(),
+        1_700_000_000
+    );
+}
+
+#[test]
+fn runlevel_record_unpacks_packed_pid() {
+    // RUN_LVL packs the current runlevel char in the low byte of ut_pid and
+    // the previous runlevel in the second byte (e.g. 0x5335 = '5'/'S').
+    let packed = ((b'S' as i32) << 8) | b'5' as i32;
+    let data = build_wtmp_record_64(RUN_LVL, packed, "runlevel", "~", "", 1_700_000_000, 0);
+    let records = parse_wtmp(&data).expect("should parse runlevel record");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "runlevel-5");
+}

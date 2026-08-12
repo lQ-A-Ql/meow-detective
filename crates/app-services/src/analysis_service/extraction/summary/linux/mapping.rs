@@ -1,6 +1,7 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::{
-    count_artifacts_by_type, query_artifact_rows, AnalysisArtifactRow,
+    count_artifacts_by_type, count_artifacts_by_type_and_extractor,
+    count_artifacts_by_type_excluding_extractor, query_artifact_rows, AnalysisArtifactRow,
 };
 use crate::analysis_service::extraction::attr_mapping::{
     bool_attr, i32_attr, optional_string_attr, optional_u32_attr, string_attr, u64_attr,
@@ -17,6 +18,10 @@ use transport::dto::{
 
 pub(super) struct LinuxCounts {
     pub(super) journal: u64,
+    /// Text-log fallback records (syslog/messages/auth/audit/pve) share the
+    /// `LinuxJournal` artifact type but are counted separately so
+    /// `journal_count` reflects only real systemd journal entries.
+    pub(super) text_log: u64,
     pub(super) login: u64,
     pub(super) bash_command: u64,
     pub(super) apt_event: u64,
@@ -35,7 +40,12 @@ pub(super) struct LinuxCounts {
 impl LinuxCounts {
     pub(super) fn load(conn: &Connection) -> Result<Self, AnalysisServiceError> {
         Ok(Self {
-            journal: count_artifacts_by_type(conn, "LinuxJournal")?,
+            journal: count_artifacts_by_type_and_extractor(conn, "LinuxJournal", "linux.journal")?,
+            text_log: count_artifacts_by_type_excluding_extractor(
+                conn,
+                "LinuxJournal",
+                "linux.journal",
+            )?,
             login: count_artifacts_by_type(conn, "LinuxWtmp")?,
             bash_command: count_artifacts_by_type(conn, "LinuxBashCommand")?,
             apt_event: count_artifacts_by_type(conn, "LinuxAptEvent")?,
@@ -54,6 +64,7 @@ impl LinuxCounts {
 
     pub(super) fn total(&self) -> u64 {
         self.journal
+            + self.text_log
             + self.login
             + self.bash_command
             + self.apt_event

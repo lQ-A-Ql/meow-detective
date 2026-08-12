@@ -8,6 +8,8 @@ pub(in crate::analysis_service::extraction) fn is_wtmp_path(normalized: &str) ->
         || normalized.contains("/var/log/wtmp.")
         || normalized.ends_with("/var/log/btmp")
         || normalized.contains("/var/log/btmp.")
+        || normalized.ends_with("/var/log/utmp")
+        || normalized.ends_with("/run/utmp")
 }
 
 pub(in crate::analysis_service::extraction) fn is_login_binary_candidate_path(

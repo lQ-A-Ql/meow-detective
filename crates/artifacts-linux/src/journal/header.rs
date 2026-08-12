@@ -1,107 +1,116 @@
-use std::io::{Cursor, Read};
+//! Journal file header parsing.
+//!
+//! Layout per `journal-def.h` (all integers little-endian):
+//!
+//! ```text
+//! offset  field
+//! 0       signature[8] = "LPKSHHRH"
+//! 8       compatible_flags (le32)
+//! 12      incompatible_flags (le32)
+//! 16      state (u8: 0=OFFLINE, 1=ONLINE, 2=ARCHIVED)
+//! 24      file_id (sd_id128, 16 bytes; SipHash key for KEYED_HASH files)
+//! 88      header_size (le64)
+//! 96      arena_size (le64)
+//! 152     n_entries (le64)
+//! 176     entry_array_offset (le64)
+//! ```
+//!
+//! All fields up to and including `tail_entry_monotonic` (offset 208) exist
+//! in every format revision, so 208 is the minimum acceptable header size.
 
 use crate::LinuxArtifactError;
 
-pub(super) const JOURNAL_HEADER_SIGNATURE: &[u8; 8] = b"LPKSHHRH";
-pub(super) const HEADER_INCOMPATIBLE_COMPRESSED: u32 = 0x04;
+const SIGNATURE: &[u8; 8] = b"LPKSHHRH";
+const MIN_HEADER_SIZE: u64 = 208;
+
+pub(super) const INCOMPATIBLE_KEYED_HASH: u32 = 1 << 2;
+pub(super) const INCOMPATIBLE_COMPACT: u32 = 1 << 4;
+const SUPPORTED_INCOMPATIBLE: u32 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 
 #[derive(Debug, Clone)]
 pub(super) struct Header {
-    incompatible_flags: u32,
-    arena_size: u64,
+    pub incompatible_flags: u32,
+    pub file_id: [u8; 16],
+    pub header_size: u64,
+    pub arena_size: u64,
+    pub entry_array_offset: u64,
 }
 
 impl Header {
-    pub(super) fn read(reader: &mut Cursor<&[u8]>) -> Result<Self, LinuxArtifactError> {
-        let position = |cursor: &mut Cursor<&[u8]>| cursor.position();
+    pub(super) fn parse(data: &[u8]) -> Result<Self, LinuxArtifactError> {
+        if (data.len() as u64) < MIN_HEADER_SIZE {
+            return Err(parse_error("data too short to be a systemd journal file"));
+        }
+        if data[0..8] != *SIGNATURE {
+            return Err(parse_error(
+                "not a systemd journal file (invalid signature)",
+            ));
+        }
 
-        let mut signature = [0u8; 8];
-        reader.read_exact(&mut signature)?;
-        if &signature != JOURNAL_HEADER_SIGNATURE {
-            return Err(LinuxArtifactError::ParseError {
+        let incompatible_flags = read_u32_at(data, 12);
+        let unknown = incompatible_flags & !SUPPORTED_INCOMPATIBLE;
+        if unknown != 0 {
+            return Err(LinuxArtifactError::Unsupported {
                 parser: "journal",
-                message: "Not a systemd journal file (invalid signature)".to_string(),
+                message: format!("unknown incompatible_flags bits 0x{unknown:08x}"),
             });
         }
 
-        let _compatible_flags = read_le_u32(reader)?;
-        let incompatible_flags = read_le_u32(reader)?;
-        let _state = read_u8(reader)?;
-        let mut reserved = [0u8; 7];
-        reader.read_exact(&mut reserved)?;
-
-        let mut file_id = [0u8; 16];
-        reader.read_exact(&mut file_id)?;
-        let mut machine_id = [0u8; 16];
-        reader.read_exact(&mut machine_id)?;
-        let mut boot_id = [0u8; 16];
-        reader.read_exact(&mut boot_id)?;
-        let mut seqnum_id = [0u8; 16];
-        reader.read_exact(&mut seqnum_id)?;
-
-        let header_size = read_le_u64(reader)?;
-        let arena_size = read_le_u64(reader)?;
-        let _data_hash_table_offset = read_le_u64(reader)?;
-        let _data_hash_table_size = read_le_u64(reader)?;
-        let _field_hash_table_offset = read_le_u64(reader)?;
-        let _field_hash_table_size = read_le_u64(reader)?;
-        let _tail_object_offset = read_le_u64(reader)?;
-        let _n_objects = read_le_u64(reader)?;
-        let _n_entries = read_le_u64(reader)?;
-        let _tail_entry_seqnum = read_le_u64(reader)?;
-        let _head_entry_seqnum = read_le_u64(reader)?;
-        let _entry_array_offset = read_le_u64(reader)?;
-        let _head_entry_realtime = read_le_u64(reader)?;
-        let _tail_entry_realtime = read_le_u64(reader)?;
-        let _tail_entry_monotonic = read_le_u64(reader)?;
-
-        if header_size > position(reader) {
-            let remaining = (header_size - position(reader)) as usize;
-            if reader.position() as usize + remaining > reader.get_ref().len() {
-                return Err(LinuxArtifactError::ParseError {
-                    parser: "journal",
-                    message: "Header size exceeds file length".to_string(),
-                });
-            }
-            reader.set_position(header_size);
+        let header_size = read_u64_at(data, 88);
+        if header_size < MIN_HEADER_SIZE || header_size > data.len() as u64 {
+            return Err(parse_error("header_size outside the file bounds"));
+        }
+        if !header_size.is_multiple_of(8) {
+            return Err(parse_error("header_size is not 8-byte aligned"));
         }
 
-        let _n_data = read_le_u64(reader)?;
-        let _n_fields = read_le_u64(reader)?;
-        let _n_tags = read_le_u64(reader)?;
-        let _n_entry_arrays = read_le_u64(reader)?;
-        let _data_hash_chain_depth = read_le_u64(reader)?;
-        let _field_hash_chain_depth = read_le_u64(reader)?;
+        let mut file_id = [0u8; 16];
+        file_id.copy_from_slice(&data[24..40]);
 
         Ok(Self {
             incompatible_flags,
-            arena_size,
+            file_id,
+            header_size,
+            arena_size: read_u64_at(data, 96),
+            entry_array_offset: read_u64_at(data, 176),
         })
     }
 
-    pub(super) fn incompatible_flags(&self) -> u32 {
-        self.incompatible_flags
+    pub(super) fn compact(&self) -> bool {
+        self.incompatible_flags & INCOMPATIBLE_COMPACT != 0
     }
 
-    pub(super) fn arena_size(&self) -> u64 {
-        self.arena_size
+    pub(super) fn keyed_hash(&self) -> bool {
+        self.incompatible_flags & INCOMPATIBLE_KEYED_HASH != 0
+    }
+
+    /// End offset (exclusive) of the object arena. Files still open for
+    /// writing (`STATE_ONLINE`) may have been imaged mid-append, so an arena
+    /// that extends past the buffer is reported as truncated, not an error.
+    pub(super) fn arena_end(&self, data_len: u64) -> (u64, bool) {
+        let nominal = self
+            .header_size
+            .saturating_add(self.arena_size)
+            .max(self.header_size);
+        if nominal > data_len {
+            (data_len, true)
+        } else {
+            (nominal, false)
+        }
     }
 }
 
-pub(super) fn read_u8(reader: &mut Cursor<&[u8]>) -> Result<u8, LinuxArtifactError> {
-    let mut buf = [0u8; 1];
-    reader.read_exact(&mut buf)?;
-    Ok(buf[0])
+fn parse_error(message: &str) -> LinuxArtifactError {
+    LinuxArtifactError::ParseError {
+        parser: "journal",
+        message: message.to_string(),
+    }
 }
 
-pub(super) fn read_le_u32(reader: &mut Cursor<&[u8]>) -> Result<u32, LinuxArtifactError> {
-    let mut buf = [0u8; 4];
-    reader.read_exact(&mut buf)?;
-    Ok(u32::from_le_bytes(buf))
+fn read_u32_at(data: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap_or([0; 4]))
 }
 
-pub(super) fn read_le_u64(reader: &mut Cursor<&[u8]>) -> Result<u64, LinuxArtifactError> {
-    let mut buf = [0u8; 8];
-    reader.read_exact(&mut buf)?;
-    Ok(u64::from_le_bytes(buf))
+fn read_u64_at(data: &[u8], offset: usize) -> u64 {
+    u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap_or([0; 8]))
 }

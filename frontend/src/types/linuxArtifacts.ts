@@ -189,6 +189,7 @@ export interface LinuxMysqlFinding {
 export interface LinuxArtifactSummary {
   status: AnalysisParseStatus;
   journalCount: number;
+  textLogCount: number;
   loginCount: number;
   bashCommandCount: number;
   aptEventCount: number;

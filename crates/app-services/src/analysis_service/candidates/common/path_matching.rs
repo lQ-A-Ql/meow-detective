@@ -3,6 +3,7 @@ pub(crate) enum EvidencePathPattern {
     Suffix(&'static str),
     Contains(&'static str),
     ContainsAndSuffix(&'static str, &'static str),
+    ContainsBoth(&'static str, &'static str),
 }
 
 pub(crate) fn normalize_evidence_path(path: &str) -> String {
@@ -115,6 +116,9 @@ pub(super) fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]
         EvidencePathPattern::Contains(needle) => path.contains(needle),
         EvidencePathPattern::ContainsAndSuffix(needle, suffix) => {
             path.contains(needle) && path.ends_with(suffix)
+        }
+        EvidencePathPattern::ContainsBoth(first, second) => {
+            path.contains(first) && path.contains(second)
         }
     })
 }

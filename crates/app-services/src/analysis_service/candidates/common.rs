@@ -78,6 +78,9 @@ pub struct EvidenceCandidate {
     pub evidence_kind: String,
     pub parser: String,
     pub category: String,
+    /// File-entry mtime; anchors year-less log timestamps (classic syslog,
+    /// sudo/auth lines) to the evidence timeframe.
+    pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
@@ -205,6 +208,7 @@ fn discover_evidence_candidates_with_definitions(
                 row.get::<_, Option<String>>(9)?,
             ],
         );
+        let modified_at = parse_timestamp(row.get::<_, Option<String>>(6)?);
         add_matching_candidates(
             &mut candidates,
             definitions,
@@ -216,6 +220,7 @@ fn discover_evidence_candidates_with_definitions(
                 size,
                 encrypted,
                 content_identity: &content_identity,
+                modified_at,
             },
             cancel_token,
         )?;
@@ -264,6 +269,7 @@ struct CandidateRow<'a> {
     size: u64,
     encrypted: bool,
     content_identity: &'a str,
+    modified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 fn add_matching_candidates(
@@ -298,6 +304,7 @@ fn add_matching_candidates(
                 evidence_kind,
                 parser,
                 category: definition.category.to_string(),
+                modified_at: row.modified_at,
             });
     }
     Ok(())

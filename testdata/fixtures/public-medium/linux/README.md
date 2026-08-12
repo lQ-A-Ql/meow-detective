@@ -1,6 +1,6 @@
 # Public-Medium Linux Artifact Fixtures
 
-`testdata/fixtures/public-medium/linux/` contains medium-sized Linux forensic artifacts sourced from controlled VM snapshots. These fixtures are checked into the repository for CI-compatible regression testing of Linux artifact parsers.
+`testdata/fixtures/public-medium/linux/` is the planned home for medium-sized Linux forensic artifacts sourced from controlled VM snapshots. **No fixture files are committed yet** — this document is the acquisition and acceptance plan; the parser regression coverage it describes is currently carried by unit/integration tests only.
 
 ## Purpose
 
@@ -336,5 +336,5 @@ Per the public-medium tier policy (`testdata/fixtures/public-medium/README.md`),
 
 - `testdata/fixtures/public-medium/README.md` — tier policy and naming conventions
 - `docs/parser-support-matrix.md` — per-parser support level and fixture status
-- `docs/linux-artifact-coverage.md` — Linux parser design and field-level commitments
+- `docs/parser-support-matrix.md` — per-parser support level, field-level commitments, and fixture status
 - `docs/v3-plan.md` — V3 roadmap for Linux artifact support

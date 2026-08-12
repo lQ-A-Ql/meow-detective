@@ -9,15 +9,23 @@
 //! ```text
 //! Start-Date: 2024-01-15  10:30:00
 //! Commandline: apt-get install curl
+//! Requested-By: alice (1000)
 //! Install: libcurl4:amd64 (7.88.1-10+deb12u5), ...
 //! End-Date: 2024-01-15  10:30:15
 //! ```
 //!
-//! dpkg.log format:
+//! dpkg.log format (note the old-version / new-version column pair):
 //! ```text
-//! 2024-01-15 10:30:00 install curl:amd64 7.88.1-10+deb12u5
-//! 2024-01-15 10:30:05 configure curl:amd64 7.88.1-10+deb12u5 <none>
+//! 2024-01-15 10:30:00 install curl:amd64 <none> 7.88.1-10+deb12u5
+//! 2024-01-15 10:30:01 configure curl:amd64 7.88.1-10+deb12u5 <none>
 //! ```
+//!
+//! Conventions and known limitations:
+//! - Package names keep their full `pkg:arch` form on every code path, so
+//!   cross-log correlation can match on the exact original token.
+//! - APT history and dpkg log timestamps are written in the system's local
+//!   time zone, but the zone is not recorded in the log. They are parsed as
+//!   if they were UTC; treat the resulting timestamps as approximate.
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -27,21 +35,44 @@ use serde::{Deserialize, Serialize};
 pub struct AptEvent {
     /// Action performed (install, upgrade, remove, purge, configure, etc.)
     pub action: String,
-    /// Package name (may include architecture suffix like ":amd64")
+    /// Package name in its full `pkg:arch` form (e.g. "curl:amd64")
     pub package: String,
-    /// Package version
-    pub version: String,
-    /// Event timestamp
+    /// Package version relevant to the action: the new version for
+    /// install/upgrade, the removed/configured version otherwise. `None`
+    /// when the log records `<none>` or no version at all.
+    pub version: Option<String>,
+    /// Event timestamp (see the module docs for the local-time caveat)
     pub timestamp: Option<DateTime<Utc>>,
+    /// User who requested the APT transaction (`Requested-By:` line)
+    pub requested_by: Option<String>,
+    /// Full command line of the APT transaction (`Commandline:` line)
+    pub command_line: Option<String>,
 }
+
+/// dpkg.log actions that produce events. `status` progress lines carry no
+/// forensic value (their first token is a dpkg state such as
+/// `half-installed`, not a package action) and are skipped.
+const DPKG_ACTIONS: &[&str] = &[
+    "startup",
+    "install",
+    "upgrade",
+    "configure",
+    "trigproc",
+    "remove",
+    "purge",
+];
 
 /// Parse `/var/log/apt/history.log` content.
 ///
 /// Extracts Start-Date/End-Date transaction entries and returns individual
-/// package events for each Install/Upgrade/Remove/Purge line.
+/// package events for each Install/Upgrade/Remove/Purge line. The
+/// transaction's `Commandline:` and `Requested-By:` lines are attached to
+/// every event of that transaction.
 pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
     let mut current_timestamp: Option<DateTime<Utc>> = None;
+    let mut current_command_line: Option<String> = None;
+    let mut current_requested_by: Option<String> = None;
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -49,9 +80,19 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArt
             continue;
         }
 
-        // Parse Start-Date
+        // Parse Start-Date; each transaction resets the per-block metadata.
         if let Some(date_str) = trimmed.strip_prefix("Start-Date: ") {
             current_timestamp = parse_apt_date(date_str);
+            current_command_line = None;
+            current_requested_by = None;
+            continue;
+        }
+        if let Some(command_line) = trimmed.strip_prefix("Commandline: ") {
+            current_command_line = Some(command_line.trim().to_string());
+            continue;
+        }
+        if let Some(requested_by) = trimmed.strip_prefix("Requested-By: ") {
+            current_requested_by = Some(requested_by.trim().to_string());
             continue;
         }
 
@@ -83,6 +124,8 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArt
                 package,
                 version,
                 timestamp: current_timestamp,
+                requested_by: current_requested_by.clone(),
+                command_line: current_command_line.clone(),
             });
         }
     }
@@ -92,10 +135,12 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArt
 
 /// Parse `/var/log/dpkg.log` content.
 ///
-/// Each line has the format:
+/// Each action line has the format:
 /// ```text
-/// YYYY-MM-DD HH:MM:SS action package version [prev_version]
+/// YYYY-MM-DD HH:MM:SS action package:arch <old-version> <new-version>
 /// ```
+/// Only action lines listed in [`DPKG_ACTIONS`] produce events; `status`
+/// progress lines are skipped.
 pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
 
@@ -111,34 +156,52 @@ pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifa
             continue;
         }
 
-        // Parse timestamp: YYYY-MM-DD HH:MM:SS
+        let action = parts[2];
+        if !DPKG_ACTIONS.contains(&action) {
+            continue;
+        }
+
+        // Parse timestamp: YYYY-MM-DD HH:MM:SS (local time, read as UTC —
+        // see the module-level caveat).
         let date_str = format!("{} {}", parts[0], parts[1]);
         let timestamp = NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S")
             .ok()
             .map(|ndt| Utc.from_utc_datetime(&ndt));
 
-        let action = parts[2].to_string();
-        let package = parts[3].split(':').next().unwrap_or("unknown").to_string();
-
-        let version = if parts.len() >= 5 {
-            parts[4]
-                .split_whitespace()
-                .next()
-                .unwrap_or("unknown")
-                .to_string()
-        } else {
-            "unknown".to_string()
-        };
+        let package = parts[3].to_string();
+        let version = select_dpkg_version(action, parts.get(4).copied().unwrap_or(""));
 
         events.push(AptEvent {
-            action,
+            action: action.to_string(),
             package,
             version,
             timestamp,
+            requested_by: None,
+            command_line: None,
         });
     }
 
     Ok(events)
+}
+
+/// Pick the forensically relevant version from a dpkg version column pair.
+///
+/// `install`/`upgrade` lines record `<old-version> <new-version>` and the
+/// new version is the one being introduced; other actions (configure,
+/// remove, purge, ...) refer to the first (current) version. A `<none>`
+/// placeholder or a missing column yields `None`.
+fn select_dpkg_version(action: &str, version_columns: &str) -> Option<String> {
+    let mut columns = version_columns.split_whitespace();
+    let picked = if action == "install" || action == "upgrade" {
+        columns.next_back()
+    } else {
+        columns.next()
+    }?;
+    if picked == "<none>" {
+        None
+    } else {
+        Some(picked.to_string())
+    }
 }
 
 /// Parse RHEL/CentOS/Fedora yum/dnf package logs.
@@ -163,6 +226,8 @@ pub fn parse_rpm_package_log(content: &str) -> Result<Vec<AptEvent>, crate::Linu
             package,
             version,
             timestamp: parse_rpm_timestamp(trimmed),
+            requested_by: None,
+            command_line: None,
         });
     }
 
@@ -214,20 +279,20 @@ fn parse_rpm_timestamp(line: &str) -> Option<DateTime<Utc>> {
         .ok()
 }
 
-fn parse_rpm_nevra(token: &str) -> (String, String) {
+fn parse_rpm_nevra(token: &str) -> (String, Option<String>) {
     let cleaned = token.trim().trim_matches(',');
     let parts = cleaned.split('-').collect::<Vec<_>>();
     if parts.len() >= 3 {
         let package = parts[..parts.len() - 2].join("-");
         let version = parts[parts.len() - 2..].join("-");
         if !package.is_empty() {
-            return (package, version);
+            return (package, Some(version));
         }
     }
-    (cleaned.to_string(), "unknown".to_string())
+    (cleaned.to_string(), None)
 }
 
-fn parse_package_entry(entry: &str) -> (String, String) {
+fn parse_package_entry(entry: &str) -> (String, Option<String>) {
     // Format: "libcurl4:amd64 (7.88.1-10+deb12u5), automatic"
     // or just: "libcurl4:amd64 (7.88.1-10+deb12u5)"
     let entry = entry.trim();
@@ -236,10 +301,10 @@ fn parse_package_entry(entry: &str) -> (String, String) {
         let rest = &entry[paren_open + 1..];
         if let Some(paren_close) = rest.find(')') {
             let version = rest[..paren_close].trim().to_string();
-            return (package, version);
+            return (package, Some(version));
         }
     }
-    (entry.to_string(), "unknown".to_string())
+    (entry.to_string(), None)
 }
 
 #[cfg(test)]

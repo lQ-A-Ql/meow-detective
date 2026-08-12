@@ -85,7 +85,25 @@ fn push_event(
     let mut attrs = base_attrs(candidate);
     attrs.insert("action".to_string(), Value::String(event.action.clone()));
     attrs.insert("package".to_string(), Value::String(event.package.clone()));
-    attrs.insert("version".to_string(), Value::String(event.version.clone()));
+    let version = event
+        .version
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    if let Some(raw_version) = &event.version {
+        attrs.insert("version".to_string(), Value::String(raw_version.clone()));
+    }
+    if let Some(requested_by) = &event.requested_by {
+        attrs.insert(
+            "requestedBy".to_string(),
+            Value::String(requested_by.clone()),
+        );
+    }
+    if let Some(command_line) = &event.command_line {
+        attrs.insert(
+            "commandLine".to_string(),
+            Value::String(command_line.clone()),
+        );
+    }
     if let Some(timestamp) = event.timestamp {
         attrs.insert(
             "timestamp".to_string(),
@@ -100,7 +118,7 @@ fn push_event(
             "{} {} {} ({})",
             event.action,
             event.package,
-            event.version,
+            version,
             event
                 .timestamp
                 .map(|timestamp| timestamp.to_rfc3339())
@@ -116,10 +134,7 @@ fn push_event(
             &candidate.file_id,
             "linux.apt",
             timestamp,
-            format!(
-                "Package {} {} {}",
-                event.action, event.package, event.version
-            ),
+            format!("Package {} {} {}", event.action, event.package, version),
             format!("Logged by {} parser", candidate.path),
             attrs,
             "linux.apt",

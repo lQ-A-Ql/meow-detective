@@ -5,6 +5,11 @@ pub enum LinuxArtifactError {
         parser: &'static str,
         message: String,
     },
+    #[error("unsupported {parser} feature: {message}")]
+    Unsupported {
+        parser: &'static str,
+        message: String,
+    },
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }

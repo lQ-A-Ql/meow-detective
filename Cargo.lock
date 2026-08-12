@@ -211,10 +211,12 @@ name = "artifacts-linux"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "lz4_flex",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "zstd",
 ]
 
 [[package]]

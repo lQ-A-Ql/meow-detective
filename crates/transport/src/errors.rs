@@ -43,6 +43,7 @@ pub enum ErrorCategory {
     Security,
     External,
     Timeout,
+    Cancelled,
     Internal,
 }
 
@@ -56,6 +57,7 @@ impl ErrorCategory {
             Self::Security => "security",
             Self::External => "external",
             Self::Timeout => "timeout",
+            Self::Cancelled => "cancelled",
             Self::Internal => "internal",
         }
     }
@@ -205,6 +207,10 @@ impl CommandError {
         Self::new("TIMEOUT", message, ErrorCategory::Timeout, true)
     }
 
+    pub fn cancelled(message: impl Into<String>) -> Self {
+        Self::new("CANCELLED", message, ErrorCategory::Cancelled, true)
+    }
+
     /// Convert a typed service-layer error into a `CommandError` using its
     /// `ServiceErrorCategory::category()` instead of substring-matching the
     /// rendered message. Prefer this over [`Self::from_service_error`] for any
@@ -223,6 +229,7 @@ impl CommandError {
             } else {
                 match category {
                     ErrorCategory::Timeout => Self::timeout("The operation timed out"),
+                    ErrorCategory::Cancelled => Self::cancelled("The operation was cancelled"),
                     ErrorCategory::Unsupported => {
                         Self::unsupported("The requested operation is not supported")
                     }

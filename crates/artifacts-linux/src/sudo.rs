@@ -11,9 +11,12 @@
 //! Jan 15 10:32:00 hostname sudo: pam_unix(sudo:session): session closed for user root
 //! ```
 //!
-//! This parser focuses on the COMMAND= lines which record the actual sudo executions.
+//! This parser extracts COMMAND= execution lines and authentication failures.
+//! `pam_unix(sudo:session)` session open/close lines are recognized but
+//! deliberately not emitted as events: they duplicate the COMMAND= record and
+//! add no investigative value beyond it.
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A sudo command execution event extracted from auth logs.
@@ -37,9 +40,29 @@ pub struct SudoEvent {
 
 /// Parse `/var/log/auth.log` (or `/var/log/secure`) for sudo events.
 ///
-/// Looks for lines containing `sudo:` and extracts COMMAND= entries
-/// as well as session open/close lines.
-pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
+/// `reference` anchors year-less syslog timestamps (typically the log file's
+/// mtime from the evidence file entry). When `None`, the current time is
+/// used. A parsed timestamp that would land after the reference is moved
+/// back one year, because syslog timestamps carry no year.
+///
+/// Only lines whose syslog tag is exactly `sudo` (`sudo:` or `sudo[pid]:`)
+/// are considered; this avoids false positives from other daemons whose
+/// message text merely mentions "sudo".
+pub fn parse_auth_log_sudo(
+    content: &str,
+    reference: Option<DateTime<Utc>>,
+) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
+    parse_auth_log_sudo_with_reference(content, reference.unwrap_or_else(Utc::now))
+}
+
+/// Parse an auth log for sudo events with an explicit reference time.
+///
+/// Equivalent to [`parse_auth_log_sudo`] with `Some(reference)`; convenient
+/// for tests and forensic flows that always have an anchor time.
+pub fn parse_auth_log_sudo_with_reference(
+    content: &str,
+    reference: DateTime<Utc>,
+) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<SudoEvent> = Vec::new();
 
     for line in content.lines() {
@@ -48,46 +71,27 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
             continue;
         }
 
-        // Only process lines containing sudo
-        if !trimmed.contains("sudo") && !trimmed.contains("sudo:") {
+        let Some(message) = split_sudo_message(trimmed) else {
             continue;
-        }
+        };
+        let timestamp = parse_log_timestamp(trimmed, reference);
 
-        let timestamp = parse_syslog_timestamp(trimmed);
-
-        if trimmed.contains("session opened for user")
-            || trimmed.contains("session closed for user")
+        // Session open/close lines are recognized but intentionally dropped.
+        if message.contains("session opened for user")
+            || message.contains("session closed for user")
         {
             continue;
         }
 
         // ---- COMMAND= line ----
-        if let Some(command_part) = trimmed.split("COMMAND=").nth(1) {
+        if let Some(command_part) = message.split("COMMAND=").nth(1) {
             let command = command_part.trim().to_string();
 
             // Extract fields: TTY=..., PWD=..., USER=...
-            let tty = extract_sudo_field(trimmed, "TTY=");
-            let pwd = extract_sudo_field(trimmed, "PWD=");
-            let target_user_field = extract_sudo_field(trimmed, "USER=");
-
-            // Extract the invoking user (before the colon in "username :")
-            let user = if let Some(user_part) = trimmed.split("sudo:").nth(1) {
-                let user_part = user_part.trim();
-                if let Some(colon_pos) = user_part.find(" :") {
-                    user_part[..colon_pos].trim().to_string()
-                } else if user_part.contains("pam_unix") {
-                    // Not a COMMAND line handled here
-                    String::new()
-                } else {
-                    user_part
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or("unknown")
-                        .to_string()
-                }
-            } else {
-                "unknown".to_string()
-            };
+            let tty = extract_sudo_field(message, "TTY=");
+            let pwd = extract_sudo_field(message, "PWD=");
+            let target_user_field = extract_sudo_field(message, "USER=");
+            let user = extract_invoking_user(message);
 
             if !command.is_empty() {
                 events.push(SudoEvent {
@@ -105,15 +109,15 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
                     // authorization and records an executed command. Some
                     // auth-failure formats also include COMMAND=; keep those
                     // explicitly failed.
-                    success: !is_sudo_auth_failure(trimmed),
+                    success: !is_sudo_auth_failure(message),
                 });
             }
             continue;
         }
 
         // ---- unsuccessful sudo attempt ----
-        if is_sudo_auth_failure(trimmed) {
-            let user = extract_sudo_user(trimmed);
+        if is_sudo_auth_failure(message) {
+            let user = extract_sudo_user(message);
             if !user.is_empty() {
                 events.push(SudoEvent {
                     user,
@@ -137,31 +141,77 @@ fn is_sudo_auth_failure(line: &str) -> bool {
         || line.contains("3 incorrect password attempts")
 }
 
-/// Parse a syslog-style timestamp at the start of a line.
-/// Handles formats like:
-/// - "Jan 15 10:30:00" (standard syslog, no year — we assume current-ish year)
-/// - "2024-01-15T10:30:00.000000+00:00" (ISO 8601 from systemd journal)
-/// - "Jan 15 10:30:00 hostname"
-fn parse_syslog_timestamp(line: &str) -> Option<DateTime<Utc>> {
-    // Try ISO 8601 first (systemd journal export format)
-    if line.len() >= 19 && line.as_bytes().get(4) == Some(&b'-') {
-        if let Ok(dt) = DateTime::parse_from_rfc3339(&line[..line.len().min(35)]) {
+/// Split a syslog line into (sudo tag match, message after the tag).
+///
+/// The tag must appear within the first five whitespace-separated fields
+/// (timestamp tokens + hostname) and be exactly `sudo:` or `sudo[<pid>]:`.
+/// Returns the message portion when the line is a genuine sudo log line.
+fn split_sudo_message(line: &str) -> Option<&str> {
+    let mut search_from = 0usize;
+    for (index, field) in line.split_whitespace().enumerate() {
+        // Tag position: ISO ts (1 token) or syslog ts (3 tokens) + hostname.
+        if index > 4 {
+            return None;
+        }
+        let pos = line[search_from..].find(field)? + search_from;
+        search_from = pos + field.len();
+        if field == "sudo:" || is_sudo_pid_tag(field) {
+            return Some(line[search_from..].trim_start());
+        }
+    }
+    None
+}
+
+fn is_sudo_pid_tag(field: &str) -> bool {
+    if !(field.starts_with("sudo[") && field.ends_with("]:")) {
+        return false;
+    }
+    let pid = &field["sudo[".len()..field.len() - 2];
+    !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Parse the timestamp at the start of a log line.
+///
+/// - ISO 8601 / RFC 3339 (systemd journal export): the first
+///   whitespace-separated token is parsed directly.
+/// - Standard syslog `Mon DD HH:MM:SS` (15 bytes, no year): the year is taken
+///   from `reference`; if the result is later than `reference`, it is moved
+///   back one year (a log written in January can hold December entries).
+fn parse_log_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    if let Some(first) = line.split_whitespace().next() {
+        if let Ok(dt) = DateTime::parse_from_rfc3339(first) {
             return Some(dt.with_timezone(&Utc));
         }
     }
 
-    // Try standard syslog: "Mon DD HH:MM:SS"
-    // Month abbreviations
-    if line.len() >= 15 {
-        let ts_str = &line[..15];
-        if let Ok(ndt) =
-            NaiveDateTime::parse_from_str(&format!("2024 {}:00", ts_str), "%Y %b %d %H:%M:%S")
-        {
-            return Some(Utc.from_utc_datetime(&ndt));
+    let prefix = line.get(..15)?;
+    let year = reference.year();
+    let stamped = format!("{year} {prefix}");
+    let naive = NaiveDateTime::parse_from_str(&stamped, "%Y %b %e %H:%M:%S").ok()?;
+    let dt = Utc.from_utc_datetime(&naive);
+    if dt > reference {
+        if let Some(shifted) = naive.with_year(year - 1) {
+            return Some(Utc.from_utc_datetime(&shifted));
         }
     }
+    Some(dt)
+}
 
-    None
+/// Extract the invoking user from the sudo message body.
+///
+/// COMMAND lines look like `alice : TTY=pts/0 ; ... COMMAND=/usr/bin/id`.
+fn extract_invoking_user(message: &str) -> String {
+    if let Some((head, _)) = message.split_once(" :") {
+        let user = head.trim();
+        if !user.is_empty() && !user.contains("pam_unix") {
+            return user.to_string();
+        }
+    }
+    message
+        .split_whitespace()
+        .next()
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 fn extract_sudo_field(line: &str, key: &str) -> String {

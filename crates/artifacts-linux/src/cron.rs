@@ -1,9 +1,9 @@
 //! Crontab parser.
 //!
 //! Parses crontab files in the standard vixie-cron format, including:
-//! - `/var/spool/cron/crontabs/<user>` (user crontabs)
+//! - `/var/spool/cron/crontabs/<user>` (user crontabs, no user field)
 //! - `/etc/crontab` (system crontab, which includes a user field)
-//! - `/etc/cron.d/*` (drop-in cron files)
+//! - `/etc/cron.d/*` (drop-in cron files, also with a user field)
 //!
 //! Format:
 //! ```text
@@ -16,6 +16,10 @@
 //! @daily /usr/bin/logrotate
 //! 0 */6 * * * root /usr/bin/system-update
 //! ```
+//!
+//! Known limitation: a `%` inside the command acts as a newline in real
+//! cron (later lines become stdin); this parser keeps the raw line and does
+//! not expand `%` semantics.
 
 use serde::{Deserialize, Serialize};
 
@@ -24,12 +28,26 @@ use serde::{Deserialize, Serialize};
 pub struct CronJob {
     /// The cron schedule expression (e.g. "30 2 * * *" or "@daily")
     pub schedule: String,
-    /// The user the job runs as (for system crontabs with user field)
+    /// The user the job runs as (system crontabs only; always `None` for
+    /// user crontabs)
     pub user: Option<String>,
     /// The command to execute
     pub command: String,
     /// Source file path (for identification)
     pub source_file: String,
+}
+
+/// Whether the parsed file follows system- or user-crontab syntax.
+///
+/// System crontabs (`/etc/crontab`, `/etc/cron.d/*`) carry a username field
+/// between the schedule and the command; user crontabs
+/// (`/var/spool/cron/crontabs/<user>`) do not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrontabKind {
+    /// `/etc/crontab`, `/etc/cron.d/*`: `m h dom mon dow user command`
+    System,
+    /// `/var/spool/cron/crontabs/<user>`: `m h dom mon dow command`
+    User,
 }
 
 /// Special cron schedule keywords.
@@ -40,24 +58,55 @@ const SCHEDULE_KEYWORDS: &[&str] = &[
     "@monthly",
     "@weekly",
     "@daily",
+    "@midnight",
     "@hourly",
 ];
 
 /// Parse a crontab file.
 ///
-/// Handles both user crontabs (5-field schedule) and system crontabs
-/// (6-field with username before command).
+/// Deprecated semantics: the file is assumed to follow [`CrontabKind::System`]
+/// syntax, which mis-parses user crontabs whose command starts with a bare
+/// word (e.g. `0 0 * * * echo hello`). Prefer [`parse_crontab_with_kind`]
+/// with an explicit kind. Retained for backward compatibility.
 ///
 /// Lines starting with `#` are comments and skipped. Variable assignments
 /// (containing `=`) are also skipped. Blank lines are ignored.
 pub fn parse_crontab(content: &str) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
-    parse_crontab_with_source(content, "<unknown>")
+    parse_crontab_impl(content, "<unknown>", CrontabKind::System)
 }
 
 /// Parse a crontab file with an explicit source file path.
+///
+/// Like [`parse_crontab`], this assumes [`CrontabKind::System`] syntax;
+/// prefer [`parse_crontab_with_source_and_kind`].
 pub fn parse_crontab_with_source(
     content: &str,
     source_file: &str,
+) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
+    parse_crontab_impl(content, source_file, CrontabKind::System)
+}
+
+/// Parse a crontab file with an explicit user/system kind.
+pub fn parse_crontab_with_kind(
+    content: &str,
+    kind: CrontabKind,
+) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
+    parse_crontab_impl(content, "<unknown>", kind)
+}
+
+/// Parse a crontab file with an explicit source file path and kind.
+pub fn parse_crontab_with_source_and_kind(
+    content: &str,
+    source_file: &str,
+    kind: CrontabKind,
+) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
+    parse_crontab_impl(content, source_file, kind)
+}
+
+fn parse_crontab_impl(
+    content: &str,
+    source_file: &str,
+    kind: CrontabKind,
 ) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
     let mut jobs: Vec<CronJob> = Vec::new();
 
@@ -79,47 +128,8 @@ pub fn parse_crontab_with_source(
             continue;
         }
 
-        // Check if first field is a schedule keyword
-        let is_keyword_schedule = SCHEDULE_KEYWORDS.contains(&fields[0]);
-
-        let (schedule, user, command_start_idx) = if is_keyword_schedule {
-            // @keyword [user] command
-            if fields.len() >= 3 && !fields[1].contains('/') && !fields[1].starts_with('/') {
-                // Check if second field is probably a username (not a path)
-                let second_is_user = !fields[1].starts_with('/')
-                    && !fields[1].starts_with('.')
-                    && fields[1]
-                        .chars()
-                        .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
-                if second_is_user && fields.len() >= 3 {
-                    (fields[0].to_string(), Some(fields[1].to_string()), 2)
-                } else {
-                    (fields[0].to_string(), None, 1)
-                }
-            } else {
-                (fields[0].to_string(), None, 1)
-            }
-        } else {
-            // 5-field schedule: m h dom mon dow [user] command
-            if fields.len() < 6 {
-                continue; // incomplete
-            }
-
-            let schedule_str = fields[..5].join(" ");
-
-            // Check if field 6 looks like a username or the start of a command
-            // For system crontabs with user field, we need at least 7 fields
-            if fields.len() >= 7
-                && !fields[5].starts_with('/')
-                && !fields[5].starts_with('.')
-                && fields[5]
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-            {
-                (schedule_str, Some(fields[5].to_string()), 6)
-            } else {
-                (schedule_str, None, 5)
-            }
+        let Some((schedule, user, command_start_idx)) = split_entry_fields(&fields, kind) else {
+            continue;
         };
 
         let command = fields[command_start_idx..].join(" ");
@@ -137,6 +147,47 @@ pub fn parse_crontab_with_source(
     }
 
     Ok(jobs)
+}
+
+/// Split a non-comment crontab line into (schedule, user, command start).
+///
+/// Returns `None` for incomplete lines.
+fn split_entry_fields(
+    fields: &[&str],
+    kind: CrontabKind,
+) -> Option<(String, Option<String>, usize)> {
+    // Check if first field is a schedule keyword
+    if SCHEDULE_KEYWORDS.contains(&fields[0]) {
+        // @keyword [user] command  (user only in system crontabs)
+        if kind == CrontabKind::System && fields.len() >= 3 && looks_like_username(fields[1]) {
+            return Some((fields[0].to_string(), Some(fields[1].to_string()), 2));
+        }
+        if fields.len() >= 2 {
+            return Some((fields[0].to_string(), None, 1));
+        }
+        return None;
+    }
+
+    // 5-field schedule: m h dom mon dow [user] command
+    if fields.len() < 6 {
+        return None;
+    }
+
+    let schedule_str = fields[..5].join(" ");
+    if kind == CrontabKind::System && fields.len() >= 7 && looks_like_username(fields[5]) {
+        return Some((schedule_str, Some(fields[5].to_string()), 6));
+    }
+    Some((schedule_str, None, 5))
+}
+
+/// A username field is a bare account name — never a path or option.
+fn looks_like_username(field: &str) -> bool {
+    !field.starts_with('/')
+        && !field.starts_with('.')
+        && !field.starts_with('-')
+        && field
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
 #[cfg(test)]

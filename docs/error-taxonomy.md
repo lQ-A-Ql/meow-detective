@@ -15,7 +15,7 @@
 
 ## 2. 当前错误分类
 
-以下分类与 `crates/transport/src/errors.rs` 中的 `ErrorCategory` 枚举完全对应（8 个变体：`Validation`, `Unsupported`, `Io`, `Parser`, `Security`, `External`, `Timeout`, `Internal`）。
+以下分类与 `crates/transport/src/errors.rs` 中的 `ErrorCategory` 枚举完全对应（9 个变体：`Validation`, `Unsupported`, `Io`, `Parser`, `Security`, `External`, `Timeout`, `Cancelled`, `Internal`）。
 
 | 类别 | 含义 | 示例 |
 |---|---|---|
@@ -26,6 +26,7 @@
 | `security` | 被安全策略拦截 | MCP policy block、路径越界、非法 handle、permission denied、forbidden |
 | `external` | 外部依赖失败 | MCP SSE / stdio / 网络错误、connection / http 错误 |
 | `timeout` | 超时 | 外部连接或长操作超时 |
+| `cancelled` | 用户或系统主动取消 | 分析/导入任务取消（可恢复） |
 | `internal` | 其他内部错误 | join error、lock poisoned、未分类内部异常 |
 
 ## 3. CommandError 口径

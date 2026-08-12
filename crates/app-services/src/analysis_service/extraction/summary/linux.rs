@@ -9,11 +9,12 @@ use chrono::Utc;
 use rusqlite::Connection;
 use transport::dto::LinuxArtifactSummaryDto;
 
-/// Get Linux artifact summary (systemd journal, wtmp/btmp logins, bash history,
-/// apt/dpkg/yum/dnf package events, cron jobs, sudo/auth events, and system config records).
+/// Get Linux artifact summary (systemd journal, text-log fallback lines,
+/// wtmp/btmp logins, bash history, apt/dpkg/yum/dnf package events, cron jobs,
+/// sudo/auth events, and system config records).
 ///
 /// This is a case-wide aggregate, matching the existing Registry/Browser/EVTX
-/// summary functions; it is not yet scoped to a single data source.
+/// summary functions.
 pub fn get_linux_artifact_summary(
     conn: &Connection,
     offset: u64,
@@ -27,6 +28,7 @@ pub fn get_linux_artifact_summary(
     Ok(LinuxArtifactSummaryDto {
         status: linux_summary_status(total_count, observability.candidate_count),
         journal_count: counts.journal,
+        text_log_count: counts.text_log,
         login_count: counts.login,
         bash_command_count: counts.bash_command,
         apt_event_count: counts.apt_event,

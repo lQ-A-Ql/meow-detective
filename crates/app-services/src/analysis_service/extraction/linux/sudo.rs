@@ -11,13 +11,24 @@ pub(in crate::analysis_service::extraction) fn is_auth_log_path(normalized: &str
         || normalized.contains("/var/log/secure.")
 }
 
+/// Lines the structured sudo parser turns into `LinuxSudoEvent` records; the
+/// auth.log text-log fallback must skip these so each line is emitted once.
+pub(super) fn is_sudo_event_line(line: &str) -> bool {
+    line.contains("sudo")
+        && (line.contains("COMMAND=")
+            || line.contains("authentication failure")
+            || line.contains("incorrect password"))
+}
+
 pub(super) fn extract(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_auth_log_sudo(&text) {
+    // The sudo parser takes the candidate mtime as reference time so its
+    // year-less syslog timestamps anchor to the evidence timeframe.
+    match artifacts_linux::parse_auth_log_sudo(&text, candidate.modified_at) {
         Ok(events) => {
             for event in events {
                 let mut attrs = base_attrs(candidate);

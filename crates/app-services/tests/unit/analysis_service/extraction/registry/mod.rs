@@ -15,6 +15,7 @@ fn candidate(path: &str) -> EvidenceCandidate {
         size: 1024,
         encrypted: false,
         content_identity: format!("test:{path}"),
+        modified_at: None,
         evidence_kind: "registry_hive".to_string(),
         parser: "registry".to_string(),
         category: "Registry".to_string(),

@@ -4,7 +4,8 @@
 //! It shares the utmp(5) structure layout. On 32-bit systems the struct is
 //! typically 384 bytes; on 64-bit glibc systems it is 400 bytes.
 //!
-//! This parser auto-detects the struct size by checking file length divisibility.
+//! This parser auto-detects the struct size by validating sampled records
+//! against each candidate layout (utmp has no magic bytes).
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -26,8 +27,11 @@ const _ACCOUNTING: i32 = 9;
 /// Known struct sizes for different architectures.
 const WTMP_SIZE_32: usize = 384;
 const WTMP_SIZE_64: usize = 400;
-// Some musl-based systems use a compact 340-byte struct
-const WTMP_SIZE_MUSL: usize = 340;
+// 32-bit musl (e.g. i386 Alpine): musl uses a 64-bit time_t on every
+// architecture (see musl `include/utmp.h` and the musl time64 transition),
+// while `long` stays 32-bit, so `ut_session`/`tv_usec` are 4 bytes and the
+// record totals 388 bytes.
+const WTMP_SIZE_MUSL: usize = 388;
 
 /// Offsets within the utmp struct differ by architecture.
 /// For glibc 64-bit (x86_64):
@@ -57,6 +61,16 @@ const WTMP_SIZE_MUSL: usize = 340;
 ///   ut_addr_v6: offset 348, 16 bytes
 ///   __unused: offset 364, 20 bytes
 /// Total: 384 bytes
+///
+/// For 32-bit musl (e.g. i386 Alpine), per musl `include/utmp.h` with
+/// 64-bit time_t and 32-bit long:
+///   ut_type/pad: offset 0, 4 bytes; ut_pid: offset 4
+///   ut_line: offset 8, 32 bytes; ut_id: offset 40, 4 bytes
+///   ut_user: offset 44, 32 bytes; ut_host: offset 76, 256 bytes
+///   ut_exit: offset 332, 4 bytes; ut_session: offset 336, 4 bytes
+///   ut_tv: offset 340, 8+4 bytes (64-bit tv_sec, 32-bit tv_usec)
+///   ut_addr_v6: offset 352, 16 bytes; __unused: offset 368, 20 bytes
+/// Total: 388 bytes
 ///
 /// A login record extracted from wtmp.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +103,7 @@ struct UtmpRecord {
 }
 
 /// Struct layout for a given word size.
+#[derive(Clone)]
 struct Layout {
     record_size: usize,
     off_type: usize,
@@ -100,33 +115,60 @@ struct Layout {
     off_host: usize,
     len_host: usize,
     off_tv_sec: usize,
+    /// Field width of `tv_sec` in bytes (4 on 32-bit glibc, 8 elsewhere).
+    tv_sec_width: usize,
     off_tv_usec: usize,
+    /// Field width of `tv_usec` in bytes (suseconds_t == long).
+    tv_usec_width: usize,
 }
 
 fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
-    let candidates: [(usize, &dyn Fn() -> Layout); 3] = [
-        (WTMP_SIZE_64, &|| layout_64()),
-        (WTMP_SIZE_32, &|| layout_32()),
-        (WTMP_SIZE_MUSL, &|| layout_musl()),
-    ];
+    let candidates = [layout_64(), layout_32(), layout_musl()];
 
-    for (size, layout_fn) in &candidates {
-        if data.len().is_multiple_of(*size) && data.len() >= *size {
-            return Ok(layout_fn());
-        }
-    }
-
-    // If none match exactly, try modulo on the largest size
-    for (size, layout_fn) in &candidates {
-        if data.len() >= *size {
-            return Ok(layout_fn());
+    // utmp has no magic bytes, so a bare length match is not enough: each
+    // candidate must also pass content validation on its leading records.
+    // A truncated trailing record (len % size != 0) is tolerated.
+    for layout in &candidates {
+        if data.len() >= layout.record_size && content_matches_layout(data, layout) {
+            return Ok(layout.clone());
         }
     }
 
     Err(crate::LinuxArtifactError::ParseError {
         parser: "wtmp",
-        message: "Cannot determine wtmp struct layout: file too small".to_string(),
+        message: "Cannot determine wtmp struct layout: no candidate passed content validation"
+            .to_string(),
     })
+}
+
+/// Sample the leading complete records and require that at least half of
+/// them (minimum one) look like plausible utmp entries.
+fn content_matches_layout(data: &[u8], layout: &Layout) -> bool {
+    let sampled = (data.len() / layout.record_size).min(8);
+    let mut plausible = 0usize;
+    for index in 0..sampled {
+        let start = index * layout.record_size;
+        let Some(record) = read_utmp_record(&data[start..start + layout.record_size], layout)
+        else {
+            continue;
+        };
+        if record_is_plausible(&record) {
+            plausible += 1;
+        }
+    }
+    plausible >= 1 && plausible * 2 >= sampled
+}
+
+fn record_is_plausible(record: &UtmpRecord) -> bool {
+    if !(EMPTY..=_ACCOUNTING).contains(&record.ut_type) {
+        return false;
+    }
+    if !record.ut_user.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
+        return false;
+    }
+    // Zero timestamps occur on EMPTY/padding records; otherwise the login
+    // time must sit within a sane 1990..2100 window.
+    record.ut_tv_sec == 0 || (631_152_000..=4_102_444_800).contains(&record.ut_tv_sec)
 }
 
 fn layout_64() -> Layout {
@@ -141,7 +183,9 @@ fn layout_64() -> Layout {
         off_host: 76,
         len_host: 256,
         off_tv_sec: 344,
+        tv_sec_width: 8,
         off_tv_usec: 352,
+        tv_usec_width: 8,
     }
 }
 
@@ -157,23 +201,29 @@ fn layout_32() -> Layout {
         off_host: 76,
         len_host: 256,
         off_tv_sec: 340,
+        tv_sec_width: 4,
         off_tv_usec: 344,
+        tv_usec_width: 4,
     }
 }
 
 fn layout_musl() -> Layout {
+    // 32-bit musl: 64-bit time_t (musl is time64 on all architectures) but
+    // 32-bit long for suseconds_t; see the module-level layout comment.
     Layout {
         record_size: WTMP_SIZE_MUSL,
         off_type: 0,
         off_pid: 4,
         off_line: 8,
         len_line: 32,
-        off_user: 40,
+        off_user: 44,
         len_user: 32,
-        off_host: 72,
+        off_host: 76,
         len_host: 256,
-        off_tv_sec: 328,
-        off_tv_usec: 332,
+        off_tv_sec: 340,
+        tv_sec_width: 8,
+        off_tv_usec: 348,
+        tv_usec_width: 4,
     }
 }
 
@@ -197,6 +247,16 @@ fn read_utmp_record(data: &[u8], layout: &Layout) -> Option<UtmpRecord> {
         Some(i64::from_le_bytes(bytes.try_into().ok()?))
     };
 
+    // tv_sec / tv_usec width differs per layout: 32-bit glibc uses 4-byte
+    // fields, 64-bit glibc 8-byte, 32-bit musl a mixed 8/4 pair.
+    let read_time = |off: usize, width: usize| -> Option<i64> {
+        if width == 4 {
+            read_i32(off).map(i64::from)
+        } else {
+            read_i64(off)
+        }
+    };
+
     let ut_type = read_i32(layout.off_type)?;
     let ut_pid = read_i32(layout.off_pid)?;
     let ut_user =
@@ -205,8 +265,8 @@ fn read_utmp_record(data: &[u8], layout: &Layout) -> Option<UtmpRecord> {
         null_terminated_string(data.get(layout.off_line..layout.off_line + layout.len_line)?);
     let ut_host =
         null_terminated_string(data.get(layout.off_host..layout.off_host + layout.len_host)?);
-    let ut_tv_sec = read_i64(layout.off_tv_sec)?;
-    let ut_tv_usec = read_i64(layout.off_tv_usec)?;
+    let ut_tv_sec = read_time(layout.off_tv_sec, layout.tv_sec_width)?;
+    let ut_tv_usec = read_time(layout.off_tv_usec, layout.tv_usec_width)?;
 
     Some(UtmpRecord {
         ut_type,
@@ -225,6 +285,17 @@ fn timestamp_from_utmp(sec: i64, _usec: i64) -> Option<DateTime<Utc>> {
         return None;
     }
     Utc.timestamp_opt(sec, 0).single()
+}
+
+/// Decode the packed ut_pid of a RUN_LVL record: the low byte holds the
+/// current runlevel as an ASCII character, the second byte the previous one.
+fn runlevel_label(pid: i32) -> String {
+    let current = (pid & 0xff) as u8;
+    if current.is_ascii_graphic() {
+        format!("runlevel-{}", current as char)
+    } else {
+        format!("runlevel-{pid}")
+    }
 }
 
 /// Parse a wtmp binary file and extract login/logout records.
@@ -313,7 +384,7 @@ pub fn parse_wtmp(data: &[u8]) -> Result<Vec<LoginRecord>, crate::LinuxArtifactE
             RUN_LVL => {
                 let ts = timestamp_from_utmp(ut.ut_tv_sec, ut.ut_tv_usec);
                 let record = LoginRecord {
-                    user: format!("runlevel-{}", ut.ut_pid),
+                    user: runlevel_label(ut.ut_pid),
                     terminal: "~".to_string(),
                     host: String::new(),
                     login_time: ts,

@@ -12,15 +12,18 @@ pub mod wtmp;
 
 pub use apt::{parse_apt_history, parse_dpkg_log, parse_rpm_package_log, AptEvent};
 pub use bash::{parse_bash_history, BashCommand};
-pub use cron::{parse_crontab, CronJob};
+pub use cron::{
+    parse_crontab, parse_crontab_with_kind, parse_crontab_with_source,
+    parse_crontab_with_source_and_kind, CronJob, CrontabKind,
+};
 pub use error::LinuxArtifactError;
-pub use journal::{parse_journal, JournalEntry};
+pub use journal::{parse_journal, parse_journal_full, JournalEntry, JournalParseOutcome};
 pub use mysql::{
     detect_mysql_config_findings, detect_mysql_log_findings, parse_mysql_config, parse_mysql_log,
     MysqlConfigEntry, MysqlFinding, MysqlLogEntry,
 };
 pub use shadow_edit::{clear_shadow_password, parse_shadow_accounts, ShadowAccount};
-pub use sudo::{parse_auth_log_sudo, SudoEvent};
+pub use sudo::{parse_auth_log_sudo, parse_auth_log_sudo_with_reference, SudoEvent};
 pub use system::{parse_os_release, parse_passwd, OsReleaseInfo, PasswdAccount};
 pub use web::{
     detect_web_findings, detect_web_shell, parse_apache_config, parse_nginx_config,

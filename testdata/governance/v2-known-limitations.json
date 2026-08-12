@@ -375,7 +375,7 @@
       "category": "Linux artifacts",
       "item": "systemd journal 压缩/轮转完整覆盖",
       "status": "partial",
-      "summary": "当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort",
+      "summary": "解析器按官方格式规范实现：支持 uncompressed 与 LZ4/ZSTD 压缩字段、KEYED_HASH（SipHash-2-4）与 COMPACT 布局；XZ 压缩字段显式跳过并计数（不产出乱码）。缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort",
       "affectedChains": [
         "LinuxArtifacts",
         "systemd"

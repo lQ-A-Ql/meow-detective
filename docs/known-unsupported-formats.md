@@ -53,7 +53,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
-| Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
+| Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 解析器按官方格式规范实现：支持 uncompressed 与 LZ4/ZSTD 压缩字段、KEYED_HASH（SipHash-2-4）与 COMPACT 布局；XZ 压缩字段显式跳过并计数（不产出乱码）。缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
 | Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
 | Linux artifacts | sudoers policy 语义解析 | 部分支持 | `/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule |
 | Linux artifacts | systemd/init/profile.d shell 语义解析 | 部分支持 | systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图 |
@@ -142,5 +142,3 @@ V2 长期计划与能力评级请同时参考：
 - `docs/parser-support-matrix.md`
 - `docs/validation-trust-framework.md`
 - `docs/documentation-index.md`
-- `docs/parser-support-matrix.md`
-- `docs/linux-artifact-coverage.md`

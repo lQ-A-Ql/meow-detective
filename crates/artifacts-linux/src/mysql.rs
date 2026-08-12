@@ -198,8 +198,16 @@ fn parse_mysql_timestamp(line: &str) -> Option<(DateTime<Utc>, &str)> {
         }
     }
     if line.len() >= 15 {
+        // Legacy MySQL/MariaDB error log format: "yymmdd HH:MM:SS"
+        // (e.g. "240815 10:30:00"). The candidate contains ':' and a space,
+        // so the pre-check must allow both.
         let candidate = &line[..15];
-        if candidate.chars().all(|c| c.is_ascii_digit() || c == ' ') {
+        if candidate
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == ' ' || c == ':')
+        {
+            // Limitation: the "20" prefix hardcodes the 21st century —
+            // two-digit years before 2000 cannot be represented here.
             if let Ok(naive) =
                 chrono::NaiveDateTime::parse_from_str(&format!("20{candidate}"), "%Y%m%d %H:%M:%S")
             {
