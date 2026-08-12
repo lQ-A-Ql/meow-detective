@@ -1,18 +1,14 @@
-use crate::analysis_service::cancellation::ensure_not_cancelled;
-use crate::analysis_service::error::AnalysisServiceError;
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard, TryLockError};
-use std::time::{Duration, Instant};
 
-const EXTRACTION_GATE_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const EXTRACTION_GATE_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+mod gate;
+
+pub(super) use gate::acquire_extraction_slot;
+
 const DEFAULT_MAX_IN_FLIGHT_BYTES: usize = 256 * 1024 * 1024;
 const THROTTLED_MAX_IN_FLIGHT_BYTES: usize = 128 * 1024 * 1024;
-
-static EXTRACTION_GATE: ExtractionGate = ExtractionGate::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ExtractionSchedulingPolicy {
@@ -62,15 +58,11 @@ pub(super) struct SchedulerSnapshot {
     pub(super) in_flight_bytes: usize,
 }
 
-pub(super) fn acquire_extraction_slot(
-    cancel_token: &AtomicBool,
-    on_wait: impl FnMut(Duration),
-) -> Result<MutexGuard<'static, ()>, AnalysisServiceError> {
-    EXTRACTION_GATE.acquire(cancel_token, on_wait)
-}
-
 // Keep the independent scheduler hooks explicit: estimation, preparation,
 // execution, ordered application, panic conversion, and observability.
+// `panic_error` returns `Some(error)` to abort the whole run, or `None` to
+// degrade: the affected candidate is recorded as skipped (no output) and the
+// ordered merge continues with the remaining candidates.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_bounded_ordered<I, T, R, E, C>(
     items: I,
@@ -80,7 +72,7 @@ pub(super) fn run_bounded_ordered<I, T, R, E, C>(
     mut prepare: impl FnMut(&mut C, I::Item) -> Result<PreparedWork<T, R>, E>,
     work: impl Fn(T) -> R + Sync,
     mut apply: impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: impl Fn(usize, String) -> E + Sync,
+    panic_error: impl Fn(usize, String) -> Option<E> + Sync,
     mut observe: impl FnMut(SchedulerSnapshot),
 ) -> Result<(), E>
 where
@@ -126,10 +118,10 @@ where
         let mut worker_panic = None;
         for (worker_id, worker) in workers.into_iter().enumerate() {
             if worker.join().is_err() && worker_panic.is_none() {
-                worker_panic = Some(panic_error(
+                worker_panic = panic_error(
                     worker_id,
                     "analysis scheduler worker terminated unexpectedly".to_string(),
-                ));
+                );
             }
         }
         match result {
@@ -152,7 +144,7 @@ fn coordinate_pipeline<I, T, R, E, C>(
     result_rx: &Receiver<WorkerResult<R>>,
     prepare: &mut impl FnMut(&mut C, I::Item) -> Result<PreparedWork<T, R>, E>,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: &impl Fn(usize, String) -> E,
+    panic_error: &impl Fn(usize, String) -> Option<E>,
     observe: &mut impl FnMut(SchedulerSnapshot),
 ) -> Result<(), E>
 where
@@ -192,18 +184,22 @@ where
                     apply,
                     panic_error,
                 )?;
-                task_tx
+                if task_tx
                     .send(WorkerTask {
                         sequence,
                         input,
                         weight_bytes,
                     })
-                    .map_err(|error| {
-                        panic_error(
-                            sequence,
-                            format!("analysis scheduler queue closed: {error}"),
-                        )
-                    })?;
+                    .is_err()
+                {
+                    if let Some(error) =
+                        panic_error(sequence, "analysis scheduler queue closed".to_string())
+                    {
+                        return Err(error);
+                    }
+                    abort_remaining(&mut state);
+                    continue;
+                }
                 state.in_flight_items = state.in_flight_items.saturating_add(1);
                 state.in_flight_bytes = state.in_flight_bytes.saturating_add(weight_bytes);
                 drain_completed(&mut state, result_rx, coordinator, apply, panic_error)?;
@@ -227,7 +223,7 @@ fn make_capacity<R, E, C>(
     result_rx: &Receiver<WorkerResult<R>>,
     coordinator: &mut C,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: &impl Fn(usize, String) -> E,
+    panic_error: &impl Fn(usize, String) -> Option<E>,
 ) -> Result<(), E> {
     while state.in_flight_items > 0
         && (state.in_flight_items >= policy.max_in_flight_items.max(1)
@@ -244,17 +240,21 @@ fn drain_completed<R, E, C>(
     result_rx: &Receiver<WorkerResult<R>>,
     coordinator: &mut C,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: &impl Fn(usize, String) -> E,
+    panic_error: &impl Fn(usize, String) -> Option<E>,
 ) -> Result<(), E> {
     loop {
         match result_rx.try_recv() {
             Ok(result) => record_completed(state, result, coordinator, apply, panic_error)?,
             Err(TryRecvError::Empty) => return Ok(()),
             Err(TryRecvError::Disconnected) => {
-                return Err(panic_error(
+                if let Some(error) = panic_error(
                     state.next_apply,
                     "analysis scheduler result channel disconnected".to_string(),
-                ));
+                ) {
+                    return Err(error);
+                }
+                abort_remaining(state);
+                return Ok(());
             }
         }
     }
@@ -265,14 +265,21 @@ fn receive_completed<R, E, C>(
     result_rx: &Receiver<WorkerResult<R>>,
     coordinator: &mut C,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: &impl Fn(usize, String) -> E,
+    panic_error: &impl Fn(usize, String) -> Option<E>,
 ) -> Result<(), E> {
-    let result = result_rx.recv().map_err(|error| {
-        panic_error(
-            state.next_apply,
-            format!("analysis scheduler result channel closed: {error}"),
-        )
-    })?;
+    let result = match result_rx.recv() {
+        Ok(result) => result,
+        Err(_) => {
+            if let Some(error) = panic_error(
+                state.next_apply,
+                "analysis scheduler result channel closed".to_string(),
+            ) {
+                return Err(error);
+            }
+            abort_remaining(state);
+            return Ok(());
+        }
+    };
     record_completed(state, result, coordinator, apply, panic_error)
 }
 
@@ -281,7 +288,7 @@ fn record_completed<R, E, C>(
     result: WorkerResult<R>,
     coordinator: &mut C,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
-    panic_error: &impl Fn(usize, String) -> E,
+    panic_error: &impl Fn(usize, String) -> Option<E>,
 ) -> Result<(), E> {
     let (sequence, weight_bytes, output) = match result {
         WorkerResult::Completed {
@@ -295,7 +302,13 @@ fn record_completed<R, E, C>(
             weight_bytes,
         } => {
             state.release(weight_bytes);
-            return Err(panic_error(sequence, message));
+            if let Some(error) = panic_error(sequence, message) {
+                return Err(error);
+            }
+            // Degraded: the panicked candidate yields no output, but the
+            // ordered merge must still advance past its sequence.
+            state.skipped.insert(sequence);
+            return apply_ready(state, coordinator, apply);
         }
     };
     state.release(weight_bytes);
@@ -308,12 +321,32 @@ fn apply_ready<R, E, C>(
     coordinator: &mut C,
     apply: &mut impl FnMut(&mut C, R) -> Result<(), E>,
 ) -> Result<(), E> {
-    while let Some(result) = state.pending.remove(&state.next_apply) {
+    loop {
+        if state.skipped.remove(&state.next_apply) {
+            state.next_apply = state.next_apply.saturating_add(1);
+            continue;
+        }
+        let Some(result) = state.pending.remove(&state.next_apply) else {
+            break;
+        };
         apply(coordinator, result)?;
         state.completed = state.completed.saturating_add(1);
         state.next_apply = state.next_apply.saturating_add(1);
     }
     Ok(())
+}
+
+/// Mark every not-yet-applied sequence as skipped and release in-flight
+/// accounting. Used when the worker side is gone (channel failures) and the
+/// caller chose to degrade instead of aborting, so the drain loops terminate.
+fn abort_remaining<R>(state: &mut CoordinatorState<R>) {
+    for sequence in state.next_apply..state.submitted {
+        if !state.pending.contains_key(&sequence) {
+            state.skipped.insert(sequence);
+        }
+    }
+    state.in_flight_items = 0;
+    state.in_flight_bytes = 0;
 }
 
 fn worker_loop<T, R>(
@@ -379,6 +412,9 @@ struct CoordinatorState<R> {
     in_flight_items: usize,
     in_flight_bytes: usize,
     pending: BTreeMap<usize, R>,
+    /// Sequences whose candidate produced no output (degraded panic or
+    /// aborted pipeline); the ordered merge steps over them.
+    skipped: BTreeSet<usize>,
 }
 
 impl<R> Default for CoordinatorState<R> {
@@ -390,6 +426,7 @@ impl<R> Default for CoordinatorState<R> {
             in_flight_items: 0,
             in_flight_bytes: 0,
             pending: BTreeMap::new(),
+            skipped: BTreeSet::new(),
         }
     }
 }
@@ -406,46 +443,6 @@ impl<R> CoordinatorState<R> {
             completed: self.completed,
             in_flight_items: self.in_flight_items,
             in_flight_bytes: self.in_flight_bytes,
-        }
-    }
-}
-
-struct ExtractionGate {
-    mutex: Mutex<()>,
-}
-
-impl ExtractionGate {
-    const fn new() -> Self {
-        Self {
-            mutex: Mutex::new(()),
-        }
-    }
-
-    fn acquire<'a>(
-        &'a self,
-        cancel_token: &AtomicBool,
-        mut on_wait: impl FnMut(Duration),
-    ) -> Result<MutexGuard<'a, ()>, AnalysisServiceError> {
-        let started = Instant::now();
-        let mut last_report = None::<Instant>;
-        loop {
-            ensure_not_cancelled(cancel_token)?;
-            match self.mutex.try_lock() {
-                Ok(guard) => return Ok(guard),
-                Err(TryLockError::Poisoned(poisoned)) => {
-                    tracing::warn!("Recovering poisoned analysis extraction serial gate");
-                    return Ok(poisoned.into_inner());
-                }
-                Err(TryLockError::WouldBlock) => {
-                    if last_report
-                        .is_none_or(|last| last.elapsed() >= EXTRACTION_GATE_REPORT_INTERVAL)
-                    {
-                        on_wait(started.elapsed());
-                        last_report = Some(Instant::now());
-                    }
-                    std::thread::sleep(EXTRACTION_GATE_POLL_INTERVAL);
-                }
-            }
         }
     }
 }

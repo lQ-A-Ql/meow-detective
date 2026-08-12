@@ -504,3 +504,125 @@ fn linux_apache_error_log_parses_timestamp_and_second_bracket_severity() {
     );
     assert_eq!(outcome.timeline_events.len(), 1);
 }
+
+fn gzip_compress(input: &[u8]) -> Vec<u8> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(input).expect("gzip write");
+    encoder.finish().expect("gzip finish")
+}
+
+#[test]
+fn linux_truncated_gzip_yields_decoded_prefix_with_warning() {
+    let mut lines = String::new();
+    for index in 0..500 {
+        lines.push_str(&format!("command-{index} --flag\n"));
+    }
+    let compressed = gzip_compress(lines.as_bytes());
+    // Cut the trailer and part of the deflate stream: the read limit hitting a
+    // rotated log mid-stream looks exactly like this to the decoder.
+    let truncated = &compressed[..compressed.len() - 24];
+
+    let candidate = candidate("/home/alice/.bash_history.gz");
+    let outcome = extract_linux_candidate(&candidate, truncated);
+
+    assert!(
+        !outcome.artifacts.is_empty(),
+        "a truncated gzip stream must still yield the decoded prefix"
+    );
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("gzip stream ends prematurely")),
+        "truncated stream must be reported: {:?}",
+        outcome.warnings
+    );
+}
+
+#[test]
+fn linux_corrupt_gzip_still_fails_closed() {
+    let candidate = candidate("/home/alice/.bash_history.gz");
+    let outcome = extract_linux_candidate(&candidate, b"definitely not a gzip stream");
+
+    assert!(outcome.artifacts.is_empty());
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("gzip decode failed")),
+        "corrupt gzip must keep the failure warning: {:?}",
+        outcome.warnings
+    );
+}
+
+#[test]
+fn linux_bash_history_respects_per_source_cap() {
+    let mut input = String::new();
+    for index in 0..20_001 {
+        input.push_str(&format!("command-{index}\n"));
+    }
+    let candidate = candidate("/home/alice/.bash_history");
+    let outcome = extract_linux_candidate(&candidate, input.as_bytes());
+
+    assert_eq!(outcome.artifacts.len(), 20_000);
+    assert!(
+        outcome.warnings.iter().any(|warning| warning
+            .contains("bash history emitted first 20000 records only (1 more skipped)")),
+        "cap warning with skipped count expected: {:?}",
+        outcome.warnings
+    );
+}
+
+#[test]
+fn linux_wtmp_respects_per_source_cap() {
+    let mut record = vec![0u8; 400];
+    record[0..4].copy_from_slice(&7i32.to_le_bytes());
+    record[4..8].copy_from_slice(&1234i32.to_le_bytes());
+    record[8..13].copy_from_slice(b"pts/0");
+    record[44..49].copy_from_slice(b"alice");
+    record[76..87].copy_from_slice(b"192.168.1.1");
+    record[344..352].copy_from_slice(&1_700_000_000i64.to_le_bytes());
+
+    let mut buf = Vec::with_capacity(record.len() * 20_001);
+    for _ in 0..20_001 {
+        buf.extend_from_slice(&record);
+    }
+    let candidate = candidate("/var/log/wtmp");
+    let outcome = extract_linux_candidate(&candidate, &buf);
+
+    assert_eq!(outcome.artifacts.len(), 20_000);
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning
+                .contains("wtmp emitted first 20000 records only (1 more skipped)")),
+        "cap warning with skipped count expected: {:?}",
+        outcome.warnings
+    );
+}
+
+#[test]
+fn linux_apt_history_respects_per_source_cap() {
+    let packages = (0..20_001)
+        .map(|index| format!("pkg{index}:amd64 (1.0)"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let input = format!(
+        "Start-Date: 2024-01-15  10:30:00\nInstall: {packages}\nEnd-Date: 2024-01-15  10:30:15\n"
+    );
+    let candidate = candidate("/var/log/apt/history.log");
+    let outcome = extract_linux_candidate(&candidate, input.as_bytes());
+
+    assert_eq!(outcome.artifacts.len(), 20_000);
+    assert!(
+        outcome.warnings.iter().any(|warning| warning
+            .contains("package log emitted first 20000 records only (1 more skipped)")),
+        "cap warning with skipped count expected: {:?}",
+        outcome.warnings
+    );
+}

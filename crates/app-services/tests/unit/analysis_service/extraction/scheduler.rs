@@ -1,3 +1,4 @@
+use super::gate::ExtractionGate;
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -40,7 +41,7 @@ fn bounded_scheduler_runs_work_in_parallel_and_applies_in_input_order() {
             applied.lock().expect("applied lock").push(value);
             Ok(())
         },
-        |sequence, message| format!("worker {sequence}: {message}"),
+        |sequence, message| Some(format!("worker {sequence}: {message}")),
         |_| {},
     )
     .expect("run bounded scheduler");
@@ -89,13 +90,109 @@ fn scheduler_turns_worker_panics_into_typed_errors() {
         },
         |_| -> usize { panic!("injected parser panic") },
         |_, _| Ok(()),
-        |sequence, message| format!("worker {sequence}: {message}"),
+        |sequence, message| Some(format!("worker {sequence}: {message}")),
         |_| {},
     )
     .expect_err("worker panic must become an error");
 
     assert!(error.contains("worker 0"));
     assert!(error.contains("injected parser panic"));
+}
+
+#[test]
+fn scheduler_degrades_worker_panics_into_skipped_candidates() {
+    let diagnostics = Mutex::new(Vec::new());
+    let applied = Mutex::new(Vec::new());
+
+    run_bounded_ordered(
+        0usize..6,
+        ExtractionSchedulingPolicy {
+            worker_count: 2,
+            max_in_flight_items: 2,
+            max_in_flight_bytes: 2,
+        },
+        &mut (),
+        |_| 1,
+        |_, value| {
+            Ok::<_, String>(PreparedWork::Parallel {
+                input: value,
+                weight_bytes: 1,
+            })
+        },
+        |value| -> usize {
+            if value == 2 {
+                panic!("injected parser panic");
+            }
+            value
+        },
+        |_, value| {
+            applied.lock().expect("applied lock").push(value);
+            Ok(())
+        },
+        |sequence, message| {
+            diagnostics
+                .lock()
+                .expect("diagnostics lock")
+                .push(format!("candidate {sequence}: {message}"));
+            None::<String>
+        },
+        |_| {},
+    )
+    .expect("a degraded run must succeed despite the panicking candidate");
+
+    assert_eq!(
+        *applied.lock().expect("applied lock"),
+        vec![0, 1, 3, 4, 5],
+        "the panicked candidate yields no output but the ordered merge continues"
+    );
+    let diagnostics = diagnostics.lock().expect("diagnostics lock");
+    assert_eq!(diagnostics.len(), 1);
+    assert!(diagnostics[0].contains("candidate 2"));
+    assert!(diagnostics[0].contains("injected parser panic"));
+}
+
+#[test]
+fn scheduler_applies_ready_results_past_a_degraded_panic() {
+    let applied = Mutex::new(Vec::new());
+
+    run_bounded_ordered(
+        0usize..4,
+        ExtractionSchedulingPolicy {
+            worker_count: 1,
+            max_in_flight_items: 4,
+            max_in_flight_bytes: 4,
+        },
+        &mut (),
+        |_| 1,
+        |_, value| {
+            if value % 2 == 0 {
+                return Ok::<_, String>(PreparedWork::Ready(value));
+            }
+            Ok(PreparedWork::Parallel {
+                input: value,
+                weight_bytes: 1,
+            })
+        },
+        |value| -> usize {
+            if value == 1 {
+                panic!("injected parser panic");
+            }
+            value
+        },
+        |_, value| {
+            applied.lock().expect("applied lock").push(value);
+            Ok(())
+        },
+        |_, _| None::<String>,
+        |_| {},
+    )
+    .expect("degraded run must succeed");
+
+    assert_eq!(
+        *applied.lock().expect("applied lock"),
+        vec![0, 2, 3],
+        "ready results after the skipped sequence must still be applied in order"
+    );
 }
 
 #[test]

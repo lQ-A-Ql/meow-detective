@@ -44,13 +44,21 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
     let effective_path = normalized.strip_suffix(".gz").unwrap_or(&normalized);
     let input = if normalized.ends_with(".gz") {
         match common::decode_gzip(bytes) {
-            Ok((data, decoded_truncated)) => {
+            Ok((data, truncation)) => {
                 decoded = data;
-                if decoded_truncated {
-                    outcome.warnings.push(format!(
+                match truncation {
+                    Some(common::GzipTruncation::OutputCap) => outcome.warnings.push(format!(
                         "{} gzip decoded output exceeds the 128 MiB analysis cap; decoded content was truncated before parsing",
                         candidate.path
-                    ));
+                    )),
+                    Some(common::GzipTruncation::TruncatedStream) => outcome.warnings.push(
+                        format!(
+                            "{} gzip stream ends prematurely; only the first {} decoded bytes were parsed",
+                            candidate.path,
+                            decoded.len()
+                        ),
+                    ),
+                    None => {}
                 }
                 decoded.as_slice()
             }

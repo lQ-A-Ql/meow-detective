@@ -1,3 +1,4 @@
+use super::common::{cap_source_events, MAX_PACKAGE_EVENTS_PER_SOURCE};
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
@@ -27,11 +28,7 @@ pub(super) fn extract_apt_history(
 ) {
     let text = String::from_utf8_lossy(bytes);
     match artifacts_linux::parse_apt_history(&text) {
-        Ok(events) => {
-            for event in events {
-                push_event(candidate, event, outcome);
-            }
-        }
+        Ok(events) => push_events(candidate, events, outcome),
         Err(error) => outcome.warnings.push(format!(
             "{} APT history parse failed: {}",
             candidate.path, error
@@ -46,11 +43,7 @@ pub(super) fn extract_dpkg_log(
 ) {
     let text = String::from_utf8_lossy(bytes);
     match artifacts_linux::parse_dpkg_log(&text) {
-        Ok(events) => {
-            for event in events {
-                push_event(candidate, event, outcome);
-            }
-        }
+        Ok(events) => push_events(candidate, events, outcome),
         Err(error) => outcome.warnings.push(format!(
             "{} dpkg log parse failed: {}",
             candidate.path, error
@@ -65,15 +58,28 @@ pub(super) fn extract_rpm_package_log(
 ) {
     let text = String::from_utf8_lossy(bytes);
     match artifacts_linux::parse_rpm_package_log(&text) {
-        Ok(events) => {
-            for event in events {
-                push_event(candidate, event, outcome);
-            }
-        }
+        Ok(events) => push_events(candidate, events, outcome),
         Err(error) => outcome.warnings.push(format!(
             "{} rpm package log parse failed: {}",
             candidate.path, error
         )),
+    }
+}
+
+fn push_events(
+    candidate: &EvidenceCandidate,
+    events: Vec<artifacts_linux::AptEvent>,
+    outcome: &mut ExtractionOutcome,
+) {
+    let events = cap_source_events(
+        candidate,
+        "package log",
+        MAX_PACKAGE_EVENTS_PER_SOURCE,
+        events,
+        &mut outcome.warnings,
+    );
+    for event in events {
+        push_event(candidate, event, outcome);
     }
 }
 

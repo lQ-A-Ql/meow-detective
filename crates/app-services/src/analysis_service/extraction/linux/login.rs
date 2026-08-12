@@ -1,3 +1,4 @@
+use super::common::{cap_source_events, MAX_LOGIN_EVENTS_PER_SOURCE};
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
@@ -27,6 +28,13 @@ pub(super) fn extract(
 ) {
     match artifacts_linux::parse_wtmp(bytes) {
         Ok(records) => {
+            let records = cap_source_events(
+                candidate,
+                "wtmp",
+                MAX_LOGIN_EVENTS_PER_SOURCE,
+                records,
+                &mut outcome.warnings,
+            );
             for record in records {
                 let mut attrs = base_attrs(candidate);
                 attrs.insert("user".to_string(), Value::String(record.user.clone()));

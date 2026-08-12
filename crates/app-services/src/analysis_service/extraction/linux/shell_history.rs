@@ -1,4 +1,4 @@
-use super::common::truncate;
+use super::common::{cap_source_events, truncate, MAX_SHELL_HISTORY_EVENTS_PER_SOURCE};
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
@@ -31,6 +31,13 @@ pub(super) fn extract_bash(
     let text = String::from_utf8_lossy(bytes);
     match artifacts_linux::parse_bash_history(&text) {
         Ok(commands) => {
+            let commands = cap_source_events(
+                candidate,
+                "bash history",
+                MAX_SHELL_HISTORY_EVENTS_PER_SOURCE,
+                commands,
+                &mut outcome.warnings,
+            );
             for command in commands {
                 let mut attrs = base_attrs(candidate);
                 attrs.insert(
@@ -183,6 +190,13 @@ fn push_commands(
     parser: &str,
     outcome: &mut ExtractionOutcome,
 ) {
+    let commands = cap_source_events(
+        candidate,
+        "shell history",
+        MAX_SHELL_HISTORY_EVENTS_PER_SOURCE,
+        commands,
+        &mut outcome.warnings,
+    );
     for command in commands {
         let mut attrs = base_attrs(candidate);
         attrs.insert(

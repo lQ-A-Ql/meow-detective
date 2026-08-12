@@ -36,7 +36,10 @@ use std::time::{Duration, Instant};
 const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 mod checkpoint;
+mod panic_diagnostics;
 mod source_preparation;
+
+use panic_diagnostics::PanicDiagnostics;
 
 pub(super) struct ExistingCheckpoints<'a> {
     pub(super) clean: &'a CleanScanKeys,
@@ -127,6 +130,7 @@ where
         state,
         progress,
     };
+    let panics = PanicDiagnostics::new(&work_items, context.selected);
     let mut last_log = Instant::now();
     run_bounded_ordered(
         work_items,
@@ -144,9 +148,10 @@ where
         },
         apply_candidate,
         |sequence, message| {
-            AnalysisServiceError::Extraction(format!(
-                "analysis candidate worker {sequence} failed: {message}"
-            ))
+            // A single panicking parser must not abort the whole run: degrade
+            // to a per-candidate diagnostic and keep the ordered merge going.
+            panics.record(sequence, &message);
+            None
         },
         |snapshot| {
             if last_log.elapsed() >= SCHEDULER_LOG_INTERVAL
@@ -157,6 +162,7 @@ where
             }
         },
     )?;
+    panics.drain_into(coordinator.state);
     ensure_not_cancelled(context.cancel_token)
 }
 
