@@ -27,6 +27,9 @@ pub use crate::dto::analysis_linux::{
     LinuxSystemInfoDto, LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto,
     LinuxWebSiteDto,
 };
+pub use crate::dto::analysis_plugin::{
+    PluginArtifactEntryDto, PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto,
+};
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,
     InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,

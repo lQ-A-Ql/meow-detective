@@ -5,6 +5,7 @@ mod analysis_classification;
 mod analysis_email;
 mod analysis_evtx;
 mod analysis_linux;
+mod analysis_plugin;
 mod analysis_registry;
 mod analysis_system;
 pub mod android;
@@ -55,7 +56,8 @@ pub use analysis::{
     LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto,
     LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto, LsaPackageDto,
     LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
-    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto,
+    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, PluginArtifactEntryDto,
+    PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto, RegistryExtractionSummaryDto,
     RegistryHiveOverviewDto, RegistryNetworkAdapterDto, RegistryStructuredSummaryDto,
     RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto,
     ReleaseScorecardDto, RunMruEntryDto, SamUserAccountDto, SecurityAuditEntryDto,
