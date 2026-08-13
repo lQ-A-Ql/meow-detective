@@ -12,6 +12,10 @@ pub(in crate::analysis_service::extraction) fn is_nginx_config_path(normalized: 
     normalized.ends_with("/etc/nginx/nginx.conf")
         || (normalized.contains("/etc/nginx/conf.d/") && normalized.ends_with(".conf"))
         || normalized.contains("/etc/nginx/sites-enabled/")
+        // BaoTa panel: per-site vhost configs and the panel-installed nginx.
+        || (normalized.contains("/www/server/panel/vhost/nginx/")
+            && normalized.ends_with(".conf"))
+        || (normalized.contains("/www/server/nginx/conf/") && normalized.ends_with(".conf"))
 }
 
 pub(in crate::analysis_service::extraction) fn is_apache_config_path(normalized: &str) -> bool {
@@ -19,6 +23,10 @@ pub(in crate::analysis_service::extraction) fn is_apache_config_path(normalized:
         || normalized.contains("/etc/apache2/sites-enabled/")
         || normalized.ends_with("/etc/httpd/conf/httpd.conf")
         || (normalized.contains("/etc/httpd/conf.d/") && normalized.ends_with(".conf"))
+        // BaoTa panel: per-site vhost configs and the panel-installed apache.
+        || (normalized.contains("/www/server/panel/vhost/apache/")
+            && normalized.ends_with(".conf"))
+        || (normalized.contains("/www/server/apache/conf/") && normalized.ends_with(".conf"))
 }
 
 enum WebLogKind {
@@ -29,9 +37,15 @@ enum WebLogKind {
 /// Any `*.log` (including rotated `*.log.N`) under the nginx/apache2/httpd log
 /// directories is a web log — vhost names like `other_vhosts_access.log`,
 /// `ssl_access_log` or `example.com.access.log` included. Names containing
-/// "error" route to the error-log parser, everything else to access.
+/// "error" route to the error-log parser, everything else to access. The BaoTa
+/// panel centralizes site logs under `/www/wwwlogs/` with the same naming.
 fn web_log_kind(normalized: &str) -> Option<WebLogKind> {
-    const WEB_LOG_DIRS: &[&str] = &["/var/log/nginx/", "/var/log/apache2/", "/var/log/httpd/"];
+    const WEB_LOG_DIRS: &[&str] = &[
+        "/var/log/nginx/",
+        "/var/log/apache2/",
+        "/var/log/httpd/",
+        "/www/wwwlogs/",
+    ];
     if !WEB_LOG_DIRS.iter().any(|dir| normalized.contains(dir)) {
         return None;
     }

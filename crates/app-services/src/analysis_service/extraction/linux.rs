@@ -9,6 +9,7 @@ mod shell_history;
 mod sudo;
 mod system_config;
 mod text_log;
+mod timezone;
 mod web;
 
 use super::ExtractionOutcome;
@@ -17,7 +18,8 @@ use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandi
 pub(super) use common::{linux_candidate_read_limit, linux_candidate_support};
 pub(super) use cron::is_cron_path;
 pub(super) use journal::is_journal_path;
-pub(super) use login::is_login_binary_candidate_path;
+pub(super) use login::is_faillog_path;
+pub(super) use login::is_lastlog_path;
 pub(super) use login::is_wtmp_path;
 pub(super) use mysql::{is_mysql_config_path, is_mysql_log_path};
 pub(super) use packages::{is_apt_history_path, is_dpkg_log_path, is_rpm_package_log_path};
@@ -32,14 +34,31 @@ pub(super) use system_config::{
     is_system_config_path, is_systemd_unit_path,
 };
 pub(super) use text_log::is_text_log_path;
+pub(super) use timezone::{resolve_linux_log_time, LinuxLogTimeContext};
 pub(super) use web::{
     is_apache_config_path, is_nginx_config_path, is_web_access_log_path, is_web_error_log_path,
     is_web_root_script_path,
 };
 
 pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
+    extract_linux_candidate_with_time(candidate, bytes, &LinuxLogTimeContext::utc())
+}
+
+/// Extract a Linux candidate, converting naive log timestamps with the
+/// inferred host timezone (UTC when no zone could be determined).
+pub(super) fn extract_linux_candidate_with_time(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    log_time: &LinuxLogTimeContext,
+) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
     let normalized = normalize_evidence_path(&candidate.path);
+    if crate::analysis_service::artifact_builders::is_docker_overlay_path(&normalized) {
+        outcome.warnings.push(format!(
+            "{} resides inside a Docker overlay2 layer; extracted records describe container content, not host state",
+            candidate.path
+        ));
+    }
     let decoded;
     let effective_path = normalized.strip_suffix(".gz").unwrap_or(&normalized);
     let input = if normalized.ends_with(".gz") {
@@ -81,7 +100,7 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         ));
     }
 
-    dispatch_candidate(effective_path, candidate, input, &mut outcome);
+    dispatch_candidate(effective_path, candidate, input, &mut outcome, log_time);
     outcome
 }
 
@@ -90,6 +109,7 @@ fn dispatch_candidate(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     use super::linux_sections::{linux_artifact_route, LinuxArtifactRouteKind};
 
@@ -107,6 +127,8 @@ fn dispatch_candidate(
         LinuxArtifactRouteKind::MysqlConfig => mysql::extract_config(candidate, bytes, outcome),
         LinuxArtifactRouteKind::MysqlLog => mysql::extract_log(candidate, bytes, outcome),
         LinuxArtifactRouteKind::Login => login::extract(candidate, bytes, outcome),
+        LinuxArtifactRouteKind::Lastlog => login::extract_lastlog(candidate, bytes, outcome),
+        LinuxArtifactRouteKind::Faillog => login::extract_faillog(candidate, bytes, outcome),
         LinuxArtifactRouteKind::BashHistory => {
             shell_history::extract_bash(candidate, bytes, outcome)
         }
@@ -139,19 +161,21 @@ fn dispatch_candidate(
             outcome,
         ),
         LinuxArtifactRouteKind::AptHistory => {
-            packages::extract_apt_history(candidate, bytes, outcome)
+            packages::extract_apt_history(candidate, bytes, outcome, log_time)
         }
-        LinuxArtifactRouteKind::DpkgLog => packages::extract_dpkg_log(candidate, bytes, outcome),
+        LinuxArtifactRouteKind::DpkgLog => {
+            packages::extract_dpkg_log(candidate, bytes, outcome, log_time)
+        }
         LinuxArtifactRouteKind::RpmLog => {
-            packages::extract_rpm_package_log(candidate, bytes, outcome)
+            packages::extract_rpm_package_log(candidate, bytes, outcome, log_time)
         }
         LinuxArtifactRouteKind::Cron => cron::extract(candidate, bytes, outcome),
-        LinuxArtifactRouteKind::AuthLog => extract_auth_log(candidate, bytes, outcome),
+        LinuxArtifactRouteKind::AuthLog => extract_auth_log(candidate, bytes, outcome, log_time),
         LinuxArtifactRouteKind::TextLog => {
-            text_log::extract(candidate, bytes, "linux.text_log", "log", outcome)
+            text_log::extract(candidate, bytes, "linux.text_log", "log", outcome, log_time)
         }
         LinuxArtifactRouteKind::PveLog => {
-            text_log::extract(candidate, bytes, "linux.pve_log", "pve", outcome)
+            text_log::extract(candidate, bytes, "linux.pve_log", "pve", outcome, log_time)
         }
         LinuxArtifactRouteKind::Unsupported => warn_unsupported_candidate(candidate, outcome),
     }
@@ -167,12 +191,17 @@ fn extract_text_config(
     system_config::extract_text_config(candidate, bytes, parser, config_kind, outcome);
 }
 
-fn extract_auth_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut ExtractionOutcome) {
+fn extract_auth_log(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
+) {
     // Dual channel: sudo lines are extracted as structured LinuxSudoEvent
     // records; every other line (sshd, pam, cron sessions, ...) still flows
     // through the text-log fallback. The filter keeps sudo lines out of the
     // fallback so no line is emitted twice.
-    sudo::extract(candidate, bytes, outcome);
+    sudo::extract(candidate, bytes, outcome, log_time);
     text_log::extract_with_filter(
         candidate,
         bytes,
@@ -180,6 +209,7 @@ fn extract_auth_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut E
         "auth",
         &sudo::is_sudo_event_line,
         outcome,
+        log_time,
     );
 }
 

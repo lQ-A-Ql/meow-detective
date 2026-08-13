@@ -53,7 +53,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
-| Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 解析器按官方格式规范实现：支持 uncompressed 与 LZ4/ZSTD 压缩字段、KEYED_HASH（SipHash-2-4）与 COMPACT 布局；XZ 压缩字段显式跳过并计数（不产出乱码）。缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
+| Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 解析器按官方格式规范实现：支持 uncompressed 与 XZ/LZ4/ZSTD 压缩字段、KEYED_HASH（SipHash-2-4）与 COMPACT 布局；public-medium 已入库合成 fixture（`testdata/fixtures/public-medium/linux/journal/system.journal`，110 条、双 boot、含 LZ4 与 XZ 压缩字段）配 expected.json 回归。仍缺真实样本 fixture 覆盖 rotated、损坏 journal 与 VM 快照 multi-boot；字段只能 bestEffort |
 | Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
 | Linux artifacts | sudoers policy 语义解析 | 部分支持 | `/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule |
 | Linux artifacts | systemd/init/profile.d shell 语义解析 | 部分支持 | systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图 |
@@ -97,7 +97,7 @@ V2 长期计划与能力评级请同时参考：
 - PVE 通用 PG/CRUSH/acting-set、EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption、CephFS 与跨节点关联。当前只对 `E:\pangushi\服务器` 私有样本显式加载的三 OSD inventory、RBD head、派生独立 source DB、114,260 条 VM 文件记录和代表性大文件 bounded-range 性能建立 baseline；已加载 inventory 是否等于完整副本集合尚未独立证明，不将其扩大为任意 Ceph 集群或公开 GA 承诺
 - 普通数据源导入自动借用案件内其他镜像补齐 multi-PV VG；必须先有原子集群成员注册与一致性校验
 - LVM thin 的全部变体与 cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活；当前仅实现受限的只读 dm-thin 映射
-- systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）
+- systemd journal 轮转/损坏/真实样本完整覆盖（压缩变体 XZ/LZ4/ZSTD 已有 public-medium 合成 fixture；当前字段为 bestEffort）
 - SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）
 - sudoers policy effective rule 解析（当前仅保留文本记录）
 - systemd/init/profile.d shell 语义解析（当前仅保留文本记录）

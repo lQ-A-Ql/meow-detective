@@ -1,11 +1,12 @@
 use super::linux::{
     is_apache_config_path, is_apt_history_path, is_auth_log_path, is_bash_history_path,
-    is_cron_path, is_dpkg_log_path, is_fish_history_path, is_init_script_path, is_journal_path,
-    is_login_binary_candidate_path, is_mysql_config_path, is_mysql_log_path, is_nginx_config_path,
-    is_plain_shell_history_path, is_profile_script_path, is_pve_config_path, is_pve_log_path,
-    is_rpm_package_log_path, is_ssh_candidate_path, is_ssh_text_path, is_sudoers_path,
-    is_system_config_path, is_systemd_unit_path, is_text_log_path, is_web_access_log_path,
-    is_web_error_log_path, is_web_root_script_path, is_wtmp_path, is_zsh_history_path,
+    is_cron_path, is_dpkg_log_path, is_faillog_path, is_fish_history_path, is_init_script_path,
+    is_journal_path, is_lastlog_path, is_mysql_config_path, is_mysql_log_path,
+    is_nginx_config_path, is_plain_shell_history_path, is_profile_script_path, is_pve_config_path,
+    is_pve_log_path, is_rpm_package_log_path, is_ssh_candidate_path, is_ssh_text_path,
+    is_sudoers_path, is_system_config_path, is_systemd_unit_path, is_text_log_path,
+    is_web_access_log_path, is_web_error_log_path, is_web_root_script_path, is_wtmp_path,
+    is_zsh_history_path,
 };
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
 
@@ -86,6 +87,8 @@ pub(super) enum LinuxArtifactRouteKind {
     MysqlConfig,
     MysqlLog,
     Login,
+    Lastlog,
+    Faillog,
     BashHistory,
     ZshHistory,
     FishHistory,
@@ -151,6 +154,10 @@ fn route_kind(path: &str) -> LinuxArtifactRouteKind {
         LinuxArtifactRouteKind::MysqlLog
     } else if is_wtmp_path(path) {
         LinuxArtifactRouteKind::Login
+    } else if is_lastlog_path(path) {
+        LinuxArtifactRouteKind::Lastlog
+    } else if is_faillog_path(path) {
+        LinuxArtifactRouteKind::Faillog
     } else if is_bash_history_path(path) {
         LinuxArtifactRouteKind::BashHistory
     } else if is_zsh_history_path(path) {
@@ -202,7 +209,9 @@ fn route_section(kind: LinuxArtifactRouteKind, path: &str) -> LinuxArtifactSecti
         LinuxArtifactRouteKind::MysqlConfig | LinuxArtifactRouteKind::MysqlLog => {
             LinuxArtifactSection::MysqlServices
         }
-        LinuxArtifactRouteKind::Login => LinuxArtifactSection::Login,
+        LinuxArtifactRouteKind::Login
+        | LinuxArtifactRouteKind::Lastlog
+        | LinuxArtifactRouteKind::Faillog => LinuxArtifactSection::Login,
         LinuxArtifactRouteKind::BashHistory
         | LinuxArtifactRouteKind::ZshHistory
         | LinuxArtifactRouteKind::FishHistory
@@ -219,9 +228,6 @@ fn route_section(kind: LinuxArtifactRouteKind, path: &str) -> LinuxArtifactSecti
         | LinuxArtifactRouteKind::SystemdUnit
         | LinuxArtifactRouteKind::InitScript
         | LinuxArtifactRouteKind::ProfileScript => LinuxArtifactSection::SystemConfig,
-        LinuxArtifactRouteKind::Unsupported if is_login_binary_candidate_path(path) => {
-            LinuxArtifactSection::Login
-        }
         LinuxArtifactRouteKind::Unsupported if is_ssh_candidate_path(path) => {
             LinuxArtifactSection::SystemConfig
         }
@@ -244,9 +250,10 @@ fn route_support(kind: LinuxArtifactRouteKind) -> LinuxCandidateSupport {
 
 fn route_read_limit(kind: LinuxArtifactRouteKind) -> usize {
     match kind {
-        LinuxArtifactRouteKind::Journal | LinuxArtifactRouteKind::Login => {
-            MAX_ANALYSIS_SOURCE_BYTES
-        }
+        LinuxArtifactRouteKind::Journal
+        | LinuxArtifactRouteKind::Login
+        | LinuxArtifactRouteKind::Lastlog
+        | LinuxArtifactRouteKind::Faillog => MAX_ANALYSIS_SOURCE_BYTES,
         LinuxArtifactRouteKind::WebAccessLog
         | LinuxArtifactRouteKind::WebErrorLog
         | LinuxArtifactRouteKind::AptHistory

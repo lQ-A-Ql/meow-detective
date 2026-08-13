@@ -130,6 +130,14 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::ContainsBoth("/var/log/apache2/", ".log."),
         EvidencePathPattern::ContainsAndSuffix("/var/log/httpd/", ".log"),
         EvidencePathPattern::ContainsBoth("/var/log/httpd/", ".log."),
+        // BaoTa (宝塔) panel layout: vhost site configs, panel-managed server
+        // main configs, and the centralized /www/wwwlogs web log directory.
+        EvidencePathPattern::ContainsAndSuffix("/www/server/panel/vhost/nginx/", ".conf"),
+        EvidencePathPattern::ContainsAndSuffix("/www/server/panel/vhost/apache/", ".conf"),
+        EvidencePathPattern::ContainsAndSuffix("/www/server/nginx/conf/", ".conf"),
+        EvidencePathPattern::ContainsAndSuffix("/www/server/apache/conf/", ".conf"),
+        EvidencePathPattern::ContainsAndSuffix("/www/wwwlogs/", ".log"),
+        EvidencePathPattern::ContainsBoth("/www/wwwlogs/", ".log."),
         EvidencePathPattern::ContainsAndSuffix("/var/www/", ".php"),
         EvidencePathPattern::ContainsAndSuffix("/var/www/", ".phtml"),
         EvidencePathPattern::ContainsAndSuffix("/var/www/", ".jsp"),
@@ -159,3 +167,7 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
     ],
     matcher: None,
 };
+
+#[cfg(test)]
+#[path = "../../../tests/unit/analysis_service/candidates/linux.rs"]
+mod tests;

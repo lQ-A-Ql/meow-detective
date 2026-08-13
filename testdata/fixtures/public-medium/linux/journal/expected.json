@@ -1,0 +1,73 @@
+[
+  {
+    "file": "system.journal",
+    "expected": {
+      "baseline": "artifacts-linux synthetic journal builder (`tests/common/mod.rs` `fixture_spec`, mirrors systemd journal-def.h/compress.c)",
+      "assertions": {
+        "entryCount": 110,
+        "distinctBootIds": 2,
+        "minDistinctPriorities": 5,
+        "skippedCompressed": 0,
+        "hashMismatches": 0,
+        "truncated": false,
+        "requiredFields": [
+          "MESSAGE",
+          "PRIORITY",
+          "_PID",
+          "_UID",
+          "_SYSTEMD_UNIT",
+          "_HOSTNAME",
+          "SYSLOG_IDENTIFIER",
+          "_BOOT_ID"
+        ],
+        "keyEntries": [
+          {
+            "index": 0,
+            "timestampMicros": 1700000000000000,
+            "priority": 0,
+            "pid": 1200,
+            "systemdUnit": "sshd.service",
+            "hostname": "fixture-host",
+            "bootId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "message": "sshd.service heartbeat cycle 0"
+          },
+          {
+            "index": 10,
+            "compression": "xz",
+            "messageContains": "soft lockup - CPU#0 stuck"
+          },
+          {
+            "index": 20,
+            "compression": "lz4",
+            "messageContains": "worker process 1203 was terminated"
+          },
+          {
+            "index": 60,
+            "timestampMicros": 1700100000000000,
+            "bootId": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+          }
+        ]
+      },
+      "guaranteedFields": [
+        "timestamp",
+        "message",
+        "pid",
+        "uid",
+        "priority",
+        "bootId",
+        "systemdUnit",
+        "hostname",
+        "syslogIdentifier"
+      ],
+      "bestEffortFields": [
+        "executable",
+        "cmdline",
+        "selinuxContext",
+        "messageId"
+      ],
+      "notGuaranteedFields": [
+        "monotonic"
+      ]
+    }
+  }
+]

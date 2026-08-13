@@ -1,4 +1,5 @@
 use super::common::{insert_opt, truncate};
+use super::timezone::LinuxLogTimeContext;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
@@ -24,14 +25,24 @@ pub(super) fn extract(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
     // The sudo parser takes the candidate mtime as reference time so its
-    // year-less syslog timestamps anchor to the evidence timeframe.
-    match artifacts_linux::parse_auth_log_sudo(&text, candidate.modified_at) {
+    // year-less syslog timestamps anchor to the evidence timeframe, and the
+    // inferred host clock so naive local timestamps convert to UTC.
+    let hint = artifacts_linux::LogTimeHint {
+        reference: candidate.modified_at,
+        clock: log_time.clock(),
+    };
+    match artifacts_linux::parse_auth_log_sudo(&text, &hint) {
         Ok(events) => {
             for event in events {
                 let mut attrs = base_attrs(candidate);
+                attrs.insert(
+                    "tzAssumed".to_string(),
+                    Value::String(log_time.tz_label().to_string()),
+                );
                 attrs.insert("user".to_string(), Value::String(event.user.clone()));
                 attrs.insert("command".to_string(), Value::String(event.command.clone()));
                 insert_opt(&mut attrs, "targetUser", event.target_user.clone());

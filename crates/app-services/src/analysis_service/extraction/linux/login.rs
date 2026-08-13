@@ -13,12 +13,12 @@ pub(in crate::analysis_service::extraction) fn is_wtmp_path(normalized: &str) ->
         || normalized.ends_with("/run/utmp")
 }
 
-pub(in crate::analysis_service::extraction) fn is_login_binary_candidate_path(
-    normalized: &str,
-) -> bool {
-    is_wtmp_path(normalized)
-        || normalized.ends_with("/var/log/lastlog")
-        || normalized.ends_with("/var/log/faillog")
+pub(in crate::analysis_service::extraction) fn is_lastlog_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/lastlog")
+}
+
+pub(in crate::analysis_service::extraction) fn is_faillog_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/faillog")
 }
 
 pub(super) fn extract(
@@ -133,5 +133,173 @@ fn event_title(record: &artifacts_linux::LoginRecord) -> (&'static str, String) 
                     .unwrap_or_default()
             ),
         ),
+    }
+}
+
+/// Extract `/var/log/lastlog` per-UID last-login records.
+///
+/// Artifact-type tradeoff: lastlog records reuse the `LinuxWtmp` family (the
+/// login family) instead of a new `LinuxLastlog` type. A new type would
+/// require a new transport DTO, summary mapping, frontend model + panel, and
+/// governance-catalog entries, while the existing `LinuxLoginRecordDto`
+/// already surfaces the fields that matter (terminal, host, loginTime). The
+/// UID rides in the `uid` attribute and `recordKind = "lastlog"` keeps the
+/// source unambiguous. Usernames are not resolved here — that needs a passwd
+/// cross-reference the extraction layer does not have; the UID is the
+/// authoritative key.
+pub(super) fn extract_lastlog(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    match artifacts_linux::parse_lastlog(bytes) {
+        Ok(records) => {
+            let records = cap_source_events(
+                candidate,
+                "lastlog",
+                MAX_LOGIN_EVENTS_PER_SOURCE,
+                records,
+                &mut outcome.warnings,
+            );
+            for record in records {
+                let mut attrs = base_attrs(candidate);
+                attrs.insert(
+                    "recordKind".to_string(),
+                    Value::String("lastlog".to_string()),
+                );
+                attrs.insert("uid".to_string(), Value::Number(record.uid.into()));
+                attrs.insert("terminal".to_string(), Value::String(record.line.clone()));
+                attrs.insert("host".to_string(), Value::String(record.host.clone()));
+                if let Some(timestamp) = record.time {
+                    attrs.insert(
+                        "loginTime".to_string(),
+                        Value::String(timestamp.to_rfc3339()),
+                    );
+                }
+
+                let title = format!(
+                    "Last login (lastlog): uid {} on {} from {}",
+                    record.uid,
+                    record.line,
+                    if record.host.is_empty() {
+                        "local"
+                    } else {
+                        record.host.as_str()
+                    }
+                );
+                outcome.artifacts.push(make_artifact(
+                    "LinuxWtmp",
+                    title.clone(),
+                    title,
+                    candidate,
+                    "linux.lastlog",
+                    attrs.clone(),
+                ));
+
+                if let Some(timestamp) = record.time {
+                    outcome.timeline_events.push(make_timeline_event(
+                        &candidate.file_id,
+                        "login",
+                        timestamp,
+                        format!(
+                            "Last login uid {}@{} ({})",
+                            record.uid, record.host, record.line
+                        ),
+                        format!("lastlog record for uid {}", record.uid),
+                        attrs,
+                        "linux.lastlog",
+                    ));
+                }
+            }
+        }
+        Err(error) => outcome.warnings.push(format!(
+            "{} lastlog parse failed: {}",
+            candidate.path, error
+        )),
+    }
+}
+
+/// Extract `/var/log/faillog` per-UID login-failure counters.
+///
+/// Same tradeoff as `extract_lastlog`: records reuse the `LinuxWtmp` login
+/// family with `recordKind = "faillog"`; the failure counters
+/// (`failures`/`failMax`/`locktimeSeconds`/`lockout`) live in the artifact
+/// attributes. faillog carries no host field, so `host` stays empty and
+/// `loginTime` holds the most recent *failure* time.
+pub(super) fn extract_faillog(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    match artifacts_linux::parse_faillog(bytes) {
+        Ok(records) => {
+            let records = cap_source_events(
+                candidate,
+                "faillog",
+                MAX_LOGIN_EVENTS_PER_SOURCE,
+                records,
+                &mut outcome.warnings,
+            );
+            for record in records {
+                let mut attrs = base_attrs(candidate);
+                attrs.insert(
+                    "recordKind".to_string(),
+                    Value::String("faillog".to_string()),
+                );
+                attrs.insert("uid".to_string(), Value::Number(record.uid.into()));
+                attrs.insert("terminal".to_string(), Value::String(record.line.clone()));
+                attrs.insert(
+                    "failures".to_string(),
+                    Value::Number(record.failure_count.into()),
+                );
+                attrs.insert(
+                    "failMax".to_string(),
+                    Value::Number(record.max_failures.into()),
+                );
+                attrs.insert(
+                    "locktimeSeconds".to_string(),
+                    Value::Number(record.locktime_seconds.into()),
+                );
+                attrs.insert("lockout".to_string(), Value::Bool(record.lockout));
+                if let Some(timestamp) = record.last_failure {
+                    attrs.insert(
+                        "loginTime".to_string(),
+                        Value::String(timestamp.to_rfc3339()),
+                    );
+                }
+
+                let title = format!(
+                    "Failed logins (faillog): uid {} count {} on {}",
+                    record.uid, record.failure_count, record.line
+                );
+                outcome.artifacts.push(make_artifact(
+                    "LinuxWtmp",
+                    title.clone(),
+                    title,
+                    candidate,
+                    "linux.faillog",
+                    attrs.clone(),
+                ));
+
+                if let Some(timestamp) = record.last_failure {
+                    outcome.timeline_events.push(make_timeline_event(
+                        &candidate.file_id,
+                        "login_failed",
+                        timestamp,
+                        format!(
+                            "Failed login uid {} ({}) count {}",
+                            record.uid, record.line, record.failure_count
+                        ),
+                        format!("faillog record for uid {}", record.uid),
+                        attrs,
+                        "linux.faillog",
+                    ));
+                }
+            }
+        }
+        Err(error) => outcome.warnings.push(format!(
+            "{} faillog parse failed: {}",
+            candidate.path, error
+        )),
     }
 }

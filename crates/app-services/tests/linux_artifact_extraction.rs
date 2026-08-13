@@ -86,6 +86,119 @@ fn linux_wtmp_extraction_produces_events() {
 }
 
 #[test]
+fn linux_lastlog_extraction_produces_login_records_without_unsupported_warning() {
+    let candidate = candidate("/var/log/lastlog");
+    let mut slot = vec![0u8; 292];
+    slot[0..4].copy_from_slice(&1_700_000_000i32.to_le_bytes());
+    slot[4..9].copy_from_slice(b"pts/0");
+    slot[36..49].copy_from_slice(b"192.168.1.100");
+    // UID 0 hole, record at UID 1.
+    let mut buf = vec![0u8; 292];
+    buf.extend_from_slice(&slot);
+
+    let outcome = extract_linux_candidate(&candidate, &buf);
+    assert_has_outputs(&outcome, &candidate.file_id);
+    assert!(
+        !outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("first-pass parser")),
+        "lastlog must no longer emit the unsupported warning: {:?}",
+        outcome.warnings
+    );
+
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxWtmp")
+        .expect("lastlog record artifact");
+    assert_eq!(
+        artifact_attr(artifact, "recordKind").and_then(|value| value.as_str()),
+        Some("lastlog")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "uid").and_then(|value| value.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        artifact_attr(artifact, "terminal").and_then(|value| value.as_str()),
+        Some("pts/0")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "host").and_then(|value| value.as_str()),
+        Some("192.168.1.100")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "loginTime").and_then(|value| value.as_str()),
+        Some("2023-11-14T22:13:20+00:00")
+    );
+    assert_eq!(outcome.timeline_events.len(), 1);
+    assert_eq!(
+        outcome.timeline_events[0].timestamp.to_rfc3339(),
+        "2023-11-14T22:13:20+00:00"
+    );
+}
+
+#[test]
+fn linux_faillog_extraction_produces_failure_records_without_unsupported_warning() {
+    let candidate = candidate("/var/log/faillog");
+    let mut slot = vec![0u8; 32];
+    slot[0..2].copy_from_slice(&5i16.to_le_bytes()); // fail_cnt
+    slot[2..4].copy_from_slice(&5i16.to_le_bytes()); // fail_max
+    slot[4..9].copy_from_slice(b"pts/2");
+    slot[16..24].copy_from_slice(&1_700_000_000i64.to_le_bytes()); // fail_time
+    slot[24..32].copy_from_slice(&900i64.to_le_bytes()); // fail_locktime
+
+    let outcome = extract_linux_candidate(&candidate, &slot);
+    assert_has_outputs(&outcome, &candidate.file_id);
+    assert!(
+        !outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("first-pass parser")),
+        "faillog must no longer emit the unsupported warning: {:?}",
+        outcome.warnings
+    );
+
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxWtmp")
+        .expect("faillog record artifact");
+    assert_eq!(
+        artifact_attr(artifact, "recordKind").and_then(|value| value.as_str()),
+        Some("faillog")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "uid").and_then(|value| value.as_u64()),
+        Some(0)
+    );
+    assert_eq!(
+        artifact_attr(artifact, "failures").and_then(|value| value.as_i64()),
+        Some(5)
+    );
+    assert_eq!(
+        artifact_attr(artifact, "failMax").and_then(|value| value.as_i64()),
+        Some(5)
+    );
+    assert_eq!(
+        artifact_attr(artifact, "locktimeSeconds").and_then(|value| value.as_i64()),
+        Some(900)
+    );
+    assert_eq!(
+        artifact_attr(artifact, "lockout").and_then(|value| value.as_bool()),
+        Some(true),
+        "fail_cnt == fail_max must surface as lockout"
+    );
+    assert_eq!(
+        artifact_attr(artifact, "loginTime").and_then(|value| value.as_str()),
+        Some("2023-11-14T22:13:20+00:00")
+    );
+    assert_eq!(outcome.timeline_events.len(), 1);
+    assert_eq!(outcome.timeline_events[0].event_type, "login_failed");
+}
+
+#[test]
 fn linux_apt_history_extraction_produces_events() {
     let candidate = candidate("/var/log/apt/history.log");
     let input = "Start-Date: 2024-01-15  10:30:00\nInstall: curl:amd64 (7.88.1)\nEnd-Date: 2024-01-15  10:30:15\n";
@@ -761,5 +874,105 @@ fn linux_apt_history_respects_per_source_cap() {
             .contains("package log emitted first 20000 records only (1 more skipped)")),
         "cap warning with skipped count expected: {:?}",
         outcome.warnings
+    );
+}
+
+#[test]
+fn linux_baota_vhost_configs_route_to_site_parsers() {
+    let nginx = candidate("/www/server/panel/vhost/nginx/example.com.conf");
+    let input = "server {\n    listen 80;\n    server_name example.com;\n    root /www/wwwroot/example.com;\n}\n";
+    let outcome = extract_linux_candidate(&nginx, input.as_bytes());
+    let site = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxWebSite")
+        .expect("baota nginx vhost should produce a LinuxWebSite artifact");
+    assert_eq!(
+        artifact_attr(site, "serverKind").and_then(|value| value.as_str()),
+        Some("nginx")
+    );
+
+    let apache = candidate("/www/server/panel/vhost/apache/example.org.conf");
+    let input = "<VirtualHost *:80>\n    ServerName example.org\n    DocumentRoot /www/wwwroot/example.org\n</VirtualHost>\n";
+    let outcome = extract_linux_candidate(&apache, input.as_bytes());
+    let site = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxWebSite")
+        .expect("baota apache vhost should produce a LinuxWebSite artifact");
+    assert_eq!(
+        artifact_attr(site, "serverKind").and_then(|value| value.as_str()),
+        Some("apache")
+    );
+}
+
+#[test]
+fn linux_baota_wwwlogs_route_to_access_and_error_parsers() {
+    let access = candidate("/www/wwwlogs/example.com.log");
+    let input =
+        "192.0.2.10 - - [15/Jan/2024:10:30:00 +0000] \"GET / HTTP/1.1\" 200 42 \"-\" \"curl/8\"\n";
+    let outcome = extract_linux_candidate(&access, input.as_bytes());
+    assert!(
+        outcome
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.family == "LinuxWebAccessLog"),
+        "baota wwwlogs access log should produce LinuxWebAccessLog artifacts"
+    );
+
+    let error = candidate("/www/wwwlogs/example.com.error.log");
+    let input = "2024/01/15 10:30:00 [error] 123#0: *1 open() failed\n";
+    let outcome = extract_linux_candidate(&error, input.as_bytes());
+    assert!(
+        outcome
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.family == "LinuxWebErrorLog"),
+        "baota wwwlogs error log should produce LinuxWebErrorLog artifacts"
+    );
+}
+
+#[test]
+fn linux_docker_overlay_candidate_is_annotated_and_warned() {
+    let overlay = candidate("/var/lib/docker/overlay2/abc123/diff/etc/cron.d/container-job");
+    let outcome =
+        extract_linux_candidate(&overlay, "30 2 * * * root /usr/bin/backup.sh\n".as_bytes());
+
+    let job = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxCronJob")
+        .expect("overlay cron.d content still extracts as cron jobs");
+    assert_eq!(
+        artifact_attr(job, "overlayContext").and_then(|value| value.as_str()),
+        Some("docker"),
+        "overlay-sourced artifacts must carry the docker overlay marker"
+    );
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("resides inside a Docker overlay2 layer")),
+        "overlay candidates must surface an extraction warning: {:?}",
+        outcome.warnings
+    );
+
+    let host = candidate("/etc/cron.d/host-job");
+    let outcome = extract_linux_candidate(&host, "30 2 * * * root /usr/bin/backup.sh\n".as_bytes());
+    let job = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxCronJob")
+        .expect("host cron.d content extracts as cron jobs");
+    assert!(
+        artifact_attr(job, "overlayContext").is_none(),
+        "host artifacts must not carry the overlay marker"
+    );
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("Docker overlay2")),
+        "host candidates must not surface the overlay warning"
     );
 }

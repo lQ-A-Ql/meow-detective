@@ -23,8 +23,7 @@ const MAX_ENTRY_ARRAYS: usize = 4096;
 #[derive(Debug, Default)]
 pub struct JournalParseOutcome {
     pub entries: Vec<JournalEntry>,
-    /// DATA payloads skipped because they were XZ-compressed (unsupported)
-    /// or failed LZ4/Zstd decompression.
+    /// DATA payloads skipped because XZ/LZ4/Zstd decompression failed.
     pub skipped_compressed: u64,
     /// Objects/fields skipped because they failed structural validation.
     pub skipped_corrupt: u64,

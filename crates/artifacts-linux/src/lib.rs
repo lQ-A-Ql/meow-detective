@@ -1,8 +1,11 @@
 pub mod apt;
 pub mod bash;
+pub mod clock;
 pub mod cron;
 pub mod error;
+pub mod faillog;
 pub mod journal;
+pub mod lastlog;
 pub mod mysql;
 pub mod shadow_edit;
 pub mod sudo;
@@ -15,12 +18,15 @@ pub use apt::{
     AptEvent,
 };
 pub use bash::{parse_bash_history, BashCommand};
+pub use clock::{LogClock, LogTimeHint, UtcClock};
 pub use cron::{
     parse_crontab, parse_crontab_with_kind, parse_crontab_with_source,
     parse_crontab_with_source_and_kind, CronJob, CrontabKind,
 };
 pub use error::LinuxArtifactError;
+pub use faillog::{parse_faillog, FaillogRecord};
 pub use journal::{parse_journal, parse_journal_full, JournalEntry, JournalParseOutcome};
+pub use lastlog::{parse_lastlog, LastlogRecord};
 pub use mysql::{
     detect_mysql_config_findings, detect_mysql_log_findings, parse_mysql_config, parse_mysql_log,
     MysqlConfigEntry, MysqlFinding, MysqlLogEntry,

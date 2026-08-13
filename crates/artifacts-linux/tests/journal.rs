@@ -172,13 +172,78 @@ fn zstd_compressed_field_roundtrip() {
 }
 
 #[test]
-fn xz_compressed_field_is_skipped_and_counted() {
+fn xz_compressed_field_roundtrip() {
     let mut spec = base_spec();
-    spec.data[0] = DataSpec::xz("MESSAGE=should never be decoded");
+    // Long messages (crash stacks etc.) are what XZ actually carries on
+    // systemd v219 (RHEL7/CentOS7), where XZ is the default.
+    let long_message = format!("MESSAGE={}", "xz-payload ".repeat(256));
+    spec.data[0] = DataSpec::xz(&long_message);
+
+    let data = build_journal(&spec);
+    let outcome = parse_journal_full(&data).expect("should parse");
+    assert_eq!(outcome.skipped_compressed, 0);
+    assert_eq!(outcome.hash_mismatches, 0);
+    assert_eq!(
+        outcome.entries[0].message.as_deref(),
+        Some(long_message.strip_prefix("MESSAGE=").unwrap_or_default())
+    );
+}
+
+#[test]
+fn mixed_lz4_xz_zstd_file_decodes_all() {
+    let mut spec = base_spec();
+    let xz_message = format!("MESSAGE={}", "xz-crash-stack ".repeat(64));
+    let lz4_message = format!("MESSAGE={}", "lz4-payload ".repeat(64));
+    spec.data[0] = DataSpec::xz(&xz_message);
+    spec.data[13] = DataSpec::lz4(&lz4_message);
+    // Entry 1's PRIORITY arrives Zstd-compressed.
+    spec.data[14] = DataSpec::zstd("PRIORITY=6");
 
     let data = build_journal(&spec);
     let outcome = parse_journal_full(&data).expect("should parse");
     assert_eq!(outcome.entries.len(), 2);
+    assert_eq!(outcome.skipped_compressed, 0);
+    assert_eq!(outcome.hash_mismatches, 0);
+    assert_eq!(
+        outcome.entries[0].message.as_deref(),
+        Some(xz_message.strip_prefix("MESSAGE=").unwrap_or_default())
+    );
+    assert_eq!(
+        outcome.entries[1].message.as_deref(),
+        Some(lz4_message.strip_prefix("MESSAGE=").unwrap_or_default())
+    );
+    assert_eq!(outcome.entries[1].priority, Some(6));
+}
+
+#[test]
+fn corrupt_xz_blob_is_counted_not_fatal() {
+    let mut spec = base_spec();
+    // Claim XZ compression but store garbage instead of a container.
+    spec.data[0] = DataSpec::raw(common::FLAG_XZ, vec![0xFF; 64]);
+
+    let data = build_journal(&spec);
+    let outcome = parse_journal_full(&data).expect("should parse");
+    assert_eq!(outcome.entries.len(), 2);
+    assert!(outcome.entries[0].message.is_none());
+    assert!(outcome.skipped_compressed >= 1);
+}
+
+#[test]
+fn xz_blob_exceeding_output_cap_is_counted() {
+    let mut spec = base_spec();
+    // A valid XZ stream decompressing past the 64 MiB cap must be dropped.
+    // Build it directly: zeros compress to well under a megabyte.
+    let huge = vec![b'A'; (65 * 1024 * 1024) as usize];
+    let stream = xz2::stream::Stream::new_easy_encoder(6, xz2::stream::Check::None)
+        .expect("XZ encoder preset must be valid");
+    let mut encoder = xz2::write::XzEncoder::new_stream(Vec::new(), stream);
+    use std::io::Write as _;
+    encoder.write_all(&huge).expect("encode");
+    let stored = encoder.finish().expect("encode");
+    spec.data[0] = DataSpec::raw(common::FLAG_XZ, stored);
+
+    let data = build_journal(&spec);
+    let outcome = parse_journal_full(&data).expect("should parse");
     assert!(outcome.entries[0].message.is_none());
     assert!(outcome.skipped_compressed >= 1);
 }

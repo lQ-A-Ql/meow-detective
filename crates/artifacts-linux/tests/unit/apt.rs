@@ -1,5 +1,6 @@
 use super::*;
-use chrono::TimeZone;
+use crate::clock::{LogClock, LogTimeHint, UtcClock};
+use chrono::{FixedOffset, TimeZone};
 
 fn reference(y: i32, m: u32, d: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(y, m, d, 12, 0, 0).unwrap()
@@ -13,7 +14,7 @@ Commandline: apt-get install curl vim
 Install: curl:amd64 (7.88.1-10+deb12u5), vim:amd64 (2:9.0.1378-2)
 End-Date: 2024-01-15  10:30:15";
 
-    let events = parse_apt_history(input).expect("should parse APT history");
+    let events = parse_apt_history(input, &UtcClock).expect("should parse APT history");
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].action, "install");
     assert_eq!(events[0].package, "curl:amd64");
@@ -42,7 +43,7 @@ Start-Date: 2024-01-16  09:00:00
 Install: vim:amd64 (2:9.0.1378-2)
 End-Date: 2024-01-16  09:00:05";
 
-    let events = parse_apt_history(input).expect("should parse");
+    let events = parse_apt_history(input, &UtcClock).expect("should parse");
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].requested_by.as_deref(), Some("alice (1000)"));
     assert_eq!(
@@ -65,7 +66,7 @@ Start-Date: 2024-06-02  09:15:00
 Remove: old-package:amd64 (1.0.0-1)
 End-Date: 2024-06-02  09:15:03";
 
-    let events = parse_apt_history(input).expect("should parse");
+    let events = parse_apt_history(input, &UtcClock).expect("should parse");
     assert_eq!(events.len(), 3);
     assert_eq!(events[0].action, "upgrade");
     assert_eq!(events[0].package, "libssl3:amd64");
@@ -83,7 +84,7 @@ fn parse_dpkg_log_entries() {
 2024-06-01 14:00:00 upgrade libssl3:amd64 3.0.10-1 3.0.11-1~deb12u2
 2024-06-02 09:15:03 remove old-package:amd64 1.0.0-1 <none>";
 
-    let events = parse_dpkg_log(input).expect("should parse dpkg log");
+    let events = parse_dpkg_log(input, &UtcClock).expect("should parse dpkg log");
     assert_eq!(events.len(), 4);
     assert_eq!(events[0].action, "install");
     // Package names keep their :arch suffix for cross-log correlation.
@@ -108,7 +109,7 @@ fn dpkg_status_lines_are_skipped() {
 2024-01-15 10:30:07 install curl:amd64 <none> 7.88.1-10+deb12u5
 2024-01-15 10:30:08 trigproc man-db:amd64 2.9.1-1 <none>";
 
-    let events = parse_dpkg_log(input).expect("should parse dpkg log");
+    let events = parse_dpkg_log(input, &UtcClock).expect("should parse dpkg log");
     let actions: Vec<&str> = events.iter().map(|e| e.action.as_str()).collect();
     assert_eq!(actions, ["startup", "install", "trigproc"]);
     // No garbage event with action="status" / package="half-installed".
@@ -118,7 +119,7 @@ fn dpkg_status_lines_are_skipped() {
 #[test]
 fn dpkg_install_without_new_version_yields_none() {
     let input = "2024-01-15 10:30:00 install curl:amd64 7.88.1-9 <none>";
-    let events = parse_dpkg_log(input).expect("should parse dpkg log");
+    let events = parse_dpkg_log(input, &UtcClock).expect("should parse dpkg log");
     assert_eq!(events.len(), 1);
     // A `<none>` placeholder must surface as None, not the string "<none>".
     assert_eq!(events[0].version, None);
@@ -133,7 +134,8 @@ Jan 15 10:30:00 Installed: curl-7.61.1-33.el8.x86_64
 ";
 
     let reference = reference(2024, 1, 20);
-    let events = parse_rpm_package_log(input, Some(reference)).expect("should parse rpm logs");
+    let events = parse_rpm_package_log(input, &LogTimeHint::utc(Some(reference)))
+        .expect("should parse rpm logs");
     assert_eq!(events.len(), 3);
     assert_eq!(events[0].action, "install");
     assert_eq!(events[0].package, "curl");
@@ -158,8 +160,8 @@ fn yum_syslog_timestamp_rolls_back_year_after_reference() {
     // A yum.log last modified in January still holds December entries from
     // the tail of the previous log year.
     let input = "Dec 20 03:22:01 Installed: kernel-3.10.0-1160.el7.x86_64\n";
-    let events =
-        parse_rpm_package_log(input, Some(reference(2024, 1, 5))).expect("should parse yum log");
+    let events = parse_rpm_package_log(input, &LogTimeHint::utc(Some(reference(2024, 1, 5))))
+        .expect("should parse yum log");
     assert_eq!(events.len(), 1);
     assert_eq!(
         events[0].timestamp.expect("timestamp").to_rfc3339(),
@@ -170,8 +172,8 @@ fn yum_syslog_timestamp_rolls_back_year_after_reference() {
 #[test]
 fn yum_syslog_timestamp_keeps_reference_year_when_not_in_future() {
     let input = "May 11 15:39:06 Installed: wget-1.14-18.el7.x86_64\n";
-    let events =
-        parse_rpm_package_log(input, Some(reference(2024, 6, 1))).expect("should parse yum log");
+    let events = parse_rpm_package_log(input, &LogTimeHint::utc(Some(reference(2024, 6, 1))))
+        .expect("should parse yum log");
     assert_eq!(events.len(), 1);
     assert_eq!(
         events[0].timestamp.expect("timestamp").to_rfc3339(),
@@ -181,8 +183,63 @@ fn yum_syslog_timestamp_keeps_reference_year_when_not_in_future() {
 
 #[test]
 fn parse_empty_input() {
-    let events = parse_apt_history("").expect("should parse");
+    let events = parse_apt_history("", &UtcClock).expect("should parse");
     assert!(events.is_empty());
-    let events = parse_dpkg_log("").expect("should parse");
+    let events = parse_dpkg_log("", &UtcClock).expect("should parse");
     assert!(events.is_empty());
+}
+
+/// +08:00 clock mirroring a host in Asia/Shanghai (no DST history).
+struct PlusEightClock;
+
+impl LogClock for PlusEightClock {
+    fn local_to_utc(&self, local: NaiveDateTime) -> Option<DateTime<Utc>> {
+        let offset = FixedOffset::east_opt(8 * 3600).expect("valid offset");
+        offset
+            .from_local_datetime(&local)
+            .single()
+            .map(|dt| dt.with_timezone(&Utc))
+    }
+    fn utc_to_local_naive(&self, timestamp: DateTime<Utc>) -> NaiveDateTime {
+        timestamp
+            .with_timezone(&FixedOffset::east_opt(8 * 3600).expect("valid offset"))
+            .naive_local()
+    }
+}
+
+#[test]
+fn apt_history_timestamp_converts_with_host_clock() {
+    let input = "\
+Start-Date: 2024-01-15  10:30:00
+Install: curl:amd64 (7.88.1-10+deb12u5)
+End-Date: 2024-01-15  10:30:15";
+    let events = parse_apt_history(input, &PlusEightClock).expect("should parse");
+    assert_eq!(
+        events[0].timestamp.expect("timestamp").to_rfc3339(),
+        "2024-01-15T02:30:00+00:00"
+    );
+}
+
+#[test]
+fn dpkg_timestamp_converts_with_host_clock() {
+    let input = "2024-01-15 10:30:00 install curl:amd64 <none> 7.88.1-10+deb12u5";
+    let events = parse_dpkg_log(input, &PlusEightClock).expect("should parse");
+    assert_eq!(
+        events[0].timestamp.expect("timestamp").to_rfc3339(),
+        "2024-01-15T02:30:00+00:00"
+    );
+}
+
+#[test]
+fn yum_syslog_timestamp_converts_with_host_clock() {
+    let input = "Jan 15 10:30:00 Installed: curl-7.61.1-33.el8.x86_64\n";
+    let hint = LogTimeHint {
+        reference: Some(reference(2024, 1, 20)),
+        clock: &PlusEightClock,
+    };
+    let events = parse_rpm_package_log(input, &hint).expect("should parse");
+    assert_eq!(
+        events[0].timestamp.expect("timestamp").to_rfc3339(),
+        "2024-01-15T02:30:00+00:00"
+    );
 }

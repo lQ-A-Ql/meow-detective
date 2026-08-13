@@ -3,8 +3,10 @@ use super::candidate_order::order_candidates_for_extraction;
 use super::candidate_processing::{
     capability_for_candidate, discovery_categories, encrypted_candidate_warning,
     process_candidates, CandidateProcessingContext, CandidateSource, ExistingCheckpoints,
+    PreloadContexts,
 };
 use super::checkpoint_validation::existing_complete_scan_keys;
+use super::linux::{resolve_linux_log_time, LinuxLogTimeContext};
 use super::output_persistence::flush_pending_outputs;
 use super::preparation::prepare_registry_preload;
 use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
@@ -161,29 +163,27 @@ fn run_analysis_extraction_with_source(
         }
         file_reader(candidate, read_limit)
     };
-    let preload = prepare_registry_preload(
+    let preloads = prepare_run_preloads(
         conn,
+        platform,
         &candidates,
         &selected,
         &checkpoints,
         cancel_token,
         &mut guarded_file_reader,
     )?;
-    let browser_preload =
-        prepare_browser_preload(conn, &candidates, cancel_token, &mut guarded_file_reader)?;
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_extraction();
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
     let mut state = ExtractionState::new(&selected);
-    record_preload_warnings(&selected, &preload, &browser_preload, &mut state);
+    record_preload_warnings(&selected, &preloads, &mut state);
     let processing_started = Instant::now();
     let processing_context = CandidateProcessingContext::new(
         conn,
         case_id,
         &selected,
         &checkpoints,
-        &preload,
-        &browser_preload,
+        preloads.as_refs(),
         cancel_token,
     );
     process_candidates(
@@ -217,17 +217,86 @@ fn run_analysis_extraction_with_source(
     })
 }
 
+/// Owned preload contexts for one extraction run.
+struct RunPreloads {
+    registry: RegistryPreloadContext,
+    browser: BrowserPreloadContext,
+    linux_log_time: LinuxLogTimeContext,
+    timezone_warnings: Vec<String>,
+}
+
+impl RunPreloads {
+    fn as_refs(&self) -> PreloadContexts<'_> {
+        PreloadContexts {
+            registry: &self.registry,
+            browser: &self.browser,
+            linux_log_time: &self.linux_log_time,
+        }
+    }
+}
+
+/// Build the registry/browser preload contexts and resolve the host timezone
+/// for Linux log parsing (non-Linux runs use UTC).
+fn prepare_run_preloads(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    candidates: &[EvidenceCandidate],
+    selected: &[AnalysisCapability],
+    checkpoints: &ExistingCheckpoints<'_>,
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<RunPreloads, AnalysisServiceError> {
+    let registry = prepare_registry_preload(
+        conn,
+        candidates,
+        selected,
+        checkpoints,
+        cancel_token,
+        file_reader,
+    )?;
+    let browser = prepare_browser_preload(conn, candidates, cancel_token, file_reader)?;
+    let (linux_log_time, timezone_warnings) = if platform == DataSourcePlatform::Linux {
+        resolve_linux_log_time(conn, cancel_token, file_reader)
+    } else {
+        (LinuxLogTimeContext::utc(), Vec::new())
+    };
+    Ok(RunPreloads {
+        registry,
+        browser,
+        linux_log_time,
+        timezone_warnings,
+    })
+}
+
+/// Record timezone resolution warnings as informational (non-retryable)
+/// warnings against any selected Linux capability.
+fn record_log_time_warnings(
+    selected: &[AnalysisCapability],
+    warnings: &[String],
+    state: &mut ExtractionState,
+) {
+    let Some(capability) = selected
+        .iter()
+        .find(|capability| capability.read_policy == CandidateReadPolicy::LinuxPathAware)
+        .copied()
+    else {
+        return;
+    };
+    for warning in warnings {
+        state.record_informational_warning(capability, warning.clone());
+    }
+}
+
 fn record_preload_warnings(
     selected: &[AnalysisCapability],
-    registry_preload: &RegistryPreloadContext,
-    browser_preload: &BrowserPreloadContext,
+    preloads: &RunPreloads,
     state: &mut ExtractionState,
 ) {
     if let Some(registry) = selected
         .iter()
         .find(|capability| capability.read_policy == CandidateReadPolicy::RegistryPreload)
     {
-        for warning in registry_preload.warnings.iter().cloned() {
+        for warning in preloads.registry.warnings.iter().cloned() {
             state.record_warning(*registry, warning);
         }
     }
@@ -235,10 +304,11 @@ fn record_preload_warnings(
         .iter()
         .find(|capability| capability.key == "BrowserHistory")
     {
-        for warning in browser_preload.warnings.iter().cloned() {
+        for warning in preloads.browser.warnings.iter().cloned() {
             state.record_warning(*browser, warning);
         }
     }
+    record_log_time_warnings(selected, &preloads.timezone_warnings, state);
 }
 
 fn register_candidates(

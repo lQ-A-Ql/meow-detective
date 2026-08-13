@@ -4,12 +4,13 @@
 //! `ObjectHeader.flags` (`OBJECT_COMPRESSED_XZ/LZ4/ZSTD`), not sniffed from
 //! magic bytes. Layouts per systemd's `src/basic/compress.c`:
 //!
+//! - XZ: a complete `.xz` container (LZMA2 filter, `LZMA_CHECK_NONE`) produced
+//!   by `lzma_stream_buffer_encode` (`compress_blob_xz`); unlike LZ4 there is
+//!   no size prefix. This is the default on systemd v219 (RHEL7/CentOS7).
 //! - LZ4: 8-byte little-endian original size, followed by a raw LZ4 block
 //!   produced by `LZ4_compress_default` (`compress_blob_lz4`).
 //! - Zstd: a plain zstd frame produced by `ZSTD_compress`
 //!   (`compress_blob_zstd`).
-//! - XZ: an lzma stream; **not supported** — reported so the caller can skip
-//!   and count the field instead of mistaking compressed bytes for text.
 
 use std::borrow::Cow;
 use std::io::Read;
@@ -22,8 +23,6 @@ const MAX_DECOMPRESSED: u64 = 64 * 1024 * 1024;
 
 pub(super) enum Payload<'a> {
     Decoded(Cow<'a, [u8]>),
-    /// XZ compression was flagged; decompression is not implemented.
-    XzUnsupported,
     /// The payload claimed compression but failed to decode.
     Corrupt,
 }
@@ -31,11 +30,40 @@ pub(super) enum Payload<'a> {
 pub(super) fn decode(flags: u8, payload: &[u8]) -> Payload<'_> {
     match flags & (COMPRESSED_XZ | COMPRESSED_LZ4 | COMPRESSED_ZSTD) {
         0 => Payload::Decoded(Cow::Borrowed(payload)),
-        COMPRESSED_XZ => Payload::XzUnsupported,
+        COMPRESSED_XZ => decode_xz(payload),
         COMPRESSED_LZ4 => decode_lz4(payload),
         COMPRESSED_ZSTD => decode_zstd(payload),
         _ => Payload::Corrupt,
     }
+}
+
+fn decode_xz(payload: &[u8]) -> Payload<'static> {
+    decode_reader(xz2::read::XzDecoder::new(payload))
+}
+
+fn decode_zstd(payload: &[u8]) -> Payload<'static> {
+    let decoder = match zstd::stream::read::Decoder::new(payload) {
+        Ok(decoder) => decoder,
+        Err(_) => return Payload::Corrupt,
+    };
+    decode_reader(decoder)
+}
+
+/// Decompress a stream with a hard output cap: reading past the limit marks
+/// the payload corrupt instead of materializing a forged-size bomb.
+fn decode_reader<R: Read>(reader: R) -> Payload<'static> {
+    let mut buffer = Vec::new();
+    if reader
+        .take(MAX_DECOMPRESSED + 1)
+        .read_to_end(&mut buffer)
+        .is_err()
+    {
+        return Payload::Corrupt;
+    }
+    if buffer.len() as u64 > MAX_DECOMPRESSED {
+        return Payload::Corrupt;
+    }
+    Payload::Decoded(Cow::Owned(buffer))
 }
 
 fn decode_lz4(payload: &[u8]) -> Payload<'static> {
@@ -50,23 +78,4 @@ fn decode_lz4(payload: &[u8]) -> Payload<'static> {
         Ok(buffer) if buffer.len() as u64 == original => Payload::Decoded(Cow::Owned(buffer)),
         _ => Payload::Corrupt,
     }
-}
-
-fn decode_zstd(payload: &[u8]) -> Payload<'static> {
-    let decoder = match zstd::stream::read::Decoder::new(payload) {
-        Ok(decoder) => decoder,
-        Err(_) => return Payload::Corrupt,
-    };
-    let mut buffer = Vec::new();
-    if decoder
-        .take(MAX_DECOMPRESSED + 1)
-        .read_to_end(&mut buffer)
-        .is_err()
-    {
-        return Payload::Corrupt;
-    }
-    if buffer.len() as u64 > MAX_DECOMPRESSED {
-        return Payload::Corrupt;
-    }
-    Payload::Decoded(Cow::Owned(buffer))
 }

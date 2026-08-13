@@ -6,7 +6,7 @@
 
 use artifacts_linux::{
     parse_apt_history, parse_auth_log_sudo, parse_bash_history, parse_crontab, parse_dpkg_log,
-    parse_journal, parse_wtmp, SudoEvent,
+    parse_journal, parse_wtmp, LogTimeHint, SudoEvent, UtcClock,
 };
 use chrono::{TimeZone, Utc};
 
@@ -29,7 +29,7 @@ Upgrade: libssl3:amd64 (3.0.11-1~deb12u2), openssl:amd64 (3.0.11-1~deb12u2)
 Remove: old-lib:amd64 (1.2.3-4)
 End-Date: 2024-06-01  14:00:05";
 
-    let events = parse_apt_history(input).expect("should parse APT history");
+    let events = parse_apt_history(input, &UtcClock).expect("should parse APT history");
     assert_eq!(
         events.len(),
         5,
@@ -53,7 +53,7 @@ fn dpkg_log_parses_complete_fixture() {
 2024-06-01 14:00:00 upgrade libssl3:amd64 3.0.11-1~deb12u2 <none>
 2024-06-02 09:15:03 remove old-package:amd64 1.0.0-1 <none>";
 
-    let events = parse_dpkg_log(input).expect("should parse dpkg log");
+    let events = parse_dpkg_log(input, &UtcClock).expect("should parse dpkg log");
     assert_eq!(events.len(), 4);
     assert_eq!(events[0].action, "install");
     assert_eq!(events[0].package, "curl:amd64");
@@ -161,7 +161,8 @@ Jan 15 10:30:05 ubuntu sudo: pam_unix(sudo:session): session opened for user roo
 Jan 15 10:32:00 ubuntu sudo:     bob : TTY=pts/1 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
 Jan 15 10:32:05 ubuntu sudo: pam_unix(sudo:session): session opened for user root by bob(uid=0)";
 
-    let events = parse_auth_log_sudo(input, None).expect("should parse auth log");
+    let events =
+        parse_auth_log_sudo(input, &LogTimeHint::utc(None)).expect("should parse auth log");
     let cmds: Vec<&SudoEvent> = events
         .iter()
         .filter(|e| !e.command.contains("authentication failure"))
@@ -267,8 +268,8 @@ fn wtmp_parses_boot_record() {
 
 #[test]
 fn apt_empty_input() {
-    assert!(parse_apt_history("").unwrap().is_empty());
-    assert!(parse_dpkg_log("").unwrap().is_empty());
+    assert!(parse_apt_history("", &UtcClock).unwrap().is_empty());
+    assert!(parse_dpkg_log("", &UtcClock).unwrap().is_empty());
 }
 
 #[test]
@@ -283,7 +284,9 @@ fn cron_empty_input() {
 
 #[test]
 fn sudo_empty_input() {
-    assert!(parse_auth_log_sudo("", None).unwrap().is_empty());
+    assert!(parse_auth_log_sudo("", &LogTimeHint::utc(None))
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

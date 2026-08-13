@@ -23,11 +23,14 @@
 //! Conventions and known limitations:
 //! - Package names keep their full `pkg:arch` form on every code path, so
 //!   cross-log correlation can match on the exact original token.
-//! - APT history and dpkg log timestamps are written in the system's local
-//!   time zone, but the zone is not recorded in the log. They are parsed as
-//!   if they were UTC; treat the resulting timestamps as approximate.
+//! - APT history, dpkg, and yum log timestamps are written in the system's
+//!   local time zone, but the zone is not recorded in the log. Callers supply
+//!   a [`LogClock`](crate::clock::LogClock) (host zone inferred by the
+//!   application layer, or UTC when undetermined) that converts the naive
+//!   local timestamps to UTC.
 
-use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
+use crate::clock::{LogClock, LogTimeHint};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// An APT package management event.
@@ -67,8 +70,12 @@ const DPKG_ACTIONS: &[&str] = &[
 /// Extracts Start-Date/End-Date transaction entries and returns individual
 /// package events for each Install/Upgrade/Remove/Purge line. The
 /// transaction's `Commandline:` and `Requested-By:` lines are attached to
-/// every event of that transaction.
-pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
+/// every event of that transaction. `clock` converts the naive local
+/// timestamps to UTC.
+pub fn parse_apt_history(
+    content: &str,
+    clock: &dyn LogClock,
+) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
     let mut current_timestamp: Option<DateTime<Utc>> = None;
     let mut current_command_line: Option<String> = None;
@@ -82,7 +89,7 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArt
 
         // Parse Start-Date; each transaction resets the per-block metadata.
         if let Some(date_str) = trimmed.strip_prefix("Start-Date: ") {
-            current_timestamp = parse_apt_date(date_str);
+            current_timestamp = parse_apt_date(date_str, clock);
             current_command_line = None;
             current_requested_by = None;
             continue;
@@ -140,8 +147,12 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArt
 /// YYYY-MM-DD HH:MM:SS action package:arch <old-version> <new-version>
 /// ```
 /// Only action lines listed in [`DPKG_ACTIONS`] produce events; `status`
-/// progress lines are skipped.
-pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
+/// progress lines are skipped. `clock` converts the naive local timestamps
+/// to UTC.
+pub fn parse_dpkg_log(
+    content: &str,
+    clock: &dyn LogClock,
+) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
 
     for line in content.lines() {
@@ -161,12 +172,12 @@ pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifa
             continue;
         }
 
-        // Parse timestamp: YYYY-MM-DD HH:MM:SS (local time, read as UTC —
-        // see the module-level caveat).
+        // Parse timestamp: YYYY-MM-DD HH:MM:SS (naive local time, converted
+        // to UTC via the injected clock — see the module-level caveat).
         let date_str = format!("{} {}", parts[0], parts[1]);
         let timestamp = NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S")
             .ok()
-            .map(|ndt| Utc.from_utc_datetime(&ndt));
+            .and_then(|ndt| clock.local_to_utc(ndt));
 
         let package = parts[3].to_string();
         let version = select_dpkg_version(action, parts.get(4).copied().unwrap_or(""));
@@ -206,19 +217,21 @@ fn select_dpkg_version(action: &str, version_columns: &str) -> Option<String> {
 
 /// Parse RHEL/CentOS/Fedora yum/dnf package logs.
 ///
-/// `reference` anchors the year-less syslog timestamps of yum.log (typically
-/// the log file's mtime from the evidence file entry). When `None`, the
-/// current time is used. A parsed timestamp that would land after the
-/// reference is moved back one year, because syslog timestamps carry no
-/// year. dnf.log RFC3339 timestamps are unaffected by the reference.
+/// `hint.reference` anchors the year-less syslog timestamps of yum.log
+/// (typically the log file's mtime from the evidence file entry); when
+/// `None`, the current time is used. `hint.clock` converts the naive local
+/// timestamps to UTC. A parsed timestamp that would land after the reference
+/// is moved back one year, because syslog timestamps carry no year; the
+/// decision runs in local wall-clock time before the UTC conversion. dnf.log
+/// RFC3339 timestamps are unaffected by the hint.
 ///
 /// The returned DTO family is still named `AptEvent` for historical frontend
 /// compatibility; semantically these are generic Linux package-manager events.
 pub fn parse_rpm_package_log(
     content: &str,
-    reference: Option<DateTime<Utc>>,
+    hint: &LogTimeHint<'_>,
 ) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
-    parse_rpm_package_log_with_reference(content, reference.unwrap_or_else(Utc::now))
+    parse_rpm_package_log_with_reference(content, hint.reference_or_now(), hint.clock)
 }
 
 /// Parse yum/dnf package logs with an explicit reference time.
@@ -228,6 +241,7 @@ pub fn parse_rpm_package_log(
 pub fn parse_rpm_package_log_with_reference(
     content: &str,
     reference: DateTime<Utc>,
+    clock: &dyn LogClock,
 ) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events = Vec::new();
 
@@ -245,7 +259,7 @@ pub fn parse_rpm_package_log_with_reference(
             action,
             package,
             version,
-            timestamp: parse_rpm_timestamp(trimmed, reference),
+            timestamp: parse_rpm_timestamp(trimmed, reference, clock),
             requested_by: None,
             command_line: None,
         });
@@ -254,12 +268,12 @@ pub fn parse_rpm_package_log_with_reference(
     Ok(events)
 }
 
-fn parse_apt_date(s: &str) -> Option<DateTime<Utc>> {
+fn parse_apt_date(s: &str, clock: &dyn LogClock) -> Option<DateTime<Utc>> {
     // Format: "2024-01-15  10:30:00" (note: double space between date and time)
     let normalized = s.replace("  ", " ");
     NaiveDateTime::parse_from_str(&normalized, "%Y-%m-%d %H:%M:%S")
         .ok()
-        .map(|ndt| Utc.from_utc_datetime(&ndt))
+        .and_then(|ndt| clock.local_to_utc(ndt))
 }
 
 fn parse_rpm_action_line(line: &str) -> Option<(String, &str)> {
@@ -296,10 +310,15 @@ fn parse_rpm_action_line(line: &str) -> Option<(String, &str)> {
 ///
 /// - dnf.log leads with an RFC3339 token, parsed directly.
 /// - yum.log uses classic syslog `Mon DD HH:MM:SS` (15 bytes, no year): the
-///   year is taken from `reference`; if the result is later than `reference`
-///   it is moved back one year (a log rotated in January can still hold
-///   December entries).
-fn parse_rpm_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<Utc>> {
+///   year is taken from `reference` in the host's local wall clock; if the
+///   result is later than the reference it is moved back one year (a log
+///   rotated in January can still hold December entries). The naive local
+///   timestamp is then converted to UTC via `clock`.
+fn parse_rpm_timestamp(
+    line: &str,
+    reference: DateTime<Utc>,
+    clock: &dyn LogClock,
+) -> Option<DateTime<Utc>> {
     if let Some(first) = line.split_whitespace().next() {
         if let Ok(dt) = DateTime::parse_from_str(first, "%Y-%m-%dT%H:%M:%S%z") {
             return Some(dt.with_timezone(&Utc));
@@ -307,16 +326,16 @@ fn parse_rpm_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<
     }
 
     let prefix = line.get(..15)?;
-    let year = reference.year();
+    let reference_local = clock.utc_to_local_naive(reference);
+    let year = reference_local.year();
     let stamped = format!("{year} {prefix}");
     let naive = NaiveDateTime::parse_from_str(&stamped, "%Y %b %e %H:%M:%S").ok()?;
-    let dt = Utc.from_utc_datetime(&naive);
-    if dt > reference {
-        if let Some(shifted) = naive.with_year(year - 1) {
-            return Some(Utc.from_utc_datetime(&shifted));
-        }
-    }
-    Some(dt)
+    let naive = if naive > reference_local {
+        naive.with_year(year - 1)?
+    } else {
+        naive
+    };
+    clock.local_to_utc(naive)
 }
 
 fn parse_rpm_nevra(token: &str) -> (String, Option<String>) {

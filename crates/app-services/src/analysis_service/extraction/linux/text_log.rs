@@ -1,8 +1,10 @@
 use super::common::{insert_opt, truncate, MAX_TEXT_LOG_EVENTS_PER_SOURCE};
+use super::timezone::LinuxLogTimeContext;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use artifacts_linux::LogClock;
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use serde_json::Value;
 
 pub(in crate::analysis_service::extraction) fn is_text_log_path(normalized: &str) -> bool {
@@ -29,8 +31,17 @@ pub(super) fn extract(
     parser: &str,
     label: &str,
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
-    extract_with_filter(candidate, bytes, parser, label, &|_| false, outcome);
+    extract_with_filter(
+        candidate,
+        bytes,
+        parser,
+        label,
+        &|_| false,
+        outcome,
+        log_time,
+    );
 }
 
 /// Extract text-log lines, skipping lines already consumed by a structured
@@ -42,6 +53,7 @@ pub(super) fn extract_with_filter(
     label: &str,
     skip: &dyn Fn(&str) -> bool,
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
     let mut emitted = 0usize;
@@ -49,6 +61,7 @@ pub(super) fn extract_with_filter(
     let mut context = TimestampContext {
         reference: candidate.modified_at,
         fallback_year: None,
+        clock: log_time.clock(),
     };
     for (line_number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -65,6 +78,10 @@ pub(super) fn extract_with_filter(
 
         let parsed = parse_syslog_like_line(trimmed, &mut context);
         let mut attrs = base_attrs(candidate);
+        attrs.insert(
+            "tzAssumed".to_string(),
+            Value::String(log_time.tz_label().to_string()),
+        );
         attrs.insert("message".to_string(), Value::String(parsed.message.clone()));
         attrs.insert(
             "lineNumber".to_string(),
@@ -125,11 +142,13 @@ pub(super) fn extract_with_filter(
 }
 
 /// Year anchors for classic syslog timestamps that carry no year.
-struct TimestampContext {
+struct TimestampContext<'a> {
     /// Candidate file mtime: preferred reference for the year heuristic.
     reference: Option<DateTime<Utc>>,
     /// Year of an RFC3339 line already seen in the same file.
     fallback_year: Option<i32>,
+    /// Host local clock for naive-to-UTC conversion.
+    clock: &'a dyn LogClock,
 }
 
 struct ParsedTextLogLine {
@@ -143,7 +162,7 @@ struct ParsedTextLogLine {
     message: String,
 }
 
-fn parse_syslog_like_line(line: &str, context: &mut TimestampContext) -> ParsedTextLogLine {
+fn parse_syslog_like_line(line: &str, context: &mut TimestampContext<'_>) -> ParsedTextLogLine {
     if let Some(parsed) = parse_rfc3339_log_line(line, context) {
         return parsed;
     }
@@ -161,18 +180,24 @@ fn parse_syslog_like_line(line: &str, context: &mut TimestampContext) -> ParsedT
     }
 }
 
-fn parse_rfc3339_log_line(line: &str, context: &mut TimestampContext) -> Option<ParsedTextLogLine> {
+fn parse_rfc3339_log_line(
+    line: &str,
+    context: &mut TimestampContext<'_>,
+) -> Option<ParsedTextLogLine> {
     let (head, rest) = line.split_once(' ')?;
     let timestamp = DateTime::parse_from_rfc3339(head)
         .ok()
         .map(|date_time| date_time.with_timezone(&Utc))?;
-    context.fallback_year = Some(timestamp.year());
+    context.fallback_year = Some(context.clock.utc_to_local_naive(timestamp).year());
     let mut parsed = parse_syslog_body(rest);
     parsed.timestamp = Some(timestamp);
     Some(parsed)
 }
 
-fn parse_classic_syslog_line(line: &str, context: &TimestampContext) -> Option<ParsedTextLogLine> {
+fn parse_classic_syslog_line(
+    line: &str,
+    context: &TimestampContext<'_>,
+) -> Option<ParsedTextLogLine> {
     let (month, day, time, rest) = split_classic_head(line)?;
     let month_number = classic_month_number(month)?;
     let day_number = day
@@ -232,26 +257,31 @@ fn classic_month_number(month: &str) -> Option<u32> {
 
 /// Anchor a year-less classic syslog timestamp: prefer the candidate file
 /// mtime year, rolling back one year when the result would be later than the
-/// reference; otherwise reuse the year of RFC3339 lines seen in the same file.
+/// reference; otherwise reuse the year of RFC3339 lines seen in the same
+/// file. The year decision runs in the host's local wall clock (the log
+/// records local time); the resolved naive timestamp is then converted to
+/// UTC via the context clock.
 fn resolve_classic_timestamp(
     month: u32,
     day: u32,
     time: NaiveTime,
-    context: &TimestampContext,
+    context: &TimestampContext<'_>,
 ) -> Option<DateTime<Utc>> {
-    let year = context
+    let reference_local = context
         .reference
-        .map(|reference| reference.year())
+        .map(|reference| context.clock.utc_to_local_naive(reference));
+    let year = reference_local
+        .map(|local| local.year())
         .or(context.fallback_year)?;
     let naive = NaiveDateTime::new(NaiveDate::from_ymd_opt(year, month, day)?, time);
-    let mut timestamp = Utc.from_utc_datetime(&naive);
-    if let Some(reference) = context.reference {
-        if timestamp > reference {
+    let naive = match reference_local {
+        Some(reference_local) if naive > reference_local => {
             let rolled = NaiveDate::from_ymd_opt(year - 1, month, day)?;
-            timestamp = Utc.from_utc_datetime(&NaiveDateTime::new(rolled, time));
+            NaiveDateTime::new(rolled, time)
         }
-    }
-    Some(timestamp)
+        _ => naive,
+    };
+    context.clock.local_to_utc(naive)
 }
 
 /// Parse the epoch inside audit.log's `msg=audit(1699999999.123:456)` stamp.

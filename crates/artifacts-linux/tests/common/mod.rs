@@ -71,13 +71,13 @@ impl DataSpec {
         }
     }
 
-    /// XZ-flagged payload. Decompression is unsupported, so the body is
-    /// irrelevant; the parser must skip and count it.
+    /// XZ-compressed DATA payload: a bare `.xz` container (LZMA2 filter,
+    /// CHECK_NONE), exactly as written by systemd's `compress_blob_xz`.
     pub fn xz(field_value: &str) -> Self {
         Self {
             flags: FLAG_XZ,
             payload: field_value.as_bytes().to_vec(),
-            precompressed: true,
+            precompressed: false,
         }
     }
 
@@ -200,6 +200,118 @@ pub fn build_journal(spec: &JournalSpec) -> Vec<u8> {
     buf
 }
 
+/// Representative multi-boot fixture spec, materialized as
+/// `testdata/fixtures/public-medium/linux/journal/system.journal` (regenerate
+/// with `cargo test -p artifacts-linux --test journal_fixture -- --ignored`).
+///
+/// Contents: 110 entries across two boots (60 + 50), all eight syslog
+/// priorities, per-unit PIDs, plus one XZ-compressed long MESSAGE (the
+/// RHEL7/CentOS7 systemd v219 default) and one LZ4-compressed MESSAGE.
+/// Everything is deterministic; `expected.json` next to the fixture pins the
+/// key assertions.
+pub const FIXTURE_BOOT_A: [u8; 16] = [0xA1; 16];
+pub const FIXTURE_BOOT_B: [u8; 16] = [0xB2; 16];
+pub const FIXTURE_BOOT_A_HEX: &str = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+pub const FIXTURE_BOOT_B_HEX: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
+pub const FIXTURE_UNITS: [&str; 4] = [
+    "sshd.service",
+    "cron.service",
+    "systemd-journald.service",
+    "nginx.service",
+];
+pub const FIXTURE_ENTRY_COUNT: usize = 110;
+pub const FIXTURE_BOOT_A_ENTRIES: usize = 60;
+pub const FIXTURE_BASE_REALTIME_A: u64 = 1_700_000_000_000_000;
+pub const FIXTURE_BASE_REALTIME_B: u64 = 1_700_100_000_000_000;
+/// XZ-compressed MESSAGE payload (entry index 10, boot A).
+pub const FIXTURE_XZ_MESSAGE: &str = "kernel: BUG: soft lockup - CPU#0 stuck for 22s! [mysqld:2342]\nCPU: 0 PID: 2342 Comm: mysqld Not tainted 3.10.0-1160.el7.x86_64 #1\nCall Trace:\n [<ffffffff810a1b2c>] dump_stack+0x19/0x1b\n [<ffffffff810b3f7e>] watchdog_timer_fn+0x1f2/0x220\n [<ffffffff810c5d01>] __run_hrtimer+0x72/0x1d0\n";
+/// LZ4-compressed MESSAGE payload (entry index 20, boot A).
+pub const FIXTURE_LZ4_MESSAGE: &str = "nginx: worker process 1203 was terminated by signal 9 (SIGKILL); respawning too fast, throttling restarts for 30s; see systemctl status nginx.service for details and the surrounding journal context";
+
+pub fn fixture_spec() -> JournalSpec {
+    let mut data = Vec::new();
+    let hostname = push_shared(&mut data, "_HOSTNAME=fixture-host");
+    let uid = push_shared(&mut data, "_UID=0");
+    let units: Vec<usize> = FIXTURE_UNITS
+        .iter()
+        .map(|unit| push_shared(&mut data, &format!("_SYSTEMD_UNIT={unit}")))
+        .collect();
+    let syslog_ids: Vec<usize> = FIXTURE_UNITS
+        .iter()
+        .map(|unit| push_shared(&mut data, &format!("SYSLOG_IDENTIFIER={}", unit_name(unit))))
+        .collect();
+    let pids: Vec<usize> = (0..FIXTURE_UNITS.len())
+        .map(|index| push_shared(&mut data, &format!("_PID={}", 1200 + index)))
+        .collect();
+    let boot_ids = [
+        push_shared(&mut data, &format!("_BOOT_ID={FIXTURE_BOOT_A_HEX}")),
+        push_shared(&mut data, &format!("_BOOT_ID={FIXTURE_BOOT_B_HEX}")),
+    ];
+    let priorities: Vec<usize> = (0..8)
+        .map(|priority| push_shared(&mut data, &format!("PRIORITY={priority}")))
+        .collect();
+
+    let mut entries = Vec::new();
+    for index in 0..FIXTURE_ENTRY_COUNT {
+        let boot = usize::from(index >= FIXTURE_BOOT_A_ENTRIES);
+        let seq = index as u64 + 1;
+        let base = [FIXTURE_BASE_REALTIME_A, FIXTURE_BASE_REALTIME_B][boot];
+        let within = index as u64 - boot as u64 * FIXTURE_BOOT_A_ENTRIES as u64;
+
+        let unit_slot = index % FIXTURE_UNITS.len();
+        let value = match index {
+            10 => FIXTURE_XZ_MESSAGE.to_string(),
+            20 => FIXTURE_LZ4_MESSAGE.to_string(),
+            _ => format!("{} heartbeat cycle {}", FIXTURE_UNITS[unit_slot], index),
+        };
+        let text = format!("MESSAGE={value}");
+        let message = match index {
+            10 => DataSpec::xz(&text),
+            20 => DataSpec::lz4(&text),
+            _ => DataSpec::plain(&text),
+        };
+        data.push(message);
+        let message_index = data.len() - 1;
+
+        entries.push(EntrySpec {
+            seqnum: seq,
+            realtime: base + within * 1_000_000,
+            monotonic: (within + 1) * 500_000,
+            boot_id: [FIXTURE_BOOT_A, FIXTURE_BOOT_B][boot],
+            items: vec![
+                message_index,
+                priorities[index % 8],
+                pids[unit_slot],
+                uid,
+                units[unit_slot],
+                hostname,
+                syslog_ids[unit_slot],
+                boot_ids[boot],
+            ],
+        });
+    }
+
+    JournalSpec {
+        fields: vec![
+            "MESSAGE".to_string(),
+            "PRIORITY".to_string(),
+            "_PID".to_string(),
+        ],
+        data,
+        entries,
+        ..JournalSpec::default()
+    }
+}
+
+fn push_shared(data: &mut Vec<DataSpec>, field_value: &str) -> usize {
+    data.push(DataSpec::plain(field_value));
+    data.len() - 1
+}
+
+fn unit_name(unit: &str) -> &str {
+    unit.strip_suffix(".service").unwrap_or(unit)
+}
+
 /// Offset of the first ENTRY_ARRAY object, read back from a built file.
 pub fn entry_array_offset(buf: &[u8]) -> u64 {
     u64::from_le_bytes(buf[176..184].try_into().unwrap_or([0; 8]))
@@ -294,11 +406,26 @@ fn stored_payload(data: &DataSpec) -> Vec<u8> {
             stored.extend_from_slice(&lz4_flex::block::compress(&data.payload));
             stored
         }
+        FLAG_XZ => xz_compress(&data.payload),
         FLAG_ZSTD => {
             zstd::stream::encode_all(std::io::Cursor::new(&data.payload), 0).unwrap_or_default()
         }
         _ => data.payload.clone(),
     }
+}
+
+/// Encode like systemd's `compress_blob_xz`: single `.xz` stream, LZMA2
+/// filter, no integrity check field (`LZMA_CHECK_NONE`).
+fn xz_compress(payload: &[u8]) -> Vec<u8> {
+    use std::io::Write as _;
+
+    let stream = xz2::stream::Stream::new_easy_encoder(6, xz2::stream::Check::None)
+        .expect("XZ encoder preset must be valid");
+    let mut encoder = xz2::write::XzEncoder::new_stream(Vec::new(), stream);
+    encoder
+        .write_all(payload)
+        .expect("XZ encoding to memory cannot fail");
+    encoder.finish().expect("XZ finish to memory cannot fail")
 }
 
 fn push_entry_objects(

@@ -242,6 +242,21 @@ impl ExtractionState {
         self.record_retryable_failure(capability, warning);
     }
 
+    /// Warning surfaced in the run DTO and section progress that does not
+    /// count as a retryable failure (e.g. timezone fallback to UTC).
+    pub(super) fn record_informational_warning(
+        &mut self,
+        capability: AnalysisCapability,
+        warning: String,
+    ) {
+        self.sections
+            .entry(capability.key.to_string())
+            .or_insert_with(|| SectionProgress::new(capability))
+            .warnings
+            .push(warning.clone());
+        self.warnings.push(warning);
+    }
+
     pub(super) fn record_retryable_failure(
         &mut self,
         capability: AnalysisCapability,

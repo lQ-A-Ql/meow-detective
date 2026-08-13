@@ -1,4 +1,4 @@
-use crate::analysis_service::candidates::EvidenceCandidate;
+use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION;
 use chrono::{DateTime, Utc};
 use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
@@ -63,7 +63,23 @@ pub(crate) fn base_attrs(candidate: &EvidenceCandidate) -> BTreeMap<String, Valu
         "sourcePath".to_string(),
         Value::String(candidate.path.clone()),
     );
+    // Files under a Docker overlay2 layer describe container content, not host
+    // state. Extraction still runs (the records are valid evidence), but every
+    // artifact carries this marker so consumers can separate container findings
+    // from host findings. Not yet consumed by the frontend.
+    if is_docker_overlay_path(&normalize_evidence_path(&candidate.path)) {
+        attrs.insert(
+            "overlayContext".to_string(),
+            Value::String("docker".to_string()),
+        );
+    }
     attrs
+}
+
+/// Matches `/var/lib/docker/overlay2/<id>/{diff,merged,...}` paths after
+/// evidence-path normalization.
+pub(crate) fn is_docker_overlay_path(normalized_path: &str) -> bool {
+    normalized_path.contains("/var/lib/docker/overlay2/")
 }
 
 pub(crate) fn browser_attrs(

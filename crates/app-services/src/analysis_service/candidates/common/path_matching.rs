@@ -110,7 +110,7 @@ fn is_linux_root_component(component: &str) -> bool {
     )
 }
 
-pub(super) fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]) -> bool {
+pub(crate) fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]) -> bool {
     patterns.iter().any(|pattern| match pattern {
         EvidencePathPattern::Suffix(suffix) => path.ends_with(suffix),
         EvidencePathPattern::Contains(needle) => path.contains(needle),

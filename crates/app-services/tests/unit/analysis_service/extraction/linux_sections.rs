@@ -42,6 +42,8 @@ fn linux_route_read_limits_are_path_aware_and_gzip_stable() {
         "/var/log/journal/system.journal",
         "/var/log/wtmp",
         "/var/log/wtmp.gz",
+        "/var/log/lastlog",
+        "/var/log/faillog",
     ] {
         assert_eq!(linux_artifact_route(path).read_limit, large, "{path}");
     }
@@ -69,8 +71,63 @@ fn linux_route_exposes_support_and_section_from_one_descriptor() {
     assert_eq!(generic_log.section, LinuxArtifactSection::Journal);
     assert_eq!(generic_log.support, LinuxCandidateSupport::TextFallback);
 
-    let unparsed_login = linux_artifact_route("/var/log/lastlog");
-    assert_eq!(unparsed_login.kind, LinuxArtifactRouteKind::Unsupported);
-    assert_eq!(unparsed_login.section, LinuxArtifactSection::Login);
-    assert_eq!(unparsed_login.support, LinuxCandidateSupport::Unsupported);
+    let lastlog = linux_artifact_route("/var/log/lastlog");
+    assert_eq!(lastlog.kind, LinuxArtifactRouteKind::Lastlog);
+    assert_eq!(lastlog.section, LinuxArtifactSection::Login);
+    assert_eq!(lastlog.support, LinuxCandidateSupport::Structured);
+
+    let faillog = linux_artifact_route("/var/log/faillog");
+    assert_eq!(faillog.kind, LinuxArtifactRouteKind::Faillog);
+    assert_eq!(faillog.section, LinuxArtifactSection::Login);
+    assert_eq!(faillog.support, LinuxCandidateSupport::Structured);
+}
+
+#[test]
+fn baota_panel_paths_route_to_web_services() {
+    let small = 4 * 1024 * 1024;
+    let text = 16 * 1024 * 1024;
+    let cases = [
+        (
+            "/www/server/panel/vhost/nginx/example.com.conf",
+            LinuxArtifactRouteKind::NginxConfig,
+            small,
+        ),
+        (
+            "/www/server/nginx/conf/nginx.conf",
+            LinuxArtifactRouteKind::NginxConfig,
+            small,
+        ),
+        (
+            "/www/server/panel/vhost/apache/example.com.conf",
+            LinuxArtifactRouteKind::ApacheConfig,
+            small,
+        ),
+        (
+            "/www/server/apache/conf/httpd.conf",
+            LinuxArtifactRouteKind::ApacheConfig,
+            small,
+        ),
+        (
+            "/www/wwwlogs/example.com.log",
+            LinuxArtifactRouteKind::WebAccessLog,
+            text,
+        ),
+        (
+            "/www/wwwlogs/example.com.error.log",
+            LinuxArtifactRouteKind::WebErrorLog,
+            text,
+        ),
+        (
+            "/www/wwwlogs/example.com.log.1.gz",
+            LinuxArtifactRouteKind::WebAccessLog,
+            text,
+        ),
+    ];
+    for (path, kind, read_limit) in cases {
+        let route = linux_artifact_route(path);
+        assert_eq!(route.kind, kind, "{path}");
+        assert_eq!(route.section, LinuxArtifactSection::WebServices, "{path}");
+        assert_eq!(route.support, LinuxCandidateSupport::Structured, "{path}");
+        assert_eq!(route.read_limit, read_limit, "{path}");
+    }
 }

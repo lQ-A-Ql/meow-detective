@@ -162,7 +162,7 @@ fn apply_data(
 
     let decoded = match decode(header.flags, &payload[fixed_len..]) {
         Payload::Decoded(value) => value,
-        Payload::XzUnsupported | Payload::Corrupt => {
+        Payload::Corrupt => {
             counters.skipped_compressed += 1;
             return;
         }

@@ -307,6 +307,8 @@ fn query_artifact_rows_with_statement(
 
 /// Count `LinuxSystemConfig` rows of one `configKind` (passwdAccount,
 /// shadowAccount, osRelease, ...). Used by the unpaged system-info overview.
+/// Rows extracted from Docker overlay layers (`overlayContext`) describe
+/// container content, not host state, and are excluded.
 pub(super) fn count_linux_system_config_by_kind(
     conn: &Connection,
     config_kind: &str,
@@ -314,7 +316,8 @@ pub(super) fn count_linux_system_config_by_kind(
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
-           AND json_extract(attrs, '$.configKind') = ?1",
+           AND json_extract(attrs, '$.configKind') = ?1
+           AND json_extract(attrs, '$.overlayContext') IS NULL",
         [config_kind],
         |row| row.get(0),
     )?;
@@ -327,7 +330,8 @@ pub(super) fn count_linux_user_accounts(conn: &Connection) -> Result<u64, Analys
         "SELECT COUNT(*) FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
            AND json_extract(attrs, '$.configKind') = 'passwdAccount'
-           AND CAST(json_extract(attrs, '$.uid') AS INTEGER) >= 1000",
+           AND CAST(json_extract(attrs, '$.uid') AS INTEGER) >= 1000
+           AND json_extract(attrs, '$.overlayContext') IS NULL",
         [],
         |row| row.get(0),
     )?;
@@ -342,7 +346,8 @@ pub(super) fn count_linux_locked_shadow_accounts(
         "SELECT COUNT(*) FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
            AND json_extract(attrs, '$.configKind') = 'shadowAccount'
-           AND json_extract(attrs, '$.locked') = 1",
+           AND json_extract(attrs, '$.locked') = 1
+           AND json_extract(attrs, '$.overlayContext') IS NULL",
         [],
         |row| row.get(0),
     )?;
@@ -351,6 +356,7 @@ pub(super) fn count_linux_locked_shadow_accounts(
 
 /// Fetch `LinuxSystemConfig` rows of one `configKind` without paging. The
 /// system-info overview needs them independent of the summary entry window.
+/// Docker overlay rows are excluded (container content, not host state).
 pub(super) fn query_linux_system_config_by_kind(
     conn: &Connection,
     config_kind: &str,
@@ -360,6 +366,7 @@ pub(super) fn query_linux_system_config_by_kind(
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
            AND json_extract(attrs, '$.configKind') = ?1
+           AND json_extract(attrs, '$.overlayContext') IS NULL
          ORDER BY id ASC
          LIMIT ?2";
     query_artifact_rows_with_statement(
@@ -378,6 +385,7 @@ pub(super) fn query_linux_account_rows(
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
            AND json_extract(attrs, '$.configKind') IN ('passwdAccount', 'shadowAccount')
+           AND json_extract(attrs, '$.overlayContext') IS NULL
          ORDER BY id ASC";
     query_artifact_rows_with_statement(conn, sql, &[])
 }
@@ -433,6 +441,7 @@ pub(super) fn query_linux_hostname_rows(
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
            AND SUBSTR(json_extract(attrs, '$.sourcePath'), -13) IN ('/etc/hostname', 'etc/hostname')
+           AND json_extract(attrs, '$.overlayContext') IS NULL
          ORDER BY CAST(json_extract(attrs, '$.lineNumber') AS INTEGER) ASC, id ASC
          LIMIT ?1";
     query_artifact_rows_with_statement(conn, sql, &[&(limit as i64)])

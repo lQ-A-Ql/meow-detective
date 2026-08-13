@@ -1,4 +1,5 @@
 use super::common::{cap_source_events, MAX_PACKAGE_EVENTS_PER_SOURCE};
+use super::timezone::LinuxLogTimeContext;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
@@ -25,10 +26,11 @@ pub(super) fn extract_apt_history(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_apt_history(&text) {
-        Ok(events) => push_events(candidate, events, outcome),
+    match artifacts_linux::parse_apt_history(&text, log_time.clock()) {
+        Ok(events) => push_events(candidate, events, outcome, log_time),
         Err(error) => outcome.warnings.push(format!(
             "{} APT history parse failed: {}",
             candidate.path, error
@@ -40,10 +42,11 @@ pub(super) fn extract_dpkg_log(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_dpkg_log(&text) {
-        Ok(events) => push_events(candidate, events, outcome),
+    match artifacts_linux::parse_dpkg_log(&text, log_time.clock()) {
+        Ok(events) => push_events(candidate, events, outcome, log_time),
         Err(error) => outcome.warnings.push(format!(
             "{} dpkg log parse failed: {}",
             candidate.path, error
@@ -55,10 +58,15 @@ pub(super) fn extract_rpm_package_log(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_rpm_package_log(&text, candidate.modified_at) {
-        Ok(events) => push_events(candidate, events, outcome),
+    let hint = artifacts_linux::LogTimeHint {
+        reference: candidate.modified_at,
+        clock: log_time.clock(),
+    };
+    match artifacts_linux::parse_rpm_package_log(&text, &hint) {
+        Ok(events) => push_events(candidate, events, outcome, log_time),
         Err(error) => outcome.warnings.push(format!(
             "{} rpm package log parse failed: {}",
             candidate.path, error
@@ -70,6 +78,7 @@ fn push_events(
     candidate: &EvidenceCandidate,
     events: Vec<artifacts_linux::AptEvent>,
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let events = cap_source_events(
         candidate,
@@ -79,7 +88,7 @@ fn push_events(
         &mut outcome.warnings,
     );
     for event in events {
-        push_event(candidate, event, outcome);
+        push_event(candidate, event, outcome, log_time);
     }
 }
 
@@ -87,8 +96,13 @@ fn push_event(
     candidate: &EvidenceCandidate,
     event: artifacts_linux::AptEvent,
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "tzAssumed".to_string(),
+        Value::String(log_time.tz_label().to_string()),
+    );
     attrs.insert("action".to_string(), Value::String(event.action.clone()));
     attrs.insert("package".to_string(), Value::String(event.package.clone()));
     let version = event

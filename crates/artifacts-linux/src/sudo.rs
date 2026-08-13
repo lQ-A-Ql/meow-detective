@@ -16,7 +16,8 @@
 //! deliberately not emitted as events: they duplicate the COMMAND= record and
 //! add no investigative value beyond it.
 
-use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
+use crate::clock::{LogClock, LogTimeHint};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A sudo command execution event extracted from auth logs.
@@ -40,19 +41,21 @@ pub struct SudoEvent {
 
 /// Parse `/var/log/auth.log` (or `/var/log/secure`) for sudo events.
 ///
-/// `reference` anchors year-less syslog timestamps (typically the log file's
-/// mtime from the evidence file entry). When `None`, the current time is
-/// used. A parsed timestamp that would land after the reference is moved
-/// back one year, because syslog timestamps carry no year.
+/// `hint.reference` anchors year-less syslog timestamps (typically the log
+/// file's mtime from the evidence file entry); when `None`, the current time
+/// is used. `hint.clock` converts the naive local timestamps to UTC. The year
+/// wraparound check runs in local wall-clock time *before* the UTC
+/// conversion: a parsed timestamp that would land after the reference is
+/// moved back one year, because syslog timestamps carry no year.
 ///
 /// Only lines whose syslog tag is exactly `sudo` (`sudo:` or `sudo[pid]:`)
 /// are considered; this avoids false positives from other daemons whose
 /// message text merely mentions "sudo".
 pub fn parse_auth_log_sudo(
     content: &str,
-    reference: Option<DateTime<Utc>>,
+    hint: &LogTimeHint<'_>,
 ) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
-    parse_auth_log_sudo_with_reference(content, reference.unwrap_or_else(Utc::now))
+    parse_auth_log_sudo_with_reference(content, hint.reference_or_now(), hint.clock)
 }
 
 /// Parse an auth log for sudo events with an explicit reference time.
@@ -62,6 +65,7 @@ pub fn parse_auth_log_sudo(
 pub fn parse_auth_log_sudo_with_reference(
     content: &str,
     reference: DateTime<Utc>,
+    clock: &dyn LogClock,
 ) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<SudoEvent> = Vec::new();
 
@@ -74,7 +78,7 @@ pub fn parse_auth_log_sudo_with_reference(
         let Some(message) = split_sudo_message(trimmed) else {
             continue;
         };
-        let timestamp = parse_log_timestamp(trimmed, reference);
+        let timestamp = parse_log_timestamp(trimmed, reference, clock);
 
         // Session open/close lines are recognized but intentionally dropped.
         if message.contains("session opened for user")
@@ -175,9 +179,15 @@ fn is_sudo_pid_tag(field: &str) -> bool {
 /// - ISO 8601 / RFC 3339 (systemd journal export): the first
 ///   whitespace-separated token is parsed directly.
 /// - Standard syslog `Mon DD HH:MM:SS` (15 bytes, no year): the year is taken
-///   from `reference`; if the result is later than `reference`, it is moved
-///   back one year (a log written in January can hold December entries).
-fn parse_log_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<Utc>> {
+///   from `reference` in the host's local wall clock; if the result is later
+///   than the reference it is moved back one year (a log written in January
+///   can hold December entries). The year decision runs in local time, then
+///   the naive local timestamp is converted to UTC via `clock`.
+fn parse_log_timestamp(
+    line: &str,
+    reference: DateTime<Utc>,
+    clock: &dyn LogClock,
+) -> Option<DateTime<Utc>> {
     if let Some(first) = line.split_whitespace().next() {
         if let Ok(dt) = DateTime::parse_from_rfc3339(first) {
             return Some(dt.with_timezone(&Utc));
@@ -185,16 +195,16 @@ fn parse_log_timestamp(line: &str, reference: DateTime<Utc>) -> Option<DateTime<
     }
 
     let prefix = line.get(..15)?;
-    let year = reference.year();
+    let reference_local = clock.utc_to_local_naive(reference);
+    let year = reference_local.year();
     let stamped = format!("{year} {prefix}");
     let naive = NaiveDateTime::parse_from_str(&stamped, "%Y %b %e %H:%M:%S").ok()?;
-    let dt = Utc.from_utc_datetime(&naive);
-    if dt > reference {
-        if let Some(shifted) = naive.with_year(year - 1) {
-            return Some(Utc.from_utc_datetime(&shifted));
-        }
-    }
-    Some(dt)
+    let naive = if naive > reference_local {
+        naive.with_year(year - 1)?
+    } else {
+        naive
+    };
+    clock.local_to_utc(naive)
 }
 
 /// Extract the invoking user from the sudo message body.

@@ -54,6 +54,10 @@ Thumbs.db
 !/testdata/fixtures/public-medium/browser/README.md
 /testdata/fixtures/public-medium/linux/**/*
 !/testdata/fixtures/public-medium/linux/README.md
+# Reviewed synthetic systemd journal fixture (generator:
+# crates/artifacts-linux/tests/common/mod.rs `fixture_spec`).
+!/testdata/fixtures/public-medium/linux/journal/
+!/testdata/fixtures/public-medium/linux/journal/*
 /crates/app-services/output/
 /output/
 /development-reports/

@@ -2,8 +2,8 @@ use super::browser::extract_browser_candidate;
 use super::browser_preload::BrowserPreloadContext;
 use super::email::extract_email_candidate;
 use super::linux::{
-    extract_linux_candidate, linux_candidate_read_limit, linux_candidate_support,
-    unsupported_linux_candidate_outcome,
+    extract_linux_candidate_with_time, linux_candidate_read_limit, linux_candidate_support,
+    unsupported_linux_candidate_outcome, LinuxLogTimeContext,
 };
 use super::linux_sections::{linux_artifact_section, LinuxArtifactSection, LinuxCandidateSupport};
 use super::progress::{CandidateProgressResult, ExtractionProgressReporter};
@@ -61,13 +61,18 @@ impl ExistingCheckpoints<'_> {
     }
 }
 
+pub(super) struct PreloadContexts<'a> {
+    pub(super) registry: &'a RegistryPreloadContext,
+    pub(super) browser: &'a BrowserPreloadContext,
+    pub(super) linux_log_time: &'a LinuxLogTimeContext,
+}
+
 pub(super) struct CandidateProcessingContext<'a> {
     conn: &'a Connection,
     case_id: &'a str,
     selected: &'a [AnalysisCapability],
     checkpoints: &'a ExistingCheckpoints<'a>,
-    preload: &'a RegistryPreloadContext,
-    browser_preload: &'a BrowserPreloadContext,
+    preloads: PreloadContexts<'a>,
     cancel_token: &'a AtomicBool,
 }
 
@@ -77,8 +82,7 @@ impl<'a> CandidateProcessingContext<'a> {
         case_id: &'a str,
         selected: &'a [AnalysisCapability],
         checkpoints: &'a ExistingCheckpoints<'a>,
-        preload: &'a RegistryPreloadContext,
-        browser_preload: &'a BrowserPreloadContext,
+        preloads: PreloadContexts<'a>,
         cancel_token: &'a AtomicBool,
     ) -> Self {
         Self {
@@ -86,8 +90,7 @@ impl<'a> CandidateProcessingContext<'a> {
             case_id,
             selected,
             checkpoints,
-            preload,
-            browser_preload,
+            preloads,
             cancel_token,
         }
     }
@@ -141,8 +144,9 @@ where
         |prepared| {
             parse_candidate(
                 prepared,
-                context.preload,
-                context.browser_preload,
+                context.preloads.registry,
+                context.preloads.browser,
+                context.preloads.linux_log_time,
                 context.cancel_token,
             )
         },
@@ -275,6 +279,7 @@ fn parse_candidate(
     prepared: PreparedCandidate,
     preload: &RegistryPreloadContext,
     browser_preload: &BrowserPreloadContext,
+    linux_log_time: &LinuxLogTimeContext,
     cancel_token: &AtomicBool,
 ) -> CandidateCompletion {
     let PreparedCandidate {
@@ -289,24 +294,25 @@ fn parse_candidate(
             kind: CandidateCompletionKind::Cancelled,
         };
     }
-    let kind = match input {
-        PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
-            Some(bytes) => {
-                let boot_key = preload.boot_key(&candidate);
-                let (txlog1, txlog2) = preload.txlogs(&candidate);
-                CandidateCompletionKind::Outcome(extract_registry_candidate(
-                    &candidate, bytes, boot_key, txlog1, txlog2,
-                ))
-            }
-            None => CandidateCompletionKind::Warning(format!(
-                "{} registry bytes not preloaded",
-                candidate.path
-            )),
-        },
-        PreparedCandidateInput::Bytes(bytes) => {
-            CandidateCompletionKind::Outcome(extract_bytes(&candidate, &bytes, browser_preload))
-        }
-    };
+    let kind =
+        match input {
+            PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
+                Some(bytes) => {
+                    let boot_key = preload.boot_key(&candidate);
+                    let (txlog1, txlog2) = preload.txlogs(&candidate);
+                    CandidateCompletionKind::Outcome(extract_registry_candidate(
+                        &candidate, bytes, boot_key, txlog1, txlog2,
+                    ))
+                }
+                None => CandidateCompletionKind::Warning(format!(
+                    "{} registry bytes not preloaded",
+                    candidate.path
+                )),
+            },
+            PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(
+                extract_bytes(&candidate, &bytes, browser_preload, linux_log_time),
+            ),
+        };
     let kind = if ensure_not_cancelled(cancel_token).is_err() {
         CandidateCompletionKind::Cancelled
     } else {
@@ -323,11 +329,12 @@ fn extract_bytes(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     browser_preload: &BrowserPreloadContext,
+    linux_log_time: &LinuxLogTimeContext,
 ) -> ExtractionOutcome {
     match candidate.category.as_str() {
         "BrowserHistory" => extract_browser_candidate(candidate, bytes, browser_preload),
         "Email" => extract_email_candidate(candidate, bytes),
-        LINUX_UMBRELLA_KEY => extract_linux_candidate(candidate, bytes),
+        LINUX_UMBRELLA_KEY => extract_linux_candidate_with_time(candidate, bytes, linux_log_time),
         _ => ExtractionOutcome::default(),
     }
 }

@@ -11,14 +11,13 @@
 //!   (`HEADER_INCOMPATIBLE_COMPACT`, 32-bit object offsets).
 //! - Unkeyed Jenkins lookup3 hashes (pre-v246 files) and keyed SipHash-2-4
 //!   hashes (`HEADER_INCOMPATIBLE_KEYED_HASH`, keyed by the header `file_id`).
-//! - LZ4 and Zstd compressed DATA payloads (`OBJECT_COMPRESSED_LZ4` /
-//!   `OBJECT_COMPRESSED_ZSTD`).
+//! - LZ4, Zstd and XZ compressed DATA payloads (`OBJECT_COMPRESSED_LZ4` /
+//!   `OBJECT_COMPRESSED_ZSTD` / `OBJECT_COMPRESSED_XZ`). XZ is the systemd
+//!   v219 default (RHEL7/CentOS7): a bare `.xz` container, no size prefix.
 //! - Truncated tails, e.g. `STATE_ONLINE` files imaged while still open for
 //!   writing; the truncation is reported, not treated as an error.
 //!
 //! Not supported:
-//! - XZ-compressed DATA payloads: detected via `OBJECT_COMPRESSED_XZ`, skipped
-//!   and counted in `JournalParseOutcome::skipped_compressed`.
 //! - Files carrying unknown `incompatible_flags` bits are rejected with
 //!   `LinuxArtifactError::Unsupported`, as required by the format spec.
 //! - Forward Secure Sealing: TAG objects are skipped without verification.
