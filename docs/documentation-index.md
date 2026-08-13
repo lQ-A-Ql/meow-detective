@@ -37,7 +37,7 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 
 | 事实 | 当前值 |
 |---|---:|
-| Rust workspace crate | 38 |
+| Rust workspace crate | 39 |
 | Tauri commands | 134 |
 | app-services source modules | 38 |
 | SQLite repositories | 43 logical repositories |

@@ -1,0 +1,12 @@
+[package]
+name = "plugin-api"
+description = "Meow~Detective DLL parser plugin ABI contract (C ABI boundary types)"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]

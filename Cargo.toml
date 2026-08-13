@@ -40,6 +40,7 @@ members = [
   "crates/memory-windows",
   "crates/ceph-wire",
   "crates/rocksdb-wire",
+  "crates/plugin-api",
 ]
 exclude = ["vendor/iscsi-target"]
 
