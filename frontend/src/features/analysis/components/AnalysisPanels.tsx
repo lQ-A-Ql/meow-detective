@@ -9,6 +9,7 @@ export {
   EventLogPanel,
   LinuxArtifactsPanel,
   RegistryExtractionPanel,
+  PluginModulePanel,
   EvidenceClassificationPanel,
   FileClassificationBoard,
   AnalysisReportPanel,

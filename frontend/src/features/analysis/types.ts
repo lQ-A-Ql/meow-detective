@@ -31,7 +31,8 @@ export type AnalysisTabKey =
   | 'eventlogs'
   | 'files'
   | 'report'
-  | 'deletedRecovery';
+  | 'deletedRecovery'
+  | 'plugin';
 
 export type AnalysisPlatformView = DataSourceSummary['platform'];
 
@@ -46,7 +47,8 @@ export type LinuxAnalysisTabKey =
   | 'systemConfig'
   | 'webServices'
   | 'mysqlServices'
-  | 'deletedRecovery';
+  | 'deletedRecovery'
+  | 'plugin';
 
 export type ExtractionCategory =
   | 'Registry'

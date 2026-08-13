@@ -4,6 +4,7 @@ use super::error::AnalysisServiceError;
 use super::MAX_ANALYSIS_SOURCE_BYTES;
 
 pub(crate) const LINUX_UMBRELLA_KEY: &str = "LinuxArtifacts";
+pub(crate) const PLUGIN_CAPABILITY_KEY: &str = "PluginArtifacts";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +30,10 @@ impl AnalysisCapability {
             "BrowserHistory" => "browser.",
             "Email" => "email.",
             "EventLogs" => "evtx.",
+            // Plugin outputs carry the bare plugin id as extractor_id (M2
+            // contract); replacements for plugin candidates use exact-id
+            // deletes, so this prefix intentionally matches nothing stored.
+            PLUGIN_CAPABILITY_KEY => "plugin.",
             _ if self.platform == DataSourcePlatform::Linux => "linux.",
             _ => "analysis.",
         }
@@ -64,6 +69,13 @@ pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
         "EventLogs",
         CandidateReadPolicy::Bounded(artifacts_windows::MAX_EVTX_ANALYSIS_BYTES),
     ),
+    capability(
+        PLUGIN_CAPABILITY_KEY,
+        DataSourcePlatform::Windows,
+        "应用插件",
+        PLUGIN_CAPABILITY_KEY,
+        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+    ),
 ];
 
 pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
@@ -76,6 +88,13 @@ pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
     linux_capability("LinuxSystemConfig", "Linux 系统配置"),
     linux_capability("LinuxWebServices", "Linux Web 服务"),
     linux_capability("LinuxMysqlServices", "Linux MySQL Services"),
+    capability(
+        PLUGIN_CAPABILITY_KEY,
+        DataSourcePlatform::Linux,
+        "应用插件",
+        PLUGIN_CAPABILITY_KEY,
+        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+    ),
 ];
 
 const fn capability(
@@ -123,9 +142,16 @@ pub(crate) fn select_capabilities(
             continue;
         }
 
-        let capability = find_capability(key).ok_or_else(|| {
-            AnalysisServiceError::InvalidInput(format!("unknown analysis capability `{key}`"))
-        })?;
+        // Look up the platform's own list first so capabilities valid on both
+        // platforms (e.g. PluginArtifacts) bind to the right platform entry;
+        // the global fallback keeps cross-platform keys a typed `Unsupported`
+        // instead of "unknown capability".
+        let capability = match available.iter().find(|capability| capability.key == key) {
+            Some(capability) => *capability,
+            None => find_capability(key).ok_or_else(|| {
+                AnalysisServiceError::InvalidInput(format!("unknown analysis capability `{key}`"))
+            })?,
+        };
         ensure_platform_match(key, platform, capability.platform)?;
         append_unique(&mut selected, std::iter::once(capability));
     }
@@ -138,6 +164,19 @@ pub(crate) fn find_capability(key: &str) -> Option<AnalysisCapability> {
         .chain(LINUX_CAPABILITIES)
         .find(|capability| capability.key == key)
         .copied()
+}
+
+/// The plugin capability is enabled only when the loaded plugin set for the
+/// run platform is non-empty (design doc §2.2); with no plugins — or
+/// `plugins.enabled=false` — the capability drops out so plugin discovery and
+/// extraction stay zero-overhead.
+pub(crate) fn retain_active_plugin_capability(
+    selected: &mut Vec<AnalysisCapability>,
+    plugins_available: bool,
+) {
+    if !plugins_available {
+        selected.retain(|capability| capability.key != PLUGIN_CAPABILITY_KEY);
+    }
 }
 
 pub(crate) fn reject_retired_or_blank_key(key: &str) -> Result<(), AnalysisServiceError> {
@@ -179,3 +218,7 @@ fn append_unique(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/analysis_service/capability.rs"]
+mod tests;

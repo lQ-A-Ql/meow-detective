@@ -12,12 +12,12 @@ function queryError(result: unknown): unknown {
 export async function refreshAnalysisQueries(
   platform: AnalysisPlatform,
   windowsQueries: readonly QueryRefetch[],
-  linuxQuery?: QueryRefetch,
+  linuxQueries: readonly QueryRefetch[] = [],
 ): Promise<void> {
   const results = platform === 'windows'
     ? await Promise.all(windowsQueries.map((query) => query()))
-    : platform === 'linux' && linuxQuery
-      ? [await linuxQuery()]
+    : platform === 'linux'
+      ? await Promise.all(linuxQueries.map((query) => query()))
       : [];
   const error = results.map(queryError).find(Boolean);
   if (error) {

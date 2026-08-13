@@ -25,6 +25,9 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           onSelectDataSource={model.selectDataSource}
           onWindowsTabChange={model.setActiveTab}
           onLinuxTabChange={model.setActiveLinuxTab}
+          pluginModules={model.pluginModules}
+          activePluginId={model.activePluginId}
+          onSelectPluginModule={model.selectPluginModule}
         />
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -62,6 +65,9 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             summaryPending={model.summaryPending}
             onDownloadSummary={model.downloadSummary}
             recoveryModel={model.recoveryModel}
+            pluginModules={model.pluginModules}
+            activePluginId={model.activePluginId}
+            dataSourceId={model.selectedDataSourceId}
           />
         ) : model.selectedPlatform === 'linux' ? (
           <LinuxAnalysisView
@@ -81,6 +87,9 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             loadContextKey={model.linuxLoadContextKey}
             onLoadMore={model.loadMoreLinuxSummary}
             onRetryLoadMore={model.retryLinuxSummaryLoad}
+            pluginModules={model.pluginModules}
+            activePluginId={model.activePluginId}
+            dataSourceId={model.selectedDataSourceId}
           />
         ) : null}
       </div>

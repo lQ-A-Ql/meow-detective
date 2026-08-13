@@ -125,6 +125,9 @@ fn retryable_artifact_read_failure_cannot_publish_a_ready_phase_payload() {
         source_read_elapsed_ms: 2,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
         rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
+        plugin_loads: Vec::new(),
+        plugin_rejections: Vec::new(),
+        plugin_extract_failures: Vec::new(),
     };
 
     let error = super::artifacts::artifact_phase_output(execution)
@@ -171,6 +174,9 @@ fn artifact_phase_payload_records_runtime_throughput_and_memory() {
             replica_device_bytes: 1_966_080,
             replica_device_elapsed_micros: 25_000,
         },
+        plugin_loads: Vec::new(),
+        plugin_rejections: Vec::new(),
+        plugin_extract_failures: Vec::new(),
     };
 
     let payload = super::artifacts::artifact_phase_output(execution)

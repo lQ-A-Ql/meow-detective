@@ -1,4 +1,5 @@
 import { useState, type ComponentType } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   Globe,
   Mail,
   Monitor,
+  Puzzle,
   Server,
   Shield,
 } from 'lucide-react';
@@ -17,7 +19,7 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { cn } from '@/app/components/ui/utils';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
-import type { DataSourceSummary } from '@/types/models';
+import type { DataSourceSummary, PluginModule } from '@/types/models';
 import type {
   AnalysisExtractionProgressInfo,
   AnalysisTabKey,
@@ -72,9 +74,13 @@ export interface AnalysisSourceSidebarProps {
   linuxNodeCounts?: Partial<Record<LinuxAnalysisTabKey, number>>;
   activeWindowsTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
+  /** Plugin modules of the currently selected data source (already fetched). */
+  pluginModules?: PluginModule[];
+  activePluginId?: string;
   onSelectDataSource: (id: string) => void;
   onWindowsTabChange: (tab: AnalysisTabKey) => void;
   onLinuxTabChange: (tab: LinuxAnalysisTabKey) => void;
+  onSelectPluginModule?: (pluginId: string) => void;
 }
 
 export function AnalysisSourceSidebar({
@@ -85,10 +91,14 @@ export function AnalysisSourceSidebar({
   linuxNodeCounts,
   activeWindowsTab,
   activeLinuxTab,
+  pluginModules,
+  activePluginId,
   onSelectDataSource,
   onWindowsTabChange,
   onLinuxTabChange,
+  onSelectPluginModule,
 }: AnalysisSourceSidebarProps) {
+  const { t } = useTranslation();
   const [collapsedSourceIds, setCollapsedSourceIds] = useState<Set<string>>(() => new Set());
 
   function toggleSource(sourceId: string) {
@@ -131,6 +141,11 @@ export function AnalysisSourceSidebar({
               ? [...WINDOWS_NODES, WINDOWS_DELETED_RECOVERY_NODE]
               : LINUX_NODES;
             const SourceIcon = sourceKindIconLarge(source.kind);
+            // Plugin modules are fetched for the selected source only; the
+            // platform filter keeps e.g. windows-only plugins off linux sources.
+            const pluginNodes = selected
+              ? (pluginModules ?? []).filter((module) => module.evidencePlatform === source.platform)
+              : [];
 
             return (
               <section key={source.id} className="min-w-0">
@@ -203,7 +218,7 @@ export function AnalysisSourceSidebar({
                             active && 'bg-forensics-surface text-forensics-text',
                           )}
                         >
-                          <TreeConnector depth={1} isLast={index === nodes.length - 1} />
+                          <TreeConnector depth={1} isLast={index === nodes.length - 1 && pluginNodes.length === 0} />
                           <Icon size={12} className="shrink-0 text-forensics-muted-light" />
                           <span className="min-w-0 flex-1 truncate">
                             {resultCount === undefined ? node.label : `${node.label}(${resultCount})`}
@@ -211,6 +226,46 @@ export function AnalysisSourceSidebar({
                         </Button>
                       );
                     })}
+                    {pluginNodes.length > 0 ? (
+                      <>
+                        <div className="px-2 pb-1 pt-1 text-[10px] text-forensics-muted-light">
+                          {t('pluginModule.groupTitle')}
+                        </div>
+                        {pluginNodes.map((module, index) => {
+                          const pluginActive = activePluginId === module.pluginId
+                            && (source.platform === 'windows'
+                              ? activeWindowsTab === 'plugin'
+                              : activeLinuxTab === 'plugin');
+                          return (
+                            <Button
+                              key={module.pluginId}
+                              type="button"
+                              variant="forensicsGhost"
+                              size="inline"
+                              disabled={disabled}
+                              aria-label={`${source.name} / ${module.displayName}`}
+                              aria-current={pluginActive ? 'true' : undefined}
+                              onClick={() => {
+                                if (source.id !== selectedDataSourceId) {
+                                  onSelectDataSource(source.id);
+                                }
+                                onSelectPluginModule?.(module.pluginId);
+                              }}
+                              className={cn(
+                                'h-7 w-full min-w-0 justify-start gap-1 px-1 text-left text-[11px] text-forensics-muted hover:text-forensics-text',
+                                pluginActive && 'bg-forensics-surface text-forensics-text',
+                              )}
+                            >
+                              <TreeConnector depth={1} isLast={index === pluginNodes.length - 1} />
+                              <Puzzle size={12} className="shrink-0 text-forensics-muted-light" />
+                              <span className="min-w-0 flex-1 truncate" title={module.displayName}>
+                                {`${module.displayName}(${module.totalCount})`}
+                              </span>
+                            </Button>
+                          );
+                        })}
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </section>

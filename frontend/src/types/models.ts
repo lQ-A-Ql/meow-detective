@@ -11,6 +11,7 @@ export * from './analysisBrowser';
 export * from './analysisEmail';
 export * from './eventLog';
 export * from './linuxArtifacts';
+export * from './pluginArtifacts';
 export * from './governance';
 export * from './files';
 export * from './recovery';

@@ -906,3 +906,189 @@ fn insert_event_log_candidate(connection: &Connection, size: u64) {
         )
         .expect("insert EVTX candidate");
 }
+
+fn insert_plugin_shaped_candidate(connection: &Connection) {
+    connection
+        .execute(
+            "INSERT INTO file_entries (
+                id, parent_id, data_source_id, path, name, entry_type, size,
+                deleted, hidden, system, encrypted
+             ) VALUES (
+                'plugin-mfx', NULL, 'source-linux',
+                '[P0]/Evidence/FOO.MFX', 'FOO.MFX', 'file', 64, 0, 0, 0, 0
+             )",
+            [],
+        )
+        .expect("insert plugin-shaped candidate");
+}
+
+#[test]
+fn plugin_capability_stays_zero_overhead_without_loaded_plugins() {
+    let connection = source_connection();
+    insert_plugin_shaped_candidate(&connection);
+    let cancel = AtomicBool::new(false);
+    let loader_calls = std::cell::Cell::new(0u32);
+    let plugin_loader = || {
+        loader_calls.set(loader_calls.get() + 1);
+        crate::plugin_loader::PluginLoadReport::default()
+    };
+    let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_plugin_loader(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &[],
+        &cancel,
+        &mut ignore_progress,
+        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(vec![0u8; 16])),
+        &plugin_loader,
+    )
+    .expect("run without plugins");
+
+    assert_eq!(loader_calls.get(), 1, "loader runs once for a default run");
+    assert!(execution
+        .dto
+        .sections
+        .iter()
+        .all(|section| section.key != "PluginArtifacts"));
+    assert!(execution.plugin_loads.is_empty());
+    assert!(execution.plugin_rejections.is_empty());
+    assert!(execution.plugin_extract_failures.is_empty());
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
+                .get::<_, i64>(0))
+            .expect("count artifacts"),
+        0
+    );
+}
+
+#[test]
+fn plugin_loader_is_never_invoked_when_capability_not_selected() {
+    let connection = source_connection();
+    let cancel = AtomicBool::new(false);
+    let plugin_loader = || -> crate::plugin_loader::PluginLoadReport {
+        panic!("plugin loader must not run for built-in-only selections")
+    };
+    let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_plugin_loader(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["Registry"],
+        &cancel,
+        &mut ignore_progress,
+        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(vec![0u8; 16])),
+        &plugin_loader,
+    )
+    .expect("built-in-only run");
+
+    assert_eq!(execution.dto.sections.len(), 1);
+    assert_eq!(execution.dto.sections[0].key, "Registry");
+}
+
+#[test]
+fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
+    let connection = source_connection();
+    let candidate = output_candidate();
+    ArtifactRepo::new(&connection)
+        .insert_batch(
+            &[
+                artifact(
+                    "old-plugin-artifact",
+                    "web-output",
+                    "meow.fixture.good",
+                    "0.1.0",
+                ),
+                artifact("keep-builtin", "web-output", "linux.web.old", "0.9.0"),
+                artifact(
+                    "other-file-plugin",
+                    "other-file",
+                    "meow.fixture.good",
+                    "0.1.0",
+                ),
+            ],
+            "case-1",
+            &candidate.data_source_id,
+        )
+        .expect("seed previous run outputs");
+    TimelineRepo::new(&connection)
+        .insert_batch_with_case(
+            &[event(
+                "old-plugin-event",
+                "web-output",
+                "meow.fixture.good",
+                "0.1.0",
+            )],
+            "case-1",
+        )
+        .expect("seed previous run events");
+
+    let capability = crate::analysis_service::capability::find_capability("PluginArtifacts")
+        .expect("plugin capability");
+    let mut state = ExtractionState::new(&[capability]);
+    state.record_plugin_outcome(
+        capability,
+        &candidate,
+        super::super::plugin::PluginCandidateOutcome {
+            outcome: ExtractionOutcome {
+                artifacts: vec![artifact(
+                    "new-plugin-artifact",
+                    "web-output",
+                    "meow.fixture.good",
+                    "0.2.0",
+                )],
+                timeline_events: vec![event(
+                    "new-plugin-event",
+                    "web-output",
+                    "meow.fixture.good",
+                    "0.2.0",
+                )],
+                warnings: Vec::new(),
+            },
+            failures: Vec::new(),
+        },
+        &["meow.fixture.good".to_string()],
+    );
+    persist_outputs(&connection, "case-1", &mut state).expect("persist plugin outputs");
+
+    let mut artifact_ids = connection
+        .prepare("SELECT id FROM artifacts ORDER BY id ASC")
+        .expect("prepare artifact listing")
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("list artifacts")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect artifact ids");
+    artifact_ids.sort();
+    assert_eq!(
+        artifact_ids,
+        vec![
+            "keep-builtin".to_string(),
+            "new-plugin-artifact".to_string(),
+            "other-file-plugin".to_string()
+        ],
+        "exact-id replacement drops only this source's outputs by this plugin"
+    );
+    let event_ids = connection
+        .prepare("SELECT id FROM timeline_events ORDER BY id ASC")
+        .expect("prepare event listing")
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("list events")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect event ids");
+    assert_eq!(event_ids, vec!["new-plugin-event".to_string()]);
+
+    let checkpoint_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM source_meta WHERE key LIKE 'analysis_candidate_scan:%'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count checkpoints");
+    assert_eq!(
+        checkpoint_count, 0,
+        "plugin candidates record no checkpoints"
+    );
+}

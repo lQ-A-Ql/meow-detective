@@ -12,6 +12,9 @@ import {
   EvidenceClassificationSummary,
   FileClassificationBoard,
   LinuxArtifactSummary,
+  PluginFamilyEntries,
+  PluginFamilyEntriesRequest,
+  PluginModule,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
   V2GovernanceSnapshot,
@@ -96,6 +99,16 @@ export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
 
 export async function getCaseOverviewSnapshot(): Promise<CaseOverviewSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_CASE_OVERVIEW_SNAPSHOT);
+}
+
+export async function listPluginModules(dataSourceId: string): Promise<PluginModule[]> {
+  return apiClient.request(COMMANDS.analysis.LIST_PLUGIN_MODULES, { request: { dataSourceId } });
+}
+
+export async function getPluginFamilyEntries(
+  request: PluginFamilyEntriesRequest,
+): Promise<PluginFamilyEntries> {
+  return apiClient.request(COMMANDS.analysis.GET_PLUGIN_FAMILY_ENTRIES, { request });
 }
 
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {

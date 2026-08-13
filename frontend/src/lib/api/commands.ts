@@ -128,6 +128,8 @@ export const COMMANDS = {
     GET_CASE_OVERVIEW_SNAPSHOT: 'get_case_overview_snapshot',
     GET_CORRELATION_SNAPSHOT: 'get_correlation_snapshot',
     GENERATE_ANALYSIS_SUMMARY: 'generate_analysis_summary',
+    LIST_PLUGIN_MODULES: 'list_plugin_modules',
+    GET_PLUGIN_FAMILY_ENTRIES: 'get_plugin_family_entries',
   },
   rulePacks: {
     LIST_LOADED_RULE_PACKS: 'list_loaded_rule_packs',

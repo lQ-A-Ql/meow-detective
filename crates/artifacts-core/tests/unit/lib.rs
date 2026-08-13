@@ -259,3 +259,75 @@ impl ArtifactExtractor for StubExtractor {
         })
     }
 }
+
+#[test]
+fn test_plugin_registration_supersedes_builtin_on_shared_family_hit() {
+    let mut registry = ExtractorRegistry::new();
+    registry.register(Box::new(StubExtractor {
+        name: "prefetch",
+        pattern: ".pf",
+    }));
+    registry.register(Box::new(StubExtractor {
+        name: "lnk",
+        pattern: ".lnk",
+    }));
+    // Plugin declares the same family ("prefetch") and also hits *.pf.
+    registry.register_plugin(
+        Box::new(StubExtractor {
+            name: "prefetch-plugin",
+            pattern: ".pf",
+        }),
+        vec!["prefetch".to_string()],
+    );
+
+    // Shared hit path + shared family: the built-in is skipped, plugin wins.
+    let matches = registry.find_for_path("C:/Windows/Prefetch/CMD.EXE-abc.pf");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].id(), "prefetch-plugin");
+
+    // A path only the built-ins support is unaffected by the plugin.
+    let matches = registry.find_for_path("C:/Windows/test.lnk");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].id(), "lnk");
+}
+
+#[test]
+fn test_plugin_registration_keeps_builtin_with_disjoint_family() {
+    let mut registry = ExtractorRegistry::new();
+    registry.register(Box::new(StubExtractor {
+        name: "prefetch",
+        pattern: ".pf",
+    }));
+    // Plugin hits *.pf too, but declares a different family: both run.
+    registry.register_plugin(
+        Box::new(StubExtractor {
+            name: "wechat-plugin",
+            pattern: ".pf",
+        }),
+        vec!["WeChat".to_string()],
+    );
+
+    let matches = registry.find_for_path("C:/Windows/Prefetch/CMD.EXE-abc.pf");
+    let mut ids = matches
+        .iter()
+        .map(|extractor| extractor.id())
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    assert_eq!(ids, vec!["prefetch", "wechat-plugin"]);
+}
+
+#[test]
+fn test_plain_registration_behaves_as_builtin() {
+    let mut registry = ExtractorRegistry::new();
+    registry.register(Box::new(StubExtractor {
+        name: "prefetch",
+        pattern: ".pf",
+    }));
+    registry.register(Box::new(StubExtractor {
+        name: "other",
+        pattern: ".pf",
+    }));
+
+    // Two plain registrations never supersede each other.
+    assert_eq!(registry.find_for_path("x.pf").len(), 2);
+}

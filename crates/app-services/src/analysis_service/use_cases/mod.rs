@@ -16,7 +16,8 @@ pub use extraction::{
 };
 pub use queries::{
     get_source_browser_summary, get_source_email_summary, get_source_evtx_summary,
-    get_source_linux_summary, get_source_registry_structured_summary, get_source_registry_summary,
+    get_source_linux_summary, get_source_plugin_family_entries, get_source_plugin_modules,
+    get_source_registry_structured_summary, get_source_registry_summary,
 };
 pub use runtime::AnalysisSourceReadRuntime;
 pub use summary::generate_source_analysis_summary;

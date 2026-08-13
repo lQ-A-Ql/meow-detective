@@ -102,6 +102,8 @@ macro_rules! desktop_command_handler {
             get_email_extraction_summary,
             get_evtx_event_summary,
             get_linux_artifact_summary,
+            list_plugin_modules,
+            get_plugin_family_entries,
             get_v2_governance_snapshot,
             get_v3_governance_snapshot,
             get_case_overview_snapshot,

@@ -20,8 +20,21 @@ pub(crate) struct PluginMeta {
     pub plugin_id: String,
     pub version: String,
     pub display_name: String,
+    pub evidence_platform: plugin_api::MeowEvidencePlatform,
     pub families: Vec<String>,
     pub patterns: Vec<PathPattern>,
+}
+
+/// Summary metadata projection of a loaded plugin: the fields the M2.5
+/// analysis module listing needs without holding the loaded DLL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginModuleMeta {
+    pub plugin_id: String,
+    pub display_name: String,
+    pub plugin_version: String,
+    /// `"windows"` or `"linux"` (lower-case wire form of the ABI enum).
+    pub evidence_platform: String,
+    pub families: Vec<String>,
 }
 
 /// Path match pattern from `path_patterns_json` (design doc §3): `*.pf`
@@ -77,8 +90,10 @@ pub struct PluginExtractor {
     id: &'static str,
     display_name: &'static str,
     version: String,
+    evidence_platform: plugin_api::MeowEvidencePlatform,
     primary_family: String,
     families: HashSet<String>,
+    declared_families: Vec<String>,
     patterns: Vec<PathPattern>,
     library: PluginLibrary,
     call_lock: Mutex<()>,
@@ -100,11 +115,43 @@ impl PluginExtractor {
             id,
             display_name,
             version: meta.version,
+            evidence_platform: meta.evidence_platform,
             primary_family,
+            declared_families: meta.families.to_vec(),
             families: meta.families.into_iter().collect(),
             patterns: meta.patterns,
             library,
             call_lock: Mutex::new(()),
+        }
+    }
+
+    /// Plugin-reported version string (host-verified present at load time).
+    pub fn plugin_version(&self) -> &str {
+        &self.version
+    }
+
+    /// Evidence platform declared by the plugin in the ABI handshake.
+    pub fn evidence_platform(&self) -> plugin_api::MeowEvidencePlatform {
+        self.evidence_platform
+    }
+
+    /// Declared family whitelist in declaration order.
+    pub fn declared_families(&self) -> &[String] {
+        &self.declared_families
+    }
+
+    /// Summary metadata projection used by the M2.5 module listing.
+    pub fn module_meta(&self) -> PluginModuleMeta {
+        PluginModuleMeta {
+            plugin_id: self.id.to_string(),
+            display_name: self.display_name.to_string(),
+            plugin_version: self.version.clone(),
+            evidence_platform: match self.evidence_platform {
+                plugin_api::MeowEvidencePlatform::Windows => "windows",
+                plugin_api::MeowEvidencePlatform::Linux => "linux",
+            }
+            .to_string(),
+            families: self.declared_families.clone(),
         }
     }
 

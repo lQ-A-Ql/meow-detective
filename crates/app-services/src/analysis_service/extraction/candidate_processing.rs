@@ -5,7 +5,8 @@ use super::linux::{
     extract_linux_candidate_with_time, linux_candidate_read_limit, linux_candidate_support,
     unsupported_linux_candidate_outcome, LinuxLogTimeContext,
 };
-use super::linux_sections::{linux_artifact_section, LinuxArtifactSection, LinuxCandidateSupport};
+use super::linux_sections::LinuxCandidateSupport;
+use super::plugin::{extract_plugin_candidate, PluginCandidateOutcome};
 use super::progress::{CandidateProgressResult, ExtractionProgressReporter};
 pub(super) use super::reader::read_candidate_bytes_with_progress;
 pub(super) use super::reader::{
@@ -24,9 +25,10 @@ use super::ExtractionOutcome;
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::capability::{
-    AnalysisCapability, CandidateReadPolicy, LINUX_UMBRELLA_KEY,
+    AnalysisCapability, CandidateReadPolicy, LINUX_UMBRELLA_KEY, PLUGIN_CAPABILITY_KEY,
 };
 use crate::analysis_service::error::AnalysisServiceError;
+use artifacts_core::ArtifactExtractor;
 use persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -37,9 +39,11 @@ const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 mod checkpoint;
 mod panic_diagnostics;
+mod routing;
 mod source_preparation;
 
 use panic_diagnostics::PanicDiagnostics;
+pub(super) use routing::{capability_for_candidate, discovery_categories};
 
 pub(super) struct ExistingCheckpoints<'a> {
     pub(super) clean: &'a CleanScanKeys,
@@ -73,6 +77,7 @@ pub(super) struct CandidateProcessingContext<'a> {
     selected: &'a [AnalysisCapability],
     checkpoints: &'a ExistingCheckpoints<'a>,
     preloads: PreloadContexts<'a>,
+    plugins: &'a [&'a dyn ArtifactExtractor],
     cancel_token: &'a AtomicBool,
 }
 
@@ -83,6 +88,7 @@ impl<'a> CandidateProcessingContext<'a> {
         selected: &'a [AnalysisCapability],
         checkpoints: &'a ExistingCheckpoints<'a>,
         preloads: PreloadContexts<'a>,
+        plugins: &'a [&'a dyn ArtifactExtractor],
         cancel_token: &'a AtomicBool,
     ) -> Self {
         Self {
@@ -91,6 +97,7 @@ impl<'a> CandidateProcessingContext<'a> {
             selected,
             checkpoints,
             preloads,
+            plugins,
             cancel_token,
         }
     }
@@ -147,6 +154,7 @@ where
                 context.preloads.registry,
                 context.preloads.browser,
                 context.preloads.linux_log_time,
+                context.plugins,
                 context.cancel_token,
             )
         },
@@ -201,6 +209,7 @@ struct CandidateCompletion {
 
 enum CandidateCompletionKind {
     Outcome(ExtractionOutcome),
+    Plugin(PluginCandidateOutcome),
     Persisted(PersistedExtractionOutcome),
     Deferred(String),
     Warning(String),
@@ -280,6 +289,7 @@ fn parse_candidate(
     preload: &RegistryPreloadContext,
     browser_preload: &BrowserPreloadContext,
     linux_log_time: &LinuxLogTimeContext,
+    plugins: &[&dyn ArtifactExtractor],
     cancel_token: &AtomicBool,
 ) -> CandidateCompletion {
     let PreparedCandidate {
@@ -294,25 +304,30 @@ fn parse_candidate(
             kind: CandidateCompletionKind::Cancelled,
         };
     }
-    let kind =
-        match input {
-            PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
-                Some(bytes) => {
-                    let boot_key = preload.boot_key(&candidate);
-                    let (txlog1, txlog2) = preload.txlogs(&candidate);
-                    CandidateCompletionKind::Outcome(extract_registry_candidate(
-                        &candidate, bytes, boot_key, txlog1, txlog2,
-                    ))
-                }
-                None => CandidateCompletionKind::Warning(format!(
-                    "{} registry bytes not preloaded",
-                    candidate.path
-                )),
-            },
-            PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(
-                extract_bytes(&candidate, &bytes, browser_preload, linux_log_time),
-            ),
-        };
+    let kind = match input {
+        PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
+            Some(bytes) => {
+                let boot_key = preload.boot_key(&candidate);
+                let (txlog1, txlog2) = preload.txlogs(&candidate);
+                CandidateCompletionKind::Outcome(extract_registry_candidate(
+                    &candidate, bytes, boot_key, txlog1, txlog2,
+                ))
+            }
+            None => CandidateCompletionKind::Warning(format!(
+                "{} registry bytes not preloaded",
+                candidate.path
+            )),
+        },
+        PreparedCandidateInput::Bytes(bytes) if capability.key == PLUGIN_CAPABILITY_KEY => {
+            CandidateCompletionKind::Plugin(extract_plugin_candidate(&candidate, &bytes, plugins))
+        }
+        PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(extract_bytes(
+            &candidate,
+            &bytes,
+            browser_preload,
+            linux_log_time,
+        )),
+    };
     let kind = if ensure_not_cancelled(cancel_token).is_err() {
         CandidateCompletionKind::Cancelled
     } else {
@@ -357,6 +372,18 @@ where
             coordinator
                 .state
                 .record_outcome(capability, &candidate, outcome);
+            result
+        }
+        CandidateCompletionKind::Plugin(plugin_outcome) => {
+            let result = progress_result(&plugin_outcome.outcome, false);
+            let producer_ids =
+                super::plugin::matching_producer_ids(coordinator.context.plugins, &candidate);
+            coordinator.state.record_plugin_outcome(
+                capability,
+                &candidate,
+                plugin_outcome,
+                &producer_ids,
+            );
             result
         }
         CandidateCompletionKind::Persisted(outcome) => {
@@ -467,34 +494,4 @@ fn log_scheduler_snapshot(snapshot: SchedulerSnapshot, policy: ExtractionSchedul
         rss_mb = crate::runtime_resources::current_rss_mb(),
         "Analysis extraction scheduler heartbeat"
     );
-}
-
-pub(super) fn capability_for_candidate(
-    selected: &[AnalysisCapability],
-    candidate: &EvidenceCandidate,
-) -> Option<AnalysisCapability> {
-    if candidate.category == LINUX_UMBRELLA_KEY {
-        let normalized = normalize_evidence_path(&candidate.path);
-        let section = linux_artifact_section(&normalized);
-        debug_assert!(LinuxArtifactSection::ALL.contains(&section));
-        debug_assert_eq!(LinuxArtifactSection::from_key(section.key()), Some(section));
-        return selected
-            .iter()
-            .find(|item| item.key == section.key())
-            .copied();
-    }
-    selected
-        .iter()
-        .find(|item| item.candidate_category == candidate.category)
-        .copied()
-}
-
-pub(super) fn discovery_categories(selected: &[AnalysisCapability]) -> Vec<&str> {
-    let mut categories = Vec::new();
-    for capability in selected {
-        if !categories.contains(&capability.candidate_category) {
-            categories.push(capability.candidate_category);
-        }
-    }
-    categories
 }

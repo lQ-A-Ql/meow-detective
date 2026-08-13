@@ -881,5 +881,26 @@
     "unknownError": "Unknown error",
     "reload": "Reload",
     "recover": "Try to recover"
+  },
+  "pluginModule": {
+    "groupTitle": "App Plugins",
+    "totalCount": "Total artifacts",
+    "loading": "Loading plugin artifacts...",
+    "loadProgress": "Loaded {{loaded}} / {{total}}",
+    "truncatedWarning": "Results were truncated by the backend; showing a partial set.",
+    "loadError": "Failed to load plugin artifacts.",
+    "retry": "Retry",
+    "attrsTitle": "Attribute detail",
+    "attrsEmpty": "This record has no additional attributes.",
+    "columns": {
+      "title": "Title",
+      "summary": "Summary",
+      "confidence": "Confidence",
+      "sourcePath": "Source Path"
+    },
+    "empty": {
+      "title": "No plugin artifacts",
+      "description": "The plugin extracted no records under this family."
+    }
   }
 }

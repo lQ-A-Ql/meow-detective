@@ -7,6 +7,8 @@ use rusqlite::{params, Connection};
 const TIMELINE_SELECT_COLUMNS: &str = "id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs";
 const TIMELINE_ORDER_BY: &str = "ORDER BY ts DESC, id ASC";
 
+mod analysis_outputs;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimelineSortKey {
     pub timestamp: Option<String>,

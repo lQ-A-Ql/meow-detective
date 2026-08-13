@@ -147,7 +147,7 @@ pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::R
     })
 }
 
-fn parse_timestamp(value: Option<String>) -> Option<chrono::DateTime<chrono::Utc>> {
+pub(crate) fn parse_timestamp(value: Option<String>) -> Option<chrono::DateTime<chrono::Utc>> {
     value
         .and_then(|timestamp| chrono::DateTime::parse_from_rfc3339(&timestamp).ok())
         .map(|timestamp| timestamp.with_timezone(&chrono::Utc))
@@ -230,7 +230,9 @@ fn discover_evidence_candidates_with_definitions(
     Ok(candidates)
 }
 
-fn file_entries_has_partition_index(conn: &Connection) -> Result<bool, AnalysisServiceError> {
+pub(crate) fn file_entries_has_partition_index(
+    conn: &Connection,
+) -> Result<bool, AnalysisServiceError> {
     let mut statement = conn.prepare("PRAGMA table_info(file_entries)")?;
     let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
     for column in columns {
@@ -241,7 +243,7 @@ fn file_entries_has_partition_index(conn: &Connection) -> Result<bool, AnalysisS
     Ok(false)
 }
 
-fn parse_partition_index(
+pub(crate) fn parse_partition_index(
     row: &rusqlite::Row<'_>,
     file_id: &str,
 ) -> Result<Option<usize>, AnalysisServiceError> {
@@ -310,7 +312,7 @@ fn add_matching_candidates(
     Ok(())
 }
 
-fn candidate_content_identity(
+pub(crate) fn candidate_content_identity(
     file_id: &str,
     data_source_id: &str,
     partition_index: Option<usize>,

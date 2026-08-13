@@ -38,17 +38,17 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 39 |
-| Tauri commands | 134 |
+| Tauri commands | 136 |
 | app-services source modules | 38 |
 | SQLite repositories | 43 logical repositories |
 | SQLite migration scripts | 79 |
-| frontend test files | 110 |
+| frontend test files | 112 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 11 |
-| `frontend/src/**/*.test.ts(x)` | 110 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 134 |
+| `frontend/src/**/*.test.ts(x)` | 112 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 136 |
 
 治理事实源：
 

@@ -19,9 +19,9 @@ mod system_info;
 mod use_cases;
 
 pub use candidates::{
-    collect_file_entries, discover_evidence_candidates, evidence_candidates_for_categories,
-    evidence_category_defs, get_evidence_classification_summary, EvidenceCandidate,
-    EvidenceCategoryDef,
+    collect_file_entries, discover_evidence_candidates, discover_plugin_candidates,
+    evidence_candidates_for_categories, evidence_category_defs,
+    get_evidence_classification_summary, EvidenceCandidate, EvidenceCategoryDef,
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use demo::seed_analysis_demo_data;
@@ -30,9 +30,10 @@ pub(crate) use extraction::AnalysisExtractionExecution;
 pub use extraction::{
     extract_evtx_candidate, extract_linux_candidate, extract_registry_candidate,
     get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
-    get_linux_artifact_summary, get_registry_extraction_summary, get_registry_structured_summary,
-    run_analysis_extraction, run_analysis_extraction_with_cancel,
-    run_analysis_extraction_with_reader_limits, ExtractionOutcome,
+    get_linux_artifact_summary, get_plugin_family_entries, get_registry_extraction_summary,
+    get_registry_structured_summary, list_plugin_modules, run_analysis_extraction,
+    run_analysis_extraction_with_cancel, run_analysis_extraction_with_reader_limits,
+    ExtractionOutcome,
 };
 pub use file_classification::build_file_classification_board;
 pub use platforms::{
@@ -46,8 +47,9 @@ pub(crate) use use_cases::run_source_analysis_extraction_execution_with_cancel;
 pub use use_cases::{
     classify_source_files, generate_source_analysis_summary, get_file_classification_board,
     get_source_browser_summary, get_source_email_summary, get_source_evidence_summary,
-    get_source_evtx_summary, get_source_linux_summary, get_source_registry_structured_summary,
-    get_source_registry_summary, get_source_system_info, run_source_analysis_extraction,
+    get_source_evtx_summary, get_source_linux_summary, get_source_plugin_family_entries,
+    get_source_plugin_modules, get_source_registry_structured_summary, get_source_registry_summary,
+    get_source_system_info, run_source_analysis_extraction,
     run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
     run_source_evidence_scan, AnalysisExtractionProgressContext, AnalysisSourceReadRuntime,
 };

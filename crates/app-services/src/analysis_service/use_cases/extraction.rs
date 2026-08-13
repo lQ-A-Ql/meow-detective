@@ -8,12 +8,15 @@ use rusqlite::Connection;
 use super::source::open_ready_analysis_source;
 use crate::analysis_service::extraction::{
     encrypted_candidate_warning, run_analysis_extraction_with_source_and_progress,
-    AnalysisExtractionExecution, CandidateSource, ExtractionProgressUpdate,
+    AnalysisExtractionExecution, CandidateSource, ExtractionProgressUpdate, PluginExtractFailure,
+    PluginLoadRecord,
 };
 use crate::analysis_service::AnalysisServiceError;
 use crate::file_service::{
     FileServiceError, RangeContentReader, SourceReadContext, SourceReadFileHint,
 };
+use crate::plugin_loader::PluginRejection;
+use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use transport::dto::{AnalysisExtractionProgressDto, AnalysisExtractionRunDto};
 
 use super::runtime::AnalysisSourceReadRuntime;
@@ -208,6 +211,14 @@ fn run_source_analysis_extraction_execution_with_progress(
             u64::try_from(source_read_elapsed.as_millis()).unwrap_or(u64::MAX);
         execution.filesystem_read_metrics = source_reader.filesystem_read_metrics();
         execution.rados_read_metrics = source_reader.rados_read_metrics();
+        record_plugin_audit_trail(
+            case_conn,
+            case_id,
+            data_source_id,
+            &execution.plugin_loads,
+            &execution.plugin_rejections,
+            &execution.plugin_extract_failures,
+        );
     }
     if extraction.is_ok() {
         if let Err(error) = source_reader.flush_derived_filesystem_locators() {
@@ -227,3 +238,77 @@ fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSo
         RangeContentReader::Streaming(reader) => CandidateSource::Reader(reader),
     }
 }
+
+/// Write the plugin audit trail of one extraction run into the case audit
+/// log (design doc §5: plugin load / refusal / extraction failure). Audit
+/// writes are non-fatal: a failing audit insert must never fail the run.
+fn record_plugin_audit_trail(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    plugin_loads: &[PluginLoadRecord],
+    plugin_rejections: &[PluginRejection],
+    plugin_extract_failures: &[PluginExtractFailure],
+) {
+    if plugin_loads.is_empty() && plugin_rejections.is_empty() && plugin_extract_failures.is_empty()
+    {
+        return;
+    }
+    let repo = AuditRepo::new(case_conn);
+    for load in plugin_loads {
+        let details = serde_json::json!({
+            "pluginId": load.plugin_id,
+            "pluginVersion": load.plugin_version,
+            "dataSourceId": data_source_id.0,
+        })
+        .to_string();
+        log_audit_outcome(repo.log(
+            Some(&case_id.0),
+            "system",
+            &AuditAction::PluginLoad,
+            Some(&load.plugin_id),
+            &details,
+        ));
+    }
+    for rejection in plugin_rejections {
+        let details = serde_json::json!({
+            "path": rejection.path.display().to_string(),
+            "reason": rejection.reason,
+            "dataSourceId": data_source_id.0,
+        })
+        .to_string();
+        log_audit_outcome(repo.log(
+            Some(&case_id.0),
+            "system",
+            &AuditAction::PluginReject,
+            None,
+            &details,
+        ));
+    }
+    for failure in plugin_extract_failures {
+        let details = serde_json::json!({
+            "pluginId": failure.plugin_id,
+            "path": failure.source_path,
+            "error": failure.error,
+            "dataSourceId": data_source_id.0,
+        })
+        .to_string();
+        log_audit_outcome(repo.log(
+            Some(&case_id.0),
+            "system",
+            &AuditAction::PluginExtractFailed,
+            Some(&failure.plugin_id),
+            &details,
+        ));
+    }
+}
+
+fn log_audit_outcome(result: persistence_sqlite::DbResult<()>) {
+    if let Err(error) = result {
+        tracing::warn!("plugin audit event could not be recorded: {error}");
+    }
+}
+
+#[cfg(test)]
+#[path = "../../../tests/unit/analysis_service/use_cases/extraction.rs"]
+mod tests;

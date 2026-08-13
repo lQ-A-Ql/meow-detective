@@ -8,6 +8,8 @@ import {
   getEvidenceClassificationSummary,
   getFileClassificationBoard,
   getLinuxArtifactSummary,
+  getPluginFamilyEntries,
+  listPluginModules,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
   getSystemInfo,
@@ -22,6 +24,7 @@ import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/type
 import type { DataSourceSummary } from '@/types/models';
 import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
 import type { LinuxArtifactSummary } from '@/types/models';
+import type { PluginFamilyEntries } from '@/types/models';
 
 type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
 type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 'dataSourceId'> & {
@@ -41,6 +44,7 @@ const ANALYSIS_QUERY_OPTIONS = {
 
 const EVTX_PAGE_SIZE = 500;
 const LINUX_PAGE_SIZE = 200;
+const PLUGIN_PAGE_SIZE = 200;
 
 /**
  * Entry-array ↔ count-field pairing used by the Linux summary pager. The
@@ -180,6 +184,14 @@ async function refreshExtractionQueries(
     }),
     queryClient.invalidateQueries({
       queryKey: ['graph', 'snapshot', caseId],
+      refetchType: 'active',
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['analysis', 'plugin-modules', caseId, request.dataSourceId],
+      refetchType: 'active',
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['analysis', 'plugin-family-entries', caseId, request.dataSourceId],
       refetchType: 'active',
     }),
   ]);
@@ -371,6 +383,70 @@ export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {
   return {
     ...query,
     data: mergeLinuxPages(query.data?.pages ?? []),
+  };
+}
+
+function mergePluginFamilyPages(pages: PluginFamilyEntries[]): PluginFamilyEntries | undefined {
+  const first = pages[0];
+  const last = pages[pages.length - 1];
+  if (!first || !last) return undefined;
+  return {
+    ...last,
+    entries: pages.flatMap((page) => page.entries),
+  };
+}
+
+export function usePluginModules(source?: AnalysisSource) {
+  const currentCase = useCurrentCase();
+  const dataSourceId = source?.id;
+  return useQuery({
+    queryKey: ['analysis', 'plugin-modules', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null],
+    queryFn: () => listPluginModules(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess
+      && Boolean(currentCase.data)
+      && Boolean(dataSourceId)
+      && (source?.platform === 'windows' || source?.platform === 'linux'),
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+}
+
+export function usePluginFamilyEntries(request: {
+  dataSourceId?: string;
+  pluginId?: string;
+  family?: string;
+  offset?: number;
+  limit?: number;
+}) {
+  const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
+  const limit = Math.min(request.limit ?? PLUGIN_PAGE_SIZE, PLUGIN_PAGE_SIZE);
+  const query = useInfiniteQuery({
+    queryKey: ['analysis', 'plugin-family-entries', currentCase.data?.id ?? null, dataSourceId ?? null, request.pluginId ?? null, request.family ?? null, limit],
+    queryFn: ({ pageParam }) => getPluginFamilyEntries({
+      dataSourceId: dataSourceId ?? '',
+      pluginId: request.pluginId ?? '',
+      family: request.family ?? '',
+      offset: pageParam,
+      limit,
+    }),
+    initialPageParam: request.offset ?? 0,
+    getNextPageParam: (lastPage, pages) => {
+      if (lastPage.entries.length === 0) return undefined;
+      const loaded = pages.reduce((total, page) => total + page.entries.length, 0);
+      return loaded < lastPage.totalCount ? (request.offset ?? 0) + loaded : undefined;
+    },
+    enabled: currentCase.isSuccess
+      && Boolean(currentCase.data)
+      && Boolean(dataSourceId)
+      && Boolean(request.pluginId)
+      && Boolean(request.family),
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+  return {
+    ...query,
+    data: mergePluginFamilyPages(query.data?.pages ?? []),
   };
 }
 

@@ -61,6 +61,9 @@ pub enum AuditAction {
     McpToolCall,
     McpPromptList,
     McpPromptGet,
+    PluginLoad,
+    PluginReject,
+    PluginExtractFailed,
 }
 
 impl AuditAction {
@@ -104,6 +107,9 @@ impl AuditAction {
             Self::McpToolCall => "mcp.tool.call",
             Self::McpPromptList => "mcp.prompt.list",
             Self::McpPromptGet => "mcp.prompt.get",
+            Self::PluginLoad => "plugin.load",
+            Self::PluginReject => "plugin.reject",
+            Self::PluginExtractFailed => "plugin.extract_failed",
         }
     }
 
@@ -141,6 +147,7 @@ impl AuditAction {
             | Self::McpToolCall
             | Self::McpPromptList
             | Self::McpPromptGet => "mcp",
+            Self::PluginLoad | Self::PluginReject | Self::PluginExtractFailed => "plugin",
         }
     }
 }

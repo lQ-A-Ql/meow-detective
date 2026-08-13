@@ -1,6 +1,7 @@
 use super::artifact_query::count_analysis_artifacts;
 use super::output_digest::output_digest_for_outputs;
-use super::ExtractionOutcome;
+use super::plugin::PluginCandidateOutcome;
+use super::{ExtractionOutcome, PluginExtractFailure};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
 use crate::analysis_service::error::AnalysisServiceError;
@@ -80,10 +81,19 @@ impl SectionProgress {
     }
 }
 
+/// How a replaced output set is addressed: built-in capabilities replace by
+/// `extractor_id` prefix (`registry.`, `browser.`, ...); plugin outputs carry
+/// the bare plugin id (M2 provenance contract) and are replaced by exact id.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum AnalysisOutputProducer {
+    Prefix(&'static str),
+    ExtractorId(String),
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct AnalysisOutputReplacement {
     pub(super) source_object_id: String,
-    pub(super) producer_prefix: &'static str,
+    pub(super) producer: AnalysisOutputProducer,
 }
 
 pub(super) struct ExtractionState {
@@ -99,6 +109,7 @@ pub(super) struct ExtractionState {
     pub(super) complete_scans: Vec<CompleteAnalysisCandidateScan>,
     pub(super) checkpoint_hit_count: u64,
     pub(super) retryable_failure_count: u64,
+    plugin_failures: Vec<PluginExtractFailure>,
 }
 
 impl ExtractionState {
@@ -124,6 +135,7 @@ impl ExtractionState {
             complete_scans: Vec::new(),
             checkpoint_hit_count: 0,
             retryable_failure_count: 0,
+            plugin_failures: Vec::new(),
         }
     }
 
@@ -136,7 +148,7 @@ impl ExtractionState {
         crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
         self.replacements.push(AnalysisOutputReplacement {
             source_object_id: candidate.file_id.0.clone(),
-            producer_prefix: capability.producer_prefix(),
+            producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
         });
         if outcome.warnings.is_empty()
             && outcome.artifacts.is_empty()
@@ -175,6 +187,36 @@ impl ExtractionState {
             });
         }
         self.record_observation(capability, outcome);
+    }
+
+    /// Plugin candidates never participate in scan checkpoints: their outputs
+    /// carry per-plugin ids/versions that the shared version/digest
+    /// validation cannot address. Re-extraction stays idempotent through
+    /// exact-id output replacements, one per plugin that ran on the candidate.
+    pub(super) fn record_plugin_outcome(
+        &mut self,
+        capability: AnalysisCapability,
+        candidate: &EvidenceCandidate,
+        plugin_outcome: PluginCandidateOutcome,
+        producer_ids: &[String],
+    ) {
+        let PluginCandidateOutcome {
+            mut outcome,
+            failures,
+        } = plugin_outcome;
+        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
+        for producer_id in producer_ids {
+            self.replacements.push(AnalysisOutputReplacement {
+                source_object_id: candidate.file_id.0.clone(),
+                producer: AnalysisOutputProducer::ExtractorId(producer_id.clone()),
+            });
+        }
+        self.plugin_failures.extend(failures);
+        self.record_observation(capability, outcome);
+    }
+
+    pub(super) fn take_plugin_failures(&mut self) -> Vec<PluginExtractFailure> {
+        std::mem::take(&mut self.plugin_failures)
     }
 
     pub(super) fn replay_diagnostic(

@@ -86,6 +86,26 @@ impl<'a> ArtifactRepo<'a> {
         Ok(deleted)
     }
 
+    /// Delete one source's outputs produced by one exact extractor id. Plugin
+    /// artifacts carry the bare plugin id (no shared prefix), so plugin
+    /// re-extraction replaces outputs by exact match instead of `LIKE`.
+    pub fn delete_analysis_outputs_by_extractor_in_transaction(
+        &self,
+        source_object_id: &str,
+        extractor_id: &str,
+    ) -> DbResult<usize> {
+        let deleted = self.conn.execute(
+            "DELETE FROM artifacts
+                 WHERE source_object_id = ?1
+                   AND extractor_id = ?2",
+            params![source_object_id, extractor_id],
+        )?;
+        if deleted > 0 {
+            SourceMetaRepo::new(self.conn).bump_revision(ARTIFACT_CURSOR_REVISION_KEY)?;
+        }
+        Ok(deleted)
+    }
+
     pub fn list_analysis_outputs(
         &self,
         source_object_id: &str,

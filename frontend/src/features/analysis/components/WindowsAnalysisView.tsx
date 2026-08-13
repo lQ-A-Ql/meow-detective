@@ -10,6 +10,7 @@ import {
   EventLogPanel,
   EvidenceClassificationPanel,
   RegistryExtractionPanel,
+  PluginModulePanel,
   SystemInfoPanel,
 } from '@/features/analysis/components/AnalysisPanels';
 import { FileClassificationBoardContainer } from '@/features/analysis/containers/FileClassificationBoardContainer';
@@ -23,6 +24,7 @@ import type {
   EvtxEventView,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
+  PluginModule,
 } from '@/types/models';
 import type { AnalysisTabKey } from '@/features/analysis/types';
 import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
@@ -64,6 +66,9 @@ export interface WindowsAnalysisViewProps {
   summaryPending: boolean;
   onDownloadSummary: () => void;
   recoveryModel: DeletedRecoveryViewModel;
+  pluginModules?: PluginModule[];
+  activePluginId?: string;
+  dataSourceId?: string;
 }
 
 export function WindowsAnalysisView({
@@ -88,8 +93,14 @@ export function WindowsAnalysisView({
   summaryPending,
   onDownloadSummary,
   recoveryModel,
+  pluginModules,
+  activePluginId,
+  dataSourceId,
 }: WindowsAnalysisViewProps) {
   const { t } = useTranslation();
+  const activePluginModule = activeTab === 'plugin'
+    ? pluginModules?.find((module) => module.pluginId === activePluginId)
+    : undefined;
 
   return (
     <Tabs
@@ -189,6 +200,16 @@ export function WindowsAnalysisView({
 
             <TabsContent value="deletedRecovery" className="m-0 data-[state=inactive]:hidden">
               <DeletedRecoveryPanel model={recoveryModel} />
+            </TabsContent>
+
+            <TabsContent value="plugin" className="m-0 data-[state=inactive]:hidden">
+              {activePluginModule && dataSourceId ? (
+                <PluginModulePanel
+                  dataSourceId={dataSourceId}
+                  module={activePluginModule}
+                  loadContextKey={dataSourceId}
+                />
+              ) : null}
             </TabsContent>
           </>
         )}

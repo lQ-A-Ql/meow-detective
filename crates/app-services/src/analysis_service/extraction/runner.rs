@@ -13,13 +13,18 @@ use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::acquire_extraction_slot;
 use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
+use super::{PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
-    evidence_candidates_for_categories_with_cancel, EvidenceCandidate,
+    discover_plugin_candidates, evidence_candidates_for_categories_with_cancel, EvidenceCandidate,
 };
-use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
+use crate::analysis_service::capability::{
+    retain_active_plugin_capability, AnalysisCapability, CandidateReadPolicy, PLUGIN_CAPABILITY_KEY,
+};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::platforms::analyzer_for;
+use crate::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
+use artifacts_core::ArtifactExtractor;
 use chrono::Utc;
 use domain::{DataSourcePlatform, FileEntryId};
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
@@ -39,6 +44,12 @@ pub(crate) struct AnalysisExtractionExecution {
     pub(crate) source_read_elapsed_ms: u64,
     pub(crate) filesystem_read_metrics: evidence_core::FileSystemReadMetrics,
     pub(crate) rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics,
+    /// Plugins that loaded for this run (audit: `plugin.load`).
+    pub(crate) plugin_loads: Vec<PluginLoadRecord>,
+    /// Plugin DLLs refused during this run (audit: `plugin.reject`).
+    pub(crate) plugin_rejections: Vec<PluginRejection>,
+    /// Plugin extraction failures (audit: `plugin.extract_failed`).
+    pub(crate) plugin_extract_failures: Vec<PluginExtractFailure>,
 }
 
 pub fn run_analysis_extraction<E: std::fmt::Display>(
@@ -131,11 +142,44 @@ fn run_analysis_extraction_with_source(
     categories: &[&str],
     cancel_token: &AtomicBool,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    run_analysis_extraction_with_plugin_loader(
+        conn,
+        case_id,
+        platform,
+        categories,
+        cancel_token,
+        progress,
+        file_reader,
+        &crate::plugin_loader::load_all_report,
+    )
+}
+
+/// Full extraction run with an injectable plugin loader. The loader is only
+/// invoked when the `PluginArtifacts` capability is selected, so runs that
+/// stay on built-in capabilities never touch plugin discovery; an empty or
+/// disabled plugin set drops the capability before any candidate work.
+#[allow(clippy::too_many_arguments)]
+fn run_analysis_extraction_with_plugin_loader(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    progress: &mut dyn FnMut(ExtractionProgressUpdate),
     mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    plugin_loader: &dyn Fn() -> PluginLoadReport,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let discovery_started = Instant::now();
     ensure_not_cancelled(cancel_token)?;
-    let selected = analyzer_for(platform)?.select_capabilities(categories)?;
+    let mut selected = analyzer_for(platform)?.select_capabilities(categories)?;
+    let (plugins, plugin_loads, plugin_rejections) =
+        load_run_plugins(platform, &mut selected, plugin_loader);
+    let plugin_extractors = plugins
+        .iter()
+        .map(|plugin| plugin as &dyn ArtifactExtractor)
+        .collect::<Vec<_>>();
     let mut progress_reporter = ExtractionProgressReporter::new(platform, &selected, progress);
     let _extraction_slot = acquire_extraction_slot(cancel_token, |waited| {
         progress_reporter.emit_waiting_for_scheduler(waited);
@@ -144,6 +188,11 @@ fn run_analysis_extraction_with_source(
     let discovery_categories = discovery_categories(&selected);
     let mut candidates =
         evidence_candidates_for_categories_with_cancel(conn, &discovery_categories, cancel_token)?;
+    candidates.append(&mut discover_plugin_candidates(
+        conn,
+        &plugin_extractors,
+        cancel_token,
+    )?);
     order_candidates_for_extraction(conn, platform, &mut candidates);
     register_candidates(&mut progress_reporter, &selected, &candidates);
     progress_reporter.emit_preparing();
@@ -184,6 +233,7 @@ fn run_analysis_extraction_with_source(
         &selected,
         &checkpoints,
         preloads.as_refs(),
+        &plugin_extractors,
         cancel_token,
     );
     process_candidates(
@@ -196,8 +246,34 @@ fn run_analysis_extraction_with_source(
     let processing_elapsed_ms = elapsed_millis(processing_started);
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_persisting();
+    finalize_run(
+        conn,
+        case_id,
+        state,
+        &mut progress_reporter,
+        discovery_elapsed_ms,
+        processing_elapsed_ms,
+        plugin_loads,
+        plugin_rejections,
+    )
+}
+
+/// Persist pending outputs, build the run DTO, complete the progress
+/// reporter, and assemble the execution record.
+#[allow(clippy::too_many_arguments)]
+fn finalize_run(
+    conn: &Connection,
+    case_id: &str,
+    mut state: ExtractionState,
+    progress_reporter: &mut ExtractionProgressReporter<'_>,
+    discovery_elapsed_ms: u64,
+    processing_elapsed_ms: u64,
+    plugin_loads: Vec<PluginLoadRecord>,
+    plugin_rejections: Vec<PluginRejection>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let persistence_elapsed_ms = flush_pending_outputs(conn, case_id, &mut state)?;
     let retryable_failure_count = state.retryable_failure_count;
+    let plugin_extract_failures = state.take_plugin_failures();
     let dto = state.into_dto(conn, Utc::now().to_rfc3339())?;
     if retryable_failure_count == 0 {
         progress_reporter.complete();
@@ -214,7 +290,65 @@ fn run_analysis_extraction_with_source(
         source_read_elapsed_ms: 0,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
         rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
+        plugin_loads,
+        plugin_rejections,
+        plugin_extract_failures,
     })
+}
+
+/// Keep only plugins whose declared evidence platform matches the run
+/// platform (design doc §4.1: Windows modules appear under Windows sources).
+fn plugins_for_platform(
+    plugins: Vec<PluginExtractor>,
+    platform: DataSourcePlatform,
+) -> Vec<PluginExtractor> {
+    plugins
+        .into_iter()
+        .filter(|plugin| {
+            matches!(
+                (plugin.evidence_platform(), platform),
+                (
+                    plugin_api::MeowEvidencePlatform::Windows,
+                    DataSourcePlatform::Windows
+                ) | (
+                    plugin_api::MeowEvidencePlatform::Linux,
+                    DataSourcePlatform::Linux
+                )
+            )
+        })
+        .collect()
+}
+
+/// Load the plugin set for one run (only when the `PluginArtifacts`
+/// capability was selected), drop the capability when no platform-matching
+/// plugin loaded, and collect the load/reject audit records.
+fn load_run_plugins(
+    platform: DataSourcePlatform,
+    selected: &mut Vec<AnalysisCapability>,
+    plugin_loader: &dyn Fn() -> PluginLoadReport,
+) -> (
+    Vec<PluginExtractor>,
+    Vec<PluginLoadRecord>,
+    Vec<PluginRejection>,
+) {
+    let plugin_report = if selected
+        .iter()
+        .any(|capability| capability.key == PLUGIN_CAPABILITY_KEY)
+    {
+        plugin_loader()
+    } else {
+        PluginLoadReport::default()
+    };
+    let plugins = plugins_for_platform(plugin_report.plugins, platform);
+    retain_active_plugin_capability(selected, !plugins.is_empty());
+    let plugin_loads = plugins
+        .iter()
+        .map(|plugin| PluginLoadRecord {
+            plugin_id: plugin.id().to_string(),
+            plugin_version: plugin.plugin_version().to_string(),
+        })
+        .collect::<Vec<_>>();
+    (plugins, plugin_loads, plugin_report.rejections)
 }
 
 /// Owned preload contexts for one extraction run.

@@ -9,6 +9,7 @@ import {
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
   useLinuxArtifactSummary,
+  usePluginModules,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
   useRunAnalysisExtraction,
@@ -73,6 +74,7 @@ export function useAnalysisWorkspaceModel() {
     view: eventLogView,
   });
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
+  const pluginModulesQuery = usePluginModules(selectedDataSource);
   const classificationBoard = useFileClassificationBoard(selectedDataSource, 300);
   const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
   const resetEvidenceScan = evidenceScan.reset;
@@ -88,6 +90,8 @@ export function useAnalysisWorkspaceModel() {
   const setExtractionRunning = useAnalysisStore((state) => state.setExtractionRunning);
   const setActiveTab = useAnalysisStore((state) => state.setActiveTab);
   const setActiveLinuxTab = useAnalysisStore((state) => state.setActiveLinuxTab);
+  const activePluginId = useAnalysisStore((state) => state.activePluginId);
+  const setActivePluginId = useAnalysisStore((state) => state.setActivePluginId);
   const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
   const deletedRecovery = useDeletedRecoveryModel(
     selectedDataSource,
@@ -299,8 +303,9 @@ export function useAnalysisWorkspaceModel() {
           emailSummary.refetch,
           eventLogSummary.refetch,
           classificationBoard.refetch,
+          pluginModulesQuery.refetch,
         ],
-        linuxSummary.refetch,
+        [linuxSummary.refetch, pluginModulesQuery.refetch],
       );
       setAnalysisRefreshError(undefined);
     } catch (error) {
@@ -341,8 +346,16 @@ export function useAnalysisWorkspaceModel() {
     });
   }
 
-  function selectDataSource(id: string) {
-    if (
+  function selectPluginModule(pluginId: string) {
+    setActivePluginId(pluginId);
+    if (selectedPlatform === 'windows') {
+      setActiveTab('plugin');
+    } else if (selectedPlatform === 'linux') {
+      setActiveLinuxTab('plugin');
+    }
+  }
+
+  function selectDataSource(id: string) {    if (
       id === selectedDataSourceId
       || analysisMutationPending
       || sourceEpoch.isBusy
@@ -427,6 +440,9 @@ export function useAnalysisWorkspaceModel() {
     },
     retryLinuxSummaryLoad: () => linuxSummary.refetch(),
     recoveryModel: deletedRecovery,
+    pluginModules: pluginModulesQuery.data ?? [],
+    activePluginId,
+    selectPluginModule,
     refresh,
     runEvidenceScan,
     runExtraction,

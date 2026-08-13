@@ -122,6 +122,48 @@ impl GetAnalysisExtractionRequest {
     }
 }
 
+/// Paged plugin artifact entries request (`get_plugin_family_entries`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPluginFamilyEntriesRequest {
+    pub data_source_id: String,
+    pub plugin_id: String,
+    pub family: String,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_analysis_extraction_limit")]
+    pub limit: u32,
+}
+
+impl Default for GetPluginFamilyEntriesRequest {
+    fn default() -> Self {
+        Self {
+            data_source_id: String::new(),
+            plugin_id: String::new(),
+            family: String::new(),
+            offset: 0,
+            limit: default_analysis_extraction_limit(),
+        }
+    }
+}
+
+impl GetPluginFamilyEntriesRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)?;
+        if self.plugin_id.trim().is_empty() {
+            return Err("pluginId must not be blank".to_string());
+        }
+        if self.family.trim().is_empty() {
+            return Err("family must not be blank".to_string());
+        }
+        if self.limit == 0 {
+            self.limit = default_analysis_extraction_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
+}
+
 fn default_analysis_extraction_limit() -> u32 {
     100
 }

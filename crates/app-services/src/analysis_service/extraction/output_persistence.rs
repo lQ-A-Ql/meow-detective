@@ -1,4 +1,4 @@
-use super::state::ExtractionState;
+use super::state::{AnalysisOutputProducer, ExtractionState};
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_sqlite::repositories::{
     analysis_scan_repo::AnalysisScanRepo, artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo,
@@ -36,14 +36,28 @@ pub(super) fn persist_outputs(
     let artifact_repo = ArtifactRepo::new(&transaction);
     let timeline_repo = TimelineRepo::new(&transaction);
     for replacement in replacements {
-        artifact_repo.delete_analysis_outputs_in_transaction(
-            &replacement.source_object_id,
-            replacement.producer_prefix,
-        )?;
-        timeline_repo.delete_analysis_outputs_in_transaction(
-            &replacement.source_object_id,
-            replacement.producer_prefix,
-        )?;
+        match &replacement.producer {
+            AnalysisOutputProducer::Prefix(prefix) => {
+                artifact_repo.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+                timeline_repo.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+            }
+            AnalysisOutputProducer::ExtractorId(extractor_id) => {
+                artifact_repo.delete_analysis_outputs_by_extractor_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+                timeline_repo.delete_analysis_outputs_by_parser_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+            }
+        }
     }
     if !artifacts.is_empty() {
         let data_source_id = resolve_output_data_source_id(&transaction)?;

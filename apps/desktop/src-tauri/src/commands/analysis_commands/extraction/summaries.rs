@@ -1,3 +1,5 @@
+use super::super::support::{run_active_case_command, validate_source_request};
+use crate::state::AppState;
 use app_services::analysis_service;
 use domain::DataSourceId;
 use tauri::State;
@@ -11,9 +13,6 @@ use transport::{
     },
     CommandError,
 };
-
-use super::super::support::{run_active_case_command, validate_source_request};
-use crate::state::AppState;
 
 #[tauri::command]
 pub async fn get_registry_extraction_summary(

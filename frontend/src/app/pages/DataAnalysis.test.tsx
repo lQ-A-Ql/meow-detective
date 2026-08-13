@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   emailSummary: vi.fn(),
   eventLogSummary: vi.fn(),
   linuxSummary: vi.fn(),
+  pluginModules: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
 }));
@@ -40,6 +41,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useEmailExtractionSummary: mocks.emailSummary,
   useEvtxEventSummary: mocks.eventLogSummary,
   useLinuxArtifactSummary: mocks.linuxSummary,
+  usePluginModules: mocks.pluginModules,
   useFileClassificationBoard: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
@@ -549,6 +551,7 @@ describe('DataAnalysis page', () => {
       mutateAsync: vi.fn().mockResolvedValue('# 数据源分析报告'),
       reset: vi.fn(),
     });
+    mocks.pluginModules.mockReturnValue(queryState({ data: [] }));
 
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:analysis'),

@@ -881,5 +881,26 @@
     "unknownError": "未知错误",
     "reload": "重新加载",
     "recover": "尝试恢复"
+  },
+  "pluginModule": {
+    "groupTitle": "应用插件",
+    "totalCount": "痕迹总数",
+    "loading": "正在加载插件痕迹...",
+    "loadProgress": "已加载 {{loaded}} / {{total}}",
+    "truncatedWarning": "后端结果已截断，仅显示部分记录。",
+    "loadError": "插件痕迹加载失败。",
+    "retry": "重试",
+    "attrsTitle": "属性明细",
+    "attrsEmpty": "该记录没有附加属性。",
+    "columns": {
+      "title": "标题",
+      "summary": "摘要",
+      "confidence": "置信度",
+      "sourcePath": "来源路径"
+    },
+    "empty": {
+      "title": "暂无插件痕迹",
+      "description": "当前插件在该 family 下没有提取到记录。"
+    }
   }
 }

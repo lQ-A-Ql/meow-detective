@@ -68,24 +68,65 @@ impl ArtifactSink for VecSink {
 
 pub struct ExtractorRegistry {
     extractors: Vec<Box<dyn ArtifactExtractor>>,
+    /// Families each plugin extractor supersedes on a shared path hit
+    /// (plugin-priority rule: hit path × family). Parallel to `extractors`;
+    /// empty for built-in extractors.
+    plugin_family_overrides: Vec<Vec<String>>,
 }
 
 impl ExtractorRegistry {
     pub fn new() -> Self {
         Self {
             extractors: Vec::new(),
+            plugin_family_overrides: Vec::new(),
         }
     }
 
     pub fn register(&mut self, extractor: Box<dyn ArtifactExtractor>) {
         self.extractors.push(extractor);
+        self.plugin_family_overrides.push(Vec::new());
+    }
+
+    /// Register a plugin extractor together with its declared families. When
+    /// the plugin and a built-in extractor both support a path and share a
+    /// family, the built-in is skipped for that path (plugin wins).
+    pub fn register_plugin(
+        &mut self,
+        extractor: Box<dyn ArtifactExtractor>,
+        families: Vec<String>,
+    ) {
+        self.extractors.push(extractor);
+        self.plugin_family_overrides.push(families);
     }
 
     pub fn find_for_path(&self, file_path: &str) -> Vec<&dyn ArtifactExtractor> {
-        self.extractors
+        let matching = self
+            .extractors
             .iter()
-            .filter(|e| e.supports_path(file_path))
-            .map(|e| e.as_ref())
+            .enumerate()
+            .filter(|(_, e)| e.supports_path(file_path))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        if matching
+            .iter()
+            .all(|index| self.plugin_family_overrides[*index].is_empty())
+        {
+            return matching
+                .into_iter()
+                .map(|index| self.extractors[index].as_ref())
+                .collect();
+        }
+        let overridden = matching
+            .iter()
+            .flat_map(|index| self.plugin_family_overrides[*index].iter())
+            .collect::<std::collections::HashSet<_>>();
+        matching
+            .into_iter()
+            .filter(|index| {
+                !self.plugin_family_overrides[*index].is_empty()
+                    || !overridden.contains(&self.extractors[*index].family().name)
+            })
+            .map(|index| self.extractors[index].as_ref())
             .collect()
     }
 

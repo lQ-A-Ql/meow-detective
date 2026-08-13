@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   getEmailExtractionSummary: vi.fn(),
   getEvtxEventSummary: vi.fn(),
   getLinuxArtifactSummary: vi.fn(),
+  listPluginModules: vi.fn(),
+  getPluginFamilyEntries: vi.fn(),
   getCaseOverviewSnapshot: vi.fn(),
   getV2GovernanceSnapshot: vi.fn(),
   getCorrelationSnapshot: vi.fn(),
@@ -38,6 +40,8 @@ vi.mock('@/lib/api/analysis', () => ({
   getEmailExtractionSummary: mocks.getEmailExtractionSummary,
   getEvtxEventSummary: mocks.getEvtxEventSummary,
   getLinuxArtifactSummary: mocks.getLinuxArtifactSummary,
+  listPluginModules: mocks.listPluginModules,
+  getPluginFamilyEntries: mocks.getPluginFamilyEntries,
   getCaseOverviewSnapshot: mocks.getCaseOverviewSnapshot,
   getV2GovernanceSnapshot: mocks.getV2GovernanceSnapshot,
   getCorrelationSnapshot: mocks.getCorrelationSnapshot,
@@ -55,6 +59,8 @@ import {
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
   useLinuxArtifactSummary,
+  usePluginFamilyEntries,
+  usePluginModules,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
   useRunAnalysisExtraction,
@@ -240,6 +246,8 @@ describe('analysis hooks', () => {
       warnings: [],
     });
     mocks.getLinuxArtifactSummary.mockResolvedValue(linuxSummaryFixture());
+    mocks.listPluginModules.mockResolvedValue([pluginModuleFixture()]);
+    mocks.getPluginFamilyEntries.mockResolvedValue(pluginFamilyPageFixture());
     mocks.getV2GovernanceSnapshot.mockResolvedValue({
       generatedAt: '2026-06-12T00:00:00Z',
       factSources: [
@@ -797,5 +805,114 @@ describe('analysis hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getCaseOverviewSnapshot).toHaveBeenCalledTimes(1);
+  });
+});
+
+function pluginEntryFixture(artifactId: string, attrs: Record<string, unknown> = {}) {
+  return {
+    artifactId,
+    fileId: 'file-1',
+    sourcePath: 'C:/Windows/Prefetch/APP.PF',
+    title: `title-${artifactId}`,
+    summary: `summary-${artifactId}`,
+    attrs,
+    createdAt: '2026-08-01T00:00:00Z',
+  };
+}
+
+function pluginModuleFixture() {
+  return {
+    pluginId: 'plugin-prefetch',
+    displayName: 'Prefetch Plugin',
+    pluginVersion: '1.0.0',
+    evidencePlatform: 'windows',
+    families: [{ family: 'ProgramExecution', count: 2 }],
+    totalCount: 2,
+    warnings: [],
+  };
+}
+
+function pluginFamilyPageFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    pluginId: 'plugin-prefetch',
+    family: 'ProgramExecution',
+    totalCount: 0,
+    truncated: false,
+    entries: [],
+    ...overrides,
+  };
+}
+
+describe('plugin analysis hooks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+    mocks.listPluginModules.mockResolvedValue([pluginModuleFixture()]);
+    mocks.getPluginFamilyEntries.mockResolvedValue(pluginFamilyPageFixture());
+  });
+
+  it('loads plugin modules for a persisted data source', async () => {
+    const { result } = renderHook(() => usePluginModules(windowsSource), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.listPluginModules).toHaveBeenCalledWith('ds-windows');
+    expect(result.current.data?.[0]?.pluginId).toBe('plugin-prefetch');
+  });
+
+  it('keeps the plugin module query idle without a selected data source', () => {
+    const { result } = renderHook(() => usePluginModules(), { wrapper: createWrapper() });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mocks.listPluginModules).not.toHaveBeenCalled();
+  });
+
+  it('pages plugin family entries until the family is fully loaded', async () => {
+    mocks.getPluginFamilyEntries
+      .mockResolvedValueOnce(pluginFamilyPageFixture({
+        totalCount: 2,
+        entries: [pluginEntryFixture('a1')],
+      }))
+      .mockResolvedValueOnce(pluginFamilyPageFixture({
+        totalCount: 2,
+        entries: [pluginEntryFixture('a2')],
+      }));
+
+    const { result } = renderHook(
+      () => usePluginFamilyEntries({
+        dataSourceId: 'ds-windows',
+        pluginId: 'plugin-prefetch',
+        family: 'ProgramExecution',
+        limit: 1,
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() => expect(result.current.data?.entries.length).toBe(2));
+    expect(mocks.getPluginFamilyEntries).toHaveBeenLastCalledWith({
+      dataSourceId: 'ds-windows',
+      pluginId: 'plugin-prefetch',
+      family: 'ProgramExecution',
+      offset: 1,
+      limit: 1,
+    });
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('keeps plugin family entries idle without plugin or family selection', () => {
+    const { result } = renderHook(
+      () => usePluginFamilyEntries({ dataSourceId: 'ds-windows' }),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mocks.getPluginFamilyEntries).not.toHaveBeenCalled();
   });
 });

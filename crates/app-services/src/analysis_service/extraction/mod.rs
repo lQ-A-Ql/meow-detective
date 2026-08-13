@@ -14,6 +14,7 @@ mod linux_sections;
 mod observability;
 mod output_digest;
 mod output_persistence;
+mod plugin;
 mod preparation;
 mod progress;
 mod reader;
@@ -38,7 +39,8 @@ pub(crate) use self::runner::{
 };
 pub use self::summary::{
     get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
-    get_linux_artifact_summary, get_registry_extraction_summary, get_registry_structured_summary,
+    get_linux_artifact_summary, get_plugin_family_entries, get_registry_extraction_summary,
+    get_registry_structured_summary, list_plugin_modules,
 };
 use domain::{Artifact, TimelineEvent};
 
@@ -47,4 +49,20 @@ pub struct ExtractionOutcome {
     pub artifacts: Vec<Artifact>,
     pub timeline_events: Vec<TimelineEvent>,
     pub warnings: Vec<String>,
+}
+
+/// One plugin `meow_plugin_extract` failure during an analysis run. Surfaced
+/// as a run warning and audited by the use-case layer (`plugin.extract_failed`).
+#[derive(Debug, Clone)]
+pub(crate) struct PluginExtractFailure {
+    pub(crate) plugin_id: String,
+    pub(crate) source_path: String,
+    pub(crate) error: String,
+}
+
+/// One plugin DLL that passed the ABI handshake during an analysis run.
+#[derive(Debug, Clone)]
+pub(crate) struct PluginLoadRecord {
+    pub(crate) plugin_id: String,
+    pub(crate) plugin_version: String,
 }

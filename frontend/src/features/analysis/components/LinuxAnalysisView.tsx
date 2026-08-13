@@ -4,8 +4,9 @@ import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
   LinuxArtifactsPanel,
+  PluginModulePanel,
 } from '@/features/analysis/components/AnalysisPanels';
-import type { LinuxArtifactSummary } from '@/types/models';
+import type { LinuxArtifactSummary, PluginModule } from '@/types/models';
 import type { LinuxAnalysisTabKey } from '@/features/analysis/types';
 import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
 import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
@@ -27,6 +28,9 @@ export interface LinuxAnalysisViewProps {
   loadStateKey?: string | number;
   onLoadMore?: () => void;
   onRetryLoadMore?: () => unknown;
+  pluginModules?: PluginModule[];
+  activePluginId?: string;
+  dataSourceId?: string;
 }
 
 export function LinuxAnalysisView({
@@ -45,8 +49,14 @@ export function LinuxAnalysisView({
   loadStateKey,
   onLoadMore,
   onRetryLoadMore,
+  pluginModules,
+  activePluginId,
+  dataSourceId,
 }: LinuxAnalysisViewProps) {
   const { t } = useTranslation();
+  const activePluginModule = activeTab === 'plugin'
+    ? pluginModules?.find((module) => module.pluginId === activePluginId)
+    : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-0">
@@ -54,6 +64,14 @@ export function LinuxAnalysisView({
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {activeTab === 'deletedRecovery' ? (
           <DeletedRecoveryPanel model={recoveryModel} />
+        ) : activeTab === 'plugin' ? (
+          activePluginModule && dataSourceId ? (
+            <PluginModulePanel
+              dataSourceId={dataSourceId}
+              module={activePluginModule}
+              loadContextKey={dataSourceId}
+            />
+          ) : null
         ) : loading || summaryLoading ? (
           <AnalysisLoadingPanel
             text={loading ? t('analysis.loading.case') : t('analysis.loading.linuxArtifacts')}

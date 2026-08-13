@@ -60,6 +60,7 @@ type AnalysisState = {
   activeTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
   selectedDataSourceId?: string;
+  activePluginId?: string;
 
   setExtractionProgress: (
     progress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>,
@@ -73,6 +74,7 @@ type AnalysisState = {
   setProgressExpanded: (expanded: boolean) => void;
   setActiveTab: (tab: AnalysisTabKey) => void;
   setActiveLinuxTab: (tab: LinuxAnalysisTabKey) => void;
+  setActivePluginId: (id?: string) => void;
   setSelectedDataSourceId: (id?: string) => void;
   reset: () => void;
 };
@@ -86,6 +88,7 @@ const initialState: Omit<
   | 'setProgressExpanded'
   | 'setActiveTab'
   | 'setActiveLinuxTab'
+  | 'setActivePluginId'
   | 'setSelectedDataSourceId'
   | 'reset'
 > = {
@@ -95,6 +98,7 @@ const initialState: Omit<
   activeTab: 'system',
   activeLinuxTab: 'overview',
   selectedDataSourceId: undefined,
+  activePluginId: undefined,
 };
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({
@@ -120,6 +124,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveLinuxTab: (tab) => set({ activeLinuxTab: tab }),
+
+  setActivePluginId: (id) => set({ activePluginId: id }),
 
   setSelectedDataSourceId: (id) => set({ selectedDataSourceId: id }),
 
