@@ -129,6 +129,8 @@ unicode-normalization = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_FileSystem", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
 iscsi-target = "1.0.0"
 dirs = "6"
+# Dynamic loading of parser plugin DLLs by the app-services plugin_loader host.
+libloading = "~0.7"
 lz4_flex = "~0.13"
 zstd = "0.13.3"
 # XZ (LZMA2 in an .xz container) for systemd journal DATA payloads; systemd's

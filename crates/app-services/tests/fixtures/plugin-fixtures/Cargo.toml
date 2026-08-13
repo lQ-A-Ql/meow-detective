@@ -1,0 +1,11 @@
+# Standalone fixture plugin workspace for app-services plugin_loader tests.
+# Deliberately NOT a member of the repository workspace (see
+# docs/plugin-system-dev-test-plan.md §2): it is compiled on demand by
+# tests/plugin_fixture_util.rs into target/plugin-fixtures/.
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[profile.dev]
+# Plugins must unwind for the host-side catch_unwind to work (plan §5).
+panic = "unwind"

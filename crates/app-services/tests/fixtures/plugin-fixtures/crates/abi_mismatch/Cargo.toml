@@ -1,0 +1,11 @@
+[package]
+name = "meow-fixture-abi-mismatch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+plugin-api = { path = "../../../../../../plugin-api" }

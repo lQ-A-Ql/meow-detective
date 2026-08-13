@@ -52,6 +52,7 @@ pub mod notebook_service;
 pub mod parallel_enum;
 mod partition_capabilities;
 pub mod performance;
+pub mod plugin_loader;
 pub mod processing_phase_service;
 pub mod report;
 pub use report::{

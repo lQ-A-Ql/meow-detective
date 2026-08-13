@@ -92,3 +92,8 @@ AGENTS.md
 
 # WinPE maintenance tool build output (built by scripts/dev/build-winpe-maintenance.ps1)
 apps/desktop/src-tauri/resources/tools/
+
+# Plugin fixture workspace build byproducts (compiled on demand by
+# crates/app-services/tests/plugin_fixture_util.rs into /target/plugin-fixtures/)
+/crates/app-services/tests/fixtures/plugin-fixtures/Cargo.lock
+/crates/app-services/tests/fixtures/plugin-fixtures/target/

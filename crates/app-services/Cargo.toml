@@ -61,6 +61,9 @@ containers-pst.workspace = true
 tempfile.workspace = true
 base64.workspace = true
 evidence-emulation.workspace = true
+libloading.workspace = true
+dirs.workspace = true
+plugin-api = { path = "../plugin-api" }
 
 [dev-dependencies]
 tempfile.workspace = true

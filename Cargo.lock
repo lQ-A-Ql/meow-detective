@@ -125,6 +125,7 @@ dependencies = [
  "chrono-tz",
  "containers-pst",
  "crossbeam-channel",
+ "dirs",
  "domain",
  "encoding_rs",
  "evidence-block",
@@ -142,6 +143,7 @@ dependencies = [
  "hex",
  "image-e01",
  "infrastructure",
+ "libloading",
  "lopdf",
  "mailparse",
  "md-5 0.10.6",
@@ -150,6 +152,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "persistence-sqlite",
+ "plugin-api",
  "quick-xml",
  "rayon",
  "regex",
@@ -3657,6 +3660,10 @@ dependencies = [
  "serde",
  "time",
 ]
+
+[[package]]
+name = "plugin-api"
+version = "0.1.0"
 
 [[package]]
 name = "png"
