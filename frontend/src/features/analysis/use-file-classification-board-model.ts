@@ -18,6 +18,8 @@ function toFileEntryRow(row: ClassifiedFileRow): FileEntryRow {
     deleted: false,
     hidden: false,
     system: false,
+    readOnly: false,
+    archive: false,
   };
 }
 

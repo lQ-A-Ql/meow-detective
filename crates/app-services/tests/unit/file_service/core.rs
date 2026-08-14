@@ -53,6 +53,7 @@ impl FileSystemReader for CancelAfterRootFs {
                     system: false,
                     read_only: false,
                     encrypted: false,
+                    archive: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -67,6 +68,7 @@ impl FileSystemReader for CancelAfterRootFs {
                     system: false,
                     read_only: false,
                     encrypted: false,
+                    archive: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -149,6 +151,7 @@ impl FileSystemReader for TimestampedFs {
             system: false,
             read_only: false,
             encrypted: false,
+            archive: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -178,6 +181,14 @@ fn enumerate_filesystem_cancel_rolls_back_transaction() {
         .unwrap();
     conn.execute_batch(include_str!(
         "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
     ))
     .unwrap();
     let cancel = AtomicBool::new(false);
@@ -217,6 +228,14 @@ fn enumerate_filesystem_persists_root_and_child_changed_at() {
         "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
     ))
     .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
+    ))
+    .unwrap();
     let root_changed_at = chrono::DateTime::from_timestamp(1_700_000_000, 123).unwrap();
     let child_changed_at = chrono::DateTime::from_timestamp(1_800_000_000, 456).unwrap();
     let fs = TimestampedFs {
@@ -249,6 +268,14 @@ fn enumerate_filesystem_preserves_typed_completeness_diagnostics() {
     .unwrap();
     conn.execute_batch(include_str!(
         "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
     ))
     .unwrap();
     let stats = enumerate_filesystem(
@@ -324,6 +351,7 @@ fn mft_root_record_becomes_tree_root() {
             system: false,
             read_only: false,
             encrypted: false,
+            archive: false,
             has_attribute_list: false,
             deleted: false,
             is_valid: true,
@@ -343,6 +371,7 @@ fn mft_root_record_becomes_tree_root() {
             system: false,
             read_only: false,
             encrypted: true,
+            archive: false,
             has_attribute_list: false,
             deleted: false,
             is_valid: true,
@@ -400,6 +429,14 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
         "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
     ))
     .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
+    ))
+    .unwrap();
     let ds_id = DataSourceId("ds-deleted-orphan".to_string());
     let mut entries = records_to_file_entries(
         &[
@@ -418,6 +455,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
                 system: false,
                 read_only: false,
                 encrypted: false,
+                archive: false,
                 has_attribute_list: false,
                 deleted: false,
                 is_valid: true,
@@ -437,6 +475,7 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
                 system: false,
                 read_only: false,
                 encrypted: false,
+                archive: false,
                 has_attribute_list: false,
                 deleted: true,
                 is_valid: true,
@@ -608,6 +647,8 @@ fn sort_entry(
         hidden,
         system,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,

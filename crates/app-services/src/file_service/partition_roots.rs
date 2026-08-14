@@ -34,6 +34,8 @@ pub fn insert_partition_placeholder_root(
         hidden: false,
         system: false,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,

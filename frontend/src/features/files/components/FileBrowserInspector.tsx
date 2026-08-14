@@ -97,6 +97,10 @@ export function FileBrowserInspector({
             <div className="text-forensics-text-secondary">{selectedFile?.hidden ? 'true' : 'false'}</div>
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.system')}</div>
             <div className="text-forensics-text-secondary">{selectedFile?.system ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.readOnly')}</div>
+            <div className="text-forensics-text-secondary">{selectedFile?.readOnly ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.archive')}</div>
+            <div className="text-forensics-text-secondary">{selectedFile?.archive ? 'true' : 'false'}</div>
           </div>
         </InspectorSection>
 

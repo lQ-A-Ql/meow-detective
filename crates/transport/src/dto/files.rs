@@ -116,6 +116,8 @@ pub struct FileEntryRowDto {
     pub deleted: bool,
     pub hidden: bool,
     pub system: bool,
+    pub read_only: bool,
+    pub archive: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub encrypted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

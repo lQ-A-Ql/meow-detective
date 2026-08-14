@@ -5,6 +5,7 @@ use std::io;
 
 const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
 const FILE_ATTRIBUTE_READ_ONLY: u32 = 0x0000_0001;
+const FILE_ATTRIBUTE_ARCHIVE: u32 = 0x0000_0020;
 const ATTRIBUTE_FLAG_ENCRYPTED: u16 = 0x4000;
 const ATTRIBUTE_HEADER_FLAGS_OFFSET: usize = 0x0C;
 const STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET: usize = 0x20;
@@ -26,6 +27,7 @@ pub struct MftRecord {
     pub system: bool,
     pub read_only: bool,
     pub encrypted: bool,
+    pub archive: bool,
     pub has_attribute_list: bool,
     pub deleted: bool,
     pub is_valid: bool,
@@ -221,6 +223,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         encrypted: si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || unnamed_data_encrypted,
+        archive: file_has_archive(si_flags, fn_flags),
         has_attribute_list,
         deleted,
         is_valid: true,
@@ -234,6 +237,11 @@ fn record_name_is_valid(deleted: bool, name: &str, record_number: u64) -> bool {
 fn file_is_read_only(si_flags: Option<u32>, fn_flags: Option<u32>) -> bool {
     si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
         || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
+}
+
+fn file_has_archive(si_flags: Option<u32>, fn_flags: Option<u32>) -> bool {
+    si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ARCHIVE != 0)
+        || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ARCHIVE != 0)
 }
 
 fn read_u32_at(bytes: &[u8], offset: usize) -> Option<u32> {

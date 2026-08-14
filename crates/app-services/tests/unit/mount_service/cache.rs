@@ -20,6 +20,8 @@ fn entry(id: &str) -> FileEntry {
         hidden: false,
         system: false,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: Some(Utc::now()),
         modified_at: None,
         accessed_at: None,

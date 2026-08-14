@@ -568,7 +568,7 @@ fn source_019_is_latest_and_reapplication_is_idempotent() {
     let (conn, _) = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_033_timeline_case_id_index"
+        "source_034_file_entry_archive"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     for table in [

@@ -154,6 +154,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0044_file_entry_read_only",
         include_str!("scripts/0044_file_entry_read_only.sql"),
     ),
+    (
+        "0045_file_entry_archive",
+        include_str!("scripts/0045_file_entry_archive.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

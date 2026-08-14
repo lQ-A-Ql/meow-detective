@@ -16,6 +16,9 @@ function toFileEntryRow(hit: SearchFileHit): FileEntryRow {
     deleted: hit.deleted,
     hidden: hit.hidden,
     system: hit.system,
+    // SearchFileHit does not carry attribute bits; default to unset.
+    readOnly: false,
+    archive: false,
     encrypted: hit.encrypted,
   };
 }

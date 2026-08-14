@@ -107,7 +107,7 @@ pub(crate) fn find_candidate_by_path_suffix(
     Ok(conn
         .query_row(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
+                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE
                AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
@@ -144,6 +144,8 @@ pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::R
         accessed_at: parse_timestamp(row.get(13)?),
         changed_at: parse_timestamp(row.get(14)?),
         hash_sha256: row.get(15)?,
+        read_only: row.get::<_, i32>(17)? != 0,
+        archive: row.get::<_, i32>(18)? != 0,
     })
 }
 

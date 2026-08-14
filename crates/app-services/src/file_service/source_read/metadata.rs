@@ -33,6 +33,8 @@ pub(super) fn hint_file_entry(hint: &SourceReadFileHint) -> FileEntry {
         hidden: false,
         system: false,
         encrypted: hint.encrypted,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,

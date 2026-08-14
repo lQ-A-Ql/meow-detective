@@ -295,6 +295,8 @@ fn file_entry_for_child(
         hidden,
         system,
         encrypted: child.encrypted,
+        read_only: child.read_only,
+        archive: child.archive,
         created_at: child.created_at,
         modified_at: child.modified_at,
         accessed_at: child.accessed_at,

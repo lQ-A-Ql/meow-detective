@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS file_entries (
     hidden INTEGER NOT NULL DEFAULT 0,
     system INTEGER NOT NULL DEFAULT 0,
     read_only INTEGER NOT NULL DEFAULT 0 CHECK (read_only IN (0, 1)),
+    archive INTEGER NOT NULL DEFAULT 0 CHECK (archive IN (0, 1)),
     encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
     created_at TEXT,
     modified_at TEXT,

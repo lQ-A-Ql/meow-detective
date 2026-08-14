@@ -19,6 +19,8 @@ pub(crate) fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
         deleted: entry.deleted,
         hidden: entry.hidden,
         system: entry.system,
+        read_only: entry.read_only,
+        archive: entry.archive,
         encrypted: entry.encrypted,
         created_at: entry.created_at.map(|dt| dt.to_rfc3339()),
         modified_at: entry.modified_at.map(|dt| dt.to_rfc3339()),

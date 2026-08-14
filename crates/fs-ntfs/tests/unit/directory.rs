@@ -1,11 +1,16 @@
 use super::*;
 
 fn index_entry(mft_ref: u64, name: &str, namespace: u8) -> Vec<u8> {
+    index_entry_with_flags(mft_ref, name, namespace, 0)
+}
+
+fn index_entry_with_flags(mft_ref: u64, name: &str, namespace: u8, flags: u32) -> Vec<u8> {
     let utf16 = name.encode_utf16().collect::<Vec<_>>();
     let entry_size = 0x52 + utf16.len() * 2;
     let mut entry = vec![0u8; entry_size];
     entry[0..8].copy_from_slice(&mft_ref.to_le_bytes());
     entry[8..10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+    entry[0x48..0x4C].copy_from_slice(&flags.to_le_bytes());
     entry[0x50] = utf16.len() as u8;
     entry[0x51] = namespace;
     for (index, character) in utf16.iter().enumerate() {
@@ -93,4 +98,36 @@ fn distinct_non_dos_names_are_preserved_in_rank_order() {
         .collect::<Vec<_>>();
 
     assert_eq!(names, vec!["WindowsName", "COMBIN~1", "PosixName"]);
+}
+
+#[test]
+fn index_entry_flags_populate_attribute_bits() {
+    // read-only + hidden + system + archive + encrypted + directory
+    let flags = 0x01 | 0x02 | 0x04 | 0x20 | 0x4000 | 0x1000_0000;
+    let entry = parse_indx_entries(&index_entry_with_flags(
+        42,
+        "System Volume Information",
+        1,
+        flags,
+    ))
+    .pop()
+    .expect("flagged INDX entry");
+
+    assert!(entry.node.is_dir);
+    assert!(entry.node.hidden);
+    assert!(entry.node.system);
+    assert!(entry.node.read_only);
+    assert!(entry.node.archive);
+    assert!(entry.node.encrypted);
+}
+
+#[test]
+fn index_entry_without_flags_defaults_attributes_to_false() {
+    let entry = parsed_entry(42, "plain.txt", 1);
+
+    assert!(!entry.node.hidden);
+    assert!(!entry.node.system);
+    assert!(!entry.node.read_only);
+    assert!(!entry.node.archive);
+    assert!(!entry.node.encrypted);
 }

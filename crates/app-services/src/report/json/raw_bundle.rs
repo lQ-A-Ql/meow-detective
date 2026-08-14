@@ -335,7 +335,7 @@ fn collect_exportable_file_entries(
     conn: &Connection,
 ) -> Result<Vec<ExportableFileEntry>, ReportError> {
     let mut stmt = conn.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
+        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive
          FROM file_entries
          WHERE entry_type = 'file'
          ORDER BY data_source_id ASC, path ASC",
@@ -366,6 +366,8 @@ fn collect_exportable_file_entries(
                 accessed_at: None,
                 changed_at: None,
                 hash_sha256: row.get(15)?,
+                read_only: row.get::<_, i32>(17)? != 0,
+                archive: row.get::<_, i32>(18)? != 0,
             },
             encryption_status,
         })

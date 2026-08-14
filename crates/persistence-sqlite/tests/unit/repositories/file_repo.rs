@@ -35,6 +35,8 @@ fn entry(id: &str, ds_id: &DataSourceId, path: &str) -> FileEntry {
         hidden: false,
         system: false,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,
@@ -202,6 +204,8 @@ fn reads_and_assigns_partition_index_by_file_id() {
             hidden: false,
             system: false,
             encrypted: false,
+            read_only: false,
+            archive: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -221,6 +225,8 @@ fn reads_and_assigns_partition_index_by_file_id() {
             hidden: false,
             system: false,
             encrypted: false,
+            read_only: false,
+            archive: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -356,4 +362,75 @@ fn mount_catalog_queries_are_partition_scoped_and_accept_prefixed_paths() {
         .find_by_partition_and_path(&ds_id, 1, "etc/hosts")
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn read_only_and_archive_flags_round_trip_through_the_repository() {
+    let conn = open_in_memory().unwrap();
+    runner::run_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-attrs".to_string());
+    insert_data_source(&conn, &ds_id);
+    let repo = FileRepo::new(&conn);
+
+    let mut flagged = entry("flagged", &ds_id, "root/flagged.txt");
+    flagged.read_only = true;
+    flagged.archive = true;
+    let plain = entry("plain", &ds_id, "root/plain.txt");
+    repo.insert_batch(&[flagged, plain]).unwrap();
+
+    let loaded = repo
+        .find_by_id(&FileEntryId("flagged".to_string()))
+        .unwrap()
+        .expect("flagged entry");
+    assert!(loaded.read_only);
+    assert!(loaded.archive);
+    assert!(!loaded.hidden);
+    assert!(!loaded.system);
+
+    let plain = repo
+        .find_by_id(&FileEntryId("plain".to_string()))
+        .unwrap()
+        .expect("plain entry");
+    assert!(!plain.read_only);
+    assert!(!plain.archive);
+}
+
+#[test]
+fn catalog_repo_insert_and_root_update_persist_attribute_flags() {
+    let conn = open_in_memory().unwrap();
+    runner::run_source_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-catalog-attrs".to_string());
+    let repo = FileRepo::new(&conn);
+    let catalog = CatalogFileRepo::new(&conn);
+
+    let mut root = catalog_entry("root", None, &ds_id, "", "root", EntryType::Directory);
+    root.read_only = true;
+    root.archive = true;
+
+    let mut child = catalog_entry(
+        "child",
+        Some("root"),
+        &ds_id,
+        "child.txt",
+        "child.txt",
+        EntryType::File,
+    );
+    child.read_only = true;
+    child.archive = true;
+    catalog
+        .insert_batch_with_partition_index_in_transaction(&[root, child], 0)
+        .unwrap();
+
+    let loaded = repo
+        .find_by_id(&FileEntryId("child".to_string()))
+        .unwrap()
+        .expect("catalog child");
+    assert!(loaded.read_only);
+    assert!(loaded.archive);
+    let loaded_root = repo
+        .find_by_id(&FileEntryId("root".to_string()))
+        .unwrap()
+        .expect("catalog root");
+    assert!(loaded_root.read_only);
+    assert!(loaded_root.archive);
 }

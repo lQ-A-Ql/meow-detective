@@ -44,6 +44,8 @@ impl LogicalFsReader {
             system: is_system_path(&full),
             read_only: metadata.permissions().readonly(),
             encrypted: false,
+            // Host filesystem metadata exposes no archive bit.
+            archive: false,
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
@@ -68,6 +70,8 @@ impl FileSystemReader for LogicalFsReader {
             system: is_system_path(&self.root),
             read_only: metadata.permissions().readonly(),
             encrypted: false,
+            // Host filesystem metadata exposes no archive bit.
+            archive: false,
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),

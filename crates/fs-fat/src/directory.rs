@@ -76,7 +76,7 @@ impl FatReader {
             }
             let attributes = entry[11];
             let size = u32::from_le_bytes(entry[28..32].try_into().unwrap_or([0; 4])) as u64;
-            nodes.push(fs_node_with_attributes(
+            let mut node = fs_node_with_attributes(
                 name,
                 attributes & 0x10 != 0,
                 size,
@@ -86,7 +86,10 @@ impl FatReader {
                 None,
                 None,
                 None,
-            ));
+            );
+            node.read_only = attributes & 0x01 != 0;
+            node.archive = attributes & 0x20 != 0;
+            nodes.push(node);
         }
 
         child_nodes_with_parent_path(nodes, parent_path)

@@ -238,6 +238,7 @@ impl NtfsReader {
                         system: entry.node.system,
                         read_only: entry.node.read_only,
                         encrypted: entry.node.encrypted,
+                        archive: entry.node.archive,
                     },
                     sequence,
                 )

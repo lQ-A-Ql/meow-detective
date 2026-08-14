@@ -1,5 +1,5 @@
 use crate::reader::ExfatReader;
-use crate::types::{ATTR_HIDDEN, ATTR_SYSTEM};
+use crate::types::{ATTR_ARCHIVE, ATTR_HIDDEN, ATTR_READ_ONLY, ATTR_SYSTEM};
 use evidence_core::filesystem::{
     child_nodes_with_parent_path_with_separator, fs_node_with_attributes,
     is_special_directory_name, path_is_not_directory, path_not_found, root_node, FileSystemReader,
@@ -26,7 +26,7 @@ impl FileSystemReader for ExfatReader {
             .filter(|entry| !is_special_directory_name(&entry.name))
             .map(|entry| {
                 let is_dir = entry.is_directory();
-                fs_node_with_attributes(
+                let mut node = fs_node_with_attributes(
                     entry.name,
                     is_dir,
                     entry.valid_data_length,
@@ -36,7 +36,10 @@ impl FileSystemReader for ExfatReader {
                     entry.created_at,
                     entry.modified_at,
                     entry.accessed_at,
-                )
+                );
+                node.read_only = entry.attributes & ATTR_READ_ONLY != 0;
+                node.archive = entry.attributes & ATTR_ARCHIVE != 0;
+                node
             })
             .collect();
 

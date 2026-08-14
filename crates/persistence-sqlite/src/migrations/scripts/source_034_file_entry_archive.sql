@@ -1,0 +1,2 @@
+ALTER TABLE file_entries
+ADD COLUMN archive INTEGER NOT NULL DEFAULT 0 CHECK (archive IN (0, 1));

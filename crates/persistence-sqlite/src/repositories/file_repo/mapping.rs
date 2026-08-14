@@ -45,6 +45,8 @@ pub(super) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<Fil
             .get::<_, Option<String>>(14)?
             .and_then(|value| parse_opt_datetime(&value)),
         hash_sha256: row.get(15)?,
+        read_only: row.get::<_, i32>(17)? != 0,
+        archive: row.get::<_, i32>(18)? != 0,
     })
 }
 

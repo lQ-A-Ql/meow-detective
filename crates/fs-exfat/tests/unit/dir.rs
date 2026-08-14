@@ -163,3 +163,50 @@ fn parse_directory_entries_complete() {
     assert_eq!(entries[0].data_length, 100);
     assert!(!entries[0].is_directory());
 }
+
+#[test]
+fn file_entry_attributes_expose_read_only_hidden_system_archive_bits() {
+    let mut data = [0u8; 32];
+    data[0] = 0x85; // In-use, type 5 (File)
+    data[1] = 0x00;
+    // FileAttributes: read-only + hidden + system + archive
+    let attributes = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_ARCHIVE;
+    data[4..6].copy_from_slice(&attributes.to_le_bytes());
+
+    let entry = DirectoryEntry::parse(&data).unwrap();
+    let parsed = entry.file_attributes().expect("file attributes");
+    assert_eq!(parsed & ATTR_READ_ONLY, ATTR_READ_ONLY);
+    assert_eq!(parsed & ATTR_HIDDEN, ATTR_HIDDEN);
+    assert_eq!(parsed & ATTR_SYSTEM, ATTR_SYSTEM);
+    assert_eq!(parsed & ATTR_ARCHIVE, ATTR_ARCHIVE);
+    assert_eq!(parsed & ATTR_DIRECTORY, 0);
+}
+
+#[test]
+fn parse_directory_entries_preserves_archive_attribute() {
+    let mut data = Vec::new();
+
+    let mut file = [0u8; 32];
+    file[0] = 0x85;
+    file[1] = 0x02;
+    file[4..6].copy_from_slice(&(ATTR_READ_ONLY | ATTR_ARCHIVE).to_le_bytes());
+    data.extend_from_slice(&file);
+
+    let mut stream = [0u8; 32];
+    stream[0] = 0xC0;
+    stream[3] = 1;
+    stream[20] = 10;
+    stream[24] = 4;
+    data.extend_from_slice(&stream);
+
+    let mut name = [0u8; 32];
+    name[0] = 0xC1;
+    name[2] = b'A';
+    data.extend_from_slice(&name);
+
+    let entries = parse_directory_entries(&data).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].attributes & ATTR_READ_ONLY, ATTR_READ_ONLY);
+    assert_eq!(entries[0].attributes & ATTR_ARCHIVE, ATTR_ARCHIVE);
+    assert_eq!(entries[0].attributes & ATTR_HIDDEN, 0);
+}

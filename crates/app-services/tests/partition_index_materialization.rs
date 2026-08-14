@@ -49,6 +49,7 @@ fn node(name: &str, path: &str, is_dir: bool) -> FsNode {
         system: false,
         read_only: false,
         encrypted: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,

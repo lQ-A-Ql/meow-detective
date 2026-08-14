@@ -56,6 +56,8 @@ impl FileTask {
             hidden: self.hidden,
             system: self.system,
             encrypted: self.encrypted,
+            read_only: false,
+            archive: false,
             created_at: self.created_at,
             modified_at: self.modified_at,
             accessed_at: self.accessed_at,

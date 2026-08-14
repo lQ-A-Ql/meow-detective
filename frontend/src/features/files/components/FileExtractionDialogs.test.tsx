@@ -14,6 +14,8 @@ function createModel(overrides: Partial<FileExtractionModel> = {}): FileExtracti
       deleted: false,
       hidden: false,
       system: false,
+      readOnly: false,
+      archive: false,
     },
     formOpen: false,
     resultOpen: false,

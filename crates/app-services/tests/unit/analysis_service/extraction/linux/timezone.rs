@@ -29,7 +29,9 @@ fn conn_with_files(paths: &[&str]) -> Connection {
             accessed_at TEXT,
             changed_at TEXT,
             hash_sha256 TEXT,
-            encrypted INTEGER
+            encrypted INTEGER,
+            read_only INTEGER NOT NULL DEFAULT 0,
+            archive INTEGER NOT NULL DEFAULT 0
         )",
         [],
     )

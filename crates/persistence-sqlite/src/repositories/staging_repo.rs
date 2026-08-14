@@ -159,7 +159,7 @@ fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
 
 impl StagingRepo {
     pub fn ensure_enum_staging_columns(conn: &Connection) -> DbResult<()> {
-        for column in ["hidden", "system", "read_only"] {
+        for column in ["hidden", "system", "read_only", "archive"] {
             if !table_has_column(conn, "file_entries", column)? {
                 conn.execute(
                     &format!(
@@ -385,7 +385,7 @@ impl StagingRepo {
             let inserted = main_conn.execute(
                 "INSERT INTO main.file_entries
                     (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, read_only, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
+                      size, ext, deleted, hidden, system, read_only, archive, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
                       partition_index)
                      SELECT
                         id,
@@ -404,7 +404,7 @@ impl StagingRepo {
                           ELSE parent_id
                         END,
                         data_source_id, path, name, LOWER(entry_type),
-                        size, ext, deleted, hidden, system, read_only, encrypted,
+                        size, ext, deleted, hidden, system, read_only, archive, encrypted,
                         created_at, modified_at, accessed_at, changed_at, hash_sha256,
                         ?2
                      FROM staging.file_entries

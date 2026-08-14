@@ -128,4 +128,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_033_timeline_case_id_index",
         include_str!("scripts/source_033_timeline_case_id_index.sql"),
     ),
+    (
+        "source_034_file_entry_archive",
+        include_str!("scripts/source_034_file_entry_archive.sql"),
+    ),
 ];

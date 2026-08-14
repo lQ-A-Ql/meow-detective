@@ -17,6 +17,8 @@ fn entry(name: &str, path: &str, ext: &str, size: u64) -> FileEntry {
         deleted: false,
         hidden: false,
         system: false,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,
@@ -167,7 +169,9 @@ fn classification_board_surfaces_header_read_failures() {
             accessed_at TEXT,
             changed_at TEXT,
             hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
+            read_only INTEGER NOT NULL DEFAULT 0,
+            archive INTEGER NOT NULL DEFAULT 0
         );
         INSERT INTO file_entries
             (id, data_source_id, path, name, entry_type, size, ext, encrypted)
@@ -209,7 +213,9 @@ fn encrypted_files_are_classified_without_reading_content_or_leaking_paths() {
             accessed_at TEXT,
             changed_at TEXT,
             hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
+            read_only INTEGER NOT NULL DEFAULT 0,
+            archive INTEGER NOT NULL DEFAULT 0
         );
         INSERT INTO file_entries
             (id, data_source_id, path, name, entry_type, size, ext, encrypted)
@@ -261,7 +267,9 @@ fn unknown_encryption_status_is_not_reported_as_efs() {
             accessed_at TEXT,
             changed_at TEXT,
             hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
+            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
+            read_only INTEGER NOT NULL DEFAULT 0,
+            archive INTEGER NOT NULL DEFAULT 0
         );
         INSERT INTO file_entries
             (id, data_source_id, path, name, entry_type, size, ext, encrypted)

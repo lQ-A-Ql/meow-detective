@@ -68,6 +68,8 @@ fn file_entry_row_serializes_visibility_flags_as_camel_case() {
         deleted: true,
         hidden: true,
         system: false,
+        read_only: true,
+        archive: true,
         encrypted: false,
         created_at: None,
         modified_at: None,
@@ -78,6 +80,9 @@ fn file_entry_row_serializes_visibility_flags_as_camel_case() {
 
     let value = serde_json::to_value(dto).unwrap();
 
+    assert_eq!(value["readOnly"], true);
+    assert_eq!(value["archive"], true);
+    assert!(value.get("read_only").is_none());
     assert_eq!(value["parentId"], "root");
     assert_eq!(value["entryType"], "file");
     assert_eq!(value["deleted"], true);
@@ -132,6 +137,8 @@ fn file_jump_context_serializes_camel_case_fields() {
             deleted: false,
             hidden: false,
             system: false,
+            read_only: false,
+            archive: false,
             encrypted: false,
             created_at: None,
             modified_at: None,
@@ -150,6 +157,8 @@ fn file_jump_context_serializes_camel_case_fields() {
             deleted: false,
             hidden: false,
             system: false,
+            read_only: false,
+            archive: false,
             encrypted: false,
             created_at: None,
             modified_at: None,

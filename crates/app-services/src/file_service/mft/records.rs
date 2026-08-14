@@ -58,6 +58,8 @@ fn record_to_file_entry(
             || visibility::inferred_system_name(&record.name),
         system: record.system || visibility::inferred_system_name(&record.name),
         encrypted: record.encrypted,
+        read_only: record.read_only,
+        archive: record.archive,
         created_at: record.created_at,
         modified_at: record.modified_at,
         accessed_at: record.accessed_at,

@@ -32,6 +32,12 @@ pub struct FileEntry {
     /// `true` means encrypted or not yet classified; only `false` is readable.
     #[serde(default)]
     pub encrypted: bool,
+    /// True when the source filesystem metadata marks the entry read-only.
+    #[serde(default)]
+    pub read_only: bool,
+    /// True when the source filesystem archive bit is set (NTFS/FAT/exFAT).
+    #[serde(default)]
+    pub archive: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub modified_at: Option<DateTime<Utc>>,
     pub accessed_at: Option<DateTime<Utc>>,

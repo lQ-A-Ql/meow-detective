@@ -62,6 +62,8 @@ impl FileSystemReader for XfsReader {
                     system: false,
                     read_only: metadata.map(|value| value.read_only).unwrap_or(false),
                     encrypted: false,
+                    // XFS has no archive bit.
+                    archive: false,
                     created_at: metadata.and_then(|value| value.created_at),
                     modified_at: metadata.and_then(|value| value.modified_at),
                     accessed_at: metadata.and_then(|value| value.accessed_at),

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileEntryRow } from '@/types/models';
-import { FileListPanel } from './FileListPanel';
+import { FileListPanel, formatEntryAttributes } from './FileListPanel';
 
 const FILE: FileEntryRow = {
   id: 'file-1',
@@ -12,6 +12,8 @@ const FILE: FileEntryRow = {
   deleted: false,
   hidden: false,
   system: false,
+  readOnly: false,
+  archive: false,
 };
 
 const DIRECTORY: FileEntryRow = {
@@ -93,5 +95,59 @@ describe('FileListPanel extraction context menu', () => {
 
     fireEvent.contextMenu(screen.getByText('Documents'));
     expect(screen.queryByText('提取文件')).toBeNull();
+  });
+});
+
+describe('FileListPanel attribute column', () => {
+  it('renders "D" for directories', () => {
+    renderPanel([DIRECTORY]);
+
+    expect(screen.getByText('D')).toBeTruthy();
+    expect(screen.queryByText('DIR')).toBeNull();
+  });
+
+  it('renders "-" for files without any attribute bits', () => {
+    renderPanel([FILE]);
+
+    const nameCell = screen.getByText('evidence.bin');
+    const row = nameCell.closest('tr');
+    expect(row?.textContent).toContain('-');
+    expect(row?.textContent).not.toContain('A--');
+  });
+
+  it('renders compact R/H/S/A letters for set attribute bits', () => {
+    renderPanel([
+      { ...FILE, id: 'f-ro', name: 'readonly.bin', readOnly: true },
+      { ...FILE, id: 'f-hs', name: 'hidden-system.bin', hidden: true, system: true },
+      { ...FILE, id: 'f-all', name: 'all.bin', readOnly: true, hidden: true, system: true, archive: true },
+      { ...FILE, id: 'f-a', name: 'archived.bin', archive: true },
+    ]);
+
+    expect(screen.getByText('R')).toBeTruthy();
+    expect(screen.getByText('HS')).toBeTruthy();
+    expect(screen.getByText('RHSA')).toBeTruthy();
+    expect(screen.getByText('A')).toBeTruthy();
+  });
+});
+
+describe('formatEntryAttributes', () => {
+  const base: FileEntryRow = { ...FILE };
+
+  it('maps directories to D regardless of attribute bits', () => {
+    expect(
+      formatEntryAttributes({ ...DIRECTORY, readOnly: true, hidden: true, system: true, archive: true }),
+    ).toBe('D');
+  });
+
+  it('maps files with no attribute bits to -', () => {
+    expect(formatEntryAttributes(base)).toBe('-');
+  });
+
+  it('concatenates set bits in R/H/S/A order', () => {
+    expect(formatEntryAttributes({ ...base, archive: true, readOnly: true })).toBe('RA');
+    expect(formatEntryAttributes({ ...base, system: true, hidden: true })).toBe('HS');
+    expect(
+      formatEntryAttributes({ ...base, readOnly: true, hidden: true, system: true, archive: true }),
+    ).toBe('RHSA');
   });
 });

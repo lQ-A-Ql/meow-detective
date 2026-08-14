@@ -77,6 +77,7 @@ impl FakeFsReader {
                 system: false,
                 read_only: false,
                 encrypted: false,
+                archive: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,
@@ -225,6 +226,7 @@ fn fake_mft_record(record_number: u64, parent_ref: u64, name: &str, is_dir: bool
         system: false,
         read_only: false,
         encrypted: false,
+        archive: false,
         has_attribute_list: false,
         deleted: false,
         is_valid: true,
@@ -256,6 +258,7 @@ fn fake_ntfs_index_entry(
         system: false,
         read_only: false,
         encrypted: false,
+        archive: false,
     }
 }
 

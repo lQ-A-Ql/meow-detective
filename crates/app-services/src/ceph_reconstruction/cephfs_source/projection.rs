@@ -364,6 +364,8 @@ fn file_entry(
         hidden: !root && entry.name.starts_with('.'),
         system: false,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,

@@ -24,6 +24,7 @@ pub struct NtfsDirectoryEntry {
     pub system: bool,
     pub read_only: bool,
     pub encrypted: bool,
+    pub archive: bool,
 }
 
 /// Parse INDX entries from $INDEX_ROOT buffer. Returns DirEntry with
@@ -68,6 +69,7 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
                 name, is_dir, size, hidden, system, encrypted, None, None, None,
             );
             node.read_only = flags & 0x01 != 0;
+            node.archive = flags & 0x20 != 0;
             entries.push(DirEntry {
                 node,
                 mft_ref,

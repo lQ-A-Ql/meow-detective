@@ -109,6 +109,8 @@ fn make_file(name: &str, path: &str, created: bool, modified: bool) -> FileEntry
         hidden: false,
         system: false,
         encrypted: false,
+        read_only: false,
+        archive: false,
         created_at: created.then(|| Utc.with_ymd_and_hms(2024, 6, 15, 10, 0, 0).unwrap()),
         modified_at: modified.then(|| Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap()),
         accessed_at: Some(Utc.with_ymd_and_hms(2024, 6, 15, 14, 0, 0).unwrap()),

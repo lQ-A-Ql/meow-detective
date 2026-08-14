@@ -647,6 +647,8 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                     hidden: false,
                     system: false,
                     encrypted: false,
+                    read_only: false,
+                    archive: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,

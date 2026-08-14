@@ -14,6 +14,9 @@ pub struct FsNode {
     pub read_only: bool,
     /// True when the file is encrypted via NTFS Encrypting File System (EFS).
     pub encrypted: bool,
+    /// True when the archive bit is set (NTFS/FAT/exFAT directory metadata).
+    /// Filesystems without an archive concept always report false.
+    pub archive: bool,
     pub created_at: Option<FsTimestamp>,
     pub modified_at: Option<FsTimestamp>,
     pub accessed_at: Option<FsTimestamp>,
@@ -78,6 +81,7 @@ pub fn fs_node_with_attributes(
         system,
         read_only: false,
         encrypted,
+        archive: false,
         created_at,
         modified_at,
         accessed_at,

@@ -244,3 +244,30 @@ fn fat32_open_nonexistent_errors() {
     let fat = FatReader::open(reader, 0).unwrap();
     assert!(fat.open_file("NOFILE.TXT").is_err());
 }
+
+#[test]
+fn fat32_attribute_byte_populates_node_flags() {
+    let mut img = build_fat32_fixture();
+    // README.TXT root entry attribute byte: read-only + hidden + archive.
+    img[2048 + 11] = 0x01 | 0x02 | 0x20;
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let fat = FatReader::open(reader, 0).unwrap();
+
+    let nodes = fat.list_children("").unwrap();
+    let readme = nodes
+        .iter()
+        .find(|node| node.name == "README.TXT")
+        .expect("README.TXT");
+    assert!(readme.read_only);
+    assert!(readme.hidden);
+    assert!(readme.archive);
+    assert!(!readme.system);
+
+    let subdir = nodes
+        .iter()
+        .find(|node| node.name == "SUBDIR")
+        .expect("SUBDIR");
+    assert!(subdir.is_dir);
+    assert!(!subdir.read_only);
+    assert!(!subdir.archive);
+}

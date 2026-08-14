@@ -145,6 +145,8 @@ pub fn seed_file(conn: &Connection, id: &str, path: &str, name: &str) {
             hidden: false,
             system: false,
             encrypted: false,
+            read_only: false,
+            archive: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

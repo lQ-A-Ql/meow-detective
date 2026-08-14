@@ -35,6 +35,8 @@ export interface FileEntryRow {
   deleted: boolean;
   hidden: boolean;
   system: boolean;
+  readOnly: boolean;
+  archive: boolean;
   encrypted?: boolean;
   createdAt?: string;
   modifiedAt?: string;

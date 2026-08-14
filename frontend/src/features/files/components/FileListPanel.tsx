@@ -56,12 +56,26 @@ const FILE_LIST_COLUMNS: DenseColumn<FileEntryRow>[] = [
     key: 'attr',
     title: '属性',
     className: 'text-forensics-muted-light',
-    render: (row) =>
-      row.entryType === 'directory'
-        ? 'DIR'
-        : 'A--',
+    render: (row) => formatEntryAttributes(row),
   },
 ];
+
+/**
+ * Compact attribute letters from real entry flags:
+ * directories render as "D"; files concatenate set bits in R/H/S/A order
+ * (readOnly, hidden, system, archive) and render "-" when none are set.
+ */
+export function formatEntryAttributes(row: FileEntryRow): string {
+  if (row.entryType === 'directory') {
+    return 'D';
+  }
+  let flags = '';
+  if (row.readOnly) flags += 'R';
+  if (row.hidden) flags += 'H';
+  if (row.system) flags += 'S';
+  if (row.archive) flags += 'A';
+  return flags || '-';
+}
 
 export interface FileListPanelProps {
   sortedRows: FileEntryRow[];
