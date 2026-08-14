@@ -97,3 +97,8 @@ apps/desktop/src-tauri/resources/tools/
 # crates/app-services/tests/plugin_fixture_util.rs into /target/plugin-fixtures/)
 /crates/app-services/tests/fixtures/plugin-fixtures/Cargo.lock
 /crates/app-services/tests/fixtures/plugin-fixtures/target/
+
+# Pilot plugin workspace byproducts (plugins-src/, built on demand by
+# crates/app-services/tests/plugin_fixture_util.rs into /target/plugins-src/)
+/plugins-src/Cargo.lock
+/plugins-src/target/

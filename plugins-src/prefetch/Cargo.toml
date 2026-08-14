@@ -1,0 +1,22 @@
+[package]
+name = "meow-plugin-prefetch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Only the cdylib is shipped; the rlib exists so the crate's own unit tests
+# can link (see plugins-src/README.md).
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+plugin-api = { path = "../../crates/plugin-api" }
+# Phase-1 reuse decision (plugins-src/README.md): run the built-in track-A
+# parser inside the DLL so the dual-channel outputs are equal by
+# construction. None of these crates touch Tauri or mimalloc.
+artifacts-core = { path = "../../crates/artifacts-core" }
+artifacts-windows = { path = "../../crates/artifacts-windows" }
+domain = { path = "../../crates/domain" }
+serde = { version = "~1.0", features = ["derive"] }
+serde_json = "~1.0"
+chrono = "~0.4"

@@ -1,0 +1,19 @@
+# Standalone parser-plugin workspace (plugin system M3+).
+#
+# Deliberately NOT a member of the repository workspace (see
+# docs/plugin-system-dev-test-plan.md §3): plugins ship as cdylib DLLs next to
+# the executable and must not enlarge the crate count or the guard surface.
+# Tests build this workspace on demand into target/plugins-src/ (see
+# crates/app-services/tests/plugin_fixture_util.rs).
+[workspace]
+members = ["prefetch"]
+resolver = "2"
+
+[profile.dev]
+# Hard ABI contract (design doc §8): a plugin panic that unwinds across the
+# FFI boundary aborts the host process on MSVC, so plugins are built with
+# unwind and must self-catch inside every exported function.
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

@@ -85,8 +85,8 @@ fn fixture_plugin_flows_from_discovery_to_summary() {
 
     // 4. Generic summary: one module, per-family counts, paged entries.
     let meta = plugin.module_meta();
-    let modules =
-        list_plugin_modules(&conn, &[meta.clone()], &BTreeMap::new()).expect("list plugin modules");
+    let modules = list_plugin_modules(&conn, std::slice::from_ref(&meta), &BTreeMap::new())
+        .expect("list plugin modules");
     assert_eq!(modules.len(), 1);
     let module = &modules[0];
     assert_eq!(module.plugin_id, "meow.fixture.good");
