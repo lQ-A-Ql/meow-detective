@@ -4,9 +4,7 @@ use super::extractor::PluginExtractor;
 use std::path::PathBuf;
 
 #[cfg(windows)]
-use super::extractor::{parse_families, parse_path_patterns, PluginMeta};
-#[cfg(windows)]
-use artifacts_core::ArtifactExtractor;
+use super::extractor::{parse_families, parse_path_patterns, PathPattern, PluginMeta};
 #[cfg(windows)]
 use std::collections::HashSet;
 #[cfg(windows)]
@@ -31,7 +29,48 @@ impl PluginLibrary {
     }
 }
 
+/// A fully loaded plugin shared across registry builds: the DLL is loaded
+/// and its metadata leaked exactly once per process (see the module docs on
+/// `load_all_report`'s process-level cache).
+pub(crate) struct SharedPlugin {
+    pub(crate) id: &'static str,
+    pub(crate) display_name: &'static str,
+    pub(crate) version: String,
+    pub(crate) evidence_platform: plugin_api::MeowEvidencePlatform,
+    pub(crate) primary_family: String,
+    pub(crate) families: std::collections::HashSet<String>,
+    pub(crate) declared_families: Vec<String>,
+    pub(crate) patterns: Vec<PathPattern>,
+    pub(crate) library: PluginLibrary,
+}
+
+impl SharedPlugin {
+    /// Leak the identity strings once per process load; plugin DLLs are
+    /// never unloaded, so this is bounded by the number of plugins.
+    fn new(meta: PluginMeta, library: PluginLibrary) -> Self {
+        let id: &'static str = Box::leak(meta.plugin_id.into_boxed_str());
+        let display_name: &'static str = Box::leak(meta.display_name.into_boxed_str());
+        let primary_family = meta
+            .families
+            .first()
+            .cloned()
+            .unwrap_or_else(|| id.to_string());
+        Self {
+            id,
+            display_name,
+            version: meta.version,
+            evidence_platform: meta.evidence_platform,
+            primary_family,
+            families: meta.families.iter().cloned().collect(),
+            declared_families: meta.families,
+            patterns: meta.patterns,
+            library,
+        }
+    }
+}
+
 /// A plugin DLL the host refused to load, with the reason.
+#[derive(Debug, Clone)]
 pub struct PluginRejection {
     pub path: PathBuf,
     pub reason: String,
@@ -45,33 +84,55 @@ pub struct PluginLoadReport {
     pub rejections: Vec<PluginRejection>,
 }
 
-/// Load every valid plugin DLL found under `dirs`, reporting refusals.
+/// The cached form of a discovery pass: shared plugin handles plus cloned
+/// rejections. `load_all_report` builds fresh extractors from this per call.
+#[derive(Default)]
+pub(crate) struct SharedPluginLoad {
+    pub(crate) plugins: Vec<std::sync::Arc<SharedPlugin>>,
+    pub(crate) rejections: Vec<PluginRejection>,
+}
+
+/// Load every valid plugin DLL found under `dirs` into shared handles.
 #[cfg(windows)]
-pub fn load_plugins_from_dirs_reporting(dirs: &[PathBuf]) -> PluginLoadReport {
+pub(crate) fn load_shared_plugins(dirs: &[PathBuf]) -> SharedPluginLoad {
     let mut seen_ids = HashSet::new();
-    let mut report = PluginLoadReport::default();
+    let mut result = SharedPluginLoad::default();
     for dir in dirs {
         for dll in enumerate_dlls(dir) {
             match try_load_plugin(&dll, &mut seen_ids) {
-                Ok(extractor) => {
+                Ok(plugin) => {
                     tracing::info!(
                         "loaded parser plugin '{}' v{} from {}",
-                        extractor.id(),
-                        extractor.plugin_version(),
+                        plugin.id,
+                        plugin.version,
                         dll.display()
                     );
-                    report.plugins.push(extractor);
+                    result.plugins.push(std::sync::Arc::new(plugin));
                 }
                 Err(reason) => {
                     tracing::warn!("plugin {} refused: {}", dll.display(), reason);
-                    report
+                    result
                         .rejections
                         .push(PluginRejection { path: dll, reason });
                 }
             }
         }
     }
-    report
+    result
+}
+
+/// Load every valid plugin DLL found under `dirs`, reporting refusals.
+#[cfg(windows)]
+pub fn load_plugins_from_dirs_reporting(dirs: &[PathBuf]) -> PluginLoadReport {
+    let shared = load_shared_plugins(dirs);
+    PluginLoadReport {
+        plugins: shared
+            .plugins
+            .iter()
+            .map(|plugin| PluginExtractor::shared(std::sync::Arc::clone(plugin)))
+            .collect(),
+        rejections: shared.rejections,
+    }
 }
 
 /// Non-Windows hosts load no plugins; the desktop host is Windows-first and
@@ -110,7 +171,7 @@ fn enumerate_dlls(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[cfg(windows)]
-fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<PluginExtractor, String> {
+fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<SharedPlugin, String> {
     let library = open_library(path)?;
     let info = read_plugin_info(&library)?;
     let meta = read_plugin_meta(&info)?;
@@ -125,7 +186,7 @@ fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<Plugin
     if !seen_ids.insert(meta.plugin_id.clone()) {
         return Err(format!("duplicate plugin id '{}'", meta.plugin_id));
     }
-    Ok(PluginExtractor::new(
+    Ok(SharedPlugin::new(
         meta,
         PluginLibrary {
             _library: library,

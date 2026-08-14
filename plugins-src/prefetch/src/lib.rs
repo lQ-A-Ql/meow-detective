@@ -16,13 +16,12 @@
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 use domain::{Artifact, FileEntryId, TimelineEvent};
 use plugin_api::{
-    MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse, MeowPluginInfo, MeowStatus,
-    MEOW_PLUGIN_ABI_VERSION,
+    error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest,
+    MeowExtractResponse, MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
-use std::ffi::{CStr, CString};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::ffi::CStr;
 
 /// ABI entry point: plugin metadata handshake.
 ///
@@ -74,25 +73,9 @@ pub unsafe extern "C" fn meow_plugin_free_buffer(ptr: *mut u8, len: u64) {
     }
 }
 
-/// Panic self-capture wrapper: the only panic boundary in the plugin. A
-/// panic in `inner` maps to `InternalError` instead of unwinding into the
-/// host (which would abort the process — design doc §8).
-fn guarded_extract(
-    request: *const MeowExtractRequest,
-    inner: impl FnOnce(*const MeowExtractRequest) -> MeowExtractResponse + std::panic::UnwindSafe,
-) -> MeowExtractResponse {
-    match catch_unwind(AssertUnwindSafe(|| inner(request))) {
-        Ok(response) => response,
-        Err(_) => error_response(MeowStatus::InternalError, "plugin panicked during extract"),
-    }
-}
-
-fn extract_inner(request: *const MeowExtractRequest) -> MeowExtractResponse {
-    if request.is_null() {
-        return error_response(MeowStatus::InternalError, "null extract request");
-    }
-    // SAFETY: the host guarantees the request is valid for the call duration.
-    let request = unsafe { &*request };
+/// Panic containment lives in `plugin_api::guarded_extract` (the plugin
+/// statically links it, so the catch happens in this DLL's own runtime).
+fn extract_inner(request: &MeowExtractRequest) -> MeowExtractResponse {
     let data = match request_data(request) {
         Ok(data) => data,
         Err(response) => return response,
@@ -230,20 +213,6 @@ fn ok_response(payload: &[u8]) -> MeowExtractResponse {
         payload: ptr,
         payload_len: len,
         error_message: std::ptr::null_mut(),
-    }
-}
-
-fn error_response(status: MeowStatus, message: &str) -> MeowExtractResponse {
-    let sanitized = message.replace('\0', " ");
-    let cstring = CString::new(sanitized)
-        .unwrap_or_else(|_| CString::new("plugin error").expect("static message is NUL-free"));
-    let ptr = cstring.into_raw().cast::<u8>();
-    MeowExtractResponse {
-        struct_size: std::mem::size_of::<MeowExtractResponse>() as u32,
-        status,
-        payload: std::ptr::null_mut(),
-        payload_len: 0,
-        error_message: ptr,
     }
 }
 

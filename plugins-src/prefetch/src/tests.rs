@@ -2,6 +2,7 @@
 //! round-trips, and a synthetic v30 fixture through the exported entry point.
 
 use super::*;
+use std::ffi::CString;
 
 /// Minimal valid uncompressed Prefetch v30 sample (84-byte header + 220-byte
 /// file-info section). The equivalent builder lives in
@@ -103,7 +104,14 @@ fn info_reports_expected_metadata() {
 
 #[test]
 fn panic_inside_extract_is_self_caught() {
-    let response = guarded_extract(std::ptr::null(), |_| panic!("boom"));
+    let request = MeowExtractRequest {
+        struct_size: std::mem::size_of::<MeowExtractRequest>() as u32,
+        file_path: std::ptr::null(),
+        file_id: std::ptr::null(),
+        data: std::ptr::null(),
+        data_len: 0,
+    };
+    let response = unsafe { guarded_extract(&request, |_| panic!("boom")) };
     assert_eq!(response.status, MeowStatus::InternalError);
     assert!(response.payload.is_null());
     let (_, error) = unsafe { drain_response(&response) };

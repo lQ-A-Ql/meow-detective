@@ -2,7 +2,7 @@
 //! (design doc §5.5). Calls are serialized per plugin (Mutex) and wrapped in
 //! `catch_unwind`; provenance fields are host-enforced, never plugin-reported.
 
-use super::library::PluginLibrary;
+use super::library::SharedPlugin;
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport};
 use domain::ArtifactFamily;
 use plugin_api::{MeowExtractRequest, MeowExtractResponse, MeowStatus};
@@ -85,73 +85,49 @@ pub(crate) fn parse_families(json: &str) -> Result<Vec<String>, String> {
         .map_err(|error| format!("families_json is not a JSON string array: {error}"))
 }
 
-/// An `ArtifactExtractor` backed by a plugin DLL.
+/// An `ArtifactExtractor` backed by a plugin DLL. The loaded library and
+/// metadata are shared process-wide (`Arc`); each registry build gets a
+/// fresh extractor with its own call lock.
 pub struct PluginExtractor {
-    id: &'static str,
-    display_name: &'static str,
-    version: String,
-    evidence_platform: plugin_api::MeowEvidencePlatform,
-    primary_family: String,
-    families: HashSet<String>,
-    declared_families: Vec<String>,
-    patterns: Vec<PathPattern>,
-    library: PluginLibrary,
+    shared: std::sync::Arc<SharedPlugin>,
     call_lock: Mutex<()>,
 }
 
 impl PluginExtractor {
-    pub(crate) fn new(meta: PluginMeta, library: PluginLibrary) -> Self {
-        // Plugin metadata lives as long as the loaded DLL; leak it into
-        // 'static to satisfy the ArtifactExtractor signature. Plugins load
-        // once per process and are never unloaded, so this does not grow.
-        let id: &'static str = Box::leak(meta.plugin_id.into_boxed_str());
-        let display_name: &'static str = Box::leak(meta.display_name.into_boxed_str());
-        let primary_family = meta
-            .families
-            .first()
-            .cloned()
-            .unwrap_or_else(|| id.to_string());
+    pub(crate) fn shared(shared: std::sync::Arc<SharedPlugin>) -> Self {
         Self {
-            id,
-            display_name,
-            version: meta.version,
-            evidence_platform: meta.evidence_platform,
-            primary_family,
-            declared_families: meta.families.to_vec(),
-            families: meta.families.into_iter().collect(),
-            patterns: meta.patterns,
-            library,
+            shared,
             call_lock: Mutex::new(()),
         }
     }
 
     /// Plugin-reported version string (host-verified present at load time).
     pub fn plugin_version(&self) -> &str {
-        &self.version
+        &self.shared.version
     }
 
     /// Evidence platform declared by the plugin in the ABI handshake.
     pub fn evidence_platform(&self) -> plugin_api::MeowEvidencePlatform {
-        self.evidence_platform
+        self.shared.evidence_platform
     }
 
     /// Declared family whitelist in declaration order.
     pub fn declared_families(&self) -> &[String] {
-        &self.declared_families
+        &self.shared.declared_families
     }
 
     /// Summary metadata projection used by the M2.5 module listing.
     pub fn module_meta(&self) -> PluginModuleMeta {
         PluginModuleMeta {
-            plugin_id: self.id.to_string(),
-            display_name: self.display_name.to_string(),
-            plugin_version: self.version.clone(),
-            evidence_platform: match self.evidence_platform {
+            plugin_id: self.shared.id.to_string(),
+            display_name: self.shared.display_name.to_string(),
+            plugin_version: self.shared.version.clone(),
+            evidence_platform: match self.shared.evidence_platform {
                 plugin_api::MeowEvidencePlatform::Windows => "windows",
                 plugin_api::MeowEvidencePlatform::Linux => "linux",
             }
             .to_string(),
-            families: self.declared_families.clone(),
+            families: self.shared.declared_families.clone(),
         }
     }
 
@@ -161,9 +137,9 @@ impl PluginExtractor {
         data: &[u8],
     ) -> Result<MeowExtractResponse, String> {
         let file_path = CString::new(ctx.file_path.as_str())
-            .map_err(|_| format!("plugin {} path is not UTF-8-clean", self.id))?;
+            .map_err(|_| format!("plugin {} path is not UTF-8-clean", self.shared.id))?;
         let file_id = CString::new(ctx.file_id.0.as_str())
-            .map_err(|_| format!("plugin {} file id is not UTF-8-clean", self.id))?;
+            .map_err(|_| format!("plugin {} file id is not UTF-8-clean", self.shared.id))?;
         let request = MeowExtractRequest {
             struct_size: std::mem::size_of::<MeowExtractRequest>() as u32,
             file_path: file_path.as_ptr().cast(),
@@ -171,14 +147,14 @@ impl PluginExtractor {
             data: data.as_ptr(),
             data_len: data.len() as u64,
         };
-        let extract = self.library.extract_fn();
+        let extract = self.shared.library.extract_fn();
         // SAFETY: every request pointer references host-owned buffers that
         // outlive the call; the contract forbids the plugin from retaining
         // them. catch_unwind keeps a plugin panic from killing the batch.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
             extract(&request)
         }));
-        outcome.map_err(|_| format!("plugin {} panicked during extract", self.id))
+        outcome.map_err(|_| format!("plugin {} panicked during extract", self.shared.id))
     }
 
     fn handle_response(
@@ -194,16 +170,20 @@ impl PluginExtractor {
                 .unwrap_or_else(|| "no error message".to_string());
             return Err(format!(
                 "plugin {} returned {:?}: {}",
-                self.id, response.status, detail
+                self.shared.id, response.status, detail
             ));
         }
         let payload = buffers
             .payload
-            .ok_or_else(|| format!("plugin {} returned Ok without a payload", self.id))?;
+            .ok_or_else(|| format!("plugin {} returned Ok without a payload", self.shared.id))?;
         let text = String::from_utf8(payload)
-            .map_err(|_| format!("plugin {} payload is not UTF-8", self.id))?;
-        let parsed: PluginPayload = serde_json::from_str(&text)
-            .map_err(|error| format!("plugin {} payload is not valid JSON: {error}", self.id))?;
+            .map_err(|_| format!("plugin {} payload is not UTF-8", self.shared.id))?;
+        let parsed: PluginPayload = serde_json::from_str(&text).map_err(|error| {
+            format!(
+                "plugin {} payload is not valid JSON: {error}",
+                self.shared.id
+            )
+        })?;
         Ok(self.write_payload(parsed, ctx, sink))
     }
 
@@ -225,7 +205,7 @@ impl PluginExtractor {
             unsafe { std::slice::from_raw_parts(response.payload, response.payload_len as usize) }
                 .to_vec();
         // SAFETY: exact pointer/length pair handed to us by the plugin above.
-        unsafe { (self.library.free_buffer_fn())(response.payload, response.payload_len) };
+        unsafe { (self.shared.library.free_buffer_fn())(response.payload, response.payload_len) };
         Some(bytes)
     }
 
@@ -244,7 +224,7 @@ impl PluginExtractor {
             )
         };
         // SAFETY: exact pointer/length pair allocated by the plugin.
-        unsafe { (self.library.free_buffer_fn())(response.error_message, len) };
+        unsafe { (self.shared.library.free_buffer_fn())(response.error_message, len) };
         Some(text)
     }
 
@@ -260,7 +240,7 @@ impl PluginExtractor {
             errors: payload.warnings,
         };
         for warning in &report.errors {
-            tracing::warn!("plugin {}: {}", self.id, warning);
+            tracing::warn!("plugin {}: {}", self.shared.id, warning);
         }
         for artifact in payload.artifacts {
             self.write_artifact(artifact, ctx, sink, &mut report);
@@ -278,10 +258,10 @@ impl PluginExtractor {
         sink: &mut dyn ArtifactSink,
         report: &mut ExtractorReport,
     ) {
-        if !self.families.contains(&parsed.family) {
+        if !self.shared.families.contains(&parsed.family) {
             let warning = format!(
                 "plugin {} emitted undeclared family '{}'; artifact dropped",
-                self.id, parsed.family
+                self.shared.id, parsed.family
             );
             tracing::warn!("{warning}");
             report.errors.push(warning);
@@ -297,8 +277,8 @@ impl PluginExtractor {
         // Host-enforced provenance (contract §4/§5.5): plugin-reported
         // provenance is never trusted.
         artifact.source_object_id = Some(ctx.file_id.clone());
-        artifact.extractor_id = Some(self.id.to_string());
-        artifact.extractor_version = Some(self.version.clone());
+        artifact.extractor_id = Some(self.shared.id.to_string());
+        artifact.extractor_version = Some(self.shared.version.clone());
         artifact.source_attribution = Some(ctx.file_path.clone());
         artifact.confidence = parsed.confidence;
         sink.write_artifact(artifact);
@@ -317,7 +297,7 @@ impl PluginExtractor {
         let Ok(timestamp) = timestamp else {
             let warning = format!(
                 "plugin {} emitted invalid timestampUtc '{}'; event dropped",
-                self.id, parsed.timestamp_utc
+                self.shared.id, parsed.timestamp_utc
             );
             tracing::warn!("{warning}");
             report.errors.push(warning);
@@ -332,8 +312,8 @@ impl PluginExtractor {
             parsed.attrs,
         );
         // Host-enforced provenance, same as artifacts.
-        event.parser_id = Some(self.id.to_string());
-        event.parser_version = Some(self.version.clone());
+        event.parser_id = Some(self.shared.id.to_string());
+        event.parser_version = Some(self.shared.version.clone());
         event.source_attribution = Some(ctx.file_path.clone());
         sink.write_timeline_event(event);
         report.timeline_events += 1;
@@ -342,25 +322,26 @@ impl PluginExtractor {
 
 impl ArtifactExtractor for PluginExtractor {
     fn id(&self) -> &'static str {
-        self.id
+        self.shared.id
     }
 
     fn display_name(&self) -> &'static str {
-        self.display_name
+        self.shared.display_name
     }
 
     fn family(&self) -> ArtifactFamily {
         ArtifactFamily {
-            name: self.primary_family.clone(),
+            name: self.shared.primary_family.clone(),
             description: Some(format!(
                 "{} v{} (DLL plugin)",
-                self.display_name, self.version
+                self.shared.display_name, self.shared.version
             )),
         }
     }
 
     fn supports_path(&self, file_path: &str) -> bool {
-        self.patterns
+        self.shared
+            .patterns
             .iter()
             .any(|pattern| pattern.matches(file_path))
     }
@@ -375,13 +356,13 @@ impl ArtifactExtractor for PluginExtractor {
         let _serial = self
             .call_lock
             .lock()
-            .map_err(|_| format!("plugin {} call lock poisoned", self.id))?;
+            .map_err(|_| format!("plugin {} call lock poisoned", self.shared.id))?;
         let mut data = Vec::new();
         ctx.reader
             .by_ref()
             .take(ARTIFACT_FILE_LIMIT_BYTES)
             .read_to_end(&mut data)
-            .map_err(|error| format!("plugin {} failed to read input: {error}", self.id))?;
+            .map_err(|error| format!("plugin {} failed to read input: {error}", self.shared.id))?;
         let response = self.call_extract(&ctx, &data)?;
         self.handle_response(response, &ctx, sink)
     }

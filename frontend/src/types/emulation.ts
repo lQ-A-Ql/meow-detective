@@ -73,6 +73,7 @@ export interface EmulationBypassApplyRequest {
 
 export interface EmulationBypassResult {
   sessionId: string;
+  dataSourceId: string;
   partitionIndex: number;
   rid: number;
   username: string;
