@@ -155,6 +155,15 @@ impl CowDisk {
             .map(|state| state.overlay.is_poisoned())
             .unwrap_or(true)
     }
+
+    /// Permanently invalidate this disposable session after a higher-level
+    /// multi-write operation can no longer prove the overlay consistent.
+    pub fn invalidate(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.overlay.poison();
+            state.cache.clear();
+        }
+    }
 }
 
 fn validate_config(

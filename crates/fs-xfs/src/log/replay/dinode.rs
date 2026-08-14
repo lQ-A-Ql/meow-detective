@@ -31,6 +31,20 @@ pub(super) fn stamp_metadata_crc(object: &mut [u8]) {
     object[CRC_OFFSET..CRC_OFFSET + 4].copy_from_slice(&(!crc).to_le_bytes());
 }
 
+pub(super) fn metadata_crc_is_valid(object: &[u8]) -> bool {
+    let Some(stored) = object
+        .get(CRC_OFFSET..CRC_OFFSET + 4)
+        .and_then(|value| value.try_into().ok())
+        .map(u32::from_le_bytes)
+    else {
+        return false;
+    };
+    let mut crc = crc32c(u32::MAX, &object[..CRC_OFFSET]);
+    crc = crc32c(crc, &[0u8; 4]);
+    crc = crc32c(crc, &object[CRC_OFFSET + 4..]);
+    stored == !crc
+}
+
 /// Convert a 176-byte v3 log dinode core into its on-disk form, stamping
 /// `di_lsn` with `lsn` and recomputing `di_crc`.
 pub(super) fn log_core_to_disk(

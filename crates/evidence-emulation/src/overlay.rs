@@ -97,7 +97,11 @@ impl Overlay {
 
     pub(crate) fn flush(&mut self) -> Result<(), EmulationError> {
         self.ensure_usable()?;
-        self.sync_pending()
+        let result = self.sync_pending();
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
     }
 
     fn commit_clusters_inner(&mut self, clusters: &[(u64, Vec<u8>)]) -> Result<(), EmulationError> {
@@ -153,6 +157,10 @@ impl Overlay {
 
     pub(crate) fn is_poisoned(&self) -> bool {
         self.poisoned
+    }
+
+    pub(crate) fn poison(&mut self) {
+        self.poisoned = true;
     }
 }
 

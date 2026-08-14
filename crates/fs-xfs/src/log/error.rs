@@ -53,6 +53,8 @@ pub enum XfsLogError {
     InvalidGeometry(String),
     #[error("invalid XFS log data: {0}")]
     InvalidData(String),
+    #[error("unsafe XFS log replay: {0}")]
+    UnsafeReplay(String),
     #[error("XFS log I/O failed: {0}")]
     Io(#[from] io::Error),
 }

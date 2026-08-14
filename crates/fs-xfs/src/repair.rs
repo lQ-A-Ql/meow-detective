@@ -46,8 +46,8 @@ pub struct XfsLogClearPlan {
     pub log_bytes: u64,
     /// Committed transactions whose items were replayed into patches.
     pub replayed_transactions: u32,
-    /// Log items skipped during replay (unknown types, malformed payloads,
-    /// cancelled buffers, out-of-geometry writes).
+    /// Retained for the IPC contract. A successful fail-closed plan has zero
+    /// skipped items; unsupported replay semantics return `XfsLogError`.
     pub skipped_items: u32,
 }
 

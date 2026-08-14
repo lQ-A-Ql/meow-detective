@@ -4,7 +4,10 @@ use evidence_block::{BlockDeviceError, BlockProvider};
 use evidence_emulation::{CowDisk, CowDiskConfig, ParentIdentity};
 use sha2::{Digest, Sha256};
 
-use super::{detect_firmware, EmulationState};
+use super::{
+    detect_firmware, EmulationEntry, EmulationRegistry, EmulationRegistryError,
+    EmulationSessionStatus, EmulationState,
+};
 
 struct MemoryProvider(Vec<u8>);
 
@@ -40,6 +43,53 @@ fn firmware_detection_uses_the_primary_gpt_header() {
         evidence_emulation::VmwareFirmware::Efi
     );
     assert_ne!(EmulationState::DescriptorReady, EmulationState::Running);
+}
+
+#[test]
+fn poisoned_overlay_cannot_launch() {
+    let directory = tempfile::tempdir().unwrap();
+    let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
+    let provider: Arc<dyn BlockProvider> = Arc::new(MemoryProvider(vec![0u8; 4096]));
+    let identity = ParentIdentity::new(provider.len(), [0x51; 32]).unwrap();
+    let workspace =
+        super::workspace::SessionWorkspace::create(directory.path(), &session_id).unwrap();
+    let disk = Arc::new(
+        CowDisk::create(
+            workspace.overlay_path(),
+            provider,
+            identity,
+            CowDiskConfig::default(),
+        )
+        .unwrap(),
+    );
+    disk.invalidate();
+    let registry = EmulationRegistry::default();
+    registry.entries.lock().unwrap().insert(
+        session_id.clone(),
+        EmulationEntry {
+            case_id: "case".to_string(),
+            status: EmulationSessionStatus {
+                session_id: session_id.clone(),
+                data_source_id: "source".to_string(),
+                state: EmulationState::DescriptorReady,
+                logical_length: disk.len(),
+                maintenance_media: false,
+                error: None,
+            },
+            workspace,
+            disk,
+            backend: None,
+            vmware: None,
+            op_lock: Arc::new(std::sync::Mutex::new(())),
+        },
+    );
+
+    assert!(matches!(
+        registry.launch(&session_id),
+        Err(EmulationRegistryError::Disk(
+            evidence_emulation::EmulationError::CorruptOverlay(_)
+        ))
+    ));
 }
 
 #[test]

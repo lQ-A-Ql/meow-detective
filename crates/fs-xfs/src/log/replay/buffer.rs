@@ -89,28 +89,45 @@ pub(super) fn requires_verifier(buffer_type: u16) -> bool {
 }
 
 /// Stamp the write-verifier fields for the type encoded in `blf_flags`.
-/// Returns false when the post-replay magic/UUID does not match that type;
-/// callers then skip the malformed item rather than emit stale metadata.
-pub(super) fn seal(bytes: &mut [u8], buffer_type: u16, lsn: u64, fs_uuid: &[u8; 16]) -> bool {
-    let Some(layout) = layout_for_type(bytes, buffer_type, fs_uuid) else {
-        return false;
-    };
-    if bytes.get(layout.uuid..layout.uuid + 16) != Some(fs_uuid.as_slice())
-        || bytes.get(layout.crc..layout.crc + 4).is_none()
+/// Returns a reason when post-replay magic, UUID, or field bounds do not
+/// match the verifier selected by the logged buffer type.
+pub(super) fn seal(
+    bytes: &mut [u8],
+    buffer_type: u16,
+    lsn: u64,
+    fs_uuid: &[u8; 16],
+) -> Result<(), String> {
+    let layout = layout_for_type(bytes, buffer_type, fs_uuid)
+        .ok_or_else(|| "metadata magic does not match the logged buffer type".to_string())?;
+    let actual_uuid = bytes
+        .get(layout.uuid..layout.uuid + 16)
+        .ok_or_else(|| "metadata UUID lies outside the buffer".to_string())?;
+    if actual_uuid != fs_uuid {
+        return Err(format!(
+            "metadata UUID {} does not match filesystem {}",
+            hex_uuid(actual_uuid),
+            hex_uuid(fs_uuid)
+        ));
+    }
+    if bytes.get(layout.crc..layout.crc + 4).is_none()
         || bytes.get(layout.lsn..layout.lsn + 8).is_none()
     {
-        return false;
+        return Err("metadata verifier fields lie outside the buffer".to_string());
     }
     bytes[layout.lsn..layout.lsn + 8].copy_from_slice(&lsn.to_be_bytes());
     stamp_crc(bytes, layout.crc);
-    true
+    Ok(())
+}
+
+fn hex_uuid(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn layout_for_type(bytes: &[u8], buffer_type: u16, fs_uuid: &[u8; 16]) -> Option<MetadataLayout> {
     let magic = be_u32(bytes, 0)?;
     match buffer_type {
         BLFT_BTREE => btree_layout(magic),
-        BLFT_AGF if magic == XFS_AGF_MAGIC => Some(layout(216, 208, 56)),
+        BLFT_AGF if magic == XFS_AGF_MAGIC => Some(layout(216, 208, 64)),
         BLFT_AGFL if magic == XFS_AGFL_MAGIC => Some(layout(32, 24, 8)),
         BLFT_AGI if magic == XFS_AGI_MAGIC => Some(layout(312, 320, 296)),
         BLFT_SYMLINK if magic == XFS_SYMLINK_MAGIC => Some(layout(12, 48, 16)),
@@ -134,7 +151,7 @@ fn layout_for_type(bytes: &[u8], buffer_type: u16, fs_uuid: &[u8; 16]) -> Option
 fn layout_from_magic(bytes: &[u8], fs_uuid: &[u8; 16]) -> Option<MetadataLayout> {
     let magic = be_u32(bytes, 0)?;
     match magic {
-        XFS_AGF_MAGIC => Some(layout(216, 208, 56)),
+        XFS_AGF_MAGIC => Some(layout(216, 208, 64)),
         XFS_AGFL_MAGIC => Some(layout(32, 24, 8)),
         XFS_AGI_MAGIC => Some(layout(312, 320, 296)),
         XFS_SYMLINK_MAGIC | XFS_ATTR3_RMT_MAGIC => Some(layout(12, 48, 16)),

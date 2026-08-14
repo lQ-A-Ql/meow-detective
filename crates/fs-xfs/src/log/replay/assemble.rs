@@ -46,8 +46,6 @@ pub(super) struct CommittedTransaction {
 
 pub(super) struct Assembly {
     pub(super) transactions: Vec<CommittedTransaction>,
-    /// Complete items dropped because their transaction was poisoned.
-    pub(super) dropped_items: u32,
 }
 
 struct ItemBuilder {
@@ -167,11 +165,12 @@ impl TransactionBuilder {
         }
     }
 
-    fn finish(self) -> (Option<CommittedTransaction>, u32) {
+    fn finish(self) -> Result<Option<CommittedTransaction>, XfsLogError> {
         if self.poisoned {
-            return (None, 0);
+            return Err(XfsLogError::InvalidData(
+                "committed transaction contains malformed regions".to_string(),
+            ));
         }
-        let mut dropped = 0u32;
         let mut items = Vec::new();
         for item in self.items {
             if item.is_complete() {
@@ -179,20 +178,19 @@ impl TransactionBuilder {
                     regions: item.regions,
                 });
             } else if !item.is_placeholder() {
-                dropped = dropped.saturating_add(1);
+                return Err(XfsLogError::InvalidData(
+                    "committed transaction contains an incomplete log item".to_string(),
+                ));
             }
         }
         if items.is_empty() {
-            return (None, dropped);
+            return Ok(None);
         }
-        (
-            Some(CommittedTransaction {
-                lsn: self.lsn,
-                format: self.format,
-                items,
-            }),
-            dropped,
-        )
+        Ok(Some(CommittedTransaction {
+            lsn: self.lsn,
+            format: self.format,
+            items,
+        }))
     }
 }
 
@@ -201,15 +199,9 @@ impl TransactionBuilder {
 pub(super) fn assemble_committed(records: &[XfsLogRecord]) -> Result<Assembly, XfsLogError> {
     let mut builders: HashMap<u32, TransactionBuilder> = HashMap::new();
     let mut transactions = Vec::new();
-    let mut dropped_items = 0u32;
     for record in records {
         for operation in parse_log_operations(record)? {
-            step(
-                &mut builders,
-                &mut transactions,
-                &mut dropped_items,
-                operation,
-            );
+            step(&mut builders, &mut transactions, operation)?;
         }
         if transactions.len() > MAX_REPLAY_TRANSACTIONS {
             return Err(XfsLogError::InvalidData(format!(
@@ -217,18 +209,14 @@ pub(super) fn assemble_committed(records: &[XfsLogRecord]) -> Result<Assembly, X
             )));
         }
     }
-    Ok(Assembly {
-        transactions,
-        dropped_items,
-    })
+    Ok(Assembly { transactions })
 }
 
 fn step(
     builders: &mut HashMap<u32, TransactionBuilder>,
     transactions: &mut Vec<CommittedTransaction>,
-    dropped_items: &mut u32,
     operation: super::super::XfsLogOperation,
-) {
+) -> Result<(), XfsLogError> {
     let tid = operation.transaction_id;
     let Some(mut builder) = builders.remove(&tid) else {
         if operation.flags.starts_transaction() {
@@ -237,7 +225,7 @@ fn step(
                 TransactionBuilder::new(operation.record_lsn, operation.record_format),
             );
         }
-        return;
+        return Ok(());
     };
     let mut flags = operation.flags.bits() & !XLOG_END_TRANS;
     if flags & XLOG_WAS_CONT_TRANS != 0 {
@@ -245,17 +233,17 @@ fn step(
     }
     match flags {
         XLOG_COMMIT_TRANS => {
-            let (transaction, dropped) = builder.finish();
-            *dropped_items = dropped_items.saturating_add(dropped);
+            let transaction = builder.finish()?;
             if let Some(transaction) = transaction {
                 transactions.push(transaction);
             }
-            return;
+            return Ok(());
         }
-        XLOG_UNMOUNT_TRANS => return,
+        XLOG_UNMOUNT_TRANS => return Ok(()),
         XLOG_WAS_CONT_TRANS => builder.append_continuation(&operation.region),
         0 | XLOG_CONTINUE_TRANS => builder.add_region(operation.region),
-        _ => return,
+        _ => return Ok(()),
     }
     builders.insert(tid, builder);
+    Ok(())
 }

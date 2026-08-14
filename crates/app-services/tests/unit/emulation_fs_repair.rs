@@ -71,10 +71,24 @@ fn dirty_xfs_disk() -> Vec<u8> {
     log[0..4].copy_from_slice(&0xFEED_BABEu32.to_be_bytes());
     log[4..8].copy_from_slice(&6u32.to_be_bytes());
     log[8..12].copy_from_slice(&2u32.to_be_bytes());
-    log[12..16].copy_from_slice(&1024u32.to_be_bytes());
-    log[16..24].copy_from_slice(&(6u64 << 32).to_be_bytes());
-    log[40..44].copy_from_slice(&3u32.to_be_bytes());
-    log[320..324].copy_from_slice(&(BPS as u32).to_be_bytes());
+    log[12..16].copy_from_slice(&(BPS as u32).to_be_bytes());
+    let lsn = 6u64 << 32;
+    log[16..24].copy_from_slice(&lsn.to_be_bytes());
+    log[24..32].copy_from_slice(&lsn.to_be_bytes());
+    log[36..40].copy_from_slice(&u32::MAX.to_be_bytes());
+    log[40..44].copy_from_slice(&1u32.to_be_bytes());
+    log[44..48].copy_from_slice(&1u32.to_be_bytes());
+    log[300..304].copy_from_slice(&1u32.to_be_bytes());
+    log[304..320].copy_from_slice(&[0x42u8; 16]);
+    log[320..324].copy_from_slice(&(32 * 1024u32).to_be_bytes());
+    let body = BPS;
+    log[body..body + 4].copy_from_slice(&6u32.to_be_bytes());
+    log[body + 8] = 0x69;
+    let mut crc = ceph_wire::crc32c::crc32c(u32::MAX, &log[..32]);
+    crc = ceph_wire::crc32c::crc32c(crc, &[0u8; 4]);
+    crc = ceph_wire::crc32c::crc32c(crc, &log[36..328]);
+    crc = ceph_wire::crc32c::crc32c(crc, &log[body..body + BPS]);
+    log[32..36].copy_from_slice(&(!crc).to_le_bytes());
     disk
 }
 
@@ -215,4 +229,54 @@ fn dirty_log_is_cleared_and_mount_metadata_normalized() {
     let second = repair_xfs_logs(&disk, &context(&fixture)).unwrap();
     assert_eq!(second.items[0].state, EmulationFsVolumeStateDto::Clean);
     assert!(!second.items[0].repaired);
+}
+
+#[test]
+fn unsupported_second_volume_prevents_writes_to_the_first() {
+    let image = dirty_xfs_disk();
+    let fixture = setup(&image);
+    let source_path = crate::source_db::source_db_path(&fixture.case_root, &fixture.data_source_id);
+    let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
+    PartitionRepo::new(&source_conn)
+        .insert_batch(&[DataSourcePartitionRecord {
+            id: "ds-xfs:partition:1".to_string(),
+            data_source_id: "ds-xfs".to_string(),
+            partition_index: 1,
+            name: "unsupported".to_string(),
+            kind_label: "XFS".to_string(),
+            status: "supported".to_string(),
+            type_guid: None,
+            offset: PART_OFFSET + FS_BLOCKS * FS_BLOCK as u64 - BPS as u64,
+            length: BPS as u64,
+            filesystem: Some("XFS".to_string()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+        }])
+        .unwrap();
+    drop(source_conn);
+    let disk = session_disk(&fixture);
+    let log_offset = PART_OFFSET + LOG_START_FSB * FS_BLOCK as u64;
+    let mut before = vec![0u8; LOG_BLOCKS as usize * FS_BLOCK];
+    disk.read_exact_at(log_offset, &mut before).unwrap();
+
+    let result = repair_xfs_logs(&disk, &context(&fixture)).unwrap();
+
+    assert_eq!(result.items.len(), 2);
+    assert_eq!(result.items[0].state, EmulationFsVolumeStateDto::Dirty);
+    assert!(!result.items[0].repaired);
+    assert_eq!(
+        result.items[1].state,
+        EmulationFsVolumeStateDto::Unsupported
+    );
+    let mut after = vec![0u8; before.len()];
+    disk.read_exact_at(log_offset, &mut after).unwrap();
+    assert_eq!(
+        after, before,
+        "planning failure must leave every volume untouched"
+    );
 }

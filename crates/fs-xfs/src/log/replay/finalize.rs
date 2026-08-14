@@ -1,8 +1,8 @@
 //! Finalize grouped BUF actions against the current volume image.
 
 use super::{
-    buffer, dinode, XfsBufferReplay, XfsInodeReplay, XfsLogError, XfsLogReplay, XfsReplayAction,
-    XfsReplayFinal, XfsReplayPatch,
+    buffer, dinode, inode_buffer, ReplayDisposition, XfsBufferReplay, XfsInodeReplay, XfsLogError,
+    XfsLogReplay, XfsReplayAction, XfsReplayFinal, XfsReplayPatch,
 };
 
 pub(crate) fn finalize_replay<F>(
@@ -15,25 +15,23 @@ where
     F: FnMut(u64, usize) -> Result<Vec<u8>, XfsLogError>,
 {
     let mut patches = Vec::new();
-    let mut skipped_items = replay.skipped_items;
+    debug_assert_eq!(replay.skipped_items, 0);
     for action in replay.actions {
         match action {
             XfsReplayAction::Patch(patch) => patches.push(patch),
             XfsReplayAction::Buffer(buffer) => {
-                if !finalize_buffer(buffer, metadata_crc, fs_uuid, &mut patches, &mut read)? {
-                    skipped_items = skipped_items.saturating_add(1);
-                }
+                let _disposition =
+                    finalize_buffer(buffer, metadata_crc, fs_uuid, &mut patches, &mut read)?;
             }
             XfsReplayAction::Inode(inode) => {
-                if !finalize_inode(inode, metadata_crc, fs_uuid, &mut patches, &mut read)? {
-                    skipped_items = skipped_items.saturating_add(1);
-                }
+                let _disposition =
+                    finalize_inode(inode, metadata_crc, fs_uuid, &mut patches, &mut read)?;
             }
         }
     }
     Ok(XfsReplayFinal {
         patches,
-        skipped_items,
+        skipped_items: 0,
     })
 }
 
@@ -43,7 +41,7 @@ fn finalize_inode<F>(
     fs_uuid: &[u8; 16],
     patches: &mut Vec<XfsReplayPatch>,
     read: &mut F,
-) -> Result<bool, XfsLogError>
+) -> Result<ReplayDisposition, XfsLogError>
 where
     F: FnMut(u64, usize) -> Result<Vec<u8>, XfsLogError>,
 {
@@ -54,25 +52,23 @@ where
         ));
     }
     overlay_prior_patches(&mut current, replay.offset, patches);
-    if !valid_inode_identity(&current, replay.inode_number, fs_uuid) {
-        return Ok(false);
-    }
+    validate_inode_identity(&current, replay.offset, replay.inode_number, fs_uuid)?;
     if metadata_crc {
         let current_lsn = be_u64(&current, 112);
         if current_lsn.is_some_and(|lsn| {
             lsn != 0 && lsn != u64::MAX && buffer::lsn_is_at_or_after(lsn, replay.lsn)
         }) {
-            return Ok(true);
+            return Ok(ReplayDisposition::AlreadyCurrent);
         }
     }
     for write in &replay.writes {
         if !overlay_write(&mut current, replay.offset, write) {
-            return Ok(false);
+            return unsafe_replay("INODE patch escapes its target object");
         }
     }
-    if !valid_inode_identity(&current, replay.inode_number, fs_uuid) {
-        return Ok(false);
-    }
+    validate_inode_identity(&current, replay.offset, replay.inode_number, fs_uuid).map_err(
+        |_| XfsLogError::UnsafeReplay("INODE replay changed the object identity".into()),
+    )?;
     if metadata_crc {
         dinode::stamp_metadata_crc(&mut current);
     }
@@ -80,14 +76,61 @@ where
         offset: replay.offset,
         bytes: current,
     });
-    Ok(true)
+    Ok(ReplayDisposition::Applied)
 }
 
-fn valid_inode_identity(bytes: &[u8], inode_number: u64, fs_uuid: &[u8; 16]) -> bool {
-    bytes.get(0..2) == Some(0x494Eu16.to_be_bytes().as_slice())
-        && bytes.get(4) == Some(&3)
-        && be_u64(bytes, 152) == Some(inode_number)
-        && bytes.get(160..176) == Some(fs_uuid.as_slice())
+fn validate_inode_identity(
+    bytes: &[u8],
+    offset: u64,
+    inode_number: u64,
+    fs_uuid: &[u8; 16],
+) -> Result<(), XfsLogError> {
+    let magic = bytes
+        .get(0..2)
+        .and_then(|value| value.try_into().ok())
+        .map(u16::from_be_bytes);
+    let version = bytes.get(4).copied();
+    let actual_inode = be_u64(bytes, 152);
+    let actual_uuid = bytes.get(160..176);
+    if magic == Some(0x494E)
+        && version == Some(3)
+        && actual_inode == Some(inode_number)
+        && actual_uuid == Some(fs_uuid.as_slice())
+    {
+        return Ok(());
+    }
+    unsafe_replay(format!(
+        "INODE identity mismatch at volume offset {offset}: expected inode {inode_number}, \
+         found magic {}, version {}, inode {}, uuid {}",
+        option_hex_u16(magic),
+        option_u8(version),
+        option_u64(actual_inode),
+        option_hex(actual_uuid),
+    ))
+}
+
+fn option_hex_u16(value: Option<u16>) -> String {
+    value
+        .map(|value| format!("0x{value:04x}"))
+        .unwrap_or_else(|| "truncated".to_string())
+}
+
+fn option_u8(value: Option<u8>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "truncated".to_string())
+}
+
+fn option_u64(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "truncated".to_string())
+}
+
+fn option_hex(value: Option<&[u8]>) -> String {
+    value
+        .map(|bytes| bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+        .unwrap_or_else(|| "truncated".to_string())
 }
 
 fn be_u64(bytes: &[u8], offset: usize) -> Option<u64> {
@@ -102,7 +145,7 @@ fn finalize_buffer<F>(
     fs_uuid: &[u8; 16],
     patches: &mut Vec<XfsReplayPatch>,
     read: &mut F,
-) -> Result<bool, XfsLogError>
+) -> Result<ReplayDisposition, XfsLogError>
 where
     F: FnMut(u64, usize) -> Result<Vec<u8>, XfsLogError>,
 {
@@ -113,21 +156,58 @@ where
         ));
     }
     overlay_prior_patches(&mut current, replay.offset, patches);
+    if matches!(replay.buffer_type, 1..=3) {
+        return unsafe_replay("DQUOT buffer validation is not implemented");
+    }
+    if replay.inode_unlinked_only {
+        if replay.buffer_type != 8 {
+            return unsafe_replay("inode-unlinked BUF item is not typed as a DINO buffer");
+        }
+        inode_buffer::replay_unlinked_fields(&mut current, &replay, fs_uuid, metadata_crc)?;
+        patches.push(XfsReplayPatch {
+            offset: replay.offset,
+            bytes: current,
+        });
+        return Ok(ReplayDisposition::Applied);
+    }
     if metadata_crc
         && buffer::current_lsn(&current, fs_uuid)
             .is_some_and(|lsn| buffer::lsn_is_at_or_after(lsn, replay.lsn))
     {
-        return Ok(true);
+        return Ok(ReplayDisposition::AlreadyCurrent);
     }
     for write in &replay.writes {
         if !overlay_write(&mut current, replay.offset, write) {
-            return Ok(false);
+            return unsafe_replay("BUF patch escapes its target buffer");
         }
     }
-    if metadata_crc && buffer::requires_verifier(replay.buffer_type) {
-        if !buffer::seal(&mut current, replay.buffer_type, replay.lsn, fs_uuid) {
-            return Ok(false);
-        }
+    if replay.buffer_type == 8 {
+        inode_buffer::validate_allocation_buffer(
+            &current,
+            replay.inode_size,
+            replay.ag_inode_count,
+            fs_uuid,
+            metadata_crc,
+        )?;
+        patches.push(XfsReplayPatch {
+            offset: replay.offset,
+            bytes: current,
+        });
+        return Ok(ReplayDisposition::Applied);
+    }
+    if metadata_crc && !buffer::requires_verifier(replay.buffer_type) {
+        return unsafe_replay(format!(
+            "BUF type {} has no supported v5 write verifier",
+            replay.buffer_type
+        ));
+    }
+    if metadata_crc {
+        buffer::seal(&mut current, replay.buffer_type, replay.lsn, fs_uuid).map_err(|reason| {
+            XfsLogError::UnsafeReplay(format!(
+                "BUF verifier rejected type {} at volume offset {}: {reason}",
+                replay.buffer_type, replay.offset
+            ))
+        })?;
         patches.push(XfsReplayPatch {
             offset: replay.offset,
             bytes: current,
@@ -135,7 +215,11 @@ where
     } else {
         patches.extend(replay.writes);
     }
-    Ok(true)
+    Ok(ReplayDisposition::Applied)
+}
+
+fn unsafe_replay<T>(message: impl Into<String>) -> Result<T, XfsLogError> {
+    Err(XfsLogError::UnsafeReplay(message.into()))
 }
 
 fn overlay_prior_patches(target: &mut [u8], target_offset: u64, patches: &[XfsReplayPatch]) {

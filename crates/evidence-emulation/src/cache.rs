@@ -56,4 +56,10 @@ impl ClusterLru {
         self.order.retain(|index| *index != cluster_index);
         self.order.push_back(cluster_index);
     }
+
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+        self.current_bytes = 0;
+    }
 }

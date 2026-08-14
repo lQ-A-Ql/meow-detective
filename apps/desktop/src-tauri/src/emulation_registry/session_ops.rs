@@ -43,6 +43,7 @@ impl EmulationRegistry {
             let entry = entries
                 .get_mut(session_id)
                 .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
+            Self::require_usable_disk(&entry.disk)?;
             refresh_backend(entry);
             if entry.status.state != EmulationState::DescriptorReady {
                 return Err(EmulationRegistryError::Vmware(
@@ -233,6 +234,21 @@ impl EmulationRegistry {
             return Err(EmulationRegistryError::Vmware(format!(
                 "session is no longer in the {expected:?} state"
             )));
+        }
+        if expected == EmulationState::DescriptorReady {
+            Self::require_usable_disk(&entry.disk)?;
+        }
+        Ok(())
+    }
+
+    fn require_usable_disk(disk: &CowDisk) -> Result<(), EmulationRegistryError> {
+        if disk.is_poisoned() {
+            return Err(EmulationRegistryError::Disk(
+                evidence_emulation::EmulationError::CorruptOverlay(
+                    "overlay session must be released and recreated after a failed write"
+                        .to_string(),
+                ),
+            ));
         }
         Ok(())
     }

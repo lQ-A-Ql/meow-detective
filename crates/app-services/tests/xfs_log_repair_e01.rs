@@ -24,6 +24,10 @@ fn sample_path() -> PathBuf {
 #[test]
 #[ignore = "requires the private XFS E01 sample"]
 fn xfs_log_repair_and_materialization() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     let image = sample_path();
     let image_size = std::fs::metadata(&image).unwrap().len();
     let temp = tempfile::TempDir::new().unwrap();

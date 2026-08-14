@@ -1,48 +1,48 @@
 //! Application of reassembled log items to volume-relative patches.
 //!
-//! Item handlers mirror the kernel's `commit_pass2` operations:
+//! BUF, INODE, and ICREATE handlers mirror their kernel `commit_pass2`
+//! operations. Buffer cancellation is collected over the complete log before
+//! actions are emitted, preserving the kernel's pass1/pass2 ordering.
 //!
-//! - `XFS_LI_BUF` (`xlog_recover_buf_commit_pass2`): data regions map in
-//!   order onto the set bits of the 128-byte-chunk dirty bitmap. The grouped
-//!   buffer action is finalized later, after the on-disk LSN check and write
-//!   verifier have run against the current volume bytes.
-//! - `XFS_LI_INODE` (`xlog_recover_inode_commit_pass2`): the log dinode core
-//!   is converted to on-disk form with the transaction LSN and a fresh CRC;
-//!   data/attr fork regions land in the inode's literal area.
-//! - `XFS_LI_ICREATE` (`xlog_recover_icreate_commit_pass2` +
-//!   `xfs_ialloc_inode_init`): the item carries only a 28-byte descriptor
-//!   whose fields after type/size are big-endian; recovery regenerates a
-//!   zeroed inode cluster, exactly like the kernel.
-//! - Buffer cancellation (`XFS_BLF_CANCEL`) is collected over the whole log
-//!   before anything is applied, like the kernel's pass1/pass2 split.
-//!
-//! Everything else (EFI/EFD, quotas, intents, ...) is skipped and counted.
+//! EFI/EFD pairs are tracked because a pending EFI would cause the kernel to
+//! free extents after log recovery. QUOTAOFF is a validated pass-2 no-op;
+//! every other unsupported item aborts planning.
 
-use super::super::{XfsLogError, XfsLogFormat, XFS_LI_BUF, XFS_LI_ICREATE, XFS_LI_INODE};
+use std::collections::HashSet;
+
+use super::super::{
+    XfsLogError, XfsLogFormat, XFS_LI_BUF, XFS_LI_DQUOT, XFS_LI_EFD, XFS_LI_EFI, XFS_LI_ICREATE,
+    XFS_LI_INODE, XFS_LI_QUOTAOFF,
+};
 use super::assemble::{AssembledItem, CommittedTransaction};
+use super::deferred;
 use super::dinode;
+use super::icreate;
 use super::sink::{CancelTable, PatchSink};
-use super::{ReplayGeometry, XfsBufferReplay, XfsInodeReplay, XfsReplayAction, XfsReplayPatch};
+use super::{
+    ReplayDisposition, ReplayGeometry, XfsBufferReplay, XfsInodeReplay, XfsReplayAction,
+    XfsReplayPatch,
+};
 
 const XFS_BLF_CANCEL: u16 = 1 << 1;
+const XFS_BLF_INODE_BUF: u16 = 1;
 const BLF_CHUNK_BYTES: usize = 128;
 const MAX_DATA_MAP_WORDS: usize = 17;
 const INODE_LOG_FORMAT_SIZE: usize = 56;
-const ICREATE_LOG_SIZE: usize = 28;
 const XFS_ILOG_CORE: u32 = 0x001;
 const XFS_ILOG_DFORK: u32 = 0x002 | 0x004;
 const XFS_ILOG_AFORK: u32 = 0x040 | 0x080;
 const XFS_ILOG_BROOTS: u32 = 0x008 | 0x100;
 const XFS_ILOG_DEV: u32 = 0x010;
+const XFS_ILOG_OWNERS: u32 = 0x200 | 0x400;
 
 pub(super) struct ApplyOutcome {
     pub(super) actions: Vec<XfsReplayAction>,
-    pub(super) skipped_items: u32,
 }
-
-/// Apply every committed transaction in log order, buffer-class items
-/// (ICREATE, then BUF) before inode items within each transaction, matching
-/// the kernel's `xlog_recover_reorder_trans` bucket order.
+/// Apply every committed transaction in log order: ordinary buffer-class
+/// items first, inode items second, and inode-unlink buffers last. The final
+/// bucket preserves the kernel's `xlog_recover_reorder_trans` rule that an
+/// inode core must be restored before its `di_next_unlinked` field.
 pub(super) fn apply_transactions(
     geometry: &ReplayGeometry,
     transactions: &[CommittedTransaction],
@@ -50,52 +50,95 @@ pub(super) fn apply_transactions(
     let mut cancels = CancelTable::default();
     for transaction in transactions {
         for item in &transaction.items {
-            collect_cancel(transaction.format, item, &mut cancels);
+            collect_cancel(transaction.format, item, &mut cancels)?;
         }
     }
     let mut sink = PatchSink::new(geometry.capacity()?);
-    let mut skipped_items = 0u32;
+    let mut pending_efi = HashSet::new();
     for transaction in transactions {
         let mut inode_items = Vec::new();
+        let mut inode_unlinked_buffers = Vec::new();
         for item in &transaction.items {
             match item_type(transaction.format, item) {
                 Some(XFS_LI_ICREATE) => {
-                    skipped_items += u32::from(!apply_icreate(
-                        geometry,
-                        &mut sink,
-                        &cancels,
-                        transaction.format,
-                        item,
-                    )?);
+                    let _disposition =
+                        icreate::apply(geometry, &mut sink, &cancels, transaction.format, item)?;
                 }
                 Some(XFS_LI_BUF) => {
-                    skipped_items += u32::from(!apply_buffer(
-                        &mut sink,
-                        &mut cancels,
-                        transaction.format,
-                        item,
-                        transaction.lsn,
-                    )?);
+                    if is_inode_unlinked_buffer(transaction.format, item)? {
+                        inode_unlinked_buffers.push(item);
+                    } else {
+                        let _disposition = apply_buffer(
+                            geometry,
+                            &mut sink,
+                            &mut cancels,
+                            transaction.format,
+                            item,
+                            transaction.lsn,
+                        )?;
+                    }
                 }
                 Some(XFS_LI_INODE) => inode_items.push(item),
-                _ => skipped_items = skipped_items.saturating_add(1),
+                Some(XFS_LI_EFI) => {
+                    let id = deferred::parse_id(transaction.format, item, "EFI")?;
+                    if !pending_efi.insert(id) {
+                        return unsafe_replay(format!("duplicate pending EFI id {id:#x}"));
+                    }
+                }
+                Some(XFS_LI_EFD) => {
+                    let id = deferred::parse_id(transaction.format, item, "EFD")?;
+                    pending_efi.remove(&id);
+                    let _disposition = ReplayDisposition::DeferredResolved;
+                }
+                Some(XFS_LI_QUOTAOFF) => deferred::validate_quotaoff(transaction.format, item)?,
+                Some(XFS_LI_DQUOT) => {
+                    return unsafe_replay("DQUOT replay is not implemented");
+                }
+                Some(kind) => {
+                    return unsafe_replay(format!("unsupported log item type {kind:#06x}"));
+                }
+                None => return unsafe_replay("log item type is missing or malformed"),
             }
         }
         for item in inode_items {
-            skipped_items += u32::from(!apply_inode(
+            let _disposition = apply_inode(
                 geometry,
                 &mut sink,
                 &cancels,
                 transaction.format,
                 item,
                 transaction.lsn,
-            )?);
+            )?;
         }
+        for item in inode_unlinked_buffers {
+            let _disposition = apply_buffer(
+                geometry,
+                &mut sink,
+                &mut cancels,
+                transaction.format,
+                item,
+                transaction.lsn,
+            )?;
+        }
+    }
+    if !pending_efi.is_empty() {
+        return unsafe_replay(format!(
+            "{} EFI intent(s) remain pending and require extent-free replay",
+            pending_efi.len()
+        ));
     }
     Ok(ApplyOutcome {
         actions: sink.actions,
-        skipped_items,
     })
+}
+
+fn is_inode_unlinked_buffer(
+    format: XfsLogFormat,
+    item: &AssembledItem,
+) -> Result<bool, XfsLogError> {
+    let descriptor = parse_buf_descriptor(format, item)
+        .ok_or_else(|| XfsLogError::InvalidData("malformed BUF descriptor".to_string()))?;
+    Ok(descriptor.flags & XFS_BLF_INODE_BUF != 0)
 }
 
 fn item_type(format: XfsLogFormat, item: &AssembledItem) -> Option<u16> {
@@ -104,16 +147,20 @@ fn item_type(format: XfsLogFormat, item: &AssembledItem) -> Option<u16> {
 
 /// Pass 1: record the ranges of cancellation buffers so their stale
 /// contents are never replayed into reallocated blocks.
-fn collect_cancel(format: XfsLogFormat, item: &AssembledItem, cancels: &mut CancelTable) {
+fn collect_cancel(
+    format: XfsLogFormat,
+    item: &AssembledItem,
+    cancels: &mut CancelTable,
+) -> Result<(), XfsLogError> {
     if item_type(format, item) != Some(XFS_LI_BUF) {
-        return;
+        return Ok(());
     }
-    let Some(descriptor) = parse_buf_descriptor(format, item) else {
-        return;
-    };
+    let descriptor = parse_buf_descriptor(format, item)
+        .ok_or_else(|| XfsLogError::InvalidData("malformed BUF descriptor".to_string()))?;
     if descriptor.flags & XFS_BLF_CANCEL != 0 {
         cancels.add(descriptor.blkno, descriptor.len);
     }
+    Ok(())
 }
 
 struct BufDescriptor {
@@ -154,50 +201,60 @@ fn parse_buf_descriptor(format: XfsLogFormat, item: &AssembledItem) -> Option<Bu
 }
 
 fn apply_buffer(
+    geometry: &ReplayGeometry,
     sink: &mut PatchSink,
     cancels: &mut CancelTable,
     format: XfsLogFormat,
     item: &AssembledItem,
     lsn: u64,
-) -> Result<bool, XfsLogError> {
-    let Some(descriptor) = parse_buf_descriptor(format, item) else {
-        return Ok(false);
-    };
+) -> Result<ReplayDisposition, XfsLogError> {
+    let descriptor = parse_buf_descriptor(format, item)
+        .ok_or_else(|| XfsLogError::InvalidData("malformed BUF descriptor".to_string()))?;
     if descriptor.flags & XFS_BLF_CANCEL != 0 {
         cancels.remove_one(descriptor.blkno, descriptor.len);
-        return Ok(true);
+        return Ok(ReplayDisposition::Cancelled);
     }
     if cancels.contains(descriptor.blkno, descriptor.len) {
-        return Ok(true);
+        return Ok(ReplayDisposition::Cancelled);
     }
-    let Some(buffer_bytes) = u64::from(descriptor.len).checked_mul(512) else {
-        return Ok(false);
-    };
-    let Some(base) = descriptor.blkno.checked_mul(512) else {
-        return Ok(false);
-    };
+    let buffer_bytes = u64::from(descriptor.len)
+        .checked_mul(512)
+        .ok_or_else(|| XfsLogError::InvalidData("BUF length overflows".to_string()))?;
+    let base = descriptor
+        .blkno
+        .checked_mul(512)
+        .ok_or_else(|| XfsLogError::InvalidData("BUF offset overflows".to_string()))?;
     if base
         .checked_add(buffer_bytes)
         .is_none_or(|end| end > sink.capacity)
     {
-        return Ok(false);
+        return unsafe_replay("BUF write lies outside filesystem geometry");
     }
-    let Ok(buffer_length) = usize::try_from(buffer_bytes) else {
-        return Ok(false);
-    };
+    let buffer_length = usize::try_from(buffer_bytes)
+        .map_err(|_| XfsLogError::InvalidData("BUF length exceeds host limits".to_string()))?;
     let total_bits = (buffer_length / BLF_CHUNK_BYTES).min(descriptor.map.len() * 32);
+    if descriptor.map.iter().enumerate().any(|(word, value)| {
+        (0..32).any(|bit| word * 32 + bit >= total_bits && value >> bit & 1 != 0)
+    }) {
+        return unsafe_replay("BUF dirty bitmap addresses data beyond the buffer");
+    }
     let mut writes = Vec::new();
     let mut region_index = 1;
     let mut bit = 0;
     while let Some(set) = next_set_bit(&descriptor.map, bit, total_bits) {
         let contiguous = contiguous_set_bits(&descriptor.map, set, total_bits);
-        let Some(region) = item.regions.get(region_index) else {
-            return Ok(false);
-        };
-        if region.len() % BLF_CHUNK_BYTES != 0 {
-            return Ok(false);
+        let region = item.regions.get(region_index).ok_or_else(|| {
+            XfsLogError::InvalidData("BUF dirty bitmap has no matching data region".to_string())
+        })?;
+        if region.is_empty() || region.len() % BLF_CHUNK_BYTES != 0 {
+            return Err(XfsLogError::InvalidData(
+                "BUF data region is not 128-byte aligned".to_string(),
+            ));
         }
-        let chunks = contiguous.min(region.len() / BLF_CHUNK_BYTES);
+        let chunks = region.len() / BLF_CHUNK_BYTES;
+        if chunks > contiguous {
+            return unsafe_replay("BUF data region exceeds its dirty bitmap run");
+        }
         let offset = base + (set * BLF_CHUNK_BYTES) as u64;
         writes.push(XfsReplayPatch {
             offset,
@@ -207,16 +264,19 @@ fn apply_buffer(
         bit = set + chunks;
     }
     if writes.is_empty() || region_index != item.regions.len() {
-        return Ok(false);
+        return unsafe_replay("BUF regions do not exactly match the dirty bitmap");
     }
     sink.push_buffer(XfsBufferReplay {
         offset: base,
         length: buffer_length,
         lsn,
         buffer_type: (descriptor.flags >> 11) & 0x1f,
+        inode_unlinked_only: descriptor.flags & XFS_BLF_INODE_BUF != 0,
+        inode_size: geometry.inode_size,
+        ag_inode_count: geometry.ag_blocks << geometry.inopblog,
         writes,
     })?;
-    Ok(true)
+    Ok(ReplayDisposition::Applied)
 }
 
 fn next_set_bit(map: &[u32], from: usize, limit: usize) -> Option<usize> {
@@ -238,18 +298,28 @@ fn apply_inode(
     format: XfsLogFormat,
     item: &AssembledItem,
     lsn: u64,
-) -> Result<bool, XfsLogError> {
-    let Some(descriptor) = item.regions.first() else {
-        return Ok(false);
-    };
+) -> Result<ReplayDisposition, XfsLogError> {
+    let descriptor = item
+        .regions
+        .first()
+        .ok_or_else(|| XfsLogError::InvalidData("INODE descriptor is missing".to_string()))?;
     if descriptor.len() != INODE_LOG_FORMAT_SIZE {
-        return Ok(false);
+        return Err(XfsLogError::InvalidData(format!(
+            "INODE descriptor length {} is not {INODE_LOG_FORMAT_SIZE}",
+            descriptor.len()
+        )));
     }
-    let Some(fields) = format.native_u32(descriptor, 4) else {
-        return Ok(false);
-    };
-    if fields & XFS_ILOG_CORE == 0 || fields & XFS_ILOG_BROOTS != 0 {
-        return Ok(false);
+    let fields = format
+        .native_u32(descriptor, 4)
+        .ok_or_else(|| XfsLogError::InvalidData("INODE fields are malformed".to_string()))?;
+    if fields & XFS_ILOG_CORE == 0 {
+        return unsafe_replay("INODE item does not contain its core");
+    }
+    if fields & XFS_ILOG_BROOTS != 0 {
+        return unsafe_replay("INODE btree-root conversion is not implemented");
+    }
+    if fields & XFS_ILOG_OWNERS != 0 {
+        return unsafe_replay("INODE btree owner rewrite is not implemented");
     }
     let (Some(inode_number), Some(blkno), Some(len), Some(boffset)) = (
         format.native_u64(descriptor, 16),
@@ -257,50 +327,54 @@ fn apply_inode(
         format.native_u32(descriptor, 48),
         format.native_u32(descriptor, 52),
     ) else {
-        return Ok(false);
+        return Err(XfsLogError::InvalidData(
+            "INODE descriptor fields are truncated".to_string(),
+        ));
     };
     if blkno < 0 || len == 0 {
-        return Ok(false);
+        return Err(XfsLogError::InvalidData(
+            "INODE descriptor has an invalid buffer range".to_string(),
+        ));
     }
     if cancels.contains(blkno as u64, len) {
-        return Ok(true);
+        return Ok(ReplayDisposition::Cancelled);
     }
     let inode_size = u64::from(geometry.inode_size);
     let Some(base) = (blkno as u64)
         .checked_mul(512)
         .and_then(|start| start.checked_add(u64::from(boffset)))
     else {
-        return Ok(false);
+        return Err(XfsLogError::InvalidData(
+            "INODE replay offset overflows".to_string(),
+        ));
     };
     if u64::from(boffset) + inode_size > u64::from(len) * 512 {
-        return Ok(false);
+        return unsafe_replay("INODE write lies outside its logged buffer");
     }
-    let Some(core) = item.regions.get(1) else {
-        return Ok(false);
-    };
-    let Ok(disk_core) = dinode::log_core_to_disk(format, core, lsn) else {
-        return Ok(false);
-    };
+    let core = item
+        .regions
+        .get(1)
+        .ok_or_else(|| XfsLogError::InvalidData("INODE core region is missing".to_string()))?;
+    let disk_core = dinode::log_core_to_disk(format, core, lsn)
+        .map_err(|error| XfsLogError::InvalidData(format!("invalid INODE core: {error}")))?;
     let mut writes = vec![(base, disk_core.to_vec())];
     if fields & XFS_ILOG_DEV != 0 {
-        let Some(rdev) = format.native_u32(descriptor, 24) else {
-            return Ok(false);
-        };
+        let rdev = format.native_u32(descriptor, 24).ok_or_else(|| {
+            XfsLogError::InvalidData("INODE device field is truncated".to_string())
+        })?;
         writes.push((
             base + dinode::V3_CORE_SIZE as u64,
             rdev.to_be_bytes().to_vec(),
         ));
     }
-    if !plan_fork_writes(
+    plan_fork_writes(
         usize::from(geometry.inode_size),
         &disk_core,
         fields,
         item,
         base,
         &mut writes,
-    ) {
-        return Ok(false);
-    }
+    )?;
     let writes = writes
         .into_iter()
         .map(|(offset, bytes)| XfsReplayPatch { offset, bytes })
@@ -312,7 +386,7 @@ fn apply_inode(
         inode_number,
         writes,
     })?;
-    Ok(true)
+    Ok(ReplayDisposition::Applied)
 }
 
 /// Plan the data-fork and attr-fork writes of an inode item into the
@@ -324,112 +398,33 @@ fn plan_fork_writes(
     item: &AssembledItem,
     base: u64,
     writes: &mut Vec<(u64, Vec<u8>)>,
-) -> bool {
+) -> Result<(), XfsLogError> {
     let literal = dinode::V3_CORE_SIZE;
     let forkoff = usize::from(disk_core[82]) * 8;
     if fields & XFS_ILOG_DFORK != 0 {
-        let Some(region) = item.regions.get(2) else {
-            return false;
-        };
+        let region = item.regions.get(2).ok_or_else(|| {
+            XfsLogError::InvalidData("INODE data-fork region is missing".to_string())
+        })?;
         let fits =
             literal + region.len() <= inode_size && (forkoff == 0 || region.len() <= forkoff);
         if !fits {
-            return false;
+            return unsafe_replay("INODE data fork exceeds the literal area");
         }
         writes.push((base + literal as u64, region.clone()));
     }
     if fields & XFS_ILOG_AFORK != 0 {
         let index = if fields & XFS_ILOG_DFORK != 0 { 3 } else { 2 };
-        let Some(region) = item.regions.get(index) else {
-            return false;
-        };
+        let region = item.regions.get(index).ok_or_else(|| {
+            XfsLogError::InvalidData("INODE attr-fork region is missing".to_string())
+        })?;
         if forkoff == 0 || literal + forkoff + region.len() > inode_size {
-            return false;
+            return unsafe_replay("INODE attr fork exceeds the literal area");
         }
         writes.push((base + (literal + forkoff) as u64, region.clone()));
     }
-    true
+    Ok(())
 }
 
-/// `struct xfs_icreate_log`: type/size host order, every later field
-/// big-endian. The item logs no inode images; recovery regenerates the
-/// freshly allocated cluster exactly like `xfs_ialloc_inode_init`.
-fn apply_icreate(
-    geometry: &ReplayGeometry,
-    sink: &mut PatchSink,
-    cancels: &CancelTable,
-    format: XfsLogFormat,
-    item: &AssembledItem,
-) -> Result<bool, XfsLogError> {
-    let Some(descriptor) = item.regions.first() else {
-        return Ok(false);
-    };
-    if item.regions.len() != 1
-        || descriptor.len() < ICREATE_LOG_SIZE
-        || format.native_u16(descriptor, 2) != Some(1)
-    {
-        return Ok(false);
-    }
-    let (Some(ag), Some(agbno), Some(count), Some(isize), Some(length), Some(generation)) = (
-        be32_at(descriptor, 4),
-        be32_at(descriptor, 8),
-        be32_at(descriptor, 12),
-        be32_at(descriptor, 16),
-        be32_at(descriptor, 20),
-        be32_at(descriptor, 24),
-    ) else {
-        return Ok(false);
-    };
-    let inopblog = u32::from(geometry.inopblog);
-    let agshift = u32::from(geometry.agblklog) + inopblog;
-    if inopblog >= 32 || agshift >= 64 {
-        return Ok(false);
-    }
-    let valid = ag < geometry.ag_count
-        && agbno > 0
-        && u64::from(agbno) < geometry.ag_blocks
-        && isize == u32::from(geometry.inode_size)
-        && count > 0
-        && length > 0
-        && u64::from(length) < geometry.ag_blocks
-        && count >> inopblog == length
-        && count == length << inopblog;
-    if !valid {
-        return Ok(false);
-    }
-    let Some(start) =
-        (u64::from(ag) * geometry.ag_blocks + u64::from(agbno)).checked_mul(geometry.block_size)
-    else {
-        return Ok(false);
-    };
-    let sectors_per_block = geometry.block_size / 512;
-    if cancels.overlaps(start / 512, u64::from(length) * sectors_per_block) {
-        return Ok(true);
-    }
-    let cluster_len = usize::try_from(u64::from(length) * geometry.block_size)
-        .map_err(|_| XfsLogError::InvalidData("icreate cluster length overflows".into()))?;
-    let mut cluster = vec![0u8; cluster_len];
-    let ino_base = (u64::from(ag) << agshift) | (u64::from(agbno) << inopblog);
-    for index in 0..count as usize {
-        let offset = index * isize as usize;
-        let Some(slot) = cluster.get_mut(offset..offset + isize as usize) else {
-            return Ok(false);
-        };
-        let inode = dinode::fresh_v3_inode(
-            isize as usize,
-            generation,
-            ino_base + index as u64,
-            &geometry.metadata_uuid,
-        );
-        slot.copy_from_slice(&inode);
-    }
-    sink.push(start, cluster)
-}
-
-/// ICREATE scalar fields are `__be32` on the wire regardless of the host
-/// byte order (cpu_to_be32 at the write site since the item was introduced).
-fn be32_at(bytes: &[u8], offset: usize) -> Option<u32> {
-    Some(u32::from_be_bytes(
-        bytes.get(offset..offset + 4)?.try_into().ok()?,
-    ))
+fn unsafe_replay<T>(message: impl Into<String>) -> Result<T, XfsLogError> {
+    Err(XfsLogError::UnsafeReplay(message.into()))
 }

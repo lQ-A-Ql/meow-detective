@@ -196,6 +196,36 @@ fn cow_disk_rejects_oversized_and_out_of_bounds_requests() {
 }
 
 #[test]
+fn invalidated_cow_disk_rejects_reads_writes_and_flushes() {
+    let directory = tempdir().unwrap();
+    let (parent, identity, _) = fixture();
+    let disk = CowDisk::create(
+        &directory.path().join("overlay.cow"),
+        parent,
+        identity,
+        CowDiskConfig::default(),
+    )
+    .unwrap();
+
+    disk.invalidate();
+
+    assert!(disk.is_poisoned());
+    let mut bytes = [0u8; 512];
+    assert!(matches!(
+        disk.read_exact_at(0, &mut bytes),
+        Err(EmulationError::CorruptOverlay(_))
+    ));
+    assert!(matches!(
+        disk.write_all_at(0, &bytes),
+        Err(EmulationError::CorruptOverlay(_))
+    ));
+    assert!(matches!(
+        disk.flush(),
+        Err(EmulationError::CorruptOverlay(_))
+    ));
+}
+
+#[test]
 fn vmdk_descriptor_uses_exact_sector_count_and_rejects_escaping_paths() {
     let (_, identity, _) = fixture();
     let descriptor =
