@@ -24,6 +24,7 @@ if (-not (Test-Path $vcvars)) {
 # plugins/linux/ and validates the declaration itself at load time.
 $pluginArtifacts = @(
     @{ File = 'meow_plugin_prefetch.dll'; Platform = 'windows' }
+    @{ File = 'meow_plugin_bt_panel.dll'; Platform = 'linux' }
 )
 
 $targetDir = Join-Path $repoRoot 'target\plugins-src'

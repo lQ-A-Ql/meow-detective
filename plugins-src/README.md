@@ -10,6 +10,7 @@
 | 目录 | plugin_id | 说明 |
 |---|---|---|
 | `prefetch/` | `meow.plugin.prefetch` | M3 试点：Windows Prefetch (.pf) 解析器的 DLL 化 |
+| `bt_panel/` | `meow.plugin.bt_panel` | 二期首个实战插件：宝塔面板 SQLite 库解析（Linux 证据） |
 
 ## 构建
 
@@ -17,7 +18,8 @@
 cargo build --manifest-path plugins-src/Cargo.toml --release
 ```
 
-产物 `meow_plugin_prefetch.dll` 拷贝到 exe 旁 `plugins/windows/` 即可被宿主
+产物 `meow_plugin_prefetch.dll` 拷贝到 exe 旁 `plugins/windows/`、
+`meow_plugin_bt_panel.dll` 拷贝到 exe 旁 `plugins/linux/` 即可被宿主
 `plugin_loader` 发现（M4 打包脚本负责该拷贝）。
 
 ## 一期复用形态（二期再定）

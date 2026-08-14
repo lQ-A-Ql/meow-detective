@@ -70,6 +70,7 @@ V2 长期执行与发布口径见：
 | Linux systemd/init/profile text config | Linux | Partial | 检材3 opt-in 私有回归按路径存在性发现 | `linux_e01_integration` ignored tests / `LinuxSystemConfig` summary | systemd unit、init.d、rc.local、profile.d 以 sourcePath、line、lineNumber、key/value（bestEffort）进入系统配置记录 | **planned** (post Stage 0) | 不承诺 shell/systemd 语义解释、环境变量生效顺序、依赖图或执行图 |
 | Linux Web services | Linux | Experimental | synthetic tests；检材3按路径存在性发现 | `LinuxWebServices` capability / nginx、Apache config 与 access/error log extractors | 站点配置、access/error log、Web root script finding（bestEffort） | **planned** (2026-Q3) — nginx/Apache controlled fixture | 不承诺完整虚拟主机继承、模块语义、动态 include 展开或 IIS；IIS 属于 Windows 能力，不在 Linux section 运行 |
 | Linux MySQL services | Linux | Experimental | synthetic tests；检材3按路径存在性发现 | `LinuxMysqlServices` capability / config 与 error/general/slow log extractors | 配置项、日志事件、风险 finding（bestEffort） | **planned** (2026-Q3) — MySQL/MariaDB controlled fixture | 不读取数据库表空间，不恢复 InnoDB page，不计算账户有效权限 |
+| 宝塔面板数据库（插件形态） | Linux | Experimental | web_dev_nvme0n1.E01 私有真实样本 opt-in 回归（`FORENSICS_BT_PANEL_EXTRACT_DIR`）；合成 SQLite 单元/宿主回归默认 CI | `plugins-src/bt_panel` 单元测试 / `bt_panel_plugin_regression` / `bt_panel_realdata_validation` | 面板账户（脱敏）、站点+域名、数据库账户（脱敏）、FTP 账户（脱敏）、防火墙规则、计划任务、操作日志 + 时间线事件 | **planned** — 公开合成 fixture 集 | 仅以 DLL 插件形态提供（`meow.plugin.bt_panel`，`plugins/linux/`）；路径自过滤 `/www/server/panel/data/`；密码哈希/口令一律不落盘，仅 `hasPasswordHash`/`hasPassword` 与算法形态；面板本地时间标注 UTC 并附 warning |
 
 ### 4a. Linux Stage 0 单盘镜像 baseline（检材3）
 

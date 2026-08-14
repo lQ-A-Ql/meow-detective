@@ -16,8 +16,8 @@
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 use domain::{Artifact, FileEntryId, TimelineEvent};
 use plugin_api::{
-    error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest,
-    MeowExtractResponse, MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
+    error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,
+    MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
