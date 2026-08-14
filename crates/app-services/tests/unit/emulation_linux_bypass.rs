@@ -1,3 +1,4 @@
+use super::volume::{LinuxFilesystem, WriteMapping};
 use super::*;
 
 use evidence_emulation::{CowDiskConfig, ParentIdentity};
@@ -7,8 +8,18 @@ fn open_overlay_fs(disk: &Arc<CowDisk>) -> fs_ext4::Ext4Reader {
     fs_ext4::Ext4Reader::open(Box::new(reader), 0).expect("ext4 over the overlay opens")
 }
 
+fn open_overlay_partition(disk: &Arc<CowDisk>, length: u64) -> LinuxPartition {
+    LinuxPartition {
+        fs: LinuxFilesystem::Ext4(Box::new(open_overlay_fs(disk))),
+        mapping: WriteMapping::Direct {
+            partition_offset: 0,
+            partition_length: length,
+        },
+    }
+}
+
 #[test]
-fn shadow_bypass_rewrites_and_truncates_through_the_overlay() {
+fn shadow_bypass_sets_password_hash_through_the_overlay() {
     let temp = tempfile::TempDir::new().unwrap();
     let image_path = temp.path().join("linux.raw");
     std::fs::write(
@@ -31,36 +42,34 @@ fn shadow_bypass_rewrites_and_truncates_through_the_overlay() {
         .unwrap(),
     );
 
-    let original = read_shadow(&open_overlay_fs(&disk)).unwrap();
+    let original = read_shadow(&open_overlay_partition(&disk, parent_bytes.len() as u64)).unwrap();
     assert!(original.contains("root:$6$saltsalt$"));
-    let edited = artifacts_linux::clear_shadow_password(&original, "root")
-        .unwrap()
-        .expect("root has a password hash");
-    assert!(edited.len() < original.len());
+    let edited =
+        artifacts_linux::set_shadow_password_hash(&original, "root", LINUX_BYPASS_PASSWORD_HASH)
+            .unwrap()
+            .expect("root has a password hash");
+    assert_eq!(edited.len(), original.len());
 
-    let partition = LinuxExt4Partition {
-        fs: open_overlay_fs(&disk),
-        mapping: WriteMapping::Direct {
-            partition_offset: 0,
-            partition_length: parent_bytes.len() as u64,
-        },
-    };
-    write_shadow_through_overlay(&disk, &partition, edited.as_bytes()).unwrap();
+    let partition = open_overlay_partition(&disk, parent_bytes.len() as u64);
+    let plan = plan_shadow_rewrite(&partition, edited.as_bytes()).unwrap();
+    validate_rewrite_plan(&partition.mapping, &plan).unwrap();
+    apply_rewrite_plan(&disk, &partition.mapping, &plan).unwrap();
+    rewrite::verify_patch_bytes(&disk, &partition.mapping, &plan).unwrap();
 
     // The parent image is byte-identical.
     assert_eq!(std::fs::read(&image_path).unwrap(), parent_bytes);
 
-    // The overlay view exposes the truncated, edited file.
+    // The overlay view exposes the edited file with a usable password hash.
     let fs = open_overlay_fs(&disk);
     assert_eq!(
         fs.file_size_by_path(SHADOW_PATH).unwrap(),
         edited.len() as u64
     );
-    let reread = read_shadow(&fs).unwrap();
+    let reread = read_shadow(&open_overlay_partition(&disk, parent_bytes.len() as u64)).unwrap();
     assert_eq!(reread, edited);
     let accounts = artifacts_linux::parse_shadow_accounts(&reread);
     let root = accounts.iter().find(|a| a.username == "root").unwrap();
-    assert!(!root.has_password);
+    assert!(root.has_password);
     let user = accounts.iter().find(|a| a.username == "user").unwrap();
     assert!(!user.has_password);
 }

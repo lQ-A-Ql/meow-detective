@@ -39,7 +39,7 @@ const OS_RELEASE: &[u8] =
     b"NAME=\"CentOS Linux\"\nID=\"centos\"\nPRETTY_NAME=\"CentOS Linux 7 (Core)\"\n";
 
 const SHADOW: &[u8] =
-    b"root:$6$saltsalt$abc123def456:19000:0:99999:7:::\nuser::19001:0:99999:7:::\n";
+    b"root:$6$saltsalt$IVr4ZkQnniyUfgoFSypTZBKHqOP3ApkoDYmbFo9HcgVJ2mzieorJUiB5CH6MDFBWGfgmrBOhof..XdUxzRcUa/:19000:0:99999:7:::\nuser::19001:0:99999:7:::\n";
 
 /// Builds a minimal ext4 image shaped like a Linux system root:
 /// `/etc/os-release`, `/etc/fstab`, `/boot/vmlinuz-5.14.0` and `/sbin/init`.

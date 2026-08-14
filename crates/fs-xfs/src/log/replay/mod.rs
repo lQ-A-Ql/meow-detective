@@ -33,6 +33,7 @@ mod items;
 mod sink;
 
 use super::{XfsLogError, XfsLogIssueKind, XfsLogSnapshot};
+pub(crate) use dinode::{metadata_crc_is_valid, stamp_metadata_crc};
 pub(crate) use finalize::finalize_replay;
 
 /// Hard cap on committed transactions replayed from one log.

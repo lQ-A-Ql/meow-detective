@@ -1,7 +1,7 @@
 //! Real XFS E01 validation of the host-side log-clear repair: register the
-//! image's XFS volumes, repair through the COW overlay, verify the clean
-//! transition and superblock CRC, then materialize the repaired disk for a
-//! VMware boot test. Run with FORENSICS_XFS_E01_FIXTURE set:
+//! image's XFS volumes, repair through the COW overlay, set one account's
+//! password, verify repeatability, then optionally materialize the repaired
+//! disk for a VMware boot test. Run with FORENSICS_XFS_E01_FIXTURE set:
 //!
 //! ```text
 //! cargo test -p app-services --test xfs_log_repair_e01 -- --include-ignored --nocapture
@@ -129,6 +129,67 @@ fn xfs_log_repair_and_materialization() {
         );
         assert_ne!(item.state, EmulationFsVolumeStateDto::Unsupported);
     }
+
+    let (partition_index, username) = active
+        .with_conn(|case_conn| {
+            let context = app_services::emulation_bypass::BypassCaseContext {
+                case_conn,
+                case_root: &case_root,
+                case_id: &case_id,
+                data_source_id: &data_source_id,
+            };
+            for partition_index in &xfs_partitions {
+                let Ok(accounts) = app_services::emulation_linux_bypass::list_linux_accounts(
+                    &context,
+                    *partition_index,
+                ) else {
+                    continue;
+                };
+                if let Some(account) = accounts.into_iter().find(|account| account.has_password) {
+                    return Ok(Some((*partition_index, account.username)));
+                }
+            }
+            Ok(None)
+        })
+        .unwrap()
+        .expect("an XFS root must expose a password-protected shadow account");
+    let bypass = active
+        .with_conn(|case_conn| {
+            app_services::emulation_linux_bypass::apply_linux_bypass(
+                &disk,
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                partition_index,
+                &username,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .expect("set the XFS shadow password through the overlay");
+    assert!(bypass.password_set);
+    assert!(!bypass.already_configured);
+
+    let repeated = active
+        .with_conn(|case_conn| {
+            app_services::emulation_linux_bypass::apply_linux_bypass(
+                &disk,
+                &app_services::emulation_bypass::BypassCaseContext {
+                    case_conn,
+                    case_root: &case_root,
+                    case_id: &case_id,
+                    data_source_id: &data_source_id,
+                },
+                partition_index,
+                &username,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .expect("repeat the XFS shadow bypass");
+    assert!(!repeated.password_set);
+    assert!(repeated.already_configured);
     assert!(
         std::fs::metadata(&image).unwrap().len() == image_size,
         "the evidence image must remain untouched"

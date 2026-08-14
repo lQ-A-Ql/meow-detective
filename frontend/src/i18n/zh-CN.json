@@ -551,7 +551,7 @@
       "noEfiFallback": "无 EFI fallback 引导",
       "xfsLogDirty": "XFS 日志脏",
       "xfsLogDirtyHint": "检测到未回放的 XFS 日志；建议保留启动前主机侧修复选项。若关闭该选项，原系统可能进入救援模式。",
-      "linuxBypassHint": "Linux 绕密：在 GRUB 菜单按 e，在 linux 行追加 init=/bin/bash（或 systemd.unit=rescue.target），Ctrl-X 启动即得 root shell；执行 mount -o remount,rw / 后可用 passwd 重置任意账户。所有改动仅落在 COW 覆盖层。",
+      "linuxBypassHint": "可在“系统绕密”中选择账户；启动前会在 COW 覆盖层中把该账户密码设置为 123456，不会修改原始证据。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
       "bypassUnavailable": "不可绕密"
@@ -566,7 +566,7 @@
     },
     "bypass": {
       "title": "系统绕密（离线 SAM 编辑，仅写入 overlay）",
-      "titleLinux": "系统绕密：清除账户密码（仅写入覆盖层）",
+      "titleLinux": "系统绕密：设置账户密码（仅写入覆盖层）",
       "partition": "目标分区",
       "account": "目标账户",
       "action": "绕密方式",
@@ -575,7 +575,8 @@
       "enableAndClear": "启用账户并清空密码",
       "disabled": "已禁用",
       "noPassword": "无密码",
-      "noAccounts": "未在该分区找到可清除密码的 Linux 账户"
+      "noAccounts": "未在该分区找到可设置密码的 Linux 账户",
+      "linuxPasswordHint": "绕密后 {{username}} 的密码为 123456。密码仅写入本次 COW 覆盖层；SSH 或 root 登录策略仍可能限制密码登录。"
     },
     "source": {
       "kind": "镜像类型",

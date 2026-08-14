@@ -31,7 +31,7 @@ pub use mysql::{
     detect_mysql_config_findings, detect_mysql_log_findings, parse_mysql_config, parse_mysql_log,
     MysqlConfigEntry, MysqlFinding, MysqlLogEntry,
 };
-pub use shadow_edit::{clear_shadow_password, parse_shadow_accounts, ShadowAccount};
+pub use shadow_edit::{parse_shadow_accounts, set_shadow_password_hash, ShadowAccount};
 pub use sudo::{parse_auth_log_sudo, parse_auth_log_sudo_with_reference, SudoEvent};
 pub use system::{parse_os_release, parse_passwd, OsReleaseInfo, PasswdAccount};
 pub use web::{

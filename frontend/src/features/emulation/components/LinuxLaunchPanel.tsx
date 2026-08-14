@@ -64,6 +64,11 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
           </SelectContent>
         </Select>
       ) : null}
+      {model.linuxUsername ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.bypass.linuxPasswordHint', { username: model.linuxUsername })}
+        </div>
+      ) : null}
       {model.bypassPartition !== undefined && model.linuxAccountsError ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {model.linuxAccountsError}

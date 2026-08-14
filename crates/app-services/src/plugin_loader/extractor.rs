@@ -8,7 +8,7 @@ use domain::ArtifactFamily;
 use plugin_api::{MeowExtractRequest, MeowExtractResponse, MeowStatus};
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::io::Read as _;
 use std::sync::Mutex;

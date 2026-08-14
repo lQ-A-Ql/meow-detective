@@ -202,7 +202,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
   });
 
-  it('renders linux installs with distro, boot risks and the GRUB bypass hint', () => {    render(<EmulationWorkspace model={createModel({
+  it('renders linux installs with distro, boot risks and the host-side bypass hint', () => {    render(<EmulationWorkspace model={createModel({
       selectedSource: {
         id: 'source-1',
         name: 'CentOS 镜像',
@@ -231,7 +231,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('Linux')).toBeInTheDocument();
     expect(screen.getByText('CentOS Linux 7 (Core)')).toBeInTheDocument();
     expect(screen.getByText('无内核')).toBeInTheDocument();
-    expect(screen.getByText(/GRUB 菜单按 e/)).toBeInTheDocument();
+    expect(screen.getByText(/系统绕密.*选择账户/)).toBeInTheDocument();
     expect(screen.queryByText('可绕密')).not.toBeInTheDocument();
   });
 
@@ -280,6 +280,37 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByRole('combobox', { name: '目标账户' })).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: '绕密方式' })).not.toBeInTheDocument();
     expect(screen.queryByText('维护盘：自动生成')).not.toBeInTheDocument();
+    expect(screen.queryByText(/密码为 123456/)).not.toBeInTheDocument();
+  });
+
+  it('shows the configured password for a selected Linux account', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      bypassPartition: 5,
+      bypassIsLinux: true,
+      linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
+      linuxUsername: 'root',
+    })} />);
+
+    expect(screen.getByText(/root 的密码为 123456/)).toBeInTheDocument();
+    expect(screen.getByText(/SSH 或 root 登录策略仍可能限制密码登录/)).toBeInTheDocument();
   });
 
   it('renders the Windows panel with SAM bypass selects for windows sources', () => {
@@ -361,7 +392,7 @@ describe('EmulationWorkspace', () => {
       },
     })} />);
 
-    expect(screen.getByText('系统绕密：清除账户密码（仅写入覆盖层）')).toBeInTheDocument();
+    expect(screen.getByText('系统绕密：设置账户密码（仅写入覆盖层）')).toBeInTheDocument();
     expect(screen.queryByText(/SAM/)).not.toBeInTheDocument();
   });
 
@@ -391,7 +422,7 @@ describe('EmulationWorkspace', () => {
     })} />);
 
     expect(screen.getByText('该文件系统不支持离线绕密')).toBeInTheDocument();
-    expect(screen.queryByText('未在该分区找到可清除密码的 Linux 账户')).not.toBeInTheDocument();
+    expect(screen.queryByText('未在该分区找到可设置密码的 Linux 账户')).not.toBeInTheDocument();
   });
 
   it('shows an explicit hint when the linux account list loads empty', () => {
@@ -420,7 +451,7 @@ describe('EmulationWorkspace', () => {
       linuxAccountsLoading: false,
     })} />);
 
-    expect(screen.getByText('未在该分区找到可清除密码的 Linux 账户')).toBeInTheDocument();
+    expect(screen.getByText('未在该分区找到可设置密码的 Linux 账户')).toBeInTheDocument();
   });
 
   it('offers host-side XFS repair only when preflight reports xfs-log-dirty', () => {

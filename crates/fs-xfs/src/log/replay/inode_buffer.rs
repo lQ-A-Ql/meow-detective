@@ -49,7 +49,7 @@ pub(super) fn validate_allocation_buffer(
     } else {
         NEXT_UNLINKED_OFFSET + 4
     };
-    if inode_size < minimum_inode_size || current.len() % inode_size != 0 {
+    if inode_size < minimum_inode_size || !current.len().is_multiple_of(inode_size) {
         return unsafe_replay("DINO allocation buffer length is not a whole number of inodes");
     }
     for inode in current.chunks_exact(inode_size) {

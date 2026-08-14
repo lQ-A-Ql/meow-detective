@@ -80,6 +80,7 @@ pub(crate) mod sb_off {
     pub const AGBLKLOG: usize = 0x7C;
     pub const FEATURES2: usize = 0xC8;
     pub const BAD_FEATURES2: usize = 0xCC;
+    pub const FEATURES_RO_COMPAT: usize = 0xD4;
     pub const FEATURES_INCOMPAT: usize = 0xD8;
     pub const LSN: usize = 0xF0;
     pub const META_UUID: usize = 0xF8;
@@ -150,6 +151,7 @@ pub struct XfsReader {
     pub(crate) log_geometry: XfsLogGeometry,
     pub(crate) superblock_lsn: u64,
     pub(crate) metadata_uuid: [u8; 16],
+    pub(crate) has_reflink: bool,
 }
 
 impl XfsReader {
@@ -250,6 +252,7 @@ impl XfsReader {
             log_geometry,
             superblock_lsn,
             metadata_uuid,
+            has_reflink: be_u32(&sb_buf, sb_off::FEATURES_RO_COMPAT) & (1 << 2) != 0,
         })
     }
 
@@ -296,7 +299,7 @@ impl XfsReader {
         ))
     }
 
-    fn inode_offset(&self, ino: u64) -> io::Result<u64> {
+    pub(crate) fn inode_offset(&self, ino: u64) -> io::Result<u64> {
         if ino == 0 {
             return Err(invalid_fs_data("inode 0 is invalid"));
         }

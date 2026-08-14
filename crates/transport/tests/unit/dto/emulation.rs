@@ -212,11 +212,11 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
         data_source_id: "source-1".to_string(),
         partition_index: 5,
         username: "root".to_string(),
-        password_cleared: true,
-        already_passwordless: false,
+        password_set: true,
+        already_configured: false,
     };
     let value = serde_json::to_value(&result).unwrap();
-    assert_eq!(value["passwordCleared"], true);
+    assert_eq!(value["passwordSet"], true);
     let restored: EmulationLinuxBypassResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, result);
 }

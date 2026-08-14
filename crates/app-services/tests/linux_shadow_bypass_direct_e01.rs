@@ -1,4 +1,4 @@
-//! Direct-registration Linux E01 validation of the shadow bypass: probe the
+//! Direct-registration Linux E01 validation of the password-setting bypass: probe the
 //! image for partitions (seconds) and register them into the source database
 //! directly, skipping the full enumeration import whose timeline
 //! materialization on multi-million-entry images exceeds the E2E budget.
@@ -145,6 +145,6 @@ fn linux_shadow_bypass_with_direct_partition_registration() {
         })
         .expect("apply the shadow bypass");
     eprintln!("bypass result: {result:?}");
-    assert!(result.password_cleared || result.already_passwordless);
+    assert!(result.password_set || result.already_configured);
     assert_eq!(std::fs::metadata(&image).unwrap().len(), image_size);
 }

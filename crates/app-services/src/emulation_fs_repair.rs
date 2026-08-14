@@ -43,7 +43,7 @@ struct PlannedVolume {
 }
 
 enum VolumeAssessment {
-    Ready(PlannedVolume),
+    Ready(Box<PlannedVolume>),
     Unsupported(EmulationFsRepairItemDto),
 }
 
@@ -336,12 +336,12 @@ fn plan_one_volume(
             "partition {partition_index} produced a non-zero skipped replay count"
         )));
     }
-    Ok(VolumeAssessment::Ready(PlannedVolume {
+    Ok(VolumeAssessment::Ready(Box::new(PlannedVolume {
         record,
         volume,
         plan,
         log_bytes,
-    }))
+    })))
 }
 
 fn apply_volume_plan(
@@ -390,7 +390,7 @@ fn assessment_item_without_writes(assessment: VolumeAssessment) -> EmulationFsRe
     }
 }
 
-fn repaired_item(volume: PlannedVolume) -> EmulationFsRepairItemDto {
+fn repaired_item(volume: Box<PlannedVolume>) -> EmulationFsRepairItemDto {
     let repaired = volume.plan.is_some();
     item(
         volume.record.partition_index,

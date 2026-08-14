@@ -186,8 +186,8 @@ pub async fn apply_emulation_linux_bypass(
             serde_json::json!({
                 "partitionIndex": result.partition_index,
                 "username": result.username,
-                "passwordCleared": result.password_cleared,
-                "alreadyPasswordless": result.already_passwordless,
+                "passwordSet": result.password_set,
+                "alreadyConfigured": result.already_configured,
             }),
         );
         Ok(result)

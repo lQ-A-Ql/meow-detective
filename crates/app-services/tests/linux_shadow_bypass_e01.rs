@@ -1,5 +1,5 @@
 //! Real Linux E01 validation of the host-side shadow bypass: import the
-//! image, clear a local account's password hash through the COW overlay,
+//! image, set a local account's password hash through the COW overlay,
 //! and verify the edit semantically while the evidence stays untouched.
 //! Run with FORENSICS_LINUX_E01_FIXTURE set:
 //!
@@ -190,7 +190,7 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
         })
         .expect("apply the shadow bypass");
     eprintln!("bypass result: {result:?}");
-    assert!(result.password_cleared || result.already_passwordless);
+    assert!(result.password_set || result.already_configured);
     assert_eq!(
         std::fs::metadata(&image).unwrap().len(),
         image_size,

@@ -23,7 +23,7 @@ const NULLAGINO: u32 = u32::MAX;
 /// Reseal a v5 metadata object whose CRC field sits at offset 100 with the
 /// formula validated against the reference image: plain `~0` seed, four zero
 /// bytes in place of the CRC field, one's complement, little-endian store.
-pub(super) fn stamp_metadata_crc(object: &mut [u8]) {
+pub(crate) fn stamp_metadata_crc(object: &mut [u8]) {
     object[CRC_OFFSET..CRC_OFFSET + 4].fill(0);
     let mut crc = crc32c(u32::MAX, &object[..CRC_OFFSET]);
     crc = crc32c(crc, &[0u8; 4]);
@@ -31,7 +31,7 @@ pub(super) fn stamp_metadata_crc(object: &mut [u8]) {
     object[CRC_OFFSET..CRC_OFFSET + 4].copy_from_slice(&(!crc).to_le_bytes());
 }
 
-pub(super) fn metadata_crc_is_valid(object: &[u8]) -> bool {
+pub(crate) fn metadata_crc_is_valid(object: &[u8]) -> bool {
     let Some(stored) = object
         .get(CRC_OFFSET..CRC_OFFSET + 4)
         .and_then(|value| value.try_into().ok())

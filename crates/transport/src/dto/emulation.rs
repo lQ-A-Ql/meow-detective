@@ -265,8 +265,8 @@ pub struct EmulationLinuxBypassResultDto {
     pub data_source_id: String,
     pub partition_index: u32,
     pub username: String,
-    pub password_cleared: bool,
-    pub already_passwordless: bool,
+    pub password_set: bool,
+    pub already_configured: bool,
 }
 
 /// Which loader the EFI fallback path was populated from.

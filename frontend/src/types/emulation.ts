@@ -140,6 +140,6 @@ export interface EmulationLinuxBypassResult {
   dataSourceId: string;
   partitionIndex: number;
   username: string;
-  passwordCleared: boolean;
-  alreadyPasswordless: boolean;
+  passwordSet: boolean;
+  alreadyConfigured: boolean;
 }
