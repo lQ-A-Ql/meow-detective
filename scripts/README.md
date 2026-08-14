@@ -103,6 +103,25 @@ fixtures only; they are not production Windows hive samples.
 powershell -ExecutionPolicy Bypass -File scripts\generate-tiny-fixtures.ps1
 ```
 
+## Parser Plugins
+
+The standalone plugin workspace at `plugins-src/` is deliberately not part of
+the repository workspace (see `docs/plugin-system-dev-test-plan.md`). Build it
+and stage the DLLs into the exe-adjacent `plugins/<platform>/` layout the host
+`plugin_loader` scans:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-plugins.ps1
+```
+
+The script compiles `plugins-src/` in release mode into `target/plugins-src/`,
+then copies each plugin DLL to `target/release/plugins/<evidence-platform>/`
+and, when present, to `apps/desktop/src-tauri/target/release/plugins/` next to
+the `cargo tauri build` output. It is idempotent; the per-plugin platform
+mapping inside the script must mirror each plugin's declared
+`evidence_platform` in `meow_plugin_info`. Distribution stays green-software:
+ship the DLL folder next to the exe in the zip; no NSIS bundle step.
+
 ## Guard Scripts
 
 These scripts run in CI and can also be run locally before a release branch.
