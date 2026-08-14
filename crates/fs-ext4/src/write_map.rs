@@ -1,10 +1,8 @@
 //! File-to-physical-offset mapping for host-side in-place edits.
 //!
-//! The emulation overlay writer edits file content in place (same bytes
-//! over the same blocks) and shrinks `/etc/shadow` by rewriting the inode
-//! size. Both need the physical location of a file's extents and of its
-//! inode record. Everything here is computed read-only; only the caller's
-//! overlay disk is ever written.
+//! The emulation overlay writer edits size-preserving file content over the
+//! same allocated blocks. Everything here is computed read-only; only the
+//! caller's overlay disk is ever written.
 
 use std::collections::HashSet;
 use std::io;
@@ -12,8 +10,7 @@ use std::io;
 use evidence_core::filesystem::invalid_fs_data;
 
 use crate::format::{
-    inode_table_block_from_descriptor, Ext4Extent, Ext4ExtentHeader, EXT4_EXTENTS_FL,
-    EXT4_INLINE_DATA_FL, I_FLAGS_OFFSET,
+    Ext4Extent, Ext4ExtentHeader, EXT4_EXTENTS_FL, EXT4_INLINE_DATA_FL, I_FLAGS_OFFSET,
 };
 
 /// One contiguous byte range of a file, expressed in the reader's
@@ -63,29 +60,6 @@ impl crate::Ext4Reader {
         let lo = read_u32(&inode, I_SIZE_LO_OFFSET)? as u64;
         let hi = read_u32(&inode, I_SIZE_HI_OFFSET)? as u64;
         Ok(lo | (hi << 32))
-    }
-
-    /// The physical byte offset of the file's inode record on the volume,
-    /// for the same-size `i_size` update that truncates the rewritten file.
-    pub fn inode_source_offset(&self, path: &str) -> io::Result<u64> {
-        let inode_number = self.regular_file_inode(path)?;
-        if inode_number < 1 {
-            return Err(invalid_fs_data("inode number must be >= 1"));
-        }
-        let group = (inode_number - 1) / self.inodes_per_group;
-        let local_index = (inode_number - 1) % self.inodes_per_group;
-        if group >= self.num_block_groups {
-            return Err(invalid_fs_data(
-                "inode belongs to a non-existent block group",
-            ));
-        }
-        let descriptor = self.read_bg_descriptor(group)?;
-        let table_block = inode_table_block_from_descriptor(&descriptor, self.has_64bit)?;
-        let byte_offset = local_index as u64 * self.inode_size as u64;
-        let table_offset = self.block_to_offset(table_block)?;
-        table_offset
-            .checked_add(byte_offset)
-            .ok_or_else(|| invalid_fs_data("inode record offset overflows"))
     }
 
     fn regular_file_inode(&self, path: &str) -> io::Result<u32> {

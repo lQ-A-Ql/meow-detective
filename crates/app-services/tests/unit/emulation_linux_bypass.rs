@@ -44,14 +44,18 @@ fn shadow_bypass_sets_password_hash_through_the_overlay() {
 
     let original = read_shadow(&open_overlay_partition(&disk, parent_bytes.len() as u64)).unwrap();
     assert!(original.contains("root:$6$saltsalt$"));
-    let edited =
-        artifacts_linux::set_shadow_password_hash(&original, "root", LINUX_BYPASS_PASSWORD_HASH)
-            .unwrap()
-            .expect("root has a password hash");
+    let password_hash = replacement_password_hash(&original, "root").unwrap();
+    let edited = artifacts_linux::set_shadow_password_hash(&original, "root", password_hash)
+        .unwrap()
+        .expect("root has a password hash");
     assert_eq!(edited.len(), original.len());
 
     let partition = open_overlay_partition(&disk, parent_bytes.len() as u64);
     let plan = plan_shadow_rewrite(&partition, edited.as_bytes()).unwrap();
+    let resize_error = plan_shadow_rewrite(&partition, &edited.as_bytes()[..edited.len() - 1])
+        .err()
+        .expect("ext4 rewrites must not change the inode size");
+    assert!(resize_error.to_string().contains("must preserve its size"));
     validate_rewrite_plan(&partition.mapping, &plan).unwrap();
     apply_rewrite_plan(&disk, &partition.mapping, &plan).unwrap();
     rewrite::verify_patch_bytes(&disk, &partition.mapping, &plan).unwrap();
@@ -72,6 +76,26 @@ fn shadow_bypass_sets_password_hash_through_the_overlay() {
     assert!(root.has_password);
     let user = accounts.iter().find(|a| a.username == "user").unwrap();
     assert!(!user.has_password);
+}
+
+#[test]
+fn replacement_hash_preserves_openeuler_sm3_shadow_length() {
+    let original_hash = format!("$sm3${}${}", "s".repeat(16), "x".repeat(43));
+    let shadow = format!("root:{original_hash}:20000:0:99999:7:::\n");
+    let replacement = replacement_password_hash(&shadow, "root").unwrap();
+
+    assert_eq!(replacement, SM3_PASSWORD_HASH);
+    assert_eq!(replacement.len(), original_hash.len());
+    let edited = artifacts_linux::set_shadow_password_hash(&shadow, "root", replacement)
+        .unwrap()
+        .unwrap();
+    assert_eq!(edited.len(), shadow.len());
+}
+
+#[test]
+fn replacement_hash_rejects_locked_accounts_without_a_retained_scheme() {
+    let error = replacement_password_hash("root:!:20000:0:99999:7:::\n", "root").unwrap_err();
+    assert!(error.to_string().contains("scheme"));
 }
 
 #[test]
@@ -102,12 +126,6 @@ fn extent_map_reports_physical_layout_of_shadow() {
     assert_eq!(extents[0].logical_offset, 0);
     // The builder places shadow content at block 11 of a 4 KiB-block image.
     assert_eq!(extents[0].volume_offset, 11 * 4096);
-    let inode_offset = fs.inode_source_offset(SHADOW_PATH).unwrap();
-    assert_eq!(
-        inode_offset % 256,
-        0,
-        "inode records are inode-size aligned"
-    );
 }
 
 #[test]

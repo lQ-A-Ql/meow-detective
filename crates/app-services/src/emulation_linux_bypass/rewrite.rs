@@ -6,9 +6,6 @@ use super::volume::{map_xfs_rewrite_error, LinuxFilesystem, LinuxPartition, Writ
 use super::SHADOW_PATH;
 use crate::emulation_bypass::EmulationBypassError;
 
-const I_SIZE_LO_OFFSET: u64 = 0x04;
-const I_SIZE_HI_OFFSET: u64 = 0x6C;
-
 pub(super) struct VolumePatch {
     pub(super) volume_offset: u64,
     pub(super) bytes: Vec<u8>,
@@ -44,32 +41,16 @@ fn plan_ext4_rewrite(
     let old_len = fs
         .file_size_by_path(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
-    if content.len() as u64 > old_len {
+    if content.len() as u64 != old_len {
         return Err(EmulationBypassError::Unsupported(
-            "the edited shadow file cannot grow in place".to_string(),
+            "the ext4 shadow rewrite must preserve its size to avoid unjournaled inode metadata edits"
+                .to_string(),
         ));
     }
     let extents = fs
         .file_extent_map(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
-    let mut patches = extent_range_patches(&extents, 0, content.len() as u64, Some(content))?;
-    patches.extend(extent_range_patches(
-        &extents,
-        content.len() as u64,
-        old_len,
-        None,
-    )?);
-    let new_len = u32::try_from(content.len())
-        .map_err(|_| EmulationBypassError::Edit("edited shadow exceeds u32 i_size".into()))?;
-    let inode_offset = fs
-        .inode_source_offset(SHADOW_PATH)
-        .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
-    patches.push((
-        inode_offset + I_SIZE_LO_OFFSET,
-        new_len.to_le_bytes().to_vec(),
-    ));
-    patches.push((inode_offset + I_SIZE_HI_OFFSET, 0u32.to_le_bytes().to_vec()));
-    Ok(patches)
+    extent_range_patches(&extents, 0, content.len() as u64, Some(content))
 }
 
 fn extent_range_patches(

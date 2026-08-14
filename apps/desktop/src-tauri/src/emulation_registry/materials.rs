@@ -51,19 +51,23 @@ Suggested workflow inside the live system:\r\n\
 2. Inspect mounts from TARGETS.JSON, then mount the root volume, e.g.\r\n\
       mount -o ro /dev/sda3 /mnt        # read-only inspection\r\n\
 3. Filesystem check and repair (do this BEFORE booting the installed\r\n\
-   system when TARGETS.JSON reports xfs-log-dirty):\r\n\
-   - XFS has no fsck; a dirty log needs the kernel or xfs_repair:\r\n\
-       xfs_repair /dev/sda3                 # replays/validates the log\r\n\
-     only when the log cannot be replayed, as a last resort:\r\n\
-       xfs_repair -L /dev/mapper/<vg>-<lv>  # destroys the log contents\r\n\
-     LVM volumes: activate first with  vgchange -ay\r\n\
+   system when TARGETS.JSON reports xfs-log-dirty or xfs-log-unverified):\r\n\
+   - Preferred: let Meow~Detective complete the host-side XFS repair\r\n\
+     before launch. It writes only to the copy-on-write overlay.\r\n\
+   - Live fallback: activate LVM first with  vgchange -ay, then mount the\r\n\
+     XFS root read-write and cleanly unmount it so the kernel can replay\r\n\
+     the journal (for example, mount -o rw /dev/sda3 /mnt; umount /mnt).\r\n\
+   - xfs_repair -n /dev/sda3 is diagnostic only; it does not replay a log.\r\n\
+     Use xfs_repair -L /dev/mapper/<vg>-<lv> only as a last resort after\r\n\
+     confirming the volume cannot be mounted; -L discards the log contents.\r\n\
    - ext4:  e2fsck -f /dev/sda3\r\n\
    All of this writes to the overlay only; the evidence image is untouched.\r\n\
-4. Account recovery without host tooling:\r\n\
-   - simplest: reboot, press 'e' in GRUB, append init=/bin/bash to the\r\n\
-     linux line, Ctrl-X; then 'mount -o remount,rw /' and 'passwd'.\r\n\
-   - offline: edit /mnt/etc/shadow and clear the second (hash) field of\r\n\
-     the target account, then remount read-only again.\r\n\
+4. Account recovery:\r\n\
+   - preferred: select the account in Meow~Detective before launch. The\r\n\
+     host sets its overlay-only password to 123456 with a target-compatible\r\n\
+     crypt hash. The original evidence remains unchanged.\r\n\
+   - manual fallback: chroot /mnt and run passwd <account>. Do not clear\r\n\
+     the shadow hash field; PAM commonly rejects empty passwords.\r\n\
 5. Boot repairs: chroot /mnt and rebuild grub.cfg or the initramfs when\r\n\
    TARGETS.JSON reports no-kernel/no-fstab style risks.\r\n\
 \r\n\
@@ -88,8 +92,8 @@ const LINUX_RESCUE_ACTIONS: &[&str] = &[
     "boot-live-iso",
     "inspect-targets-json",
     "xfs-repair-dirty-log",
-    "grub-init-bash-bypass",
-    "offline-shadow-edit",
+    "host-set-password-123456",
+    "chroot-passwd-fallback",
     "chroot-repair",
 ];
 

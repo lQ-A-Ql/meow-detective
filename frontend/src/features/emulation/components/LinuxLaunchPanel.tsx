@@ -82,6 +82,15 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
           {t('emulationPage.bypass.noAccounts')}
         </div>
       ) : null}
+      {model.bypassPartition !== undefined
+        && !model.linuxAccountsError
+        && !model.linuxAccountsLoading
+        && model.linuxAccounts.length > 0
+        && !model.linuxUsername ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.bypass.selectLinuxAccount')}
+        </div>
+      ) : null}
     </fieldset>
   );
 }
@@ -91,6 +100,8 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
   if (!model.preflight || model.preflight.installs.length === 0) return null;
   const hasDirtyXfsLog = model.preflight.installs
     .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty'));
+  const hasUnverifiedXfsLog = model.preflight.installs
+    .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-unverified'));
   return (
     <div className="space-y-1.5 border-y border-forensics-border py-3">
       <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
@@ -116,11 +127,19 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
           {(install.bootRiskNotes ?? []).includes('xfs-log-dirty') ? (
             <Badge variant="secondary">{t('emulationPage.preflight.xfsLogDirty')}</Badge>
           ) : null}
+          {(install.bootRiskNotes ?? []).includes('xfs-log-unverified') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.xfsLogUnverified')}</Badge>
+          ) : null}
         </div>
       ))}
       {hasDirtyXfsLog ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {t('emulationPage.preflight.xfsLogDirtyHint')}
+        </div>
+      ) : null}
+      {hasUnverifiedXfsLog ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.xfsLogUnverifiedHint')}
         </div>
       ) : null}
       <div className="pt-1 text-[10px] leading-4 text-forensics-muted">

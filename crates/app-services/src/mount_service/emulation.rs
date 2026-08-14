@@ -172,35 +172,27 @@ fn linux_preflight(
         );
     }
     let ds_repo = DataSourceRepo::new(case_conn);
-    match ds_repo
-        .source_path(data_source_id)
-        .and_then(|path| ds_repo.source_kind(data_source_id).map(|kind| (path, kind)))
-    {
-        Ok((path, kind)) => {
-            super::emulation_linux::enrich_linux_installs_from_fs(
-                std::path::Path::new(&path),
-                &kind,
-                &partitions,
-                data_source_id,
-                &mut installs,
-            );
-            super::emulation_linux_boot::annotate_boot_path_risk(
-                std::path::Path::new(&path),
-                &kind,
-                &mut installs,
-            );
-            super::emulation_linux_boot::annotate_xfs_log_risk(
-                std::path::Path::new(&path),
-                &kind,
-                &partitions,
-                data_source_id,
-                &mut installs,
-            );
-        }
-        Err(error) => {
-            tracing::warn!(error = %error, "linux preflight: source metadata unavailable");
-        }
-    }
+    let path = ds_repo.source_path(data_source_id)?;
+    let kind = ds_repo.source_kind(data_source_id)?;
+    super::emulation_linux::enrich_linux_installs_from_fs(
+        std::path::Path::new(&path),
+        &kind,
+        &partitions,
+        data_source_id,
+        &mut installs,
+    );
+    super::emulation_linux_boot::annotate_boot_path_risk(
+        std::path::Path::new(&path),
+        &kind,
+        &mut installs,
+    );
+    super::emulation_linux_boot::annotate_xfs_log_risk(
+        std::path::Path::new(&path),
+        &kind,
+        &partitions,
+        data_source_id,
+        &mut installs,
+    )?;
     Ok(EmulationPreflightDto {
         data_source_id: data_source_id.0.clone(),
         installs,

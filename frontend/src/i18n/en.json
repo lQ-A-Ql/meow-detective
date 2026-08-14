@@ -107,7 +107,9 @@
       "status": {
         "deleted": "deleted",
         "hidden": "hidden",
-        "system": "system"
+        "system": "system",
+        "readOnly": "readOnly",
+        "archive": "archive"
       },
       "extract": {
         "pending": "Extracting...",
@@ -510,7 +512,7 @@
       "source": "Evidence source",
       "sourcePlaceholder": "Select an E01 or RAW source",
       "noSources": "This case has no fingerprinted E01/RAW source available for emulation.",
-      "recoveryIso": "WinPE boot media",
+      "recoveryIso": "Boot / rescue ISO",
       "liveIsoHint": "Linux source: attach a live ISO such as SystemRescue; the maintenance CD carries TARGETS.JSON and the rescue README.",
       "recoveryPlaceholder": "Not selected; original system boot requires confirmation",
       "bootRoute": "Boot route",
@@ -551,6 +553,8 @@
       "noEfiFallback": "No EFI fallback loader",
       "xfsLogDirty": "XFS log dirty",
       "xfsLogDirtyHint": "An unreplayed XFS log was detected. Keep the pre-launch host repair enabled; disabling it may send the installed system into rescue mode.",
+      "xfsLogUnverified": "XFS log unverified",
+      "xfsLogUnverifiedHint": "At least one XFS log could not be verified. Pre-launch repair will assess it again and block launch when it cannot be handled safely.",
       "linuxBypassHint": "Select an account under Logon bypass. Before launch, its password is set to 123456 in the COW overlay without modifying the original evidence.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
@@ -575,7 +579,8 @@
       "enableAndClear": "Enable account and clear password",
       "disabled": "disabled",
       "noPassword": "no password",
-      "noAccounts": "No Linux accounts with a settable password found on this partition",
+      "noAccounts": "No Linux accounts with a settable password found on this partition. Set the target partition to Disabled when no bypass is needed.",
+      "selectLinuxAccount": "Select a target account, or set the target partition to Disabled when no bypass is needed.",
       "linuxPasswordHint": "After bypass, the password for {{username}} is 123456. It is written only to this COW overlay; SSH or root-login policies may still restrict password authentication."
     },
     "source": {
@@ -613,8 +618,8 @@
     },
     "actions": {
       "refresh": "Refresh emulation state",
-      "chooseIso": "Choose WinPE ISO",
-      "clearIso": "Clear WinPE ISO",
+      "chooseIso": "Choose boot / rescue ISO",
+      "clearIso": "Clear boot / rescue ISO",
       "start": "Start emulation",
       "starting": "Starting...",
       "release": "Release session",
@@ -622,6 +627,8 @@
     },
     "errors": {
       "sourceRequired": "Select an evidence source.",
+      "preflightRequired": "Image preflight has not completed successfully, so the emulation session was not created.",
+      "linuxAccountRequired": "Linux logon bypass is enabled, but the target account has not been resolved and selected.",
       "osdataNonEmpty": "OSDATA is a non-empty directory; automatic removal was refused.",
       "fsRepairUnsupported": "At least one XFS volume could not be repaired safely. Launch was cancelled and the emulation session was released.",
       "operationFailed": "Emulation operation failed."

@@ -66,8 +66,10 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
         .expect("import the Linux image");
 
     let (case_id, case_root) = (active.meta.id.clone(), active.case_root.clone());
-    // Find the first ext4 partition (direct or LVM LV) from the source DB.
-    let ext4_partition = active
+    // A Linux image can expose an ext4 /boot before the ext4 root LV. Probe
+    // every persisted ext4 volume and select the one that actually owns
+    // /etc/shadow instead of assuming the first ext4 record is the root.
+    let ext4_partitions = active
         .with_conn(|case_conn| {
             let source_conn = app_services::source_db::open_ready_source_read_only_by_id(
                 case_conn,
@@ -86,53 +88,14 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
             }
             Ok(partitions
                 .iter()
-                .find(|record| record.filesystem.as_deref() == Some("Ext4"))
-                .map(|record| record.partition_index))
+                .filter(|record| record.filesystem.as_deref() == Some("Ext4"))
+                .map(|record| record.partition_index)
+                .collect::<Vec<_>>())
         })
         .unwrap();
-
-    let Some(partition_index) = ext4_partition else {
-        // No ext4 partition (e.g. an XFS-only image): the bypass must refuse
-        // with a typed Unsupported error rather than misbehaving.
-        let first = active
-            .with_conn(|case_conn| {
-                let source_conn = app_services::source_db::open_ready_source_read_only_by_id(
-                    case_conn,
-                    &case_root,
-                    &case_id,
-                    &data_source_id,
-                )
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-                let partitions = PartitionRepo::new(&source_conn.connection)
-                    .find_by_data_source(&data_source_id.0)?;
-                Ok(partitions
-                    .first()
-                    .map(|record| record.partition_index)
-                    .expect("the image has at least one partition"))
-            })
-            .unwrap();
-        let outcome = active
-            .with_conn(|case_conn| {
-                Ok(app_services::emulation_linux_bypass::list_linux_accounts(
-                    &app_services::emulation_bypass::BypassCaseContext {
-                        case_conn,
-                        case_root: &case_root,
-                        case_id: &case_id,
-                        data_source_id: &data_source_id,
-                    },
-                    first,
-                )
-                .map_err(|error| error.to_string()))
-            })
-            .expect("query the non-ext4 partition");
-        let error = outcome.expect_err("non-ext4 partitions must be refused");
-        eprintln!("non-ext4 refusal: {error}");
-        assert!(error.contains("not ext4") || error.contains("Unsupported"));
-        return;
-    };
-
-    let accounts = active
-        .with_conn(|case_conn| {
+    let mut selected = None;
+    for partition_index in ext4_partitions {
+        let accounts = active.with_conn(|case_conn| {
             app_services::emulation_linux_bypass::list_linux_accounts(
                 &app_services::emulation_bypass::BypassCaseContext {
                     case_conn,
@@ -143,9 +106,18 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
                 partition_index,
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-        })
-        .expect("list shadow accounts");
-    assert!(!accounts.is_empty(), "shadow accounts must be listed");
+        });
+        match accounts {
+            Ok(accounts) if !accounts.is_empty() => {
+                selected = Some((partition_index, accounts));
+                break;
+            }
+            Ok(_) => eprintln!("partition P{partition_index} has an empty shadow account set"),
+            Err(error) => eprintln!("partition P{partition_index} has no readable shadow: {error}"),
+        }
+    }
+    let (partition_index, accounts) =
+        selected.expect("an ext4 root partition must expose shadow accounts");
     for account in &accounts {
         eprintln!(
             "account {} has_password={} locked={}",

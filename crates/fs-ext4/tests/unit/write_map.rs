@@ -76,15 +76,6 @@ fn maps_a_regular_file_to_its_physical_block() {
 }
 
 #[test]
-fn reports_the_inode_table_position() {
-    let fs = open(testing::builders::ext4::linux_root_ext4_image());
-    let offset = fs.inode_source_offset("etc/shadow").unwrap();
-    // The builder's inode table starts at block 2 with 256-byte inodes;
-    // shadow is inode 10.
-    assert_eq!(offset, 2 * 4096 + 9 * 256);
-}
-
-#[test]
 fn refuses_directories_and_missing_files() {
     let fs = open(testing::builders::ext4::linux_root_ext4_image());
     assert!(fs.file_extent_map("etc").is_err());

@@ -15,57 +15,70 @@ use crate::datasource_service::open_evidence_reader;
 /// log transactions blocks the RHEL/CentOS GRUB builds before the kernel is
 /// even reached. Every install on the disk is annotated when ANY XFS volume
 /// is dirty — the separate-/boot layout makes a non-root XFS volume just as
-/// boot-critical. Reads stay bounded by the snapshot limit and failures are
-/// silent (no evidence, no annotation).
+/// boot-critical. Reads stay bounded by the snapshot limit. A volume that
+/// cannot be assessed is annotated separately so launch can fail closed.
 pub(crate) fn annotate_xfs_log_risk(
     source_path: &std::path::Path,
     source_kind: &domain::DataSourceKind,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     installs: &mut [EmulationInstallDto],
-) {
+) -> Result<(), super::MountServiceError> {
     use fs_xfs::log::{assess_log_state, XfsLogState, XFS_LOG_MAX_SNAPSHOT_BYTES};
 
     if installs.is_empty() {
-        return;
+        return Ok(());
     }
     let context = EvidenceContext {
         source_path: source_path.to_path_buf(),
         kind: source_kind.clone(),
     };
-    let records = partitions
-        .find_by_data_source(&data_source_id.0)
-        .unwrap_or_default();
-    let mut any_dirty = false;
+    let records = partitions.find_by_data_source(&data_source_id.0)?;
+    let mut assessments = Vec::new();
     for record in records
         .iter()
         .filter(|record| record.filesystem.as_deref() == Some("XFS"))
     {
-        let Some(reader) = open_linux_volume_reader(&context, record) else {
-            continue;
-        };
-        let Ok(xfs) = fs_xfs::XfsReader::open(reader, 0) else {
-            continue;
-        };
-        let dirty = xfs
-            .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
-            .map(|snapshot| assess_log_state(&snapshot) == XfsLogState::Dirty)
-            .unwrap_or(false);
-        if dirty {
-            any_dirty = true;
-            break;
-        }
+        let assessment = open_linux_volume_reader(&context, record)
+            .and_then(|reader| fs_xfs::XfsReader::open(reader, 0).ok())
+            .and_then(|xfs| {
+                xfs.read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
+                    .ok()
+            })
+            .map(|snapshot| match assess_log_state(&snapshot) {
+                XfsLogState::Clean => XfsLogAssessment::Clean,
+                XfsLogState::Dirty => XfsLogAssessment::Dirty,
+            })
+            .unwrap_or(XfsLogAssessment::Unverified);
+        assessments.push(assessment);
     }
-    if !any_dirty {
-        return;
+    annotate_xfs_assessments(installs, &assessments);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum XfsLogAssessment {
+    Clean,
+    Dirty,
+    Unverified,
+}
+
+fn annotate_xfs_assessments(
+    installs: &mut [EmulationInstallDto],
+    assessments: &[XfsLogAssessment],
+) {
+    if assessments.contains(&XfsLogAssessment::Dirty) {
+        add_boot_risk(installs, "xfs-log-dirty");
     }
+    if assessments.contains(&XfsLogAssessment::Unverified) {
+        add_boot_risk(installs, "xfs-log-unverified");
+    }
+}
+
+fn add_boot_risk(installs: &mut [EmulationInstallDto], risk: &str) {
     for install in installs.iter_mut() {
-        if !install
-            .boot_risk_notes
-            .iter()
-            .any(|note| note == "xfs-log-dirty")
-        {
-            install.boot_risk_notes.push("xfs-log-dirty".to_string());
+        if !install.boot_risk_notes.iter().any(|note| note == risk) {
+            install.boot_risk_notes.push(risk.to_string());
         }
     }
 }
@@ -148,3 +161,7 @@ fn gpt_disk_missing_boot_paths(
     let fs = fs_fat::FatReader::open(Box::new(window), 0).ok()?;
     Some(fs.open_file("EFI/BOOT/BOOTX64.EFI").is_err())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/mount_service/emulation_linux_boot.rs"]
+mod tests;

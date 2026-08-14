@@ -87,6 +87,7 @@ describe('useEmulationWorkspaceModel', () => {
       recommendedBootRoute: 'directSystem',
     });
     mocks.bypassAccounts.mockResolvedValue([]);
+    mocks.linuxAccounts.mockResolvedValue([]);
     mocks.prepare.mockResolvedValue({ sessionId: 'emulation-1' });
     mocks.launch.mockResolvedValue({ sessionId: 'emulation-1', state: 'running' });
     mocks.release.mockResolvedValue({ sessionId: 'emulation-1', state: 'released' });
@@ -100,7 +101,7 @@ describe('useEmulationWorkspaceModel', () => {
   it('owns direct-boot confirmation and sends explicit authorization after approval', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
-    await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
+    await waitFor(() => expect(result.current.canStart).toBe(true));
 
     await act(async () => result.current.start());
 
@@ -142,6 +143,29 @@ describe('useEmulationWorkspaceModel', () => {
 
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
+  });
+
+  it('blocks session creation until the selected source preflight completes', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.preflight.mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
+
+    expect(result.current.preflightLoading).toBe(true);
+    expect(result.current.canStart).toBe(false);
+    await act(async () => {
+      await expect(result.current.start()).rejects.toThrow('镜像预检尚未成功完成');
+    });
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it('surfaces preflight failure and keeps launch disabled', async () => {
+    mocks.preflight.mockRejectedValue(new Error('xfs preflight failed'));
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.error).toBe('xfs preflight failed'));
+
+    expect(result.current.canStart).toBe(false);
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
 
   it('releases the prepared session when OSDATA cleanup is refused', async () => {
@@ -283,6 +307,34 @@ describe('useEmulationWorkspaceModel', () => {
       .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
     expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+  });
+
+  it('rechecks an unverified XFS log before launch', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource(['xfs-log-unverified']);
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
+
+    await act(async () => result.current.start());
+
+    expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+  });
+
+  it('requires a resolved Linux account after a bypass partition is selected', async () => {
+    useLinuxEfiSource([]);
+    mocks.linuxAccounts.mockResolvedValue([
+      { username: 'root', hasPassword: true, locked: false },
+    ]);
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+
+    act(() => result.current.selectBypassPartition(2));
+    await waitFor(() => expect(result.current.linuxAccounts).toHaveLength(1));
+    expect(result.current.canStart).toBe(false);
+
+    act(() => result.current.selectLinuxUsername('root'));
+    await waitFor(() => expect(result.current.canStart).toBe(true));
   });
 
   it('allows the investigator to skip the XFS log repair', async () => {

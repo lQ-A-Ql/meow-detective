@@ -21,7 +21,19 @@ use volume::{open_linux_partition, LinuxPartition};
 const SHADOW_PATH: &str = "etc/shadow";
 const MAX_SHADOW_BYTES: u64 = 8 * 1024 * 1024;
 pub const LINUX_BYPASS_PASSWORD: &str = "123456";
-const LINUX_BYPASS_PASSWORD_HASH: &str = "$6$meow1234$Ece2JtWkjNGCiGYoIvqBZ8teI2U1Lmd73FwcHlczR6zRf0q8ET2EdwZ6ZaEz0WZ196VlNUTZk240LtfFdViux1";
+const SHA512_PASSWORD_HASH: &str = "$6$meow1234$Ece2JtWkjNGCiGYoIvqBZ8teI2U1Lmd73FwcHlczR6zRf0q8ET2EdwZ6ZaEz0WZ196VlNUTZk240LtfFdViux1";
+const SHA256_PASSWORD_HASH: &str = "$5$meow1234$qQo/HTqGwuXnYwUW/4dOt0XW4nIwccjEttTNDrymHn2";
+const MD5_PASSWORD_HASH: &str = "$1$meow123$b2lFkt4IaVGRkj8fDdzcD/";
+const SM3_PASSWORD_HASH: &str = "$sm3$meow123456789012$hPU6PNpmDoZFQQrP9OmB8xLIg3eMh/p.Pla8NO8HyG4";
+const YESCRYPT_PASSWORD_HASH: &str =
+    "$y$j9T$SjOxytwbNDX3I5UCfJi0G1$gtzGm7SguXS3HSonfCo2nheVt..hc2TFSp6XE4v7BV4";
+const BCRYPT_2A_PASSWORD_HASH: &str =
+    "$2a$12$pns0Q7.Aa1geuiYHrwDxJ.ZzaerL4ZO1hYjAIVJUE.4ZQliufC9nq";
+const BCRYPT_2B_PASSWORD_HASH: &str =
+    "$2b$12$pns0Q7.Aa1geuiYHrwDxJ.ZzaerL4ZO1hYjAIVJUE.4ZQliufC9nq";
+const BCRYPT_2Y_PASSWORD_HASH: &str =
+    "$2y$12$pns0Q7.Aa1geuiYHrwDxJ.ZzaerL4ZO1hYjAIVJUE.4ZQliufC9nq";
+const DES_PASSWORD_HASH: &str = "meYmEekhPnz3w";
 
 pub fn list_linux_accounts(
     case_context: &BypassCaseContext<'_>,
@@ -61,9 +73,9 @@ pub fn apply_linux_bypass(
         password_set,
         already_configured,
     };
-    let Some(edited) =
-        artifacts_linux::set_shadow_password_hash(&shadow, username, LINUX_BYPASS_PASSWORD_HASH)
-            .map_err(|error| EmulationBypassError::Edit(error.to_string()))?
+    let password_hash = replacement_password_hash(&shadow, username)?;
+    let Some(edited) = artifacts_linux::set_shadow_password_hash(&shadow, username, password_hash)
+        .map_err(|error| EmulationBypassError::Edit(error.to_string()))?
     else {
         return Ok(result(false, true));
     };
@@ -79,12 +91,53 @@ pub fn apply_linux_bypass(
         partition_index,
         &edited,
         username,
+        password_hash,
         &plan,
     ) {
         disk.invalidate();
         return Err(error);
     }
     Ok(result(true, false))
+}
+
+fn replacement_password_hash(
+    shadow: &str,
+    username: &str,
+) -> Result<&'static str, EmulationBypassError> {
+    let existing = shadow
+        .lines()
+        .find_map(|line| {
+            let mut fields = line.splitn(3, ':');
+            let name = fields.next()?;
+            let hash = fields.next()?;
+            (name == username).then_some(hash)
+        })
+        .ok_or_else(|| EmulationBypassError::Edit("account disappeared from /etc/shadow".into()))?;
+    let unlocked = existing.trim_start_matches('!');
+    let replacement = match unlocked {
+        hash if hash.starts_with("$sm3$") => SM3_PASSWORD_HASH,
+        hash if hash.starts_with("$6$") => SHA512_PASSWORD_HASH,
+        hash if hash.starts_with("$5$") => SHA256_PASSWORD_HASH,
+        hash if hash.starts_with("$1$") => MD5_PASSWORD_HASH,
+        hash if hash.starts_with("$y$") => YESCRYPT_PASSWORD_HASH,
+        hash if hash.starts_with("$2a$") => BCRYPT_2A_PASSWORD_HASH,
+        hash if hash.starts_with("$2b$") => BCRYPT_2B_PASSWORD_HASH,
+        hash if hash.starts_with("$2y$") => BCRYPT_2Y_PASSWORD_HASH,
+        hash if hash.len() == DES_PASSWORD_HASH.len() && !hash.starts_with('$') => {
+            DES_PASSWORD_HASH
+        }
+        _ => {
+            return Err(EmulationBypassError::Unsupported(
+                "the account password hash scheme cannot be replaced safely".into(),
+            ))
+        }
+    };
+    if replacement.len() > existing.len() {
+        return Err(EmulationBypassError::Unsupported(
+            "the compatible password hash would require /etc/shadow to grow".into(),
+        ));
+    }
+    Ok(replacement)
 }
 
 fn read_shadow(partition: &LinuxPartition) -> Result<String, EmulationBypassError> {
@@ -113,6 +166,7 @@ fn verify_shadow_write(
     partition_index: u32,
     expected: &str,
     username: &str,
+    password_hash: &str,
     plan: &[rewrite::VolumePatch],
 ) -> Result<(), EmulationBypassError> {
     let partition = open_linux_partition(case_context, partition_index, Some(disk))?;
@@ -129,7 +183,7 @@ fn verify_shadow_write(
         .find(|account| account.username == username)
         .is_some();
     let already_configured =
-        artifacts_linux::set_shadow_password_hash(&reread, username, LINUX_BYPASS_PASSWORD_HASH)
+        artifacts_linux::set_shadow_password_hash(&reread, username, password_hash)
             .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?
             .is_none();
     if account_exists && already_configured {

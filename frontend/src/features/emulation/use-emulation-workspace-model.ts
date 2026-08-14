@@ -214,15 +214,32 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   );
   const needsFsRepair = useMemo(
     () => (preflightQuery.data?.installs ?? [])
-      .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty')),
+      .some((install) => (install.bootRiskNotes ?? [])
+        .some((note) => note === 'xfs-log-dirty' || note === 'xfs-log-unverified')),
     [preflightQuery.data],
   );
   const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
   const isLinuxSource = selectedSource?.platform === 'LINUX';
+  const preflightReady = Boolean(selectedSourceId)
+    && preflightQuery.isSuccess
+    && !preflightQuery.isFetching
+    && preflightQuery.data?.dataSourceId === selectedSourceId;
+  const linuxBypassReady = bypassPartition === undefined
+    || !bypassIsLinux
+    || (!linuxAccountsQuery.isFetching
+      && !linuxAccountsQuery.error
+      && Boolean(linuxUsername)
+      && linuxAccountsQuery.data?.some((account) => account.username === linuxUsername));
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
       if (!selectedSourceId) {
         throw new Error(t('emulationPage.errors.sourceRequired'));
+      }
+      if (!preflightReady) {
+        throw new Error(t('emulationPage.errors.preflightRequired'));
+      }
+      if (!linuxBypassReady) {
+        throw new Error(t('emulationPage.errors.linuxAccountRequired'));
       }
       const prepared = await prepareEmulation({
         dataSourceId: selectedSourceId,
@@ -299,6 +316,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const combinedError = currentCase.error
     ?? dataSourcesQuery.error
     ?? sessionsQuery.error
+    ?? preflightQuery.error
     ?? startMutation.error
     ?? releaseMutation.error;
 
@@ -306,11 +324,11 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     const selected = await openPlatformDialog({
       directory: false,
       multiple: false,
-      filters: [{ name: 'WinPE ISO', extensions: ['iso'] }],
+      filters: [{ name: isLinuxSource ? 'Linux Live ISO' : 'WinPE ISO', extensions: ['iso'] }],
     });
     const path = singleDialogPath(selected);
     if (path) setRecoveryIsoPath(path);
-  }, []);
+  }, [isLinuxSource]);
   const clearRecoveryIso = useCallback(() => setRecoveryIsoPath(''), []);
   const toggleOption = useCallback((key: 'clipboard' | 'timeSync') => {
     setOptions((current) => ({ ...current, [key]: !current[key] }));
@@ -397,6 +415,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       failedCount: sessions.filter((session) => session.state === 'failedCleanupPending').length,
     },
     canStart: Boolean(selectedSourceId)
+      && preflightReady
+      && Boolean(linuxBypassReady)
       && !activeSourceIds.has(selectedSourceId)
       && !startMutation.isPending
       && !releaseMutation.isPending,

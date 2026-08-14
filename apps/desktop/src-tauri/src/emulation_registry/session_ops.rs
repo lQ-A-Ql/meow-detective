@@ -38,7 +38,7 @@ impl EmulationRegistry {
         &self,
         session_id: &str,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
-        let (op_lock, vmx_path) = {
+        let (op_lock, vmx_path, disk) = {
             let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
             let entry = entries
                 .get_mut(session_id)
@@ -53,10 +53,12 @@ impl EmulationRegistry {
             (
                 Arc::clone(&entry.op_lock),
                 entry.workspace.vmx_path().to_path_buf(),
+                Arc::clone(&entry.disk),
             )
         };
         let _op_guard = op_lock.lock().map_err(|_| Self::lock_error())?;
         self.require_state(session_id, EmulationState::DescriptorReady)?;
+        disk.flush()?;
         let control = vmware::launch(&vmx_path)
             .map_err(|error| EmulationRegistryError::Vmware(error.to_string()))?;
         // The op guard is still held, so no release or edit could have
@@ -207,10 +209,11 @@ impl EmulationRegistry {
         session_id: &str,
         state_error: &str,
     ) -> Result<EditSession, EmulationRegistryError> {
-        let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
+        let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
         let entry = entries
-            .get(session_id)
+            .get_mut(session_id)
             .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
+        refresh_backend(entry);
         if entry.status.state != EmulationState::DescriptorReady {
             return Err(EmulationRegistryError::Vmware(state_error.to_string()));
         }
@@ -226,10 +229,11 @@ impl EmulationRegistry {
         session_id: &str,
         expected: EmulationState,
     ) -> Result<(), EmulationRegistryError> {
-        let entries = self.entries.lock().map_err(|_| Self::lock_error())?;
+        let mut entries = self.entries.lock().map_err(|_| Self::lock_error())?;
         let entry = entries
-            .get(session_id)
+            .get_mut(session_id)
             .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
+        refresh_backend(entry);
         if entry.status.state != expected {
             return Err(EmulationRegistryError::Vmware(format!(
                 "session is no longer in the {expected:?} state"

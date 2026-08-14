@@ -107,7 +107,9 @@
       "status": {
         "deleted": "deleted",
         "hidden": "hidden",
-        "system": "system"
+        "system": "system",
+        "readOnly": "readOnly",
+        "archive": "archive"
       },
       "extract": {
         "pending": "提取中...",
@@ -510,7 +512,7 @@
       "source": "证据数据源",
       "sourcePlaceholder": "选择 E01 或 RAW 数据源",
       "noSources": "当前案件没有具备可信指纹的 E01/RAW 数据源。",
-      "recoveryIso": "WinPE 启动介质",
+      "recoveryIso": "启动/救援 ISO",
       "liveIsoHint": "Linux 源：可挂 SystemRescue 等 live ISO 救援盘；维护 CD 将附带 TARGETS.JSON 与救援手册。",
       "recoveryPlaceholder": "未选择，确认后启动原系统",
       "bootRoute": "启动路径",
@@ -551,6 +553,8 @@
       "noEfiFallback": "无 EFI fallback 引导",
       "xfsLogDirty": "XFS 日志脏",
       "xfsLogDirtyHint": "检测到未回放的 XFS 日志；建议保留启动前主机侧修复选项。若关闭该选项，原系统可能进入救援模式。",
+      "xfsLogUnverified": "XFS 日志未验证",
+      "xfsLogUnverifiedHint": "至少一个 XFS 卷的日志状态无法验证；启动前修复将重新检查并在无法安全处理时阻止启动。",
       "linuxBypassHint": "可在“系统绕密”中选择账户；启动前会在 COW 覆盖层中把该账户密码设置为 123456，不会修改原始证据。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
@@ -575,7 +579,8 @@
       "enableAndClear": "启用账户并清空密码",
       "disabled": "已禁用",
       "noPassword": "无密码",
-      "noAccounts": "未在该分区找到可设置密码的 Linux 账户",
+      "noAccounts": "未在该分区找到可设置密码的 Linux 账户；如不需要绕密，请将目标分区改为“不启用”。",
+      "selectLinuxAccount": "请选择目标账户；若不需要绕密，请将目标分区改为“不启用”。",
       "linuxPasswordHint": "绕密后 {{username}} 的密码为 123456。密码仅写入本次 COW 覆盖层；SSH 或 root 登录策略仍可能限制密码登录。"
     },
     "source": {
@@ -613,8 +618,8 @@
     },
     "actions": {
       "refresh": "刷新仿真状态",
-      "chooseIso": "选择 WinPE ISO",
-      "clearIso": "清除 WinPE ISO",
+      "chooseIso": "选择启动/救援 ISO",
+      "clearIso": "清除启动/救援 ISO",
       "start": "启动仿真",
       "starting": "正在启动...",
       "release": "释放会话",
@@ -622,6 +627,8 @@
     },
     "errors": {
       "sourceRequired": "请选择证据数据源。",
+      "preflightRequired": "镜像预检尚未成功完成，已阻止创建仿真会话。",
+      "linuxAccountRequired": "已启用 Linux 绕密，但目标账户尚未成功解析或选择。",
       "osdataNonEmpty": "OSDATA 为非空目录，已拒绝自动清除。",
       "fsRepairUnsupported": "至少一个 XFS 卷无法安全修复，已取消启动并释放仿真会话。",
       "operationFailed": "仿真操作失败。"

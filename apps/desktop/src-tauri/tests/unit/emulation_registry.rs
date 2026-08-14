@@ -352,8 +352,11 @@ fn linux_rescue_targets_carry_platform_installs_and_actions() {
         .as_array()
         .unwrap()
         .iter()
-        .any(|action| action == "grub-init-bash-bypass"));
-    assert!(super::materials::LINUX_RESCUE_README.contains("init=/bin/bash"));
+        .any(|action| action == "host-set-password-123456"));
+    assert!(super::materials::LINUX_RESCUE_README.contains("password to 123456"));
+    assert!(super::materials::LINUX_RESCUE_README.contains("does not replay a log"));
+    assert!(!super::materials::LINUX_RESCUE_README.contains("clear the second"));
+    assert!(!super::materials::LINUX_RESCUE_README.contains("replays/validates"));
 }
 
 fn firmware_test_disk(bytes: Vec<u8>, directory: &tempfile::TempDir) -> CowDisk {
