@@ -246,7 +246,7 @@ impl PluginExtractor {
             self.write_artifact(artifact, ctx, sink, &mut report);
         }
         for event in payload.timeline_events {
-            self.write_timeline_event(event, ctx, sink, &mut report);
+            self.write_timeline_event(event, ctx, sink, &mut report, payload.times_are_local);
         }
         report
     }
@@ -291,9 +291,19 @@ impl PluginExtractor {
         ctx: &ArtifactContext,
         sink: &mut dyn ArtifactSink,
         report: &mut ExtractorReport,
+        times_are_local: bool,
     ) {
-        let timestamp = chrono::DateTime::parse_from_rfc3339(&parsed.timestamp_utc)
-            .map(|ts| ts.with_timezone(&chrono::Utc));
+        // Plugins that only know the host's wall clock (e.g. panel logs with
+        // no zone info) declare `timesAreLocal` in the payload; the host marks
+        // the event and the analysis layer converts it with the resolved host
+        // timezone before persistence.
+        let timestamp = if times_are_local {
+            chrono::NaiveDateTime::parse_from_str(&parsed.timestamp_utc, "%Y-%m-%dT%H:%M:%S%.f")
+                .map(|naive| naive.and_utc())
+        } else {
+            chrono::DateTime::parse_from_rfc3339(&parsed.timestamp_utc)
+                .map(|ts| ts.with_timezone(&chrono::Utc))
+        };
         let Ok(timestamp) = timestamp else {
             let warning = format!(
                 "plugin {} emitted invalid timestampUtc '{}'; event dropped",
@@ -311,6 +321,12 @@ impl PluginExtractor {
             parsed.description,
             parsed.attrs,
         );
+        if times_are_local {
+            event.attrs.insert(
+                "naiveLocalTime".to_string(),
+                serde_json::Value::String(parsed.timestamp_utc.clone()),
+            );
+        }
         // Host-enforced provenance, same as artifacts.
         event.parser_id = Some(self.shared.id.to_string());
         event.parser_version = Some(self.shared.version.clone());
@@ -383,6 +399,11 @@ struct PluginPayload {
     timeline_events: Vec<PayloadTimelineEvent>,
     #[serde(default)]
     warnings: Vec<String>,
+    /// Plugin declares its event timestamps are the host's wall clock without
+    /// a zone; the analysis layer converts them with the resolved host
+    /// timezone before persistence.
+    #[serde(default, rename = "timesAreLocal")]
+    times_are_local: bool,
 }
 
 #[derive(Debug, Deserialize)]

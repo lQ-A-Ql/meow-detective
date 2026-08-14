@@ -67,9 +67,12 @@ fn account_db_artifacts_are_redacted_and_provenanced() {
     let report = report.expect("plugin run must succeed");
     assert_eq!(report.artifacts_found, 1);
     // No family-whitelist rejections, no parser warnings beyond the
-    // (expected) UTC timezone assumption note.
+    // (expected) wall-clock timezone note.
     for error in &report.errors {
-        assert!(error.contains("UTC"), "unexpected plugin warning: {error}");
+        assert!(
+            error.contains("wall clock"),
+            "unexpected plugin warning: {error}"
+        );
         assert!(!error.contains("undeclared family"));
     }
 
@@ -83,7 +86,7 @@ fn account_db_artifacts_are_redacted_and_provenanced() {
         "md5(md5(md5(password)+'_bt.cn')+salt)"
     );
     assert_eq!(artifact.attrs["loginIp"], "10.0.0.8");
-    assert_eq!(artifact.attrs["loginTimeUtc"], "2025-06-01T08:00:00Z");
+    assert_eq!(artifact.attrs["loginTimeLocal"], "2025-06-01T08:00:00");
     // Redaction: hash and salt material must not survive the boundary.
     let dump = serde_json::to_string(&sink.artifacts).expect("dump");
     assert!(!dump.contains("b59c67bf196a4758191e42f76670ceba"));

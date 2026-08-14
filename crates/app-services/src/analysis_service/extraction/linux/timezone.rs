@@ -74,6 +74,28 @@ impl LinuxLogTimeContext {
             self.zone.tz.name()
         }
     }
+
+    /// Convert plugin timeline events that carry host wall-clock times
+    /// (`timesAreLocal` payloads mark them with a `naiveLocalTime` attr) to
+    /// UTC with the resolved host zone, removing the marker.
+    pub fn convert_marked_local_events(&self, events: &mut [domain::TimelineEvent]) {
+        for event in events {
+            let Some(naive_text) = event.attrs.remove("naiveLocalTime") else {
+                continue;
+            };
+            let Some(naive_text) = naive_text.as_str() else {
+                continue;
+            };
+            let Ok(naive) =
+                chrono::NaiveDateTime::parse_from_str(naive_text, "%Y-%m-%dT%H:%M:%S%.f")
+            else {
+                continue;
+            };
+            if let Some(converted) = self.zone.local_to_utc(naive) {
+                event.timestamp = converted;
+            }
+        }
+    }
 }
 
 /// `chrono-tz` backed clock. `Tz` is `Copy + Send + Sync`, so the context can

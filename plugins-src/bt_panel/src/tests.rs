@@ -198,7 +198,7 @@ fn accounts_are_parsed_and_redacted() {
         "md5(md5(md5(password)+'_bt.cn')+salt)"
     );
     assert_eq!(artifact["attrs"]["loginIp"], "10.0.0.8");
-    assert_eq!(artifact["attrs"]["loginTimeUtc"], "2025-06-01T08:00:00Z");
+    assert_eq!(artifact["attrs"]["loginTimeLocal"], "2025-06-01T08:00:00");
     // Redaction: neither the hash nor the salt may appear anywhere.
     let text = payload.to_string();
     assert!(!text.contains("b59c67bf196a4758191e42f76670ceba"));
@@ -207,7 +207,7 @@ fn accounts_are_parsed_and_redacted() {
         .as_array()
         .expect("warnings")
         .iter()
-        .any(|w| w.as_str().unwrap_or_default().contains("UTC")));
+        .any(|w| w.as_str().unwrap_or_default().contains("wall clock")));
 }
 
 #[test]
@@ -352,12 +352,12 @@ fn logs_emit_artifacts_and_timeline_events() {
     let artifact = &payload["artifacts"][0];
     assert_eq!(artifact["family"], "BtPanelLog");
     assert_eq!(artifact["attrs"]["logType"], "用户登录");
-    assert_eq!(artifact["attrs"]["addtimeUtc"], "2025-06-01T08:00:01Z");
+    assert_eq!(artifact["attrs"]["addtimeLocal"], "2025-06-01T08:00:01");
     let events = payload["timelineEvents"].as_array().expect("events");
     // The unparsable timestamp row keeps its artifact but drops its event.
     assert_eq!(events.len(), 2);
     assert_eq!(events[0]["eventType"], "BT_PANEL_OPERATION");
-    assert_eq!(events[0]["timestampUtc"], "2025-06-01T08:00:01Z");
+    assert_eq!(events[0]["timestampUtc"], "2025-06-01T08:00:01");
 }
 
 #[test]
@@ -451,7 +451,7 @@ fn modern_firewall_new_table_is_parsed() {
     assert_eq!(artifact["title"], "drop tcp/8080");
     assert_eq!(artifact["attrs"]["policy"], "drop");
     assert_eq!(artifact["attrs"]["sourceIp"], "5.6.7.8");
-    assert_eq!(artifact["attrs"]["addtimeUtc"], "2025-06-02T12:00:00Z");
+    assert_eq!(artifact["attrs"]["addtimeLocal"], "2025-06-02T12:00:00");
 }
 
 #[test]

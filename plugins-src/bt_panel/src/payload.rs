@@ -12,6 +12,10 @@ pub struct Payload {
     #[serde(rename = "timelineEvents")]
     pub timeline_events: Vec<PayloadTimelineEvent>,
     pub warnings: Vec<String>,
+    /// This plugin only knows the panel's wall clock; the host converts the
+    /// naive timestamps with the resolved host timezone before persistence.
+    #[serde(rename = "timesAreLocal")]
+    pub times_are_local: bool,
 }
 
 impl Payload {
@@ -20,6 +24,7 @@ impl Payload {
             artifacts: Vec::new(),
             timeline_events: Vec::new(),
             warnings: Vec::new(),
+            times_are_local: true,
         }
     }
 

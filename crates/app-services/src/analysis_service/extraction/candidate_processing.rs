@@ -304,30 +304,33 @@ fn parse_candidate(
             kind: CandidateCompletionKind::Cancelled,
         };
     }
-    let kind = match input {
-        PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
-            Some(bytes) => {
-                let boot_key = preload.boot_key(&candidate);
-                let (txlog1, txlog2) = preload.txlogs(&candidate);
-                CandidateCompletionKind::Outcome(extract_registry_candidate(
-                    &candidate, bytes, boot_key, txlog1, txlog2,
-                ))
+    let kind =
+        match input {
+            PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
+                Some(bytes) => {
+                    let boot_key = preload.boot_key(&candidate);
+                    let (txlog1, txlog2) = preload.txlogs(&candidate);
+                    CandidateCompletionKind::Outcome(extract_registry_candidate(
+                        &candidate, bytes, boot_key, txlog1, txlog2,
+                    ))
+                }
+                None => CandidateCompletionKind::Warning(format!(
+                    "{} registry bytes not preloaded",
+                    candidate.path
+                )),
+            },
+            PreparedCandidateInput::Bytes(bytes) if capability.key == PLUGIN_CAPABILITY_KEY => {
+                // Plugins that only know the host wall clock mark their events;
+                // convert them with the resolved host timezone before merge.
+                let mut plugin_outcome = extract_plugin_candidate(&candidate, &bytes, plugins);
+                linux_log_time
+                    .convert_marked_local_events(&mut plugin_outcome.outcome.timeline_events);
+                CandidateCompletionKind::Plugin(plugin_outcome)
             }
-            None => CandidateCompletionKind::Warning(format!(
-                "{} registry bytes not preloaded",
-                candidate.path
-            )),
-        },
-        PreparedCandidateInput::Bytes(bytes) if capability.key == PLUGIN_CAPABILITY_KEY => {
-            CandidateCompletionKind::Plugin(extract_plugin_candidate(&candidate, &bytes, plugins))
-        }
-        PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(extract_bytes(
-            &candidate,
-            &bytes,
-            browser_preload,
-            linux_log_time,
-        )),
-    };
+            PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(
+                extract_bytes(&candidate, &bytes, browser_preload, linux_log_time),
+            ),
+        };
     let kind = if ensure_not_cancelled(cancel_token).is_err() {
         CandidateCompletionKind::Cancelled
     } else {
