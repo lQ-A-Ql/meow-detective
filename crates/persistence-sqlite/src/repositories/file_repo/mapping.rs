@@ -47,6 +47,7 @@ pub(super) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<Fil
         hash_sha256: row.get(15)?,
         read_only: row.get::<_, i32>(17)? != 0,
         archive: row.get::<_, i32>(18)? != 0,
+        unix_mode: row.get(19)?,
     })
 }
 

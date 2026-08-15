@@ -18,8 +18,8 @@ fn ok_response() -> MeowExtractResponse {
 fn request() -> MeowExtractRequest {
     MeowExtractRequest {
         struct_size: size_of::<MeowExtractRequest>() as u32,
-        file_path: b"x.pf\0".as_ptr(),
-        file_id: b"ds:1:1\0".as_ptr(),
+        file_path: c"x.pf".as_ptr().cast(),
+        file_id: c"ds:1:1".as_ptr().cast(),
         data: b"data".as_ptr(),
         data_len: 4,
     }

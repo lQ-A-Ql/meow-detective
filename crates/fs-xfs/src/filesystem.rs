@@ -21,6 +21,7 @@ impl FileSystemReader for XfsReader {
         root.accessed_at = metadata.accessed_at;
         root.changed_at = metadata.changed_at;
         root.read_only = metadata.read_only;
+        root.unix_mode = Some(metadata.unix_mode);
         Ok(root)
     }
 
@@ -64,6 +65,7 @@ impl FileSystemReader for XfsReader {
                     encrypted: false,
                     // XFS has no archive bit.
                     archive: false,
+                    unix_mode: metadata.map(|value| value.unix_mode),
                     created_at: metadata.and_then(|value| value.created_at),
                     modified_at: metadata.and_then(|value| value.modified_at),
                     accessed_at: metadata.and_then(|value| value.accessed_at),

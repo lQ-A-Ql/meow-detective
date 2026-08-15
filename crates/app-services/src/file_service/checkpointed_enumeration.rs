@@ -297,6 +297,7 @@ fn file_entry_for_child(
         encrypted: child.encrypted,
         read_only: child.read_only,
         archive: child.archive,
+        unix_mode: child.unix_mode,
         created_at: child.created_at,
         modified_at: child.modified_at,
         accessed_at: child.accessed_at,

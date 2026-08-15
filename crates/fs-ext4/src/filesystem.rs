@@ -33,6 +33,7 @@ impl FileSystemReader for Ext4Reader {
                     let size = if is_dir { 0 } else { Self::inode_size(&inode)? };
                     let mut node = fs_node_without_timestamps(name.clone(), is_dir, size);
                     node.read_only = mode & 0o222 == 0;
+                    node.unix_mode = Some(u32::from(mode));
                     node.created_at = Self::inode_created_at(&inode);
                     node.modified_at = Self::inode_modified_at(&inode);
                     node.accessed_at = Self::inode_accessed_at(&inode);

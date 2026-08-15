@@ -61,11 +61,37 @@ const FILE_LIST_COLUMNS: DenseColumn<FileEntryRow>[] = [
 ];
 
 /**
+ * `ls -l` style ten-character rendering of a Unix mode: one type character
+ * (d/l/-/p/c/b/s) followed by nine rwx permission characters.
+ */
+export function formatUnixMode(mode: number): string {
+  const typeChars: Record<number, string> = {
+    0o01: 'p',
+    0o02: 'c',
+    0o04: 'd',
+    0o06: 'b',
+    0o10: '-',
+    0o12: 'l',
+    0o14: 's',
+  };
+  const typeChar = typeChars[(mode & 0o170000) >> 12] ?? '?';
+  let permissions = '';
+  for (let bit = 8; bit >= 0; bit -= 1) {
+    permissions += mode & (1 << bit) ? 'rwx'[(8 - bit) % 3] : '-';
+  }
+  return typeChar + permissions;
+}
+
+/**
  * Compact attribute letters from real entry flags:
  * directories render as "D"; files concatenate set bits in R/H/S/A order
  * (readOnly, hidden, system, archive) and render "-" when none are set.
+ * Entries from Unix filesystems (unixMode present) render in `ls -l` form.
  */
 export function formatEntryAttributes(row: FileEntryRow): string {
+  if (row.unixMode !== undefined && row.unixMode !== null) {
+    return formatUnixMode(row.unixMode);
+  }
   if (row.entryType === 'directory') {
     return 'D';
   }

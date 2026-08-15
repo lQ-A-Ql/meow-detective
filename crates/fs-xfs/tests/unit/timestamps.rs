@@ -38,6 +38,21 @@ fn assert_timestamp(timestamp: Option<FsTimestamp>, seconds: i64, nanoseconds: u
 }
 
 #[test]
+fn inode_metadata_exposes_full_unix_mode() {
+    let mut dir_inode = inode(2);
+    dir_inode[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+    let metadata = XfsReader::decode_inode_metadata(&dir_inode).unwrap();
+    assert_eq!(metadata.unix_mode, u32::from(S_IFDIR | 0o755));
+
+    let mut file_inode = inode(2);
+    file_inode[di_off::MODE..di_off::MODE + 2].copy_from_slice(&0o100640u16.to_be_bytes());
+    let metadata = XfsReader::decode_inode_metadata(&file_inode).unwrap();
+    assert!(!metadata.is_dir);
+    assert_eq!(metadata.unix_mode, 0o100640);
+    assert!(!metadata.read_only);
+}
+
+#[test]
 fn v2_inode_decodes_signed_legacy_macb_timestamps() {
     let mut inode = inode(2);
     inode[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());

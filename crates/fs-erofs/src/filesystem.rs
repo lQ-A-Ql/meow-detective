@@ -37,6 +37,7 @@ impl FileSystemReader for ErofsReader {
                 if is_directory { 0 } else { inode.size },
             );
             node.read_only = inode.mode & 0o222 == 0;
+            node.unix_mode = Some(u32::from(inode.mode));
             nodes.push(node);
         }
         Ok(child_nodes_with_parent_path(nodes, path))

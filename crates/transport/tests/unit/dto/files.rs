@@ -70,6 +70,7 @@ fn file_entry_row_serializes_visibility_flags_as_camel_case() {
         system: false,
         read_only: true,
         archive: true,
+        unix_mode: None,
         encrypted: false,
         created_at: None,
         modified_at: None,
@@ -83,6 +84,7 @@ fn file_entry_row_serializes_visibility_flags_as_camel_case() {
     assert_eq!(value["readOnly"], true);
     assert_eq!(value["archive"], true);
     assert!(value.get("read_only").is_none());
+    assert!(value.get("unixMode").is_none());
     assert_eq!(value["parentId"], "root");
     assert_eq!(value["entryType"], "file");
     assert_eq!(value["deleted"], true);
@@ -139,6 +141,7 @@ fn file_jump_context_serializes_camel_case_fields() {
             system: false,
             read_only: false,
             archive: false,
+            unix_mode: None,
             encrypted: false,
             created_at: None,
             modified_at: None,
@@ -159,6 +162,7 @@ fn file_jump_context_serializes_camel_case_fields() {
             system: false,
             read_only: false,
             archive: false,
+            unix_mode: None,
             encrypted: false,
             created_at: None,
             modified_at: None,
@@ -177,4 +181,37 @@ fn file_jump_context_serializes_camel_case_fields() {
     assert_eq!(value["requiresShowHidden"], false);
     assert_eq!(value["ancestorDirectoryIds"][0], "root");
     assert!(value.get("row_offset").is_none());
+}
+
+#[test]
+fn file_entry_row_serializes_unix_mode_when_present() {
+    let dto = FileEntryRowDto {
+        id: "file-2".to_string(),
+        parent_id: Some("root".to_string()),
+        path: "/etc/shadow".to_string(),
+        name: "shadow".to_string(),
+        entry_type: "file".to_string(),
+        size: Some(42),
+        ext: None,
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: true,
+        archive: false,
+        unix_mode: Some(0o100640),
+        // `encrypted` skips serialization when false; keep it true so the
+        // round trip below carries every non-Option field.
+        encrypted: true,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    };
+
+    let value = serde_json::to_value(dto).unwrap();
+
+    assert_eq!(value["unixMode"], 0o100640);
+    let round_trip: FileEntryRowDto = serde_json::from_value(value).unwrap();
+    assert_eq!(round_trip.unix_mode, Some(0o100640));
 }

@@ -8,6 +8,7 @@ use std::io;
 pub(crate) struct BtrfsInodeMetadata {
     pub(crate) size: u64,
     pub(crate) read_only: bool,
+    pub(crate) unix_mode: u32,
     pub(crate) created_at: Option<FsTimestamp>,
     pub(crate) modified_at: Option<FsTimestamp>,
     pub(crate) accessed_at: Option<FsTimestamp>,
@@ -114,6 +115,7 @@ impl BtrfsReader {
                 return Ok(Some(BtrfsInodeMetadata {
                     size,
                     read_only: mode & 0o222 == 0,
+                    unix_mode: mode,
                     created_at: parse_inode_timestamp(data, 148),
                     modified_at: parse_inode_timestamp(data, 136),
                     accessed_at: parse_inode_timestamp(data, 112),

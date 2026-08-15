@@ -270,6 +270,7 @@ impl BtrfsReader {
             );
             if let Some(metadata) = metadata {
                 node.read_only = metadata.read_only;
+                node.unix_mode = Some(metadata.unix_mode);
                 node.changed_at = metadata.changed_at;
             }
             node.path = child_path.clone();

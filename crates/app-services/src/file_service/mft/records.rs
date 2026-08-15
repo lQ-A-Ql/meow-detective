@@ -60,6 +60,8 @@ fn record_to_file_entry(
         encrypted: record.encrypted,
         read_only: record.read_only,
         archive: record.archive,
+        // NTFS MFT records carry DOS attributes, not Unix modes.
+        unix_mode: None,
         created_at: record.created_at,
         modified_at: record.modified_at,
         accessed_at: record.accessed_at,

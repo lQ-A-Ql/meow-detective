@@ -46,6 +46,7 @@ impl LogicalFsReader {
             encrypted: false,
             // Host filesystem metadata exposes no archive bit.
             archive: false,
+            unix_mode: None,
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
@@ -72,6 +73,7 @@ impl FileSystemReader for LogicalFsReader {
             encrypted: false,
             // Host filesystem metadata exposes no archive bit.
             archive: false,
+            unix_mode: None,
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),

@@ -88,6 +88,7 @@ fn register_source(
             encrypted: false,
             read_only: false,
             archive: false,
+            unix_mode: None,
             created_at: None,
             modified_at: None,
             accessed_at: None,

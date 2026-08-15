@@ -247,11 +247,13 @@ mod cases {
         assert!(!txt.is_dir);
         assert_eq!(txt.path, "test.txt");
         assert_eq!(txt.size, 11);
+        assert_eq!(txt.unix_mode, Some(0o100644));
 
         let sub = children.iter().find(|n| n.name == "subdir").unwrap();
         assert!(sub.is_dir);
         assert_eq!(sub.path, "subdir");
         assert_eq!(sub.size, 0);
+        assert_eq!(sub.unix_mode, Some(0o040755));
 
         let nested = ext4.list_children("subdir").unwrap();
         let hello = nested.iter().find(|node| node.name == "hello.dat").unwrap();

@@ -1699,6 +1699,7 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
         encrypted: false,
         read_only: false,
         archive: false,
+        unix_mode: None,
         created_at: None,
         modified_at: None,
         accessed_at: None,

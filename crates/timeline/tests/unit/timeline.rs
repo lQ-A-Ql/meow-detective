@@ -19,6 +19,7 @@ fn file(modified_at: Option<chrono::DateTime<Utc>>) -> FileEntry {
         encrypted: false,
         read_only: false,
         archive: false,
+        unix_mode: None,
         created_at: Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).single(),
         modified_at,
         accessed_at: Utc.with_ymd_and_hms(2024, 1, 3, 1, 0, 0).single(),

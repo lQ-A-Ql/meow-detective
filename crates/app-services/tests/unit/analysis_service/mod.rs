@@ -42,6 +42,7 @@ fn file(id: &str, path: &str, size: u64) -> FileEntry {
         encrypted: false,
         read_only: false,
         archive: false,
+        unix_mode: None,
         created_at: None,
         modified_at: None,
         accessed_at: None,

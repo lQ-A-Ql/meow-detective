@@ -118,6 +118,8 @@ pub struct FileEntryRowDto {
     pub system: bool,
     pub read_only: bool,
     pub archive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unix_mode: Option<u32>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub encrypted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

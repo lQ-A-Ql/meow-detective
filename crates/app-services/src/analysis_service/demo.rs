@@ -199,6 +199,7 @@ fn collect_demo_entries(
             encrypted: false,
             read_only: metadata.permissions().readonly(),
             archive: false,
+            unix_mode: None,
             created_at: None,
             modified_at: None,
             accessed_at: None,

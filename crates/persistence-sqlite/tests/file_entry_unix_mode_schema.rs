@@ -1,65 +1,21 @@
-use persistence_sqlite::{open_in_memory, repositories::staging_repo::StagingRepo, runner};
-use rusqlite::{Connection, ErrorCode};
-use tempfile::TempDir;
+use persistence_sqlite::{open_in_memory, runner};
+use rusqlite::Connection;
 
 #[test]
-fn application_and_source_schemas_enforce_archive_boolean_contract() {
+fn application_and_source_schemas_carry_nullable_unix_mode() {
     let application = open_in_memory().expect("open application database");
     runner::run_all(&application).expect("run application migrations");
     seed_application_source(&application);
-    assert_archive_contract(&application, "app-file", "app-source", true);
+    assert_unix_mode_contract(&application, "app-file", "app-source");
 
     let source = open_in_memory().expect("open source database");
     runner::run_source_all(&source).expect("run source migrations");
     seed_source_registration(&source);
-    assert_archive_contract(&source, "source-file", "source-1", true);
+    assert_unix_mode_contract(&source, "source-file", "source-1");
 }
 
 #[test]
-fn fresh_and_upgraded_staging_schemas_default_archive_to_false() {
-    let temporary = TempDir::new().expect("create staging root");
-    let fresh = StagingRepo::open_partition_staging_conn(temporary.path(), "fresh", 0)
-        .expect("open fresh staging database");
-    assert_archive_contract(&fresh, "fresh-file", "fresh", true);
-
-    let upgraded = Connection::open_in_memory().expect("open legacy staging database");
-    upgraded
-        .execute_batch(
-            "CREATE TABLE file_entries (
-                id TEXT PRIMARY KEY NOT NULL,
-                parent_id TEXT,
-                data_source_id TEXT NOT NULL,
-                path TEXT NOT NULL,
-                name TEXT NOT NULL,
-                entry_type TEXT NOT NULL,
-                size INTEGER,
-                ext TEXT,
-                deleted INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT,
-                modified_at TEXT,
-                accessed_at TEXT,
-                changed_at TEXT,
-                hash_sha256 TEXT
-            );
-            INSERT INTO file_entries
-                (id, data_source_id, path, name, entry_type)
-            VALUES ('legacy-stage', 'upgraded', 'old.bin', 'old.bin', 'file');",
-        )
-        .expect("create legacy staging schema");
-    StagingRepo::ensure_enum_staging_columns(&upgraded).expect("upgrade staging schema");
-    let historical: i64 = upgraded
-        .query_row(
-            "SELECT archive FROM file_entries WHERE id = 'legacy-stage'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("read upgraded staging status");
-    assert_eq!(historical, 0);
-    assert_archive_contract(&upgraded, "upgraded-file", "upgraded", false);
-}
-
-#[test]
-fn upgrade_from_source_033_adds_archive_without_losing_rows() {
+fn upgrade_from_source_034_adds_unix_mode_without_losing_rows() {
     let connection = open_in_memory().expect("open legacy source database");
     connection
         .execute_batch(
@@ -94,16 +50,16 @@ fn upgrade_from_source_033_adds_archive_without_losing_rows() {
         )
         .expect("insert legacy file row");
 
-    assert_eq!(runner::run_source_all(&connection).expect("upgrade"), 2);
+    assert_eq!(runner::run_source_all(&connection).expect("upgrade"), 1);
 
-    let row: (String, i64) = connection
+    let row: (String, Option<i64>) = connection
         .query_row(
-            "SELECT path, archive FROM file_entries WHERE id = 'legacy-file'",
+            "SELECT path, unix_mode FROM file_entries WHERE id = 'legacy-file'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("read upgraded row");
-    assert_eq!(row, ("legacy.bin".to_string(), 0));
+    assert_eq!(row, ("legacy.bin".to_string(), None));
 }
 
 const PRIOR_SOURCE_MIGRATIONS: &[&str] = &[
@@ -140,24 +96,20 @@ const PRIOR_SOURCE_MIGRATIONS: &[&str] = &[
     "source_031_mount_directory_index",
     "source_032_deleted_recovery_hashes",
     "source_033_timeline_case_id_index",
+    "source_034_file_entry_archive",
 ];
 
-fn assert_archive_contract(
-    conn: &Connection,
-    file_id: &str,
-    data_source_id: &str,
-    enforces_check: bool,
-) {
+fn assert_unix_mode_contract(conn: &Connection, file_id: &str, data_source_id: &str) {
     let column: (String, i64, Option<String>) = conn
         .query_row(
             "SELECT type, \"notnull\", dflt_value
              FROM pragma_table_info('file_entries')
-             WHERE name = 'archive'",
+             WHERE name = 'unix_mode'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
-        .expect("archive column");
-    assert_eq!(column, ("INTEGER".to_string(), 1, Some("0".to_string())));
+        .expect("unix_mode column");
+    assert_eq!(column, ("INTEGER".to_string(), 0, None));
 
     conn.execute(
         "INSERT INTO file_entries
@@ -165,33 +117,29 @@ fn assert_archive_contract(
          VALUES (?1, ?2, 'plain.txt', 'plain.txt', 'file')",
         (file_id, data_source_id),
     )
-    .expect("insert file with default archive state");
-    let default_value: i64 = conn
+    .expect("insert file without unix mode");
+    let default_value: Option<i64> = conn
         .query_row(
-            "SELECT archive FROM file_entries WHERE id = ?1",
+            "SELECT unix_mode FROM file_entries WHERE id = ?1",
             [file_id],
             |row| row.get(0),
         )
         .expect("read default state");
-    assert_eq!(default_value, 0);
+    assert_eq!(default_value, None);
 
     conn.execute(
-        "UPDATE file_entries SET archive = 1 WHERE id = ?1",
+        "UPDATE file_entries SET unix_mode = 33188 WHERE id = ?1",
         [file_id],
     )
-    .expect("persist archive state");
-    if enforces_check {
-        let error = conn
-            .execute(
-                "UPDATE file_entries SET archive = 2 WHERE id = ?1",
-                [file_id],
-            )
-            .expect_err("reject non-boolean archive state");
-        assert!(matches!(
-            error.sqlite_error_code(),
-            Some(ErrorCode::ConstraintViolation)
-        ));
-    }
+    .expect("persist unix mode");
+    let stored: Option<i64> = conn
+        .query_row(
+            "SELECT unix_mode FROM file_entries WHERE id = ?1",
+            [file_id],
+            |row| row.get(0),
+        )
+        .expect("read persisted unix mode");
+    assert_eq!(stored, Some(0o100644i64));
 }
 
 fn seed_application_source(conn: &Connection) {

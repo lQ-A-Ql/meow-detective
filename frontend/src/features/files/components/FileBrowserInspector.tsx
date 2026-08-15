@@ -8,6 +8,7 @@ import {
 import type { FileEntryRow, FileTreeNode } from '@/types/models';
 import type { DataSourcePartition } from '@/types/models';
 import { BitLockerVolumePanel } from '@/features/files/components/BitLockerVolumePanel';
+import { formatUnixMode } from '@/features/files/components/FileListPanel';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 
 interface FileBrowserInspectorProps {
@@ -101,6 +102,12 @@ export function FileBrowserInspector({
             <div className="text-forensics-text-secondary">{selectedFile?.readOnly ? 'true' : 'false'}</div>
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.archive')}</div>
             <div className="text-forensics-text-secondary">{selectedFile?.archive ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.permissions')}</div>
+            <div className="text-forensics-text-secondary">
+              {selectedFile?.unixMode !== undefined && selectedFile?.unixMode !== null
+                ? `${(selectedFile.unixMode & 0o7777).toString(8).padStart(4, '0')} ${formatUnixMode(selectedFile.unixMode)}`
+                : '-'}
+            </div>
           </div>
         </InspectorSection>
 

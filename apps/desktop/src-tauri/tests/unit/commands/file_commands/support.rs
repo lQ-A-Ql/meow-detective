@@ -188,6 +188,7 @@ pub(super) fn with_raw_exfat_case_file(
                 encrypted: false,
                 read_only: false,
                 archive: false,
+                unix_mode: None,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

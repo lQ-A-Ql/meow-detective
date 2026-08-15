@@ -17,6 +17,9 @@ pub struct FsNode {
     /// True when the archive bit is set (NTFS/FAT/exFAT directory metadata).
     /// Filesystems without an archive concept always report false.
     pub archive: bool,
+    /// Full Unix mode (type bits + permission bits) from the inode.
+    /// `None` for filesystems without Unix permission semantics.
+    pub unix_mode: Option<u32>,
     pub created_at: Option<FsTimestamp>,
     pub modified_at: Option<FsTimestamp>,
     pub accessed_at: Option<FsTimestamp>,
@@ -82,6 +85,7 @@ pub fn fs_node_with_attributes(
         read_only: false,
         encrypted,
         archive: false,
+        unix_mode: None,
         created_at,
         modified_at,
         accessed_at,

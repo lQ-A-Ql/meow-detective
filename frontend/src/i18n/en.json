@@ -109,7 +109,8 @@
         "hidden": "hidden",
         "system": "system",
         "readOnly": "readOnly",
-        "archive": "archive"
+        "archive": "archive",
+        "permissions": "permissions"
       },
       "extract": {
         "pending": "Extracting...",

@@ -58,6 +58,7 @@ impl FileTask {
             encrypted: self.encrypted,
             read_only: false,
             archive: false,
+            unix_mode: None,
             created_at: self.created_at,
             modified_at: self.modified_at,
             accessed_at: self.accessed_at,

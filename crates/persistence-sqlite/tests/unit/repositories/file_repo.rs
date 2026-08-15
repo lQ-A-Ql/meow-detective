@@ -37,6 +37,7 @@ fn entry(id: &str, ds_id: &DataSourceId, path: &str) -> FileEntry {
         encrypted: false,
         read_only: false,
         archive: false,
+        unix_mode: None,
         created_at: None,
         modified_at: None,
         accessed_at: None,
@@ -206,6 +207,7 @@ fn reads_and_assigns_partition_index_by_file_id() {
             encrypted: false,
             read_only: false,
             archive: false,
+            unix_mode: None,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -227,6 +229,7 @@ fn reads_and_assigns_partition_index_by_file_id() {
             encrypted: false,
             read_only: false,
             archive: false,
+            unix_mode: None,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -375,6 +378,7 @@ fn read_only_and_archive_flags_round_trip_through_the_repository() {
     let mut flagged = entry("flagged", &ds_id, "root/flagged.txt");
     flagged.read_only = true;
     flagged.archive = true;
+    flagged.unix_mode = Some(0o100644);
     let plain = entry("plain", &ds_id, "root/plain.txt");
     repo.insert_batch(&[flagged, plain]).unwrap();
 
@@ -384,6 +388,7 @@ fn read_only_and_archive_flags_round_trip_through_the_repository() {
         .expect("flagged entry");
     assert!(loaded.read_only);
     assert!(loaded.archive);
+    assert_eq!(loaded.unix_mode, Some(0o100644));
     assert!(!loaded.hidden);
     assert!(!loaded.system);
 
@@ -393,6 +398,7 @@ fn read_only_and_archive_flags_round_trip_through_the_repository() {
         .expect("plain entry");
     assert!(!plain.read_only);
     assert!(!plain.archive);
+    assert_eq!(plain.unix_mode, None);
 }
 
 #[test]
@@ -417,6 +423,7 @@ fn catalog_repo_insert_and_root_update_persist_attribute_flags() {
     );
     child.read_only = true;
     child.archive = true;
+    child.unix_mode = Some(0o100600);
     catalog
         .insert_batch_with_partition_index_in_transaction(&[root, child], 0)
         .unwrap();
@@ -427,6 +434,7 @@ fn catalog_repo_insert_and_root_update_persist_attribute_flags() {
         .expect("catalog child");
     assert!(loaded.read_only);
     assert!(loaded.archive);
+    assert_eq!(loaded.unix_mode, Some(0o100600));
     let loaded_root = repo
         .find_by_id(&FileEntryId("root".to_string()))
         .unwrap()

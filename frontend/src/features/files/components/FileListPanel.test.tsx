@@ -150,4 +150,13 @@ describe('formatEntryAttributes', () => {
       formatEntryAttributes({ ...base, readOnly: true, hidden: true, system: true, archive: true }),
     ).toBe('RHSA');
   });
+
+  it('renders ls -l form when unixMode is present', () => {
+    expect(formatEntryAttributes({ ...base, unixMode: 0o100644 })).toBe('-rw-r--r--');
+    expect(formatEntryAttributes({ ...DIRECTORY, unixMode: 0o040755 })).toBe('drwxr-xr-x');
+    expect(formatEntryAttributes({ ...base, unixMode: 0o120777 })).toBe('lrwxrwxrwx');
+    expect(formatEntryAttributes({ ...base, unixMode: 0o100600, readOnly: true })).toBe(
+      '-rw-------',
+    );
+  });
 });

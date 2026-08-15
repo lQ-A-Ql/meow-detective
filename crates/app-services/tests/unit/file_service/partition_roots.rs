@@ -28,6 +28,7 @@ impl FileSystemReader for TwoFileFs {
                 read_only: false,
                 encrypted: false,
                 archive: false,
+                unix_mode: None,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

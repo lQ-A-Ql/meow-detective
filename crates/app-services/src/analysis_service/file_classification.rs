@@ -65,7 +65,7 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
 
     let mut statement = conn.prepare(
         "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive
+                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
          FROM file_entries
          WHERE entry_type = 'file' COLLATE NOCASE
          ORDER BY COALESCE(size, 0) DESC, path ASC",

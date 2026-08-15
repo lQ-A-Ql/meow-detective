@@ -37,6 +37,7 @@ impl FileSystemReader for F2fsReader {
                 if is_directory { 0 } else { inode.size },
             );
             node.read_only = inode.mode & 0o222 == 0;
+            node.unix_mode = Some(u32::from(inode.mode));
             node.encrypted = inode.is_encrypted();
             nodes.push(node);
         }

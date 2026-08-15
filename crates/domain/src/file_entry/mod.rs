@@ -38,6 +38,9 @@ pub struct FileEntry {
     /// True when the source filesystem archive bit is set (NTFS/FAT/exFAT).
     #[serde(default)]
     pub archive: bool,
+    /// Full Unix mode (type bits + permission bits) for Unix filesystems.
+    #[serde(default)]
+    pub unix_mode: Option<u32>,
     pub created_at: Option<DateTime<Utc>>,
     pub modified_at: Option<DateTime<Utc>>,
     pub accessed_at: Option<DateTime<Utc>>,
