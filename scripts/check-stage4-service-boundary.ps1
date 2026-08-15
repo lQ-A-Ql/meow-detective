@@ -204,7 +204,7 @@ $moduleManifest = @(
   @('crates/app-services/src/import_pipeline/phases/mod.rs', 'enumerate', 'crates/app-services/src/import_pipeline/phases/enumerate.rs'),
   @('crates/app-services/src/import_pipeline/phases/mod.rs', 'finalize', 'crates/app-services/src/import_pipeline/phases/finalize.rs'),
   @('crates/app-services/src/import_pipeline/partition/mod.rs', 'candidates', 'crates/app-services/src/import_pipeline/partition/candidates.rs'),
-  @('crates/app-services/src/file_service/metadata/mod.rs', 'source_routing', 'crates/app-services/src/file_service/metadata/source_routing.rs'),
+  @('crates/app-services/src/file_service/metadata/mod.rs', 'source_routing', 'crates/app-services/src/file_service/metadata/source_routing/mod.rs'),
   @('crates/app-services/src/file_service/viewer/range/mod.rs', 'api', 'crates/app-services/src/file_service/viewer/range/api.rs'),
   @('crates/app-services/src/file_service/mft/mod.rs', 'enumeration', 'crates/app-services/src/file_service/mft/enumeration.rs'),
   @('crates/app-services/src/artifact_service.rs', 'persistence', 'crates/app-services/src/artifact_service/persistence.rs'),
@@ -327,7 +327,7 @@ Assert-NoModuleReferencesUnder `
   'File services must not depend on derived-source orchestration'
 
 Assert-MaskedPattern `
-  'crates/app-services/src/derived_source_service.rs' `
+  'crates/app-services/src/derived_source_service/orchestration.rs' `
   '\bceph_reconstruction\b' `
   'derived_source_service must remain the owner of Ceph-derived source orchestration'
 Assert-MaskedPattern `
@@ -375,7 +375,7 @@ if ($importMasked -notmatch 'pub\s+trait\s+ImportEventSink' -or
 }
 
 Assert-MaskedPattern `
-  'crates/app-services/src/file_service/metadata/source_routing.rs' `
+  'crates/app-services/src/file_service/metadata/source_routing/browse.rs' `
   '\bGlobalFileId\b' `
   'file_service source routing must resolve source-scoped file identifiers'
 Assert-MaskedPattern `

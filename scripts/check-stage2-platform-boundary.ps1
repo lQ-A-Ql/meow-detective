@@ -295,9 +295,9 @@ foreach ($relativePath in @(
   'crates/app-services/src/timeline_service/pagination.rs',
   'crates/app-services/src/graph_service/source_aggregation.rs',
   'crates/app-services/src/correlation/graph/snapshot.rs',
-  'crates/app-services/src/case_service.rs',
+  'crates/app-services/src/case_service/metrics.rs',
   'crates/app-services/src/file_service/data_sources.rs',
-  'crates/app-services/src/file_service/metadata/source_routing.rs',
+  'crates/app-services/src/file_service/metadata/source_routing/browse.rs',
   'crates/app-services/src/search_service/case_search.rs',
   'crates/app-services/src/step_recorder.rs'
 )) {

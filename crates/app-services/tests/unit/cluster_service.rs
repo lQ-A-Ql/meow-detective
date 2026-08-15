@@ -1,4 +1,6 @@
 use super::*;
+use domain::{DataSourceKind, DataSourcePlatform};
+use std::path::PathBuf;
 
 #[test]
 fn cluster_parse_plan_is_explicitly_non_executing() {

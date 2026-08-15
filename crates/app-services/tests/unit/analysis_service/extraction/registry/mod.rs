@@ -1,7 +1,9 @@
 use super::ntuser::user_assist_artifacts;
 use super::sam::sam_user_artifacts;
 use super::system::{network_adapter_artifacts, shutdown_time_artifacts};
+use super::warnings::govern_registry_warnings;
 use super::*;
+use crate::analysis_service::candidates::EvidenceCandidate;
 use chrono::Utc;
 use domain::FileEntryId;
 use serde_json::Value;

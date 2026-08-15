@@ -1,5 +1,7 @@
 use super::*;
+use domain::{DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
+use std::path::{Path, PathBuf};
 
 #[test]
 fn global_file_id_round_trips() {

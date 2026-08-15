@@ -1,4 +1,8 @@
+use super::check::{estimate_files_from_size, select_strategy};
 use super::*;
+use crate::import_state::{ImportPlan, ImportStrategy};
+use domain::{DataSourceKind, DataSourcePlatform};
+use std::path::Path;
 
 #[test]
 fn test_select_strategy_small() {

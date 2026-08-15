@@ -1,4 +1,5 @@
 use super::*;
+use domain::{CaseId, DataSourceKind};
 use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind};
 use std::sync::{
     atomic::{AtomicBool, Ordering},

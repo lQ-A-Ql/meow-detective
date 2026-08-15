@@ -12,6 +12,7 @@ use persistence_sqlite::repositories::{
     timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use transport::dto::CorrelationNodeKindDto;
 

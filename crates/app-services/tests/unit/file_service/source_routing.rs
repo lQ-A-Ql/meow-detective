@@ -1,10 +1,12 @@
 use super::*;
-use crate::file_service::PreparedSourceReadState;
+use crate::file_service::{PreparedSourceReadState, SourceReadContext};
+use domain::{DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
 use sha2::{Digest, Sha256};
+use std::path::Path;
 use std::sync::Arc;
 
 fn setup_case_conn() -> rusqlite::Connection {

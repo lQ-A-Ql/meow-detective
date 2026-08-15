@@ -1,4 +1,4 @@
-use super::{remove_dir_all_with_retry, CaseServiceError, Result};
+use super::{lifecycle::remove_dir_all_with_retry, CaseServiceError, Result};
 use domain::DataSourceId;
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use rusqlite::Connection;

@@ -15,20 +15,19 @@ mod artifact_family_platform;
 mod error;
 mod overview;
 mod platform_coverage;
+mod rule_pack_status;
 
 use rusqlite::Connection;
 use std::path::Path;
 
-use transport::dto::{
-    BatchStatusDto, GraphStatsDto, NotebookStatsDto, RulePackInfoDto, RulePackStatusDto,
-    V3GovernanceSnapshotDto,
-};
+use transport::dto::{BatchStatusDto, GraphStatsDto, NotebookStatsDto, V3GovernanceSnapshotDto};
 
 pub use error::V3GovernanceError;
 pub use overview::get_case_overview_snapshot_for_case;
 use platform_coverage::{
     apply_platform_integrity_gate, build_platform_coverage, build_platform_coverage_for_case,
 };
+pub(crate) use rule_pack_status::build_rule_pack_status;
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -116,56 +115,6 @@ fn build_graph_stats_for_case(
         density: graph_snapshot.density,
         largest_component_size: graph_snapshot.largest_component_size,
     })
-}
-
-// ── Rule Pack Status ───────────────────────────────────────────────────────
-
-fn build_rule_pack_status() -> RulePackStatusDto {
-    use crate::rule_pack::parser;
-
-    build_rule_pack_status_from(parser::V2_STANDARD_TOML)
-}
-
-fn build_rule_pack_status_from(source: &str) -> RulePackStatusDto {
-    use crate::rule_pack::parser;
-
-    let mut loaded_packs = Vec::new();
-    let mut load_status = "unavailable";
-
-    match parser::parse_rule_pack(source) {
-        Ok(pack) => {
-            load_status = "loaded";
-            let rule_count = pack.rules.len() as u32;
-            loaded_packs.push(RulePackInfoDto {
-                name: pack.manifest.name.clone(),
-                version: pack.manifest.version.clone(),
-                author: pack.manifest.author.clone(),
-                rule_count,
-                scope: pack.manifest.scope.clone(),
-            });
-        }
-        Err(error) => {
-            tracing::error!(?error, "built-in rule-pack definition could not be loaded");
-        }
-    }
-
-    let total_rule_count = loaded_packs.iter().map(|p| p.rule_count).sum::<u32>();
-
-    // The built-in pack is currently a definition-only capability. No persisted
-    // per-case rule-pack run record exists, so never present a loaded definition
-    // as if it had executed for the active case.
-    let execution_status = if total_rule_count > 0 {
-        "not_executed"
-    } else {
-        "unavailable"
-    };
-
-    RulePackStatusDto {
-        loaded_packs,
-        total_rule_count,
-        load_status: load_status.to_string(),
-        execution_status: execution_status.to_string(),
-    }
 }
 
 // ── Batch Status ───────────────────────────────────────────────────────────
