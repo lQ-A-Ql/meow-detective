@@ -12,11 +12,13 @@ use transport::dto::{
 mod case_search;
 mod error;
 mod instrumented;
+mod search_request;
 pub use error::SearchError;
 pub use instrumented::{
     search_files_for_case_cursor_instrumented, search_files_for_case_instrumented,
     InstrumentedFileSearchResult,
 };
+pub use search_request::search_files_request_for_case;
 
 #[derive(Debug, Clone)]
 pub struct IndexStats {

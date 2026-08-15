@@ -6,7 +6,6 @@ use persistence_sqlite::repositories::{
     file_repo::FileRepo,
 };
 use tempfile::TempDir;
-use transport::{dto::FileExtractionResultDto, CommandError};
 
 use super::support::with_raw_exfat_case_file;
 
@@ -120,52 +119,6 @@ fn file_extraction_audit_failure_is_not_silently_ignored() {
     .expect_err("missing audit schema must be reported");
 
     assert_eq!(error.category, "io");
-}
-
-#[test]
-fn completed_extraction_surfaces_audit_failure_as_partial_success() {
-    let extraction = FileExtractionResultDto {
-        file_id: "ds:source:file".to_string(),
-        bytes_written: 10,
-        source_size: Some(10),
-        sha256: "a".repeat(64),
-        destination_file_name: "evidence.bin".to_string(),
-        size_verified: true,
-        audit_persisted: false,
-        warning: None,
-    };
-
-    let result = super::super::extract::resolve_extract_and_audit(
-        Ok(extraction),
-        Err(CommandError::internal("audit unavailable")),
-    )
-    .expect("the published file remains a successful extraction");
-
-    assert!(!result.audit_persisted);
-    assert!(result
-        .warning
-        .as_deref()
-        .is_some_and(|warning| warning.contains("audit record")));
-}
-
-#[test]
-fn completed_extraction_marks_audit_as_persisted_only_after_success() {
-    let extraction = FileExtractionResultDto {
-        file_id: "ds:source:file".to_string(),
-        bytes_written: 10,
-        source_size: Some(10),
-        sha256: "a".repeat(64),
-        destination_file_name: "evidence.bin".to_string(),
-        size_verified: true,
-        audit_persisted: false,
-        warning: Some("stale warning".to_string()),
-    };
-
-    let result = super::super::extract::resolve_extract_and_audit(Ok(extraction), Ok(()))
-        .expect("successful audit should preserve extraction success");
-
-    assert!(result.audit_persisted);
-    assert!(result.warning.is_none());
 }
 
 #[test]

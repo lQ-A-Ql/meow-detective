@@ -88,7 +88,6 @@ $approvedRepositoryReferences = @{
   'apps/desktop/src-tauri/src/commands/mcp_commands/prompts.rs' = @('audit_repo')
   'apps/desktop/src-tauri/src/commands/mcp_commands/resources.rs' = @('audit_repo')
   'apps/desktop/src-tauri/src/commands/mcp_commands/tools.rs' = @('audit_repo')
-  'apps/desktop/src-tauri/src/commands/mount_commands.rs' = @('audit_repo')
 }
 
 function Find-UnapprovedRepositoryReference(

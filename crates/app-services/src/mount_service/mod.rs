@@ -1,3 +1,4 @@
+mod audit;
 mod cache;
 mod catalog;
 mod directory_cache;
@@ -11,6 +12,7 @@ mod open;
 mod physical;
 mod source_validation;
 
+pub use audit::{record_image_unmount_audit, record_logical_mount_audit};
 pub use emulation::{emulation_preflight, prepare_emulation_source, PreparedEmulationSource};
 pub use emulation_linux::{linux_guest_profile, LinuxGuestProfile};
 pub use error::MountServiceError;

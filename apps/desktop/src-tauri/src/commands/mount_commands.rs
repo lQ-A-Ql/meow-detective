@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use app_services::mount_service::{record_image_unmount_audit, record_logical_mount_audit};
 use tauri::State;
 use transport::{commands::MountImageRequestDto, dto::MountStatusDto, CommandError};
 
@@ -32,21 +32,7 @@ pub async fn mount_image(
                 request.mount_point.as_deref(),
             )
             .map_err(CommandError::from_typed_service_error)?;
-        let details = serde_json::json!({
-            "status": "mounted",
-            "mountId": status.target.mount_id,
-            "partitionIndex": status.target.partition_index,
-            "filesystem": status.target.filesystem,
-            "mountPoint": status.target.mount_point,
-            "readOnly": status.target.read_only,
-        });
-        if let Err(error) = AuditRepo::new(&connection).log(
-            Some(&active.meta.id.0),
-            "system",
-            &AuditAction::ImageMount,
-            Some(&request.data_source_id),
-            &details.to_string(),
-        ) {
+        if let Err(error) = record_logical_mount_audit(&connection, &active.meta.id, &status) {
             if let Err(cleanup_error) = registry.unmount(&status.target.mount_id) {
                 tracing::error!(
                     error = %cleanup_error,
@@ -88,22 +74,7 @@ pub async fn unmount_image(
                 .status(&mount_id)
                 .map_err(CommandError::from_typed_service_error)?
         };
-        let details = serde_json::json!({
-            "status": "requested",
-            "mountId": status.target.mount_id,
-            "partitionIndex": status.target.partition_index,
-            "filesystem": status.target.filesystem,
-            "mountPoint": status.target.mount_point,
-            "readOnly": status.target.read_only,
-        });
-        AuditRepo::new(&connection)
-            .log(
-                Some(&active.meta.id.0),
-                "system",
-                &AuditAction::ImageUnmount,
-                Some(&status.target.data_source_id),
-                &details.to_string(),
-            )
+        record_image_unmount_audit(&connection, &active.meta.id, &status)
             .map_err(CommandError::from_typed_service_error)?;
         if physical {
             app_state
