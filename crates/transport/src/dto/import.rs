@@ -110,14 +110,6 @@ pub enum CancelReasonDto {
     Superseded,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CancelJobRequestDto {
-    pub job_id: String,
-    pub reason: CancelReasonDto,
-    pub drain_timeout_ms: u64,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CancellationStateDto {

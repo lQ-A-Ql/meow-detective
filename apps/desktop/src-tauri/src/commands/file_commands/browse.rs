@@ -4,32 +4,13 @@ use transport::{
     commands::{
         GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,
     },
-    dto::{FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto},
+    dto::{FileChildrenDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto},
     CommandError,
 };
 
 use crate::state::AppState;
 
 use super::support::{run_active_case_command, run_optional_active_case_command};
-
-/// Get children of a file tree node (lazy loading).
-#[tauri::command]
-pub async fn get_file_children(
-    state: State<'_, AppState>,
-    parent_id: String,
-) -> Result<Vec<FileTreeNodeDto>, CommandError> {
-    let page = get_file_children_request(
-        state,
-        GetFileChildrenRequest {
-            parent_id,
-            offset: 0,
-            limit: infrastructure::constants::MAX_PAGE_LIMIT,
-            show_hidden: false,
-        },
-    )
-    .await?;
-    Ok(page.children)
-}
 
 /// Get children of a file tree node with explicit request.
 #[tauri::command]
@@ -61,14 +42,6 @@ pub async fn get_file_children_request(
     .await
 }
 
-/// Get the complete file tree for the current case.
-#[tauri::command]
-pub async fn get_file_tree(
-    state: State<'_, AppState>,
-) -> Result<Vec<FileTreeNodeDto>, CommandError> {
-    get_file_tree_request(state, GetFileTreeRequest::default()).await
-}
-
 /// Get the complete file tree for the current case with explicit visibility.
 #[tauri::command]
 pub async fn get_file_tree_request(
@@ -85,15 +58,6 @@ pub async fn get_file_tree_request(
         .map_err(CommandError::from_typed_service_error)
     })
     .await
-}
-
-/// Get file rows for display in table view.
-#[tauri::command]
-pub async fn get_file_rows(
-    state: State<'_, AppState>,
-) -> Result<Vec<FileEntryRowDto>, CommandError> {
-    let page = get_file_rows_request(state, GetFileRowsRequest::default()).await?;
-    Ok(page.rows)
 }
 
 /// Get file rows with explicit request parameters.

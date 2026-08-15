@@ -19,9 +19,9 @@ pub(crate) use crate::commands::{
         start_batch,
     },
     case_commands::{
-        close_case, create_analysis_demo_case, create_case, delete_case, delete_data_source,
-        get_case_metrics, get_current_case, get_data_sources, get_recent_cases, get_recent_objects,
-        open_case, remove_case_from_list, rename_data_source,
+        close_case, create_case, delete_case, delete_data_source, get_case_metrics,
+        get_current_case, get_data_sources, get_recent_cases, get_recent_objects, open_case,
+        remove_case_from_list, rename_data_source,
     },
     emulation_commands::{
         apply_emulation_bypass, apply_emulation_linux_bypass, cleanup_emulation_osdata,
@@ -32,11 +32,11 @@ pub(crate) use crate::commands::{
     },
     file_commands::{
         close_file_handle, export_deleted_recovery, extract_file, forget_persisted_bitlocker_key,
-        get_document_preview, get_file_children, get_file_children_request, get_file_jump_context,
-        get_file_rows, get_file_rows_request, get_file_tree, get_file_tree_request,
-        get_image_preview, get_media_url, get_text_preview, import_unlocked_bitlocker_catalog,
-        inspect_bitlocker_volume, list_deleted_recoveries, lock_bitlocker_volume, open_file_handle,
-        open_file_handle_request, read_deleted_recovery_range, read_file_range, read_media_range,
+        get_document_preview, get_file_children_request, get_file_jump_context,
+        get_file_rows_request, get_file_tree_request, get_image_preview, get_media_url,
+        get_text_preview, import_unlocked_bitlocker_catalog, inspect_bitlocker_volume,
+        list_deleted_recoveries, lock_bitlocker_volume, open_file_handle_request,
+        read_deleted_recovery_range, read_file_range, read_media_range,
         restore_persisted_bitlocker_key, run_deleted_recovery, search_deleted_recoveries_by_hash,
         unlock_bitlocker_with_memory_image, unlock_bitlocker_with_password,
         unlock_bitlocker_with_recovery_password,
@@ -64,7 +64,7 @@ pub(crate) use crate::commands::{
         get_report_history, get_report_templates,
     },
     rule_pack_commands::{list_loaded_rule_packs, load_rule_pack, validate_rule_pack},
-    search_commands::{search_files, search_files_request},
+    search_commands::search_files_request,
     settings_commands::{get_app_settings, save_app_settings},
     timeline_commands::{get_timeline_event_by_id, get_timeline_events, get_timeline_facets},
 };

@@ -14,8 +14,7 @@ use crate::state::AppState;
 use super::support::run_active_case_command;
 
 /// Open a file handle for preview (returns handle ID and metadata).
-#[tauri::command]
-pub async fn open_file_handle(
+async fn open_file_handle(
     state: State<'_, AppState>,
     file_id: String,
 ) -> Result<ViewerHandleDto, CommandError> {

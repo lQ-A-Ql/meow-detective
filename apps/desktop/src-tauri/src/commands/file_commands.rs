@@ -15,8 +15,7 @@ pub use bitlocker::{
     unlock_bitlocker_with_password, unlock_bitlocker_with_recovery_password,
 };
 pub use browse::{
-    get_file_children, get_file_children_request, get_file_jump_context, get_file_rows,
-    get_file_rows_request, get_file_tree, get_file_tree_request,
+    get_file_children_request, get_file_jump_context, get_file_rows_request, get_file_tree_request,
 };
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
@@ -25,7 +24,7 @@ pub use recovery::{
     run_deleted_recovery, search_deleted_recoveries_by_hash,
 };
 pub use viewer::{
-    close_file_handle, get_document_preview, get_image_preview, get_text_preview, open_file_handle,
+    close_file_handle, get_document_preview, get_image_preview, get_text_preview,
     open_file_handle_request, read_file_range,
 };
 

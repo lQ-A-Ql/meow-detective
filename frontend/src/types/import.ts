@@ -72,12 +72,6 @@ export interface PartialResult {
 
 export type CancelReason = 'userRequested' | 'caseClosing' | 'memoryLimit' | 'superseded';
 
-export interface CancelJobRequest {
-  jobId: string;
-  reason: CancelReason;
-  drainTimeoutMs: number;
-}
-
 export type CancellationState = 'notRequested' | 'requested' | 'acknowledged' | 'draining' | 'cancelled' | 'timedOut';
 
 export interface JobCancellation {

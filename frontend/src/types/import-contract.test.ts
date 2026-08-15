@@ -1,6 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {
-  CancelJobRequest,
   EventTopic,
   ImportDataSourceRequest,
   ImportPhaseProgress,
@@ -100,11 +99,6 @@ describe('import progress contract models', () => {
   });
 
   it('accepts cancellation payloads with detailed design states', () => {
-    const request = {
-      jobId: 'job-1',
-      reason: 'memoryLimit',
-      drainTimeoutMs: 30_000,
-    } satisfies CancelJobRequest;
     const cancellation = {
       jobId: 'job-1',
       requestedAt: '2026-06-05T00:02:00Z',
@@ -114,14 +108,10 @@ describe('import progress contract models', () => {
       detail: 'Draining import workers',
     } satisfies JobCancellation;
     const states: JobCancellation['state'][] = ['notRequested', 'requested', 'acknowledged', 'draining', 'cancelled', 'timedOut'];
-    const reasons: CancelJobRequest['reason'][] = ['userRequested', 'caseClosing', 'memoryLimit', 'superseded'];
 
-    expect(request.reason).toBe('memoryLimit');
-    expect(request.drainTimeoutMs).toBe(30_000);
     expect(cancellation.state).toBe('draining');
     expect(cancellation.safeToClose).toBe(false);
     expect(states).toContain('timedOut');
-    expect(reasons).toContain('caseClosing');
   });
 
   it('accepts cache and performance report payloads', () => {

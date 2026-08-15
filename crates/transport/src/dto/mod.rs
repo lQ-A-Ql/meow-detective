@@ -8,15 +8,12 @@ mod analysis_linux;
 mod analysis_plugin;
 mod analysis_registry;
 mod analysis_system;
-pub mod android;
 pub mod artifacts;
 pub mod batch;
 pub mod bitlocker;
 pub mod case;
 pub mod correlation;
 pub mod emulation;
-pub mod entity_resolution;
-pub mod exchange;
 pub mod files;
 mod governance;
 pub mod graph;
@@ -66,9 +63,6 @@ pub use analysis::{
     V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
     VerificationResultDto, WinlogonConfigDto,
 };
-pub use android::{
-    AndroidBackupDto, AndroidCallDto, AndroidChromeVisitDto, AndroidContactDto, AndroidSmsDto,
-};
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use bitlocker::{
@@ -95,8 +89,6 @@ pub use emulation::{
     EmulationPreflightDto, EmulationSessionStatusDto, EmulationStateDto,
     PrepareEmulationRequestDto,
 };
-pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
-pub use exchange::{StixExportRequestDto, StixExportResultDto};
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileExtractionPhaseDto, FileExtractionProgressDto,
     FileExtractionResultDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
@@ -107,10 +99,10 @@ pub use graph::{
     GraphSnapshotDto, ListGraphNodesRequest,
 };
 pub use import::{
-    CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,
-    ImportPhaseMetricsDto, ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto,
-    JobCancellationDto, PartialResultDto, PartialResultKindDto, PerformanceMetricDto,
-    PerformanceReportDto, PerformanceReportSummaryDto, ResultFreshnessDto,
+    CancelReasonDto, CancellationStateDto, ImportPhaseDto, ImportPhaseMetricsDto,
+    ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto, JobCancellationDto,
+    PartialResultDto, PartialResultKindDto, PerformanceMetricDto, PerformanceReportDto,
+    PerformanceReportSummaryDto, ResultFreshnessDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use mcp::{
@@ -126,8 +118,7 @@ pub use notebook::{
     AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
     GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,
     ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
-    NotebookExportDto, NotebookThreadEdgeDto, StepReplayDifferDto, StepReplayDto,
-    StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto, UpdateNotebookEntryRequest,
+    UpdateNotebookEntryRequest,
 };
 pub use recovery::{
     DeletedFileRecoveryDto, DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto,
@@ -136,11 +127,7 @@ pub use recovery::{
     RecoveryCompletenessDto, RecoveryHashAlgorithmDto, RecoveryIssueDto, RecoveryIssueSeverityDto,
     RecoveryProvenanceRangeDto, RecoveryScanStateDto,
 };
-pub use registry::{
-    MountPointDto, NtuserInfoDto, RecentDocDto, RegistryRunKeyDto, RegistryTransactionDto,
-    RegistryTransactionOperationDto, SamGroupDto, SamInfoDto, SamPasswordPolicyDto, SamUserDto,
-    TxLogParseResultDto,
-};
+pub use registry::RegistryRunKeyDto;
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
 pub use search::{

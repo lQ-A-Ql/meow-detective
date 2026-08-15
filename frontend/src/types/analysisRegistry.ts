@@ -319,26 +319,3 @@ export interface LsaPackage {
   notificationPackages: string[];
   securityPackages: string[];
 }
-
-export interface RecentDoc {
-  fileName: string;
-  extension: string;
-  lastAccessed?: string;
-  lnkTarget?: string;
-}
-
-export interface MountPoint {
-  driveLetter?: string;
-  volumeGuid?: string;
-  lastMounted?: string;
-}
-
-export interface NtuserInfo {
-  runKeys: RegistryRunKey[];
-  recentDocs: RecentDoc[];
-  userAssist: UserAssistEntry[];
-  typedUrls: string[];
-  wordWheelQuery: string[];
-  mountPoints: MountPoint[];
-  warnings: string[];
-}

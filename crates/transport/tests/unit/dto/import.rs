@@ -100,12 +100,7 @@ fn partial_result_base_dto_has_no_required_payload() {
 }
 
 #[test]
-fn cancellation_contract_serializes_design_request_and_state() {
-    let request = CancelJobRequestDto {
-        job_id: "job-1".to_string(),
-        reason: CancelReasonDto::MemoryLimit,
-        drain_timeout_ms: 30_000,
-    };
+fn cancellation_contract_serializes_state() {
     let cancellation = JobCancellationDto {
         job_id: "job-1".to_string(),
         requested_at: Some("2026-06-05T00:02:00Z".to_string()),
@@ -115,19 +110,14 @@ fn cancellation_contract_serializes_design_request_and_state() {
         detail: "Draining import workers".to_string(),
     };
 
-    let request_value = serde_json::to_value(request).expect("serialize request");
     let cancellation_value = serde_json::to_value(cancellation).expect("serialize cancellation");
 
-    assert_eq!(request_value["jobId"], "job-1");
-    assert_eq!(request_value["reason"], "memoryLimit");
-    assert_eq!(request_value["drainTimeoutMs"], 30_000);
     assert_eq!(cancellation_value["jobId"], "job-1");
     assert_eq!(cancellation_value["requestedAt"], "2026-06-05T00:02:00Z");
     assert_eq!(cancellation_value["acknowledgedAt"], "2026-06-05T00:02:01Z");
     assert_eq!(cancellation_value["state"], "draining");
     assert_eq!(cancellation_value["safeToClose"], false);
     assert_eq!(cancellation_value["detail"], "Draining import workers");
-    assert!(request_value.get("requestedBy").is_none());
     assert!(cancellation_value.get("canResume").is_none());
 }
 

@@ -1,8 +1,7 @@
 //! Notebook DTOs shared across the Tauri boundary.
 //!
 //! Mirrors `crates/domain/src/notebook.rs` domain types with camelCase serde
-//! for the frontend, plus investigation-step recording, step replay, and export
-//! structures.
+//! for the frontend, plus investigation-step recording structures.
 
 use serde::{Deserialize, Serialize};
 
@@ -105,67 +104,6 @@ pub struct InvestigationStepDto {
     pub error_code: Option<String>,
 }
 
-/// A collection of investigation steps that can be replayed.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct StepReplayDto {
-    /// The ordered list of investigation steps.
-    pub steps: Vec<InvestigationStepDto>,
-    /// Total number of steps in the replay.
-    pub total_steps: u64,
-    /// Whether the recorded steps can be replayed against the current case state.
-    pub replayable: bool,
-    /// Caveats or warnings about replay fidelity.
-    pub caveats: Vec<String>,
-}
-
-/// The result of replaying a range of investigation steps.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct StepReplayResultDto {
-    /// Steps whose re-execution produced matching results.
-    pub matched_steps: Vec<StepReplayMatchDto>,
-    /// Steps whose re-execution produced differing results.
-    pub differed_steps: Vec<StepReplayDifferDto>,
-    /// Steps that failed during re-execution.
-    pub failed_steps: Vec<StepReplayFailDto>,
-    /// Observations or caveats about the replay.
-    pub caveats: Vec<String>,
-}
-
-/// A step that replayed successfully with matching results.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct StepReplayMatchDto {
-    pub step_id: String,
-    pub step_kind: String,
-    pub recorded_duration_ms: u32,
-    pub replay_duration_ms: u32,
-    pub detail: String,
-}
-
-/// A step that replayed but produced different results from the recording.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct StepReplayDifferDto {
-    pub step_id: String,
-    pub step_kind: String,
-    pub recorded_duration_ms: u32,
-    pub replay_duration_ms: u32,
-    pub expected: String,
-    pub actual: String,
-}
-
-/// A step that failed during re-execution.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct StepReplayFailDto {
-    pub step_id: String,
-    pub step_kind: String,
-    pub recorded_duration_ms: u32,
-    pub error: String,
-}
-
 // ── Request DTOs for Tauri command parameters ─────────────────────────
 
 /// Request payload for creating a new notebook entry.
@@ -247,30 +185,6 @@ pub struct ListInvestigationStepsRequest {
     pub limit: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
-}
-
-/// A directed edge in the notebook entry thread graph (parent-child relationships).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct NotebookThreadEdgeDto {
-    /// The id of the source (parent) entry.
-    pub source_entry_id: String,
-    /// The id of the target (child) entry.
-    pub target_entry_id: String,
-    /// Human-readable label for this thread relationship.
-    pub label: String,
-}
-
-/// Full notebook export containing entries, citations, and the thread graph.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct NotebookExportDto {
-    /// All notebook entries in this export.
-    pub entries: Vec<NotebookEntryDto>,
-    /// All evidence citations in this export.
-    pub citations: Vec<EvidenceCitationDto>,
-    /// The parent-child thread edges between entries.
-    pub thread_graph: Vec<NotebookThreadEdgeDto>,
 }
 
 #[cfg(test)]

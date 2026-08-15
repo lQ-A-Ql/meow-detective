@@ -7,7 +7,6 @@ mod cancellation;
 mod candidates;
 mod capability;
 mod classification;
-mod demo;
 mod error;
 mod extraction;
 mod file_classification;
@@ -24,7 +23,6 @@ pub use candidates::{
     get_evidence_classification_summary, EvidenceCandidate, EvidenceCategoryDef,
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
-pub use demo::seed_analysis_demo_data;
 pub use error::AnalysisServiceError;
 pub(crate) use extraction::AnalysisExtractionExecution;
 pub use extraction::{

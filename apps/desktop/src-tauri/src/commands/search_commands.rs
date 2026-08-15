@@ -5,32 +5,6 @@ use transport::{commands::SearchFilesRequest, dto::SearchFileResultPageDto, Comm
 use crate::events::event_bridge;
 use crate::state::AppState;
 
-/// Search files in the current case's index.
-#[tauri::command]
-pub async fn search_files(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    query: String,
-) -> Result<SearchFileResultPageDto, CommandError> {
-    search_files_request(
-        state,
-        app,
-        SearchFilesRequest {
-            query,
-            match_path: false,
-            entry_type: Default::default(),
-            extensions: Vec::new(),
-            data_source_ids: Vec::new(),
-            sort_key: Default::default(),
-            sort_direction: Default::default(),
-            offset: 0,
-            limit: infrastructure::constants::SEARCH_PAGE_SIZE as u32,
-            cursor: None,
-        },
-    )
-    .await
-}
-
 /// Search files with explicit request parameters.
 #[tauri::command]
 pub async fn search_files_request(
