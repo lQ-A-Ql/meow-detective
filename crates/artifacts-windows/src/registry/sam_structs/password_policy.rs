@@ -2,26 +2,26 @@ use binread::BinRead;
 
 #[derive(BinRead, Debug)]
 #[br(little)]
-pub struct DomainAccountFRaw {
-    pub revision: u32,
+pub(crate) struct DomainAccountFRaw {
+    pub _revision: u32,
     _pad1: u32,
-    pub creation_time: u64,
-    pub domain_modified_count: u64,
+    pub _creation_time: u64,
+    pub _domain_modified_count: u64,
     pub max_pwd_age: u64,
     pub min_pwd_age: u64,
-    pub force_logoff: u64,
+    pub _force_logoff: u64,
     pub lockout_duration: u64,
     pub lockout_observation_window: u64,
     _pad2: u64,
-    pub next_rid: u32,
-    pub pwd_properties: u32,
+    pub _next_rid: u32,
+    pub _pwd_properties: u32,
     pub min_pwd_length: u16,
     pub pwd_history_length: u16,
     pub lockout_threshold: u16,
     _pad3: u16,
-    pub server_state: u32,
-    pub server_role: u16,
-    pub uas_compatibility_req: u16,
+    pub _server_state: u32,
+    pub _server_role: u16,
+    pub _uas_compatibility_req: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -38,7 +38,7 @@ pub struct SamPasswordPolicy {
 const HUNDRED_NS_PER_DAY: u64 = 864_000_000_000;
 const HUNDRED_NS_PER_MINUTE: u64 = 600_000_000;
 
-pub fn parse_domain_account_f(data: &[u8]) -> Option<SamPasswordPolicy> {
+pub(crate) fn parse_domain_account_f(data: &[u8]) -> Option<SamPasswordPolicy> {
     let mut cursor = std::io::Cursor::new(data);
     let raw = DomainAccountFRaw::read(&mut cursor).ok()?;
     Some(SamPasswordPolicy {

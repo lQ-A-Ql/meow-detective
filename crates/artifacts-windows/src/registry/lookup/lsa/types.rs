@@ -55,7 +55,7 @@ pub struct TbalSecret {
 
 impl TbalSecret {
     /// Secret name prefix that marks a TBAL provisioning record.
-    pub const NAME_PREFIX: &'static str = "M$_MSV1_0_TBAL_PRIMARY_";
+    pub(crate) const NAME_PREFIX: &'static str = "M$_MSV1_0_TBAL_PRIMARY_";
 
     /// Parse a decrypted TBAL secret, requiring the duplicated password-SHA1
     /// fields to agree before trusting the offsets.

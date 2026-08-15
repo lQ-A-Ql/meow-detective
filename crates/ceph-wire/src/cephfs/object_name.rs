@@ -74,9 +74,9 @@ pub struct CephFsMetadataObjectCandidates {
 
 impl CephFsMetadataObjectCandidates {
     pub const INODE: u8 = 1 << 0;
-    pub const DIRFRAG: u8 = 1 << 1;
-    pub const DENTRY: u8 = 1 << 2;
-    pub const BACKTRACE: u8 = 1 << 3;
+    pub(crate) const DIRFRAG: u8 = 1 << 1;
+    pub(crate) const DENTRY: u8 = 1 << 2;
+    pub(crate) const BACKTRACE: u8 = 1 << 3;
     pub const XATTR: u8 = 1 << 4;
     pub const SNAPSHOT_REALM: u8 = 1 << 5;
 

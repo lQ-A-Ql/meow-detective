@@ -8,7 +8,7 @@ use crate::{
     error::{CephWireError, Result},
 };
 
-pub const BLUEFS_MAX_OPERATION_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const BLUEFS_MAX_OPERATION_BYTES: usize = 16 * 1024 * 1024;
 pub const BLUEFS_MAX_OPERATIONS: usize = 262_144;
 const BLUEFS_TRANSACTION_VERSION: u8 = 1;
 const BLUEFS_FNODE_DELTA_VERSION: u8 = 2;

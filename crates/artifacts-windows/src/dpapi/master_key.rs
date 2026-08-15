@@ -81,7 +81,7 @@ pub fn decrypt_master_key_file(
 
 /// Like [`decrypt_master_key_file`], but accepts variable-length prekeys such
 /// as the 20-byte `DPAPI_SYSTEM` machine/user keys or 16-byte legacy keys.
-pub fn decrypt_master_key_file_with_keys(
+pub(crate) fn decrypt_master_key_file_with_keys(
     data: &[u8],
     prekeys: &[&[u8]],
 ) -> Result<DecryptedMasterKey, DpapiError> {

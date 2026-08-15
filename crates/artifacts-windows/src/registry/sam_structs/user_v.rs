@@ -2,7 +2,7 @@ use binread::BinRead;
 
 #[derive(BinRead, Debug)]
 #[br(little)]
-pub struct UserVRaw {
+pub(crate) struct UserVRaw {
     _pad1: [u8; 12],
     name_offset: u32,
     name_length: u32,
@@ -24,7 +24,7 @@ pub struct UserVRaw {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SamUserProfile {
+pub(crate) struct SamUserProfile {
     pub username: String,
     pub full_name: String,
     pub comment: String,
@@ -33,7 +33,7 @@ pub struct SamUserProfile {
     pub script_path: String,
 }
 
-pub fn parse_username_from_v_record(data: &[u8]) -> Option<String> {
+pub(crate) fn parse_username_from_v_record(data: &[u8]) -> Option<String> {
     if data.len() < 0x14 {
         return None;
     }
@@ -42,7 +42,7 @@ pub fn parse_username_from_v_record(data: &[u8]) -> Option<String> {
     decode_utf16_field(data, offset, length, 256)
 }
 
-pub fn parse_user_v(data: &[u8]) -> Option<SamUserProfile> {
+pub(crate) fn parse_user_v(data: &[u8]) -> Option<SamUserProfile> {
     let mut cursor = std::io::Cursor::new(data);
     let raw = UserVRaw::read(&mut cursor).ok()?;
     Some(SamUserProfile {

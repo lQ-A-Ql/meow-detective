@@ -74,7 +74,7 @@ impl DpapiBlob {
     }
 
     /// Decrypt a blob with optional application entropy.
-    pub fn decrypt_with_entropy(
+    pub(crate) fn decrypt_with_entropy(
         &self,
         master_key: &[u8],
         entropy: Option<&[u8]>,

@@ -95,11 +95,6 @@ impl FileEntry {
         self.hash_sha256.as_ref().is_some_and(|h| !h.is_empty())
     }
 
-    /// Get the parent ID, or None if this is a root entry.
-    pub fn parent_id(&self) -> Option<&FileEntryId> {
-        self.parent_id.as_ref()
-    }
-
     /// Check if this is a root entry (no parent).
     pub fn is_root(&self) -> bool {
         self.parent_id.is_none()

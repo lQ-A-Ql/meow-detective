@@ -4,7 +4,6 @@
 //! handling remain shared implementation details.
 
 mod cookies;
-mod downloads;
 mod history;
 mod passwords;
 mod session;
@@ -14,7 +13,6 @@ mod types;
 
 pub use cookies::parse_chrome_cookies;
 pub use cookies::parse_chrome_cookies_with_decryptor;
-pub use downloads::parse_chrome_downloads;
 pub use history::parse_chrome_history;
 pub use passwords::parse_chrome_passwords;
 pub use passwords::parse_chrome_passwords_with_decryptor;

@@ -284,7 +284,7 @@ fn append_mutation_reason(
     Ok(())
 }
 
-pub fn cephfs_backtrace_proof_sha256(
+pub(crate) fn cephfs_backtrace_proof_sha256(
     child: &CephFsDirfragIdentity,
     parent_inode: u64,
     parent_fragment: u32,

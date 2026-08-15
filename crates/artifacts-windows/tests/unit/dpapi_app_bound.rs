@@ -112,7 +112,7 @@ fn candidates_bind_to_elevation_binary_only_when_unique() {
     let unwrapped =
         unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), Some(&exe)).expect("bound flag-3 unwrap");
     assert!(unwrapped.bound_to_elevation);
-    assert_eq!(unwrapped.scheme, AppBoundScheme::CngXorAesGcm);
+    assert_eq!(unwrapped._scheme, AppBoundScheme::CngXorAesGcm);
 
     let without = vec![0u8; 4096];
     assert!(unwrap_app_bound_key(&flag3, Some(&[0x42; 32]), Some(&without)).is_err());
@@ -213,12 +213,12 @@ fn flag1_and_flag2_direct_blobs_unwrap_with_known_keys() {
     assert!(!content_requires_cng(&flag1));
     let unwrapped = unwrap_app_bound_key(&flag1, None, None).expect("flag-1 unwrap");
     assert_eq!(unwrapped.key.as_slice(), &app_bound_key);
-    assert_eq!(unwrapped.scheme, AppBoundScheme::AesGcmDirect);
+    assert_eq!(unwrapped._scheme, AppBoundScheme::AesGcmDirect);
 
     let flag2 = build_direct_blob(0x02, &FLAG2_CHACHA_KEY, &app_bound_key, &nonce);
     let unwrapped = unwrap_app_bound_key(&flag2, None, None).expect("flag-2 unwrap");
     assert_eq!(unwrapped.key.as_slice(), &app_bound_key);
-    assert_eq!(unwrapped.scheme, AppBoundScheme::ChaCha20Direct);
+    assert_eq!(unwrapped._scheme, AppBoundScheme::ChaCha20Direct);
 
     let mut tampered = flag1;
     let last = tampered.len() - 1;

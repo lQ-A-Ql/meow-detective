@@ -19,9 +19,9 @@ pub use dirfrag::{
 pub use fsmap::decode_ceph_fs_map;
 pub use inode::{
     decode_cephfs_inode_object, decode_cephfs_inode_store, decode_cephfs_inode_t_prefix,
-    CephFsInodeKind, CephFsInodeProjection, CEPH_FS_ONDISK_MAGIC, S_IFDIR, S_IFLNK, S_IFMT,
-    S_IFREG,
+    CephFsInodeKind, CephFsInodeProjection, S_IFDIR, S_IFREG,
 };
+pub(crate) use inode::{S_IFLNK, S_IFMT};
 pub use journal::{
     decode_cephfs_journal_frame, decode_cephfs_journal_frame_prefix, decode_cephfs_journal_header,
     decode_cephfs_journal_pointer, plan_cephfs_journal_range, CephFsJournalEvent,
@@ -40,9 +40,9 @@ pub use namespace::{
     CephFsNamespaceEntryKind, CephFsNamespaceGraph, CephFsNamespaceRecord,
 };
 pub use namespace_assembly::{
-    assemble_cephfs_namespace, cephfs_backtrace_proof_sha256, CephFsDirfragBatch,
-    CephFsDirfragParentProof, CephFsMetadataMutationState, CephFsNamespaceAssembly,
-    CephFsNamespaceAssemblyInput, CephFsNamespaceFreezeReason, CEPHFS_NAMESPACE_ASSEMBLY_VERSION,
+    assemble_cephfs_namespace, CephFsDirfragBatch, CephFsDirfragParentProof,
+    CephFsMetadataMutationState, CephFsNamespaceAssembly, CephFsNamespaceAssemblyInput,
+    CephFsNamespaceFreezeReason, CEPHFS_NAMESPACE_ASSEMBLY_VERSION,
 };
 pub use object_name::{
     classify_cephfs_metadata_object_name, format_cephfs_journal_data_object_name,

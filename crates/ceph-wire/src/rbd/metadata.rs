@@ -4,11 +4,11 @@ use crate::{
     error::{CephWireError, Result},
 };
 
-pub const RBD_MIN_ORDER: u8 = 12;
-pub const RBD_MAX_ORDER: u8 = 25;
-pub const RBD_MAX_IMAGE_NAME_LENGTH: usize = 96;
-pub const RBD_MAX_IMAGE_ID_LENGTH: usize = 14;
-pub const RBD_MAX_OBJECT_PREFIX_LENGTH: usize = 43;
+pub(crate) const RBD_MIN_ORDER: u8 = 12;
+pub(crate) const RBD_MAX_ORDER: u8 = 25;
+pub(crate) const RBD_MAX_IMAGE_NAME_LENGTH: usize = 96;
+pub(crate) const RBD_MAX_IMAGE_ID_LENGTH: usize = 14;
+pub(crate) const RBD_MAX_OBJECT_PREFIX_LENGTH: usize = 43;
 
 /// Normalized RBD metadata values needed to construct a head-image layout.
 #[derive(Debug, Clone, PartialEq, Eq)]

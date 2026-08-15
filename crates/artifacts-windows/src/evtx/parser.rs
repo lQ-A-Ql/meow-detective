@@ -9,15 +9,17 @@ mod types;
 
 pub use reader::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
-    extract_structured_events, extract_structured_events_from_json_records,
-    extract_structured_events_from_read_seek, probe_newest_records,
-    visit_structured_events_from_read_seek, EvtxVisitError, EvtxVisitSummary,
-    MAX_EVTX_ANALYSIS_BYTES,
+    extract_structured_events, probe_newest_records, visit_structured_events_from_read_seek,
+    EvtxVisitError, EvtxVisitSummary, MAX_EVTX_ANALYSIS_BYTES,
+};
+#[cfg(test)]
+pub(crate) use reader::{
+    extract_structured_events_from_json_records, extract_structured_events_from_read_seek,
 };
 pub use types::{
     EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
-    EvtxBootExtraction, EvtxEventCategory, EvtxSecurityEvent, EvtxSecurityEventKind,
-    EvtxStructuredEvent, EvtxStructuredExtraction,
+    EvtxBootExtraction, EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredEvent,
+    EvtxStructuredExtraction,
 };
 
 #[cfg(test)]

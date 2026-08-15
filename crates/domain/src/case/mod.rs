@@ -67,11 +67,6 @@ impl CaseSession {
     pub fn indexes_path(&self) -> PathBuf {
         self.case_root.join("indexes")
     }
-
-    /// Get how long this session has been open.
-    pub fn duration(&self) -> chrono::Duration {
-        Utc::now() - self.opened_at
-    }
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ const MAX_PREVIEW_CHARS: usize = 512;
 
 /// Decryption state exposed to artifact projection without exposing key bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BrowserDecryption {
+pub(crate) enum BrowserDecryption {
     Plaintext,
     Decrypted,
     Encrypted,
@@ -32,23 +32,9 @@ pub enum BrowserDecryption {
     Unavailable,
 }
 
-impl BrowserDecryption {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Plaintext => "plaintext",
-            Self::Decrypted => "decrypted",
-            Self::Encrypted => "encrypted",
-            Self::Unsupported => "unsupported",
-            Self::Failed => "failed",
-            Self::Unavailable => "unavailable",
-        }
-    }
-}
-
 /// Identifies which Chromium encoding was observed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChromiumValueKind {
-    Plaintext,
+pub(crate) enum ChromiumValueKind {
     V10,
     V11,
     V20,
@@ -151,7 +137,7 @@ impl ChromiumDecryptor {
         self.app_bound_error.as_deref()
     }
 
-    pub fn decrypt_value(
+    pub(crate) fn decrypt_value(
         &self,
         encrypted: &[u8],
         host_key: Option<&str>,
@@ -356,7 +342,7 @@ pub(crate) fn decrypt_chromium_value(
                 ),
             }
         }
-        ChromiumValueKind::Unknown | ChromiumValueKind::Plaintext => (
+        ChromiumValueKind::Unknown => (
             BrowserDecryption::Encrypted,
             Some(format!("[encrypted {} bytes]", encrypted.len())),
             None,

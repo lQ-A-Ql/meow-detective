@@ -3,8 +3,8 @@ use crate::error::{Result, RocksDbWireError};
 use crate::limits::LogDecodeLimits;
 
 pub const ROCKSDB_LOG_BLOCK_SIZE: usize = 32_768;
-pub const ROCKSDB_LOG_HEADER_SIZE: usize = 7;
-pub const ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE: usize = 11;
+pub(crate) const ROCKSDB_LOG_HEADER_SIZE: usize = 7;
+pub(crate) const ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE: usize = 11;
 
 const ZERO_TYPE: u8 = 0;
 const FULL_TYPE: u8 = 1;

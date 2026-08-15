@@ -43,8 +43,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 #[test]
 fn parse_with_source_file() {
-    let jobs = parse_crontab_with_source("0 5 * * * /usr/bin/mysql_backup", "/etc/cron.d/mysql")
-        .expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(
+        "0 5 * * * /usr/bin/mysql_backup",
+        "/etc/cron.d/mysql",
+        CrontabKind::System,
+    )
+    .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].source_file, "/etc/cron.d/mysql");
     assert_eq!(jobs[0].command, "/usr/bin/mysql_backup");
@@ -88,7 +92,8 @@ fn skip_env_assignments() {
 #[test]
 fn user_crontab_kind_treats_bare_word_as_command() {
     let input = "0 0 * * * echo hello";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::User)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].user, None);
     assert_eq!(jobs[0].command, "echo hello");
@@ -97,7 +102,8 @@ fn user_crontab_kind_treats_bare_word_as_command() {
 #[test]
 fn system_crontab_kind_reads_user_field() {
     let input = "0 0 * * * echo hello";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::System)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].user.as_deref(), Some("echo"));
     assert_eq!(jobs[0].command, "hello");
@@ -106,7 +112,8 @@ fn system_crontab_kind_reads_user_field() {
 #[test]
 fn user_crontab_kind_keyword_schedule_has_no_user() {
     let input = "@daily echo housekeeping";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::User)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].user, None);
     assert_eq!(jobs[0].command, "echo housekeeping");
@@ -115,7 +122,8 @@ fn user_crontab_kind_keyword_schedule_has_no_user() {
 #[test]
 fn system_crontab_kind_keyword_schedule_with_user() {
     let input = "@daily root /usr/bin/housekeeping";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::System)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].user.as_deref(), Some("root"));
     assert_eq!(jobs[0].command, "/usr/bin/housekeeping");
@@ -124,7 +132,8 @@ fn system_crontab_kind_keyword_schedule_with_user() {
 #[test]
 fn midnight_keyword_is_a_schedule() {
     let input = "@midnight /usr/bin/nightly";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::User)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].schedule, "@midnight");
     assert_eq!(jobs[0].command, "/usr/bin/nightly");
@@ -150,7 +159,8 @@ ionice -c3 -p $$ >/dev/null 2>&1
 /usr/sbin/logrotate /etc/logrotate.conf
 EXITVALUE=$?
 0 3 * * * /usr/bin/weekly-task";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::System).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::System)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].schedule, "0 3 * * *");
     assert_eq!(jobs[0].command, "/usr/bin/weekly-task");
@@ -159,7 +169,8 @@ EXITVALUE=$?
 #[test]
 fn schedule_fields_accept_list_range_step() {
     let input = "5,15 1-3 */2 * 1,5 /usr/bin/combo";
-    let jobs = parse_crontab_with_kind(input, CrontabKind::User).expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(input, "<unknown>", CrontabKind::User)
+        .expect("should parse");
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].schedule, "5,15 1-3 */2 * 1,5");
     assert_eq!(jobs[0].command, "/usr/bin/combo");
@@ -167,7 +178,11 @@ fn schedule_fields_accept_list_range_step() {
 
 #[test]
 fn unknown_at_keyword_is_rejected() {
-    let jobs = parse_crontab_with_kind("@fortnightly /usr/bin/task", CrontabKind::User)
-        .expect("should parse");
+    let jobs = parse_crontab_with_source_and_kind(
+        "@fortnightly /usr/bin/task",
+        "<unknown>",
+        CrontabKind::User,
+    )
+    .expect("should parse");
     assert!(jobs.is_empty());
 }

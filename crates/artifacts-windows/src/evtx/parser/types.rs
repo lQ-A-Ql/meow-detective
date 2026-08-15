@@ -89,20 +89,6 @@ pub struct EvtxBootExtraction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum EvtxEventCategory {
-    BootShutdown,
-    LogonLogoff,
-    PrivilegeEscalation,
-    ProcessExecution,
-    AccountManagement,
-    ScheduledTask,
-    ApplicationCrash,
-    SoftwareInstallation,
-    Other,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum EvtxSecurityEventKind {
     LogonSuccess,
     LogonFailure,

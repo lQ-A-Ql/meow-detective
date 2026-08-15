@@ -1,7 +1,7 @@
 /// Parse shell items from a LinkTargetIDList.
 /// Each shell item: 2 bytes size, 1 byte type, variable data.
 /// Gathers file/directory names to build a partial path.
-pub fn parse_shell_items(data: &[u8]) -> String {
+pub(crate) fn parse_shell_items(data: &[u8]) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut pos = 0usize;
     while pos + 3 <= data.len() {

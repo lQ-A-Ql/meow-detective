@@ -14,22 +14,18 @@ mod physical;
 mod targeted_kernel;
 mod x64;
 
-pub use bootstrap::{
-    discover_directory_table_base, find_processor_start_blocks, ProcessorStartBlock,
-};
-pub use error::{MemoryWindowsError, Result};
+pub use bootstrap::{discover_directory_table_base, ProcessorStartBlock};
+pub use error::MemoryWindowsError;
 pub use keyring_recovery::{
     recover_vmks_structurally, resolve_profile_for_image, BitLockerMemoryProfile,
     BitLockerMemoryRecovery,
 };
 pub use physical::{PhysicalReadStats, RawMemoryImage};
-pub use targeted_kernel::{
-    discover_kernel_from_entry, discover_kernel_from_processor_start_block,
-    enumerate_loaded_modules, read_codeview_identity, KernelModule, LoadedModuleEntryLayout,
-    TargetedCodeViewIdentity, TargetedKernelDiscovery, TargetedKernelLayoutProfile,
-    TargetedKernelPeImage, TargetedKernelSearchLimits, TargetedKernelSearchReport,
-};
-pub use x64::{is_canonical_address, X64AddressSpace};
+pub use targeted_kernel::TargetedKernelSearchLimits;
+pub use x64::X64AddressSpace;
+
+pub(crate) use error::Result;
+pub(crate) use x64::is_canonical_address;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

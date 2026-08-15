@@ -5,15 +5,15 @@ use crate::{
 
 use super::layout::{decode_file_layout, CephFsFileLayout};
 
-pub const CEPH_FS_ONDISK_MAGIC: &str = "ceph fs volume v011";
+pub(crate) const CEPH_FS_ONDISK_MAGIC: &str = "ceph fs volume v011";
 const INODE_DECODER_VERSION: u8 = 20;
 const INODE_COMPAT_VERSION: u8 = 6;
 const INODE_STORE_DECODER_VERSION: u8 = 6;
 const INODE_STORE_COMPAT_VERSION: u8 = 4;
-pub const S_IFMT: u32 = 0o170000;
+pub(crate) const S_IFMT: u32 = 0o170000;
 pub const S_IFREG: u32 = 0o100000;
 pub const S_IFDIR: u32 = 0o040000;
-pub const S_IFLNK: u32 = 0o120000;
+pub(crate) const S_IFLNK: u32 = 0o120000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CephFsInodeKind {

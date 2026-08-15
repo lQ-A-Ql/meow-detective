@@ -19,25 +19,25 @@ use binread::BinRead;
 /// - `0x42` u16 total logon count
 #[derive(BinRead, Debug)]
 #[br(little)]
-pub struct UserFRaw {
+pub(crate) struct UserFRaw {
     _reserved1: u64,
     pub last_login_time: u64,
     _reserved2: u64,
     pub last_pwd_change_time: u64,
     _reserved3: u64,
-    pub last_failed_login_time: u64,
+    pub _last_failed_login_time: u64,
     pub rid: u32,
     _reserved4: u32,
     pub account_control: u16,
     _reserved5: u32,
     _reserved6: u16,
-    pub failed_login_count: u16,
+    pub _failed_login_count: u16,
     pub logon_count: u16,
     _reserved7: [u8; 12],
 }
 
 /// Returns `(rid, logon_count, account_control)` for the user.
-pub fn parse_user_f(data: &[u8]) -> Option<(u32, u16, u32)> {
+pub(crate) fn parse_user_f(data: &[u8]) -> Option<(u32, u16, u32)> {
     let mut cursor = std::io::Cursor::new(data);
     let user_f = UserFRaw::read(&mut cursor).ok()?;
     Some((

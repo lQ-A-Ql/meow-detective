@@ -73,7 +73,7 @@ impl RegistryError {
         }
     }
 
-    pub fn invalid_cell<S: Into<String>>(msg: S) -> Self {
+    pub(crate) fn invalid_cell<S: Into<String>>(msg: S) -> Self {
         Self::InvalidCell(msg.into())
     }
 
@@ -81,7 +81,7 @@ impl RegistryError {
         Self::Utf16(msg.into())
     }
 
-    pub fn missing_key<S: Into<String>>(path: S) -> Self {
+    pub(crate) fn missing_key<S: Into<String>>(path: S) -> Self {
         Self::MissingKey(path.into())
     }
 }

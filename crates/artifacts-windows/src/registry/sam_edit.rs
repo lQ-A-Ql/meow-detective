@@ -54,7 +54,7 @@ pub struct SamEditOutcome {
 /// A cleanly unmounted hive has matching primary/secondary sequence numbers.
 /// Editing a dirty hive is refused: Windows would replay its transaction log
 /// on boot and could clobber or corrupt the edit.
-pub fn hive_is_clean(hive: &[u8]) -> bool {
+pub(crate) fn hive_is_clean(hive: &[u8]) -> bool {
     hive.len() >= 12 && hive[4..8] == hive[8..12]
 }
 

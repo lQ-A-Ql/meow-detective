@@ -81,29 +81,10 @@ pub struct TargetedKernelSearchReport {
 pub struct TargetedKernelPeImage {
     pub base: u64,
     pub size_of_image: u32,
-    pub(crate) section_count: u16,
-    pub(crate) section_table: u64,
     pub(crate) export_rva: u32,
     pub(crate) export_size: u32,
     pub(crate) debug_rva: u32,
     pub(crate) debug_size: u32,
-}
-
-impl TargetedKernelPeImage {
-    #[must_use]
-    pub fn section_count(self) -> u16 {
-        self.section_count
-    }
-
-    #[must_use]
-    pub fn export_rva(self) -> u32 {
-        self.export_rva
-    }
-
-    #[must_use]
-    pub fn export_size(self) -> u32 {
-        self.export_size
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,16 +123,6 @@ impl TargetedCodeViewIdentity {
     #[must_use]
     pub fn guid(&self) -> &str {
         &self.guid
-    }
-
-    #[must_use]
-    pub fn age(&self) -> u32 {
-        self.age
-    }
-
-    #[must_use]
-    pub fn pdb_name(&self) -> &str {
-        &self.pdb_name
     }
 }
 

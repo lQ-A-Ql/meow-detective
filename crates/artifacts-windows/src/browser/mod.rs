@@ -15,7 +15,6 @@ pub use profile_detect::{detect_browser_profiles, BrowserProfile};
 
 // Re-export chromium parser functions
 pub use chromium::{
-    parse_chrome_cookies, parse_chrome_cookies_with_decryptor, parse_chrome_downloads,
-    parse_chrome_history, parse_chrome_passwords, parse_chrome_passwords_with_decryptor,
-    parse_chrome_session,
+    parse_chrome_cookies, parse_chrome_cookies_with_decryptor, parse_chrome_history,
+    parse_chrome_passwords, parse_chrome_passwords_with_decryptor, parse_chrome_session,
 };

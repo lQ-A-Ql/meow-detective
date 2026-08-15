@@ -62,7 +62,7 @@ pub fn parse_auth_log_sudo(
 ///
 /// Equivalent to [`parse_auth_log_sudo`] with `Some(reference)`; convenient
 /// for tests and forensic flows that always have an anchor time.
-pub fn parse_auth_log_sudo_with_reference(
+pub(crate) fn parse_auth_log_sudo_with_reference(
     content: &str,
     reference: DateTime<Utc>,
     clock: &dyn LogClock,

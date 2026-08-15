@@ -4,7 +4,7 @@ use super::records::{try_recover_nk, try_recover_vk};
 use super::{FreeCell, RecoverResult, RecoveredKey, RecoveredValue};
 use crate::registry::RegistryError;
 
-pub fn scan_free_cells(bytes: &[u8]) -> Vec<FreeCell> {
+pub(crate) fn scan_free_cells(bytes: &[u8]) -> Vec<FreeCell> {
     let mut cells = Vec::new();
     let mut hbin_offset = BASE_BLOCK_SIZE;
 

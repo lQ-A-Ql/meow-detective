@@ -66,32 +66,14 @@ const SCHEDULE_KEYWORDS: &[&str] = &[
 ///
 /// Deprecated semantics: the file is assumed to follow [`CrontabKind::System`]
 /// syntax, which mis-parses user crontabs whose command starts with a bare
-/// word (e.g. `0 0 * * * echo hello`). Prefer [`parse_crontab_with_kind`]
-/// with an explicit kind. Retained for backward compatibility.
+/// word (e.g. `0 0 * * * echo hello`). Prefer
+/// [`parse_crontab_with_source_and_kind`] with an explicit kind. Retained for
+/// backward compatibility.
 ///
 /// Lines starting with `#` are comments and skipped. Variable assignments
 /// (containing `=`) are also skipped. Blank lines are ignored.
 pub fn parse_crontab(content: &str) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
     parse_crontab_impl(content, "<unknown>", CrontabKind::System)
-}
-
-/// Parse a crontab file with an explicit source file path.
-///
-/// Like [`parse_crontab`], this assumes [`CrontabKind::System`] syntax;
-/// prefer [`parse_crontab_with_source_and_kind`].
-pub fn parse_crontab_with_source(
-    content: &str,
-    source_file: &str,
-) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
-    parse_crontab_impl(content, source_file, CrontabKind::System)
-}
-
-/// Parse a crontab file with an explicit user/system kind.
-pub fn parse_crontab_with_kind(
-    content: &str,
-    kind: CrontabKind,
-) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
-    parse_crontab_impl(content, "<unknown>", kind)
 }
 
 /// Parse a crontab file with an explicit source file path and kind.

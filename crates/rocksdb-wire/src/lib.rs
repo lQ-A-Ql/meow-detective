@@ -14,10 +14,7 @@ pub use error::{Result, RocksDbWireError};
 pub use limits::{
     LogDecodeLimits, ManifestDecodeLimits, ReplayLimits, VersionEditLimits, WriteBatchLimits,
 };
-pub use log::{
-    decode_log, LogDecodeOptions, LogicalLogRecord, ROCKSDB_LOG_BLOCK_SIZE,
-    ROCKSDB_LOG_HEADER_SIZE, ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE,
-};
+pub use log::{decode_log, LogDecodeOptions, LogicalLogRecord, ROCKSDB_LOG_BLOCK_SIZE};
 pub use recovery::{
     reduce_latest_state, reduce_latest_state_ref, KeyVersion, KeyVersionKind, LatestState,
     LatestStateError, LatestStateLimits, LatestStateRef, MergeOperator,

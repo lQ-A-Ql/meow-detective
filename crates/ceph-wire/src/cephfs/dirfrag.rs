@@ -52,7 +52,7 @@ pub struct CephFsDentryKey {
 }
 
 impl CephFsDentryKey {
-    pub fn is_head(&self) -> bool {
+    pub(crate) fn is_head(&self) -> bool {
         self.snap_id == CEPH_NOSNAP
     }
 }

@@ -10,31 +10,28 @@ pub mod sru;
 pub mod thumbcache;
 
 pub use browser::chromium::{
-    parse_chrome_cookies, parse_chrome_downloads, parse_chrome_history, parse_chrome_session,
-    BrowserCookie, BrowserDownload, BrowserSessionTab, BrowserVisit,
+    parse_chrome_cookies, parse_chrome_history, parse_chrome_session, BrowserCookie,
+    BrowserDownload, BrowserSessionTab, BrowserVisit,
 };
 pub use browser::firefox::{
     parse_firefox_cookies, parse_firefox_downloads, parse_firefox_history, parse_firefox_session,
 };
 pub use browser::profile_detect::{detect_browser_profiles, BrowserProfile};
 pub use evtx::capability::{
-    evtx_capability, supports_evtx_boot_shutdown_path, EvtxCapability, EVTX_PARSER_ID,
-    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX, SUPPORTED_SOURCE_PATH_SUFFIXES,
+    evtx_capability, EvtxCapability, EVTX_PARSER_ID, SUPPORTED_EVENT_IDS,
+    SUPPORTED_SOURCE_PATH_SUFFIX,
 };
 pub use evtx::parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
-    extract_structured_events, extract_structured_events_from_json_records,
-    extract_structured_events_from_read_seek, probe_newest_records,
-    visit_structured_events_from_read_seek, EvtxApplicationEvent, EvtxApplicationEventKind,
-    EvtxBootEvent, EvtxBootEventKind, EvtxBootExtraction, EvtxEventCategory, EvtxSecurityEvent,
-    EvtxSecurityEventKind, EvtxStructuredEvent, EvtxStructuredExtraction, EvtxVisitError,
-    EvtxVisitSummary, MAX_EVTX_ANALYSIS_BYTES,
+    extract_structured_events, probe_newest_records, visit_structured_events_from_read_seek,
+    EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
+    EvtxBootExtraction, EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredEvent,
+    EvtxStructuredExtraction, EvtxVisitError, EvtxVisitSummary, MAX_EVTX_ANALYSIS_BYTES,
 };
 pub use jumplist::JumpListExtractor;
 pub use lnk::parser::LnkExtractor;
 pub use prefetch::parser::PrefetchExtractor;
 pub use recycle_bin::parser::RecycleBinExtractor;
-pub use registry::hash_decrypt::{decrypt_user_hashes, derive_hashed_boot_key, SamHashes};
 pub use registry::lookup::lsa::{
     decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecret, LsaDecryptedSecrets, TbalSecret,
 };
@@ -63,12 +60,9 @@ pub use registry::lookup::{
 };
 pub use registry::parser::RegistryExtractor;
 pub use registry::recovery::{
-    scan_deleted_registry_cells, scan_free_cells, FreeCell, HiveBin, RecoverResult, RecoveredKey,
-    RecoveredValue,
+    scan_deleted_registry_cells, RecoverResult, RecoveredKey, RecoveredValue,
 };
-pub use registry::sam_structs::{
-    extract_boot_key, parse_domain_account_f, parse_user_f, SamPasswordPolicy, UserFRaw,
-};
+pub use registry::sam_structs::{extract_boot_key, SamPasswordPolicy};
 pub use registry::txlog::{
     parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
 };

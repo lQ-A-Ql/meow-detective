@@ -7,8 +7,8 @@ use crate::{
     error::{CephWireError, Result},
 };
 
-pub const DEFAULT_MAX_STRING_LENGTH: usize = 16 * 1024 * 1024;
-pub const DEFAULT_MAX_MAP_ENTRIES: usize = 1_000_000;
+pub(crate) const DEFAULT_MAX_STRING_LENGTH: usize = 16 * 1024 * 1024;
+pub(crate) const DEFAULT_MAX_MAP_ENTRIES: usize = 1_000_000;
 
 pub type CephStringMap = BTreeMap<String, String>;
 
@@ -34,7 +34,7 @@ pub trait CephEncode {
 }
 
 impl CephStructEnvelope {
-    pub const ENCODED_LENGTH: usize = 6;
+    pub(crate) const ENCODED_LENGTH: usize = 6;
 
     pub fn decode_payload<'a>(
         cursor: &mut CephCursor<'a>,

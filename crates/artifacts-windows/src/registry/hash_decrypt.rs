@@ -32,7 +32,7 @@ pub(crate) const NT_HASH_EMPTY: &str = "31d6cfe0d16ae931b73c59d7e0c089c0";
 
 /// Decrypted LM and NT hashes for a single SAM account.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SamHashes {
+pub(crate) struct SamHashes {
     /// Hex-encoded LM hash, or the canonical empty-LM value if no LM hash
     /// is stored.
     pub lm: String,
@@ -48,7 +48,7 @@ pub struct SamHashes {
 ///
 /// Returns `None` when the domain key structure is unrecognized, the data is
 /// too short, or the RC4 checksum / AES padding is invalid.
-pub fn derive_hashed_boot_key(boot_key: [u8; 16], account_f: &[u8]) -> Option<[u8; 32]> {
+pub(crate) fn derive_hashed_boot_key(boot_key: [u8; 16], account_f: &[u8]) -> Option<[u8; 32]> {
     match parse_domain_key_data(account_f)? {
         DomainKeyData::Rc4 {
             salt,
@@ -61,7 +61,7 @@ pub fn derive_hashed_boot_key(boot_key: [u8; 16], account_f: &[u8]) -> Option<[u
 
 /// Decrypt the LM and NT hashes for a user given the hashed boot key, the
 /// user's RID, and the raw `V` value bytes.
-pub fn decrypt_user_hashes(
+pub(crate) fn decrypt_user_hashes(
     hashed_boot_key: [u8; 32],
     rid: u32,
     user_v: &[u8],

@@ -11,19 +11,21 @@ mod chrome;
 mod error;
 mod master_key;
 
+#[cfg(test)]
+pub(crate) use app_bound::{
+    content_requires_cng, parse_cng_private_key, unwrap_app_bound_key, unwrap_direct_key_blob,
+    AppBoundScheme, CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS,
+};
 pub use app_bound::{
-    content_requires_cng, parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file,
-    unwrap_app_bound_key, unwrap_direct_key_blob, AppBoundKeyCandidate, AppBoundScheme,
-    ChromeKeyBlob, CngSystemKeyFile, UnwrappedAppBoundKey, CHROME_147_XOR_CONSTANT,
-    KNOWN_APP_BOUND_KEYS, KSP_PRIVATE_KEY_ENTROPY, KSP_PROPERTY_ENTROPY,
+    parse_chrome_key_blob, parse_cng_system_key_file, ChromeKeyBlob, CngSystemKeyFile,
 };
 pub use blob::{parse_dpapi_blob, DpapiBlob};
-pub use chrome::{BrowserDecryption, ChromiumDecryptor, ChromiumFamily, ChromiumValueKind};
+pub(crate) use chrome::BrowserDecryption;
+pub use chrome::{ChromiumDecryptor, ChromiumFamily};
 pub use error::DpapiError;
 pub use master_key::{
-    decrypt_master_key_file, decrypt_master_key_file_with_keys, derive_user_prekeys,
-    derive_user_prekeys_from_password_sha1, parse_masterkey_file, DecryptedMasterKey,
-    MasterKeyFile,
+    decrypt_master_key_file, derive_user_prekeys, derive_user_prekeys_from_password_sha1,
+    parse_masterkey_file, DecryptedMasterKey, MasterKeyFile,
 };
 
 #[cfg(test)]

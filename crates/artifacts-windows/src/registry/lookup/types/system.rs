@@ -28,7 +28,7 @@ pub enum ServiceStartType {
 }
 
 impl ServiceStartType {
-    pub fn from_raw(start: u32, delayed_auto_start: bool) -> Self {
+    pub(crate) fn from_raw(start: u32, delayed_auto_start: bool) -> Self {
         match start {
             0 => Self::Boot,
             1 => Self::System,
@@ -66,7 +66,7 @@ pub enum ServiceType {
 }
 
 impl ServiceType {
-    pub fn from_raw(raw: u32) -> Self {
+    pub(crate) fn from_raw(raw: u32) -> Self {
         match (raw & 0xff, raw & 0x100 != 0) {
             (0x01, _) => Self::KernelDriver,
             (0x02, _) => Self::FileSystemDriver,

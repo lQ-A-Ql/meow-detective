@@ -1,6 +1,8 @@
 use std::io::Write;
 
-use crate::{find_processor_start_blocks, MemoryWindowsError, RawMemoryImage, X64AddressSpace};
+use crate::{
+    bootstrap::find_processor_start_blocks, MemoryWindowsError, RawMemoryImage, X64AddressSpace,
+};
 use tempfile::NamedTempFile;
 
 fn write_image(bytes: &[u8]) -> NamedTempFile {

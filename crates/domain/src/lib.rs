@@ -7,8 +7,6 @@ pub mod file_entry;
 pub mod graph;
 pub mod job;
 pub mod notebook;
-pub mod report;
-pub mod tag;
 pub mod timeline;
 pub mod timestamp;
 
@@ -23,8 +21,6 @@ pub use file_entry::{
     EntryType, FileEncryptionStatus, FileEntry, FileEntryId, InvalidEncryptionStatus,
 };
 pub use graph::{EdgeType, GraphEdge, GraphNode, NodeType};
-pub use job::{Job, JobId, JobScope, JobStatus};
+pub use job::JobId;
 pub use notebook::{EntryStatus, EntryType as NotebookEntryType, EvidenceCitation, NotebookEntry};
-pub use report::{ReportHistoryItem, ReportId, ReportStatus, ReportTemplate};
-pub use tag::{Tag, TagId};
 pub use timeline::{TimelineEvent, TimelineEventId};

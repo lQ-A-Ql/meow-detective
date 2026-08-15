@@ -1,13 +1,7 @@
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HiveBin {
-    pub offset: usize,
-    pub size: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FreeCell {
+pub(crate) struct FreeCell {
     pub size: usize,
     pub offset: usize,
 }

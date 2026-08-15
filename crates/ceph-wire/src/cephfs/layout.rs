@@ -40,14 +40,14 @@ impl CephFsFileLayout {
         self.stripe_unit == 0 && self.stripe_count == 0 && self.object_size == 0
     }
 
-    pub fn stripe_period(&self) -> Result<u64> {
+    pub(crate) fn stripe_period(&self) -> Result<u64> {
         self.validate()?;
         u64::from(self.stripe_unit)
             .checked_mul(u64::from(self.stripe_count))
             .ok_or(CephWireError::CephFsLayoutRangeOverflow)
     }
 
-    pub fn object_set_size(&self) -> Result<u64> {
+    pub(crate) fn object_set_size(&self) -> Result<u64> {
         self.validate()?;
         u64::from(self.object_size)
             .checked_mul(u64::from(self.stripe_count))

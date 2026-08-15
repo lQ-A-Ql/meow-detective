@@ -238,7 +238,7 @@ pub fn parse_rpm_package_log(
 ///
 /// Equivalent to [`parse_rpm_package_log`] with `Some(reference)`; convenient
 /// for tests and forensic flows that always have an anchor time.
-pub fn parse_rpm_package_log_with_reference(
+pub(crate) fn parse_rpm_package_log_with_reference(
     content: &str,
     reference: DateTime<Utc>,
     clock: &dyn LogClock,

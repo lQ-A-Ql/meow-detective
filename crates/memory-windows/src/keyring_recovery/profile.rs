@@ -1,4 +1,4 @@
-use crate::{MemoryWindowsError, Result, TargetedKernelLayoutProfile};
+use crate::{targeted_kernel::TargetedKernelLayoutProfile, MemoryWindowsError, Result};
 
 use super::symbol_table;
 
@@ -86,7 +86,7 @@ impl BitLockerMemoryProfile {
     /// fast path is skipped in favor of the version-free driver scan). A
     /// missing CodeView identity fails closed with
     /// [`MemoryWindowsError::UnsupportedBitLockerMemoryProfile`].
-    pub fn resolve(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
+    pub(crate) fn resolve(kernel: TargetedKernelLayoutProfile) -> Result<Self> {
         let codeview = kernel
             .codeview_identity()
             .ok_or(MemoryWindowsError::UnsupportedBitLockerMemoryProfile)?;

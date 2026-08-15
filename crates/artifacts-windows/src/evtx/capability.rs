@@ -25,7 +25,7 @@ pub const SUPPORTED_SOURCE_PATH_SUFFIX: &str = "windows/system32/winevt/logs/sys
 /// adjacent channels (Biometrics, Winlogon, etc.) do not generate noisy
 /// "outside bounded parser scope" warnings; events from those channels are
 /// simply ignored unless they match a supported ID/channel rule.
-pub const SUPPORTED_SOURCE_PATH_SUFFIXES: &[&str] = &[
+pub(crate) const SUPPORTED_SOURCE_PATH_SUFFIXES: &[&str] = &[
     "windows/system32/winevt/logs/system.evtx",
     "windows/system32/winevt/logs/security.evtx",
     "windows/system32/winevt/logs/application.evtx",
@@ -54,7 +54,7 @@ pub fn evtx_capability() -> EvtxCapability {
     }
 }
 
-pub fn supports_evtx_boot_shutdown_path(path: &str) -> bool {
+pub(crate) fn supports_evtx_boot_shutdown_path(path: &str) -> bool {
     let normalized = path.replace('\\', "/").to_ascii_lowercase();
     if !normalized.ends_with(".evtx") {
         return false;

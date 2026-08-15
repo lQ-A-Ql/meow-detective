@@ -24,9 +24,9 @@ use super::algorithms::{decrypt_cbc_no_padding, CipherAlgorithm};
 use super::error::DpapiError;
 
 /// Fixed DPAPI entropy for the CNG key file's properties blob.
-pub const KSP_PROPERTY_ENTROPY: &[u8] = b"6jnkd5J3ZdQDtrsu\x00";
+pub(crate) const KSP_PROPERTY_ENTROPY: &[u8] = b"6jnkd5J3ZdQDtrsu\x00";
 /// Fixed DPAPI entropy for the CNG key file's private key blob.
-pub const KSP_PRIVATE_KEY_ENTROPY: &[u8] = b"xT5rZW5qVVbrvpuA\x00";
+pub(crate) const KSP_PRIVATE_KEY_ENTROPY: &[u8] = b"xT5rZW5qVVbrvpuA\x00";
 
 const CNG_HEADER_LEN: usize = 44;
 const DIRECT_BLOB_LEN: usize = 61;
@@ -39,42 +39,32 @@ const FLAG_CNG_XOR_AES_GCM: u8 = 0x03;
 
 /// App-Bound key protection scheme selected by the content flag byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppBoundScheme {
+pub(crate) enum AppBoundScheme {
     AesGcmDirect,
     ChaCha20Direct,
     CngXorAesGcm,
 }
 
-impl AppBoundScheme {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::AesGcmDirect => "aes-256-gcm-direct",
-            Self::ChaCha20Direct => "chacha20-poly1305-direct",
-            Self::CngXorAesGcm => "cng-xor-aes-256-gcm",
-        }
-    }
-}
-
 /// A publicly documented App-Bound key constant with its provenance.
-pub struct AppBoundKeyCandidate {
+pub(crate) struct AppBoundKeyCandidate {
     pub scheme: AppBoundScheme,
-    pub chrome_versions: &'static str,
-    pub source: &'static str,
+    pub _chrome_versions: &'static str,
+    pub _source: &'static str,
     pub key: [u8; 32],
 }
 
 /// XOR constant documented for Chrome 137+ builds (including 147.0.7727.102).
-pub const CHROME_147_XOR_CONSTANT: [u8; 32] = [
+pub(crate) const CHROME_147_XOR_CONSTANT: [u8; 32] = [
     0xcc, 0xf8, 0xa1, 0xce, 0xc5, 0x66, 0x05, 0xb8, 0x51, 0x75, 0x52, 0xba, 0x1a, 0x2d, 0x06, 0x1c,
     0x03, 0xa2, 0x9e, 0x90, 0x27, 0x4f, 0xb2, 0xfc, 0xf5, 0x9b, 0xa4, 0xb7, 0x5c, 0x39, 0x23, 0x90,
 ];
 
 /// Known App-Bound key constants from public reverse engineering.
-pub const KNOWN_APP_BOUND_KEYS: &[AppBoundKeyCandidate] = &[
+pub(crate) const KNOWN_APP_BOUND_KEYS: &[AppBoundKeyCandidate] = &[
     AppBoundKeyCandidate {
         scheme: AppBoundScheme::AesGcmDirect,
-        chrome_versions: "127-132",
-        source: "runassu/chrome_v20_decryption (elevation_service.exe)",
+        _chrome_versions: "127-132",
+        _source: "runassu/chrome_v20_decryption (elevation_service.exe)",
         key: [
             0xb3, 0x1c, 0x6e, 0x24, 0x1a, 0xc8, 0x46, 0x72, 0x8d, 0xa9, 0xc1, 0xfa, 0xc4, 0x93,
             0x66, 0x51, 0xcf, 0xfb, 0x94, 0x4d, 0x14, 0x3a, 0xb8, 0x16, 0x27, 0x6b, 0xcc, 0x6d,
@@ -83,8 +73,8 @@ pub const KNOWN_APP_BOUND_KEYS: &[AppBoundKeyCandidate] = &[
     },
     AppBoundKeyCandidate {
         scheme: AppBoundScheme::ChaCha20Direct,
-        chrome_versions: "133-136",
-        source: "runassu/chrome_v20_decryption (elevation_service.exe)",
+        _chrome_versions: "133-136",
+        _source: "runassu/chrome_v20_decryption (elevation_service.exe)",
         key: [
             0xe9, 0x8f, 0x37, 0xd7, 0xf4, 0xe1, 0xfa, 0x43, 0x3d, 0x19, 0x30, 0x4d, 0xc2, 0x25,
             0x80, 0x42, 0x09, 0x0e, 0x2d, 0x1d, 0x7e, 0xea, 0x76, 0x70, 0xd4, 0x1f, 0x73, 0x8d,
@@ -93,16 +83,16 @@ pub const KNOWN_APP_BOUND_KEYS: &[AppBoundKeyCandidate] = &[
     },
     AppBoundKeyCandidate {
         scheme: AppBoundScheme::CngXorAesGcm,
-        chrome_versions: "137+",
-        source: "runassu/chrome_v20_decryption, Invoke-PowerChrome, somesota.blog",
+        _chrome_versions: "137+",
+        _source: "runassu/chrome_v20_decryption, Invoke-PowerChrome, somesota.blog",
         key: CHROME_147_XOR_CONSTANT,
     },
 ];
 
 /// Result of a successful App-Bound unwrap with provenance.
-pub struct UnwrappedAppBoundKey {
+pub(crate) struct UnwrappedAppBoundKey {
     pub key: Zeroizing<[u8; 32]>,
-    pub scheme: AppBoundScheme,
+    pub _scheme: AppBoundScheme,
     pub bound_to_elevation: bool,
 }
 
@@ -206,7 +196,7 @@ pub fn parse_cng_system_key_file(bytes: &[u8]) -> Result<CngSystemKeyFile, Dpapi
 
 /// Validate the decrypted CNG private key plaintext and extract the 32-byte
 /// AES key. Layout: `"KDBM" | version(4)==1 | key_len(4)==32 | key[32]`.
-pub fn parse_cng_private_key(plaintext: &[u8]) -> Result<Zeroizing<[u8; 32]>, DpapiError> {
+pub(crate) fn parse_cng_private_key(plaintext: &[u8]) -> Result<Zeroizing<[u8; 32]>, DpapiError> {
     if plaintext.len() != 12 + APP_BOUND_KEY_LEN || &plaintext[..4] != b"KDBM" {
         return Err(DpapiError::InvalidFormat(
             "unexpected CNG private key format",
@@ -224,14 +214,14 @@ pub fn parse_cng_private_key(plaintext: &[u8]) -> Result<Zeroizing<[u8; 32]>, Dp
 
 /// Whether the Chrome key blob content requires the CNG `Google Chromekey1`
 /// file (only the flag-3 scheme does).
-pub fn content_requires_cng(content: &[u8]) -> bool {
+pub(crate) fn content_requires_cng(content: &[u8]) -> bool {
     content.first().copied() == Some(FLAG_CNG_XOR_AES_GCM)
 }
 
 /// Non-Chrome Chromium browsers (Edge, Brave, …) skip the Chrome-only
 /// PostProcessData layer: the Chrome key blob content is already the raw
 /// 32-byte App-Bound key.
-pub fn unwrap_direct_key_blob(content: &[u8]) -> Result<Zeroizing<[u8; 32]>, DpapiError> {
+pub(crate) fn unwrap_direct_key_blob(content: &[u8]) -> Result<Zeroizing<[u8; 32]>, DpapiError> {
     if content.len() != APP_BOUND_KEY_LEN {
         return Err(DpapiError::InvalidFormat(
             "unexpected non-Chrome app-bound key blob length",
@@ -246,7 +236,7 @@ pub fn unwrap_direct_key_blob(content: &[u8]) -> Result<Zeroizing<[u8; 32]>, Dpa
 /// candidate key for the scheme is tried; only an AEAD-authenticated result
 /// is accepted. With `elevation_exe` present, the winning candidate must occur
 /// exactly once in the binary.
-pub fn unwrap_app_bound_key(
+pub(crate) fn unwrap_app_bound_key(
     content: &[u8],
     cng_aes_key: Option<&[u8; 32]>,
     elevation_exe: Option<&[u8]>,
@@ -291,7 +281,7 @@ fn unwrap_direct(
         if let Some(key) = authenticated_key(plaintext) {
             return Ok(UnwrappedAppBoundKey {
                 key,
-                scheme,
+                _scheme: scheme,
                 bound_to_elevation: bound,
             });
         }
@@ -329,7 +319,7 @@ fn unwrap_flag3(
         if let Some(key) = authenticated_key(plaintext) {
             return Ok(UnwrappedAppBoundKey {
                 key,
-                scheme: AppBoundScheme::CngXorAesGcm,
+                _scheme: AppBoundScheme::CngXorAesGcm,
                 bound_to_elevation: bound,
             });
         }

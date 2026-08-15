@@ -45,7 +45,7 @@ pub fn extract_structured_events(
 }
 
 /// Parse a complete EVTX stream without copying the whole evidence file into memory.
-pub fn extract_structured_events_from_read_seek<R>(
+pub(crate) fn extract_structured_events_from_read_seek<R>(
     reader: R,
     source_path: &str,
 ) -> Result<EvtxStructuredExtraction, EvtxBootError>
@@ -140,7 +140,7 @@ fn evtx_parser_thread_count() -> usize {
         .clamp(1, MAX_EVTX_PARSER_THREADS)
 }
 
-pub fn extract_structured_events_from_json_records(
+pub(crate) fn extract_structured_events_from_json_records(
     records: &[Value],
     source_path: &str,
 ) -> Result<EvtxStructuredExtraction, EvtxBootError> {

@@ -245,17 +245,18 @@ fn build_pe_image(
     {
         return Ok(None);
     }
-    let section_table = base
-        .checked_add(pe_offset)
-        .and_then(|address| address.checked_add(24))
-        .and_then(|address| address.checked_add(optional.len() as u64))
-        .ok_or(MemoryWindowsError::MalformedPe)?;
     let section_table_rva = pe_offset
         .checked_add(24)
         .and_then(|value| value.checked_add(optional.len() as u64))
         .ok_or(MemoryWindowsError::MalformedPe)?;
     let section_table_bytes = u64::from(number_of_sections)
         .checked_mul(40)
+        .ok_or(MemoryWindowsError::MalformedPe)?;
+    // The absolute section-table address is validated for overflow even though
+    // only the RVA bounds below gate the candidate.
+    base.checked_add(pe_offset)
+        .and_then(|address| address.checked_add(24))
+        .and_then(|address| address.checked_add(optional.len() as u64))
         .ok_or(MemoryWindowsError::MalformedPe)?;
     if section_table_rva > u64::from(u32::MAX)
         || section_table_bytes > u64::from(u32::MAX)
@@ -270,8 +271,6 @@ fn build_pe_image(
     Ok(Some(TargetedKernelPeImage {
         base,
         size_of_image,
-        section_count: number_of_sections,
-        section_table,
         export_rva,
         export_size,
         debug_rva,

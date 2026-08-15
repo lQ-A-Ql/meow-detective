@@ -6,8 +6,11 @@ mod records;
 mod scanner;
 mod types;
 
-pub use scanner::{scan_deleted_registry_cells, scan_free_cells};
-pub use types::{FreeCell, HiveBin, RecoverResult, RecoveredKey, RecoveredValue};
+pub use scanner::scan_deleted_registry_cells;
+#[cfg(test)]
+pub(crate) use scanner::scan_free_cells;
+pub(crate) use types::FreeCell;
+pub use types::{RecoverResult, RecoveredKey, RecoveredValue};
 
 #[cfg(test)]
 #[path = "../../tests/unit/registry/recovery.rs"]

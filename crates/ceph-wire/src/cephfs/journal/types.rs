@@ -235,7 +235,7 @@ impl CephFsJournalEventKind {
         }
     }
 
-    pub fn from_type(event_type: u32) -> Self {
+    pub(crate) fn from_type(event_type: u32) -> Self {
         match event_type {
             2 => Self::SubtreeMap,
             3 => Self::Export,
@@ -261,7 +261,7 @@ impl CephFsJournalEventKind {
         }
     }
 
-    pub fn is_major_boundary(self) -> bool {
+    pub(crate) fn is_major_boundary(self) -> bool {
         matches!(self, Self::SubtreeMap | Self::ResetJournal | Self::Lid)
     }
 

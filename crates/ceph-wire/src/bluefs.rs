@@ -12,7 +12,7 @@ use crate::{
 
 pub const BLUEFS_SUPER_OFFSET: u64 = 4096;
 pub const BLUEFS_SUPER_BLOCK_SIZE: usize = 4096;
-pub const BLUEFS_MAX_EXTENTS: usize = 65_536;
+pub(crate) const BLUEFS_MAX_EXTENTS: usize = 65_536;
 
 const BLUEFS_SUPER_VERSION: u8 = 3;
 const BLUEFS_FNODE_VERSION: u8 = 2;
