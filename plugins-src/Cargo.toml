@@ -6,7 +6,7 @@
 # Tests build this workspace on demand into target/plugins-src/ (see
 # crates/app-services/tests/plugin_fixture_util.rs).
 [workspace]
-members = ["prefetch", "bt_panel"]
+members = ["prefetch", "bt_panel", "wechat"]
 resolver = "2"
 
 [profile.dev]

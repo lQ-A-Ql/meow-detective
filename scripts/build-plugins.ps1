@@ -25,6 +25,7 @@ if (-not (Test-Path $vcvars)) {
 $pluginArtifacts = @(
     @{ File = 'meow_plugin_prefetch.dll'; Platform = 'windows' }
     @{ File = 'meow_plugin_bt_panel.dll'; Platform = 'linux' }
+    @{ File = 'meow_plugin_wechat.dll'; Platform = 'windows' }
 )
 
 $targetDir = Join-Path $repoRoot 'target\plugins-src'
