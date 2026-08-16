@@ -56,6 +56,35 @@ const FILES: &[(&str, &str)] = &[
         "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\message\\message_resource.db",
         "message_resource.db",
     ),
+    // WAL companions for the merge path (same keys as their main db).
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\message\\message_0.db-wal",
+        "message_0.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\message\\biz_message_0.db-wal",
+        "biz_message_0.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\contact\\contact.db-wal",
+        "contact.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\session\\session.db-wal",
+        "session.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\sns\\sns.db-wal",
+        "sns.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\favorite\\favorite.db-wal",
+        "favorite.db-wal",
+    ),
+    (
+        "Users\\admin\\Documents\\xwechat_files\\wxid_zuaa9igqlro22_eef8\\db_storage\\message\\message_fts.db-wal",
+        "message_fts.db-wal",
+    ),
 ];
 
 fn main() {

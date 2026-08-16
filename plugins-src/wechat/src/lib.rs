@@ -44,6 +44,8 @@ pub mod payload;
 mod route;
 /// SQLCipher 4 (WCDB) page decryption primitives for WeChat 4.x databases.
 pub mod sqlcipher4;
+/// WAL frame validation/decryption and merge into decrypted images.
+pub mod walmerge;
 
 use plugin_api::{
     error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,

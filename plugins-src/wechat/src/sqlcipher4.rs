@@ -27,13 +27,48 @@ pub fn validate_page1(key: &[u8; 32], page1_with_salt: &[u8]) -> bool {
     }
     let salt = &page1_with_salt[..SALT_SZ];
     let page = &page1_with_salt[SALT_SZ..PAGE_SZ];
+    page_hmac_valid(key, salt, 1, page)
+}
+
+/// Verify the page HMAC of one salt-stripped encrypted page.
+///
+/// `page` is `ciphertext | IV(16) | HMAC(64)` — for database page 1 the
+/// caller strips the leading 16-byte salt first; WAL frames carry no salt
+/// prefix and are passed whole. The HMAC covers `ciphertext | IV | pgno_le`.
+pub fn page_hmac_valid(key: &[u8; 32], salt: &[u8], pgno: u32, page: &[u8]) -> bool {
+    if page.len() < RESERVE_SZ {
+        return false;
+    }
     let mac_key = mac_key_for(key, salt);
     let body_end = page.len() - RESERVE_SZ + IV_SZ; // ciphertext + IV
     let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(&mac_key[..]).expect("hmac key");
     mac.update(&page[..body_end]);
-    mac.update(&1u32.to_le_bytes());
+    mac.update(&pgno.to_le_bytes());
     let expected = mac.finalize().into_bytes();
     expected[..HMAC_SZ] == page[body_end..body_end + HMAC_SZ]
+}
+
+/// Decrypt one salt-stripped encrypted page into `plaintext | reserve` form.
+///
+/// The reserve bytes (IV + HMAC) are carried over verbatim, matching the
+/// decrypted-image layout produced by [`decrypt_database`]. The HMAC is not
+/// checked here — callers that consume untrusted pages should gate on
+/// [`page_hmac_valid`] first.
+pub fn decrypt_page(key: &[u8; 32], pgno: u32, page: &[u8]) -> Result<Vec<u8>, String> {
+    if page.len() < RESERVE_SZ {
+        return Err(format!(
+            "encrypted page {pgno} is too short ({} bytes)",
+            page.len()
+        ));
+    }
+    let body_end = page.len() - RESERVE_SZ;
+    let iv = &page[body_end..body_end + IV_SZ];
+    let mut buf = page[..body_end].to_vec();
+    Aes256CbcDec::new((&key[..]).into(), iv.into())
+        .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut buf)
+        .map_err(|e| format!("AES-CBC decrypt failed on page {pgno}: {e}"))?;
+    buf.extend_from_slice(&page[body_end..]);
+    Ok(buf)
 }
 
 fn mac_key_for(key: &[u8; 32], salt: &[u8]) -> Zeroizing<[u8; 32]> {
@@ -62,14 +97,8 @@ pub fn decrypt_database(key: &[u8; 32], data: &[u8]) -> Result<Vec<u8>, String> 
     out.extend_from_slice(SQLITE_HEADER);
     for (index, chunk) in data.chunks(PAGE_SZ).enumerate() {
         let page = if index == 0 { &chunk[SALT_SZ..] } else { chunk };
-        let body_end = page.len() - RESERVE_SZ;
-        let iv = &page[body_end..body_end + IV_SZ];
-        let mut buf = page[..body_end].to_vec();
-        Aes256CbcDec::new((&key[..]).into(), iv.into())
-            .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut buf)
-            .map_err(|e| format!("AES-CBC decrypt failed on page {}: {e}", index + 1))?;
-        out.extend_from_slice(&buf);
-        out.extend_from_slice(&page[body_end..]);
+        let decrypted = decrypt_page(key, (index + 1) as u32, page)?;
+        out.extend_from_slice(&decrypted);
     }
     Ok(out)
 }

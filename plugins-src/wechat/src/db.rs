@@ -11,7 +11,9 @@
 //! WAL-mode images outright (`SQLITE_CANTOPEN`). Since the plugin only
 //! reads committed pages from the main file, the copied buffer's version
 //! bytes are downgraded to 1 (rollback) before deserialization. Any
-//! un-checkpointed `-wal` frames are simply not part of the offline view.
+//! un-checkpointed `-wal` frames are not part of the DLL's offline view;
+//! the `walmerge` module recovers them for the offline tooling (the ABI
+//! single-file contract cannot deliver WAL bytes to the plugin yet).
 
 use rusqlite::ffi;
 use rusqlite::serialize::OwnedData;
