@@ -1,9 +1,10 @@
+use super::app_bound::{
+    content_requires_cng, parse_cng_private_key, unwrap_app_bound_key, AppBoundScheme,
+    CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS,
+};
 use super::chrome::{decrypt_chromium_value, BrowserDecryption};
 use super::master_key::DecryptedMasterKey;
-use super::{
-    content_requires_cng, parse_chrome_key_blob, parse_cng_private_key, parse_cng_system_key_file,
-    unwrap_app_bound_key, AppBoundScheme, CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS,
-};
+use super::{parse_chrome_key_blob, parse_cng_system_key_file};
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -283,8 +284,8 @@ fn master_key_guid_lookup_is_case_insensitive() {
 #[test]
 fn non_chrome_direct_key_blob_requires_exact_key_length() {
     let content = [0x6A; 32];
-    let key = super::unwrap_direct_key_blob(&content).expect("raw Edge-style key");
+    let key = super::app_bound::unwrap_direct_key_blob(&content).expect("raw Edge-style key");
     assert_eq!(key.as_slice(), &content);
-    assert!(super::unwrap_direct_key_blob(&content[..31]).is_err());
-    assert!(super::unwrap_direct_key_blob(&[]).is_err());
+    assert!(super::app_bound::unwrap_direct_key_blob(&content[..31]).is_err());
+    assert!(super::app_bound::unwrap_direct_key_blob(&[]).is_err());
 }

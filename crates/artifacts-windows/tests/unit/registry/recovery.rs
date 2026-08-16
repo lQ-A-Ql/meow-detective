@@ -1,4 +1,5 @@
 use super::constants::{BASE_BLOCK_SIZE, HBIN_HEADER_SIZE, HBIN_MAGIC, INVALID_OFFSET};
+use super::scanner::scan_free_cells;
 use super::*;
 
 fn build_hive(payload: &[u8]) -> Vec<u8> {

@@ -11,11 +11,6 @@ mod chrome;
 mod error;
 mod master_key;
 
-#[cfg(test)]
-pub(crate) use app_bound::{
-    content_requires_cng, parse_cng_private_key, unwrap_app_bound_key, unwrap_direct_key_blob,
-    AppBoundScheme, CHROME_147_XOR_CONSTANT, KNOWN_APP_BOUND_KEYS,
-};
 pub use app_bound::{
     parse_chrome_key_blob, parse_cng_system_key_file, ChromeKeyBlob, CngSystemKeyFile,
 };

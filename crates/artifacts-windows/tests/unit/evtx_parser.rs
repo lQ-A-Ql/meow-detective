@@ -1,6 +1,7 @@
 use super::reader::{
-    bounded_clean_evtx_bytes, format_evtx_warning, govern_evtx_warnings, EVTX_CHUNK_SIZE,
-    EVTX_FILE_HEADER_SIZE,
+    bounded_clean_evtx_bytes, extract_structured_events_from_json_records,
+    extract_structured_events_from_read_seek, format_evtx_warning, govern_evtx_warnings,
+    EVTX_CHUNK_SIZE, EVTX_FILE_HEADER_SIZE,
 };
 use super::records::event_data_map;
 use super::*;
