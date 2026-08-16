@@ -910,6 +910,22 @@
     "empty": {
       "title": "No plugin artifacts",
       "description": "The plugin extracted no records under this family."
+    },
+    "actions": {
+      "title": "Plugin actions",
+      "run": "Run",
+      "running": "Running…",
+      "selectFile": "Choose file",
+      "filePlaceholder": "Input file path",
+      "fileRequired": "Choose an input file first.",
+      "unsupported": "This action cannot run from the UI yet.",
+      "candidates": "Candidates scanned",
+      "recovered": "Recovered",
+      "matched": "Matched databases",
+      "unmatched": "Unmatched databases",
+      "rerunHint": "Re-run plugin analysis on this data source to view contacts, messages, moments and other content.",
+      "rerun": "Re-run plugin analysis",
+      "rerunDone": "Plugin analysis has been re-run."
     }
   }
 }

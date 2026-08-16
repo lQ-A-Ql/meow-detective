@@ -10,6 +10,10 @@ vi.mock('@/features/analysis/hooks', () => ({
   usePluginFamilyEntries: mocks.usePluginFamilyEntries,
 }));
 
+vi.mock('@/features/analysis/plugin-action-hooks', () => ({
+  usePluginActions: () => ({ data: [], isLoading: false }),
+}));
+
 import { PluginModulePanel, deriveDynamicAttrKeys } from './PluginModulePanel';
 import type { PluginArtifactEntry, PluginModule } from '@/types/models';
 

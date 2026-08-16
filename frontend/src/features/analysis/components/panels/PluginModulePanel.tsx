@@ -6,6 +6,7 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { usePluginFamilyEntries } from '@/features/analysis/hooks';
 import type { PluginArtifactEntry, PluginModule } from '@/types/models';
 import { EmptyLine, WarningList } from './helpers';
+import { PluginActionsSection } from './PluginActionsSection';
 
 const DYNAMIC_ATTR_COLUMN_CAP = 6;
 
@@ -221,6 +222,7 @@ export function PluginModulePanel({
           </div>
         </div>
       </div>
+      <PluginActionsSection dataSourceId={dataSourceId} pluginId={module.pluginId} />
       {module.warnings.length > 0 ? <WarningList warnings={module.warnings} /> : null}
       {module.families.length === 0 ? (
         <EmptyLine text={t('pluginModule.empty.description')} />

@@ -910,6 +910,22 @@
     "empty": {
       "title": "暂无插件痕迹",
       "description": "当前插件在该 family 下没有提取到记录。"
+    },
+    "actions": {
+      "title": "插件操作",
+      "run": "运行",
+      "running": "运行中…",
+      "selectFile": "选择文件",
+      "filePlaceholder": "输入文件路径",
+      "fileRequired": "请先选择输入文件。",
+      "unsupported": "该操作暂不支持在界面中运行。",
+      "candidates": "扫描候选",
+      "recovered": "恢复成功",
+      "matched": "匹配的数据库",
+      "unmatched": "未匹配的数据库",
+      "rerunHint": "重新运行该数据源的插件分析，以查看联系人、消息、朋友圈等内容。",
+      "rerun": "重新运行插件分析",
+      "rerunDone": "插件分析已重新运行。"
     }
   }
 }

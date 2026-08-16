@@ -42,3 +42,23 @@ export interface PluginFamilyEntriesRequest {
   offset: number;
   limit: number;
 }
+
+/** One self-described plugin action from `list_plugin_actions`. */
+export interface PluginActionDescriptor {
+  id: string;
+  label: string;
+  description?: string;
+  /** Currently "file" | "none". */
+  inputKind: string;
+}
+
+/**
+ * Outcome of a WeChat database-key recovery run (`recover_wechat_keys`).
+ * Recovered keys never appear in this DTO; only counts and db names.
+ */
+export interface WeChatKeyRecoveryResult {
+  candidatesSeen: number;
+  recoveredCount: number;
+  matchedDbNames: string[];
+  unmatchedDbNames: string[];
+}

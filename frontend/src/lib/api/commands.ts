@@ -130,6 +130,8 @@ export const COMMANDS = {
     GENERATE_ANALYSIS_SUMMARY: 'generate_analysis_summary',
     LIST_PLUGIN_MODULES: 'list_plugin_modules',
     GET_PLUGIN_FAMILY_ENTRIES: 'get_plugin_family_entries',
+    LIST_PLUGIN_ACTIONS: 'list_plugin_actions',
+    RECOVER_WECHAT_KEYS: 'recover_wechat_keys',
   },
   rulePacks: {
     LIST_LOADED_RULE_PACKS: 'list_loaded_rule_packs',

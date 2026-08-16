@@ -12,6 +12,7 @@ import {
   EvidenceClassificationSummary,
   FileClassificationBoard,
   LinuxArtifactSummary,
+  PluginActionDescriptor,
   PluginFamilyEntries,
   PluginFamilyEntriesRequest,
   PluginModule,
@@ -19,6 +20,7 @@ import {
   RegistryStructuredSummary,
   V2GovernanceSnapshot,
   V3GovernanceSnapshot,
+  WeChatKeyRecoveryResult,
 } from '@/types/models';
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
@@ -109,6 +111,19 @@ export async function getPluginFamilyEntries(
   request: PluginFamilyEntriesRequest,
 ): Promise<PluginFamilyEntries> {
   return apiClient.request(COMMANDS.analysis.GET_PLUGIN_FAMILY_ENTRIES, { request });
+}
+
+export async function listPluginActions(pluginId: string): Promise<PluginActionDescriptor[]> {
+  return apiClient.request(COMMANDS.analysis.LIST_PLUGIN_ACTIONS, { request: { pluginId } });
+}
+
+export async function recoverWeChatKeys(
+  dataSourceId: string,
+  dumpPath: string,
+): Promise<WeChatKeyRecoveryResult> {
+  return apiClient.request(COMMANDS.analysis.RECOVER_WECHAT_KEYS, {
+    request: { dataSourceId, dumpPath },
+  });
 }
 
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
