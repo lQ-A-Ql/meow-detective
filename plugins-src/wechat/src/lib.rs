@@ -27,6 +27,8 @@
 //! and any injected database keys are only tested for presence or consumed
 //! in place — never emitted to payload, warnings, or logs.
 
+/// Optional action channel (`recoverKeys` dump scan + page-1 validation).
+pub mod action;
 /// Database content parsers (contacts/sessions/messages/sns/favorites).
 /// Public so the offline tooling binary can drive them directly.
 pub mod content;
@@ -35,8 +37,8 @@ pub use db::WeChatDb;
 /// Development key-injection channel (`MEOW_WECHAT_KEYS`).
 mod keyinject;
 /// Crash-dump key recovery (`x'<hex>'` literal scan + HMAC validation).
-/// Library-only: the ABI path never sees a memory dump (50MB cap), so this
-/// is consumed by the offline tooling and by a future host-side integration.
+/// Library-only within the extraction ABI (50MB cap); the host reaches it
+/// through the `recoverKeys` action (`action`) and the offline tooling.
 pub mod keyscan;
 mod parse;
 /// ABI payload builders; public for the offline tooling binary.
@@ -48,8 +50,8 @@ pub mod sqlcipher4;
 pub mod walmerge;
 
 use plugin_api::{
-    error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,
-    MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
+    error_response, guarded_action, guarded_extract, MeowEvidencePlatform, MeowExtractRequest,
+    MeowExtractResponse, MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
 };
 use std::ffi::CStr;
 
@@ -93,6 +95,21 @@ pub unsafe extern "C" fn meow_plugin_extract(
     request: *const MeowExtractRequest,
 ) -> MeowExtractResponse {
     guarded_extract(request, extract_inner)
+}
+
+/// ABI entry point (optional): self-describing JSON action channel.
+///
+/// # Safety
+///
+/// `request`/`request_len` must be null+0 or a valid pointer/length pair
+/// referencing bytes that live for the call duration. The caller must return
+/// the response buffers via `meow_plugin_free_buffer`.
+#[no_mangle]
+pub unsafe extern "C" fn meow_plugin_action(
+    request: *const u8,
+    request_len: u64,
+) -> MeowExtractResponse {
+    guarded_action(request, request_len, action::run)
 }
 
 /// ABI entry point: reclaim a plugin-allocated response buffer.

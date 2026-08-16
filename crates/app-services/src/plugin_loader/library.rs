@@ -17,6 +17,9 @@ pub(crate) struct PluginLibrary {
     _library: libloading::os::windows::Library,
     extract: plugin_api::MeowPluginExtractFn,
     free_buffer: plugin_api::MeowPluginFreeBufferFn,
+    /// Optional action channel entry point (`None` = plugin has no actions;
+    /// graceful degradation per the ABI contract).
+    action: Option<plugin_api::MeowPluginActionFn>,
 }
 
 impl PluginLibrary {
@@ -26,6 +29,10 @@ impl PluginLibrary {
 
     pub(crate) fn free_buffer_fn(&self) -> plugin_api::MeowPluginFreeBufferFn {
         self.free_buffer
+    }
+
+    pub(crate) fn action_fn(&self) -> Option<plugin_api::MeowPluginActionFn> {
+        self.action
     }
 }
 
@@ -183,6 +190,12 @@ fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<Shared
         &library,
         plugin_api::MEOW_PLUGIN_FREE_BUFFER_SYMBOL,
     )?;
+    // Optional export: the action channel is probed by symbol existence;
+    // a missing symbol means the plugin simply has no actions (contract §3).
+    let action = resolve_optional_symbol::<plugin_api::MeowPluginActionFn>(
+        &library,
+        plugin_api::MEOW_PLUGIN_ACTION_SYMBOL,
+    );
     if !seen_ids.insert(meta.plugin_id.clone()) {
         return Err(format!("duplicate plugin id '{}'", meta.plugin_id));
     }
@@ -192,8 +205,21 @@ fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<Shared
             _library: library,
             extract,
             free_buffer,
+            action,
         },
     ))
+}
+
+#[cfg(windows)]
+fn resolve_optional_symbol<T: Copy>(
+    library: &libloading::os::windows::Library,
+    symbol: &[u8],
+) -> Option<T> {
+    // SAFETY: same contract as resolve_symbol; a lookup failure only means
+    // the optional export is absent, never a load error.
+    unsafe { library.get::<T>(symbol) }
+        .map(|symbol| *symbol)
+        .ok()
 }
 
 #[cfg(windows)]

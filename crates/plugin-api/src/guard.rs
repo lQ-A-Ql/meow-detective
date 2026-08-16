@@ -54,3 +54,39 @@ pub unsafe fn guarded_extract(
         )
     })
 }
+
+/// Run `f` as the body of the optional `meow_plugin_action` export with
+/// panic containment (same hard contract as [`guarded_extract`]).
+///
+/// The request is a length-delimited UTF-8 JSON document
+/// (`{"action": "<id>", "params": {...}}`); `f` receives it as a byte slice
+/// valid for the duration of the call. A panic inside `f` becomes an
+/// `InternalError` response; it never unwinds past this function.
+///
+/// # Safety
+///
+/// `request`/`request_len` must be the pointer/length pair the host passed
+/// to `meow_plugin_action` (valid for the duration of the call; may be null
+/// only when `request_len` is 0).
+pub unsafe fn guarded_action(
+    request: *const u8,
+    request_len: u64,
+    f: impl FnOnce(&[u8]) -> MeowExtractResponse,
+) -> MeowExtractResponse {
+    if request.is_null() && request_len > 0 {
+        return error_response(MeowStatus::InternalError, "null action request");
+    }
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: null+0 yields an empty slice; otherwise the host contract
+        // guarantees request_len readable bytes for the call duration.
+        let bytes = if request.is_null() {
+            &[][..]
+        } else {
+            unsafe { std::slice::from_raw_parts(request, request_len as usize) }
+        };
+        f(bytes)
+    }));
+    outcome.unwrap_or_else(|_| {
+        error_response(MeowStatus::InternalError, "plugin panicked during action")
+    })
+}

@@ -167,3 +167,35 @@ impl GetPluginFamilyEntriesRequest {
 fn default_analysis_extraction_limit() -> u32 {
     100
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPluginActionsRequest {
+    pub plugin_id: String,
+}
+
+impl ListPluginActionsRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.plugin_id.trim().is_empty() {
+            return Err("pluginId must not be blank".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverWeChatKeysRequest {
+    pub data_source_id: String,
+    pub dump_path: String,
+}
+
+impl RecoverWeChatKeysRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)?;
+        if self.dump_path.trim().is_empty() {
+            return Err("dumpPath must not be blank".to_string());
+        }
+        Ok(())
+    }
+}

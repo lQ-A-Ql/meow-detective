@@ -126,7 +126,7 @@ fn encrypted_database_is_inventory_with_warning() {
     assert_eq!(artifact.family, "WeChatDatabase");
     assert_eq!(artifact.attrs["encrypted"], true);
     assert_eq!(artifact.attrs["category"], "contact");
-    assert!(artifact.attrs.get("tableList").is_none());
+    assert!(!artifact.attrs.contains_key("tableList"));
 }
 
 #[test]

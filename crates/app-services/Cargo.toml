@@ -49,6 +49,7 @@ sha1.workspace = true
 md-5.workspace = true
 hex.workspace = true
 once_cell.workspace = true
+zeroize.workspace = true
 regex.workspace = true
 unicode-normalization = { workspace = true }
 toml.workspace = true

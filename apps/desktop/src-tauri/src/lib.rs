@@ -131,6 +131,8 @@ macro_rules! desktop_command_handler {
             get_notebook_thread,
             add_evidence_citation,
             list_investigation_steps,
+            list_plugin_actions,
+            recover_wechat_keys,
             mount_image,
             mount_physical_image,
             unmount_image,

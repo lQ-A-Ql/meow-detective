@@ -13,8 +13,8 @@ pub use crate::dto::PrepareEmulationRequestDto;
 pub use crate::dto::{MountImageRequestDto, MountPhysicalImageRequestDto};
 pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
-    GetEvtxEventSummaryRequest, GetPluginFamilyEntriesRequest, RunAnalysisExtractionRequest,
-    RunEvidenceClassificationRequest,
+    GetEvtxEventSummaryRequest, GetPluginFamilyEntriesRequest, ListPluginActionsRequest,
+    RecoverWeChatKeysRequest, RunAnalysisExtractionRequest, RunEvidenceClassificationRequest,
 };
 pub use artifacts::{GetArtifactByIdRequest, GetArtifactRowsRequest};
 pub use case::{

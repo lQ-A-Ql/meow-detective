@@ -3,9 +3,10 @@
 //! Implements the host behavior described in
 //! `docs/plugin-abi-contract-design.md` §5: directory discovery (`directory`),
 //! `plugins.*` settings (`settings`), safe DLL loading and the ABI handshake
-//! (`library`), and the `ArtifactExtractor` adapter with host-enforced
-//! provenance (`extractor`).
+//! (`library`), the `ArtifactExtractor` adapter with host-enforced provenance
+//! (`extractor`), and the optional self-describing action channel (`action`).
 
+mod action;
 mod directory;
 mod extractor;
 mod library;

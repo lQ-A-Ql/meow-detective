@@ -132,9 +132,7 @@ fn real_decrypted_dbs_match_ground_truth() {
     );
     let sessions = by_family(&sink, "WeChatSession");
     assert_eq!(sessions.len(), 18, "session.db ground truth is 18 rows");
-    assert!(sessions
-        .iter()
-        .all(|a| a.attrs.get("unreadCount").is_some()));
+    assert!(sessions.iter().all(|a| a.attrs.contains_key("unreadCount")));
     assert!(sessions.iter().any(|a| a.attrs["username"] == "weixin"));
 
     // sns.db: 6 moments with timeline events; the known post at unix
@@ -150,7 +148,7 @@ fn real_decrypted_dbs_match_ground_truth() {
     assert!(moments
         .iter()
         .any(|a| a.attrs["createTimeUtc"] == "2026-03-30T07:54:43Z"));
-    assert!(moments.iter().all(|a| a.attrs.get("hasMedia").is_some()));
+    assert!(moments.iter().all(|a| a.attrs.contains_key("hasMedia")));
     assert!(report.timeline_events > 0, "moments emit timeline events");
 
     // favorite.db: table exists but holds zero rows on this image.
@@ -198,7 +196,7 @@ fn real_decrypted_dbs_match_ground_truth() {
         "message_0.db ground truth is 17 Msg_ tables"
     );
     assert!(
-        messages.iter().all(|a| a.attrs.get("talker").is_some()),
+        messages.iter().all(|a| a.attrs.contains_key("talker")),
         "every talker table suffix resolves through Name2Id on this image"
     );
     let earliest_text = messages
@@ -215,7 +213,7 @@ fn real_decrypted_dbs_match_ground_truth() {
     assert!(!compressed.is_empty(), "message_0.db has zstd rows");
     assert!(compressed
         .iter()
-        .all(|a| a.attrs.get("contentText").is_some()));
+        .all(|a| a.attrs.contains_key("contentText")));
     // Direction resolution runs against the path-derived owner wxid.
     assert!(messages.iter().any(|a| a.attrs["isSend"] == true));
     assert!(messages.iter().any(|a| a.attrs["isSend"] == false));
@@ -252,6 +250,6 @@ fn real_decrypted_dbs_match_ground_truth() {
         assert_eq!(by_family(&sink, "WeChatDatabase").len(), 1, "{file}");
         assert!(by_family(&sink, "WeChatMessage").is_empty(), "{file}");
         // Plaintext deep-parse still inventories the schema.
-        assert!(sink.artifacts[0].attrs.get("tableList").is_some(), "{file}");
+        assert!(sink.artifacts[0].attrs.contains_key("tableList"), "{file}");
     }
 }

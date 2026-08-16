@@ -13,3 +13,7 @@ pub const MEOW_PLUGIN_INFO_SYMBOL: &[u8] = b"meow_plugin_info\0";
 pub const MEOW_PLUGIN_EXTRACT_SYMBOL: &[u8] = b"meow_plugin_extract\0";
 /// Exported symbol: free function for plugin-allocated buffers.
 pub const MEOW_PLUGIN_FREE_BUFFER_SYMBOL: &[u8] = b"meow_plugin_free_buffer\0";
+/// Optional exported symbol: self-describing JSON action channel. A plugin
+/// that does not export it simply has no actions; the host degrades
+/// gracefully (no load error, ABI version unchanged).
+pub const MEOW_PLUGIN_ACTION_SYMBOL: &[u8] = b"meow_plugin_action\0";

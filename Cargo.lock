@@ -176,6 +176,7 @@ dependencies = [
  "uuid",
  "volume-bitlocker",
  "winpe-maintenance",
+ "zeroize",
  "zip",
 ]
 

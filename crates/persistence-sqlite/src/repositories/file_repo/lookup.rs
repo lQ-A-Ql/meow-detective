@@ -200,6 +200,34 @@ impl FileRepo<'_> {
         Ok(updated)
     }
 
+    /// Find non-deleted file entries whose path contains every fragment
+    /// (AND of escaped `LIKE '%fragment%'` terms), path-ordered. Fragments
+    /// are matched with SQLite's default case-insensitive ASCII LIKE.
+    pub fn find_by_path_fragments(
+        &self,
+        data_source_id: &DataSourceId,
+        fragments: &[&str],
+    ) -> DbResult<Vec<FileEntry>> {
+        if fragments.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND deleted = 0"
+        );
+        let mut values: Vec<String> = Vec::with_capacity(fragments.len());
+        for (index, fragment) in fragments.iter().enumerate() {
+            sql.push_str(&format!(" AND path LIKE ?{} ESCAPE '\\'", index + 2));
+            values.push(format!("%{}%", escape_like_literal(fragment)));
+        }
+        sql.push_str(" ORDER BY path ASC");
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(
+            rusqlite::params_from_iter(std::iter::once(data_source_id.0.clone()).chain(values)),
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
     pub fn find_data_source_location(
         &self,
         data_source_id: &DataSourceId,

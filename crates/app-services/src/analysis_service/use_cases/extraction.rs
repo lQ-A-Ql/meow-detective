@@ -160,6 +160,11 @@ fn run_source_analysis_extraction_execution_with_progress(
     control: AnalysisExecutionControl<'_>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    // If a WeChat key recovery previously produced keys for this case, point
+    // the plugin's injection channel at them for this run; no keys file means
+    // behavior is unchanged (see WeChatKeysEnvGuard for the process-level env
+    // concurrency argument).
+    let _wechat_keys = crate::wechat_key_service::WeChatKeysEnvGuard::activate(case_root);
     let mut source_reader = control.source_runtime.bind(SourceReadContext::new(
         &source.connection,
         case_conn,

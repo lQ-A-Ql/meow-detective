@@ -28,7 +28,8 @@ pub use crate::dto::analysis_linux::{
     LinuxWebSiteDto,
 };
 pub use crate::dto::analysis_plugin::{
-    PluginArtifactEntryDto, PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto,
+    PluginActionDescriptorDto, PluginArtifactEntryDto, PluginFamilyCountDto,
+    PluginFamilyEntriesDto, PluginModuleDto, WeChatKeyRecoveryResultDto,
 };
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,

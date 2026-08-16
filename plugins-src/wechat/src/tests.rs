@@ -967,3 +967,120 @@ fn decrypted_real_layout_parses_after_wal_downgrade() {
     assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
     assert_eq!(payload["artifacts"][0]["attrs"]["tableCount"], 1);
 }
+
+// ---- Optional action channel (`meow_plugin_action`) ----
+
+fn run_action(request: &Value) -> (MeowStatus, Option<Value>, Option<String>) {
+    let body = request.to_string();
+    let response = unsafe { meow_plugin_action(body.as_ptr(), body.len() as u64) };
+    let status = response.status;
+    let (payload, error) = unsafe { drain_response(&response) };
+    let payload = payload.map(|bytes| serde_json::from_slice(&bytes).expect("valid JSON"));
+    (status, payload, error)
+}
+
+/// Build a synthetic WCDB-encrypted page 1 whose HMAC validates for `key`
+/// (same construction as sqlcipher4: mac key = PBKDF2-HMAC-SHA512(key,
+/// salt ^ 0x3a, 2), HMAC over ciphertext | IV | pgno_le).
+fn synthetic_encrypted_page1(key: &[u8; 32], salt: &[u8; 16]) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    let mut page = vec![0u8; sqlcipher4::PAGE_SZ - sqlcipher4::SALT_SZ];
+    for (index, byte) in page.iter_mut().enumerate() {
+        *byte = (index % 251) as u8;
+    }
+    let body_end = page.len() - 80 + 16; // ciphertext + IV
+    let mac_salt: Vec<u8> = salt.iter().map(|b| b ^ 0x3a).collect();
+    let mac_key = pbkdf2::pbkdf2_hmac_array::<Sha512, 32>(key, &mac_salt, 2);
+    let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(&mac_key[..]).expect("hmac key");
+    mac.update(&page[..body_end]);
+    mac.update(&1u32.to_le_bytes());
+    let tag = mac.finalize().into_bytes();
+    page[body_end..body_end + 64].copy_from_slice(&tag[..64]);
+    let mut full = salt.to_vec();
+    full.extend_from_slice(&page);
+    assert!(sqlcipher4::validate_page1(key, &full), "fixture page1");
+    full
+}
+
+fn write_temp_dump(key: &[u8; 32]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("meow-wechat-action-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dump dir");
+    let dump = dir.join("dump.dmp");
+    let mut bytes = vec![0u8; 1024];
+    bytes.extend_from_slice(format!("x'{}'", keyscan::key_to_hex(key)).as_bytes());
+    bytes.extend_from_slice(&[7u8; 512]);
+    std::fs::write(&dump, &bytes).expect("write dump");
+    dump
+}
+
+#[test]
+fn action_describe_declares_recover_keys() {
+    let (status, payload, error) = run_action(&serde_json::json!({"action": "describe"}));
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let actions = payload["actions"].as_array().expect("actions");
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0]["id"], "recoverKeys");
+    assert_eq!(actions[0]["label"], "从内存镜像恢复数据库密钥");
+    assert_eq!(actions[0]["inputKind"], "file");
+}
+
+#[test]
+fn action_unknown_is_unsupported() {
+    let (status, _payload, error) = run_action(&serde_json::json!({"action": "nope"}));
+    assert_eq!(status, MeowStatus::Unsupported);
+    assert!(error.is_some());
+}
+
+#[test]
+fn action_malformed_json_is_parse_error() {
+    let body = b"not json";
+    let response = unsafe { meow_plugin_action(body.as_ptr(), body.len() as u64) };
+    assert_eq!(response.status, MeowStatus::ParseError);
+    let (_payload, error) = unsafe { drain_response(&response) };
+    assert!(error.is_some());
+}
+
+#[test]
+fn action_recover_keys_requires_dump_path() {
+    let (status, _payload, error) =
+        run_action(&serde_json::json!({"action": "recoverKeys", "params": {}}));
+    assert_eq!(status, MeowStatus::ParseError);
+    assert!(error.is_some());
+}
+
+#[test]
+fn action_recover_keys_matches_validated_page1() {
+    use base64::Engine as _;
+    let key = [0x42u8; 32];
+    let salt = [0x11u8; 16];
+    let page1 = synthetic_encrypted_page1(&key, &salt);
+    let dump = write_temp_dump(&key);
+    let request = serde_json::json!({
+        "action": "recoverKeys",
+        "params": {
+            "dumpPath": dump.to_string_lossy(),
+            "dbPages": {
+                "message_0.db": base64::engine::general_purpose::STANDARD.encode(&page1),
+                "contact.db": base64::engine::general_purpose::STANDARD.encode(vec![9u8; 4096]),
+                "broken.db": "!!!not-base64!!!",
+            }
+        }
+    });
+    let (status, payload, error) = run_action(&request);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert_eq!(payload["candidatesSeen"], 1);
+    assert_eq!(payload["matched"], serde_json::json!(["message_0.db"]));
+    let unmatched = payload["unmatched"].as_array().expect("unmatched");
+    assert!(unmatched.contains(&serde_json::json!("contact.db")));
+    assert!(unmatched.contains(&serde_json::json!("broken.db")));
+    assert_eq!(
+        payload["keys"]["message_0.db"],
+        serde_json::Value::String(keyscan::key_to_hex(&key))
+    );
+    let _ = std::fs::remove_dir_all(dump.parent().expect("dump dir"));
+}

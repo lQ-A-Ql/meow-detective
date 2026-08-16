@@ -49,6 +49,32 @@ pub struct PluginArtifactEntryDto {
     pub created_at: String,
 }
 
+/// One self-described plugin action (ABI doc §3 optional export): the
+/// plugin's `describe` response element. `label` is user-facing (may be
+/// Chinese); `inputKind` is `"file"` or `"none"`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginActionDescriptorDto {
+    pub id: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub input_kind: String,
+}
+
+/// Outcome of a WeChat database-key recovery run. Recovered keys never
+/// appear in any DTO; they are persisted to the ACL-protected case
+/// workspace (`derived/wechat-keys/keys.json`) and only counts/names are
+/// reported here.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeChatKeyRecoveryResultDto {
+    pub candidates_seen: u64,
+    pub recovered_count: u64,
+    pub matched_db_names: Vec<String>,
+    pub unmatched_db_names: Vec<String>,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/analysis_plugin.rs"]
 mod tests;

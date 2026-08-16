@@ -59,6 +59,7 @@ pub(crate) use crate::commands::{
         add_evidence_citation, create_notebook_entry, get_notebook_thread,
         list_investigation_steps, list_notebook_entries, update_notebook_entry,
     },
+    plugin_action_commands::{list_plugin_actions, recover_wechat_keys},
     report_commands::{
         export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,
         get_report_history, get_report_templates,

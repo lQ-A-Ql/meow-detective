@@ -99,11 +99,10 @@ fn real_wechat_files_match_ground_truth() {
     assert_eq!(install.family, "WeChatInstall");
     assert_eq!(install.attrs["installVersion"], "4.1.8.67");
     assert!(
-        install.attrs["pluginVersions"]
+        !install.attrs["pluginVersions"]
             .as_object()
             .expect("pluginVersions")
-            .len()
-            > 0,
+            .is_empty(),
         "plugin_info.ini must yield at least one plugin version entry"
     );
 
@@ -168,7 +167,7 @@ fn real_wechat_files_match_ground_truth() {
             artifact.attrs["sizeBytes"].as_u64().expect("sizeBytes") > 0,
             "{file}"
         );
-        assert!(artifact.attrs.get("tableList").is_none(), "{file}");
+        assert!(!artifact.attrs.contains_key("tableList"), "{file}");
         assert!(
             report
                 .errors

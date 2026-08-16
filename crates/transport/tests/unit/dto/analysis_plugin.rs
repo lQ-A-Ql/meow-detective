@@ -59,3 +59,40 @@ fn plugin_family_entries_round_trip_and_option_skip() {
     assert_eq!(back.entries.len(), 1);
     assert!(!back.truncated);
 }
+
+#[test]
+fn plugin_action_descriptor_round_trip_and_option_skip() {
+    let descriptor = PluginActionDescriptorDto {
+        id: "recoverKeys".to_string(),
+        label: "从内存镜像恢复数据库密钥".to_string(),
+        description: None,
+        input_kind: "file".to_string(),
+    };
+    let json = serde_json::to_value(&descriptor).unwrap();
+    assert_eq!(json["id"], "recoverKeys");
+    assert_eq!(json["inputKind"], "file");
+    // description is None and must be omitted.
+    assert!(json.get("description").is_none());
+    let back: PluginActionDescriptorDto = serde_json::from_value(json).unwrap();
+    assert_eq!(back.id, "recoverKeys");
+    assert_eq!(back.input_kind, "file");
+}
+
+#[test]
+fn wechat_key_recovery_result_round_trip_carries_no_keys() {
+    let result = WeChatKeyRecoveryResultDto {
+        candidates_seen: 7,
+        recovered_count: 1,
+        matched_db_names: vec!["message_0.db".to_string()],
+        unmatched_db_names: vec!["contact.db".to_string()],
+    };
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["candidatesSeen"], 7);
+    assert_eq!(json["recoveredCount"], 1);
+    assert_eq!(json["matchedDbNames"][0], "message_0.db");
+    assert_eq!(json["unmatchedDbNames"][0], "contact.db");
+    // The DTO must never carry key material.
+    assert!(json.get("keys").is_none());
+    let back: WeChatKeyRecoveryResultDto = serde_json::from_value(json).unwrap();
+    assert_eq!(back.recovered_count, 1);
+}

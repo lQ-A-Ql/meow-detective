@@ -44,8 +44,9 @@ cargo build --manifest-path plugins-src/Cargo.toml --release
 1. **导出函数内自捕获 panic**：MSVC 下跨 FFI 边界的 unwind 会被宿主判为
    foreign exception 直接 `abort`（0xC0000409），宿主 `catch_unwind`
    拦不住（ABI 文档 §8 实测记录）。本工程 `panic = "unwind"` + 每个导出
-   函数经 `guarded_extract` 的 `catch_unwind` 包裹，panic 映射为
-   `MeowStatus::InternalError`。
+   函数经 `guarded_extract` / `guarded_action`（可选动作通道
+   `meow_plugin_action`，见 ABI 文档 §3"可选导出符号"）的 `catch_unwind`
+   包裹，panic 映射为 `MeowStatus::InternalError`。
 2. **谁分配谁释放**：payload / error_message 由本 DLL 分配，宿主读完后
    调 `meow_plugin_free_buffer` 归还。payload 按显式长度释放；
    error_message 是 NUL 结尾字符串（`CString::into_raw`），宿主按

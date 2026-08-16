@@ -89,8 +89,8 @@ pub(crate) fn parse_families(json: &str) -> Result<Vec<String>, String> {
 /// metadata are shared process-wide (`Arc`); each registry build gets a
 /// fresh extractor with its own call lock.
 pub struct PluginExtractor {
-    shared: std::sync::Arc<SharedPlugin>,
-    call_lock: Mutex<()>,
+    pub(crate) shared: std::sync::Arc<SharedPlugin>,
+    pub(crate) call_lock: Mutex<()>,
 }
 
 impl PluginExtractor {
@@ -187,7 +187,7 @@ impl PluginExtractor {
         Ok(self.write_payload(parsed, ctx, sink))
     }
 
-    fn take_buffers(&self, response: &MeowExtractResponse) -> ResponseBuffers {
+    pub(crate) fn take_buffers(&self, response: &MeowExtractResponse) -> ResponseBuffers {
         ResponseBuffers {
             payload: self.take_payload(response),
             error: self.take_error_message(response),
@@ -384,9 +384,9 @@ impl ArtifactExtractor for PluginExtractor {
     }
 }
 
-struct ResponseBuffers {
-    payload: Option<Vec<u8>>,
-    error: Option<String>,
+pub(crate) struct ResponseBuffers {
+    pub(crate) payload: Option<Vec<u8>>,
+    pub(crate) error: Option<String>,
 }
 
 /// Extraction payload schema (design doc §4). Unknown fields are ignored so
