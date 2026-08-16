@@ -6,25 +6,33 @@
 //!   WeChatInstall / WeChatAccount inventory artifacts;
 //! - `db_storage/*.db` files are inventoried as WeChatDatabase with the
 //!   wxid/category/name/size and an `encrypted` flag;
-//! - encrypted (WCDB/SQLCipher) databases stop at inventory plus an
-//!   explanatory warning — WeChat 4.0.3.36+ keeps the key only in the
-//!   running process and scrubs it, so a pure disk image cannot recover it
-//!   offline;
-//! - a plaintext database (older builds, other images) is deep-parsed:
-//!   table list plus per-table row counts (a missing/unreadable table is a
-//!   ParseError, absent tables simply do not appear).
+//! - encrypted (WCDB/SQLCipher) databases need key material: WeChat
+//!   4.0.3.36+ keeps the key only in the running process and scrubs it, so
+//!   recovery requires a memory dump (`keyscan`); with a key injected via
+//!   the `MEOW_WECHAT_KEYS` development channel (`keyinject`) the database
+//!   is decrypted in memory and parsed as plaintext, otherwise it stays
+//!   inventory-only with an explanatory warning;
+//! - a plaintext database (native or decrypted) is deep-parsed: schema
+//!   inventory (table list plus per-table row counts; custom-tokenizer FTS
+//!   tables degrade to a per-table warning) and, for the known content
+//!   databases, contact/session/message/moment/favorite artifacts (see
+//!   `content/`).
 //!
-//! Redaction: `kTdiKeyCloudSession` and `key_info.dat` contents are only
-//! tested for presence; their bytes never enter the payload.
+//! Redaction: `kTdiKeyCloudSession`, `key_info.dat`, and injected database
+//! keys are only tested for presence or consumed in place; their bytes
+//! never enter the payload.
 
 use serde_json::{Map, Value};
 
+use crate::content;
 use crate::db::WeChatDb;
+use crate::keyinject::{self, Injected};
 use crate::payload::{new_attrs, Payload};
 use crate::route;
 
-/// Encryption note attached to every encrypted WeChatDatabase artifact.
-const ENCRYPTION_WARNING: &str = "WCDB/SQLCipher 加密；微信 4.0.3.36+ 密钥仅存在于运行进程内存且会主动清除，纯磁盘镜像无法离线恢复，需要外部密钥材料方可内容提取";
+/// Encryption note attached to every encrypted WeChatDatabase artifact that
+/// stays inventory-only (no usable key on the injection channel).
+const ENCRYPTION_WARNING: &str = "WCDB/SQLCipher 加密；密钥仅存于运行进程内存且会被清除，纯磁盘镜像无法离线恢复；可结合内存 dump 恢复密钥（keyscan 模块已实现）后经 MEOW_WECHAT_KEYS 通道注入解析";
 
 /// Bound on the emitted table list so a pathological database cannot blow
 /// up the payload; the host reads the whole payload into memory.
@@ -118,13 +126,35 @@ pub fn kv_config(data: &[u8], payload: &mut Payload) {
 }
 
 /// `xwechat_files/<wxid>/db_storage/<category>/*.db` → WeChatDatabase.
-/// Plaintext databases are deep-parsed; encrypted ones are inventoried
-/// with the encryption warning. Corrupt plaintext input is a ParseError.
+///
+/// Encrypted (WCDB/SQLCipher) databases first try the `MEOW_WECHAT_KEYS`
+/// development channel (`keyinject.rs`); with a usable key the in-memory
+/// plaintext is deep-parsed exactly like a natively plaintext database,
+/// otherwise the database stays inventory-only with the encryption
+/// warning. Known content databases (contact/session/message/sns/favorite)
+/// additionally emit content artifacts via `content::parse_content`.
+/// Corrupt plaintext input is a ParseError.
 pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), String> {
     let wxid = route::segment_after(path, "xwechat_files").unwrap_or("<unknown>");
     let category = route::segment_after(path, "db_storage").unwrap_or("<unknown>");
     let db_name = route::basename(path);
     let encrypted = data.len() < 16 || &data[..16] != b"SQLite format 3\0";
+
+    // Development key-injection channel: encrypted database + injected key
+    // → in-memory plaintext. Failures fall back to inventory with a
+    // key-free warning.
+    let mut decrypted: Option<Vec<u8>> = None;
+    if encrypted {
+        match keyinject::try_decrypt(db_name, data) {
+            Injected::Inactive => {}
+            Injected::Decrypted(plain) => decrypted = Some(plain),
+            Injected::Failed(reason) => {
+                payload.warn(format!(
+                    "{db_name}：密钥注入通道未能解密（{reason}），维持盘点"
+                ));
+            }
+        }
+    }
 
     let mut attrs = new_attrs();
     attrs.insert("wxid".to_string(), Value::String(wxid.to_string()));
@@ -133,7 +163,7 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     attrs.insert("sizeBytes".to_string(), Value::from(data.len() as u64));
     attrs.insert("encrypted".to_string(), Value::Bool(encrypted));
 
-    if encrypted {
+    if encrypted && decrypted.is_none() {
         payload.warn(ENCRYPTION_WARNING);
         payload.artifact(
             "WeChatDatabase",
@@ -144,11 +174,32 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
         return Ok(());
     }
 
-    // Plaintext path: inventory the schema and count rows per table. The
-    // row-count pass doubles as the defensive message/contact table probe —
-    // whatever tables exist (message/session/contact/sns variants) are
-    // counted, and absent ones simply do not appear.
-    let db = WeChatDb::from_bytes(data)?;
+    // Plaintext path (native or freshly decrypted): inventory the schema and
+    // count rows per table, then run the content parser for known databases.
+    // The row-count pass doubles as the defensive message/contact table
+    // probe — whatever tables exist (message/session/contact/sns variants)
+    // are counted, and absent ones simply do not appear.
+    let body: &[u8] = decrypted.as_deref().unwrap_or(data);
+    let db = match WeChatDb::from_bytes(body) {
+        Ok(db) => db,
+        Err(reason) if encrypted => {
+            payload.warn(format!(
+                "{db_name} 解密产物不是可读的 SQLite 库（{reason}），维持盘点"
+            ));
+            payload.warn(ENCRYPTION_WARNING);
+            payload.artifact(
+                "WeChatDatabase",
+                format!("{category}/{db_name}"),
+                format!("WCDB/SQLCipher 加密数据库（{} 字节），仅盘点", data.len()),
+                attrs,
+            );
+            return Ok(());
+        }
+        Err(reason) => return Err(reason),
+    };
+    if decrypted.is_some() {
+        attrs.insert("decrypted".to_string(), Value::Bool(true));
+    }
     let tables = db.table_list()?;
     if tables.len() > MAX_TABLES {
         payload.warn(format!(
@@ -159,7 +210,17 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     let tables: Vec<String> = tables.into_iter().take(MAX_TABLES).collect();
     let mut row_counts = Map::new();
     for table in &tables {
-        row_counts.insert(table.clone(), Value::from(db.row_count(table)?));
+        // A table backed by a custom WCDB tokenizer (e.g. the FTS index
+        // tables) cannot be queried by stock SQLite; degrade that table's
+        // count to a warning instead of failing the whole database.
+        match db.row_count(table) {
+            Ok(count) => {
+                row_counts.insert(table.clone(), Value::from(count));
+            }
+            Err(reason) => {
+                payload.warn(format!("row count on {table} skipped: {reason}"));
+            }
+        }
     }
     let table_count = tables.len();
     attrs.insert(
@@ -171,9 +232,14 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     payload.artifact(
         "WeChatDatabase",
         format!("{category}/{db_name}"),
-        format!("明文 SQLite 数据库，{table_count} 张表"),
+        if decrypted.is_some() {
+            format!("WCDB 加密数据库（经注入密钥解密，{table_count} 张表）")
+        } else {
+            format!("明文 SQLite 数据库，{table_count} 张表")
+        },
         attrs,
     );
+    content::parse_content(db_name, wxid, &db, payload)?;
     Ok(())
 }
 

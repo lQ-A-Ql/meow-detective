@@ -21,6 +21,36 @@ fn synthetic_db(schema: &str) -> Vec<u8> {
     data.to_vec()
 }
 
+/// Build a synthetic database populated through bound parameters (needed
+/// for blob/zstd payloads that cannot live in a SQL literal).
+fn synthetic_db_with(build: impl FnOnce(&Connection)) -> Vec<u8> {
+    let conn = Connection::open_in_memory().expect("in-memory db");
+    build(&conn);
+    let data = conn
+        .serialize(rusqlite::DatabaseName::Main)
+        .expect("serialize fixture");
+    data.to_vec()
+}
+
+fn artifacts_of(payload: &Value, family: &str) -> Vec<Value> {
+    payload["artifacts"]
+        .as_array()
+        .expect("artifacts")
+        .iter()
+        .filter(|a| a["family"] == family)
+        .cloned()
+        .collect()
+}
+
+fn warning_texts(payload: &Value) -> Vec<String> {
+    payload["warnings"]
+        .as_array()
+        .expect("warnings")
+        .iter()
+        .map(|w| w.as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
 fn request_for<'a>(path: &'a CString, id: &'a CString, data: &'a [u8]) -> MeowExtractRequest {
     MeowExtractRequest {
         struct_size: std::mem::size_of::<MeowExtractRequest>() as u32,
@@ -92,7 +122,16 @@ fn info_reports_expected_metadata() {
         .expect("families json");
         assert_eq!(
             families,
-            serde_json::json!(["WeChatInstall", "WeChatAccount", "WeChatDatabase"])
+            serde_json::json!([
+                "WeChatInstall",
+                "WeChatAccount",
+                "WeChatDatabase",
+                "WeChatContact",
+                "WeChatMessage",
+                "WeChatSession",
+                "WeChatMoment",
+                "WeChatFavorite"
+            ])
         );
         let patterns: Value = serde_json::from_str(
             CStr::from_ptr(info.path_patterns_json.cast())
@@ -356,4 +395,575 @@ fn backslash_paths_route_identically() {
     let artifact = &payload.expect("payload")["artifacts"][0];
     assert_eq!(artifact["attrs"]["category"], "favorite");
     assert_eq!(artifact["attrs"]["wxid"], "wxid_zuaa9igqlro22_eef8");
+}
+
+// ---------------------------------------------------------------------------
+// Content parsing (v2): contacts / sessions / messages / moments / favorites
+// ---------------------------------------------------------------------------
+
+const OWNER_SEGMENT: &str = "wxid_owner22_ab12";
+
+fn content_path(category: &str, name: &str) -> String {
+    format!("[P2]/Users/admin/Documents/xwechat_files/{OWNER_SEGMENT}/db_storage/{category}/{name}")
+}
+
+#[test]
+fn contact_db_yields_contact_artifacts() {
+    let data = synthetic_db(
+        "CREATE TABLE contact (id INTEGER PRIMARY KEY, username TEXT, local_type INTEGER,
+            alias TEXT, encrypt_username TEXT, delete_flag INTEGER, remark TEXT,
+            nick_name TEXT, head_img_md5 TEXT, description TEXT);
+        INSERT INTO contact (username, local_type, alias, encrypt_username, delete_flag,
+            remark, nick_name, head_img_md5, description) VALUES
+            ('wxid_friend22', 0, '', '', 0, '闺蜜', '小倩', 'abc123', ''),
+            ('weixin', 0, '', '', 0, '', '微信团队', '', 'system account'),
+            ('wxid_gone22', 3, 'gonealias', 'v1_xyz@stranger', 1, '', '已删除', '', '');",
+    );
+    let (status, payload, error) = run_plugin(&content_path("contact", "contact.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let contacts = artifacts_of(&payload, "WeChatContact");
+    assert_eq!(contacts.len(), 3);
+    // Inventory artifact is still emitted alongside the content artifacts.
+    assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
+
+    let friend = contacts
+        .iter()
+        .find(|a| a["attrs"]["username"] == "wxid_friend22")
+        .expect("friend contact");
+    assert_eq!(friend["attrs"]["nickName"], "小倩");
+    assert_eq!(friend["attrs"]["remark"], "闺蜜");
+    assert_eq!(friend["attrs"]["localType"], 0);
+    assert_eq!(friend["attrs"]["headImgMd5"], "abc123");
+    assert!(friend["attrs"].get("deleted").is_none());
+    assert_eq!(friend["title"], "联系人 闺蜜");
+
+    let gone = contacts
+        .iter()
+        .find(|a| a["attrs"]["username"] == "wxid_gone22")
+        .expect("deleted contact");
+    assert_eq!(gone["attrs"]["deleted"], true);
+    // encrypt_username is passed through verbatim, never decoded.
+    assert_eq!(gone["attrs"]["encryptUsername"], "v1_xyz@stranger");
+    assert_eq!(gone["attrs"]["alias"], "gonealias");
+}
+
+#[test]
+fn session_db_yields_session_artifacts() {
+    let data = synthetic_db(
+        "CREATE TABLE SessionTable (username TEXT PRIMARY KEY, type INTEGER,
+            unread_count INTEGER, is_hidden INTEGER, summary TEXT,
+            last_timestamp INTEGER, last_msg_sender TEXT,
+            last_sender_display_name TEXT, last_msg_type INTEGER);
+        INSERT INTO SessionTable VALUES
+            ('wxid_friend22', 2, 3, 0, '晚上见', 1700000000, 'wxid_friend22', '小倩', 1),
+            ('weixin', 0, 0, 1, '', 0, '', '', 49);",
+    );
+    let (status, payload, error) = run_plugin(&content_path("session", "session.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let sessions = artifacts_of(&payload, "WeChatSession");
+    assert_eq!(sessions.len(), 2);
+    let friend = sessions
+        .iter()
+        .find(|a| a["attrs"]["username"] == "wxid_friend22")
+        .expect("friend session");
+    assert_eq!(friend["attrs"]["unreadCount"], 3);
+    assert_eq!(friend["attrs"]["summary"], "晚上见");
+    assert_eq!(friend["attrs"]["lastSenderDisplayName"], "小倩");
+    assert_eq!(friend["attrs"]["isHidden"], false);
+    assert_eq!(friend["attrs"]["lastTimestampUtc"], "2023-11-14T22:13:20Z");
+    let team = sessions
+        .iter()
+        .find(|a| a["attrs"]["username"] == "weixin")
+        .expect("weixin session");
+    assert_eq!(team["attrs"]["isHidden"], true);
+    // last_timestamp = 0 yields no timestamp attr.
+    assert!(team["attrs"].get("lastTimestampUtc").is_none());
+}
+
+/// Name2Id rowids: 1 = owner (bare wxid, path segment carries `_ab12`),
+/// 2 = friend. One Msg table per friend plus one orphan table whose suffix
+/// matches nobody.
+fn synthetic_message_db() -> (Vec<u8>, String) {
+    use md5::{Digest, Md5};
+    let friend_table = format!("Msg_{:x}", Md5::digest(b"friend_wxid44"));
+    let orphan_table = format!("Msg_{:x}", Md5::digest(b"ghost_wxid99"));
+    let long_text: String = "长".repeat(600);
+    let zstd_blob = zstd::encode_all(&b"compressed hello"[..], 0).expect("zstd encode");
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE Name2Id (user_name TEXT PRIMARY KEY, is_session INTEGER);
+            INSERT INTO Name2Id (rowid, user_name, is_session) VALUES
+                (1, 'wxid_owner22', 1), (2, 'friend_wxid44', 1);",
+        )
+        .expect("name2id");
+        for table in [&friend_table, &orphan_table] {
+            conn.execute_batch(&format!(
+                "CREATE TABLE \"{table}\" (local_id INTEGER PRIMARY KEY, server_id INTEGER,
+                    local_type INTEGER, real_sender_id INTEGER, create_time INTEGER,
+                    message_content TEXT, WCDB_CT_message_content INTEGER);"
+            ))
+            .expect("msg table");
+        }
+        let mut stmt = conn
+            .prepare(&format!(
+                "INSERT INTO \"{friend_table}\" (local_id, server_id, local_type,
+                    real_sender_id, create_time, message_content, WCDB_CT_message_content)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            ))
+            .expect("insert stmt");
+        // Outgoing plaintext text message.
+        stmt.execute(rusqlite::params![
+            1,
+            100,
+            1,
+            1,
+            1700000000i64,
+            "你好",
+            None::<i64>
+        ])
+        .expect("row 1");
+        // Incoming zstd-compressed text message (WCDB_CT = 4).
+        stmt.execute(rusqlite::params![
+            2,
+            101,
+            1,
+            2,
+            1700000060i64,
+            zstd_blob,
+            Some(4i64)
+        ])
+        .expect("row 2");
+        // Incoming picture, unknown-sender rowid (no Name2Id entry).
+        stmt.execute(rusqlite::params![
+            3,
+            102,
+            3,
+            99,
+            1700000120i64,
+            "",
+            None::<i64>
+        ])
+        .expect("row 3");
+        // Over-long message for the truncation cap.
+        stmt.execute(rusqlite::params![
+            4,
+            103,
+            1,
+            2,
+            1700000180i64,
+            long_text,
+            None::<i64>
+        ])
+        .expect("row 4");
+        // Unknown local_type keeps the raw number only.
+        stmt.execute(rusqlite::params![
+            5,
+            104,
+            424242,
+            2,
+            1700000240i64,
+            "?",
+            None::<i64>
+        ])
+        .expect("row 5");
+        drop(stmt);
+        let mut orphan = conn
+            .prepare(&format!(
+                "INSERT INTO \"{orphan_table}\" (local_id, server_id, local_type,
+                    real_sender_id, create_time, message_content, WCDB_CT_message_content)
+                 VALUES (1, 200, 1, 2, 1700000300, 'orphan', NULL)"
+            ))
+            .expect("orphan stmt");
+        orphan.execute([]).expect("orphan row");
+    });
+    (data, friend_table)
+}
+
+#[test]
+fn message_db_yields_message_artifacts_and_timeline() {
+    let (data, friend_table) = synthetic_message_db();
+    let (status, payload, error) = run_plugin(&content_path("message", "message_0.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let messages = artifacts_of(&payload, "WeChatMessage");
+    assert_eq!(messages.len(), 6);
+    let events = payload["timelineEvents"]
+        .as_array()
+        .expect("timelineEvents");
+    assert_eq!(events.len(), 6);
+    assert_eq!(payload["timesAreLocal"], false);
+
+    // Direction: rowid 1 resolves to the bare owner wxid and matches the
+    // path segment despite its `_ab12` suffix.
+    let outgoing = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 1 && a["attrs"]["talkerTable"] == friend_table)
+        .expect("outgoing");
+    assert_eq!(outgoing["attrs"]["talker"], "friend_wxid44");
+    assert_eq!(outgoing["attrs"]["isSend"], true);
+    assert_eq!(outgoing["attrs"]["serverId"], 100);
+    assert_eq!(outgoing["attrs"]["localTypeLabel"], "文本");
+    assert_eq!(outgoing["attrs"]["createTimeUtc"], "2023-11-14T22:13:20Z");
+    assert_eq!(outgoing["attrs"]["contentText"], "你好");
+    assert_eq!(outgoing["attrs"]["zstdCompressed"], false);
+    assert!(outgoing["attrs"].get("contentTruncated").is_none());
+
+    // zstd round trip.
+    let compressed = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 2)
+        .expect("compressed");
+    assert_eq!(compressed["attrs"]["zstdCompressed"], true);
+    assert_eq!(compressed["attrs"]["contentText"], "compressed hello");
+    assert_eq!(compressed["attrs"]["isSend"], false);
+
+    // Unknown sender rowid: no isSend attr.
+    let unknown_sender = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 3)
+        .expect("unknown sender");
+    assert!(unknown_sender["attrs"].get("isSend").is_none());
+    assert_eq!(unknown_sender["attrs"]["localTypeLabel"], "图片");
+
+    // Truncation at 500 chars.
+    let long = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 4)
+        .expect("long message");
+    assert_eq!(long["attrs"]["contentTruncated"], true);
+    assert_eq!(
+        long["attrs"]["contentText"]
+            .as_str()
+            .expect("text")
+            .chars()
+            .count(),
+        500
+    );
+
+    // Unknown local_type: raw number only.
+    let odd = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 5)
+        .expect("odd type");
+    assert_eq!(odd["attrs"]["localType"], 424242);
+    assert!(odd["attrs"].get("localTypeLabel").is_none());
+
+    // Orphan Msg_ table: md5 reverse lookup misses → no talker attr.
+    let orphan = messages
+        .iter()
+        .find(|a| {
+            a["attrs"]["talkerTable"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("ghost")
+                || a["attrs"].get("talker").is_none()
+        })
+        .expect("orphan message");
+    assert!(orphan["attrs"].get("talker").is_none());
+
+    // Timeline events carry RFC3339 UTC timestamps (table order follows the
+    // sqlite_master name ordering, so match on the set).
+    let timestamps: Vec<&str> = events
+        .iter()
+        .filter_map(|e| e["timestampUtc"].as_str())
+        .collect();
+    assert!(timestamps.contains(&"2023-11-14T22:13:20Z"));
+    assert!(events.iter().all(|e| e["eventType"] == "WeChatMessage"));
+
+    assert!(warning_texts(&payload).is_empty());
+}
+
+#[test]
+fn message_db_with_bad_zstd_row_warns_but_continues() {
+    use md5::{Digest, Md5};
+    let friend_table = format!("Msg_{:x}", Md5::digest(b"friend_wxid44"));
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE Name2Id (user_name TEXT PRIMARY KEY, is_session INTEGER);
+            INSERT INTO Name2Id (rowid, user_name, is_session) VALUES (2, 'friend_wxid44', 1);",
+        )
+        .expect("name2id");
+        conn.execute_batch(&format!(
+            "CREATE TABLE \"{friend_table}\" (local_id INTEGER PRIMARY KEY, server_id INTEGER,
+                local_type INTEGER, real_sender_id INTEGER, create_time INTEGER,
+                message_content TEXT, WCDB_CT_message_content INTEGER);"
+        ))
+        .expect("msg table");
+        conn.execute(
+            &format!(
+                "INSERT INTO \"{friend_table}\" VALUES (1, 1, 1, 2, 1700000000, ?1, 4), (2, 2, 1, 2, 1700000060, 'plain', 0)"
+            ),
+            [b"not-really-zstd".as_slice()],
+        )
+        .expect("rows");
+    });
+    let (status, payload, error) = run_plugin(&content_path("message", "message_0.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let messages = artifacts_of(&payload, "WeChatMessage");
+    assert_eq!(messages.len(), 2);
+    let bad = messages
+        .iter()
+        .find(|a| a["attrs"]["localId"] == 1)
+        .expect("bad zstd row");
+    assert_eq!(bad["attrs"]["zstdCompressed"], true);
+    assert!(bad["attrs"].get("contentText").is_none());
+    assert!(warning_texts(&payload)
+        .iter()
+        .any(|w| w.contains("无法解压")));
+}
+
+#[test]
+fn sns_db_yields_moment_artifacts() {
+    let xml_with_media =
+        "<SnsDataItem><TimelineObject><id>111</id><username>wxid_friend22</username>\
+        <createTime>1700000000</createTime><contentDesc>周末爬山</contentDesc>\
+        <mediaList><media id=\"1\"/></mediaList></TimelineObject></SnsDataItem>";
+    let xml_plain = "<SnsDataItem><TimelineObject><id>222</id><username>wxid_friend22</username>\
+        <createTime>bad</createTime><contentDesc></contentDesc><mediaList/></TimelineObject></SnsDataItem>";
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE SnsTimeLine (tid INTEGER PRIMARY KEY, user_name TEXT, content TEXT);",
+        )
+        .expect("sns table");
+        conn.execute(
+            "INSERT INTO SnsTimeLine (tid, user_name, content) VALUES (1, 'wxid_friend22', ?1), (2, 'wxid_friend22', ?2)",
+            [xml_with_media, xml_plain],
+        )
+        .expect("sns rows");
+    });
+    let (status, payload, error) = run_plugin(&content_path("sns", "sns.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let moments = artifacts_of(&payload, "WeChatMoment");
+    assert_eq!(moments.len(), 2);
+    let with_media = moments
+        .iter()
+        .find(|a| a["attrs"]["tid"] == 1)
+        .expect("media moment");
+    assert_eq!(with_media["attrs"]["contentDesc"], "周末爬山");
+    assert_eq!(with_media["attrs"]["hasMedia"], true);
+    assert_eq!(with_media["attrs"]["snsId"], "111");
+    assert_eq!(with_media["attrs"]["createTimeUtc"], "2023-11-14T22:13:20Z");
+    let plain = moments
+        .iter()
+        .find(|a| a["attrs"]["tid"] == 2)
+        .expect("plain moment");
+    assert_eq!(plain["attrs"]["hasMedia"], false);
+    // Unparseable createTime: no timestamp attr, no timeline event.
+    assert!(plain["attrs"].get("createTimeUtc").is_none());
+    let events = payload["timelineEvents"]
+        .as_array()
+        .expect("timelineEvents");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["eventType"], "WeChatMoment");
+}
+
+#[test]
+fn favorite_db_yields_favorite_artifacts() {
+    let data = synthetic_db(
+        "CREATE TABLE fav_db_item (local_id INTEGER PRIMARY KEY, server_id INTEGER,
+            type INTEGER, update_time INTEGER, fromusr TEXT, realchatname TEXT, content TEXT);
+        INSERT INTO fav_db_item VALUES (7, 900, 2, 1700000000, 'wxid_friend22', '闺蜜群', '收藏的链接内容');",
+    );
+    let (status, payload, error) = run_plugin(&content_path("favorite", "favorite.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let favorites = artifacts_of(&payload, "WeChatFavorite");
+    assert_eq!(favorites.len(), 1);
+    let attrs = &favorites[0]["attrs"];
+    assert_eq!(attrs["localId"], 7);
+    assert_eq!(attrs["serverId"], 900);
+    assert_eq!(attrs["type"], 2);
+    assert_eq!(attrs["fromUsr"], "wxid_friend22");
+    assert_eq!(attrs["realChatName"], "闺蜜群");
+    assert_eq!(attrs["updateTimeUtc"], "2023-11-14T22:13:20Z");
+    assert_eq!(attrs["contentText"], "收藏的链接内容");
+}
+
+#[test]
+fn empty_favorite_db_is_ok_and_silent() {
+    let data = synthetic_db(
+        "CREATE TABLE fav_db_item (local_id INTEGER PRIMARY KEY, server_id INTEGER,
+            type INTEGER, update_time INTEGER, fromusr TEXT, realchatname TEXT, content TEXT);",
+    );
+    let (status, payload, error) = run_plugin(&content_path("favorite", "favorite.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert!(artifacts_of(&payload, "WeChatFavorite").is_empty());
+    assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
+    assert!(warning_texts(&payload).is_empty());
+}
+
+#[test]
+fn artifact_cap_truncates_with_warning() {
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE contact (id INTEGER PRIMARY KEY, username TEXT, local_type INTEGER,
+                alias TEXT, encrypt_username TEXT, delete_flag INTEGER, remark TEXT,
+                nick_name TEXT, head_img_md5 TEXT, description TEXT);",
+        )
+        .expect("contact table");
+        let tx = conn.unchecked_transaction().expect("tx");
+        {
+            let mut stmt = tx
+                .prepare("INSERT INTO contact (username) VALUES (?1)")
+                .expect("insert");
+            for index in 0..20_001 {
+                stmt.execute([format!("wxid_{index}")]).expect("row");
+            }
+        }
+        tx.commit().expect("commit");
+    });
+    let (status, payload, error) = run_plugin(&content_path("contact", "contact.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert_eq!(artifacts_of(&payload, "WeChatContact").len(), 20_000);
+    assert!(warning_texts(&payload)
+        .iter()
+        .any(|w| w.contains("20000") || w.contains("20_000") || w.contains("上限")));
+}
+
+// ---------------------------------------------------------------------------
+// MEOW_WECHAT_KEYS development key-injection channel
+// ---------------------------------------------------------------------------
+
+/// Build a synthetic WCDB/SQLCipher-4 encrypted blob whose pages carry a
+/// valid HMAC for `key` (mirrors `sqlcipher4`'s layout) but whose plaintext
+/// is not a SQLite database — enough to drive the decrypt-then-fallback
+/// path end to end.
+fn synthetic_encrypted_blob(key: &[u8; 32], pages: u32) -> Vec<u8> {
+    use aes::cipher::{BlockEncryptMut, KeyIvInit};
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    type Enc = cbc::Encryptor<aes::Aes256>;
+
+    let salt = [0x11u8; 16];
+    let iv = [0x22u8; 16];
+    let mac_salt: Vec<u8> = salt.iter().map(|b| b ^ 0x3a).collect();
+    let mac_key = pbkdf2::pbkdf2_hmac_array::<Sha512, 32>(key, &mac_salt, 2);
+    let mut out = Vec::new();
+    for page_no in 1..=pages {
+        // Page 1 carries a 16-byte salt prefix, so its ciphertext body is
+        // 16 bytes shorter than later pages'.
+        let body_len = if page_no == 1 { 4000 } else { 4016 };
+        let mut body = vec![0u8; body_len];
+        for (i, b) in body.iter_mut().enumerate() {
+            *b = (i % 251) as u8;
+        }
+        // NoPadding on a block-aligned buffer encrypts in place.
+        Enc::new((&key[..]).into(), (&iv[..]).into())
+            .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut body, body_len)
+            .expect("encrypt");
+        let ciphertext = body;
+        let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(&mac_key[..]).expect("hmac");
+        mac.update(&ciphertext);
+        mac.update(&iv);
+        mac.update(&page_no.to_le_bytes());
+        let tag = mac.finalize().into_bytes();
+        if page_no == 1 {
+            out.extend_from_slice(&salt);
+        }
+        out.extend_from_slice(&ciphertext);
+        out.extend_from_slice(&iv);
+        out.extend_from_slice(&tag[..64]);
+    }
+    out
+}
+
+/// Single test for every env-var-dependent branch so the process-wide
+/// environment is never mutated concurrently by parallel tests.
+#[test]
+fn key_injection_channel_branches() {
+    use std::io::Write;
+    let key = [0x42u8; 32];
+    let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+    let blob = synthetic_encrypted_blob(&key, 3);
+    let path = content_path("message", "message_0.db");
+
+    // 1. Channel inactive: pure v1 inventory behavior.
+    std::env::remove_var("MEOW_WECHAT_KEYS");
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
+    assert!(artifacts_of(&payload, "WeChatMessage").is_empty());
+    assert!(warning_texts(&payload)
+        .iter()
+        .any(|w| w.contains("WCDB/SQLCipher")));
+
+    // 2. Channel active, key file has no entry for this db: warning +
+    // inventory fallback.
+    let dir = std::env::temp_dir().join(format!("wechat-keys-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let keys_file = dir.join("keys.json");
+    std::fs::write(&keys_file, br#"{"other.db": "00"}"#).expect("write keys");
+    std::env::set_var("MEOW_WECHAT_KEYS", &keys_file);
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert_eq!(
+        artifacts_of(&payload, "WeChatDatabase")[0]["attrs"]["encrypted"],
+        true
+    );
+    assert!(warning_texts(&payload)
+        .iter()
+        .any(|w| w.contains("密钥注入通道未能解密")));
+
+    // 3. Key matches (decrypt + page-1 HMAC pass) but the plaintext is not
+    // SQLite: warn and fall back to inventory, never ParseError, and the
+    // key material never crosses into the payload.
+    let mut file = std::fs::File::create(&keys_file).expect("rewrite keys");
+    write!(file, "{{\"message_0.db\": \"{key_hex}\"}}").expect("write key");
+    drop(file);
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let warnings = warning_texts(&payload);
+    assert!(warnings
+        .iter()
+        .any(|w| w.contains("解密产物不是可读的 SQLite 库")));
+    assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
+    assert!(!payload.to_string().contains(&key_hex));
+
+    // 4. Key file unreadable: warning + fallback, still no ParseError.
+    std::env::set_var("MEOW_WECHAT_KEYS", dir.join("missing.json"));
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    assert!(warning_texts(&payload.expect("payload"))
+        .iter()
+        .any(|w| w.contains("密钥文件不可读")));
+
+    std::env::remove_var("MEOW_WECHAT_KEYS");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn decrypted_real_layout_parses_after_wal_downgrade() {
+    // Decrypted WCDB databases carry WAL read/write versions in the header;
+    // db.rs downgrades them on the private copy so deserialize works.
+    let mut data = synthetic_db("CREATE TABLE t (id INTEGER);");
+    assert_eq!(data[18], 1);
+    data[18] = 2;
+    data[19] = 2;
+    let (status, payload, error) = run_plugin(&content_path("sns", "sns.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
+    assert_eq!(payload["artifacts"][0]["attrs"]["tableCount"], 1);
 }

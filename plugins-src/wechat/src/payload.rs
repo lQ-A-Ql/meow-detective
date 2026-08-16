@@ -3,9 +3,10 @@
 //! Provenance fields are deliberately absent: the host overwrites them.
 //! Attr keys are camelCase, aligned with `base_attrs()` conventions.
 //!
-//! This plugin emits artifacts and warnings only: the request carries no
-//! file timestamps, so there is no time source for timeline events and
-//! `timesAreLocal` is pinned to `false`.
+//! The request carries no file timestamps, so side-file routes emit no
+//! timeline events; database content routes (messages, moments) derive UTC
+//! timestamps from record fields and emit RFC3339 events, keeping
+//! `timesAreLocal` pinned to `false`.
 
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -16,7 +17,7 @@ pub struct Payload {
     #[serde(rename = "timelineEvents")]
     pub timeline_events: Vec<PayloadTimelineEvent>,
     pub warnings: Vec<String>,
-    /// No timestamp source exists in this plugin version; nothing local is
+    /// All emitted timeline timestamps are UTC RFC3339; nothing local is
     /// ever emitted, so the flag stays `false`.
     #[serde(rename = "timesAreLocal")]
     pub times_are_local: bool,
@@ -52,6 +53,21 @@ impl Payload {
         });
     }
 
+    pub fn timeline_event(
+        &mut self,
+        timestamp_utc: String,
+        event_type: &str,
+        description: impl Into<String>,
+        attrs: Map<String, Value>,
+    ) {
+        self.timeline_events.push(PayloadTimelineEvent {
+            timestamp_utc,
+            event_type: event_type.to_string(),
+            description: description.into(),
+            attrs,
+        });
+    }
+
     pub fn warn(&mut self, warning: impl Into<String>) {
         self.warnings.push(warning.into());
     }
@@ -67,8 +83,9 @@ pub struct PayloadArtifact {
     pub attrs: Map<String, Value>,
 }
 
-/// Kept for schema stability (`timelineEvents` must always serialize, even
-/// when empty); this plugin version never constructs one.
+/// Timeline events emitted by the database content routes (chat messages,
+/// moments); side-file routes never construct one. The struct must always
+/// serialize (`timelineEvents` is part of the schema, even when empty).
 #[derive(Serialize)]
 pub struct PayloadTimelineEvent {
     #[serde(rename = "timestampUtc")]

@@ -1,16 +1,19 @@
 //! WeChat (微信) 4.x parser plugin for Windows evidence — inventory plus
-//! plaintext deep-parse.
+//! content deep-parse.
 //!
 //! Routes (see `route.rs`): the install `plugin_info.ini`, the roaming
 //! `xwechat` side files (`cloud_account.txt`, `key_info.dat`,
 //! `kvcomm/config.ini`), and the per-account `xwechat_files/<wxid>/
 //! db_storage/<category>/*.db` databases. Databases encrypted with
 //! WCDB/SQLCipher (all of them on WeChat 4.0.3.36+) are inventoried with an
-//! explanatory warning — the key only lives in the running process and is
-//! scrubbed, so offline recovery from a pure disk image is not possible.
-//! Plaintext databases (older builds / other images) are deep-parsed in
-//! memory via `sqlite3_deserialize` (read-only; nothing touches the host
-//! disk).
+//! explanatory warning unless a key is available: the key only lives in the
+//! running process and is scrubbed, so recovery requires a memory dump
+//! (`keyscan` implements the crash-dump scan + HMAC validation) and
+//! injection through the `MEOW_WECHAT_KEYS` development channel
+//! (`keyinject`). Plaintext databases — native (older builds) or decrypted
+//! in memory — are deep-parsed via `sqlite3_deserialize` (read-only;
+//! nothing touches the host disk) into contact/session/message/moment/
+//! favorite content artifacts (see `content/`).
 //!
 //! Hard contract (design doc §8, plugins-src/README.md):
 //! - every exported function self-catches panics; a panic escaping across
@@ -20,13 +23,27 @@
 //!   messages are NUL-terminated and free at strlen+1;
 //! - request pointers are valid only for the duration of the call.
 //!
-//! Redaction contract: `kTdiKeyCloudSession` values and `key_info.dat`
-//! bytes are only tested for presence — never emitted.
+//! Redaction contract: `kTdiKeyCloudSession` values, `key_info.dat` bytes,
+//! and any injected database keys are only tested for presence or consumed
+//! in place — never emitted to payload, warnings, or logs.
 
+/// Database content parsers (contacts/sessions/messages/sns/favorites).
+/// Public so the offline tooling binary can drive them directly.
+pub mod content;
 mod db;
+pub use db::WeChatDb;
+/// Development key-injection channel (`MEOW_WECHAT_KEYS`).
+mod keyinject;
+/// Crash-dump key recovery (`x'<hex>'` literal scan + HMAC validation).
+/// Library-only: the ABI path never sees a memory dump (50MB cap), so this
+/// is consumed by the offline tooling and by a future host-side integration.
+pub mod keyscan;
 mod parse;
-mod payload;
+/// ABI payload builders; public for the offline tooling binary.
+pub mod payload;
 mod route;
+/// SQLCipher 4 (WCDB) page decryption primitives for WeChat 4.x databases.
+pub mod sqlcipher4;
 
 use plugin_api::{
     error_response, guarded_extract, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,
@@ -52,7 +69,7 @@ pub unsafe extern "C" fn meow_plugin_info() -> MeowPluginInfo {
         plugin_version: c"0.1.0".as_ptr().cast(),
         display_name: c"微信".as_ptr().cast(),
         evidence_platform: MeowEvidencePlatform::Windows,
-        families_json: c"[\"WeChatInstall\",\"WeChatAccount\",\"WeChatDatabase\"]"
+        families_json: c"[\"WeChatInstall\",\"WeChatAccount\",\"WeChatDatabase\",\"WeChatContact\",\"WeChatMessage\",\"WeChatSession\",\"WeChatMoment\",\"WeChatFavorite\"]"
             .as_ptr()
             .cast(),
         path_patterns_json:

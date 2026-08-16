@@ -11,7 +11,7 @@
 |---|---|---|
 | `prefetch/` | `meow.plugin.prefetch` | M3 试点：Windows Prefetch (.pf) 解析器的 DLL 化 |
 | `bt_panel/` | `meow.plugin.bt_panel` | 二期首个实战插件：宝塔面板 SQLite 库解析（Linux 证据） |
-| `wechat/` | `meow.plugin.wechat` | 微信 4.x 盘点插件（Windows 证据）：安装/账户侧文件解析 + db_storage 库盘点，明文库深解析，WCDB 加密库仅盘点 |
+| `wechat/` | `meow.plugin.wechat` | 微信 4.x 盘点+内容解析插件（Windows 证据）：安装/账户侧文件解析 + db_storage 库盘点，明文库深解析并产出联系人/会话/聊天记录/朋友圈/收藏内容产物；WCDB 加密库默认仅盘点，密钥可经内存 dump 恢复（`keyscan` 模块 + `wechat_offline scan/decrypt` 工具）后由 `MEOW_WECHAT_KEYS` 环境变量（指向 `{"<dbName>": "<hex-key>"}` JSON 文件）这一**开发通道**注入解密解析——密钥绝不进 payload/log，无密钥或解密失败自动回退盘点+警告 |
 
 ## 构建
 

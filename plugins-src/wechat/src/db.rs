@@ -5,6 +5,13 @@
 //! (read-only, free-on-close), so no temporary files ever touch the host
 //! disk and the evidence buffer is never retained. Only used for plaintext
 //! databases — WCDB/SQLCipher-encrypted files never reach this module.
+//!
+//! WAL-mode normalization: WeChat 4.x (WCDB) databases carry read/write
+//! version 2 (WAL) in the header, and `sqlite3_deserialize` rejects
+//! WAL-mode images outright (`SQLITE_CANTOPEN`). Since the plugin only
+//! reads committed pages from the main file, the copied buffer's version
+//! bytes are downgraded to 1 (rollback) before deserialization. Any
+//! un-checkpointed `-wal` frames are simply not part of the offline view.
 
 use rusqlite::ffi;
 use rusqlite::serialize::OwnedData;
@@ -33,6 +40,12 @@ impl WeChatDb {
                 return Err("sqlite3_malloc failed for input buffer".to_string());
             }
             std::ptr::copy_nonoverlapping(data.as_ptr(), raw.cast::<u8>(), data.len());
+            // WAL downgrade on the private copy (see module docs): bytes
+            // 18/19 are the file-format read/write versions.
+            if data.len() >= 20 && &data[..16] == b"SQLite format 3\0" && data[18] == 2 {
+                raw.cast::<u8>().add(18).write(1);
+                raw.cast::<u8>().add(19).write(1);
+            }
             OwnedData::from_raw_nonnull(
                 NonNull::new(raw.cast::<u8>()).expect("non-null sqlite allocation"),
                 data.len(),
@@ -75,5 +88,24 @@ impl WeChatDb {
                 row.get::<_, i64>(0)
             })
             .map_err(|error| format!("row count on {table} failed: {error}"))
+    }
+
+    /// Whether a user table exists (exact name match in `sqlite_master`).
+    pub fn table_exists(&self, table: &str) -> Result<bool, String> {
+        self.conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count > 0)
+            .map_err(|error| format!("table existence check on {table} failed: {error}"))
+    }
+
+    /// Raw connection for the content parsers. Callers only run SELECTs
+    /// against the in-memory deserialized copy; the evidence bytes are
+    /// read-only by construction.
+    pub fn conn(&self) -> &Connection {
+        &self.conn
     }
 }
