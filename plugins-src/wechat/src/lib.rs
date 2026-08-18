@@ -50,8 +50,8 @@ pub mod sqlcipher4;
 pub mod walmerge;
 
 use plugin_api::{
-    error_response, guarded_action, guarded_extract, MeowEvidencePlatform, MeowExtractRequest,
-    MeowExtractResponse, MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
+    error_response, guarded_action, guarded_extract, MeowCompanionFile, MeowEvidencePlatform,
+    MeowExtractRequest, MeowExtractResponse, MeowPluginInfo, MeowStatus, MEOW_PLUGIN_ABI_VERSION,
 };
 use std::ffi::CStr;
 
@@ -70,14 +70,14 @@ pub unsafe extern "C" fn meow_plugin_info() -> MeowPluginInfo {
         struct_size: std::mem::size_of::<MeowPluginInfo>() as u32,
         abi_version: MEOW_PLUGIN_ABI_VERSION,
         plugin_id: c"meow.plugin.wechat".as_ptr().cast(),
-        plugin_version: c"0.1.0".as_ptr().cast(),
+        plugin_version: c"0.4.2".as_ptr().cast(),
         display_name: c"微信".as_ptr().cast(),
         evidence_platform: MeowEvidencePlatform::Windows,
-        families_json: c"[\"WeChatInstall\",\"WeChatAccount\",\"WeChatDatabase\",\"WeChatContact\",\"WeChatMessage\",\"WeChatSession\",\"WeChatMoment\",\"WeChatFavorite\"]"
+        families_json: c"[\"WeChatInstall\",\"WeChatAccount\",\"WeChatDatabase\",\"WeChatContact\",\"WeChatMessage\",\"WeChatSession\",\"WeChatMoment\",\"WeChatFavorite\",\"WeChatMedia\",\"WeChatSearchRecord\"]"
             .as_ptr()
             .cast(),
         path_patterns_json:
-            c"[\"*.db\",\"plugin_info.ini\",\"cloud_account.txt\",\"key_info.dat\",\"config.ini\"]"
+            c"[\"*.db\",\"plugin_info.ini\",\"cloud_account.txt\",\"key_info.dat\",\"config.ini\",\"/msg/attach/\",\"/sns/img/\"]"
                 .as_ptr()
                 .cast(),
     }
@@ -135,6 +135,10 @@ fn extract_inner(request: &MeowExtractRequest) -> MeowExtractResponse {
         Ok(value) => value,
         Err(response) => return response,
     };
+    let file_id = match request_string(request.file_id, "file_id") {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
     // Imported paths may use either separator; normalize before routing.
     let normalized = file_path.replace('\\', "/");
     // Self-filter: non-WeChat paths (the host's `*.db` filter is wide) are
@@ -152,21 +156,86 @@ fn extract_inner(request: &MeowExtractRequest) -> MeowExtractResponse {
     // SAFETY: the host guarantees `data` points to `data_len` readable bytes
     // for the call duration; the parsers copy out and never retain the
     // pointer.
-    let data = unsafe { std::slice::from_raw_parts(request.data, request.data_len as usize) };
+    let data = if request.data.is_null() {
+        &[][..]
+    } else {
+        // SAFETY: pointer/length validity is guaranteed by the host for the call.
+        unsafe { std::slice::from_raw_parts(request.data, request.data_len as usize) }
+    };
     let mut payload = Payload::empty();
     match route {
         Route::InstallInfo => parse::install_info(&normalized, data, &mut payload),
         Route::CloudAccount => parse::cloud_account(data, &mut payload),
         Route::KeyInfo => parse::key_info(&normalized, request.data_len, &mut payload),
         Route::KvConfig => parse::kv_config(data, &mut payload),
+        Route::LocalMedia => {
+            if let Err(reason) = content::local_media::parse(&normalized, data, &mut payload) {
+                return error_response(MeowStatus::ParseError, &reason);
+            }
+        }
         Route::Database => {
-            if let Err(reason) = parse::database(&normalized, data, &mut payload) {
+            let wal = match wal_companion(request, &normalized) {
+                Ok(value) => value,
+                Err(response) => return response,
+            };
+            if let Err(reason) = parse::database(&normalized, &file_id, data, wal, &mut payload) {
                 return error_response(MeowStatus::ParseError, &reason);
             }
         }
         Route::NotOurs => unreachable!("NotOurs returns above"),
     }
     ok_response(&payload.to_vec())
+}
+
+fn wal_companion<'a>(
+    request: &'a MeowExtractRequest,
+    database_path: &str,
+) -> Result<Option<&'a [u8]>, MeowExtractResponse> {
+    if request.companion_count == 0 {
+        return Ok(None);
+    }
+    if request.companions.is_null() || request.companion_count > 32 {
+        return Err(error_response(
+            MeowStatus::InternalError,
+            "invalid companion file array",
+        ));
+    }
+    let count = usize::try_from(request.companion_count)
+        .map_err(|_| error_response(MeowStatus::InternalError, "companion count is too large"))?;
+    // SAFETY: the host guarantees a contiguous array of `count` companion
+    // records that remains valid for the extraction call.
+    let companions = unsafe { std::slice::from_raw_parts(request.companions, count) };
+    let wanted = format!("{database_path}-wal");
+    for companion in companions {
+        if companion.struct_size < std::mem::size_of::<MeowCompanionFile>() as u32 {
+            continue;
+        }
+        let path = match request_string(companion.file_path, "companion.file_path") {
+            Ok(value) => value.replace('\\', "/"),
+            Err(response) => return Err(response),
+        };
+        if !path.eq_ignore_ascii_case(&wanted) {
+            continue;
+        }
+        if companion.data.is_null() {
+            if companion.data_len == 0 {
+                return Ok(Some(&[]));
+            }
+            return Err(error_response(
+                MeowStatus::InternalError,
+                "null companion data pointer with nonzero length",
+            ));
+        }
+        let len = usize::try_from(companion.data_len).map_err(|_| {
+            error_response(MeowStatus::InternalError, "companion data is too large")
+        })?;
+        // SAFETY: the companion pointer/length is host-owned and valid for
+        // the duration of this extraction call.
+        return Ok(Some(unsafe {
+            std::slice::from_raw_parts(companion.data, len)
+        }));
+    }
+    Ok(None)
 }
 
 fn request_string(pointer: *const u8, field: &str) -> Result<String, MeowExtractResponse> {

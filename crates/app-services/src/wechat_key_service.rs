@@ -9,12 +9,13 @@
 //! `<case_root>/derived/wechat-keys/keys.json` (temp file + atomic rename,
 //! then the caller-provided ACL restriction).
 //!
-//! Key discipline: keys are secrets. They cross the plugin boundary exactly
-//! once (action response), are written to the ACL-protected case workspace,
-//! and never enter logs, DTOs, or audit details (the audit event records
-//! only recovered/unmatched counts). The returned DTO carries counts and
-//! database names only.
+//! Key discipline: keys cross the plugin boundary once, are written to the
+//! ACL-protected case workspace, and are returned only in the recovery DTO so
+//! the local investigator can see them in the plugin title. They never enter
+//! logs, audit details, artifacts, plugin metadata, or reports.
 
+use std::collections::BTreeMap;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use domain::{CaseId, DataSourceId};
@@ -22,7 +23,7 @@ use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use serde_json::{Map, Value};
-use transport::dto::WeChatKeyRecoveryResultDto;
+use transport::dto::{WeChatKeyRecoveryResultDto, WeChatRecoveredKeyDto};
 use zeroize::Zeroizing;
 
 use crate::file_service::SourceReadContext;
@@ -36,15 +37,19 @@ const RECOVER_KEYS_ACTION: &str = "recoverKeys";
 /// Mirrors the plugin's `keyinject::KEYS_ENV` contract (the plugin crate is
 /// not linkable from the host; the literal is the contract).
 const WECHAT_KEYS_ENV: &str = "MEOW_WECHAT_KEYS";
+const IMAGE_KEY_ENTRY: &str = "__wechat_image_key_v2";
+const IMAGE_XOR_KEY_ENTRY: &str = "__wechat_image_xor_key_v2";
 /// file_entries path fragments selecting WeChat 4.x database candidates.
 const DB_PATH_FRAGMENTS: [&str; 3] = ["xwechat_files", "db_storage", ".db"];
 const PAGE1_BYTES: usize = 4096;
+const MEDIA_SAMPLE_MAX_BYTES: usize = 1024 * 1024;
 /// Memory-dump extensions accepted for recovery (loose but never a dir).
 const DUMP_EXTENSIONS: [&str; 2] = ["dmp", "raw"];
 
 /// Recovered-keys file: `<case_root>/derived/wechat-keys/keys.json`, in the
-/// keyinject format `{"<dbName>": "<hex>"}` the plugin's injection channel
-/// reads during analysis extraction.
+/// keyinject format `{"<fileEntryId>": "<hex>"}` the plugin's injection
+/// channel reads during analysis extraction. File ids avoid collisions
+/// between accounts and data sources; the plugin retains legacy fallbacks.
 pub fn keys_file_path(case_root: &Path) -> PathBuf {
     case_root
         .join("derived")
@@ -74,20 +79,39 @@ pub fn recover_wechat_keys(
         case_id,
         data_source_id,
     )?;
-    if db_pages.is_empty() {
+    let media_sample = collect_media_sample(
+        &source.connection,
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )?;
+    if db_pages.pages.is_empty() {
         return Ok(WeChatKeyRecoveryResultDto {
             candidates_seen: 0,
             recovered_count: 0,
             matched_db_names: Vec::new(),
             unmatched_db_names: Vec::new(),
+            recovered_keys: Vec::new(),
         });
     }
-    let params = serde_json::json!({
-        "dumpPath": dump_path.to_string_lossy(),
-        "dbPages": Value::Object(db_pages),
-    });
-    let response = call_plugin_action(WECHAT_PLUGIN_ID, RECOVER_KEYS_ACTION, &params)?;
-    let outcome = RecoveryOutcome::parse(response)?;
+    let mut params = Map::new();
+    params.insert(
+        "dumpPath".to_string(),
+        Value::String(dump_path.to_string_lossy().into_owned()),
+    );
+    params.insert("dbPages".to_string(), Value::Object(db_pages.pages));
+    if let Some(sample) = media_sample {
+        params.insert("mediaSample".to_string(), sample);
+    }
+    let response = call_plugin_action(
+        WECHAT_PLUGIN_ID,
+        RECOVER_KEYS_ACTION,
+        &Value::Object(params),
+    )?;
+    let mut outcome = RecoveryOutcome::parse(response)?;
+    outcome.retain_valid_keys(&db_pages.display_names);
+    outcome.apply_display_names(&db_pages.display_names);
     if outcome.recovered_count() > 0 {
         let path = keys_file_path(case_root);
         write_keys_file(&path, &outcome.keys)?;
@@ -95,6 +119,37 @@ pub fn recover_wechat_keys(
     }
     audit_recovery(case_conn, case_id, data_source_id, &outcome);
     Ok(outcome.into_dto())
+}
+
+fn collect_media_sample(
+    source_conn: &Connection,
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<Option<Value>, PluginActionError> {
+    use base64::Engine as _;
+
+    let entries = FileRepo::new(source_conn)
+        .find_by_path_fragments(data_source_id, &["xwechat_files", "msg/attach", "_t.dat"])?;
+    let mut reader =
+        SourceReadContext::new(source_conn, case_conn, case_root, case_id, data_source_id);
+    for entry in entries {
+        let size = entry
+            .size
+            .and_then(|size| usize::try_from(size).ok())
+            .unwrap_or(MEDIA_SAMPLE_MAX_BYTES)
+            .min(MEDIA_SAMPLE_MAX_BYTES);
+        let Ok(sample) = reader.read_file_header_by_id(&entry.id, size) else {
+            continue;
+        };
+        if sample.len() >= 31 && sample.starts_with(b"\x07\x08\x56\x32") {
+            return Ok(Some(Value::String(
+                base64::engine::general_purpose::STANDARD.encode(sample),
+            )));
+        }
+    }
+    Ok(None)
 }
 
 /// Dump path admission: must exist, be a regular file, and carry a
@@ -126,17 +181,31 @@ fn validate_dump_path(dump_path: &Path) -> Result<(), PluginActionError> {
 /// Read page 1 of every WeChat database candidate through the
 /// source-bound evidence reader. Unreadable/short entries are skipped with
 /// a warning (they simply stay unrecovered).
+struct DbPageCollection {
+    pages: Map<String, Value>,
+    display_names: BTreeMap<String, String>,
+}
+
+impl DbPageCollection {
+    fn empty() -> Self {
+        Self {
+            pages: Map::new(),
+            display_names: BTreeMap::new(),
+        }
+    }
+}
+
 fn collect_db_pages(
     source_conn: &Connection,
     case_conn: &Connection,
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
-) -> Result<Map<String, Value>, PluginActionError> {
+) -> Result<DbPageCollection, PluginActionError> {
     use base64::Engine as _;
     let entries =
         FileRepo::new(source_conn).find_by_path_fragments(data_source_id, &DB_PATH_FRAGMENTS)?;
-    let mut db_pages = Map::new();
+    let mut db_pages = DbPageCollection::empty();
     if entries.is_empty() {
         return Ok(db_pages);
     }
@@ -147,7 +216,11 @@ fn collect_db_pages(
             Ok(page) if page.len() >= PAGE1_BYTES => {
                 let encoded =
                     base64::engine::general_purpose::STANDARD.encode(&page[..PAGE1_BYTES]);
-                db_pages.insert(entry.name.clone(), Value::String(encoded));
+                let key = entry.id.0.clone();
+                db_pages.pages.insert(key.clone(), Value::String(encoded));
+                db_pages
+                    .display_names
+                    .insert(key, entry.path.replace('\\', "/"));
             }
             Ok(_) => {
                 tracing::warn!(path = %entry.path, "WeChat database page 1 short read; skipped");
@@ -160,22 +233,35 @@ fn collect_db_pages(
     Ok(db_pages)
 }
 
-/// Parsed plugin response. `keys` holds the secret material; it is consumed
-/// by `write_keys_file` and never exposed through the DTO.
+/// Parsed plugin response. `keys` is consumed by `write_keys_file`; the
+/// verified subset is also copied into the explicit local recovery DTO.
 struct RecoveryOutcome {
     keys: Map<String, Value>,
     candidates_seen: u64,
     matched_db_names: Vec<String>,
     unmatched_db_names: Vec<String>,
+    recovered_keys: Vec<WeChatRecoveredKeyDto>,
 }
 
 impl RecoveryOutcome {
     fn parse(response: Value) -> Result<Self, PluginActionError> {
-        let keys = response
+        let mut keys = response
             .get("keys")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
+        if let Some(image_key) = response.get("imageKey").and_then(Value::as_str) {
+            keys.insert(
+                IMAGE_KEY_ENTRY.to_string(),
+                Value::String(image_key.to_string()),
+            );
+        }
+        if let Some(xor_key) = response.get("imageXorKey").and_then(Value::as_str) {
+            keys.insert(
+                IMAGE_XOR_KEY_ENTRY.to_string(),
+                Value::String(xor_key.to_string()),
+            );
+        }
         let candidates_seen = response
             .get("candidatesSeen")
             .and_then(Value::as_u64)
@@ -187,11 +273,67 @@ impl RecoveryOutcome {
             candidates_seen,
             matched_db_names,
             unmatched_db_names,
+            recovered_keys: Vec::new(),
         })
     }
 
     fn recovered_count(&self) -> u64 {
-        u64::try_from(self.keys.len()).unwrap_or(u64::MAX)
+        u64::try_from(
+            self.keys
+                .keys()
+                .filter(|key| key.as_str() != IMAGE_XOR_KEY_ENTRY)
+                .count(),
+        )
+        .unwrap_or(u64::MAX)
+    }
+
+    fn retain_valid_keys(&mut self, requested: &BTreeMap<String, String>) {
+        self.keys.retain(|file_id, value| {
+            let Some(value) = value.as_str() else {
+                return false;
+            };
+            match file_id.as_str() {
+                IMAGE_KEY_ENTRY => is_valid_hex(value, 32),
+                IMAGE_XOR_KEY_ENTRY => is_valid_hex(value, 2),
+                _ => requested.contains_key(file_id) && is_valid_hex(value, 64),
+            }
+        });
+        self.matched_db_names
+            .retain(|file_id| self.keys.contains_key(file_id));
+        self.unmatched_db_names
+            .retain(|file_id| requested.contains_key(file_id));
+    }
+
+    fn apply_display_names(&mut self, display_names: &BTreeMap<String, String>) {
+        self.recovered_keys = self
+            .keys
+            .iter()
+            .filter(|(file_id, _)| {
+                file_id.as_str() != IMAGE_KEY_ENTRY && file_id.as_str() != IMAGE_XOR_KEY_ENTRY
+            })
+            .filter_map(|(file_id, value)| {
+                Some(WeChatRecoveredKeyDto {
+                    database_name: display_names.get(file_id)?.clone(),
+                    key_hex: value.as_str()?.to_string(),
+                })
+            })
+            .collect();
+        if let Some(key_hex) = self.keys.get(IMAGE_KEY_ENTRY).and_then(Value::as_str) {
+            self.recovered_keys.push(WeChatRecoveredKeyDto {
+                database_name: "微信图片密钥".to_string(),
+                key_hex: key_hex.to_string(),
+            });
+        }
+        for name in &mut self.matched_db_names {
+            if let Some(display) = display_names.get(name) {
+                *name = display.clone();
+            }
+        }
+        for name in &mut self.unmatched_db_names {
+            if let Some(display) = display_names.get(name) {
+                *name = display.clone();
+            }
+        }
     }
 
     fn into_dto(self) -> WeChatKeyRecoveryResultDto {
@@ -200,6 +342,7 @@ impl RecoveryOutcome {
             recovered_count: self.recovered_count(),
             matched_db_names: self.matched_db_names,
             unmatched_db_names: self.unmatched_db_names,
+            recovered_keys: self.recovered_keys,
         }
     }
 }
@@ -216,6 +359,10 @@ fn string_list(value: Option<&Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn is_valid_hex(value: &str, length: usize) -> bool {
+    value.len() == length && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 /// Persist the recovered keys in the keyinject JSON format via temp file +
 /// atomic rename. The serialized secret buffer is zeroized after the write.
 fn write_keys_file(path: &Path, keys: &Map<String, Value>) -> Result<(), PluginActionError> {
@@ -223,14 +370,92 @@ fn write_keys_file(path: &Path, keys: &Map<String, Value>) -> Result<(), PluginA
         PluginActionError::InvalidInput("keys file path has no parent".to_string())
     })?;
     std::fs::create_dir_all(parent)?;
+    let mut merged = read_existing_keys(path)?;
+    merged.extend(keys.clone());
     let content = Zeroizing::new(
-        serde_json::to_string(&Value::Object(keys.clone()))
+        serde_json::to_string(&Value::Object(merged))
             .map_err(|error| PluginActionError::Plugin(error.to_string()))?,
     );
-    let staging = path.with_extension("json.tmp");
-    std::fs::write(&staging, content.as_bytes())?;
-    std::fs::rename(&staging, path)?;
+    let staging = parent.join(format!(".wechat-keys-{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| -> std::io::Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        replace_file(&staging, path)
+    })();
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&staging);
+        return Err(error.into());
+    }
     Ok(())
+}
+
+fn read_existing_keys(path: &Path) -> Result<Map<String, Value>, PluginActionError> {
+    if !path.exists() {
+        return Ok(Map::new());
+    }
+    let content = Zeroizing::new(std::fs::read_to_string(path)?);
+    let parsed: Value = serde_json::from_str(&content).map_err(|error| {
+        PluginActionError::Plugin(format!("existing keys file is invalid: {error}"))
+    })?;
+    let object = parsed.as_object().ok_or_else(|| {
+        PluginActionError::Plugin("existing keys file must be a JSON object".to_string())
+    })?;
+    Ok(object
+        .iter()
+        .filter(|(key, value)| {
+            value.as_str().is_some_and(|value| match key.as_str() {
+                IMAGE_KEY_ENTRY => is_valid_hex(value, 32),
+                IMAGE_XOR_KEY_ENTRY => is_valid_hex(value, 2),
+                _ => is_valid_hex(value, 64),
+            })
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect())
+}
+
+#[cfg(windows)]
+fn replace_file(staging: &Path, destination: &Path) -> std::io::Result<()> {
+    if !destination.exists() {
+        return std::fs::rename(staging, destination);
+    }
+    use std::os::windows::ffi::OsStrExt as _;
+    let destination_wide = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let staging_wide = staging
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    // SAFETY: both paths are NUL-terminated UTF-16 buffers that remain alive
+    // for the call. Optional backup/exclusion parameters are intentionally null.
+    let replaced = unsafe {
+        windows_sys::Win32::Storage::FileSystem::ReplaceFileW(
+            destination_wide.as_ptr(),
+            staging_wide.as_ptr(),
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if replaced == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_file(staging: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::rename(staging, destination)
 }
 
 /// Audit the recovery run with counts only — never key material or dump

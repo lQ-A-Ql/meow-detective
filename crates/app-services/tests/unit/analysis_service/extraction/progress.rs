@@ -12,6 +12,7 @@ fn candidate(path: &str, id: &str) -> EvidenceCandidate {
         size: 32,
         encrypted: false,
         content_identity: format!("identity-{id}"),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "linux_artifact".to_string(),
         parser: "linux.artifacts".to_string(),

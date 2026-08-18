@@ -9,6 +9,7 @@ fn test_candidate(path: &str) -> EvidenceCandidate {
         size: 4096,
         encrypted: false,
         content_identity: "test:systemd-unit".to_string(),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "test".to_string(),
         parser: "test".to_string(),

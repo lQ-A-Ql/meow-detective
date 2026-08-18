@@ -2,7 +2,8 @@
 //! padding change must break this test before it breaks loaded plugins.
 
 use plugin_api::{
-    MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse, MeowPluginInfo, MeowStatus,
+    MeowCompanionFile, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,
+    MeowPluginInfo, MeowStatus,
 };
 use std::mem::{offset_of, size_of};
 
@@ -21,12 +22,24 @@ fn plugin_info_layout_is_locked() {
 
 #[test]
 fn extract_request_layout_is_locked() {
-    assert_eq!(size_of::<MeowExtractRequest>(), 40);
+    assert_eq!(size_of::<MeowExtractRequest>(), 56);
     assert_eq!(offset_of!(MeowExtractRequest, struct_size), 0);
     assert_eq!(offset_of!(MeowExtractRequest, file_path), 8);
     assert_eq!(offset_of!(MeowExtractRequest, file_id), 16);
     assert_eq!(offset_of!(MeowExtractRequest, data), 24);
     assert_eq!(offset_of!(MeowExtractRequest, data_len), 32);
+    assert_eq!(offset_of!(MeowExtractRequest, companions), 40);
+    assert_eq!(offset_of!(MeowExtractRequest, companion_count), 48);
+}
+
+#[test]
+fn companion_file_layout_is_locked() {
+    assert_eq!(size_of::<MeowCompanionFile>(), 40);
+    assert_eq!(offset_of!(MeowCompanionFile, struct_size), 0);
+    assert_eq!(offset_of!(MeowCompanionFile, file_path), 8);
+    assert_eq!(offset_of!(MeowCompanionFile, file_id), 16);
+    assert_eq!(offset_of!(MeowCompanionFile, data), 24);
+    assert_eq!(offset_of!(MeowCompanionFile, data_len), 32);
 }
 
 #[test]

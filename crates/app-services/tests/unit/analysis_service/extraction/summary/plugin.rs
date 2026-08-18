@@ -155,6 +155,49 @@ fn undeclared_family_is_rejected() {
 }
 
 #[test]
+fn wechat_messages_paginate_by_evidence_time() {
+    let conn = source_connection();
+    insert_artifact(
+        &conn,
+        "older-evidence-newer-row",
+        "meow.plugin.wechat",
+        "WeChatMessage",
+        "older",
+        "2026-08-17T12:00:00Z",
+    );
+    insert_artifact(
+        &conn,
+        "newer-evidence-older-row",
+        "meow.plugin.wechat",
+        "WeChatMessage",
+        "newer",
+        "2026-08-17T11:00:00Z",
+    );
+    conn.execute(
+        "UPDATE artifacts SET attrs = ?1 WHERE id = ?2",
+        rusqlite::params![
+            r#"{"createTimeUtc":"2025-01-01T00:00:00Z","localId":1}"#,
+            "older-evidence-newer-row"
+        ],
+    )
+    .expect("update older evidence attrs");
+    conn.execute(
+        "UPDATE artifacts SET attrs = ?1 WHERE id = ?2",
+        rusqlite::params![
+            r#"{"createTimeUtc":"2025-01-02T00:00:00Z","localId":2}"#,
+            "newer-evidence-older-row"
+        ],
+    )
+    .expect("update newer evidence attrs");
+    let meta = plugin_meta("meow.plugin.wechat", &["WeChatMessage"]);
+
+    let page = get_plugin_family_entries(&conn, &meta, "WeChatMessage", 0, 1)
+        .expect("wechat message page");
+
+    assert_eq!(page.entries[0].artifact_id, "newer-evidence-older-row");
+}
+
+#[test]
 fn empty_plugin_set_lists_no_modules() {
     let conn = source_connection();
     let modules = list_plugin_modules(&conn, &[], &BTreeMap::new()).expect("list modules");

@@ -8,7 +8,7 @@
 mod wechat_plugin_util;
 
 use app_services::plugin_loader::{load_plugins_from_dirs, PluginExtractor};
-use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
+use artifacts_core::{ArtifactCompanion, ArtifactContext, ArtifactExtractor, VecSink};
 use domain::FileEntryId;
 use rusqlite::Connection;
 
@@ -99,8 +99,33 @@ fn plaintext_database_is_deep_parsed_and_provenanced() {
         Some(FILE_ID)
     );
     assert_eq!(artifact.extractor_id.as_deref(), Some("meow.plugin.wechat"));
-    assert_eq!(artifact.extractor_version.as_deref(), Some("0.1.0"));
+    assert_eq!(artifact.extractor_version.as_deref(), Some("0.3.0"));
     assert_eq!(artifact.source_attribution.as_deref(), Some(path.as_str()));
+}
+
+#[test]
+fn host_passes_database_wal_companion_across_abi() {
+    let dir = wechat_plugin_util::stage_wechat_plugin();
+    let plugin = load_wechat_plugin(dir.path());
+    let data = synthetic_db("CREATE TABLE message (id INTEGER PRIMARY KEY);");
+    let path = format!("{DATA_PREFIX}/message/message_0.db");
+    let context = ArtifactContext {
+        file_id: FileEntryId(FILE_ID.to_string()),
+        file_path: path.clone(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let companions = [ArtifactCompanion {
+        file_id: FileEntryId("ds:1:wechat-wal-1".to_string()),
+        file_path: format!("{path}-wal"),
+        data: Vec::new(),
+    }];
+    let mut sink = VecSink::new();
+
+    plugin
+        .run_with_companions(context, &companions, &mut sink)
+        .expect("plugin run with WAL companion");
+
+    assert_eq!(sink.artifacts[0].attrs["walPresent"], true);
 }
 
 #[test]

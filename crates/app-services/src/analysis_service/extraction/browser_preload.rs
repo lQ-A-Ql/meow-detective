@@ -429,6 +429,7 @@ pub(super) fn locator_from_row(
         size,
         encrypted,
         content_identity: format!("browser-preload:{data_source_id}:{size}:{encrypted}"),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "browser_preload".to_string(),
         parser: "browser.dpapi".to_string(),

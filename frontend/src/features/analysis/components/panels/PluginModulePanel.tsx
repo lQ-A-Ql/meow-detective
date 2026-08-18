@@ -4,9 +4,10 @@ import { Puzzle } from 'lucide-react';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { usePluginFamilyEntries } from '@/features/analysis/hooks';
-import type { PluginArtifactEntry, PluginModule } from '@/types/models';
+import type { PluginArtifactEntry, PluginModule, WeChatRecoveredKey } from '@/types/models';
 import { EmptyLine, WarningList } from './helpers';
 import { PluginActionsSection } from './PluginActionsSection';
+import { WeChatWorkspaceContainer } from '@/features/analysis/containers/WeChatWorkspaceContainer';
 
 const DYNAMIC_ATTR_COLUMN_CAP = 6;
 
@@ -203,14 +204,27 @@ export function PluginModulePanel({
   loadContextKey,
 }: PluginModulePanelProps) {
   const { t } = useTranslation();
+  const recoveryContext = `${dataSourceId}:${module.pluginId}`;
+  const [recoveryTitle, setRecoveryTitle] = useState<{
+    context: string;
+    keys: WeChatRecoveredKey[];
+  }>({ context: recoveryContext, keys: [] });
+  const recoveredKeys = recoveryTitle.context === recoveryContext ? recoveryTitle.keys : [];
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
+          <h3 className="flex flex-wrap items-center gap-2 text-[14px] font-light text-forensics-text">
             <Puzzle size={16} />
-            {module.displayName}
+            <span>{module.displayName}</span>
+            {recoveredKeys.length > 0 ? (
+              recoveredKeys.map((key) => (
+                <span key={`${key.databaseName}:${key.keyHex}`} className="min-w-0 break-all font-mono text-[10px] text-forensics-text-secondary">
+                  {t('pluginModule.actions.recoveredKey')} {key.databaseName}: <span className="text-forensics-text">{key.keyHex}</span>
+                </span>
+              ))
+            ) : null}
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
             <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-tertiary">
@@ -222,9 +236,15 @@ export function PluginModulePanel({
           </div>
         </div>
       </div>
-      <PluginActionsSection dataSourceId={dataSourceId} pluginId={module.pluginId} />
+      <PluginActionsSection
+        dataSourceId={dataSourceId}
+        pluginId={module.pluginId}
+        onRecoveredKeys={(keys) => setRecoveryTitle({ context: recoveryContext, keys })}
+      />
       {module.warnings.length > 0 ? <WarningList warnings={module.warnings} /> : null}
-      {module.families.length === 0 ? (
+      {module.pluginId === 'meow.plugin.wechat' ? (
+        <WeChatWorkspaceContainer dataSourceId={dataSourceId} />
+      ) : module.families.length === 0 ? (
         <EmptyLine text={t('pluginModule.empty.description')} />
       ) : (
         module.families.map((family) => (

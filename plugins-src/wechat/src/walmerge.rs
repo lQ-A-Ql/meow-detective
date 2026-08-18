@@ -188,7 +188,11 @@ fn parse_header(wal: &[u8]) -> Result<(WalHeader, bool), String> {
 /// Split the WAL body into complete frames; trailing partial bytes are
 /// reported through `trailing`.
 fn parse_frames(wal: &[u8]) -> (Vec<FrameRef>, usize) {
-    let stride = FRAME_HDR_SZ + sqlcipher4::PAGE_SZ;
+    parse_frames_with_page_size(wal, sqlcipher4::PAGE_SZ)
+}
+
+fn parse_frames_with_page_size(wal: &[u8], page_size: usize) -> (Vec<FrameRef>, usize) {
+    let stride = FRAME_HDR_SZ + page_size;
     let body = wal.len().saturating_sub(WAL_HDR_SZ);
     let count = body / stride;
     let mut frames = Vec::with_capacity(count);
@@ -360,6 +364,108 @@ pub fn merge(
     Ok((image, report))
 }
 
+/// Merge a standard plaintext SQLite WAL into a copied main database image.
+/// Only the header generation with a valid checksum chain is considered and
+/// frames after the last commit marker are deliberately excluded.
+pub fn merge_plaintext(
+    plain_image: &[u8],
+    wal: &[u8],
+) -> Result<(Vec<u8>, WalMergeReport), String> {
+    if plain_image.len() < 100 || !plain_image.starts_with(SQLITE_HEADER) {
+        return Err("plaintext database has no SQLite header".to_string());
+    }
+    let page_size = sqlite_page_size(plain_image)?;
+    if !plain_image.len().is_multiple_of(page_size) {
+        return Err("plaintext database is not page aligned".to_string());
+    }
+    if wal.is_empty() {
+        return Ok((
+            plain_image.to_vec(),
+            WalMergeReport {
+                final_page_count: plain_image.len() / page_size,
+                ..WalMergeReport::default()
+            },
+        ));
+    }
+    let (header, header_checksum_ok) = parse_header(wal)?;
+    if !header_checksum_ok {
+        return Err("WAL header checksum mismatch".to_string());
+    }
+    let (frames, _) = parse_frames_with_page_size(wal, page_size);
+    let mut report = WalMergeReport {
+        frames_seen: frames.len(),
+        ..WalMergeReport::default()
+    };
+    let run_end = generation_runs(&frames)
+        .first()
+        .filter(|_| {
+            frames
+                .first()
+                .is_some_and(|frame| frame.salt == (header.salt1, header.salt2))
+        })
+        .map(|(_, end)| *end)
+        .unwrap_or(0);
+    let mut seed = header.checksum;
+    let mut valid = Vec::new();
+    for frame in &frames[..run_end] {
+        if frame.pgno == 0 {
+            break;
+        }
+        let header_end = frame.data_offset - FRAME_HDR_SZ;
+        let (s1, s2) = wal_checksum(
+            &wal[header_end..header_end + 8],
+            seed.0,
+            seed.1,
+            header.little_endian,
+        );
+        let page_end = frame.data_offset + page_size;
+        let chained = wal_checksum(
+            &wal[frame.data_offset..page_end],
+            s1,
+            s2,
+            header.little_endian,
+        );
+        if chained != frame.checksum {
+            break;
+        }
+        seed = frame.checksum;
+        valid.push(frame);
+    }
+    report.frames_valid = valid.len();
+    let Some(commit_index) = valid.iter().rposition(|frame| frame.db_size != 0) else {
+        report.frames_dropped_uncommitted = valid.len();
+        report.final_page_count = plain_image.len() / page_size;
+        return Ok((plain_image.to_vec(), report));
+    };
+    report.frames_dropped_uncommitted = valid.len() - commit_index - 1;
+    let committed = &valid[..=commit_index];
+    let final_pages = committed[commit_index].db_size as usize;
+    let mut image = plain_image.to_vec();
+    image.resize(final_pages.saturating_mul(page_size), 0);
+    for frame in committed {
+        let page_index = (frame.pgno as usize).saturating_sub(1);
+        if page_index >= final_pages {
+            continue;
+        }
+        let target = page_index * page_size;
+        image[target..target + page_size]
+            .copy_from_slice(&wal[frame.data_offset..frame.data_offset + page_size]);
+        report.pages_written += 1;
+    }
+    report.frames_applied = committed.len();
+    report.final_page_count = final_pages;
+    Ok((image, report))
+}
+
+fn sqlite_page_size(image: &[u8]) -> Result<usize, String> {
+    let raw = u16::from_be_bytes([image[16], image[17]]);
+    let page_size = if raw == 1 { 65_536 } else { raw as usize };
+    if !(512..=65_536).contains(&page_size) || !page_size.is_power_of_two() {
+        return Err(format!("invalid SQLite page size {page_size}"));
+    }
+    Ok(page_size)
+}
+
 /// Read-only WAL inventory for the offline `walinfo` tooling: header fields
 /// plus per-generation frame/commit/chain statistics. No key is needed —
 /// frame checksums and salts are plaintext.
@@ -461,8 +567,31 @@ mod tests {
     use aes::cipher::{BlockEncryptMut, KeyIvInit};
     use hmac::{Hmac, Mac};
     use sha2::Sha512;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     const SALT: [u8; sqlcipher4::SALT_SZ] = [0x5au8; sqlcipher4::SALT_SZ];
+    static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn create(label: &str) -> Self {
+            let sequence = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "wechat-walmerge-{}-{label}-{sequence}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("temp dir");
+            Self(path)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn key() -> [u8; 32] {
         [0x42u8; 32]
@@ -904,13 +1033,8 @@ mod tests {
     /// the decrypted-WCDB layout that `merge` consumes.
     fn real_db_pair(base_rows: u32, extra_rows: u32) -> (Vec<u8>, Vec<u8>) {
         use rusqlite::ffi;
-        let dir = std::env::temp_dir().join(format!(
-            "wechat-walmerge-{}-{}",
-            std::process::id(),
-            base_rows
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let path = dir.join("fixture.db");
+        let dir = TestDirectory::create(&format!("{base_rows}-{extra_rows}"));
+        let path = dir.0.join("fixture.db");
         let (base, extended);
         {
             let conn = rusqlite::Connection::open(&path).expect("open fixture db");
@@ -959,7 +1083,6 @@ mod tests {
                 .expect("extended checkpoint");
             extended = std::fs::read(&path).expect("read extended image");
         }
-        let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(base[20], 80, "reserve byte recorded in the header");
         assert_eq!(&base[18..20], &[2, 2], "WAL journal versions");
         (base, extended)
@@ -1061,5 +1184,31 @@ mod tests {
             .query_row("PRAGMA integrity_check", [], |row| row.get(0))
             .expect("integrity_check");
         assert_eq!(integrity, "ok");
+    }
+
+    #[test]
+    fn plaintext_db_plus_wal_merges_into_extended_rows() {
+        let (base, extended) = real_db_pair(4, 3);
+        let salt = (0xABCD_0001, 0xABCD_0002);
+        let pages = extended.len() / sqlcipher4::PAGE_SZ;
+        let mut frames = Vec::new();
+        for index in 0..pages {
+            let at = index * sqlcipher4::PAGE_SZ;
+            if base[at..at + sqlcipher4::PAGE_SZ] != extended[at..at + sqlcipher4::PAGE_SZ] {
+                frames.push(FrameSpec {
+                    pgno: (index + 1) as u32,
+                    db_size: 0,
+                    salt,
+                    page: extended[at..at + sqlcipher4::PAGE_SZ].to_vec(),
+                });
+            }
+        }
+        frames.last_mut().expect("changed page").db_size = pages as u32;
+        let wal = build_wal(1, salt, &frames);
+
+        let (merged, report) = merge_plaintext(&base, &wal).expect("merge plaintext WAL");
+
+        assert_eq!(merged, extended);
+        assert_eq!(report.frames_applied, frames.len());
     }
 }

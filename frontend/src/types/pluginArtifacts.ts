@@ -53,12 +53,18 @@ export interface PluginActionDescriptor {
 }
 
 /**
- * Outcome of a WeChat database-key recovery run (`recover_wechat_keys`).
- * Recovered keys never appear in this DTO; only counts and db names.
+ * A page-1-verified key returned for explicit local investigator display.
  */
+export interface WeChatRecoveredKey {
+  databaseName: string;
+  keyHex: string;
+}
+
+/** Outcome of a WeChat database-key recovery run (`recover_wechat_keys`). */
 export interface WeChatKeyRecoveryResult {
   candidatesSeen: number;
   recoveredCount: number;
   matchedDbNames: string[];
   unmatchedDbNames: string[];
+  recoveredKeys: WeChatRecoveredKey[];
 }

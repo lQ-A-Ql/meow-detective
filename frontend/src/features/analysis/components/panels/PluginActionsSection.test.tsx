@@ -159,6 +159,7 @@ describe('PluginActionsSection', () => {
         recoveredCount: 3,
         matchedDbNames: ['EnMicroMsg.db', 'SnsMicroMsg.db'],
         unmatchedDbNames: ['Favorite.db'],
+        recoveredKeys: [{ databaseName: 'EnMicroMsg.db', keyHex: 'ab'.repeat(32) }],
       },
     }));
     const rerun = rerunState();
@@ -179,6 +180,34 @@ describe('PluginActionsSection', () => {
         dataSourceId: 'ds-1',
         categories: ['PluginArtifacts'],
       });
+    });
+  });
+
+  it('reports verified plaintext keys to the plugin title owner', async () => {
+    mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
+    const result = {
+      candidatesSeen: 1,
+      recoveredCount: 1,
+      matchedDbNames: ['message_0.db'],
+      unmatchedDbNames: [],
+      recoveredKeys: [{ databaseName: 'message_0.db', keyHex: 'cd'.repeat(32) }],
+    };
+    mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState({
+      mutateAsync: vi.fn().mockResolvedValue(result),
+    }));
+    const onRecoveredKeys = vi.fn();
+    render(createElement(PluginActionsSection, {
+      dataSourceId: 'ds-1',
+      pluginId: 'wechat',
+      onRecoveredKeys,
+    }));
+    fireEvent.change(screen.getByLabelText('输入文件路径'), {
+      target: { value: 'D:/dump.raw' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '运行' }));
+
+    await waitFor(() => {
+      expect(onRecoveredKeys).toHaveBeenCalledWith(result.recoveredKeys);
     });
   });
 

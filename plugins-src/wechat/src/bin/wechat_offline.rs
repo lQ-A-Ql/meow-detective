@@ -2,6 +2,7 @@
 //!
 //! Subcommands:
 //!   scan <dump.dmp> <db...>              recover and print matching db keys
+//!   imagekey <dump.dmp> <media.dat>       recover the WeChat V4 image key
 //!   decrypt <key-hex> <in.db> <out> [in.db-wal]
 //!                                        decrypt one WCDB/SQLCipher-4 database,
 //!                                        merging the WAL when given
@@ -24,12 +25,13 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first().map(String::as_str) else {
         eprintln!(
-            "usage: wechat_offline scan <dump> <db...> | decrypt <key-hex> <in.db> <out.db> [in.db-wal] | walinfo <in.db-wal> | parse <decrypted.db> <category> [owner-wxid]"
+            "usage: wechat_offline scan <dump> <db...> | imagekey <dump> <media.dat> | decrypt <key-hex> <in.db> <out.db> [in.db-wal] | walinfo <in.db-wal> | parse <decrypted.db> <category> [owner-wxid]"
         );
         std::process::exit(2);
     };
     let code = match command {
         "scan" => scan(&args[1..]),
+        "imagekey" => image_key(&args[1..]),
         "decrypt" => decrypt(&args[1..]),
         "walinfo" => walinfo(&args[1..]),
         "parse" => parse(&args[1..]),
@@ -39,6 +41,41 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+fn image_key(args: &[String]) -> i32 {
+    if args.len() != 2 {
+        eprintln!("usage: imagekey <dump.dmp> <media.dat>");
+        return 2;
+    }
+    let media = match std::fs::read(&args[1]) {
+        Ok(media) if media.len() >= 31 && media.starts_with(b"\x07\x08\x56\x32") => media,
+        Ok(_) => {
+            eprintln!("media is not a supported WeChat V4 image");
+            return 2;
+        }
+        Err(error) => {
+            eprintln!("read {}: {error}", args[1]);
+            return 1;
+        }
+    };
+    let mut encrypted_block = [0u8; 16];
+    encrypted_block.copy_from_slice(&media[15..31]);
+    match keyscan::scan_dump_for_keys_and_image(Path::new(&args[0]), Some(&encrypted_block)) {
+        Ok(scan) if scan.image_key.is_some() => {
+            let key = scan.image_key.expect("guarded image key");
+            println!("{}", keyscan::image_key_to_hex(&key));
+            0
+        }
+        Ok(_) => {
+            println!("no matching image key");
+            1
+        }
+        Err(error) => {
+            eprintln!("scan failed: {error}");
+            1
+        }
+    }
 }
 
 fn parse_key(key_hex: &str) -> Option<[u8; 32]> {

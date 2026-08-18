@@ -20,6 +20,8 @@ pub enum Route {
     KvConfig,
     /// `xwechat_files/<wxid>/db_storage/<category>/*.db`.
     Database,
+    /// Local message attachments and Moments cache images.
+    LocalMedia,
     /// Anything else: empty-Ok.
     NotOurs,
 }
@@ -33,6 +35,14 @@ pub fn classify(path: &str) -> Route {
         && lower.contains("db_storage/")
     {
         return Route::Database;
+    }
+    if lower.contains("xwechat_files/")
+        && ((lower.contains("/msg/attach/")
+            && lower.contains("/img/")
+            && basename.ends_with(".dat"))
+            || lower.contains("/sns/img/"))
+    {
+        return Route::LocalMedia;
     }
     match basename {
         "plugin_info.ini" if lower.contains("tencent") => Route::InstallInfo,

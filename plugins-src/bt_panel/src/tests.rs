@@ -26,6 +26,8 @@ fn request_for<'a>(path: &'a CString, id: &'a CString, data: &'a [u8]) -> MeowEx
         file_id: id.as_ptr().cast(),
         data: data.as_ptr(),
         data_len: data.len() as u64,
+        companions: std::ptr::null(),
+        companion_count: 0,
     }
 }
 
@@ -122,6 +124,8 @@ fn panic_inside_extract_is_self_caught() {
         file_id: std::ptr::null(),
         data: std::ptr::null(),
         data_len: 0,
+        companions: std::ptr::null(),
+        companion_count: 0,
     };
     let response = unsafe { guarded_extract(&request, |_| panic!("boom")) };
     assert_eq!(response.status, MeowStatus::InternalError);

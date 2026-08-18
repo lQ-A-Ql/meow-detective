@@ -22,6 +22,8 @@ fn request() -> MeowExtractRequest {
         file_id: c"ds:1:1".as_ptr().cast(),
         data: b"data".as_ptr(),
         data_len: 4,
+        companions: std::ptr::null(),
+        companion_count: 0,
     }
 }
 

@@ -58,6 +58,8 @@ fn request_for<'a>(path: &'a CString, id: &'a CString, data: &'a [u8]) -> MeowEx
         file_id: id.as_ptr().cast(),
         data: data.as_ptr(),
         data_len: data.len() as u64,
+        companions: std::ptr::null(),
+        companion_count: 0,
     }
 }
 
@@ -101,6 +103,28 @@ fn run_plugin(path_str: &str, data: &[u8]) -> (MeowStatus, Option<Value>, Option
     (status, payload, error)
 }
 
+fn run_plugin_with_wal(path_str: &str, data: &[u8], wal: &[u8]) -> Value {
+    let path = CString::new(path_str).expect("path");
+    let id = CString::new("ds:1:wechat-1").expect("id");
+    let wal_path = CString::new(format!("{path_str}-wal")).expect("wal path");
+    let wal_id = CString::new("ds:1:wechat-wal-1").expect("wal id");
+    let companion = MeowCompanionFile {
+        struct_size: std::mem::size_of::<MeowCompanionFile>() as u32,
+        file_path: wal_path.as_ptr().cast(),
+        file_id: wal_id.as_ptr().cast(),
+        data: wal.as_ptr(),
+        data_len: wal.len() as u64,
+    };
+    let mut request = request_for(&path, &id, data);
+    request.companions = &companion;
+    request.companion_count = 1;
+    let response = unsafe { meow_plugin_extract(&request) };
+    assert_eq!(response.status, MeowStatus::Ok);
+    let (payload, error) = unsafe { drain_response(&response) };
+    assert!(error.is_none());
+    serde_json::from_slice(&payload.expect("payload")).expect("valid JSON")
+}
+
 #[test]
 fn info_reports_expected_metadata() {
     let info = unsafe { meow_plugin_info() };
@@ -112,7 +136,7 @@ fn info_reports_expected_metadata() {
     assert_eq!(info.evidence_platform, MeowEvidencePlatform::Windows);
     unsafe {
         assert_eq!(CStr::from_ptr(info.plugin_id.cast()), c"meow.plugin.wechat");
-        assert_eq!(CStr::from_ptr(info.plugin_version.cast()), c"0.1.0");
+        assert_eq!(CStr::from_ptr(info.plugin_version.cast()), c"0.4.2");
         assert_eq!(CStr::from_ptr(info.display_name.cast()), c"微信");
         let families: Value = serde_json::from_str(
             CStr::from_ptr(info.families_json.cast())
@@ -130,7 +154,9 @@ fn info_reports_expected_metadata() {
                 "WeChatMessage",
                 "WeChatSession",
                 "WeChatMoment",
-                "WeChatFavorite"
+                "WeChatFavorite",
+                "WeChatMedia",
+                "WeChatSearchRecord"
             ])
         );
         let patterns: Value = serde_json::from_str(
@@ -146,7 +172,9 @@ fn info_reports_expected_metadata() {
                 "plugin_info.ini",
                 "cloud_account.txt",
                 "key_info.dat",
-                "config.ini"
+                "config.ini",
+                "/msg/attach/",
+                "/sns/img/"
             ])
         );
     }
@@ -160,6 +188,8 @@ fn panic_inside_extract_is_self_caught() {
         file_id: std::ptr::null(),
         data: std::ptr::null(),
         data_len: 0,
+        companions: std::ptr::null(),
+        companion_count: 0,
     };
     let response = unsafe { guarded_extract(&request, |_| panic!("boom")) };
     assert_eq!(response.status, MeowStatus::InternalError);
@@ -253,6 +283,15 @@ fn plaintext_database_is_deep_parsed() {
     assert_eq!(artifact["attrs"]["rowCounts"]["message"], 3);
     assert_eq!(artifact["attrs"]["rowCounts"]["contact"], 2);
     assert!(payload["warnings"].as_array().expect("warnings").is_empty());
+}
+
+#[test]
+fn database_request_accepts_wal_companion() {
+    let data = synthetic_db("CREATE TABLE message (id INTEGER PRIMARY KEY);");
+    let path = format!("{DATA_PREFIX}/message/message_0.db");
+    let payload = run_plugin_with_wal(&path, &data, &[]);
+    let database = artifacts_of(&payload, "WeChatDatabase");
+    assert_eq!(database[0]["attrs"]["walPresent"], true);
 }
 
 #[test]
@@ -548,7 +587,7 @@ fn synthetic_message_db() -> (Vec<u8>, String) {
             None::<i64>
         ])
         .expect("row 3");
-        // Over-long message for the truncation cap.
+        // Long message must be retained in full.
         stmt.execute(rusqlite::params![
             4,
             103,
@@ -605,6 +644,7 @@ fn message_db_yields_message_artifacts_and_timeline() {
         .find(|a| a["attrs"]["localId"] == 1 && a["attrs"]["talkerTable"] == friend_table)
         .expect("outgoing");
     assert_eq!(outgoing["attrs"]["talker"], "friend_wxid44");
+    assert_eq!(outgoing["attrs"]["senderUsername"], "wxid_owner22");
     assert_eq!(outgoing["attrs"]["isSend"], true);
     assert_eq!(outgoing["attrs"]["serverId"], 100);
     assert_eq!(outgoing["attrs"]["localTypeLabel"], "文本");
@@ -620,6 +660,7 @@ fn message_db_yields_message_artifacts_and_timeline() {
         .expect("compressed");
     assert_eq!(compressed["attrs"]["zstdCompressed"], true);
     assert_eq!(compressed["attrs"]["contentText"], "compressed hello");
+    assert_eq!(compressed["attrs"]["senderUsername"], "friend_wxid44");
     assert_eq!(compressed["attrs"]["isSend"], false);
 
     // Unknown sender rowid: no isSend attr.
@@ -630,19 +671,19 @@ fn message_db_yields_message_artifacts_and_timeline() {
     assert!(unknown_sender["attrs"].get("isSend").is_none());
     assert_eq!(unknown_sender["attrs"]["localTypeLabel"], "图片");
 
-    // Truncation at 500 chars.
+    // Full message body is preserved; only the human summary is shortened.
     let long = messages
         .iter()
         .find(|a| a["attrs"]["localId"] == 4)
         .expect("long message");
-    assert_eq!(long["attrs"]["contentTruncated"], true);
+    assert!(long["attrs"].get("contentTruncated").is_none());
     assert_eq!(
         long["attrs"]["contentText"]
             .as_str()
             .expect("text")
             .chars()
             .count(),
-        500
+        600
     );
 
     // Unknown local_type: raw number only.
@@ -720,20 +761,71 @@ fn message_db_with_bad_zstd_row_warns_but_continues() {
 }
 
 #[test]
+fn biz_message_recovers_compressed_body_and_official_account_reply_xml() {
+    use md5::{Digest, Md5};
+    let talker = "gh_case_owner";
+    let table = format!("Msg_{:x}", Md5::digest(talker.as_bytes()));
+    let body_xml =
+        "<msg><appmsg><type>5</type><title>号主答复标题</title><des>答复摘要</des></appmsg></msg>";
+    let body = zstd::encode_all(body_xml.as_bytes(), 0).expect("compress body");
+    let source = "<msg><sourceusername>gh_case_owner</sourceusername><sourcedisplayname>案件号主</sourcedisplayname><replyusername>wxid_reader</replyusername><replynickname>提问者</replynickname><content>号主回复正文</content></msg>";
+    let mut packed = vec![1, 2];
+    packed.extend_from_slice("<extra><content>号主补充回复</content></extra>".as_bytes());
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(&format!(
+            "CREATE TABLE Name2Id (user_name TEXT PRIMARY KEY, is_session INTEGER);
+             INSERT INTO Name2Id (rowid, user_name, is_session) VALUES (2, '{talker}', 1);
+             CREATE TABLE \"{table}\" (
+                local_id INTEGER PRIMARY KEY, server_id INTEGER, local_type INTEGER,
+                real_sender_id INTEGER, create_time INTEGER, source TEXT,
+                message_content TEXT, compress_content BLOB, packed_info_data BLOB,
+                WCDB_CT_message_content INTEGER, WCDB_CT_source INTEGER);"
+        ))
+        .expect("biz schema");
+        conn.execute(
+            &format!(
+                "INSERT INTO \"{table}\" VALUES (1, 501, 49, 0, 1700000000, ?1, '', ?2, ?3, 0, 0)"
+            ),
+            rusqlite::params![source, body, packed],
+        )
+        .expect("biz row");
+    });
+
+    let (status, payload, error) = run_plugin(&content_path("message", "biz_message_0.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let messages = artifacts_of(&payload.expect("payload"), "WeChatMessage");
+    let attrs = &messages[0]["attrs"];
+    assert_eq!(attrs["appTitle"], "号主答复标题");
+    assert_eq!(attrs["xmlText"], "号主答复标题\n答复摘要");
+    assert_eq!(attrs["sourceUsername"], "gh_case_owner");
+    assert_eq!(attrs["sourceDisplayName"], "案件号主");
+    assert_eq!(attrs["senderUsername"], "gh_case_owner");
+    assert_eq!(attrs["replyUsername"], "wxid_reader");
+    assert_eq!(attrs["replyNickname"], "提问者");
+    assert_eq!(attrs["sourceXmlText"], "号主回复正文");
+    assert!(attrs["packedInfoText"]
+        .as_str()
+        .is_some_and(|text| text.contains("号主补充回复")));
+}
+
+#[test]
 fn sns_db_yields_moment_artifacts() {
     let xml_with_media =
         "<SnsDataItem><TimelineObject><id>111</id><username>wxid_friend22</username>\
         <createTime>1700000000</createTime><contentDesc>周末爬山</contentDesc>\
-        <mediaList><media id=\"1\"/></mediaList></TimelineObject></SnsDataItem>";
+        <mediaList><media id=\"1\"><url>https://media.invalid/1</url></media></mediaList></TimelineObject></SnsDataItem>";
     let xml_plain = "<SnsDataItem><TimelineObject><id>222</id><username>wxid_friend22</username>\
         <createTime>bad</createTime><contentDesc></contentDesc><mediaList/></TimelineObject></SnsDataItem>";
     let data = synthetic_db_with(|conn| {
         conn.execute_batch(
-            "CREATE TABLE SnsTimeLine (tid INTEGER PRIMARY KEY, user_name TEXT, content TEXT);",
+            "CREATE TABLE SnsTimeLine (tid INTEGER PRIMARY KEY, user_name TEXT, content TEXT, pack_info_buf TEXT);",
         )
         .expect("sns table");
         conn.execute(
-            "INSERT INTO SnsTimeLine (tid, user_name, content) VALUES (1, 'wxid_friend22', ?1), (2, 'wxid_friend22', ?2)",
+            "INSERT INTO SnsTimeLine (tid, user_name, content, pack_info_buf) VALUES
+             (1, 'wxid_friend22', ?1, '<likeUser><username>wxid_like</username><nickname>点赞者</nickname></likeUser><commentUser><username>wxid_comment</username><content>评论正文</content></commentUser>'),
+             (2, 'wxid_friend22', ?2, '')",
             [xml_with_media, xml_plain],
         )
         .expect("sns rows");
@@ -750,6 +842,15 @@ fn sns_db_yields_moment_artifacts() {
         .expect("media moment");
     assert_eq!(with_media["attrs"]["contentDesc"], "周末爬山");
     assert_eq!(with_media["attrs"]["hasMedia"], true);
+    assert_eq!(with_media["attrs"]["mediaCount"], 1);
+    assert_eq!(
+        with_media["attrs"]["mediaItems"][0]["url"],
+        "https://media.invalid/1"
+    );
+    assert_eq!(with_media["attrs"]["likeCount"], 1);
+    assert_eq!(with_media["attrs"]["likes"][0]["nickname"], "点赞者");
+    assert_eq!(with_media["attrs"]["commentCount"], 1);
+    assert_eq!(with_media["attrs"]["comments"][0]["content"], "评论正文");
     assert_eq!(with_media["attrs"]["snsId"], "111");
     assert_eq!(with_media["attrs"]["createTimeUtc"], "2023-11-14T22:13:20Z");
     let plain = moments
@@ -764,6 +865,32 @@ fn sns_db_yields_moment_artifacts() {
         .expect("timelineEvents");
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["eventType"], "WeChatMoment");
+}
+
+#[test]
+fn message_resource_db_projects_inline_media_and_blob_hash() {
+    let data = synthetic_db_with(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE MediaResource (local_id INTEGER, kind TEXT, payload BLOB);",
+        )
+        .expect("resource table");
+        conn.execute(
+            "INSERT INTO MediaResource (local_id, kind, payload) VALUES (1, 'thumb', ?1)",
+            [b"\x89PNG\r\n\x1a\nbody".as_slice()],
+        )
+        .expect("resource row");
+    });
+    let (status, payload, error) =
+        run_plugin(&content_path("message", "message_resource.db"), &data);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    let payload = payload.expect("payload");
+    let media = artifacts_of(&payload, "WeChatMedia");
+    assert_eq!(media.len(), 1);
+    let blob = &media[0]["attrs"]["values"]["payload"];
+    assert_eq!(blob["mimeType"], "image/png");
+    assert_eq!(blob["sha256"].as_str().map(str::len), Some(64));
+    assert!(blob["inlineDataBase64"].as_str().is_some());
 }
 
 #[test]
@@ -926,7 +1053,7 @@ fn key_injection_channel_branches() {
     // SQLite: warn and fall back to inventory, never ParseError, and the
     // key material never crosses into the payload.
     let mut file = std::fs::File::create(&keys_file).expect("rewrite keys");
-    write!(file, "{{\"message_0.db\": \"{key_hex}\"}}").expect("write key");
+    write!(file, "{{\"ds:1:wechat-1\": \"{key_hex}\"}}").expect("write key");
     drop(file);
     let (status, payload, error) = run_plugin(&path, &blob);
     assert_eq!(status, MeowStatus::Ok);
@@ -938,6 +1065,30 @@ fn key_injection_channel_branches() {
         .any(|w| w.contains("解密产物不是可读的 SQLite 库")));
     assert_eq!(artifacts_of(&payload, "WeChatDatabase").len(), 1);
     assert!(!payload.to_string().contains(&key_hex));
+
+    // 3b. Existing logical-path key files remain compatible after file ids
+    // became the preferred cross-source identity.
+    let mut file = std::fs::File::create(&keys_file).expect("rewrite path key");
+    write!(file, "{{\"{path}\": \"{key_hex}\"}}").expect("write path key");
+    drop(file);
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    assert!(warning_texts(&payload.expect("payload"))
+        .iter()
+        .any(|w| w.contains("解密产物不是可读的 SQLite 库")));
+
+    // 3c. Single-account key files using only the basename also stay
+    // compatible with the offline tooling format.
+    let mut file = std::fs::File::create(&keys_file).expect("rewrite basename key");
+    write!(file, "{{\"message_0.db\": \"{key_hex}\"}}").expect("write basename key");
+    drop(file);
+    let (status, payload, error) = run_plugin(&path, &blob);
+    assert_eq!(status, MeowStatus::Ok);
+    assert!(error.is_none());
+    assert!(warning_texts(&payload.expect("payload"))
+        .iter()
+        .any(|w| w.contains("解密产物不是可读的 SQLite 库")));
 
     // 4. Key file unreadable: warning + fallback, still no ParseError.
     std::env::set_var("MEOW_WECHAT_KEYS", dir.join("missing.json"));

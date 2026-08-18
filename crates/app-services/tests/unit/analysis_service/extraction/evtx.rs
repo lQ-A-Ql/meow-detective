@@ -10,6 +10,7 @@ fn candidate() -> EvidenceCandidate {
         size: 4096,
         encrypted: false,
         content_identity: "test:system-evtx".to_string(),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "evtx_log".to_string(),
         parser: "evtx.structured".to_string(),

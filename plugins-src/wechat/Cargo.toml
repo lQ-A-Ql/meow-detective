@@ -1,6 +1,6 @@
 [package]
 name = "meow-plugin-wechat"
-version = "0.1.0"
+version = "0.4.2"
 edition = "2021"
 publish = false
 
@@ -31,3 +31,4 @@ zstd = "~0.13"
 # Content parsing: talker-table md5 reverse lookup and unix→UTC timestamps.
 md-5 = "~0.10"
 chrono = { version = "~0.4", default-features = false, features = ["std"] }
+quick-xml = "~0.41"

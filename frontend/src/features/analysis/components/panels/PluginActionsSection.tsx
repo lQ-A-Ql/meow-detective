@@ -7,7 +7,7 @@ import { errorMessage } from '@/lib/errors';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { usePluginActions, useRecoverWeChatKeys } from '@/features/analysis/plugin-action-hooks';
 import { useRunAnalysisExtraction } from '@/features/analysis/hooks';
-import type { PluginActionDescriptor, WeChatKeyRecoveryResult } from '@/types/models';
+import type { PluginActionDescriptor, WeChatKeyRecoveryResult, WeChatRecoveredKey } from '@/types/models';
 
 /**
  * Action id → host command wiring. The plugin only self-describes its
@@ -95,10 +95,12 @@ function PluginActionCard({
   dataSourceId,
   action,
   pickFilePath,
+  onRecoveredKeys,
 }: {
   dataSourceId: string;
   action: PluginActionDescriptor;
   pickFilePath: PickFilePath;
+  onRecoveredKeys: (keys: WeChatRecoveredKey[]) => void;
 }) {
   const { t } = useTranslation();
   const [filePath, setFilePath] = useState('');
@@ -127,7 +129,10 @@ function PluginActionCard({
     }
     setInputError('');
     rerun.reset();
-    await recovery.mutateAsync({ dataSourceId, dumpPath: trimmed }).catch(() => undefined);
+    const result = await recovery
+      .mutateAsync({ dataSourceId, dumpPath: trimmed })
+      .catch(() => undefined);
+    if (result) onRecoveredKeys(result.recoveredKeys);
   }
 
   async function handleRerun() {
@@ -217,6 +222,7 @@ export interface PluginActionsSectionProps {
   pluginId: string;
   /** Injectable for tests; defaults to the shared Tauri open dialog. */
   pickFilePath?: PickFilePath;
+  onRecoveredKeys?: (keys: WeChatRecoveredKey[]) => void;
 }
 
 /**
@@ -227,6 +233,7 @@ export function PluginActionsSection({
   dataSourceId,
   pluginId,
   pickFilePath = defaultPickFilePath,
+  onRecoveredKeys = () => undefined,
 }: PluginActionsSectionProps) {
   const { t } = useTranslation();
   const actionsQuery = usePluginActions(pluginId);
@@ -248,6 +255,7 @@ export function PluginActionsSection({
             dataSourceId={dataSourceId}
             action={action}
             pickFilePath={pickFilePath}
+            onRecoveredKeys={onRecoveredKeys}
           />
         ))}
       </div>

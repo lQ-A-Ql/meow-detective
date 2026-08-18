@@ -134,7 +134,13 @@ pub fn kv_config(data: &[u8], payload: &mut Payload) {
 /// warning. Known content databases (contact/session/message/sns/favorite)
 /// additionally emit content artifacts via `content::parse_content`.
 /// Corrupt plaintext input is a ParseError.
-pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), String> {
+pub fn database(
+    path: &str,
+    file_id: &str,
+    data: &[u8],
+    wal: Option<&[u8]>,
+    payload: &mut Payload,
+) -> Result<(), String> {
     let wxid = route::segment_after(path, "xwechat_files").unwrap_or("<unknown>");
     let category = route::segment_after(path, "db_storage").unwrap_or("<unknown>");
     let db_name = route::basename(path);
@@ -143,16 +149,46 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     // Development key-injection channel: encrypted database + injected key
     // → in-memory plaintext. Failures fall back to inventory with a
     // key-free warning.
-    let mut decrypted: Option<Vec<u8>> = None;
+    let mut reconstructed: Option<Vec<u8>> = None;
+    let mut decrypted = false;
+    let mut wal_report = None;
     if encrypted {
-        match keyinject::try_decrypt(db_name, data) {
+        match keyinject::try_decrypt(file_id, path, db_name, data) {
             Injected::Inactive => {}
-            Injected::Decrypted(plain) => decrypted = Some(plain),
+            Injected::Decrypted { plain, key } => {
+                decrypted = true;
+                reconstructed = Some(if let Some(wal) = wal.filter(|wal| !wal.is_empty()) {
+                    match crate::walmerge::merge(&key, &data[..16], &plain, wal) {
+                        Ok((merged, report)) => {
+                            wal_report = Some(report);
+                            merged
+                        }
+                        Err(reason) => {
+                            payload.warn(format!(
+                                "{db_name}-wal 验证/合并失败（{reason}），仅解析主数据库"
+                            ));
+                            plain
+                        }
+                    }
+                } else {
+                    plain
+                });
+            }
             Injected::Failed(reason) => {
                 payload.warn(format!(
                     "{db_name}：密钥注入通道未能解密（{reason}），维持盘点"
                 ));
             }
+        }
+    } else if let Some(wal) = wal.filter(|wal| !wal.is_empty()) {
+        match crate::walmerge::merge_plaintext(data, wal) {
+            Ok((merged, report)) => {
+                reconstructed = Some(merged);
+                wal_report = Some(report);
+            }
+            Err(reason) => payload.warn(format!(
+                "{db_name}-wal 验证/合并失败（{reason}），仅解析主数据库"
+            )),
         }
     }
 
@@ -162,8 +198,23 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     attrs.insert("dbName".to_string(), Value::String(db_name.to_string()));
     attrs.insert("sizeBytes".to_string(), Value::from(data.len() as u64));
     attrs.insert("encrypted".to_string(), Value::Bool(encrypted));
+    attrs.insert("walPresent".to_string(), Value::Bool(wal.is_some()));
+    if let Some(report) = &wal_report {
+        attrs.insert(
+            "walFramesSeen".to_string(),
+            Value::from(report.frames_seen as u64),
+        );
+        attrs.insert(
+            "walFramesApplied".to_string(),
+            Value::from(report.frames_applied as u64),
+        );
+        attrs.insert(
+            "walFramesDroppedUncommitted".to_string(),
+            Value::from(report.frames_dropped_uncommitted as u64),
+        );
+    }
 
-    if encrypted && decrypted.is_none() {
+    if encrypted && !decrypted {
         payload.warn(ENCRYPTION_WARNING);
         payload.artifact(
             "WeChatDatabase",
@@ -179,7 +230,7 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     // The row-count pass doubles as the defensive message/contact table
     // probe — whatever tables exist (message/session/contact/sns variants)
     // are counted, and absent ones simply do not appear.
-    let body: &[u8] = decrypted.as_deref().unwrap_or(data);
+    let body: &[u8] = reconstructed.as_deref().unwrap_or(data);
     let db = match WeChatDb::from_bytes(body) {
         Ok(db) => db,
         Err(reason) if encrypted => {
@@ -197,8 +248,11 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
         }
         Err(reason) => return Err(reason),
     };
-    if decrypted.is_some() {
+    if decrypted {
         attrs.insert("decrypted".to_string(), Value::Bool(true));
+    }
+    if wal_report.is_some() {
+        attrs.insert("walMerged".to_string(), Value::Bool(true));
     }
     let tables = db.table_list()?;
     if tables.len() > MAX_TABLES {
@@ -232,7 +286,7 @@ pub fn database(path: &str, data: &[u8], payload: &mut Payload) -> Result<(), St
     payload.artifact(
         "WeChatDatabase",
         format!("{category}/{db_name}"),
-        if decrypted.is_some() {
+        if decrypted {
             format!("WCDB 加密数据库（经注入密钥解密，{table_count} 张表）")
         } else {
             format!("明文 SQLite 数据库，{table_count} 张表")

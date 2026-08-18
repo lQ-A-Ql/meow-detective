@@ -8,12 +8,10 @@
 //!
 //! WAL-mode normalization: WeChat 4.x (WCDB) databases carry read/write
 //! version 2 (WAL) in the header, and `sqlite3_deserialize` rejects
-//! WAL-mode images outright (`SQLITE_CANTOPEN`). Since the plugin only
-//! reads committed pages from the main file, the copied buffer's version
-//! bytes are downgraded to 1 (rollback) before deserialization. Any
-//! un-checkpointed `-wal` frames are not part of the DLL's offline view;
-//! the `walmerge` module recovers them for the offline tooling (the ABI
-//! single-file contract cannot deliver WAL bytes to the plugin yet).
+//! WAL-mode images outright (`SQLITE_CANTOPEN`). The host supplies a sibling
+//! `-wal` through the ABI companion list when present; `walmerge` validates
+//! and applies committed frames first. The resulting private copy's version
+//! bytes are then downgraded to 1 (rollback) before deserialization.
 
 use rusqlite::ffi;
 use rusqlite::serialize::OwnedData;
@@ -102,6 +100,26 @@ impl WeChatDb {
             )
             .map(|count| count > 0)
             .map_err(|error| format!("table existence check on {table} failed: {error}"))
+    }
+
+    pub fn column_exists(&self, table: &str, column: &str) -> Result<bool, String> {
+        let escaped = table.replace('"', "\"\"");
+        let mut statement = self
+            .conn
+            .prepare(&format!("PRAGMA table_info(\"{escaped}\")"))
+            .map_err(|error| format!("table_info on {table} failed: {error}"))?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| format!("table_info query on {table} failed: {error}"))?;
+        for row in rows {
+            if row
+                .map_err(|error| format!("table_info row on {table} failed: {error}"))?
+                .eq_ignore_ascii_case(column)
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Raw connection for the content parsers. Callers only run SELECTs

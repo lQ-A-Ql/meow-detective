@@ -62,10 +62,18 @@ pub struct PluginActionDescriptorDto {
     pub input_kind: String,
 }
 
-/// Outcome of a WeChat database-key recovery run. Recovered keys never
-/// appear in any DTO; they are persisted to the ACL-protected case
-/// workspace (`derived/wechat-keys/keys.json`) and only counts/names are
-/// reported here.
+/// One database key verified against that database's encrypted page 1.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeChatRecoveredKeyDto {
+    pub database_name: String,
+    pub key_hex: String,
+}
+
+/// Outcome of a WeChat database-key recovery run. `recoveredKeys` is
+/// intentionally returned to the local investigator UI for plaintext display
+/// in the plugin title. It must not be copied into logs, audit details,
+/// artifacts, reports, or generic plugin metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WeChatKeyRecoveryResultDto {
@@ -73,6 +81,7 @@ pub struct WeChatKeyRecoveryResultDto {
     pub recovered_count: u64,
     pub matched_db_names: Vec<String>,
     pub unmatched_db_names: Vec<String>,
+    pub recovered_keys: Vec<WeChatRecoveredKeyDto>,
 }
 
 #[cfg(test)]

@@ -175,6 +175,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "volume-bitlocker",
+ "windows-sys 0.61.2",
  "winpe-maintenance",
  "zeroize",
  "zip",

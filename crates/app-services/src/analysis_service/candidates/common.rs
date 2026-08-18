@@ -67,6 +67,15 @@ pub(crate) fn ensure_supported_analysis_categories(
 }
 
 #[derive(Debug, Clone)]
+pub struct EvidenceCompanion {
+    pub file_id: FileEntryId,
+    pub path: String,
+    pub size: u64,
+    pub encrypted: bool,
+    pub content_identity: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct EvidenceCandidate {
     pub file_id: FileEntryId,
     pub data_source_id: String,
@@ -75,6 +84,7 @@ pub struct EvidenceCandidate {
     pub size: u64,
     pub encrypted: bool,
     pub content_identity: String,
+    pub companions: Vec<EvidenceCompanion>,
     pub evidence_kind: String,
     pub parser: String,
     pub category: String,
@@ -306,6 +316,7 @@ fn add_matching_candidates(
                 size: row.size,
                 encrypted: row.encrypted,
                 content_identity: row.content_identity.to_string(),
+                companions: Vec::new(),
                 evidence_kind,
                 parser,
                 category: definition.category.to_string(),

@@ -51,6 +51,21 @@ pub struct MeowExtractRequest {
     pub file_id: *const u8,
     pub data: *const u8,
     pub data_len: u64,
+    /// Optional same-directory evidence files associated with the primary
+    /// input (for example `<database>-wal`). Null when `companion_count` is 0.
+    pub companions: *const MeowCompanionFile,
+    pub companion_count: u64,
+}
+
+/// One read-only companion file supplied alongside the primary extraction
+/// request. Every pointer is host-owned and valid only for the call.
+#[repr(C)]
+pub struct MeowCompanionFile {
+    pub struct_size: u32,
+    pub file_path: *const u8,
+    pub file_id: *const u8,
+    pub data: *const u8,
+    pub data_len: u64,
 }
 
 /// Extraction status, mapped by the host onto `ErrorCategory`.

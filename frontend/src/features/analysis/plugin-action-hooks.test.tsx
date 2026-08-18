@@ -84,6 +84,7 @@ describe('useRecoverWeChatKeys', () => {
       recoveredCount: 2,
       matchedDbNames: ['EnMicroMsg.db'],
       unmatchedDbNames: ['SnsMicroMsg.db'],
+      recoveredKeys: [{ databaseName: 'EnMicroMsg.db', keyHex: 'ab'.repeat(32) }],
     };
     mocks.recoverWeChatKeys.mockResolvedValue(result);
     const queryClient = createQueryClient();

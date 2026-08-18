@@ -1,5 +1,6 @@
 use super::*;
 use chrono::TimeZone;
+use std::io;
 
 #[test]
 fn test_vec_sink_new() {

@@ -96,13 +96,15 @@ fn query_plugin_family_entries(
     offset: u64,
     limit: u32,
 ) -> Result<Vec<PluginArtifactEntryDto>, AnalysisServiceError> {
-    let mut statement = conn.prepare(
+    let order = plugin_family_order(plugin_id, family);
+    let sql = format!(
         "SELECT id, source_object_id, source_attribution, title, summary, confidence, attrs, created_at
          FROM artifacts
          WHERE extractor_id = ?1 AND artifact_type = ?2
-         ORDER BY created_at DESC, id ASC
-         LIMIT ?3 OFFSET ?4",
-    )?;
+         ORDER BY {order}
+         LIMIT ?3 OFFSET ?4"
+    );
+    let mut statement = conn.prepare(&sql)?;
     let rows = statement.query_map(
         rusqlite::params![plugin_id, family, i64::from(limit), offset as i64],
         |row| {
@@ -124,6 +126,25 @@ fn query_plugin_family_entries(
         entries.push(row?);
     }
     Ok(entries)
+}
+
+fn plugin_family_order(plugin_id: &str, family: &str) -> &'static str {
+    if plugin_id != "meow.plugin.wechat" {
+        return "created_at DESC, id ASC";
+    }
+    match family {
+        "WeChatMessage" => {
+            "COALESCE(json_extract(attrs, '$.createTimeUtc'), '') DESC, \
+             COALESCE(json_extract(attrs, '$.localId'), 0) DESC, id ASC"
+        }
+        "WeChatSession" => "COALESCE(json_extract(attrs, '$.lastTimestampUtc'), '') DESC, id ASC",
+        "WeChatMoment" => {
+            "COALESCE(json_extract(attrs, '$.createTimeUtc'), '') DESC, \
+             COALESCE(json_extract(attrs, '$.tid'), 0) DESC, id ASC"
+        }
+        "WeChatFavorite" => "COALESCE(json_extract(attrs, '$.updateTimeUtc'), '') DESC, id ASC",
+        _ => "created_at DESC, id ASC",
+    }
 }
 
 #[cfg(test)]

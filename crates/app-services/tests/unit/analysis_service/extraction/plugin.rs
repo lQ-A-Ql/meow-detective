@@ -88,6 +88,7 @@ fn candidate() -> EvidenceCandidate {
         size: 16,
         encrypted: false,
         content_identity: "test:plugin".to_string(),
+        companions: Vec::new(),
         evidence_kind: "plugin".to_string(),
         parser: "meow.stub.good".to_string(),
         category: "PluginArtifacts".to_string(),
@@ -99,7 +100,7 @@ fn candidate() -> EvidenceCandidate {
 fn matching_plugins_merge_outputs_and_warnings() {
     let good = GoodStub;
     let plugins: Vec<&dyn ArtifactExtractor> = vec![&good as &dyn ArtifactExtractor];
-    let result = extract_plugin_candidate(&candidate(), &[0u8; 8], &plugins);
+    let result = extract_plugin_candidate(&candidate(), &[0u8; 8], &[], &plugins);
 
     assert!(result.failures.is_empty());
     assert_eq!(result.outcome.artifacts.len(), 1);
@@ -118,7 +119,7 @@ fn failing_plugin_degrades_to_warning_and_failure_record() {
         &failing as &dyn ArtifactExtractor,
         &good as &dyn ArtifactExtractor,
     ];
-    let result = extract_plugin_candidate(&candidate(), &[0u8; 8], &plugins);
+    let result = extract_plugin_candidate(&candidate(), &[0u8; 8], &[], &plugins);
 
     // The failing plugin never blocks the remaining plugins on the candidate.
     assert_eq!(result.outcome.artifacts.len(), 1);
@@ -139,7 +140,7 @@ fn non_matching_plugin_is_not_invoked() {
     let plugins: Vec<&dyn ArtifactExtractor> = vec![&failing as &dyn ArtifactExtractor];
     let mut txt_candidate = candidate();
     txt_candidate.path = "[P0]/Evidence/notes.txt".to_string();
-    let result = extract_plugin_candidate(&txt_candidate, &[0u8; 8], &plugins);
+    let result = extract_plugin_candidate(&txt_candidate, &[0u8; 8], &[], &plugins);
 
     assert!(result.outcome.artifacts.is_empty());
     assert!(result.outcome.warnings.is_empty());

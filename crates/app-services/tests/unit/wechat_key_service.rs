@@ -1,5 +1,5 @@
 //! Unit tests for the WeChat key-recovery service: dump admission, keys
-//! file placement/format, response parsing (no key leakage into the DTO),
+//! file placement/format, explicit verified-key DTO projection,
 //! and the analysis-run env guard.
 
 use super::*;
@@ -52,25 +52,29 @@ fn keys_file_lives_under_case_derived_area() {
 }
 
 #[test]
-fn recovery_outcome_parse_and_dto_never_carry_keys() {
+fn recovery_outcome_projects_verified_keys_for_investigator_display() {
     let response = serde_json::json!({
         "keys": { "message_0.db": "ab".repeat(32) },
         "matched": ["message_0.db"],
         "unmatched": ["contact.db", 42],
         "candidatesSeen": 7
     });
-    let outcome = RecoveryOutcome::parse(response).expect("parse");
+    let mut outcome = RecoveryOutcome::parse(response).expect("parse");
     assert_eq!(outcome.candidates_seen, 7);
     assert_eq!(outcome.recovered_count(), 1);
+    outcome.apply_display_names(&BTreeMap::from([(
+        "message_0.db".to_string(),
+        "[P2]/wechat/message_0.db".to_string(),
+    )]));
     let dto = outcome.into_dto();
-    assert_eq!(dto.matched_db_names, vec!["message_0.db".to_string()]);
+    assert_eq!(
+        dto.matched_db_names,
+        vec!["[P2]/wechat/message_0.db".to_string()]
+    );
     // Non-string entries are dropped.
     assert_eq!(dto.unmatched_db_names, vec!["contact.db".to_string()]);
     let json = serde_json::to_value(&dto).expect("serialize");
-    assert!(
-        json.get("keys").is_none(),
-        "DTO must not carry key material"
-    );
+    assert_eq!(json["recoveredKeys"][0]["keyHex"], "ab".repeat(32));
 }
 
 #[test]
@@ -79,12 +83,81 @@ fn keys_file_round_trips_the_keyinject_format() {
     let path = keys_file_path(temp.path());
     let mut keys = Map::new();
     keys.insert("message_0.db".to_string(), Value::String("ab".repeat(32)));
+    keys.insert("existing.db".to_string(), Value::String("ef".repeat(32)));
     write_keys_file(&path, &keys).expect("write keys");
     let parsed: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("json");
     assert_eq!(parsed["message_0.db"], Value::String("ab".repeat(32)));
-    // Temp staging file is renamed away.
-    assert!(!path.with_extension("json.tmp").exists());
+    let replacement =
+        Map::from_iter([("message_0.db".to_string(), Value::String("cd".repeat(32)))]);
+    write_keys_file(&path, &replacement).expect("replace keys");
+    let replaced: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("read replacement"))
+            .expect("replacement json");
+    assert_eq!(replaced["message_0.db"], Value::String("cd".repeat(32)));
+    assert_eq!(replaced["existing.db"], Value::String("ef".repeat(32)));
+    assert!(std::fs::read_dir(path.parent().expect("parent"))
+        .expect("read key dir")
+        .all(|entry| !entry
+            .expect("entry")
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")));
+}
+
+#[test]
+fn recovery_outcome_display_names_do_not_change_secret_key_ids() {
+    let response = serde_json::json!({
+        "keys": { "file-entry-1": "ab".repeat(32) },
+        "matched": ["file-entry-1"],
+        "unmatched": ["file-entry-2"],
+        "candidatesSeen": 1
+    });
+    let mut outcome = RecoveryOutcome::parse(response).expect("parse");
+    outcome.apply_display_names(&BTreeMap::from([
+        (
+            "file-entry-1".to_string(),
+            "[P2]/wechat/message_0.db".to_string(),
+        ),
+        (
+            "file-entry-2".to_string(),
+            "[P2]/wechat/contact.db".to_string(),
+        ),
+    ]));
+    assert!(outcome.keys.contains_key("file-entry-1"));
+    let dto = outcome.into_dto();
+    assert_eq!(dto.matched_db_names, vec!["[P2]/wechat/message_0.db"]);
+    assert_eq!(dto.unmatched_db_names, vec!["[P2]/wechat/contact.db"]);
+    assert_eq!(
+        dto.recovered_keys[0].database_name,
+        "[P2]/wechat/message_0.db"
+    );
+    assert_eq!(dto.recovered_keys[0].key_hex, "ab".repeat(32));
+}
+
+#[test]
+fn recovery_outcome_drops_unknown_ids_and_malformed_keys() {
+    let response = serde_json::json!({
+        "keys": {
+            "known-good": "ab".repeat(32),
+            "known-bad": "not-a-key",
+            "not-requested": "cd".repeat(32)
+        },
+        "matched": ["known-good", "known-bad", "not-requested"],
+        "unmatched": ["known-missing", "not-requested"],
+        "candidatesSeen": 3
+    });
+    let requested = BTreeMap::from([
+        ("known-good".to_string(), "good.db".to_string()),
+        ("known-bad".to_string(), "bad.db".to_string()),
+        ("known-missing".to_string(), "missing.db".to_string()),
+    ]);
+    let mut outcome = RecoveryOutcome::parse(response).expect("parse");
+    outcome.retain_valid_keys(&requested);
+    assert_eq!(outcome.keys.len(), 1);
+    assert!(outcome.keys.contains_key("known-good"));
+    assert_eq!(outcome.matched_db_names, vec!["known-good"]);
+    assert_eq!(outcome.unmatched_db_names, vec!["known-missing"]);
 }
 
 #[test]

@@ -9,6 +9,7 @@ fn candidate(path: &str) -> EvidenceCandidate {
         size: 4096,
         encrypted: false,
         content_identity: format!("identity:{path}"),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "browser".to_string(),
         parser: "browser.history".to_string(),

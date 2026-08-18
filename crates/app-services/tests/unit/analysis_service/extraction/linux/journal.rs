@@ -9,6 +9,7 @@ fn test_candidate() -> EvidenceCandidate {
         size: 4096,
         encrypted: false,
         content_identity: "test:journal".to_string(),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "test".to_string(),
         parser: "test".to_string(),

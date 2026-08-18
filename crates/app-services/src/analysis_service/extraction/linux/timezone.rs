@@ -205,6 +205,7 @@ fn timezone_probe_candidate(entry: &FileEntry) -> EvidenceCandidate {
         size: entry.size.unwrap_or(0),
         encrypted: entry.encrypted,
         content_identity: String::new(),
+        companions: Vec::new(),
         evidence_kind: "linux_timezone".to_string(),
         parser: "linux.timezone".to_string(),
         category: String::new(),

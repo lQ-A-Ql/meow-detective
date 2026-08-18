@@ -3,17 +3,17 @@
 //! `catch_unwind`; provenance fields are host-enforced, never plugin-reported.
 
 use super::library::SharedPlugin;
-use artifacts_core::{ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport};
+use artifacts_core::{
+    ArtifactCompanion, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
+};
 use domain::ArtifactFamily;
-use plugin_api::{MeowExtractRequest, MeowExtractResponse, MeowStatus};
+use plugin_api::{MeowCompanionFile, MeowExtractRequest, MeowExtractResponse, MeowStatus};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::io::Read as _;
 use std::sync::Mutex;
-
-const ARTIFACT_FILE_LIMIT_BYTES: u64 = infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES;
 
 /// Validated plugin metadata, copied out of the DLL at load time.
 pub(crate) struct PluginMeta {
@@ -38,11 +38,13 @@ pub struct PluginModuleMeta {
 }
 
 /// Path match pattern from `path_patterns_json` (design doc §3): `*.pf`
-/// suffix semantics, otherwise an exact file name match. Both
-/// case-insensitive, aligned with the built-in extractors.
+/// suffix semantics, slash-delimited values match a normalized path
+/// fragment, and remaining values match an exact file name. All forms are
+/// case-insensitive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PathPattern {
     Suffix(String),
+    PathContains(String),
     ExactName(String),
 }
 
@@ -57,6 +59,10 @@ impl PathPattern {
             }
         } else if trimmed.is_empty() {
             None
+        } else if trimmed.contains(['/', '\\']) {
+            Some(Self::PathContains(
+                trimmed.replace('\\', "/").to_lowercase(),
+            ))
         } else {
             Some(Self::ExactName(trimmed.to_lowercase()))
         }
@@ -65,6 +71,10 @@ impl PathPattern {
     fn matches(&self, file_path: &str) -> bool {
         match self {
             Self::Suffix(suffix) => file_path.to_lowercase().ends_with(suffix.as_str()),
+            Self::PathContains(fragment) => file_path
+                .replace('\\', "/")
+                .to_lowercase()
+                .contains(fragment),
             Self::ExactName(name) => file_path
                 .rsplit(['/', '\\'])
                 .next()
@@ -135,17 +145,50 @@ impl PluginExtractor {
         &self,
         ctx: &ArtifactContext,
         data: &[u8],
+        companions: &[ArtifactCompanion],
     ) -> Result<MeowExtractResponse, String> {
         let file_path = CString::new(ctx.file_path.as_str())
             .map_err(|_| format!("plugin {} path is not UTF-8-clean", self.shared.id))?;
         let file_id = CString::new(ctx.file_id.0.as_str())
             .map_err(|_| format!("plugin {} file id is not UTF-8-clean", self.shared.id))?;
+        let companion_paths = companions
+            .iter()
+            .map(|companion| CString::new(companion.file_path.as_str()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| {
+                format!(
+                    "plugin {} companion path is not UTF-8-clean",
+                    self.shared.id
+                )
+            })?;
+        let companion_ids = companions
+            .iter()
+            .map(|companion| CString::new(companion.file_id.0.as_str()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| format!("plugin {} companion id is not UTF-8-clean", self.shared.id))?;
+        let companion_abi = companions
+            .iter()
+            .enumerate()
+            .map(|(index, companion)| MeowCompanionFile {
+                struct_size: std::mem::size_of::<MeowCompanionFile>() as u32,
+                file_path: companion_paths[index].as_ptr().cast(),
+                file_id: companion_ids[index].as_ptr().cast(),
+                data: companion.data.as_ptr(),
+                data_len: companion.data.len() as u64,
+            })
+            .collect::<Vec<_>>();
         let request = MeowExtractRequest {
             struct_size: std::mem::size_of::<MeowExtractRequest>() as u32,
             file_path: file_path.as_ptr().cast(),
             file_id: file_id.as_ptr().cast(),
             data: data.as_ptr(),
             data_len: data.len() as u64,
+            companions: if companion_abi.is_empty() {
+                std::ptr::null()
+            } else {
+                companion_abi.as_ptr()
+            },
+            companion_count: companion_abi.len() as u64,
         };
         let extract = self.shared.library.extract_fn();
         // SAFETY: every request pointer references host-owned buffers that
@@ -364,7 +407,16 @@ impl ArtifactExtractor for PluginExtractor {
 
     fn run(
         &self,
+        ctx: ArtifactContext,
+        sink: &mut dyn ArtifactSink,
+    ) -> Result<ExtractorReport, String> {
+        self.run_with_companions(ctx, &[], sink)
+    }
+
+    fn run_with_companions(
+        &self,
         mut ctx: ArtifactContext,
+        companions: &[ArtifactCompanion],
         sink: &mut dyn ArtifactSink,
     ) -> Result<ExtractorReport, String> {
         // The contract serializes calls per plugin (§3): plugins need not be
@@ -375,11 +427,9 @@ impl ArtifactExtractor for PluginExtractor {
             .map_err(|_| format!("plugin {} call lock poisoned", self.shared.id))?;
         let mut data = Vec::new();
         ctx.reader
-            .by_ref()
-            .take(ARTIFACT_FILE_LIMIT_BYTES)
             .read_to_end(&mut data)
             .map_err(|error| format!("plugin {} failed to read input: {error}", self.shared.id))?;
-        let response = self.call_extract(&ctx, &data)?;
+        let response = self.call_extract(&ctx, &data, companions)?;
         self.handle_response(response, &ctx, sink)
     }
 }

@@ -1,17 +1,22 @@
 import { createElement } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   usePluginFamilyEntries: vi.fn(),
+  usePluginActions: vi.fn(),
+  useRecoverWeChatKeys: vi.fn(),
+  useRunAnalysisExtraction: vi.fn(),
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
   usePluginFamilyEntries: mocks.usePluginFamilyEntries,
+  useRunAnalysisExtraction: mocks.useRunAnalysisExtraction,
 }));
 
 vi.mock('@/features/analysis/plugin-action-hooks', () => ({
-  usePluginActions: () => ({ data: [], isLoading: false }),
+  usePluginActions: mocks.usePluginActions,
+  useRecoverWeChatKeys: mocks.useRecoverWeChatKeys,
 }));
 
 import { PluginModulePanel, deriveDynamicAttrKeys } from './PluginModulePanel';
@@ -87,6 +92,20 @@ describe('PluginModulePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.usePluginFamilyEntries.mockReturnValue(queryState([]));
+    mocks.usePluginActions.mockReturnValue({ data: [], isLoading: false });
+    mocks.useRecoverWeChatKeys.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(undefined),
+      isPending: false,
+      data: undefined,
+      error: null,
+    });
+    mocks.useRunAnalysisExtraction.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(undefined),
+      isPending: false,
+      isSuccess: false,
+      error: null,
+      reset: vi.fn(),
+    });
   });
 
   it('renders header with display name, version and warnings', () => {
@@ -219,5 +238,56 @@ describe('PluginModulePanel', () => {
     }));
 
     expect(screen.getByText('正在加载插件痕迹...')).toBeDefined();
+  });
+
+  it('uses the dedicated WeChat workspace for the first-party WeChat plugin', () => {
+    render(createElement(PluginModulePanel, {
+      dataSourceId: 'ds-1',
+      module: moduleFixture({
+        pluginId: 'meow.plugin.wechat',
+        displayName: '微信',
+        families: [{ family: 'WeChatMessage', count: 0 }],
+        totalCount: 0,
+      }),
+    }));
+
+    expect(screen.getByRole('tab', { name: '聊天' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '联系人' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '媒体' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '索引恢复' })).toBeDefined();
+    expect(mocks.usePluginFamilyEntries).toHaveBeenCalledTimes(7);
+  });
+
+  it('shows verified plaintext keys in the WeChat plugin title after recovery', async () => {
+    const recovered = {
+      candidatesSeen: 1,
+      recoveredCount: 1,
+      matchedDbNames: ['message_0.db'],
+      unmatchedDbNames: [],
+      recoveredKeys: [{ databaseName: 'message_0.db', keyHex: 'ef'.repeat(32) }],
+    };
+    mocks.usePluginActions.mockReturnValue({
+      data: [{ id: 'recoverKeys', label: '恢复密钥', inputKind: 'file' }],
+      isLoading: false,
+    });
+    mocks.useRecoverWeChatKeys.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(recovered),
+      isPending: false,
+      data: recovered,
+      error: null,
+    });
+    render(createElement(PluginModulePanel, {
+      dataSourceId: 'ds-1',
+      module: moduleFixture({ pluginId: 'meow.plugin.wechat', displayName: '微信' }),
+    }));
+    fireEvent.change(screen.getByLabelText('输入文件路径'), {
+      target: { value: 'D:/wechat.raw' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '运行' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('ef'.repeat(32))).toBeInTheDocument();
+    });
+    expect(screen.getByText(/数据库密钥 message_0\.db/)).toBeInTheDocument();
   });
 });

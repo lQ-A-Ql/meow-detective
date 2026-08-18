@@ -9,9 +9,14 @@
 
 pub mod contacts;
 pub mod favorites;
+pub mod local_media;
 pub mod messages;
+mod resource;
+mod rich_message;
 pub mod sessions;
 pub mod sns;
+mod supplemental;
+mod xml;
 
 use serde_json::{Map, Value};
 
@@ -23,13 +28,8 @@ use crate::payload::Payload;
 /// blow it up.
 pub const MAX_ARTIFACTS_PER_DB: usize = 20_000;
 
-/// Long text fields (message/favorite bodies) are truncated to this many
-/// Unicode scalar values.
-pub const MAX_TEXT_CHARS: usize = 500;
-
 /// Dispatch a plaintext database to its content parser by file name.
-/// Unknown databases (fts/resource indexes, future splits) are left to the
-/// generic schema inventory in `parse.rs`.
+/// Unknown future splits remain in the generic schema inventory.
 pub fn parse_content(
     db_name: &str,
     owner_wxid: &str,
@@ -45,14 +45,18 @@ pub fn parse_content(
         sns::parse(db, payload)?;
     } else if lower == "favorite.db" {
         favorites::parse(db, payload)?;
+    } else if lower.contains("message_resource") {
+        resource::parse(db, payload)?;
+        supplemental::parse_resource(db, payload)?;
+    } else if lower.contains("message_fts") {
+        supplemental::parse_fts(db, payload)?;
     } else if is_message_db(&lower) {
         messages::parse(db, owner_wxid, payload)?;
     }
     Ok(())
 }
 
-/// `message_N.db` / `biz_message_N.db` hold per-conversation `Msg_` tables;
-/// the FTS/resource companions stay inventory-only.
+/// `message_N.db` / `biz_message_N.db` hold per-conversation `Msg_` tables.
 fn is_message_db(lower_name: &str) -> bool {
     (lower_name.starts_with("message_") || lower_name.starts_with("biz_message_"))
         && lower_name.ends_with(".db")
@@ -67,15 +71,6 @@ pub fn unix_to_rfc3339(secs: i64) -> Option<String> {
         return None;
     }
     chrono::DateTime::from_timestamp(secs, 0).map(|ts| ts.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-}
-
-/// Char-boundary-safe truncation to `MAX_TEXT_CHARS`; the bool reports
-/// whether truncation happened.
-pub fn truncate_text(text: &str) -> (String, bool) {
-    if text.chars().count() <= MAX_TEXT_CHARS {
-        return (text.to_string(), false);
-    }
-    (text.chars().take(MAX_TEXT_CHARS).collect(), true)
 }
 
 /// Insert a trimmed string attr only when non-empty.

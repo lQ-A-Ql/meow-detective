@@ -16,6 +16,7 @@ fn candidate(id: &str, partition_index: Option<usize>, path: &str) -> EvidenceCa
         size: 32,
         encrypted: false,
         content_identity: format!("test:{id}"),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "linux".to_string(),
         parser: "linux.web".to_string(),

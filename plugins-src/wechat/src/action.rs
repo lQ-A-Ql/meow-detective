@@ -67,12 +67,19 @@ fn recover_keys(params: &Value) -> Result<Vec<u8>, MeowExtractResponse> {
             "recoverKeys requires params.dbPages",
         ));
     };
-    let candidates = keyscan::scan_dump_for_keys(Path::new(dump_path)).map_err(|_| {
+    let media_sample = params.get("mediaSample").and_then(decode_media_sample);
+    let scan = keyscan::scan_dump_for_keys_and_image(
+        Path::new(dump_path),
+        media_sample.as_ref().map(|sample| &sample.encrypted_block),
+    )
+    .map_err(|_| {
         error_response(
             MeowStatus::InternalError,
             "memory dump could not be read or scanned",
         )
     })?;
+    let candidates = scan.candidates;
+    let image_key = scan.image_key;
     let mut keys = Map::new();
     let mut matched = Vec::new();
     let mut unmatched = Vec::new();
@@ -102,7 +109,49 @@ fn recover_keys(params: &Value) -> Result<Vec<u8>, MeowExtractResponse> {
         "candidatesSeen".to_string(),
         Value::Number(candidates.len().into()),
     );
+    if let Some(image_key) = image_key {
+        result.insert(
+            "imageKey".to_string(),
+            Value::String(keyscan::image_key_to_hex(&image_key)),
+        );
+    }
+    if let Some(sample) = media_sample {
+        if let Some(xor_key) = sample.xor_key {
+            result.insert(
+                "imageXorKey".to_string(),
+                Value::String(format!("{xor_key:02x}")),
+            );
+        }
+    }
     Ok(Value::Object(result).to_string().into_bytes())
+}
+
+struct MediaSample {
+    encrypted_block: [u8; 16],
+    xor_key: Option<u8>,
+}
+
+fn decode_media_sample(value: &Value) -> Option<MediaSample> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(value.as_str()?)
+        .ok()?;
+    if bytes.len() < 31 || !bytes.starts_with(b"\x07\x08\x56\x32") {
+        return None;
+    }
+    let mut encrypted_block = [0u8; 16];
+    encrypted_block.copy_from_slice(&bytes[15..31]);
+    let xor_key = (bytes.len() >= 2)
+        .then(|| {
+            let first = bytes[bytes.len() - 2] ^ 0xff;
+            let second = bytes[bytes.len() - 1] ^ 0xd9;
+            (first == second).then_some(first)
+        })
+        .flatten();
+    Some(MediaSample {
+        encrypted_block,
+        xor_key,
+    })
 }
 
 /// Base64-decode one database page-1 entry; only full pages can validate.

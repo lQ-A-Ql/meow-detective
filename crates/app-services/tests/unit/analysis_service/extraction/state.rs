@@ -36,6 +36,7 @@ fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
         size: 32,
         encrypted: false,
         content_identity: "test:web-1".to_string(),
+        companions: Vec::new(),
         modified_at: None,
         evidence_kind: "File".to_string(),
         parser: "XFS".to_string(),

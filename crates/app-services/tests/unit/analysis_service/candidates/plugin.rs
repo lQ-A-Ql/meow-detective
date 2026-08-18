@@ -89,3 +89,35 @@ fn empty_plugin_set_discovers_nothing() {
         .expect("discover with no plugins");
     assert!(candidates.is_empty());
 }
+
+#[test]
+fn database_candidate_carries_wal_companion_and_identity() {
+    let conn = source_connection();
+    insert_file(
+        &conn,
+        "db",
+        "[P0]/Users/a/xwechat_files/wxid/db_storage/message/message_0.db",
+        "message_0.db",
+    );
+    insert_file(
+        &conn,
+        "wal",
+        "[P0]/Users/a/xwechat_files/wxid/db_storage/message/message_0.db-wal",
+        "message_0.db-wal",
+    );
+    let stub = StubPlugin {
+        id: "meow.stub",
+        suffix: ".db",
+    };
+    let plugins: Vec<&dyn ArtifactExtractor> = vec![&stub];
+
+    let candidates = discover_plugin_candidates(&conn, &plugins, &AtomicBool::new(false))
+        .expect("discover database candidate");
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].companions.len(), 1);
+    assert_eq!(candidates[0].companions[0].file_id.0, "wal");
+    assert!(candidates[0]
+        .content_identity
+        .starts_with("plugin-candidate-v2:"));
+}

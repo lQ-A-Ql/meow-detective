@@ -8,7 +8,7 @@
 
 use serde_json::Value;
 
-use super::{insert_text, truncate_text, unix_to_rfc3339, CapGuard};
+use super::{insert_text, unix_to_rfc3339, CapGuard};
 use crate::db::WeChatDb;
 use crate::payload::{new_attrs, Payload};
 
@@ -55,11 +55,7 @@ pub fn parse(db: &WeChatDb, payload: &mut Payload) -> Result<usize, String> {
         if let Some(ts) = unix_to_rfc3339(update_time) {
             attrs.insert("updateTimeUtc".to_string(), Value::String(ts));
         }
-        let (truncated, was_truncated) = truncate_text(&content);
-        insert_text(&mut attrs, "contentText", &truncated);
-        if was_truncated {
-            attrs.insert("contentTruncated".to_string(), Value::Bool(true));
-        }
+        insert_text(&mut attrs, "contentText", &content);
         let who = if fromusr.trim().is_empty() {
             "<unknown>"
         } else {

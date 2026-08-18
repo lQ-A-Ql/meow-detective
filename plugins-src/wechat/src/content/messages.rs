@@ -15,15 +15,16 @@
 //!
 //! Direction: `real_sender_id` is a rowid into `Name2Id`; when the resolved
 //! `user_name` matches the owner wxid (from the evidence path, with its
-//! `_<hash>` suffix tolerated) the message is outgoing (`isSend: true`).
-//! Unresolvable senders omit the field.
+//! `_<hash>` suffix tolerated), or is the WeChat 4.x self alias in rowid 1,
+//! the message is outgoing (`isSend: true`). Unresolvable senders omit the
+//! field.
 
 use md5::{Digest, Md5};
 use rusqlite::types::Value as SqlValue;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use super::{truncate_text, unix_to_rfc3339, CapGuard};
+use super::{rich_message, unix_to_rfc3339, CapGuard};
 use crate::db::WeChatDb;
 use crate::payload::{new_attrs, Payload};
 
@@ -49,10 +50,28 @@ fn md5_hex(name: &str) -> String {
 /// The path wxid segment may carry a `_<hash>` suffix (e.g.
 /// `wxid_zuaa9igqlro22_eef8`); the Name2Id value is the bare wxid.
 fn same_account(owner_segment: &str, user_name: &str) -> bool {
-    owner_segment == user_name
+    owner_segment.eq_ignore_ascii_case(user_name)
         || owner_segment
-            .strip_prefix(user_name)
+            .get(..user_name.len())
+            .filter(|prefix| prefix.eq_ignore_ascii_case(user_name))
+            .and_then(|_| owner_segment.get(user_name.len()..))
             .is_some_and(|rest| rest.starts_with('_'))
+}
+
+/// WeChat 4.x stores the local account as `rowid = 1` with the literal
+/// username `weixin` (or an equivalent self alias), while the evidence path
+/// still contains the account's wxid. Keep the rowid check narrow so a
+/// malformed Name2Id table cannot turn an arbitrary contact into an outgoing
+/// message.
+fn is_owner_sender(owner_wxid: &str, sender_id: i64, sender_name: &str) -> bool {
+    same_account(owner_wxid, sender_name) || (sender_id == 1 && is_self_alias(sender_name))
+}
+
+fn is_self_alias(sender_name: &str) -> bool {
+    matches!(
+        sender_name.trim().to_ascii_lowercase().as_str(),
+        "weixin" | "self" | "me"
+    )
 }
 
 /// Parse every `Msg_<md5>` table into WeChatMessage artifacts plus one
@@ -117,9 +136,14 @@ fn parse_msg_table(
     cap: &mut CapGuard,
 ) -> Result<usize, String> {
     let escaped = table.replace('"', "\"\"");
+    let source = optional_column(db, table, "source", "NULL")?;
+    let source_ct = optional_column(db, table, "WCDB_CT_source", "NULL")?;
+    let compressed_content = optional_column(db, table, "compress_content", "NULL")?;
+    let packed_info = optional_column(db, table, "packed_info_data", "NULL")?;
     let sql = format!(
         "SELECT local_id, server_id, local_type, real_sender_id, create_time, \
-         message_content, WCDB_CT_message_content FROM \"{escaped}\" ORDER BY local_id"
+         message_content, WCDB_CT_message_content, {source}, {source_ct}, \
+         {compressed_content}, {packed_info} FROM \"{escaped}\" ORDER BY local_id"
     );
     let mut stmt = db
         .conn()
@@ -135,6 +159,10 @@ fn parse_msg_table(
                 row.get::<_, i64>(4).unwrap_or_default(),
                 row.get::<_, SqlValue>(5).unwrap_or(SqlValue::Null),
                 row.get::<_, Option<i64>>(6).unwrap_or_default(),
+                row.get::<_, SqlValue>(7).unwrap_or(SqlValue::Null),
+                row.get::<_, Option<i64>>(8).unwrap_or_default(),
+                row.get::<_, SqlValue>(9).unwrap_or(SqlValue::Null),
+                row.get::<_, SqlValue>(10).unwrap_or(SqlValue::Null),
             ))
         })
         .map_err(|error| format!("{table} query failed: {error}"))?;
@@ -142,13 +170,24 @@ fn parse_msg_table(
     let mut emitted = 0usize;
     let mut decode_warned = false;
     for row in rows {
-        let (local_id, server_id, local_type, sender_id, create_time, content, ct) =
-            row.map_err(|error| format!("{table} row failed: {error}"))?;
+        let (
+            local_id,
+            server_id,
+            local_type,
+            sender_id,
+            create_time,
+            content,
+            ct,
+            source,
+            source_ct,
+            compressed_content,
+            packed_info,
+        ) = row.map_err(|error| format!("{table} row failed: {error}"))?;
         if !cap.allow("WeChatMessage", payload) {
             break;
         }
         let compressed = ct.unwrap_or(0) != 0;
-        let decoded = decode_content(content, compressed);
+        let decoded = decode_message_content(content, compressed_content, compressed);
         let text = match decoded {
             Content::Text(text) => Some(text),
             Content::Undecodable => {
@@ -161,6 +200,8 @@ fn parse_msg_table(
                 None
             }
         };
+        let source_text = decode_auxiliary(source, source_ct.unwrap_or(0) != 0);
+        let packed_text = decode_packed_info(packed_info);
 
         let mut attrs = new_attrs();
         attrs.insert("talkerTable".to_string(), Value::String(table.to_string()));
@@ -182,19 +223,46 @@ fn parse_msg_table(
         }
         if let Some(sender_name) = name2id.get(&sender_id) {
             attrs.insert(
+                "senderUsername".to_string(),
+                Value::String(sender_name.clone()),
+            );
+            attrs.insert(
                 "isSend".to_string(),
-                Value::Bool(same_account(owner_wxid, sender_name)),
+                Value::Bool(is_owner_sender(owner_wxid, sender_id, sender_name)),
             );
         }
         attrs.insert("zstdCompressed".to_string(), Value::Bool(compressed));
         let mut summary_text = String::new();
         if let Some(text) = text {
-            let (truncated, was_truncated) = truncate_text(&text);
-            attrs.insert("contentText".to_string(), Value::String(truncated.clone()));
-            if was_truncated {
-                attrs.insert("contentTruncated".to_string(), Value::Bool(true));
+            attrs.insert("contentText".to_string(), Value::String(text.clone()));
+            rich_message::enrich(local_type, &text, &mut attrs);
+            summary_text = display_text(&attrs, &text).chars().take(60).collect();
+        }
+        if let Some(source) = source_text {
+            attrs.insert("sourceContent".to_string(), Value::String(source.clone()));
+            rich_message::enrich_source(&source, &mut attrs);
+        }
+        if let Some(packed) = packed_text {
+            attrs.insert("packedInfoText".to_string(), Value::String(packed.clone()));
+            rich_message::enrich_packed_info(&packed, &mut attrs);
+        }
+        if !attrs.contains_key("senderUsername") {
+            if let Some(Value::String(sender)) = attrs.get("sourceUsername").cloned() {
+                attrs.insert("senderUsername".to_string(), Value::String(sender.clone()));
+                attrs.insert(
+                    "isSend".to_string(),
+                    Value::Bool(same_account(owner_wxid, &sender) || is_self_alias(&sender)),
+                );
             }
-            summary_text = truncated.chars().take(60).collect();
+        }
+        if summary_text.is_empty() {
+            summary_text = attrs
+                .get("sourceXmlText")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .chars()
+                .take(60)
+                .collect();
         }
 
         let label = local_type_label(local_type).unwrap_or("未知类型");
@@ -222,6 +290,28 @@ fn parse_msg_table(
     Ok(emitted)
 }
 
+fn optional_column(
+    db: &WeChatDb,
+    table: &str,
+    column: &str,
+    fallback: &str,
+) -> Result<String, String> {
+    db.column_exists(table, column).map(|present| {
+        if present {
+            format!("\"{}\"", column.replace('"', "\"\""))
+        } else {
+            fallback.to_string()
+        }
+    })
+}
+
+fn display_text<'a>(attrs: &'a serde_json::Map<String, Value>, fallback: &'a str) -> &'a str {
+    attrs
+        .get("xmlText")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback)
+}
+
 enum Content {
     Text(String),
     Undecodable,
@@ -244,6 +334,52 @@ fn decode_content(content: SqlValue, compressed: bool) -> Content {
     }
 }
 
+fn decode_message_content(
+    content: SqlValue,
+    compressed_content: SqlValue,
+    compressed: bool,
+) -> Content {
+    match decode_content(content, compressed) {
+        Content::Text(text) if !text.trim().is_empty() => Content::Text(text),
+        primary => decode_fallback_content(compressed_content).unwrap_or(primary),
+    }
+}
+
+fn decode_fallback_content(content: SqlValue) -> Option<Content> {
+    let bytes = value_bytes(content)?;
+    if bytes.is_empty() {
+        return None;
+    }
+    let decoded = zstd::decode_all(bytes.as_slice()).ok().unwrap_or(bytes);
+    Some(Content::Text(
+        String::from_utf8_lossy(&decoded).into_owned(),
+    ))
+}
+
+fn decode_auxiliary(content: SqlValue, compressed: bool) -> Option<String> {
+    match decode_content(content, compressed) {
+        Content::Text(text) if !text.trim().is_empty() => Some(text),
+        _ => None,
+    }
+}
+
+fn decode_packed_info(content: SqlValue) -> Option<String> {
+    let bytes = value_bytes(content)?;
+    let decoded = zstd::decode_all(bytes.as_slice()).ok().unwrap_or(bytes);
+    let text = String::from_utf8_lossy(&decoded);
+    let start = text.find('<')?;
+    let end = text.rfind('>').map(|index| index + 1).unwrap_or(text.len());
+    Some(text[start..end].to_string())
+}
+
+fn value_bytes(content: SqlValue) -> Option<Vec<u8>> {
+    match content {
+        SqlValue::Text(text) => Some(text.into_bytes()),
+        SqlValue::Blob(bytes) => Some(bytes),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,6 +390,14 @@ mod tests {
         assert!(same_account("wxid_abc22", "wxid_abc22"));
         assert!(!same_account("wxid_abc22", "wxid_abc23"));
         assert!(!same_account("wxid_abc22", "wxid_abc"));
+    }
+
+    #[test]
+    fn rowid_one_weixin_is_owner_fallback() {
+        assert!(is_owner_sender("wxid_owner22_eef8", 1, "weixin"));
+        assert!(is_owner_sender("wxid_owner22_eef8", 1, "WEIXIN"));
+        assert!(!is_owner_sender("wxid_owner22_eef8", 2, "weixin"));
+        assert!(!is_owner_sender("wxid_owner22_eef8", 1, "friend_wxid"));
     }
 
     #[test]

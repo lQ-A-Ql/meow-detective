@@ -7,7 +7,7 @@
 
 use super::{ExtractionOutcome, PluginExtractFailure};
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
-use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
+use artifacts_core::{ArtifactCompanion, ArtifactContext, ArtifactExtractor, VecSink};
 
 pub(super) struct PluginCandidateOutcome {
     pub(super) outcome: ExtractionOutcome,
@@ -21,6 +21,7 @@ pub(super) struct PluginCandidateOutcome {
 pub(super) fn extract_plugin_candidate(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
+    companions: &[ArtifactCompanion],
     plugins: &[&dyn ArtifactExtractor],
 ) -> PluginCandidateOutcome {
     let normalized = normalize_evidence_path(&candidate.path);
@@ -36,7 +37,7 @@ pub(super) fn extract_plugin_candidate(
             reader: Box::new(std::io::Cursor::new(bytes.to_vec())),
         };
         let mut sink = VecSink::new();
-        match plugin.run(ctx, &mut sink) {
+        match plugin.run_with_companions(ctx, companions, &mut sink) {
             Ok(report) => {
                 outcome.artifacts.extend(sink.artifacts);
                 outcome.timeline_events.extend(sink.timeline_events);

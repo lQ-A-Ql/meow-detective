@@ -62,7 +62,7 @@ pub use analysis::{
     ShimCacheEntryDto, ShutdownTimeDto, SupportMaturityDto, SystemServiceDto, UsbDeviceHistoryDto,
     UserAssistEntryDto, V2GovernanceSnapshotDto, VerificationChainStatusDto,
     VerificationGuaranteeLevelDto, VerificationResultDto, WeChatKeyRecoveryResultDto,
-    WinlogonConfigDto,
+    WeChatRecoveredKeyDto, WinlogonConfigDto,
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};

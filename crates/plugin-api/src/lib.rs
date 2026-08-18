@@ -15,7 +15,8 @@ pub use consts::{
 };
 pub use guard::{error_response, guarded_action, guarded_extract};
 pub use types::{
-    MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse, MeowPluginInfo, MeowStatus,
+    MeowCompanionFile, MeowEvidencePlatform, MeowExtractRequest, MeowExtractResponse,
+    MeowPluginInfo, MeowStatus,
 };
 
 /// Signature of the plugin's metadata entry point.

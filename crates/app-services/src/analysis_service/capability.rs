@@ -11,6 +11,7 @@ const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 pub(crate) enum CandidateReadPolicy {
     RegistryPreload,
     Bounded(usize),
+    Full,
     LinuxPathAware,
 }
 
@@ -74,7 +75,7 @@ pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
         DataSourcePlatform::Windows,
         "应用插件",
         PLUGIN_CAPABILITY_KEY,
-        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+        CandidateReadPolicy::Full,
     ),
 ];
 
@@ -93,7 +94,7 @@ pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
         DataSourcePlatform::Linux,
         "应用插件",
         PLUGIN_CAPABILITY_KEY,
-        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+        CandidateReadPolicy::Full,
     ),
 ];
 

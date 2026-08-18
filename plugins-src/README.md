@@ -52,7 +52,7 @@ cargo build --manifest-path plugins-src/Cargo.toml --release
    error_message 是 NUL 结尾字符串（`CString::into_raw`），宿主按
    strlen+1 回传长度。两者都以"长度 == 容量"的缓冲分配，统一由
    `Vec::from_raw_parts(ptr, len, len)` 回收。
-3. **不得留存请求指针**：`MeowExtractRequest` 内的指针仅在调用期间有效。
+3. **不得留存请求指针**：`MeowExtractRequest` 及可选伴随文件数组内的指针仅在调用期间有效。
 
 ## crate-type 说明
 

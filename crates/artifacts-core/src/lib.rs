@@ -2,18 +2,15 @@ use chrono::Utc;
 use domain::{Artifact, ArtifactFamily, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::io;
 use uuid::Uuid;
+
+mod context;
+
+pub use context::{ArtifactCompanion, ArtifactContext};
 
 pub trait ArtifactSink {
     fn write_artifact(&mut self, artifact: Artifact);
     fn write_timeline_event(&mut self, event: TimelineEvent);
-}
-
-pub struct ArtifactContext {
-    pub file_id: FileEntryId,
-    pub file_path: String,
-    pub reader: Box<dyn io::Read>,
 }
 
 pub struct ExtractorReport {
@@ -35,6 +32,14 @@ pub trait ArtifactExtractor: Send + Sync {
         ctx: ArtifactContext,
         sink: &mut dyn ArtifactSink,
     ) -> Result<ExtractorReport, String>;
+    fn run_with_companions(
+        &self,
+        ctx: ArtifactContext,
+        _companions: &[ArtifactCompanion],
+        sink: &mut dyn ArtifactSink,
+    ) -> Result<ExtractorReport, String> {
+        self.run(ctx, sink)
+    }
 }
 
 pub struct VecSink {

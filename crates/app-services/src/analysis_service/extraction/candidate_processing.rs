@@ -2,7 +2,7 @@ use super::browser::extract_browser_candidate;
 use super::browser_preload::BrowserPreloadContext;
 use super::email::extract_email_candidate;
 use super::linux::{
-    extract_linux_candidate_with_time, linux_candidate_read_limit, linux_candidate_support,
+    extract_linux_candidate_with_time, linux_candidate_support,
     unsupported_linux_candidate_outcome, LinuxLogTimeContext,
 };
 use super::linux_sections::LinuxCandidateSupport;
@@ -28,7 +28,7 @@ use crate::analysis_service::capability::{
     AnalysisCapability, CandidateReadPolicy, LINUX_UMBRELLA_KEY, PLUGIN_CAPABILITY_KEY,
 };
 use crate::analysis_service::error::AnalysisServiceError;
-use artifacts_core::ArtifactExtractor;
+use artifacts_core::{ArtifactCompanion, ArtifactExtractor};
 use persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -146,7 +146,7 @@ where
         work_items,
         policy,
         &mut coordinator,
-        estimated_input_weight,
+        source_preparation::estimated_input_weight,
         prepare_candidate,
         |prepared| {
             parse_candidate(
@@ -199,6 +199,10 @@ struct PreparedCandidate {
 enum PreparedCandidateInput {
     Registry,
     Bytes(Vec<u8>),
+    Plugin {
+        primary: Vec<u8>,
+        companions: Vec<ArtifactCompanion>,
+    },
 }
 
 struct CandidateCompletion {
@@ -218,17 +222,6 @@ enum CandidateCompletionKind {
     ReplayComplete(CompleteAnalysisCandidateScan),
     ExistingV1,
     Cancelled,
-}
-
-fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
-    if item.capability.read_policy == CandidateReadPolicy::RegistryPreload
-        || item.candidate.encrypted
-        || is_unsupported_linux_candidate(&item.candidate)
-    {
-        return 0;
-    }
-    let read_limit = candidate_read_limit(&item.candidate, item.capability);
-    usize::try_from(item.candidate.size.min(read_limit as u64)).unwrap_or(read_limit)
 }
 
 fn prepare_candidate<F>(
@@ -319,10 +312,17 @@ fn parse_candidate(
                     candidate.path
                 )),
             },
-            PreparedCandidateInput::Bytes(bytes) if capability.key == PLUGIN_CAPABILITY_KEY => {
+            PreparedCandidateInput::Bytes(_) if capability.key == PLUGIN_CAPABILITY_KEY => {
+                unreachable!("plugin candidates use PreparedCandidateInput::Plugin")
+            }
+            PreparedCandidateInput::Plugin {
+                primary,
+                companions,
+            } => {
                 // Plugins that only know the host wall clock mark their events;
                 // convert them with the resolved host timezone before merge.
-                let mut plugin_outcome = extract_plugin_candidate(&candidate, &bytes, plugins);
+                let mut plugin_outcome =
+                    extract_plugin_candidate(&candidate, &primary, &companions, plugins);
                 linux_log_time
                     .convert_marked_local_events(&mut plugin_outcome.outcome.timeline_events);
                 CandidateCompletionKind::Plugin(plugin_outcome)
@@ -456,16 +456,6 @@ fn progress_result(outcome: &ExtractionOutcome, checkpoint_hit: bool) -> Candida
         timeline_event_count: outcome.timeline_events.len() as u64,
         warning: !outcome.warnings.is_empty(),
         checkpoint_hit,
-    }
-}
-
-fn candidate_read_limit(candidate: &EvidenceCandidate, capability: AnalysisCapability) -> usize {
-    match capability.read_policy {
-        CandidateReadPolicy::Bounded(limit) => limit,
-        CandidateReadPolicy::LinuxPathAware => {
-            linux_candidate_read_limit(&normalize_evidence_path(&candidate.path))
-        }
-        CandidateReadPolicy::RegistryPreload => 0,
     }
 }
 

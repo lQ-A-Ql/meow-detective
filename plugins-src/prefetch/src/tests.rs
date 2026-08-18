@@ -47,6 +47,8 @@ fn request_for(data: &[u8]) -> (CString, CString, MeowExtractRequest) {
         file_id: id.as_ptr().cast(),
         data: data.as_ptr(),
         data_len: data.len() as u64,
+        companions: std::ptr::null(),
+        companion_count: 0,
     };
     (path, id, request)
 }
@@ -110,6 +112,8 @@ fn panic_inside_extract_is_self_caught() {
         file_id: std::ptr::null(),
         data: std::ptr::null(),
         data_len: 0,
+        companions: std::ptr::null(),
+        companion_count: 0,
     };
     let response = unsafe { guarded_extract(&request, |_| panic!("boom")) };
     assert_eq!(response.status, MeowStatus::InternalError);
@@ -133,6 +137,8 @@ fn null_request_and_null_data_fail_closed() {
         file_id: id.as_ptr().cast(),
         data: std::ptr::null(),
         data_len: 16,
+        companions: std::ptr::null(),
+        companion_count: 0,
     };
     let response = unsafe { meow_plugin_extract(&request) };
     assert_eq!(response.status, MeowStatus::InternalError);
