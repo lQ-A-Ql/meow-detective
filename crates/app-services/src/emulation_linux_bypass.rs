@@ -19,7 +19,9 @@ use rewrite::{apply_rewrite_plan, plan_shadow_rewrite, validate_rewrite_plan};
 use volume::{open_linux_partition, LinuxPartition};
 
 const SHADOW_PATH: &str = "etc/shadow";
+const PASSWD_PATH: &str = "etc/passwd";
 const MAX_SHADOW_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_PASSWD_BYTES: u64 = 8 * 1024 * 1024;
 pub const LINUX_BYPASS_PASSWORD: &str = "123456";
 const SHA512_PASSWORD_HASH: &str = "$6$meow1234$Ece2JtWkjNGCiGYoIvqBZ8teI2U1Lmd73FwcHlczR6zRf0q8ET2EdwZ6ZaEz0WZ196VlNUTZk240LtfFdViux1";
 const SHA256_PASSWORD_HASH: &str = "$5$meow1234$qQo/HTqGwuXnYwUW/4dOt0XW4nIwccjEttTNDrymHn2";
@@ -41,14 +43,21 @@ pub fn list_linux_accounts(
 ) -> Result<Vec<EmulationLinuxAccountDto>, EmulationBypassError> {
     let partition = open_linux_partition(case_context, partition_index, None)?;
     let shadow = read_shadow(&partition)?;
-    Ok(artifacts_linux::parse_shadow_accounts(&shadow)
+    let passwd = read_passwd(&partition).ok();
+    let mut accounts = artifacts_linux::parse_shadow_accounts(&shadow)
         .into_iter()
         .map(|account| EmulationLinuxAccountDto {
             username: account.username,
             has_password: account.has_password,
             locked: account.locked,
         })
-        .collect())
+        .collect::<Vec<_>>();
+    // Put local interactive users before service accounts and root. The UI
+    // still requires an explicit investigator selection, but this ordering
+    // makes the account that can actually reach a display manager visible
+    // first on typical server images.
+    accounts.sort_by_key(|account| account_sort_key(&account.username, passwd.as_deref()));
+    Ok(accounts)
 }
 
 pub fn apply_linux_bypass(
@@ -65,6 +74,7 @@ pub fn apply_linux_bypass(
         .ok_or_else(|| {
             EmulationBypassError::Edit(format!("account {username} was not found in /etc/shadow"))
         })?;
+    validate_login_policy(&partition, &shadow, username)?;
     let result = |password_set, already_configured| EmulationLinuxBypassResultDto {
         session_id: String::new(),
         data_source_id: case_context.data_source_id.0.clone(),
@@ -141,23 +151,113 @@ fn replacement_password_hash(
 }
 
 fn read_shadow(partition: &LinuxPartition) -> Result<String, EmulationBypassError> {
+    read_bounded_file(partition, SHADOW_PATH, MAX_SHADOW_BYTES, "shadow")
+}
+
+fn read_passwd(partition: &LinuxPartition) -> Result<String, EmulationBypassError> {
+    read_bounded_file(partition, PASSWD_PATH, MAX_PASSWD_BYTES, "passwd")
+}
+
+fn read_bounded_file(
+    partition: &LinuxPartition,
+    path: &str,
+    maximum: u64,
+    label: &str,
+) -> Result<String, EmulationBypassError> {
     let size = partition
         .fs
-        .file_size(SHADOW_PATH)
+        .file_size(path)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
-    if size > MAX_SHADOW_BYTES {
+    if size > maximum {
         return Err(EmulationBypassError::Unsupported(format!(
-            "shadow file declares {size} bytes, above the {MAX_SHADOW_BYTES}-byte sanity cap"
+            "{label} file declares {size} bytes, above the {maximum}-byte sanity cap"
         )));
     }
     let length = usize::try_from(size)
-        .map_err(|_| EmulationBypassError::Unsupported("shadow file is too large".into()))?;
+        .map_err(|_| EmulationBypassError::Unsupported(format!("{label} file is too large")))?;
     let bytes = partition
         .fs
-        .read_file_range(SHADOW_PATH, 0, length)
+        .read_file_range(path, 0, length)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
     String::from_utf8(bytes)
-        .map_err(|error| EmulationBypassError::Edit(format!("shadow is not UTF-8: {error}")))
+        .map_err(|error| EmulationBypassError::Edit(format!("{label} is not UTF-8: {error}")))
+}
+
+fn account_sort_key(username: &str, passwd: Option<&str>) -> (u8, u32, String) {
+    let Some(passwd) = passwd else {
+        return (2, u32::MAX, username.to_string());
+    };
+    let Some(account) = artifacts_linux::parse_passwd(passwd)
+        .ok()
+        .and_then(|accounts| {
+            accounts
+                .into_iter()
+                .find(|account| account.username == username)
+        })
+    else {
+        return (2, u32::MAX, username.to_string());
+    };
+    let interactive_shell = is_interactive_shell(&account.shell);
+    let rank = if interactive_shell && account.uid >= 1000 {
+        0
+    } else if interactive_shell && account.uid == 0 {
+        1
+    } else if interactive_shell {
+        2
+    } else {
+        3
+    };
+    (rank, account.uid, account.username)
+}
+
+fn is_interactive_shell(shell: &str) -> bool {
+    !matches!(
+        shell.trim(),
+        "" | "/bin/false" | "/usr/bin/false" | "/sbin/nologin" | "/usr/sbin/nologin"
+    )
+}
+
+fn validate_login_policy(
+    partition: &LinuxPartition,
+    shadow: &str,
+    username: &str,
+) -> Result<(), EmulationBypassError> {
+    if let Ok(passwd) = read_passwd(partition) {
+        if let Ok(accounts) = artifacts_linux::parse_passwd(&passwd) {
+            if let Some(account) = accounts
+                .into_iter()
+                .find(|account| account.username == username)
+            {
+                if !is_interactive_shell(&account.shell) {
+                    return Err(EmulationBypassError::Unsupported(format!(
+                        "account {username} uses a non-interactive shell and cannot log in through the guest login manager"
+                    )));
+                }
+            }
+        }
+    }
+    let Some(expire_days) = shadow_expiry_days(shadow, username) else {
+        return Ok(());
+    };
+    let now_days = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| EmulationBypassError::Unsupported("host clock is before UNIX epoch".into()))?
+        .as_secs()
+        / 86_400;
+    if expire_days != 0 && expire_days <= now_days {
+        return Err(EmulationBypassError::Unsupported(format!(
+            "account {username} is expired in /etc/shadow; password replacement cannot enable login"
+        )));
+    }
+    Ok(())
+}
+
+fn shadow_expiry_days(shadow: &str, username: &str) -> Option<u64> {
+    let line = shadow
+        .lines()
+        .find(|line| line.starts_with(&format!("{username}:")))?;
+    let fields = line.split(':').collect::<Vec<_>>();
+    fields.get(7)?.parse::<u64>().ok()
 }
 
 fn verify_shadow_write(

@@ -28,8 +28,13 @@ fn linux_shadow_bypass_with_direct_partition_registration() {
     let image_size = std::fs::metadata(&image).unwrap().len();
 
     let mut probe_reader = E01Reader::open(&image).unwrap();
-    let probe = app_services::datasource_service::detect_image_filesystem(&mut probe_reader)
+    let mut probe = app_services::datasource_service::detect_image_filesystem(&mut probe_reader)
         .expect("probe the image filesystems");
+    app_services::datasource_service::expand_lvm_pool_candidates(
+        &mut probe,
+        &image,
+        &DataSourceKind::E01,
+    );
     for partition in &probe.partitions {
         eprintln!(
             "probe P{} fs={:?} offset={} length={}",
@@ -39,10 +44,11 @@ fn linux_shadow_bypass_with_direct_partition_registration() {
     let target = probe
         .partitions
         .iter()
-        .find(|partition| {
+        .filter(|partition| {
             partition.filesystem
                 == Some(app_services::datasource_service::ImageFilesystemKind::Ext4)
         })
+        .max_by_key(|partition| partition.lvm_identity.is_some())
         .expect("the image must expose an ext4 partition")
         .clone();
 

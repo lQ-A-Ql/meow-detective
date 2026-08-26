@@ -62,9 +62,7 @@ impl Overlay {
         buffer: &mut [u8],
     ) -> Result<(), EmulationError> {
         self.ensure_usable()?;
-        if let Some(pointer) = self.index.get(&cluster_index) {
-            self.file.seek(SeekFrom::Start(pointer.data_offset))?;
-            self.file.read_exact(buffer)?;
+        if self.read_overlay_cluster(cluster_index, buffer)? {
             return Ok(());
         }
         buffer.fill(0);
@@ -81,6 +79,27 @@ impl Overlay {
             parent.read_exact_at(offset, &mut buffer[..available])?;
         }
         Ok(())
+    }
+
+    /// Read a cluster already present in the overlay without consulting the
+    /// parent image. The caller holds the disk state lock, so the index and
+    /// file cursor are accessed atomically with writes.
+    pub(crate) fn read_overlay_cluster(
+        &mut self,
+        cluster_index: u64,
+        buffer: &mut [u8],
+    ) -> Result<bool, EmulationError> {
+        self.ensure_usable()?;
+        let Some(pointer) = self.index.get(&cluster_index) else {
+            return Ok(false);
+        };
+        self.file.seek(SeekFrom::Start(pointer.data_offset))?;
+        self.file.read_exact(buffer)?;
+        Ok(true)
+    }
+
+    pub(crate) fn ensure_readable(&self) -> Result<(), EmulationError> {
+        self.ensure_usable()
     }
 
     pub(crate) fn commit_clusters(

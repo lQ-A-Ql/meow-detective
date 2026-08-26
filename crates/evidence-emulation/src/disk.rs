@@ -69,10 +69,6 @@ impl CowDisk {
 
     pub fn read_exact_at(&self, offset: u64, buffer: &mut [u8]) -> Result<(), EmulationError> {
         validate_range(offset, buffer.len(), self.len())?;
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| EmulationError::LockPoisoned)?;
         let cluster_size = self.config.cluster_size as usize;
         let mut cluster = vec![0u8; cluster_size];
         let mut copied = 0usize;
@@ -80,10 +76,45 @@ impl CowDisk {
             let position = offset + copied as u64;
             let cluster_index = position / self.config.cluster_size as u64;
             let intra = (position % self.config.cluster_size as u64) as usize;
-            if !state.cache.copy_to(cluster_index, &mut cluster) {
-                state
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| EmulationError::LockPoisoned)?;
+            state.overlay.ensure_readable()?;
+            let cached = state.cache.copy_to(cluster_index, &mut cluster);
+            let overlay_hit = !cached
+                && state
                     .overlay
-                    .read_cluster(&self.parent, cluster_index, &mut cluster)?;
+                    .read_overlay_cluster(cluster_index, &mut cluster)?;
+            if !cached && !overlay_hit {
+                // Parent I/O and E01 decompression must not block writers or
+                // unrelated VM reads that only need the overlay state.
+                drop(state);
+                read_parent_cluster(
+                    &self.parent,
+                    self.len(),
+                    self.config.cluster_size,
+                    cluster_index,
+                    &mut cluster,
+                )?;
+                state = self
+                    .state
+                    .lock()
+                    .map_err(|_| EmulationError::LockPoisoned)?;
+                state.overlay.ensure_readable()?;
+                // A concurrent write may have committed while the parent was
+                // being read. Prefer that newer overlay data over the stale
+                // parent result, then cache whichever view is authoritative.
+                if state.cache.copy_to(cluster_index, &mut cluster)
+                    || state
+                        .overlay
+                        .read_overlay_cluster(cluster_index, &mut cluster)?
+                {
+                    // The cluster was populated by the cache or overlay.
+                } else {
+                    state.cache.insert(cluster_index, &cluster);
+                }
+            } else if overlay_hit {
                 state.cache.insert(cluster_index, &cluster);
             }
             let count = (cluster_size - intra).min(buffer.len() - copied);
@@ -164,6 +195,24 @@ impl CowDisk {
             state.cache.clear();
         }
     }
+}
+
+fn read_parent_cluster(
+    parent: &Arc<dyn BlockProvider>,
+    disk_length: u64,
+    cluster_size: u32,
+    cluster_index: u64,
+    buffer: &mut [u8],
+) -> Result<(), EmulationError> {
+    buffer.fill(0);
+    let offset = cluster_index
+        .checked_mul(u64::from(cluster_size))
+        .ok_or(EmulationError::ArithmeticOverflow)?;
+    let available = disk_length.saturating_sub(offset).min(buffer.len() as u64) as usize;
+    if available != 0 {
+        parent.read_exact_at(offset, &mut buffer[..available])?;
+    }
+    Ok(())
 }
 
 fn validate_config(

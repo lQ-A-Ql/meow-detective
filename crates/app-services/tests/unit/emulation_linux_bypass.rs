@@ -99,6 +99,32 @@ fn replacement_hash_rejects_locked_accounts_without_a_retained_scheme() {
 }
 
 #[test]
+fn login_policy_rejects_non_interactive_shells() {
+    assert!(is_interactive_shell("/bin/bash"));
+    assert!(is_interactive_shell("/usr/bin/zsh"));
+    assert!(!is_interactive_shell("/sbin/nologin"));
+    assert!(!is_interactive_shell("/usr/sbin/nologin"));
+    assert!(!is_interactive_shell("/bin/false"));
+    assert!(!is_interactive_shell(""));
+}
+
+#[test]
+fn shadow_expiry_field_is_read_without_treating_zero_as_expired() {
+    let active = "user:$6$hash:20000:0:99999:7::0:\n";
+    assert_eq!(shadow_expiry_days(active, "user"), Some(0));
+    let expired = "user:$6$hash:20000:0:99999:7::1:\n";
+    assert_eq!(shadow_expiry_days(expired, "user"), Some(1));
+    assert_eq!(shadow_expiry_days(active, "missing"), None);
+}
+
+#[test]
+fn account_sort_key_prefers_interactive_local_users() {
+    let passwd = "root:x:0:0:root:/root:/bin/bash\nsvc:x:998:998:svc:/var/lib/svc:/usr/sbin/nologin\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n";
+    assert!(account_sort_key("alice", Some(passwd)) < account_sort_key("root", Some(passwd)));
+    assert!(account_sort_key("root", Some(passwd)) < account_sort_key("svc", Some(passwd)));
+}
+
+#[test]
 fn extent_map_reports_physical_layout_of_shadow() {
     let temp = tempfile::TempDir::new().unwrap();
     let image_path = temp.path().join("linux.raw");

@@ -1,5 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use evidence_block::{BlockDeviceError, BlockProvider};
 use evidence_emulation::{
@@ -33,6 +35,30 @@ impl BlockProvider for MemoryProvider {
 struct CountingProvider {
     bytes: Vec<u8>,
     reads: Arc<AtomicU64>,
+}
+
+struct GateProvider {
+    bytes: Vec<u8>,
+    started: Mutex<Option<mpsc::Sender<()>>>,
+    release: Arc<AtomicBool>,
+}
+
+impl BlockProvider for GateProvider {
+    fn len(&self) -> u64 {
+        self.bytes.len() as u64
+    }
+
+    fn read_exact_at(&self, offset: u64, buffer: &mut [u8]) -> Result<(), BlockDeviceError> {
+        if let Some(sender) = self.started.lock().unwrap().take() {
+            let _ = sender.send(());
+        }
+        while !self.release.load(Ordering::Acquire) {
+            thread::yield_now();
+        }
+        let start = offset as usize;
+        buffer.copy_from_slice(&self.bytes[start..start + buffer.len()]);
+        Ok(())
+    }
 }
 
 impl BlockProvider for CountingProvider {
@@ -106,6 +132,52 @@ fn cow_disk_cluster_cache_serves_repeated_reads_and_tracks_writes() {
     disk.read_exact_at(1024, &mut actual).unwrap();
     assert_eq!(actual, [0xa5; 512]);
     assert_eq!(reads.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn parent_read_does_not_hold_the_disk_lock_during_slow_io() {
+    let directory = tempdir().unwrap();
+    let release = Arc::new(AtomicBool::new(false));
+    let (started_tx, started_rx) = mpsc::channel();
+    let provider: Arc<dyn BlockProvider> = Arc::new(GateProvider {
+        bytes: vec![0x31; DISK_LENGTH],
+        started: Mutex::new(Some(started_tx)),
+        release: Arc::clone(&release),
+    });
+    let identity = ParentIdentity::new(provider.len(), [0x42; 32]).unwrap();
+    let disk = Arc::new(
+        CowDisk::create(
+            &directory.path().join("overlay.cow"),
+            provider,
+            identity,
+            CowDiskConfig {
+                cluster_size: 4096,
+                max_write_length: 64 * 1024,
+            },
+        )
+        .unwrap(),
+    );
+    let reader_disk = Arc::clone(&disk);
+    let reader = thread::spawn(move || {
+        let mut bytes = [0u8; 512];
+        reader_disk.read_exact_at(0, &mut bytes).unwrap();
+    });
+    started_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("parent read should start");
+
+    let writer_disk = Arc::clone(&disk);
+    let (writer_done_tx, writer_done_rx) = mpsc::channel();
+    let writer = thread::spawn(move || {
+        writer_disk.write_all_at(4096, &[0xa5; 4096]).unwrap();
+        writer_done_tx.send(()).unwrap();
+    });
+    writer_done_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("full-cluster overlay write must not wait for parent I/O");
+    release.store(true, Ordering::Release);
+    reader.join().unwrap();
+    writer.join().unwrap();
 }
 
 #[test]
