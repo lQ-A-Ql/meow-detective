@@ -1,4 +1,4 @@
-use super::{encode_hex, EmulationProvenance, SessionWorkspace};
+use super::{encode_hex, EmulationProvenance, ProvenanceGuest, ProvenanceIds, SessionWorkspace};
 
 #[test]
 fn session_workspace_contains_only_derived_paths() {
@@ -22,6 +22,33 @@ fn session_workspace_contains_only_derived_paths() {
 fn provenance_hex_encoding_is_lowercase_and_exact() {
     assert_eq!(encode_hex(&[0x00, 0xab, 0xff]), "00abff");
     let _ = std::mem::size_of::<EmulationProvenance<'_>>();
+}
+
+#[test]
+fn provenance_records_the_selected_disk_adapter_and_reason() {
+    let identity = evidence_emulation::ParentIdentity::new(512, [0xabu8; 32]).unwrap();
+    let value = EmulationProvenance::new(
+        ProvenanceIds {
+            session_id: "session",
+            case_id: "case",
+            data_source_id: "source",
+        },
+        &identity,
+        ProvenanceGuest {
+            firmware: evidence_emulation::VmwareFirmware::Efi,
+            options: evidence_emulation::VmOptions::default(),
+            disk_adapter: evidence_emulation::VmdkAdapter::Ide,
+            disk_adapter_reason: "initramfs contains ata_piix; selected IDE",
+            maintenance_media: false,
+        },
+        None,
+    );
+    let json = serde_json::to_value(value).unwrap();
+    assert_eq!(json["diskAdapter"], "ide");
+    assert_eq!(
+        json["diskAdapterReason"],
+        "initramfs contains ata_piix; selected IDE"
+    );
 }
 
 #[test]

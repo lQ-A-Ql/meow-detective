@@ -177,8 +177,10 @@ dependencies = [
  "volume-bitlocker",
  "windows-sys 0.61.2",
  "winpe-maintenance",
+ "xz2",
  "zeroize",
  "zip",
+ "zstd",
 ]
 
 [[package]]

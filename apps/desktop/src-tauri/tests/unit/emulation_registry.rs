@@ -130,6 +130,7 @@ fn real_e01_mount_uses_a_descriptor_and_sparse_cow_without_materializing_the_dis
             firmware: super::detect_firmware(&disk).unwrap(),
             guest_os: "windows9-64",
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
+            disk_adapter_reason: "test",
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,
@@ -222,6 +223,7 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
             firmware: super::detect_firmware(&disk).unwrap(),
             guest_os: "windows9-64",
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
+            disk_adapter_reason: "test",
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,

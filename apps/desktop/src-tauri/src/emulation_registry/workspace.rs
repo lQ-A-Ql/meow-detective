@@ -160,6 +160,8 @@ pub(super) struct EmulationProvenance<'a> {
     guest_time_sync: bool,
     guest_processor_count: u8,
     guest_memory_mib: u32,
+    disk_adapter: &'static str,
+    disk_adapter_reason: &'a str,
     maintenance_media: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     recovery_media: Option<RecoveryMediaProvenance<'a>>,
@@ -180,13 +182,20 @@ pub(super) struct ProvenanceIds<'a> {
     pub data_source_id: &'a str,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ProvenanceGuest<'a> {
+    pub firmware: VmwareFirmware,
+    pub options: VmOptions,
+    pub disk_adapter: evidence_emulation::VmdkAdapter,
+    pub disk_adapter_reason: &'a str,
+    pub maintenance_media: bool,
+}
+
 impl<'a> EmulationProvenance<'a> {
     pub(super) fn new(
         ids: ProvenanceIds<'a>,
         identity: &ParentIdentity,
-        firmware: VmwareFirmware,
-        options: VmOptions,
-        maintenance_media: bool,
+        guest: ProvenanceGuest<'a>,
         recovery_media: Option<RecoveryMediaProvenance<'a>>,
     ) -> Self {
         Self {
@@ -196,23 +205,28 @@ impl<'a> EmulationProvenance<'a> {
             data_source_id: ids.data_source_id,
             parent_sha256: encode_hex(identity.sha256()),
             logical_length: identity.logical_length(),
-            firmware: match firmware {
+            firmware: match guest.firmware {
                 VmwareFirmware::Bios => "bios",
                 VmwareFirmware::Efi => "efi",
             },
             created_at: chrono::Utc::now().to_rfc3339(),
             evidence_access: "read-only-parent-with-application-cow",
-            guest_network: match options.network_mode {
+            guest_network: match guest.options.network_mode {
                 evidence_emulation::VmNetworkMode::Off => "disabled",
                 evidence_emulation::VmNetworkMode::HostOnly => "host-only",
                 evidence_emulation::VmNetworkMode::Nat => "nat",
                 evidence_emulation::VmNetworkMode::Bridged => "bridged",
             },
-            guest_clipboard: options.clipboard,
-            guest_time_sync: options.time_sync,
-            guest_processor_count: options.processor_count,
-            guest_memory_mib: options.memory_mib,
-            maintenance_media,
+            guest_clipboard: guest.options.clipboard,
+            guest_time_sync: guest.options.time_sync,
+            guest_processor_count: guest.options.processor_count,
+            guest_memory_mib: guest.options.memory_mib,
+            disk_adapter: match guest.disk_adapter {
+                evidence_emulation::VmdkAdapter::Ide => "ide",
+                evidence_emulation::VmdkAdapter::LsiLogic => "lsilogic",
+            },
+            disk_adapter_reason: guest.disk_adapter_reason,
+            maintenance_media: guest.maintenance_media,
             recovery_media,
         }
     }

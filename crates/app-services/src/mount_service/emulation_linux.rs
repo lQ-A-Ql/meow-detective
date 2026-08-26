@@ -19,6 +19,7 @@ use rusqlite::Connection;
 use transport::dto::{EmulationInstallDto, EmulationInstallPlatformDto};
 
 use super::emulation::EvidenceContext;
+use super::emulation_linux_controller::LinuxControllerEvidence;
 use super::MountServiceError;
 use crate::datasource_service::open_evidence_reader;
 
@@ -386,8 +387,10 @@ pub fn linux_guest_profile(
         source_path: std::path::PathBuf::from(source_path),
         kind: source_kind,
     };
-    // Read the distro id from the first Linux-formatted partition that has it.
+    // Read the distro id and initramfs controller evidence from Linux
+    // filesystems. A dedicated /boot partition is included in this scan.
     let mut distro_id = None;
+    let mut controller_evidence = LinuxControllerEvidence::default();
     for record in &all_partitions {
         let Some(fs_label) = record.filesystem.as_deref() else {
             continue;
@@ -398,25 +401,41 @@ pub fn linux_guest_profile(
         let Some(fs) = open_linux_fs(&context, record) else {
             continue;
         };
-        for path in ["etc/os-release", "usr/lib/os-release"] {
-            if let Ok(content) = fs.read_file_range(path, 0, 64 * 1024) {
-                distro_id = parse_os_release_id(&content);
-                if distro_id.is_some() {
-                    break;
+        let current_evidence = super::emulation_linux_controller::inspect_filesystem(fs.as_ref());
+        controller_evidence.ide |= current_evidence.ide;
+        controller_evidence.lsi |= current_evidence.lsi;
+        controller_evidence.candidates = controller_evidence
+            .candidates
+            .saturating_add(current_evidence.candidates);
+        controller_evidence.decoded = controller_evidence
+            .decoded
+            .saturating_add(current_evidence.decoded);
+        controller_evidence.unreadable = controller_evidence
+            .unreadable
+            .saturating_add(current_evidence.unreadable);
+        if distro_id.is_none() {
+            for path in ["etc/os-release", "usr/lib/os-release"] {
+                if let Ok(content) = fs.read_file_range(path, 0, 64 * 1024) {
+                    distro_id = parse_os_release_id(&content);
+                    if distro_id.is_some() {
+                        break;
+                    }
                 }
             }
         }
-        if distro_id.is_some() {
-            break;
-        }
     }
+    let controller = controller_evidence.decision();
     Ok(LinuxGuestProfile {
         guest_os: linux_guest_os_id(distro_id.as_deref()).to_string(),
+        disk_adapter: controller.adapter,
+        disk_adapter_reason: controller.reason.to_string(),
     })
 }
 
 pub struct LinuxGuestProfile {
     pub guest_os: String,
+    pub disk_adapter: evidence_emulation::VmdkAdapter,
+    pub disk_adapter_reason: String,
 }
 
 #[cfg(test)]

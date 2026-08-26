@@ -128,7 +128,7 @@ impl EmulationRegistry {
             .transpose()
             .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
         let prepared = prepare_emulation_source(case_conn, data_source_id)?;
-        let (is_linux, guest_os, disk_adapter) =
+        let (is_linux, guest_os, disk_adapter, disk_adapter_reason) =
             guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
         let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
@@ -169,6 +169,7 @@ impl EmulationRegistry {
                 firmware,
                 guest_os: &guest_os,
                 disk_adapter,
+                disk_adapter_reason: &disk_adapter_reason,
             },
             ProvenanceIds {
                 session_id: &session_id,
@@ -322,16 +323,16 @@ impl EmulationRegistry {
     }
 }
 
-/// Pick the guest OS profile for the source: Linux guests boot LsiLogic
-/// with a distro-derived guestid; Windows keeps the inbox IDE path and the
-/// windows9-64 profile. The guestOS value is whitelist-checked again by
-/// `VmxConfig::with_guest_os`.
+/// Pick the guest OS profile for the source. Linux derives both the guestid
+/// and storage controller from the read-only initramfs probe; Windows keeps
+/// the inbox IDE path and the windows9-64 profile. The guestOS value is
+/// whitelist-checked again by `VmxConfig::with_guest_os`.
 fn guest_profile_for_source(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
-) -> Result<(bool, String, evidence_emulation::VmdkAdapter), EmulationRegistryError> {
+) -> Result<(bool, String, evidence_emulation::VmdkAdapter, String), EmulationRegistryError> {
     let is_linux =
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_conn)
             .find_storage(data_source_id)
@@ -348,13 +349,15 @@ fn guest_profile_for_source(
         Ok((
             true,
             profile.guest_os,
-            evidence_emulation::VmdkAdapter::LsiLogic,
+            profile.disk_adapter,
+            profile.disk_adapter_reason,
         ))
     } else {
         Ok((
             false,
             "windows9-64".to_string(),
             evidence_emulation::VmdkAdapter::Ide,
+            "Windows guest uses the inbox IDE controller".to_string(),
         ))
     }
 }

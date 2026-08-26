@@ -13,7 +13,7 @@ use evidence_emulation::{
 
 use super::recovery_media::RecoveryMedia;
 use super::workspace::{
-    EmulationProvenance, ProvenanceIds, RecoveryMediaProvenance, SessionWorkspace,
+    EmulationProvenance, ProvenanceGuest, ProvenanceIds, RecoveryMediaProvenance, SessionWorkspace,
 };
 use super::EmulationRegistryError;
 
@@ -211,6 +211,7 @@ pub(super) struct MachineSpec<'a> {
     pub firmware: VmwareFirmware,
     pub guest_os: &'a str,
     pub disk_adapter: VmdkAdapter,
+    pub disk_adapter_reason: &'a str,
 }
 
 pub(super) fn prepare_machine_materials(
@@ -222,9 +223,9 @@ pub(super) fn prepare_machine_materials(
     options: VmOptions,
     maintenance: Option<&MaintenancePayload>,
 ) -> Result<(), EmulationRegistryError> {
-    // Windows and the user-selected PE boot from the inbox IDE path; Linux
-    // guests get LsiLogic (the driver ships in the kernel and mainstream
-    // initramfs images). The caller picks the adapter per platform.
+    // The caller picks the adapter from the guest profile. This is important
+    // for Linux images whose initramfs only carries ata_piix or only carries
+    // the VMware/LSI SCSI modules.
     let disk_adapter = spec.disk_adapter;
     let descriptor = VmdkDescriptor::new(identity, "mount/disk.raw", disk_adapter)?;
     let rendered = descriptor.render();
@@ -291,9 +292,13 @@ pub(super) fn prepare_machine_materials(
         .write_provenance(&EmulationProvenance::new(
             ids,
             identity,
-            spec.firmware,
-            options,
-            maintenance.is_some(),
+            ProvenanceGuest {
+                firmware: spec.firmware,
+                options,
+                disk_adapter,
+                disk_adapter_reason: spec.disk_adapter_reason,
+                maintenance_media: maintenance.is_some(),
+            },
             recovery_media.map(|media| RecoveryMediaProvenance {
                 file_name: media.file_name(),
                 length: media.length(),

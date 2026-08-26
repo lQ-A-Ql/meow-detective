@@ -115,7 +115,10 @@ fn linux_preflight_detects_installs_and_derives_the_guest_profile() {
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })
         .expect("derive the guest profile");
-    eprintln!("guest OS profile: {}", profile.guest_os);
+    eprintln!(
+        "guest OS profile: {} adapter={:?} reason={}",
+        profile.guest_os, profile.disk_adapter, profile.disk_adapter_reason
+    );
     assert!(
         evidence_emulation::GUEST_OS_WHITELIST.contains(&profile.guest_os.as_str()),
         "the derived guest OS must be renderable: {}",
