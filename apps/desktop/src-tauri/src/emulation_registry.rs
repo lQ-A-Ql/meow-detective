@@ -128,8 +128,7 @@ impl EmulationRegistry {
             .transpose()
             .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
         let prepared = prepare_emulation_source(case_conn, data_source_id)?;
-        let (is_linux, guest_os, disk_adapter, disk_adapter_reason) =
-            guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
+        let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
         let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
@@ -146,7 +145,7 @@ impl EmulationRegistry {
         // get the WinPE helper tool, Linux installs get the rescue CD with
         // TARGETS.JSON and the rescue README (no in-guest tool for Linux).
         let maintenance = if recovery_media.is_some() {
-            let payload = if is_linux {
+            let payload = if guest.is_linux {
                 materials::build_linux_rescue_payload(case_conn, case_root, case_id, data_source_id)
             } else {
                 build_maintenance_payload(case_conn, case_root, case_id, data_source_id)
@@ -167,9 +166,9 @@ impl EmulationRegistry {
             &identity,
             materials::MachineSpec {
                 firmware,
-                guest_os: &guest_os,
-                disk_adapter,
-                disk_adapter_reason: &disk_adapter_reason,
+                guest_os: &guest.guest_os,
+                disk_adapter: guest.disk_adapter,
+                disk_adapter_reason: &guest.disk_adapter_reason,
             },
             ProvenanceIds {
                 session_id: &session_id,
@@ -323,16 +322,22 @@ impl EmulationRegistry {
     }
 }
 
-/// Pick the guest OS profile for the source. Linux derives both the guestid
-/// and storage controller from the read-only initramfs probe; Windows keeps
-/// the inbox IDE path and the windows9-64 profile. The guestOS value is
-/// whitelist-checked again by `VmxConfig::with_guest_os`.
+/// Resolved VM identity and storage-controller policy for one source.
+struct GuestProfile {
+    is_linux: bool,
+    guest_os: String,
+    disk_adapter: evidence_emulation::VmdkAdapter,
+    disk_adapter_reason: String,
+}
+
+/// Linux derives both the guestid and storage controller from read-only
+/// evidence probes. Windows keeps the inbox IDE path and windows9-64 profile.
 fn guest_profile_for_source(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
-) -> Result<(bool, String, evidence_emulation::VmdkAdapter, String), EmulationRegistryError> {
+) -> Result<GuestProfile, EmulationRegistryError> {
     let is_linux =
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_conn)
             .find_storage(data_source_id)
@@ -346,19 +351,19 @@ fn guest_profile_for_source(
             case_id,
             data_source_id,
         )?;
-        Ok((
-            true,
-            profile.guest_os,
-            profile.disk_adapter,
-            profile.disk_adapter_reason,
-        ))
+        Ok(GuestProfile {
+            is_linux: true,
+            guest_os: profile.guest_os,
+            disk_adapter: profile.disk_adapter,
+            disk_adapter_reason: profile.disk_adapter_reason,
+        })
     } else {
-        Ok((
-            false,
-            "windows9-64".to_string(),
-            evidence_emulation::VmdkAdapter::Ide,
-            "Windows guest uses the inbox IDE controller".to_string(),
-        ))
+        Ok(GuestProfile {
+            is_linux: false,
+            guest_os: "windows9-64".to_string(),
+            disk_adapter: evidence_emulation::VmdkAdapter::Ide,
+            disk_adapter_reason: "Windows guest uses the inbox IDE controller".to_string(),
+        })
     }
 }
 

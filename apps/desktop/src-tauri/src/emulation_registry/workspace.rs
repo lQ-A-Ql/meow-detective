@@ -221,10 +221,7 @@ impl<'a> EmulationProvenance<'a> {
             guest_time_sync: guest.options.time_sync,
             guest_processor_count: guest.options.processor_count,
             guest_memory_mib: guest.options.memory_mib,
-            disk_adapter: match guest.disk_adapter {
-                evidence_emulation::VmdkAdapter::Ide => "ide",
-                evidence_emulation::VmdkAdapter::LsiLogic => "lsilogic",
-            },
+            disk_adapter: guest.disk_adapter.as_str(),
             disk_adapter_reason: guest.disk_adapter_reason,
             maintenance_media: guest.maintenance_media,
             recovery_media,

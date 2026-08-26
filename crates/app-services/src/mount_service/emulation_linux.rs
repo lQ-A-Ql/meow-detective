@@ -402,17 +402,7 @@ pub fn linux_guest_profile(
             continue;
         };
         let current_evidence = super::emulation_linux_controller::inspect_filesystem(fs.as_ref());
-        controller_evidence.ide |= current_evidence.ide;
-        controller_evidence.lsi |= current_evidence.lsi;
-        controller_evidence.candidates = controller_evidence
-            .candidates
-            .saturating_add(current_evidence.candidates);
-        controller_evidence.decoded = controller_evidence
-            .decoded
-            .saturating_add(current_evidence.decoded);
-        controller_evidence.unreadable = controller_evidence
-            .unreadable
-            .saturating_add(current_evidence.unreadable);
+        controller_evidence.merge(current_evidence);
         if distro_id.is_none() {
             for path in ["etc/os-release", "usr/lib/os-release"] {
                 if let Ok(content) = fs.read_file_range(path, 0, 64 * 1024) {
@@ -422,6 +412,9 @@ pub fn linux_guest_profile(
                     }
                 }
             }
+        }
+        if distro_id.is_some() && controller_evidence.ide_is_decisive() {
+            break;
         }
     }
     let controller = controller_evidence.decision();

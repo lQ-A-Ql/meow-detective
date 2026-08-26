@@ -17,7 +17,7 @@ pub enum VmdkAdapter {
 }
 
 impl VmdkAdapter {
-    fn descriptor_value(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Ide => "ide",
             Self::LsiLogic => "lsilogic",
@@ -93,12 +93,8 @@ impl VmdkDescriptor {
         )
         .expect("writing to a string cannot fail");
         writeln!(output, "# The Disk Data Base").expect("writing to a string cannot fail");
-        writeln!(
-            output,
-            "ddb.adapterType = \"{}\"",
-            self.adapter.descriptor_value()
-        )
-        .expect("writing to a string cannot fail");
+        writeln!(output, "ddb.adapterType = \"{}\"", self.adapter.as_str())
+            .expect("writing to a string cannot fail");
         writeln!(output, "ddb.geometry.cylinders = \"{cylinders}\"")
             .expect("writing to a string cannot fail");
         writeln!(output, "ddb.geometry.heads = \"{HEADS}\"")

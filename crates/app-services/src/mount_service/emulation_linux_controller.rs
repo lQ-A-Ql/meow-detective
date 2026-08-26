@@ -16,11 +16,10 @@ const CPIO_HEADER_SIZE: usize = 110;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct LinuxControllerEvidence {
-    pub(crate) ide: bool,
-    pub(crate) lsi: bool,
-    pub(crate) candidates: usize,
-    pub(crate) decoded: usize,
-    pub(crate) unreadable: usize,
+    ide: bool,
+    lsi: bool,
+    found_initramfs: bool,
+    decoded_initramfs: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +29,17 @@ pub(crate) struct LinuxControllerDecision {
 }
 
 impl LinuxControllerEvidence {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.ide |= other.ide;
+        self.lsi |= other.lsi;
+        self.found_initramfs |= other.found_initramfs;
+        self.decoded_initramfs |= other.decoded_initramfs;
+    }
+
+    pub(crate) fn ide_is_decisive(self) -> bool {
+        self.ide
+    }
+
     pub(crate) fn decision(self) -> LinuxControllerDecision {
         if self.ide {
             return LinuxControllerDecision {
@@ -40,15 +50,15 @@ impl LinuxControllerEvidence {
         if self.lsi {
             return LinuxControllerDecision {
                 adapter: VmdkAdapter::LsiLogic,
-                reason: "initramfs contains LSI storage drivers; selected LsiLogic",
+                reason: "initramfs contains mptspi; selected LsiLogic",
             };
         }
-        if self.candidates == 0 {
+        if !self.found_initramfs {
             LinuxControllerDecision {
                 adapter: VmdkAdapter::Ide,
                 reason: "no initramfs was found; defaulted to IDE",
             }
-        } else if self.decoded == 0 {
+        } else if !self.decoded_initramfs {
             LinuxControllerDecision {
                 adapter: VmdkAdapter::Ide,
                 reason: "initramfs could not be decoded; defaulted to IDE",
@@ -73,20 +83,17 @@ pub(crate) fn inspect_filesystem(fs: &dyn FileSystemReader) -> LinuxControllerEv
 
     let mut evidence = LinuxControllerEvidence::default();
     for path in paths {
-        evidence.candidates = evidence.candidates.saturating_add(1);
+        evidence.found_initramfs = true;
         let Ok(bytes) = fs.read_file_range(&path, 0, MAX_INITRAMFS_BYTES.saturating_add(1)) else {
-            evidence.unreadable = evidence.unreadable.saturating_add(1);
             continue;
         };
         if bytes.len() > MAX_INITRAMFS_BYTES {
-            evidence.unreadable = evidence.unreadable.saturating_add(1);
             continue;
         }
         let Some((ide, lsi)) = inspect_initramfs_driver_names(&bytes) else {
-            evidence.unreadable = evidence.unreadable.saturating_add(1);
             continue;
         };
-        evidence.decoded = evidence.decoded.saturating_add(1);
+        evidence.decoded_initramfs = true;
         evidence.ide |= ide;
         evidence.lsi |= lsi;
         // IDE is intentionally the deterministic preference when any
@@ -130,10 +137,7 @@ fn read_bounded(reader: &mut dyn Read) -> Option<Vec<u8>> {
     (bytes.len() <= MAX_INITRAMFS_BYTES).then_some(bytes)
 }
 
-fn decode_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
-    if is_cpio_magic(bytes) {
-        return Some(bytes.to_vec());
-    }
+fn decode_compressed_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
     let decoded = if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut decoder = flate2::read::MultiGzDecoder::new(Cursor::new(bytes));
         read_bounded(&mut decoder)?
@@ -146,7 +150,7 @@ fn decode_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
     } else {
         return None;
     };
-    (decoded.len() <= MAX_INITRAMFS_BYTES && is_cpio_magic(&decoded)).then_some(decoded)
+    is_cpio_magic(&decoded).then_some(decoded)
 }
 
 /// Linux initramfs images may prepend an uncompressed microcode cpio before
@@ -172,7 +176,7 @@ fn inspect_initramfs_driver_names(bytes: &[u8]) -> Option<(bool, bool)> {
             offset = offset.checked_add(consumed)?;
             continue;
         }
-        let decoded = decode_initramfs(&bytes[offset..])?;
+        let decoded = decode_compressed_initramfs(&bytes[offset..])?;
         let (archive_ide, archive_lsi) = inspect_initramfs_driver_names(&decoded)?;
         ide |= archive_ide;
         lsi |= archive_lsi;
@@ -202,21 +206,18 @@ fn parse_cpio_archive(bytes: &[u8]) -> Option<((bool, bool), usize)> {
         if namesize == 0 || name_end > bytes.len() || bytes[name_end - 1] != 0 {
             return None;
         }
-        let name = bytes[name_start..name_end.saturating_sub(1)]
-            .iter()
-            .map(|byte| char::from(*byte))
-            .collect::<String>();
-        if name == "TRAILER!!!" {
-            return Some(((ide, lsi), align4(name_end)?));
+        let name = &bytes[name_start..name_end.saturating_sub(1)];
+        if name == b"TRAILER!!!" {
+            let consumed = align4(name_end)?;
+            return (filesize == 0 && consumed <= bytes.len()).then_some(((ide, lsi), consumed));
         }
-        let lower = name.to_ascii_lowercase();
-        if lower.contains("ata_piix.ko") {
+        if is_kernel_module_entry(name, b"ata_piix.ko") {
             ide = true;
         }
         // VMware's LSI Logic Parallel adapter needs the mptspi transport.
         // mptbase/mptscsih are dependencies, while vmw_pvscsi belongs to a
         // different virtual controller and is not evidence for lsilogic.
-        if lower.contains("mptspi.ko") {
+        if is_kernel_module_entry(name, b"mptspi.ko") {
             lsi = true;
         }
         let data_start = align4(name_end)?;
@@ -227,6 +228,18 @@ fn parse_cpio_archive(bytes: &[u8]) -> Option<((bool, bool), usize)> {
         }
     }
     None
+}
+
+fn is_kernel_module_entry(path: &[u8], module: &[u8]) -> bool {
+    let file_name = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
+    let (stem, suffix) = file_name
+        .split_at_checked(module.len())
+        .unwrap_or((&[], &[]));
+    stem.eq_ignore_ascii_case(module)
+        && (suffix.is_empty()
+            || [b".gz".as_slice(), b".xz", b".zst", b".lz4"]
+                .iter()
+                .any(|expected| suffix.eq_ignore_ascii_case(expected)))
 }
 
 fn parse_hex_field(field: &[u8]) -> Option<usize> {
