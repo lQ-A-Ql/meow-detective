@@ -310,6 +310,9 @@ pub enum EmulationFsVolumeStateDto {
 #[serde(rename_all = "camelCase")]
 pub struct EmulationFsRepairItemDto {
     pub partition_index: u32,
+    /// State observed before any repair writes were applied.
+    pub initial_state: EmulationFsVolumeStateDto,
+    /// State verified from the session COW after the operation completed.
     pub state: EmulationFsVolumeStateDto,
     pub repaired: bool,
     pub log_bytes: u64,

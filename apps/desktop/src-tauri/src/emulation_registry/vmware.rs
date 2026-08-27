@@ -2,12 +2,22 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::{fs, io};
 
 use thiserror::Error;
 
-const CONTROL_TIMEOUT: Duration = Duration::from_secs(30);
+// VMware may spend several seconds opening the sparse COW-backed disk before
+// `vmrun start` reports success. Startup gets its own window so a slow source
+// does not look like a failed launch.
+const START_TIMEOUT: Duration = Duration::from_secs(120);
+const CONTROL_TIMEOUT: Duration = Duration::from_secs(60);
+const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+const START_CONFIRM_TIMEOUT: Duration = Duration::from_secs(15);
+const START_CONFIRM_INTERVAL: Duration = Duration::from_millis(250);
 const SOFT_STOP_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const SOFT_STOP_CONFIRM_TIMEOUT: Duration = Duration::from_secs(20);
+const VMX_EXIT_CONFIRM_TIMEOUT: Duration = Duration::from_secs(30);
+const VMX_EXIT_CONFIRM_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Error)]
 pub(super) enum VmwareError {
@@ -15,18 +25,26 @@ pub(super) enum VmwareError {
     NotInstalled,
     #[error("VMware process could not be started: {0}")]
     Start(std::io::Error),
-    #[error("VMware control command timed out")]
-    ControlTimeout,
+    #[error("VMware {operation} command timed out after {timeout_secs}s")]
+    ControlTimeout {
+        operation: String,
+        timeout_secs: u64,
+    },
     #[error("VMware control command failed with status {0}")]
     ControlFailed(ExitStatus),
     #[error("the VMX path is not valid Unicode and cannot be matched against vmrun output")]
     NonUnicodePath,
+    #[error("VMware VMX exit could not be confirmed within {timeout_secs}s")]
+    VmxExitTimeout { timeout_secs: u64 },
+    #[error("VMware VMX log could not be read while confirming shutdown")]
+    VmxLogRead(#[source] io::Error),
 }
 
 #[derive(Clone)]
 pub(super) struct VmwareControl {
     vmrun: PathBuf,
     vmx: PathBuf,
+    vmx_log_baseline: Option<u64>,
 }
 
 impl VmwareControl {
@@ -39,11 +57,7 @@ impl VmwareControl {
     }
 
     pub(super) fn is_running(&self) -> Result<bool, VmwareError> {
-        let output = Command::new(&self.vmrun)
-            .arg("list")
-            .stdin(Stdio::null())
-            .output()
-            .map_err(VmwareError::Start)?;
+        let output = run_query(&self.vmrun)?;
         if !output.status.success() {
             return Err(VmwareError::ControlFailed(output.status));
         }
@@ -60,10 +74,11 @@ impl VmwareControl {
             Ok(()) => self.confirm_soft_stop(),
             Err(soft_error) => {
                 if !self.is_running()? {
-                    return Ok(());
+                    return self.confirm_vmx_exit();
                 }
                 tracing::warn!(error = %soft_error, "VMware soft stop failed; forcing COW-backed VM off");
-                self.stop_hard()
+                self.stop_hard()?;
+                self.confirm_vmx_exit()
             }
         }
     }
@@ -76,15 +91,42 @@ impl VmwareControl {
         let deadline = Instant::now() + SOFT_STOP_CONFIRM_TIMEOUT;
         loop {
             if !self.is_running()? {
-                return Ok(());
+                return self.confirm_vmx_exit();
             }
             if Instant::now() >= deadline {
                 tracing::warn!(
                     "VMware guest still running after soft stop; forcing COW-backed VM off"
                 );
-                return self.stop_hard();
+                self.stop_hard()?;
+                return self.confirm_vmx_exit();
             }
             thread::sleep(SOFT_STOP_POLL_INTERVAL);
+        }
+    }
+
+    /// `vmrun list` can stop reporting a guest before VMX has finished
+    /// flushing virtual disks and closing handles. The session workspace must
+    /// remain intact until VMware writes its terminal `VMX exit` record.
+    fn confirm_vmx_exit(&self) -> Result<(), VmwareError> {
+        let deadline = Instant::now() + VMX_EXIT_CONFIRM_TIMEOUT;
+        let log_path = self.vmx.parent().map(|path| path.join("vmware.log"));
+        loop {
+            if let Some(path) = log_path.as_deref() {
+                match fs::read_to_string(path) {
+                    Ok(contents) if vmx_log_has_exited_since(&contents, self.vmx_log_baseline) => {
+                        return Ok(())
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(VmwareError::VmxLogRead(error)),
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(VmwareError::VmxExitTimeout {
+                    timeout_secs: VMX_EXIT_CONFIRM_TIMEOUT.as_secs(),
+                });
+            }
+            thread::sleep(VMX_EXIT_CONFIRM_INTERVAL);
         }
     }
 
@@ -99,13 +141,21 @@ impl VmwareControl {
         if let Some(mode) = mode {
             command.arg(mode);
         }
-        wait_for_control(command.spawn().map_err(VmwareError::Start)?)
+        wait_for_control(
+            command.spawn().map_err(VmwareError::Start)?,
+            action,
+            CONTROL_TIMEOUT,
+        )
     }
 }
 
 pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
     let (_workstation, vmrun) = discover()?;
     let vmx = vmware_compatible_path(vmx);
+    let vmx_log_baseline = vmx
+        .parent()
+        .map(|path| path.join("vmware.log"))
+        .and_then(|path| fs::metadata(path).ok().map(|metadata| metadata.len()));
     let child = Command::new(&vmrun)
         .arg("start")
         .arg(&vmx)
@@ -115,20 +165,60 @@ pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
         .stderr(Stdio::null())
         .spawn()
         .map_err(VmwareError::Start)?;
-    if let Err(error) = wait_for_control(child) {
-        // vmrun may have actually started the VM before the wait timed out;
-        // without a control handle the guest would be orphaned.
-        let _ = Command::new(&vmrun)
-            .arg("stop")
-            .arg(&vmx)
-            .arg("hard")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        return Err(error);
+    let control = VmwareControl {
+        vmrun,
+        vmx,
+        vmx_log_baseline,
+    };
+    match wait_for_control(child, "start", START_TIMEOUT) {
+        Ok(()) => Ok(control),
+        Err(error) => recover_after_start_failure(control, error),
     }
-    Ok(VmwareControl { vmrun, vmx })
+}
+
+/// `vmrun start` can time out after it has already handed the VM to VMX. Use
+/// the authoritative `vmrun list` state before deciding that startup failed;
+/// this avoids stopping a guest that is already usable and avoids returning a
+/// false timeout to the caller.
+fn recover_after_start_failure(
+    control: VmwareControl,
+    start_error: VmwareError,
+) -> Result<VmwareControl, VmwareError> {
+    let deadline = Instant::now() + START_CONFIRM_TIMEOUT;
+    loop {
+        match control.is_running() {
+            Ok(true) => {
+                tracing::warn!(
+                    error = %start_error,
+                    "VMware start command ended without acknowledgement, but the guest is running"
+                );
+                return Ok(control);
+            }
+            Ok(false) if Instant::now() >= deadline => {
+                if let Err(stop_error) = control.stop_hard() {
+                    tracing::warn!(
+                        error = %stop_error,
+                        "VMware cleanup after an unconfirmed start timeout failed"
+                    );
+                }
+                return Err(start_error);
+            }
+            Ok(false) => thread::sleep(START_CONFIRM_INTERVAL),
+            Err(query_error) => {
+                tracing::warn!(
+                    error = %query_error,
+                    "VMware guest state could not be confirmed after start failure"
+                );
+                if let Err(stop_error) = control.stop_hard() {
+                    tracing::warn!(
+                        error = %stop_error,
+                        "VMware cleanup after unconfirmed start failed"
+                    );
+                }
+                return Err(start_error);
+            }
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -278,8 +368,12 @@ fn registry_install_path(product: &str) -> Option<PathBuf> {
     path.is_dir().then_some(path)
 }
 
-fn wait_for_control(mut child: std::process::Child) -> Result<(), VmwareError> {
-    let deadline = Instant::now() + CONTROL_TIMEOUT;
+fn wait_for_control(
+    mut child: std::process::Child,
+    operation: &str,
+    timeout: Duration,
+) -> Result<(), VmwareError> {
+    let deadline = Instant::now() + timeout;
     loop {
         if let Some(status) = child.try_wait().map_err(VmwareError::Start)? {
             return if status.success() {
@@ -291,10 +385,64 @@ fn wait_for_control(mut child: std::process::Child) -> Result<(), VmwareError> {
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(VmwareError::ControlTimeout);
+            return Err(VmwareError::ControlTimeout {
+                operation: operation.to_string(),
+                timeout_secs: timeout.as_secs(),
+            });
         }
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+fn run_query(vmrun: &Path) -> Result<std::process::Output, VmwareError> {
+    let child = Command::new(vmrun)
+        .arg("list")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(VmwareError::Start)?;
+    wait_for_output(child, "list", QUERY_TIMEOUT)
+}
+
+fn wait_for_output(
+    mut child: std::process::Child,
+    operation: &str,
+    timeout: Duration,
+) -> Result<std::process::Output, VmwareError> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if child.try_wait().map_err(VmwareError::Start)?.is_some() {
+            return child.wait_with_output().map_err(VmwareError::Start);
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(VmwareError::ControlTimeout {
+                operation: operation.to_string(),
+                timeout_secs: timeout.as_secs(),
+            });
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn vmx_log_has_exited_since(contents: &str, baseline: Option<u64>) -> bool {
+    let baseline = baseline.unwrap_or(0);
+    let mut offset = 0u64;
+    contents.lines().any(|line| {
+        let folded = line.to_ascii_lowercase();
+        let found = folded
+            .find("vmx exit (")
+            .and_then(|marker| u64::try_from(marker).ok())
+            .and_then(|marker| offset.checked_add(marker))
+            .is_some_and(|marker| marker >= baseline);
+        offset = offset.saturating_add(u64::try_from(line.len()).unwrap_or(u64::MAX));
+        // `lines` removes the newline; account for it when calculating the
+        // byte offset of the next line in the original log.
+        offset = offset.saturating_add(1);
+        found
+    })
 }
 
 #[cfg(test)]

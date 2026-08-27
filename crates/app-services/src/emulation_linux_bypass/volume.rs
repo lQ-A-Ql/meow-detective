@@ -17,6 +17,10 @@ pub(super) enum LinuxFilesystem {
 }
 
 impl LinuxFilesystem {
+    pub(super) fn supports_file_resize(&self) -> bool {
+        matches!(self, Self::Xfs(_))
+    }
+
     pub(super) fn file_size(&self, path: &str) -> io::Result<u64> {
         match self {
             Self::Ext4(fs) => fs.file_size_by_path(path),

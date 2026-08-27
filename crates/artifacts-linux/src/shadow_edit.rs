@@ -1,7 +1,7 @@
 //! `/etc/shadow` parsing and password-hash replacement for offline bypass.
 //!
 //! The caller supplies a complete crypt-format password hash and remains
-//! responsible for the rewrite-and-truncate write-back.
+//! responsible for bounded filesystem write-back.
 
 use crate::LinuxArtifactError;
 
@@ -44,6 +44,49 @@ pub fn set_shadow_password_hash(
     username: &str,
     password_hash: &str,
 ) -> Result<Option<String>, LinuxArtifactError> {
+    edit_shadow_account(content, username, password_hash, None)
+}
+
+/// Replace one password hash and make its shadow aging fields usable now.
+///
+/// The last-change day is advanced to `current_day`. An absolute account
+/// expiration that has already elapsed is cleared; future expiration and all
+/// other policy fields are preserved. This is intended for an explicit,
+/// caller-controlled emulation overlay, never for an evidence source.
+pub fn set_shadow_login_password(
+    content: &str,
+    username: &str,
+    password_hash: &str,
+    current_day: u64,
+) -> Result<Option<String>, LinuxArtifactError> {
+    edit_shadow_account(content, username, password_hash, Some(current_day))
+}
+
+fn edit_shadow_account(
+    content: &str,
+    username: &str,
+    password_hash: &str,
+    current_day: Option<u64>,
+) -> Result<Option<String>, LinuxArtifactError> {
+    validate_edit_inputs(username, password_hash)?;
+    let mut output = String::with_capacity(content.len());
+    let mut edited = false;
+    for (index, line) in content.split('\n').enumerate() {
+        if index > 0 {
+            output.push('\n');
+        }
+        let Some(replacement) = edit_target_line(line, username, password_hash, current_day)?
+        else {
+            output.push_str(line);
+            continue;
+        };
+        edited |= replacement != line;
+        output.push_str(&replacement);
+    }
+    Ok(edited.then_some(output))
+}
+
+fn validate_edit_inputs(username: &str, password_hash: &str) -> Result<(), LinuxArtifactError> {
     if username.is_empty() || username.contains(':') || username.contains('\n') {
         return Err(LinuxArtifactError::ParseError {
             parser: "shadow",
@@ -61,33 +104,49 @@ pub fn set_shadow_password_hash(
             message: "invalid replacement password hash".to_string(),
         });
     }
-    let mut lines = content.split('\n');
-    let mut output = String::with_capacity(content.len());
-    let mut edited = false;
-    let mut first = true;
-    for line in lines.by_ref() {
-        if !first {
-            output.push('\n');
-        }
-        first = false;
-        let mut fields = line.splitn(3, ':');
-        let (Some(name), Some(hash), Some(rest)) = (fields.next(), fields.next(), fields.next())
-        else {
-            output.push_str(line);
-            continue;
-        };
-        if name != username || hash == password_hash {
-            output.push_str(line);
-            continue;
-        }
-        output.push_str(name);
-        output.push(':');
-        output.push_str(password_hash);
-        output.push(':');
-        output.push_str(rest);
-        edited = true;
+    Ok(())
+}
+
+fn edit_target_line(
+    line: &str,
+    username: &str,
+    password_hash: &str,
+    current_day: Option<u64>,
+) -> Result<Option<String>, LinuxArtifactError> {
+    if line.split_once(':').map(|(name, _)| name) != Some(username) {
+        return Ok(None);
     }
-    Ok(edited.then_some(output))
+    let mut fields = line.split(':').collect::<Vec<_>>();
+    let required_fields = if current_day.is_some() { 8 } else { 3 };
+    if fields.len() < required_fields {
+        return Err(LinuxArtifactError::ParseError {
+            parser: "shadow",
+            message: "target account has malformed shadow fields".to_string(),
+        });
+    }
+    fields[1] = password_hash;
+    if let Some(day) = current_day {
+        let day_text = day.to_string();
+        fields[2] = &day_text;
+        if shadow_expiration_elapsed(fields[7], day)? {
+            fields[7] = "";
+        }
+        return Ok(Some(fields.join(":")));
+    }
+    Ok(Some(fields.join(":")))
+}
+
+fn shadow_expiration_elapsed(value: &str, current_day: u64) -> Result<bool, LinuxArtifactError> {
+    if value.is_empty() || value == "0" {
+        return Ok(false);
+    }
+    value
+        .parse::<u64>()
+        .map(|day| day <= current_day)
+        .map_err(|_| LinuxArtifactError::ParseError {
+            parser: "shadow",
+            message: "target account has an invalid expiration day".to_string(),
+        })
 }
 
 #[cfg(test)]

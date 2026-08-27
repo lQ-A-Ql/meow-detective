@@ -309,6 +309,7 @@ fn plan_one_volume(
             return Ok(VolumeAssessment::Unsupported(item(
                 partition_index,
                 EmulationFsVolumeStateDto::Unsupported,
+                EmulationFsVolumeStateDto::Unsupported,
                 false,
                 0,
             )));
@@ -325,6 +326,7 @@ fn plan_one_volume(
             tracing::warn!(partition_index, error = %error, "xfs log repair: planning failed");
             return Ok(VolumeAssessment::Unsupported(item(
                 partition_index,
+                EmulationFsVolumeStateDto::Unsupported,
                 EmulationFsVolumeStateDto::Unsupported,
                 false,
                 0,
@@ -376,16 +378,16 @@ fn verify_volume(disk: &Arc<CowDisk>, volume: &PlannedVolume) -> Result<(), Emul
 
 fn assessment_item_without_writes(assessment: VolumeAssessment) -> EmulationFsRepairItemDto {
     match assessment {
-        VolumeAssessment::Ready(volume) => item(
-            volume.record.partition_index,
-            if volume.plan.is_some() {
-                EmulationFsVolumeStateDto::Dirty
-            } else {
-                EmulationFsVolumeStateDto::Clean
-            },
-            false,
-            volume.log_bytes,
-        ),
+        VolumeAssessment::Ready(volume) => {
+            let state = planned_state(&volume);
+            item(
+                volume.record.partition_index,
+                state,
+                state,
+                false,
+                volume.log_bytes,
+            )
+        }
         VolumeAssessment::Unsupported(item) => item,
     }
 }
@@ -394,14 +396,19 @@ fn repaired_item(volume: Box<PlannedVolume>) -> EmulationFsRepairItemDto {
     let repaired = volume.plan.is_some();
     item(
         volume.record.partition_index,
-        if repaired {
-            EmulationFsVolumeStateDto::Dirty
-        } else {
-            EmulationFsVolumeStateDto::Clean
-        },
+        planned_state(&volume),
+        EmulationFsVolumeStateDto::Clean,
         repaired,
         volume.log_bytes,
     )
+}
+
+fn planned_state(volume: &PlannedVolume) -> EmulationFsVolumeStateDto {
+    if volume.plan.is_some() {
+        EmulationFsVolumeStateDto::Dirty
+    } else {
+        EmulationFsVolumeStateDto::Clean
+    }
 }
 
 fn repair_result(
@@ -421,12 +428,14 @@ fn assess(snapshot: &fs_xfs::log::XfsLogSnapshot) -> fs_xfs::log::XfsLogState {
 
 fn item(
     partition_index: u32,
+    initial_state: EmulationFsVolumeStateDto,
     state: EmulationFsVolumeStateDto,
     repaired: bool,
     log_bytes: u64,
 ) -> EmulationFsRepairItemDto {
     EmulationFsRepairItemDto {
         partition_index,
+        initial_state,
         state,
         repaired,
         log_bytes,

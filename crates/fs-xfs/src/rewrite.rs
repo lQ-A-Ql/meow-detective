@@ -1,8 +1,9 @@
 //! Fail-closed planning for bounded in-place file rewrites.
 //!
 //! The planner never writes evidence. It resolves one regular file, proves
-//! that its existing data fork is fully allocated and unshared, then returns
-//! volume-relative patches for a caller-owned copy-on-write layer.
+//! that its required data range is already backed by written, unshared
+//! extents, then returns volume-relative patches for a caller-owned
+//! copy-on-write layer.
 
 use crate::log::{assess_log_state, XfsLogState, XFS_LOG_MAX_SNAPSHOT_BYTES};
 use crate::reader::S_IFMT;
@@ -43,10 +44,11 @@ impl XfsReader {
         Ok(be_u64(&inode, di_off::SIZE))
     }
 
-    /// Plan a non-growing rewrite over the file's existing allocation.
+    /// Plan a rewrite over the file's existing written allocation.
     ///
     /// Dirty or incomplete internal logs, sparse/unwritten/reflink/realtime
-    /// layouts, local forks, malformed extent maps, and growth are rejected.
+    /// layouts, local forks, malformed extent maps, and growth beyond existing
+    /// written extents are rejected.
     pub fn plan_in_place_file_rewrite(
         &self,
         path: &str,
@@ -58,9 +60,10 @@ impl XfsReader {
                 "reflink-capable XFS volumes cannot be rewritten safely",
             ));
         }
-        let (inode_number, mut inode, old_size, extents) = self.rewrite_target(path, content)?;
-        let extents = self.validate_rewrite_extents(extents, old_size)?;
-        let mut patches = self.build_data_patches(&extents, content, old_size)?;
+        let (inode_number, mut inode, old_size, extents) = self.rewrite_target(path)?;
+        let rewrite_size = old_size.max(content.len() as u64);
+        let extents = self.validate_rewrite_extents(extents, rewrite_size)?;
+        let mut patches = self.build_data_patches(&extents, content, rewrite_size)?;
         self.validate_inode_for_rewrite(inode_number, &inode)?;
         inode[di_off::SIZE..di_off::SIZE + 8]
             .copy_from_slice(&(content.len() as u64).to_be_bytes());
@@ -89,11 +92,7 @@ impl XfsReader {
         Ok(())
     }
 
-    fn rewrite_target(
-        &self,
-        path: &str,
-        content: &[u8],
-    ) -> io::Result<(u64, Vec<u8>, u64, Vec<XfsExtent>)> {
+    fn rewrite_target(&self, path: &str) -> io::Result<(u64, Vec<u8>, u64, Vec<XfsExtent>)> {
         let resolved = self
             .resolve_path_with_inode(path)?
             .ok_or_else(|| file_not_found(path))?;
@@ -117,11 +116,6 @@ impl XfsReader {
             return Err(unsupported("XFS NREXT64 inode rewrites are not supported"));
         }
         let old_size = be_u64(&inode, di_off::SIZE);
-        let new_size = u64::try_from(content.len())
-            .map_err(|_| invalid_fs_data("replacement content length overflows u64"))?;
-        if new_size > old_size {
-            return Err(unsupported("replacement content cannot grow the XFS file"));
-        }
         let extents = match Self::inode_format(&inode)? {
             FORMAT_EXTENTS => Self::inline_extents(&inode)?,
             FORMAT_BTREE => self.collect_btree_extents(&inode)?,
@@ -142,12 +136,15 @@ impl XfsReader {
     fn validate_rewrite_extents(
         &self,
         mut extents: Vec<XfsExtent>,
-        old_size: u64,
+        required_size: u64,
     ) -> io::Result<Vec<XfsExtent>> {
         extents.sort_by_key(|extent| extent.logical);
         let mut covered_until = 0u64;
         let mut physical_ranges = Vec::with_capacity(extents.len());
         for extent in &extents {
+            if covered_until >= required_size {
+                break;
+            }
             if extent.unwritten || extent.block_count == 0 {
                 return Err(unsupported(
                     "unwritten or empty XFS extents cannot be rewritten",
@@ -185,9 +182,9 @@ impl XfsReader {
         if physical_ranges.windows(2).any(|pair| pair[0].1 > pair[1].0) {
             return Err(unsupported("XFS extent map contains a physical overlap"));
         }
-        if covered_until < old_size {
+        if covered_until < required_size {
             return Err(unsupported(
-                "XFS extent map does not cover the complete file",
+                "XFS written extent map does not cover the requested file size",
             ));
         }
         Ok(extents)
@@ -197,16 +194,17 @@ impl XfsReader {
         &self,
         extents: &[XfsExtent],
         content: &[u8],
-        old_size: u64,
+        rewrite_size: u64,
     ) -> io::Result<Vec<XfsFileRewritePatch>> {
         let new_size = content.len() as u64;
         let mut patches = Vec::new();
         for extent in extents {
             let logical_start = extent.logical * self.block_size;
-            if logical_start >= old_size {
+            if logical_start >= rewrite_size {
                 break;
             }
-            let logical_end = (logical_start + extent.block_count * self.block_size).min(old_size);
+            let logical_end =
+                (logical_start + extent.block_count * self.block_size).min(rewrite_size);
             let physical = self.relative_offset(self.fsblock_to_offset(extent.start_block)?)?;
             if logical_start < new_size {
                 let end = logical_end.min(new_size) as usize;

@@ -164,7 +164,7 @@ fn plans_rewrite_tail_zeroing_inode_size_and_v3_crc() {
 }
 
 #[test]
-fn rejects_dirty_log_growth_and_invalid_inode_crc() {
+fn rejects_dirty_log_growth_beyond_allocation_and_invalid_inode_crc() {
     let mut dirty = rewrite_fixture();
     dirty[LOG_OFFSET..LOG_OFFSET + 4].copy_from_slice(&1u32.to_be_bytes());
     assert!(open(dirty)
@@ -173,9 +173,25 @@ fn rejects_dirty_log_growth_and_invalid_inode_crc() {
         .to_string()
         .contains("dirty"));
 
+    let mut grown = rewrite_fixture();
+    let growth = open(grown.clone())
+        .plan_in_place_file_rewrite("test.txt", &[0x5a; 12])
+        .expect("growth inside the existing written block is safe");
+    assert_eq!(growth.old_size, 11);
+    assert_eq!(
+        be_u64(&growth.patches.last().unwrap().bytes, di_off::SIZE),
+        12
+    );
+    apply_plan(&mut grown, &growth);
+    let grown_fs = open(grown);
+    assert_eq!(grown_fs.file_size_by_path("test.txt").unwrap(), 12);
+    assert_eq!(
+        grown_fs.read_file_range("test.txt", 0, 12).unwrap(),
+        [0x5a; 12]
+    );
     assert_eq!(
         open(rewrite_fixture())
-            .plan_in_place_file_rewrite("test.txt", &[0; 12])
+            .plan_in_place_file_rewrite("test.txt", &[0; BLOCK_SIZE + 1])
             .unwrap_err()
             .kind(),
         io::ErrorKind::Unsupported

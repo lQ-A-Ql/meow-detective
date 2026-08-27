@@ -64,3 +64,30 @@ fn handles_missing_trailing_newline() {
         .unwrap();
     assert_eq!(edited, format!("root:{PASSWORD_HASH}:1:2:3:::"));
 }
+
+#[test]
+fn login_password_refreshes_age_and_clears_only_elapsed_account_expiry() {
+    let shadow = "root:!!:1:0:30:7:14:19999:\nfuture:*:1:0:30:7:14:30000:\n";
+    let edited = set_shadow_login_password(shadow, "root", PASSWORD_HASH, 20_000)
+        .unwrap()
+        .unwrap();
+
+    assert!(edited.starts_with(&format!("root:{PASSWORD_HASH}:20000:0:30:7:14::\n")));
+    assert!(edited.ends_with("future:*:1:0:30:7:14:30000:\n"));
+}
+
+#[test]
+fn login_password_is_idempotent_and_rejects_unknown_expiration_policy() {
+    let configured = format!("root:{PASSWORD_HASH}:20000:0:30:7:14::");
+    assert_eq!(
+        set_shadow_login_password(&configured, "root", PASSWORD_HASH, 20_000).unwrap(),
+        None
+    );
+    assert!(set_shadow_login_password(
+        "root:!!:1:0:30:7:14:not-a-day:",
+        "root",
+        PASSWORD_HASH,
+        20_000,
+    )
+    .is_err());
+}

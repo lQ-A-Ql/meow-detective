@@ -44,7 +44,7 @@ fn shadow_bypass_sets_password_hash_through_the_overlay() {
 
     let original = read_shadow(&open_overlay_partition(&disk, parent_bytes.len() as u64)).unwrap();
     assert!(original.contains("root:$6$saltsalt$"));
-    let password_hash = replacement_password_hash(&original, "root").unwrap();
+    let password_hash = replacement_password_hash(&original, "root", None).unwrap();
     let edited = artifacts_linux::set_shadow_password_hash(&original, "root", password_hash)
         .unwrap()
         .expect("root has a password hash");
@@ -82,7 +82,7 @@ fn shadow_bypass_sets_password_hash_through_the_overlay() {
 fn replacement_hash_preserves_openeuler_sm3_shadow_length() {
     let original_hash = format!("$sm3${}${}", "s".repeat(16), "x".repeat(43));
     let shadow = format!("root:{original_hash}:20000:0:99999:7:::\n");
-    let replacement = replacement_password_hash(&shadow, "root").unwrap();
+    let replacement = replacement_password_hash(&shadow, "root", None).unwrap();
 
     assert_eq!(replacement, SM3_PASSWORD_HASH);
     assert_eq!(replacement.len(), original_hash.len());
@@ -93,9 +93,22 @@ fn replacement_hash_preserves_openeuler_sm3_shadow_length() {
 }
 
 #[test]
-fn replacement_hash_rejects_locked_accounts_without_a_retained_scheme() {
-    let error = replacement_password_hash("root:!:20000:0:99999:7:::\n", "root").unwrap_err();
-    assert!(error.to_string().contains("scheme"));
+fn replacement_hash_infers_scheme_for_placeholder_accounts() {
+    let shadow = "root:!!:1:0:99999:7:::\nalice:$6$salt$hash:1:0:99999:7:::\n";
+    assert_eq!(
+        replacement_password_hash(shadow, "root", None).unwrap(),
+        SHA512_PASSWORD_HASH
+    );
+    assert_eq!(
+        replacement_password_hash(
+            "root:*:1:0:99999:7:::\n",
+            "root",
+            Some("ENCRYPT_METHOD SM3\n"),
+        )
+        .unwrap(),
+        SM3_PASSWORD_HASH
+    );
+    assert!(replacement_password_hash("root:!:1:0:99999:7:::\n", "root", None).is_err());
 }
 
 #[test]
@@ -109,12 +122,25 @@ fn login_policy_rejects_non_interactive_shells() {
 }
 
 #[test]
-fn shadow_expiry_field_is_read_without_treating_zero_as_expired() {
-    let active = "user:$6$hash:20000:0:99999:7::0:\n";
-    assert_eq!(shadow_expiry_days(active, "user"), Some(0));
-    let expired = "user:$6$hash:20000:0:99999:7::1:\n";
-    assert_eq!(shadow_expiry_days(expired, "user"), Some(1));
-    assert_eq!(shadow_expiry_days(active, "missing"), None);
+fn login_defs_parser_ignores_comments_and_unknown_methods() {
+    assert_eq!(
+        configured_hash_replacement("# ENCRYPT_METHOD MD5\n ENCRYPT_METHOD yescrypt # preferred"),
+        Some(YESCRYPT_PASSWORD_HASH)
+    );
+    assert_eq!(configured_hash_replacement("ENCRYPT_METHOD ARGON2"), None);
+}
+
+#[test]
+fn shadow_expiry_parser_distinguishes_absent_empty_and_invalid_values() {
+    assert_eq!(
+        shadow_expiry_day("root:$6$hash:1:0:30:7::20000:\n", "root").unwrap(),
+        Some(20_000)
+    );
+    assert_eq!(
+        shadow_expiry_day("root:$6$hash:1:0:30:7:::\n", "root").unwrap(),
+        None
+    );
+    assert!(shadow_expiry_day("root:$6$hash:1:0:30:7::bad:\n", "root").is_err());
 }
 
 #[test]

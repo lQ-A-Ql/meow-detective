@@ -264,7 +264,8 @@ fn fs_repair_dtos_round_trip_in_camel_case() {
         data_source_id: "source-1".to_string(),
         items: vec![EmulationFsRepairItemDto {
             partition_index: 2,
-            state: EmulationFsVolumeStateDto::Dirty,
+            initial_state: EmulationFsVolumeStateDto::Dirty,
+            state: EmulationFsVolumeStateDto::Clean,
             repaired: true,
             log_bytes: 10 * 1024 * 1024,
         }],
@@ -272,7 +273,8 @@ fn fs_repair_dtos_round_trip_in_camel_case() {
     let value = serde_json::to_value(&result).unwrap();
     assert_eq!(value["sessionId"], "emulation-1");
     assert_eq!(value["items"][0]["partitionIndex"], 2);
-    assert_eq!(value["items"][0]["state"], "dirty");
+    assert_eq!(value["items"][0]["initialState"], "dirty");
+    assert_eq!(value["items"][0]["state"], "clean");
     assert_eq!(value["items"][0]["logBytes"], 10 * 1024 * 1024);
     let restored: EmulationFsRepairResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, result);

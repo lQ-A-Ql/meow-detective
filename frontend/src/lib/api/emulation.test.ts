@@ -84,7 +84,13 @@ describe('emulation API', () => {
     requestMock.mockResolvedValueOnce({
       sessionId: 'emulation-1',
       dataSourceId: 'source-1',
-      items: [{ partitionIndex: 2, state: 'dirty', repaired: true, logBytes: 10_485_760 }],
+      items: [{
+        partitionIndex: 2,
+        initialState: 'dirty',
+        state: 'clean',
+        repaired: true,
+        logBytes: 10_485_760,
+      }],
     } as never);
 
     const result = await repairEmulationFsJournals('emulation-1');
@@ -92,6 +98,8 @@ describe('emulation API', () => {
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.REPAIR_FS_JOURNALS, {
       sessionId: 'emulation-1',
     });
+    expect(result.items[0]?.initialState).toBe('dirty');
+    expect(result.items[0]?.state).toBe('clean');
     expect(result.items[0]?.repaired).toBe(true);
   });
 });

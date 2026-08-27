@@ -209,7 +209,8 @@ fn dirty_log_is_cleared_and_mount_metadata_normalized() {
     assert_eq!(result.items.len(), 1);
     let item = &result.items[0];
     assert_eq!(item.partition_index, 0);
-    assert_eq!(item.state, EmulationFsVolumeStateDto::Dirty);
+    assert_eq!(item.initial_state, EmulationFsVolumeStateDto::Dirty);
+    assert_eq!(item.state, EmulationFsVolumeStateDto::Clean);
     assert!(item.repaired);
     assert_eq!(item.log_bytes, u64::from(LOG_BLOCKS) * FS_BLOCK as u64);
 
@@ -227,6 +228,10 @@ fn dirty_log_is_cleared_and_mount_metadata_normalized() {
 
     // A second run sees a clean log and writes nothing.
     let second = repair_xfs_logs(&disk, &context(&fixture)).unwrap();
+    assert_eq!(
+        second.items[0].initial_state,
+        EmulationFsVolumeStateDto::Clean
+    );
     assert_eq!(second.items[0].state, EmulationFsVolumeStateDto::Clean);
     assert!(!second.items[0].repaired);
 }
@@ -267,6 +272,10 @@ fn unsupported_second_volume_prevents_writes_to_the_first() {
     let result = repair_xfs_logs(&disk, &context(&fixture)).unwrap();
 
     assert_eq!(result.items.len(), 2);
+    assert_eq!(
+        result.items[0].initial_state,
+        EmulationFsVolumeStateDto::Dirty
+    );
     assert_eq!(result.items[0].state, EmulationFsVolumeStateDto::Dirty);
     assert!(!result.items[0].repaired);
     assert_eq!(

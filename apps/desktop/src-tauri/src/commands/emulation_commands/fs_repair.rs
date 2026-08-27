@@ -37,6 +37,7 @@ pub async fn repair_emulation_fs_journals(
             serde_json::json!({
                 "items": result.items.iter().map(|item| serde_json::json!({
                     "partitionIndex": item.partition_index,
+                    "initialState": format!("{:?}", item.initial_state),
                     "state": format!("{:?}", item.state),
                     "repaired": item.repaired,
                     "logBytes": item.log_bytes,

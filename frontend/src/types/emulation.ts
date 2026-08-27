@@ -124,6 +124,7 @@ export type EmulationFsVolumeState = 'clean' | 'dirty' | 'unsupported';
 
 export interface EmulationFsRepairItem {
   partitionIndex: number;
+  initialState: EmulationFsVolumeState;
   state: EmulationFsVolumeState;
   repaired: boolean;
   logBytes: number;
