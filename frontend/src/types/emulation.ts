@@ -7,6 +7,11 @@ export type EmulationState =
 
 export type EmulationControlMode = 'interactiveOnly';
 
+export type EmulationGuestPhase =
+  | 'unknown'
+  | 'booting'
+  | 'filesystemMounted';
+
 export type EmulationNetworkMode = 'off' | 'hostOnly' | 'nat' | 'bridged';
 
 export interface EmulationOptions {
@@ -50,6 +55,7 @@ export interface EmulationSessionStatus {
   state: EmulationState;
   logicalLength: number;
   controlMode: EmulationControlMode;
+  guestPhase?: EmulationGuestPhase;
   maintenanceMedia?: boolean;
   error?: string;
 }

@@ -5,8 +5,8 @@ use evidence_emulation::{CowDisk, CowDiskConfig, ParentIdentity};
 use sha2::{Digest, Sha256};
 
 use super::{
-    detect_firmware, EmulationEntry, EmulationRegistry, EmulationRegistryError,
-    EmulationSessionStatus, EmulationState,
+    detect_firmware, EmulationEntry, EmulationGuestPhase, EmulationRegistry,
+    EmulationRegistryError, EmulationSessionStatus, EmulationState,
 };
 
 struct MemoryProvider(Vec<u8>);
@@ -72,6 +72,7 @@ fn poisoned_overlay_cannot_launch() {
                 session_id: session_id.clone(),
                 data_source_id: "source".to_string(),
                 state: EmulationState::DescriptorReady,
+                guest_phase: EmulationGuestPhase::Unknown,
                 logical_length: disk.len(),
                 maintenance_media: false,
                 error: None,
@@ -80,6 +81,7 @@ fn poisoned_overlay_cannot_launch() {
             disk,
             backend: None,
             vmware: None,
+            boot_started_at: None,
             op_lock: Arc::new(std::sync::Mutex::new(())),
         },
     );

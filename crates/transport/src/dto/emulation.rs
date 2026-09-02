@@ -104,6 +104,18 @@ pub enum EmulationControlModeDto {
     InteractiveOnly,
 }
 
+/// Conservative host-observed guest boot progress. This is intentionally
+/// separate from the VMware power state: a powered-on VM is not necessarily
+/// ready to accept an investigator login.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationGuestPhaseDto {
+    #[default]
+    Unknown,
+    Booting,
+    FilesystemMounted,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum EmulationBootRouteDto {
@@ -170,6 +182,8 @@ pub struct EmulationSessionStatusDto {
     pub state: EmulationStateDto,
     pub logical_length: u64,
     pub control_mode: EmulationControlModeDto,
+    #[serde(default)]
+    pub guest_phase: EmulationGuestPhaseDto,
     #[serde(default)]
     pub maintenance_media: bool,
     pub error: Option<String>,

@@ -31,6 +31,7 @@ pub struct VmxConfig {
     maintenance_iso_path: Option<String>,
     firmware: VmwareFirmware,
     guest_os: String,
+    linux_console_compat: bool,
     options: VmOptions,
 }
 
@@ -46,6 +47,7 @@ impl VmxConfig {
             maintenance_iso_path: None,
             firmware,
             guest_os: "windows9-64".to_string(),
+            linux_console_compat: false,
             options: VmOptions::default(),
         })
     }
@@ -58,6 +60,7 @@ impl VmxConfig {
             )));
         }
         self.guest_os = guest_os.to_string();
+        self.linux_console_compat = guest_os != "windows9-64";
         Ok(self)
     }
 
@@ -115,10 +118,11 @@ impl VmxConfig {
         }
         validate_isolation_exceptions(&settings, options)?;
         validate_disk_settings(&settings)?;
-        match settings.get("guestOS").map(String::as_str) {
-            Some(id) if GUEST_OS_WHITELIST.contains(&id) => {}
+        let guest_os = match settings.get("guestOS").map(String::as_str) {
+            Some(id) if GUEST_OS_WHITELIST.contains(&id) => id,
             _ => return Err(invalid_vmx("guestOS is not in the supported whitelist")),
-        }
+        };
+        validate_display_settings(&settings, guest_os)?;
         validate_recovery_media_settings(&settings)?;
         validate_maintenance_media_settings(&settings, has_maintenance_media)?;
         Ok(())
@@ -143,6 +147,16 @@ impl VmxConfig {
             ("numvcpus", self.options.processor_count.to_string()),
             ("virtualHW.version", "16".to_string()),
         ]);
+        if self.linux_console_compat {
+            // Keep the virtual framebuffer available for VMware's console
+            // while disabling 3D acceleration. Removing SVGA makes the
+            // guest unobservable and can leave BIOS/Linux boot on a black
+            // screen even though the VMX remains powered on.
+            values.extend([
+                ("mks.enable3d", "FALSE".to_string()),
+                ("svga.present", "TRUE".to_string()),
+            ]);
+        }
         match self.disk_adapter {
             VmdkAdapter::Ide => values.extend([
                 ("ide0:0.deviceType", "disk".to_string()),
@@ -183,6 +197,29 @@ impl VmxConfig {
             "hdd"
         }
     }
+}
+
+fn validate_display_settings(
+    settings: &BTreeMap<String, String>,
+    guest_os: &str,
+) -> Result<(), EmulationError> {
+    let is_linux = guest_os != "windows9-64";
+    if is_linux {
+        for (key, expected) in [("mks.enable3d", "FALSE"), ("svga.present", "TRUE")] {
+            if settings.get(key).map(String::as_str) != Some(expected) {
+                return Err(invalid_vmx(format!(
+                    "Linux text-console display setting {key} is missing"
+                )));
+            }
+        }
+    } else if settings.contains_key("mks.enable3d")
+        || settings.get("svga.present").map(String::as_str) == Some("FALSE")
+    {
+        return Err(invalid_vmx(
+            "Linux text-console display settings are not valid for Windows guests",
+        ));
+    }
+    Ok(())
 }
 
 fn base_security_settings() -> [(&'static str, &'static str); 13] {

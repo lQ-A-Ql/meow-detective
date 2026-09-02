@@ -211,6 +211,7 @@ pub(crate) fn probe_linux_fs_root(
     if fs_label == "Btrfs" {
         risk_notes.push("btrfs-root".to_string());
     }
+    super::emulation_linux_services::annotate_service_risks(fs, &mut risk_notes);
     Some(LinuxFsProbe {
         pretty_name,
         kernel_present,

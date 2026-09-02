@@ -2,21 +2,22 @@ use std::path::PathBuf;
 
 use tauri::State;
 use transport::{
-    commands::PrepareEmulationRequestDto,
-    dto::{EmulationControlModeDto, EmulationSessionStatusDto, EmulationStateDto},
-    CommandError,
+    commands::PrepareEmulationRequestDto, dto::EmulationSessionStatusDto, CommandError,
 };
 
 use crate::commands::command_support::{
     get_case_connection, require_active_case, write_emulation_audit_log, EmulationAuditEvent,
 };
-use crate::emulation_registry::{EmulationSessionStatus, EmulationState};
+use crate::emulation_registry::EmulationSessionStatus;
 use crate::state::AppState;
 
 mod bypass;
 mod efi_fallback;
 mod fs_repair;
 mod preflight;
+mod status_dto;
+
+use status_dto::to_dto;
 
 pub use bypass::{
     apply_emulation_bypass, apply_emulation_linux_bypass, cleanup_emulation_osdata,
@@ -153,28 +154,6 @@ fn validate_session_id(session_id: &str) -> Result<(), CommandError> {
         Err(CommandError::invalid_input("session id is required"))
     } else {
         Ok(())
-    }
-}
-
-fn to_dto(status: EmulationSessionStatus) -> EmulationSessionStatusDto {
-    EmulationSessionStatusDto {
-        session_id: status.session_id,
-        data_source_id: status.data_source_id,
-        state: state_to_dto(status.state),
-        logical_length: status.logical_length,
-        control_mode: EmulationControlModeDto::InteractiveOnly,
-        maintenance_media: status.maintenance_media,
-        error: status.error,
-    }
-}
-
-fn state_to_dto(state: EmulationState) -> EmulationStateDto {
-    match state {
-        EmulationState::DescriptorReady => EmulationStateDto::DescriptorReady,
-        EmulationState::Running => EmulationStateDto::Running,
-        EmulationState::Quiescing => EmulationStateDto::Quiescing,
-        EmulationState::Released => EmulationStateDto::Released,
-        EmulationState::FailedCleanupPending => EmulationStateDto::FailedCleanupPending,
     }
 }
 

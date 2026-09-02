@@ -1,3 +1,4 @@
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
@@ -18,6 +19,7 @@ const SOFT_STOP_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const SOFT_STOP_CONFIRM_TIMEOUT: Duration = Duration::from_secs(20);
 const VMX_EXIT_CONFIRM_TIMEOUT: Duration = Duration::from_secs(30);
 const VMX_EXIT_CONFIRM_INTERVAL: Duration = Duration::from_millis(250);
+const VMX_LOG_OBSERVATION_LIMIT: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub(super) enum VmwareError {
@@ -48,6 +50,17 @@ pub(super) struct VmwareControl {
 }
 
 impl VmwareControl {
+    /// VMware Tools is a user-space guest service. Its start is enough to
+    /// confirm the guest mounted and reached user space, but never enough to
+    /// claim multi-user target completion or a login prompt.
+    pub(super) fn guest_userspace_started(&self) -> bool {
+        self.vmx
+            .parent()
+            .map(|path| path.join("vmware.log"))
+            .and_then(|path| read_vmx_log_since(&path, self.vmx_log_baseline).ok())
+            .is_some_and(|contents| vmx_log_has_tools_started_since(&contents, Some(0)))
+    }
+
     pub(super) fn stop_soft(&self) -> Result<(), VmwareError> {
         self.run_control("stop", Some("soft"))
     }
@@ -64,9 +77,7 @@ impl VmwareControl {
         // A non-Unicode VMX path can never match vmrun's listing; failing
         // closed keeps release from reporting a running guest as stopped.
         let expected = self.vmx.to_str().ok_or(VmwareError::NonUnicodePath)?;
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .any(|line| line.trim().eq_ignore_ascii_case(expected)))
+        Ok(vmrun_lists_vmx(&output.stdout, expected))
     }
 
     pub(super) fn stop_bounded(&self) -> Result<(), VmwareError> {
@@ -112,10 +123,8 @@ impl VmwareControl {
         let log_path = self.vmx.parent().map(|path| path.join("vmware.log"));
         loop {
             if let Some(path) = log_path.as_deref() {
-                match fs::read_to_string(path) {
-                    Ok(contents) if vmx_log_has_exited_since(&contents, self.vmx_log_baseline) => {
-                        return Ok(())
-                    }
+                match read_vmx_log_since(path, self.vmx_log_baseline) {
+                    Ok(contents) if vmx_log_has_exited_since(&contents, Some(0)) => return Ok(()),
                     Ok(_) => {}
                     Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                     Err(error) => return Err(VmwareError::VmxLogRead(error)),
@@ -147,6 +156,20 @@ impl VmwareControl {
             CONTROL_TIMEOUT,
         )
     }
+}
+
+/// Checks a VMX path against VMware's process-wide running-VM listing. This
+/// is used during startup recovery when the owning app process is gone but
+/// VMware is still running the session.
+pub(super) fn is_vmx_running(vmx: &Path) -> Result<bool, VmwareError> {
+    let (_workstation, vmrun) = discover()?;
+    let output = run_query(&vmrun)?;
+    if !output.status.success() {
+        return Err(VmwareError::ControlFailed(output.status));
+    }
+    let expected = vmware_compatible_path(vmx);
+    let expected = expected.to_str().ok_or(VmwareError::NonUnicodePath)?;
+    Ok(vmrun_lists_vmx(&output.stdout, expected))
 }
 
 pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
@@ -405,6 +428,12 @@ fn run_query(vmrun: &Path) -> Result<std::process::Output, VmwareError> {
     wait_for_output(child, "list", QUERY_TIMEOUT)
 }
 
+fn vmrun_lists_vmx(stdout: &[u8], expected: &str) -> bool {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .any(|line| line.trim().eq_ignore_ascii_case(expected))
+}
+
 fn wait_for_output(
     mut child: std::process::Child,
     operation: &str,
@@ -428,21 +457,31 @@ fn wait_for_output(
 }
 
 fn vmx_log_has_exited_since(contents: &str, baseline: Option<u64>) -> bool {
+    vmx_log_has_marker_since(contents, baseline, "vmx exit (")
+}
+
+fn vmx_log_has_tools_started_since(contents: &str, baseline: Option<u64>) -> bool {
+    vmx_log_has_marker_since(contents, baseline, "running status rpc handler: 0 => 1")
+}
+
+fn vmx_log_has_marker_since(contents: &str, baseline: Option<u64>, marker: &str) -> bool {
     let baseline = baseline.unwrap_or(0);
-    let mut offset = 0u64;
-    contents.lines().any(|line| {
-        let folded = line.to_ascii_lowercase();
-        let found = folded
-            .find("vmx exit (")
-            .and_then(|marker| u64::try_from(marker).ok())
-            .and_then(|marker| offset.checked_add(marker))
-            .is_some_and(|marker| marker >= baseline);
-        offset = offset.saturating_add(u64::try_from(line.len()).unwrap_or(u64::MAX));
-        // `lines` removes the newline; account for it when calculating the
-        // byte offset of the next line in the original log.
-        offset = offset.saturating_add(1);
-        found
-    })
+    contents
+        .to_ascii_lowercase()
+        .match_indices(marker)
+        .any(|(position, _)| u64::try_from(position).is_ok_and(|position| position >= baseline))
+}
+
+fn read_vmx_log_since(path: &Path, baseline: Option<u64>) -> io::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let length = file.metadata()?.len();
+    let baseline = baseline.filter(|offset| *offset <= length).unwrap_or(0);
+    let start = baseline.max(length.saturating_sub(VMX_LOG_OBSERVATION_LIMIT));
+    file.seek(SeekFrom::Start(start))?;
+    let mut contents = Vec::new();
+    file.take(VMX_LOG_OBSERVATION_LIMIT)
+        .read_to_end(&mut contents)?;
+    Ok(String::from_utf8_lossy(&contents).into_owned())
 }
 
 #[cfg(test)]

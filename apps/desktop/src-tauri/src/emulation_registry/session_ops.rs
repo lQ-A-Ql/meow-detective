@@ -21,7 +21,7 @@ use evidence_emulation::CowDisk;
 
 use super::vmware::{self, VmwareControl};
 use super::{
-    refresh_backend, BypassCaseRef, EmulationRegistry, EmulationRegistryError,
+    refresh_backend, BypassCaseRef, EmulationGuestPhase, EmulationRegistry, EmulationRegistryError,
     EmulationSessionStatus, EmulationState,
 };
 use crate::emulation_backend::EmulationBackendHandle;
@@ -69,6 +69,8 @@ impl EmulationRegistry {
             .ok_or_else(|| EmulationRegistryError::NotFound(session_id.to_string()))?;
         entry.vmware = Some(control);
         entry.status.state = EmulationState::Running;
+        entry.status.guest_phase = EmulationGuestPhase::Booting;
+        entry.boot_started_at = Some(std::time::Instant::now());
         Ok(entry.status.clone())
     }
 
@@ -283,6 +285,8 @@ impl EmulationRegistry {
                 return Ok(entry.status.clone());
             }
             entry.status.state = EmulationState::Quiescing;
+            entry.status.guest_phase = EmulationGuestPhase::Unknown;
+            entry.boot_started_at = None;
             (
                 entry.vmware.take(),
                 Arc::clone(&entry.disk),

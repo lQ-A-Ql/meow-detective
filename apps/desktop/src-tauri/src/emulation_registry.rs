@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use app_services::mount_service::{prepare_emulation_source, MountServiceError};
 use domain::{CaseId, DataSourceId};
@@ -14,6 +15,7 @@ use crate::emulation_backend::{self, EmulationBackendHandle};
 
 mod materials;
 mod recovery_media;
+mod session_discovery;
 mod session_ops;
 mod vmware;
 mod workspace;
@@ -35,11 +37,19 @@ pub enum EmulationState {
     FailedCleanupPending,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmulationGuestPhase {
+    Unknown,
+    Booting,
+    FilesystemMounted,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmulationSessionStatus {
     pub session_id: String,
     pub data_source_id: String,
     pub state: EmulationState,
+    pub guest_phase: EmulationGuestPhase,
     pub logical_length: u64,
     pub maintenance_media: bool,
     pub error: Option<String>,
@@ -51,8 +61,8 @@ pub enum EmulationRegistryError {
     LockPoisoned,
     #[error("emulation session {0} was not found")]
     NotFound(String),
-    #[error("the data source already has an active emulation session")]
-    AlreadyActive,
+    #[error("the data source already has an active emulation session ({session_id})")]
+    AlreadyActive { session_id: String },
     #[error("emulation source validation failed: {0}")]
     Source(#[from] MountServiceError),
     #[error("emulation block provider failed: {0}")]
@@ -75,7 +85,7 @@ impl transport::ServiceErrorCategory for EmulationRegistryError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::LockPoisoned => transport::ErrorCategory::Internal,
-            Self::NotFound(_) | Self::AlreadyActive => transport::ErrorCategory::Validation,
+            Self::NotFound(_) | Self::AlreadyActive { .. } => transport::ErrorCategory::Validation,
             Self::Source(error) => error.category(),
             Self::Block(_) | Self::Disk(_) | Self::Workspace(_) => transport::ErrorCategory::Io,
             Self::RecoveryMedia(_) => transport::ErrorCategory::Validation,
@@ -105,6 +115,7 @@ struct EmulationEntry {
     disk: Arc<CowDisk>,
     backend: Option<EmulationBackendHandle>,
     vmware: Option<VmwareControl>,
+    boot_started_at: Option<Instant>,
     /// Serializes the long mutating operations (launch, host-side edits,
     /// release) of this session. The global `entries` lock is only ever
     /// taken briefly — to clone this Arc or to update status — and never
@@ -122,7 +133,7 @@ impl EmulationRegistry {
         recovery_iso: Option<&Path>,
         options: VmOptions,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
-        self.reject_duplicate(data_source_id)?;
+        self.reject_duplicate(case_root, data_source_id)?;
         let recovery_media = recovery_iso
             .map(RecoveryMedia::open)
             .transpose()
@@ -188,6 +199,7 @@ impl EmulationRegistry {
             session_id: session_id.clone(),
             data_source_id: data_source_id.0.clone(),
             state: EmulationState::DescriptorReady,
+            guest_phase: EmulationGuestPhase::Unknown,
             logical_length: identity.logical_length(),
             maintenance_media: maintenance.is_some(),
             error: None,
@@ -201,6 +213,7 @@ impl EmulationRegistry {
                 disk,
                 backend: Some(backend),
                 vmware: None,
+                boot_started_at: None,
                 op_lock: Arc::new(Mutex::new(())),
             },
         )?;
@@ -248,19 +261,41 @@ impl EmulationRegistry {
 
     fn reject_duplicate(
         &self,
+        case_root: &Path,
         data_source_id: &DataSourceId,
     ) -> Result<(), EmulationRegistryError> {
-        let active = self
+        let active_session = self
             .entries
             .lock()
             .map_err(|_| Self::lock_error())?
             .values()
-            .any(|entry| {
+            .find(|entry| {
                 entry.status.data_source_id == data_source_id.0
                     && entry.status.state != EmulationState::Released
-            });
-        if active {
-            return Err(EmulationRegistryError::AlreadyActive);
+            })
+            .map(|entry| entry.status.session_id.clone());
+        if let Some(session_id) = active_session {
+            tracing::warn!(
+                data_source_id = %data_source_id.0,
+                session_id = %session_id,
+                "emulation prepare rejected because this process already owns an active session"
+            );
+            return Err(EmulationRegistryError::AlreadyActive { session_id });
+        }
+
+        // The registry is process-local. A previous application instance may
+        // still own a running VM, so consult the durable provenance records
+        // before allocating another COW workspace. We never stop a VM here.
+        if let Some(session_id) =
+            session_discovery::find_active_session(case_root, &data_source_id.0)
+                .map_err(|error| EmulationRegistryError::Vmware(error.to_string()))?
+        {
+            tracing::warn!(
+                data_source_id = %data_source_id.0,
+                session_id = %session_id,
+                "emulation prepare rejected because another process owns an active session"
+            );
+            return Err(EmulationRegistryError::AlreadyActive { session_id });
         }
         Ok(())
     }
@@ -280,7 +315,9 @@ impl EmulationRegistry {
                 let _ = backend.stop();
             }
             entry.workspace.remove_best_effort();
-            return Err(EmulationRegistryError::AlreadyActive);
+            return Err(EmulationRegistryError::AlreadyActive {
+                session_id: entry.status.session_id.clone(),
+            });
         }
         entries.insert(session_id, entry);
         Ok(())
@@ -410,6 +447,36 @@ fn refresh_backend(entry: &mut EmulationEntry) {
             entry.status.state = EmulationState::FailedCleanupPending;
             entry.status.error = Some(error.to_string());
         }
+    }
+    refresh_guest_phase(entry);
+}
+
+const GUEST_SIGNAL_WINDOW: Duration = Duration::from_secs(90);
+
+fn refresh_guest_phase(entry: &mut EmulationEntry) {
+    if entry.status.state != EmulationState::Running
+        || entry.status.guest_phase != EmulationGuestPhase::Booting
+    {
+        return;
+    }
+    if entry
+        .vmware
+        .as_ref()
+        .is_some_and(VmwareControl::guest_userspace_started)
+    {
+        entry.status.guest_phase = EmulationGuestPhase::FilesystemMounted;
+        entry.boot_started_at = None;
+        return;
+    }
+    if entry
+        .boot_started_at
+        .is_some_and(|started| started.elapsed() >= GUEST_SIGNAL_WINDOW)
+    {
+        // VMware Tools is optional and its heartbeat is not a login-ready
+        // oracle. Do not leave an unobservable guest labelled "booting"
+        // forever once the bounded observation window closes.
+        entry.status.guest_phase = EmulationGuestPhase::Unknown;
+        entry.boot_started_at = None;
     }
 }
 

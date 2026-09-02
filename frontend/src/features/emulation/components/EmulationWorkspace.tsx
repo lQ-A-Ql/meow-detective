@@ -56,6 +56,9 @@ function SessionRow({
           {t(`emulationPage.controlModes.${session.controlMode}`)}
         </div>
         <div className="mt-1 truncate text-[10px] text-forensics-muted">
+          {t(`emulationPage.guestPhases.${session.guestPhase ?? 'unknown'}`)}
+        </div>
+        <div className="mt-1 truncate text-[10px] text-forensics-muted">
           {t(session.maintenanceMedia
             ? 'emulationPage.maintenance.attached'
             : 'emulationPage.maintenance.absent')}

@@ -346,6 +346,30 @@ fn vmx_disables_host_integrations_and_networking() {
 }
 
 #[test]
+fn linux_vmx_uses_the_text_console_compatibility_profile() {
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_guest_os("centos-64")
+        .unwrap()
+        .render();
+
+    VmxConfig::validate_rendered(&rendered, VmOptions::default(), false).unwrap();
+    assert!(rendered.contains("guestOS = \"centos-64\""));
+    assert!(rendered.contains("mks.enable3d = \"FALSE\""));
+    assert!(rendered.contains("svga.present = \"TRUE\""));
+}
+
+#[test]
+fn linux_display_settings_cannot_be_mixed_into_a_windows_vmx() {
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .render()
+        + "mks.enable3d = \"FALSE\"\n";
+
+    assert!(VmxConfig::validate_rendered(&rendered, VmOptions::default(), false).is_err());
+}
+
+#[test]
 fn vmx_can_boot_a_user_selected_winpe_iso_before_the_evidence_disk() {
     let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Efi)
         .unwrap()

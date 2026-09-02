@@ -85,6 +85,37 @@ fn control_mode_serializes_as_interactive_only() {
 }
 
 #[test]
+fn session_status_round_trip_preserves_guest_phase_and_legacy_default() {
+    use super::{EmulationGuestPhaseDto, EmulationSessionStatusDto, EmulationStateDto};
+
+    let status = EmulationSessionStatusDto {
+        session_id: "emulation-1".to_string(),
+        data_source_id: "source-1".to_string(),
+        state: EmulationStateDto::Running,
+        logical_length: 1024,
+        control_mode: EmulationControlModeDto::InteractiveOnly,
+        guest_phase: EmulationGuestPhaseDto::FilesystemMounted,
+        maintenance_media: false,
+        error: None,
+    };
+    let value = serde_json::to_value(&status).unwrap();
+    assert_eq!(value["guestPhase"], "filesystemMounted");
+    let restored: EmulationSessionStatusDto = serde_json::from_value(value).unwrap();
+    assert_eq!(restored, status);
+
+    let legacy = serde_json::json!({
+        "sessionId": "emulation-legacy",
+        "dataSourceId": "source-1",
+        "state": "running",
+        "logicalLength": 1024,
+        "controlMode": "interactiveOnly",
+        "error": null
+    });
+    let restored: EmulationSessionStatusDto = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.guest_phase, EmulationGuestPhaseDto::Unknown);
+}
+
+#[test]
 fn install_dto_omits_unknown_osdata_emptiness() {
     use super::EmulationInstallDto;
 

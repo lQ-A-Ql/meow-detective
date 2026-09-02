@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use super::{discover, vmware_compatible_path, vmx_log_has_exited_since, VmwareError};
+use super::{
+    discover, vmrun_lists_vmx, vmware_compatible_path, vmx_log_has_exited_since,
+    vmx_log_has_tools_started_since, VmwareError,
+};
 
 #[test]
 fn discovery_never_falls_back_to_an_unrelated_virtualization_backend() {
@@ -76,6 +79,31 @@ fn vmware_log_exit_marker_must_be_after_the_launch_baseline() {
     assert!(!vmx_log_has_exited_since(stale, Some(baseline)));
     let current = format!("{stale}current VMX exit (0)\n");
     assert!(vmx_log_has_exited_since(&current, Some(baseline)));
+}
+
+#[test]
+fn vmware_tools_marker_must_be_from_the_current_session() {
+    let stale = "Tools: Running status rpc handler: 0 => 1.\n";
+    let baseline = u64::try_from(stale.len()).unwrap();
+    assert!(!vmx_log_has_tools_started_since(stale, Some(baseline)));
+    let current = format!("{stale}Tools: Running status rpc handler: 0 => 1.\n");
+    assert!(vmx_log_has_tools_started_since(&current, Some(baseline)));
+
+    let stale_crlf = "Tools: Running status rpc handler: 0 => 1.\r\n";
+    let baseline = u64::try_from(stale_crlf.len()).unwrap();
+    let current_crlf = format!("{stale_crlf}Tools: Running status rpc handler: 0 => 1.\r\n");
+    assert!(vmx_log_has_tools_started_since(
+        &current_crlf,
+        Some(baseline)
+    ));
+}
+
+#[test]
+fn vmrun_listing_matches_only_the_requested_vmx_path() {
+    let output =
+        b"Total running VMs: 2\r\nC:\\Case\\one\\machine.vmx\r\nC:\\Case\\two\\machine.vmx\r\n";
+    assert!(vmrun_lists_vmx(output, "c:\\case\\one\\machine.vmx"));
+    assert!(!vmrun_lists_vmx(output, "C:\\Case\\other\\machine.vmx"));
 }
 
 #[test]

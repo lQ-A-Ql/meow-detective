@@ -6,6 +6,7 @@ mod emulation;
 mod emulation_linux;
 mod emulation_linux_boot;
 mod emulation_linux_controller;
+mod emulation_linux_services;
 mod error;
 mod filesystem_factory;
 mod handle;

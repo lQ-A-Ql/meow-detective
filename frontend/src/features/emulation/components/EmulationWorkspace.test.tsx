@@ -109,6 +109,7 @@ describe('EmulationWorkspace', () => {
         state: 'running',
         logicalLength: 214_748_364_800,
         controlMode: 'interactiveOnly',
+        guestPhase: 'filesystemMounted',
         active: true,
         releasable: true,
       }],
@@ -118,6 +119,7 @@ describe('EmulationWorkspace', () => {
     })} />);
 
     expect(screen.getAllByText('运行中')).toHaveLength(2);
+    expect(screen.getByText('客体已进入用户空间')).toBeInTheDocument();
     expect(screen.getByText('200.00 GB')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '释放 早起王的PC镜像 的仿真会话' }));
     expect(release).toHaveBeenCalledWith('emulation-session-1');
@@ -495,5 +497,34 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText('XFS 日志未验证')).toBeInTheDocument();
     expect(screen.getByText(/无法安全处理时阻止启动/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' })).toBeInTheDocument();
+  });
+
+  it('identifies image-side service loops without calling them XFS damage', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'CentOS 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          bootRiskNotes: ['custom-service-always-restart', 'remote-session-guard'],
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+    })} />);
+
+    expect(screen.getByText('自定义服务持续重启')).toBeInTheDocument();
+    expect(screen.getByText('远程会话防护')).toBeInTheDocument();
+    expect(screen.getByText(/该告警不是 XFS 损坏证据/)).toBeInTheDocument();
+    expect(screen.getByText(/安排强制终止/)).toBeInTheDocument();
   });
 });

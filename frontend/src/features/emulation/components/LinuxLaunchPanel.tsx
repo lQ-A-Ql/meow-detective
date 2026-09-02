@@ -130,6 +130,12 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
           {(install.bootRiskNotes ?? []).includes('xfs-log-unverified') ? (
             <Badge variant="secondary">{t('emulationPage.preflight.xfsLogUnverified')}</Badge>
           ) : null}
+          {(install.bootRiskNotes ?? []).includes('custom-service-always-restart') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.customServiceRestart')}</Badge>
+          ) : null}
+          {(install.bootRiskNotes ?? []).includes('remote-session-guard') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.remoteSessionGuard')}</Badge>
+          ) : null}
         </div>
       ))}
       {hasDirtyXfsLog ? (
@@ -140,6 +146,16 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
       {hasUnverifiedXfsLog ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {t('emulationPage.preflight.xfsLogUnverifiedHint')}
+        </div>
+      ) : null}
+      {model.preflight.installs.some((install) => (install.bootRiskNotes ?? []).includes('custom-service-always-restart')) ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.customServiceRestartHint')}
+        </div>
+      ) : null}
+      {model.preflight.installs.some((install) => (install.bootRiskNotes ?? []).includes('remote-session-guard')) ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.remoteSessionGuardHint')}
         </div>
       ) : null}
       <div className="pt-1 text-[10px] leading-4 text-forensics-muted">

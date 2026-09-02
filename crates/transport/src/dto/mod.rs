@@ -83,12 +83,12 @@ pub use emulation::{
     EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
     EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
     EmulationEfiFallbackResultDto, EmulationEfiFallbackStrategyDto, EmulationFsRepairItemDto,
-    EmulationFsRepairResultDto, EmulationFsVolumeStateDto, EmulationInstallDto,
-    EmulationInstallPlatformDto, EmulationLinuxAccountDto, EmulationLinuxBypassRequestDto,
-    EmulationLinuxBypassResultDto, EmulationNetworkModeDto, EmulationOptionsDto,
-    EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto,
-    EmulationPreflightDto, EmulationSessionStatusDto, EmulationStateDto,
-    PrepareEmulationRequestDto,
+    EmulationFsRepairResultDto, EmulationFsVolumeStateDto, EmulationGuestPhaseDto,
+    EmulationInstallDto, EmulationInstallPlatformDto, EmulationLinuxAccountDto,
+    EmulationLinuxBypassRequestDto, EmulationLinuxBypassResultDto, EmulationNetworkModeDto,
+    EmulationOptionsDto, EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto,
+    EmulationOsdataCleanupStateDto, EmulationPreflightDto, EmulationSessionStatusDto,
+    EmulationStateDto, PrepareEmulationRequestDto,
 };
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileExtractionPhaseDto, FileExtractionProgressDto,
