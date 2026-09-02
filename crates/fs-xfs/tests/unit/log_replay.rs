@@ -125,6 +125,53 @@ fn replays_a_committed_buffer_transaction_into_a_metadata_patch() {
 }
 
 #[test]
+fn conservative_log_clear_does_not_replay_live_capture_transactions() {
+    let operations = buffer_transaction(1, 200 * 8, 0xAB);
+    let image = filesystem_with_record(0, RECORD_CYCLE, 32 * 1024, &operations);
+    let reader = XfsReader::open(Box::new(MemoryReader::new(image)), 0).unwrap();
+    let plan = reader
+        .plan_log_clear()
+        .unwrap()
+        .expect("the fixture log assesses dirty");
+
+    assert_eq!(plan.replayed_transactions, 0);
+    assert_eq!(plan.skipped_items, 0);
+    assert_eq!(plan.patches.len(), 1, "clear mode only rewrites the log");
+    assert_eq!(
+        plan.patches[0].offset,
+        (LOG_START_FSB * FS_BLOCK_SIZE) as u64
+    );
+}
+
+#[test]
+fn conservative_log_clear_discards_valid_agi_unlinked_state() {
+    let operations = buffer_transaction(1, 200 * 8, 0xAB);
+    let mut image = filesystem_with_record(0, RECORD_CYCLE, 32 * 1024, &operations);
+    let mut agi = agi_block(RECORD_LSN);
+    agi[40..44].copy_from_slice(&1u32.to_be_bytes());
+    image[2 * FS_BLOCK_SIZE..3 * FS_BLOCK_SIZE].copy_from_slice(&agi);
+    let reader = XfsReader::open(Box::new(MemoryReader::new(image)), 0).unwrap();
+
+    let plan = reader
+        .plan_log_clear()
+        .unwrap()
+        .expect("the fixture log assesses dirty");
+    let agi_patch = plan
+        .patches
+        .iter()
+        .find(|patch| patch.offset == (2 * FS_BLOCK_SIZE) as u64)
+        .expect("valid AGI gets a conservative clear patch");
+    assert!(agi_patch.bytes[40..(40 + 64 * 4)]
+        .chunks_exact(4)
+        .all(|value| value == u32::MAX.to_be_bytes()));
+    assert_eq!(&agi_patch.bytes[320..328], &[0u8; 8]);
+    assert_eq!(
+        u32::from_le_bytes(agi_patch.bytes[312..316].try_into().unwrap()),
+        agi_crc(&agi_patch.bytes)
+    );
+}
+
+#[test]
 fn clean_log_cycle_is_newer_than_the_v5_superblock_lsn() {
     let operations = buffer_transaction(1, 200 * 8, 0xAB);
     let mut image = filesystem_with_record(0, RECORD_CYCLE, 32 * 1024, &operations);

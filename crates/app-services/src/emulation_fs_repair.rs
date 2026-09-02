@@ -4,12 +4,13 @@
 //! log. The guest kernel can replay it, but crash-truncated user-space
 //! files then break the booted system (observed on the CentOS 7 sample:
 //! dbus/logind cascade, no login prompt). This service applies the
-//! repair plan computed by `fs-xfs` through the session COW overlay:
-//! zero the internal log, terminate it with the mkfs-style dummy unmount
-//! record, and normalize the LSN (+CRC32C) of every metadata object the
-//! mount path verifies (superblock, per-AG AGF/AGI, root/realtime
-//! inodes). The evidence image is never written; only volumes whose
-//! assessment reports `Dirty` are touched.
+//! clear plan computed by `fs-xfs` through the session COW overlay: discard
+//! the captured internal log and terminate it with the mkfs-style dummy
+//! unmount record. Emulation deliberately does not replay transactions: a
+//! live capture can contain an inode core whose data fork was not captured
+//! atomically, and replaying that core can make an otherwise mountable volume
+//! fail XFS consistency checks. The evidence image is never written; only
+//! volumes whose assessment reports `Dirty` are touched.
 
 use std::sync::Arc;
 
@@ -320,7 +321,7 @@ fn plan_one_volume(
         .log_geometry()
         .log_bytes()
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
-    let plan = match volume.fs.plan_log_repair() {
+    let plan = match volume.fs.plan_log_clear() {
         Ok(plan) => plan,
         Err(error) => {
             tracing::warn!(partition_index, error = %error, "xfs log repair: planning failed");

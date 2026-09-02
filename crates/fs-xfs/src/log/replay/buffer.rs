@@ -115,7 +115,7 @@ pub(super) fn seal(
         return Err("metadata verifier fields lie outside the buffer".to_string());
     }
     bytes[layout.lsn..layout.lsn + 8].copy_from_slice(&lsn.to_be_bytes());
-    stamp_crc(bytes, layout.crc);
+    stamp_crc32c(bytes, layout.crc);
     Ok(())
 }
 
@@ -203,7 +203,7 @@ const fn layout(crc: usize, lsn: usize, uuid: usize) -> MetadataLayout {
     MetadataLayout { crc, lsn, uuid }
 }
 
-fn stamp_crc(bytes: &mut [u8], crc_offset: usize) {
+pub(crate) fn stamp_crc32c(bytes: &mut [u8], crc_offset: usize) {
     let mut crc = crc32c(u32::MAX, &bytes[..crc_offset]);
     crc = crc32c(crc, &[0; 4]);
     crc = crc32c(crc, &bytes[crc_offset + 4..]);
