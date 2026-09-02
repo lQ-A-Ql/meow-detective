@@ -1,4 +1,4 @@
-//! Host-side XFS log repair planning: replay, then rewrite the log area.
+//! Host-side XFS log repair planning: replay or conservatively clear the log.
 //!
 //! A dirty v5 XFS volume only becomes mountable when the metadata that
 //! exists solely in the log is materialized first (a captured image showed
@@ -8,9 +8,9 @@
 //! patches that the caller applies through its own write mapping (the
 //! emulation COW overlay) — this module never writes anything itself:
 //!
-//! 1. **Replay** (`log::replay`, mirroring the kernel's `xlog_recover`):
-//!    every committed transaction's BUF / INODE / ICREATE items become
-//!    metadata patches, in increasing record-LSN order.
+//! 1. **Replay** (`plan_log_repair`): every committed transaction's BUF /
+//!    INODE / ICREATE items become metadata patches, in increasing record-LSN
+//!    order. This path is retained for analysis and controlled replay views.
 //! 2. **Log rewrite**: the log area is rewritten into the shape of a real
 //!    clean-unmount log: a fully cycle-stamped region with the mkfs-style
 //!    dummy unmount record in the last two basic blocks. Its cycle is newer
@@ -23,11 +23,16 @@
 //!    against fs/xfs/xfs_log_recover.c and iterated against the RHEL7
 //!    3.10 backport's observed behavior).
 
-use crate::log::replay::{finalize_replay, replay_log_snapshot, stamp_crc32c, ReplayGeometry};
+use std::collections::HashSet;
+
+use crate::log::replay::{
+    finalize_replay, replay_log_snapshot, stamp_crc32c, stamp_metadata_crc, ReplayGeometry,
+};
 use crate::log::{
     assess_log_state, dummy_unmount_record, XfsLogError, XfsLogSnapshot, XfsLogState,
     XFS_LOG_MAX_SNAPSHOT_BYTES, XLOG_BASIC_BLOCK_SIZE,
 };
+use crate::reader::XFS_INODE_MAGIC;
 use crate::XfsReader;
 
 /// One volume-relative write of the repair.
@@ -52,12 +57,21 @@ pub struct XfsLogClearPlan {
 }
 
 const UNMOUNT_RECORD_BLOCKS: usize = 2;
+/// XFS allocation-group headers use filesystem disk addresses (512-byte
+/// sectors), not filesystem-block addresses.  In particular, AGI is sector
+/// 2 from the start of each allocation group even when the data block size is
+/// 4 KiB or larger.
+const XFS_DADDR_SIZE: u64 = 512;
+const XFS_AGI_DADDR_SECTORS: u64 = 2;
+const XFS_AGI_BYTES: usize = XFS_DADDR_SIZE as usize;
 const XFS_AGI_MAGIC: u32 = 0x5841_4749;
 const AGI_UNLINKED_OFFSET: usize = 40;
 const AGI_UNLINKED_COUNT: usize = 64;
 const AGI_UUID_OFFSET: usize = 296;
 const AGI_CRC_OFFSET: usize = 312;
 const AGI_LSN_OFFSET: usize = 320;
+const INODE_NEXT_UNLINKED_OFFSET: usize = 96;
+const MAX_UNLINKED_CHAIN_STEPS: u64 = 1_000_000;
 
 /// Advance beyond every metadata/log LSN that remains visible after replay.
 /// XFS reserves the log-header magic as an invalid cycle number.
@@ -100,6 +114,19 @@ impl XfsReader {
         }
         self.finish_clear_plan(&snapshot, 0, 0, Vec::new(), 0)
             .map(Some)
+    }
+
+    /// Verify the state produced by [`Self::plan_log_clear`]. This is
+    /// intentionally stricter than log assessment: a misplaced AGI patch
+    /// would leave the log clean while the guest still sees orphaned inodes.
+    pub fn verify_log_clear(&self) -> Result<(), XfsLogError> {
+        let snapshot = self.read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)?;
+        if assess_log_state(&snapshot) != XfsLogState::Clean {
+            return Err(XfsLogError::InvalidData(
+                "cleared XFS log is not assessed as clean".into(),
+            ));
+        }
+        self.verify_ag_unlinked_clear()
     }
 
     fn replay_geometry(&self) -> ReplayGeometry {
@@ -218,10 +245,10 @@ impl XfsReader {
     fn plan_ag_unlinked_clear(&self) -> Result<Vec<XfsRepairPatch>, XfsLogError> {
         let mut patches = Vec::new();
         for ag in 0..self._ag_count {
-            let fs_block = (u64::from(ag) << self.agblklog)
-                .checked_add(2)
-                .ok_or_else(|| XfsLogError::InvalidGeometry("AGI block overflows".into()))?;
-            let mut block = self.read_block(fs_block).map_err(XfsLogError::Io)?;
+            let ag_offset = self.agi_offset(ag)?;
+            let mut block = self
+                .read_bytes_at(ag_offset, XFS_AGI_BYTES)
+                .map_err(XfsLogError::Io)?;
             if block.len() < AGI_UNLINKED_OFFSET + AGI_UNLINKED_COUNT * 4
                 || crate::be_u32(&block, 0) != XFS_AGI_MAGIC
             {
@@ -236,6 +263,7 @@ impl XfsReader {
                     "AGI block for allocation group {ag} has a foreign UUID"
                 )));
             }
+            patches.extend(self.plan_unlinked_inode_clear(ag, &block)?);
             let mut changed = false;
             for index in 0..AGI_UNLINKED_COUNT {
                 let offset = AGI_UNLINKED_OFFSET + index * 4;
@@ -255,8 +283,7 @@ impl XfsReader {
             if self.log_geometry.metadata_crc {
                 stamp_crc32c(&mut block, AGI_CRC_OFFSET);
             }
-            let absolute = self.fsblock_to_offset(fs_block).map_err(XfsLogError::Io)?;
-            let offset = absolute.checked_sub(self.volume_offset).ok_or_else(|| {
+            let offset = ag_offset.checked_sub(self.volume_offset).ok_or_else(|| {
                 XfsLogError::InvalidData("AGI patch precedes the XFS volume".into())
             })?;
             patches.push(XfsRepairPatch {
@@ -266,4 +293,131 @@ impl XfsReader {
         }
         Ok(patches)
     }
+
+    fn agi_offset(&self, ag: u32) -> Result<u64, XfsLogError> {
+        u64::from(ag)
+            .checked_mul(self._ag_blocks)
+            .and_then(|blocks| blocks.checked_mul(self.block_size))
+            .and_then(|offset| offset.checked_add(XFS_AGI_DADDR_SECTORS * XFS_DADDR_SIZE))
+            .ok_or_else(|| XfsLogError::InvalidGeometry("AGI offset overflows".into()))
+    }
+
+    fn verify_ag_unlinked_clear(&self) -> Result<(), XfsLogError> {
+        for ag in 0..self._ag_count {
+            let offset = self.agi_offset(ag)?;
+            let block = self
+                .read_bytes_at(offset, XFS_AGI_BYTES)
+                .map_err(XfsLogError::Io)?;
+            if block.len() < AGI_UNLINKED_OFFSET + AGI_UNLINKED_COUNT * 4
+                || crate::be_u32(&block, 0) != XFS_AGI_MAGIC
+            {
+                continue;
+            }
+            if block[AGI_UNLINKED_OFFSET..AGI_UNLINKED_OFFSET + AGI_UNLINKED_COUNT * 4]
+                .chunks_exact(4)
+                .any(|value| value != u32::MAX.to_be_bytes())
+            {
+                return Err(XfsLogError::InvalidData(format!(
+                    "AGI block for allocation group {ag} still contains an unlinked inode"
+                )));
+            }
+            if self.log_geometry.metadata_crc && !agi_metadata_crc_is_valid(&block) {
+                return Err(XfsLogError::InvalidData(format!(
+                    "AGI block for allocation group {ag} has an invalid CRC"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Clear the inode-side links reachable from the AGI buckets. Once the
+    /// buckets themselves are discarded, retaining a `di_next_unlinked` value
+    /// leaves xfs_repair to find a dangling orphan on the next boot.
+    fn plan_unlinked_inode_clear(
+        &self,
+        ag: u32,
+        agi: &[u8],
+    ) -> Result<Vec<XfsRepairPatch>, XfsLogError> {
+        let inode_capacity = self
+            ._ag_blocks
+            .checked_shl(u32::from(self.inopblog))
+            .ok_or_else(|| XfsLogError::InvalidGeometry("AG inode capacity overflows".into()))?;
+        let mut patches = Vec::new();
+        let mut visited = HashSet::new();
+        for bucket in 0..AGI_UNLINKED_COUNT {
+            let offset = AGI_UNLINKED_OFFSET + bucket * 4;
+            let head = crate::be_u32(agi, offset);
+            if head == u32::MAX || u64::from(head) >= inode_capacity {
+                continue;
+            }
+            let mut agino = head;
+            let mut steps = 0u64;
+            while agino != u32::MAX
+                && u64::from(agino) < inode_capacity
+                && steps < MAX_UNLINKED_CHAIN_STEPS
+                && visited.insert(agino)
+            {
+                let inode_number = self
+                    .inode_number_for_agino(ag, agino)
+                    .map_err(XfsLogError::InvalidGeometry)?;
+                let mut inode = match self.read_inode(inode_number) {
+                    Ok(inode) => inode,
+                    Err(_) => break,
+                };
+                if inode.len() < INODE_NEXT_UNLINKED_OFFSET + 4
+                    || !matches!(inode.get(crate::di_off::VERSION), Some(1..=3))
+                    || crate::be_u16(&inode, crate::di_off::MAGIC) != XFS_INODE_MAGIC
+                {
+                    break;
+                }
+                let next = crate::be_u32(&inode, INODE_NEXT_UNLINKED_OFFSET);
+                if next != u32::MAX {
+                    inode[INODE_NEXT_UNLINKED_OFFSET..INODE_NEXT_UNLINKED_OFFSET + 4]
+                        .copy_from_slice(&u32::MAX.to_be_bytes());
+                    if self.log_geometry.metadata_crc && inode[crate::di_off::VERSION] == 3 {
+                        stamp_metadata_crc(&mut inode);
+                    }
+                    let offset = self
+                        .inode_offset(inode_number)
+                        .map_err(XfsLogError::Io)?
+                        .checked_sub(self.volume_offset)
+                        .ok_or_else(|| {
+                            XfsLogError::InvalidData(
+                                "unlinked inode patch precedes the XFS volume".into(),
+                            )
+                        })?;
+                    patches.push(XfsRepairPatch {
+                        offset,
+                        bytes: inode,
+                    });
+                }
+                agino = next;
+                steps += 1;
+            }
+        }
+        Ok(patches)
+    }
+
+    fn inode_number_for_agino(&self, ag: u32, agino: u32) -> Result<u64, String> {
+        let shift = self
+            .agblklog
+            .checked_add(self.inopblog)
+            .ok_or_else(|| "XFS inode number shift overflows".to_string())?;
+        if shift >= u64::BITS as u8 {
+            return Err("XFS inode number shift is invalid".to_string());
+        }
+        u64::from(ag)
+            .checked_shl(u32::from(shift))
+            .and_then(|base| base.checked_add(u64::from(agino)))
+            .ok_or_else(|| "XFS inode number overflows".to_string())
+    }
+}
+
+fn agi_metadata_crc_is_valid(object: &[u8]) -> bool {
+    if object.get(AGI_CRC_OFFSET..AGI_CRC_OFFSET + 4).is_none() {
+        return false;
+    }
+    let mut sealed = object.to_vec();
+    stamp_crc32c(&mut sealed, AGI_CRC_OFFSET);
+    sealed[AGI_CRC_OFFSET..AGI_CRC_OFFSET + 4] == object[AGI_CRC_OFFSET..AGI_CRC_OFFSET + 4]
 }

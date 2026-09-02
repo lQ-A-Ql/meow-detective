@@ -5,8 +5,9 @@
 //! files then break the booted system (observed on the CentOS 7 sample:
 //! dbus/logind cascade, no login prompt). This service applies the
 //! clear plan computed by `fs-xfs` through the session COW overlay: discard
-//! the captured internal log and terminate it with the mkfs-style dummy
-//! unmount record. Emulation deliberately does not replay transactions: a
+//! the captured internal log, clear allocation-group orphan lists, and
+//! terminate it with the mkfs-style dummy unmount record. Emulation
+//! deliberately does not replay transactions: a
 //! live capture can contain an inode core whose data fork was not captured
 //! atomically, and replaying that core can make an otherwise mountable volume
 //! fail XFS consistency checks. The evidence image is never written; only
@@ -365,15 +366,10 @@ fn verify_volume(disk: &Arc<CowDisk>, volume: &PlannedVolume) -> Result<(), Emul
         return Ok(());
     }
     let verified = open_xfs_volume(disk, &volume.record)?;
-    let snapshot = verified
+    verified
         .fs
-        .read_internal_log_snapshot(fs_xfs::log::XFS_LOG_MAX_SNAPSHOT_BYTES)
-        .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
-    if assess(&snapshot) != fs_xfs::log::XfsLogState::Clean {
-        return Err(EmulationBypassError::OverlayWrite(
-            "the repaired log does not assess as clean".to_string(),
-        ));
-    }
+        .verify_log_clear()
+        .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
     Ok(())
 }
 
@@ -421,10 +417,6 @@ fn repair_result(
         data_source_id: context.data_source_id.0.clone(),
         items,
     }
-}
-
-fn assess(snapshot: &fs_xfs::log::XfsLogSnapshot) -> fs_xfs::log::XfsLogState {
-    fs_xfs::log::assess_log_state(snapshot)
 }
 
 fn item(

@@ -532,8 +532,8 @@
       "optionTimeSync": "Guest time synchronization",
       "installEfiFallback": "Install EFI fallback bootloader before launch (overlay only)",
       "installEfiFallbackHint": "The GPT disk has no ESP fallback loader, so the VM would land in the firmware boot manager; when enabled, BOOTX64.EFI is installed into the ESP through the COW overlay and original evidence is never written.",
-      "repairFilesystems": "Replay and repair XFS logs before launch (overlay only)",
-      "repairFilesystemsHint": "Unflushed XFS transactions were detected. The host replays committed transactions and writes a clean log only to this emulation session's COW overlay."
+      "repairFilesystems": "Clear XFS log state before launch (overlay only)",
+      "repairFilesystemsHint": "Unflushed XFS state was detected. The host discards log transactions, clears AGI orphan lists, and writes a clean log only to this emulation session's COW overlay."
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO first",
@@ -556,6 +556,10 @@
       "xfsLogDirtyHint": "An unreplayed XFS log was detected. Keep the pre-launch host repair enabled; disabling it may send the installed system into rescue mode.",
       "xfsLogUnverified": "XFS log unverified",
       "xfsLogUnverifiedHint": "At least one XFS log could not be verified. Pre-launch repair will assess it again and block launch when it cannot be handled safely.",
+      "customServiceRestart": "Custom service keeps restarting",
+      "customServiceRestartHint": "An enabled locally defined systemd service is configured to restart continuously. Missing dependencies or guest-incompatible scripts can make the console repeat stop/start messages; this is not evidence of XFS corruption.",
+      "remoteSessionGuard": "Remote-session guard",
+      "remoteSessionGuardHint": "A custom image script checks pts sessions and schedules forced termination. The emulation network is disabled by default, but the behavior remains an image-side finding.",
       "linuxBypassHint": "Select an account under Logon bypass. Before launch, its password is set to 123456 in the COW overlay without modifying the original evidence.",
       "osdataNonEmptyHint": "OSDATA is not empty; use the PE route",
       "bypassAvailable": "Bypass available",
@@ -616,6 +620,11 @@
     },
     "controlModes": {
       "interactiveOnly": "Interactive control"
+    },
+    "guestPhases": {
+      "unknown": "Guest state unknown",
+      "booting": "Confirming guest boot",
+      "filesystemMounted": "Guest reached user space"
     },
     "actions": {
       "refresh": "Refresh emulation state",

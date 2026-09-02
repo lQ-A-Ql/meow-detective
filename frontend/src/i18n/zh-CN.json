@@ -532,8 +532,8 @@
       "optionTimeSync": "客机时间同步",
       "installEfiFallback": "启动前安装 EFI fallback 引导（仅写入覆盖层）",
       "installEfiFallbackHint": "GPT 磁盘缺少 ESP 回退引导器，虚拟机会落入固件启动菜单；勾选后将在 ESP 安装 BOOTX64.EFI，仅写入 COW 覆盖层，不改动原始证据。",
-      "repairFilesystems": "启动前回放并修复 XFS 日志（仅写入覆盖层）",
-      "repairFilesystemsHint": "检测到采集时未落盘的 XFS 事务；勾选后将在主机侧重放已提交事务并生成干净日志，所有修改仅进入当前仿真 COW 覆盖层。"
+      "repairFilesystems": "启动前清理 XFS 日志状态（仅写入覆盖层）",
+      "repairFilesystemsHint": "检测到采集时未落盘的 XFS 状态；勾选后将丢弃日志事务、清理 AGI 孤立链并生成干净日志，所有修改仅进入当前仿真 COW 覆盖层。"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO 优先",
@@ -556,6 +556,10 @@
       "xfsLogDirtyHint": "检测到未回放的 XFS 日志；建议保留启动前主机侧修复选项。若关闭该选项，原系统可能进入救援模式。",
       "xfsLogUnverified": "XFS 日志未验证",
       "xfsLogUnverifiedHint": "至少一个 XFS 卷的日志状态无法验证；启动前修复将重新检查并在无法安全处理时阻止启动。",
+      "customServiceRestart": "自定义服务持续重启",
+      "customServiceRestartHint": "镜像启用的本地 systemd 服务配置为持续重启；若其依赖或脚本不适配仿真环境，控制台可能反复显示停止/启动。该告警不是 XFS 损坏证据。",
+      "remoteSessionGuard": "远程会话防护",
+      "remoteSessionGuardHint": "镜像中的自定义脚本会检查 pts 会话并安排强制终止；仿真网络默认关闭，但该行为仍应作为样本自身逻辑记录。",
       "linuxBypassHint": "可在“系统绕密”中选择账户；启动前会在 COW 覆盖层中把该账户密码设置为 123456，不会修改原始证据。",
       "osdataNonEmptyHint": "OSDATA 非空，无法自动清除，请使用 PE 路线",
       "bypassAvailable": "可绕密",
@@ -616,6 +620,11 @@
     },
     "controlModes": {
       "interactiveOnly": "交互式控制"
+    },
+    "guestPhases": {
+      "unknown": "客体状态未知",
+      "booting": "客体启动确认中",
+      "filesystemMounted": "客体已进入用户空间"
     },
     "actions": {
       "refresh": "刷新仿真状态",

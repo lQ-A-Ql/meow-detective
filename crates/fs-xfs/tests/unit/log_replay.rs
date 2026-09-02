@@ -4,7 +4,7 @@ use crate::log::{
     XFS_TRANSACTION_CLIENT, XLOG_BASIC_BLOCK_SIZE, XLOG_COMMIT_TRANS, XLOG_OP_HEADER_SIZE,
     XLOG_START_TRANS,
 };
-use crate::reader::{sb_off, XFS_SUPER_MAGIC};
+use crate::reader::{sb_off, XFS_INODE_MAGIC, XFS_SUPER_MAGIC};
 use crate::XfsReader;
 use evidence_core::{EvidenceReader, ReaderInfo};
 use std::io::{self, Read, Seek, SeekFrom};
@@ -148,8 +148,16 @@ fn conservative_log_clear_discards_valid_agi_unlinked_state() {
     let operations = buffer_transaction(1, 200 * 8, 0xAB);
     let mut image = filesystem_with_record(0, RECORD_CYCLE, 32 * 1024, &operations);
     let mut agi = agi_block(RECORD_LSN);
-    agi[40..44].copy_from_slice(&1u32.to_be_bytes());
-    image[2 * FS_BLOCK_SIZE..3 * FS_BLOCK_SIZE].copy_from_slice(&agi);
+    agi[40..44].copy_from_slice(&16u32.to_be_bytes());
+    // AGI is at daddr 2 (the third 512-byte sector), not filesystem block 2.
+    image[2 * XLOG_BASIC_BLOCK_SIZE..2 * XLOG_BASIC_BLOCK_SIZE + XLOG_BASIC_BLOCK_SIZE]
+        .copy_from_slice(&agi[..XLOG_BASIC_BLOCK_SIZE]);
+    let mut inode = vec![0u8; 256];
+    inode[crate::di_off::MAGIC..crate::di_off::MAGIC + 2]
+        .copy_from_slice(&XFS_INODE_MAGIC.to_be_bytes());
+    inode[crate::di_off::VERSION] = 3;
+    inode[96..100].copy_from_slice(&17u32.to_be_bytes());
+    image[FS_BLOCK_SIZE..FS_BLOCK_SIZE + inode.len()].copy_from_slice(&inode);
     let reader = XfsReader::open(Box::new(MemoryReader::new(image)), 0).unwrap();
 
     let plan = reader
@@ -159,8 +167,9 @@ fn conservative_log_clear_discards_valid_agi_unlinked_state() {
     let agi_patch = plan
         .patches
         .iter()
-        .find(|patch| patch.offset == (2 * FS_BLOCK_SIZE) as u64)
+        .find(|patch| patch.offset == (2 * XLOG_BASIC_BLOCK_SIZE) as u64)
         .expect("valid AGI gets a conservative clear patch");
+    assert_eq!(agi_patch.bytes.len(), XLOG_BASIC_BLOCK_SIZE);
     assert!(agi_patch.bytes[40..(40 + 64 * 4)]
         .chunks_exact(4)
         .all(|value| value == u32::MAX.to_be_bytes()));
@@ -169,6 +178,12 @@ fn conservative_log_clear_discards_valid_agi_unlinked_state() {
         u32::from_le_bytes(agi_patch.bytes[312..316].try_into().unwrap()),
         agi_crc(&agi_patch.bytes)
     );
+    let inode_patch = plan
+        .patches
+        .iter()
+        .find(|patch| patch.offset == FS_BLOCK_SIZE as u64)
+        .expect("reachable unlinked inode gets a clear patch");
+    assert_eq!(&inode_patch.bytes[96..100], &u32::MAX.to_be_bytes());
 }
 
 #[test]
