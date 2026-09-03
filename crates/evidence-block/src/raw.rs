@@ -1,3 +1,4 @@
+use evidence_core::{EvidenceReader, RawImageReader};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Mutex;
@@ -5,16 +6,16 @@ use std::sync::Mutex;
 use crate::{BlockDeviceError, BlockProvider};
 
 pub(crate) struct RawBlockProvider {
-    file: Mutex<std::fs::File>,
+    file: Mutex<RawImageReader>,
     byte_len: u64,
 }
 
 impl RawBlockProvider {
     pub(crate) fn open(path: &Path) -> Result<Self, BlockDeviceError> {
-        let file = std::fs::File::open(path)?;
-        let byte_len = file.metadata()?.len();
+        let reader = RawImageReader::open(path)?;
+        let byte_len = reader.info().size;
         Ok(Self {
-            file: Mutex::new(file),
+            file: Mutex::new(reader),
             byte_len,
         })
     }

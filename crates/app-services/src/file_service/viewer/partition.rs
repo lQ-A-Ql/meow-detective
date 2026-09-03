@@ -114,6 +114,7 @@ pub(crate) fn raw_partition_candidates(
         let filesystem_kind = match candidate.kind {
             crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
             crate::datasource_service::ImageFilesystemKind::Fat => "FAT",
+            crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
             crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
             crate::datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
             crate::datasource_service::ImageFilesystemKind::Xfs => "XFS",

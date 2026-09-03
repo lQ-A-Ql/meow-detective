@@ -69,6 +69,15 @@ fn opens_detected_filesystem_from_real_e01() {
             let root = fs.root().unwrap();
             assert!(root.is_dir);
         }
+        ImageFilesystemKind::Iso9660 => {
+            let reader = image_e01::E01Reader::open(&sample_path()).unwrap();
+            let fs = evidence_core::Iso9660Reader::from_reader(
+                Box::new(reader),
+                sample_path().file_name().and_then(|name| name.to_str()),
+            )
+            .unwrap();
+            assert!(fs.root().unwrap().is_dir);
+        }
         ImageFilesystemKind::BitLocker => {
             panic!("expected first real sample candidate to be directly readable");
         }
@@ -126,6 +135,7 @@ fn dumps_real_e01_partition_accessibility() {
             }
             ImageFilesystemKind::BitLocker => {}
             ImageFilesystemKind::Ext4 | ImageFilesystemKind::Xfs | ImageFilesystemKind::Btrfs => {}
+            ImageFilesystemKind::Iso9660 => {}
             _ => {}
         }
     }

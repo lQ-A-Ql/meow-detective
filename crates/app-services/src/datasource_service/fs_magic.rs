@@ -7,6 +7,7 @@ pub(crate) fn kind_label(kind: ImageFilesystemKind) -> String {
     match kind {
         ImageFilesystemKind::Ntfs => "NTFS".to_string(),
         ImageFilesystemKind::Fat => "FAT".to_string(),
+        ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
         ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
         ImageFilesystemKind::Ext4 => "Ext4".to_string(),
         ImageFilesystemKind::Xfs => "XFS".to_string(),
@@ -77,6 +78,34 @@ where
     }
 
     Ok(None)
+}
+
+pub(crate) fn read_iso9660<R>(reader: &mut R) -> Result<bool>
+where
+    R: Read + Seek + ?Sized,
+{
+    const BLOCK_SIZE: u64 = 2048;
+    const FIRST_DESCRIPTOR: u64 = 16;
+    const MAX_DESCRIPTORS: u64 = 256;
+    for index in 0..MAX_DESCRIPTORS {
+        let mut descriptor = [0u8; BLOCK_SIZE as usize];
+        reader.seek(SeekFrom::Start((FIRST_DESCRIPTOR + index) * BLOCK_SIZE))?;
+        match reader.read_exact(&mut descriptor) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(false),
+            Err(error) => return Err(error.into()),
+        }
+        if &descriptor[1..6] != b"CD001" || descriptor[6] != 1 {
+            continue;
+        }
+        if descriptor[0] == 1 {
+            return Ok(true);
+        }
+        if descriptor[0] == 255 {
+            return Ok(false);
+        }
+    }
+    Ok(false)
 }
 
 pub(crate) fn read_sector<R>(reader: &mut R, offset: u64) -> Result<[u8; 512]>

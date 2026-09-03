@@ -64,7 +64,9 @@ impl HashService {
         let segments = match kind {
             DataSourceKind::E01 => volumes::discover_e01_segments(path)
                 .map_err(|error| io_error("discover E01 segments", error))?,
-            DataSourceKind::Raw => vec![path.to_path_buf()],
+            DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
+                .map(|reader| reader.backing_paths().to_vec())
+                .map_err(|error| io_error("discover raw image backing files", error))?,
             _ => return Err(EvidenceHashError::Unsupported),
         };
         let total_bytes = segments

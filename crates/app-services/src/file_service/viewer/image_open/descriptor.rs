@@ -78,6 +78,18 @@ where
 {
     let (reader, fs_offset, filesystem_kind) =
         context.open_candidate_block_reader(descriptor, candidate)?;
+    if filesystem_kind.eq_ignore_ascii_case("ISO9660") {
+        let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, None)?;
+        let filesystem = evidence_core::Iso9660Reader::from_reader(
+            Box::new(reader),
+            Path::new(&descriptor.source_path)
+                .file_name()
+                .and_then(|name| name.to_str()),
+        )?;
+        return open_first_image_path_seekable(&filesystem, paths)
+            .map(Some)
+            .map_err(FileServiceError::Io);
+    }
     if filesystem_kind == "NTFS" {
         return open_ntfs_descriptor_file(
             fs_ntfs::NtfsReader::open(reader, fs_offset)?,
@@ -151,6 +163,15 @@ fn open_candidate<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
+    if candidate.filesystem_kind.eq_ignore_ascii_case("ISO9660") {
+        let (reader, fs_offset) = open_candidate_block_reader(source_path, candidate, open_reader)?;
+        let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, None)?;
+        let filesystem = evidence_core::Iso9660Reader::from_reader(
+            Box::new(reader),
+            source_path.file_name().and_then(|name| name.to_str()),
+        )?;
+        return open_first_image_path_seekable(&filesystem, paths).map(Some);
+    }
     if candidate.filesystem_kind == "NTFS" {
         return open_ntfs(source_path, descriptor, candidate, paths, open_reader).map(Some);
     }

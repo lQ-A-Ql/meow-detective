@@ -222,6 +222,7 @@ pub(crate) fn preview_candidate_for_locator(
     let filesystem_kind = match candidate.kind {
         ImageFilesystemKind::Ntfs => "NTFS",
         ImageFilesystemKind::Fat => "FAT",
+        ImageFilesystemKind::Iso9660 => "ISO9660",
         ImageFilesystemKind::Ext4 => "Ext4",
         ImageFilesystemKind::Xfs => "XFS",
         ImageFilesystemKind::Btrfs => "Btrfs",

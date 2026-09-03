@@ -35,6 +35,28 @@ fn test_pre_check_nonexistent() {
 }
 
 #[test]
+fn pre_check_uses_flat_vmdk_logical_size() {
+    let directory = tempfile::tempdir().unwrap();
+    let descriptor = directory.path().join("disk.vmdk");
+    let extent = directory.path().join("disk-flat.vmdk");
+    std::fs::File::create(&extent)
+        .unwrap()
+        .set_len(200_000_000)
+        .unwrap();
+    std::fs::write(
+        &descriptor,
+        "# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 390625 FLAT \"disk-flat.vmdk\" 0\n",
+    )
+    .unwrap();
+
+    let result = pre_import_check(&descriptor, &DataSourceKind::Raw);
+
+    assert!(result.errors.is_empty());
+    assert_eq!(result.plan.total_size, 200_000_000);
+    assert_eq!(result.plan.strategy, ImportStrategy::Streaming);
+}
+
+#[test]
 fn pre_check_rejects_ceph_rbd_before_filesystem_access() {
     let result = pre_import_check(
         Path::new("C:/path-that-must-not-be-opened"),

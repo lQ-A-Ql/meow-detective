@@ -146,6 +146,7 @@ fn enumerate_staged_catalog(
         let fs_kind_label = match fs_kind {
             ImageFilesystemKind::Ntfs => "NTFS",
             ImageFilesystemKind::Fat => "FAT",
+            ImageFilesystemKind::Iso9660 => "ISO9660",
             ImageFilesystemKind::Ext4 => "EXT4",
             ImageFilesystemKind::Xfs => "XFS",
             ImageFilesystemKind::Btrfs => "BTRFS",

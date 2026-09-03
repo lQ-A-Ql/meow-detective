@@ -19,7 +19,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 ### 证据导入与文件浏览
 
-- 支持 E01、RAW/dd、逻辑目录及 Linux 集群目录作为数据源入口。
+- 支持 E01、单文件 RAW/dd/img、ISO9660/Joliet、受限 monolithic-flat VMDK、逻辑目录及 Linux 集群目录作为数据源入口。
 - 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs 以及 Linux LVM 直接逻辑卷映射。
 - 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。
 - 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。

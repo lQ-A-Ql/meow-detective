@@ -1,6 +1,6 @@
 {
-  "lastVerifiedAt": "2026-07-29T00:00:00Z",
-  "documentedLimitCount": 54,
+  "lastVerifiedAt": "2026-09-02T00:00:00Z",
+  "documentedLimitCount": 58,
   "items": [
     {
       "category": "E01",
@@ -9,6 +9,46 @@
       "summary": "当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空",
       "affectedChains": [
         "E01"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "RAW",
+      "item": "`.001/.002/...` 分卷集合",
+      "status": "unsupported",
+      "summary": "当前适配器仅接受单文件 RAW/dd/img；检测到相邻分卷时 fail closed，避免只导入首段",
+      "affectedChains": [
+        "RAW"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "VMDK",
+      "item": "sparse / streamOptimized / 多 extent / snapshot / parent chain",
+      "status": "unsupported",
+      "summary": "当前只读适配器仅接受单个 zero-offset FLAT extent 的 `monolithicFlat` descriptor；不猜测复杂块映射",
+      "affectedChains": [
+        "VMDK"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "光盘镜像",
+      "item": "UDF / Rock Ridge / multi-extent / interleaved extent",
+      "status": "unsupported",
+      "summary": "当前仅 ISO9660 基础目录与 Joliet 名称；遇到需要复杂 extent 映射的记录时 fail closed",
+      "affectedChains": [
+        "ISO9660"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "虚拟磁盘",
+      "item": "VHD / VHDX / QCOW/QCOW2",
+      "status": "unsupported",
+      "summary": "尚无容器 reader，不作为 raw 字节流误读",
+      "affectedChains": [
+        "VirtualDisk"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

@@ -6,6 +6,7 @@ pub fn format_partition_root_name(
     let fs_label = match candidate.kind {
         ImageFilesystemKind::Ntfs => "NTFS",
         ImageFilesystemKind::Fat => "FAT",
+        ImageFilesystemKind::Iso9660 => "ISO9660",
         ImageFilesystemKind::BitLocker => "BitLocker",
         ImageFilesystemKind::Ext4 => "Ext4",
         ImageFilesystemKind::Xfs => "XFS",

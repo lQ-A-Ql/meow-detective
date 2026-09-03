@@ -18,6 +18,10 @@ V2 长期计划与能力评级请同时参考：
 | 分类 | 项目 | 状态 | 说明 |
 |---|---|---|---|
 | E01 | 多段复杂样本 | 部分支持 | 当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空 |
+| RAW | `.001/.002/...` 分卷集合 | 不支持 | 当前适配器仅接受单文件 RAW/dd/img；检测到相邻分卷时 fail closed，避免只导入首段 |
+| VMDK | sparse / streamOptimized / 多 extent / snapshot / parent chain | 不支持 | 当前只读适配器仅接受单个 zero-offset FLAT extent 的 `monolithicFlat` descriptor；不猜测复杂块映射 |
+| 光盘镜像 | UDF / Rock Ridge / multi-extent / interleaved extent | 不支持 | 当前仅 ISO9660 基础目录与 Joliet 名称；遇到需要复杂 extent 映射的记录时 fail closed |
+| 虚拟磁盘 | VHD / VHDX / QCOW/QCOW2 | 不支持 | 尚无容器 reader，不作为 raw 字节流误读 |
 | NTFS | 全量损坏恢复 | 不承诺 | 极端损坏、复杂修复场景仍缺样本与回归 |
 | FAT / exFAT | 已删除文件恢复 | 不承诺 | 本轮 deleted 重点仅覆盖 NTFS MFT |
 | FAT / exFAT | committed fixture | 缺失 | 无 fixture 文件。expected.json 待建 |

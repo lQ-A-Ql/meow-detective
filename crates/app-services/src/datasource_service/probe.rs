@@ -1,7 +1,7 @@
 mod gpt;
 
 use self::gpt::detect_gpt_filesystems;
-use super::fs_magic::{kind_label, read_boot_filesystem, SECTOR_SIZE};
+use super::fs_magic::{kind_label, read_boot_filesystem, read_iso9660, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
     ImageFilesystemSource, PartitionRecord, PartitionStatus, Result, UnsupportedImageKind,
@@ -53,6 +53,33 @@ pub fn detect_image_filesystem<R>(reader: &mut R) -> Result<ImageFilesystemProbe
 where
     R: Read + Seek,
 {
+    if read_iso9660(reader)? {
+        let length = reader.seek(std::io::SeekFrom::End(0))?;
+        return Ok(ImageFilesystemProbe {
+            candidates: vec![ImageFilesystemCandidate {
+                partition_index: Some(1),
+                partition_name: Some("ISO9660 Volume".to_string()),
+                kind: ImageFilesystemKind::Iso9660,
+                offset: 0,
+                length: Some(length),
+                source: ImageFilesystemSource::DirectVolume,
+                lvm_identity: None,
+            }],
+            partitions: vec![PartitionRecord {
+                index: 1,
+                name: "ISO9660 Volume".to_string(),
+                kind_label: kind_label(ImageFilesystemKind::Iso9660),
+                type_guid: None,
+                offset: 0,
+                length,
+                status: PartitionStatus::Supported,
+                filesystem: Some(ImageFilesystemKind::Iso9660),
+                lvm_identity: None,
+            }],
+            unsupported_volumes: Vec::new(),
+            warnings: Vec::new(),
+        });
+    }
     if let Some(probe) = detect_direct_volume(reader)? {
         return Ok(probe);
     }
@@ -299,6 +326,7 @@ pub(super) fn partition_status_for_filesystem(kind: ImageFilesystemKind) -> Part
         ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
         ImageFilesystemKind::Ntfs
         | ImageFilesystemKind::Fat
+        | ImageFilesystemKind::Iso9660
         | ImageFilesystemKind::Ext4
         | ImageFilesystemKind::Xfs
         | ImageFilesystemKind::Btrfs

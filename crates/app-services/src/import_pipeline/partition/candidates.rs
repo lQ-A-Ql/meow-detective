@@ -356,6 +356,7 @@ fn candidate_start_detail(kind: ImageFilesystemKind, root_name: &str) -> String 
     match kind {
         ImageFilesystemKind::Ntfs
         | ImageFilesystemKind::Fat
+        | ImageFilesystemKind::Iso9660
         | ImageFilesystemKind::Ext4
         | ImageFilesystemKind::Xfs
         | ImageFilesystemKind::Btrfs => format!("Enumerating {root_name}"),

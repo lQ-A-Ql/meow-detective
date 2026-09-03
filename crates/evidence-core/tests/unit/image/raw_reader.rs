@@ -267,3 +267,181 @@ fn multiple_clones_hold_separate_positions() {
     assert_eq!(clone_a.path(), reader.path());
     assert_eq!(clone_b.len(), reader.len());
 }
+
+fn write_flat_vmdk(dir: &Path, extent_name: &str, data: &[u8]) -> PathBuf {
+    assert!(data.len().is_multiple_of(512));
+    std::fs::write(dir.join(extent_name), data).expect("write extent");
+    let descriptor = format!(
+        "# Disk DescriptorFile\nversion=1\nCID=12345678\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW {} FLAT \"{}\" 0\n",
+        data.len() / 512,
+        extent_name
+    );
+    let path = dir.join("disk.vmdk");
+    std::fs::write(&path, descriptor).expect("write descriptor");
+    path
+}
+
+#[test]
+fn reads_monolithic_flat_vmdk_extent() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut data = vec![0u8; 1024];
+    data[510..514].copy_from_slice(b"EDGE");
+    let descriptor = write_flat_vmdk(dir.path(), "disk-flat.vmdk", &data);
+
+    let mut reader = RawImageReader::open(&descriptor).expect("open VMDK");
+    assert_eq!(reader.info().kind, "vmdk");
+    assert_eq!(reader.len(), 1024);
+    assert_eq!(reader.backing_paths().len(), 2);
+    reader
+        .seek(SeekFrom::Start(510))
+        .expect("cross-sector seek");
+    let mut actual = [0u8; 4];
+    reader.read_exact(&mut actual).expect("cross-sector read");
+    assert_eq!(&actual, b"EDGE");
+}
+
+#[test]
+fn accepts_descriptor_assignment_whitespace() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let descriptor = write_flat_vmdk(dir.path(), "disk-flat.vmdk", &[0x5a; 512]);
+    let text = std::fs::read_to_string(&descriptor)
+        .expect("read descriptor")
+        .replace("parentCID=", "parentCID = ")
+        .replace("createType=", "createType = ");
+    std::fs::write(&descriptor, text).expect("rewrite descriptor");
+
+    let mut reader = RawImageReader::open(&descriptor).expect("open VMDK");
+    let mut byte = [0u8; 1];
+    reader.read_exact(&mut byte).expect("read extent");
+    assert_eq!(byte, [0x5a]);
+}
+
+#[test]
+fn rejects_truncated_vmdk_extent() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let descriptor = write_flat_vmdk(dir.path(), "disk-flat.vmdk", &[0u8; 512]);
+    let text = std::fs::read_to_string(&descriptor)
+        .expect("read descriptor")
+        .replace("RW 1 ", "RW 2 ");
+    std::fs::write(&descriptor, text).expect("rewrite descriptor");
+
+    let error = RawImageReader::open(&descriptor).expect_err("truncated extent");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn rejects_sparse_and_parented_vmdk_descriptors() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sparse = dir.path().join("sparse.vmdk");
+    std::fs::write(
+        &sparse,
+        "# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"streamOptimized\"\nRW 1 SPARSE \"disk-sparse.vmdk\"\n",
+    )
+    .expect("write sparse descriptor");
+    assert_eq!(
+        RawImageReader::open(&sparse)
+            .expect_err("sparse unsupported")
+            .kind(),
+        io::ErrorKind::Unsupported
+    );
+
+    let parented = write_flat_vmdk(dir.path(), "disk-flat.vmdk", &[0u8; 512]);
+    let text = std::fs::read_to_string(&parented)
+        .expect("read descriptor")
+        .replace("parentCID=ffffffff", "parentCID=12345678");
+    std::fs::write(&parented, text).expect("rewrite parent descriptor");
+    assert_eq!(
+        RawImageReader::open(&parented)
+            .expect_err("parent chain unsupported")
+            .kind(),
+        io::ErrorKind::Unsupported
+    );
+}
+
+#[test]
+fn rejects_binary_sparse_vmdk_magic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sparse = dir.path().join("binary-sparse.vmdk");
+    let mut bytes = vec![0u8; 2 * 1024 * 1024];
+    bytes[..4].copy_from_slice(b"KDMV");
+    std::fs::write(&sparse, bytes).expect("write sparse image");
+    assert_eq!(
+        RawImageReader::open(&sparse)
+            .expect_err("binary sparse unsupported")
+            .kind(),
+        io::ErrorKind::Unsupported
+    );
+}
+
+#[test]
+fn rejects_unrecognized_vmdk_by_extension_instead_of_raw_fallback() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("unknown.vmdk");
+    std::fs::write(&path, [0u8; 512]).expect("write unknown VMDK");
+
+    assert_eq!(
+        RawImageReader::open(&path)
+            .expect_err("unknown VMDK must fail closed")
+            .kind(),
+        io::ErrorKind::Unsupported
+    );
+}
+
+#[test]
+fn rejects_split_raw_sets_instead_of_parsing_one_member() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let first = dir.path().join("capture.001");
+    let second = dir.path().join("capture.002");
+    std::fs::write(&first, [0u8; 512]).expect("write first member");
+    std::fs::write(&second, [0u8; 512]).expect("write second member");
+
+    for member in [&first, &second] {
+        assert_eq!(
+            RawImageReader::open(member)
+                .expect_err("split RAW is unsupported")
+                .kind(),
+            io::ErrorKind::Unsupported
+        );
+    }
+}
+
+#[test]
+fn rejects_vmdk_extent_path_escape() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let descriptor = dir.path().join("escape.vmdk");
+    std::fs::write(
+        &descriptor,
+        "# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 1 FLAT \"../outside.raw\" 0\n",
+    )
+    .expect("write descriptor");
+    let error = RawImageReader::open(&descriptor).expect_err("path escape");
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn rejects_mixed_and_self_referencing_vmdk_extents() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let descriptor = write_flat_vmdk(dir.path(), "disk-flat.vmdk", &[0u8; 512]);
+    let mut text = std::fs::read_to_string(&descriptor).expect("read descriptor");
+    text.push_str("RDONLY 1 FLAT \"disk-flat.vmdk\" 0\n");
+    std::fs::write(&descriptor, text).expect("rewrite descriptor");
+    assert_eq!(
+        RawImageReader::open(&descriptor)
+            .expect_err("mixed extents")
+            .kind(),
+        io::ErrorKind::Unsupported
+    );
+
+    let self_reference = dir.path().join("self.vmdk");
+    std::fs::write(
+        &self_reference,
+        "# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 1 FLAT \"self.vmdk\" 0\n",
+    )
+    .expect("write self-reference descriptor");
+    assert_eq!(
+        RawImageReader::open(&self_reference)
+            .expect_err("self-reference")
+            .kind(),
+        io::ErrorKind::InvalidData
+    );
+}

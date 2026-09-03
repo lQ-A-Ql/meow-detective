@@ -42,7 +42,9 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     // Analyze based on type
     let (total_files, total_size) = match kind {
         DataSourceKind::LogicalDirectory => analyze_directory(source_path, &mut warnings),
-        DataSourceKind::E01 | DataSourceKind::Raw => analyze_image(source_path, &mut warnings),
+        DataSourceKind::E01 | DataSourceKind::Raw => {
+            analyze_image(source_path, kind, &mut warnings)
+        }
         DataSourceKind::CephRbd | DataSourceKind::CephFs => {
             unreachable!("derived Ceph sources are rejected before filesystem access")
         }
@@ -126,10 +128,9 @@ fn count_directory_recursive(path: &Path) -> (u64, u64) {
 }
 
 /// Analyze an image data source
-fn analyze_image(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
-    match std::fs::metadata(path) {
-        Ok(meta) => {
-            let size = meta.len();
+fn analyze_image(path: &Path, kind: &DataSourceKind, warnings: &mut Vec<String>) -> (u64, u64) {
+    match image_logical_size(path, kind) {
+        Ok(size) => {
             // Estimate files based on size (rough heuristic)
             let estimated_files = estimate_files_from_size(size);
             (estimated_files, size)
@@ -138,6 +139,13 @@ fn analyze_image(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
             warnings.push(format!("Cannot read image file: {}", e));
             (0, 0)
         }
+    }
+}
+
+fn image_logical_size(path: &Path, kind: &DataSourceKind) -> std::io::Result<u64> {
+    match kind {
+        DataSourceKind::Raw => evidence_core::RawImageReader::open(path).map(|reader| reader.len()),
+        _ => std::fs::metadata(path).map(|metadata| metadata.len()),
     }
 }
 

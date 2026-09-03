@@ -87,6 +87,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                             match c.kind {
                                 datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
                                 datasource_service::ImageFilesystemKind::Fat => "FAT",
+                                datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
                                 datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
                                 datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
                                 datasource_service::ImageFilesystemKind::Xfs => "XFS",

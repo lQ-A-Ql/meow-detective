@@ -30,6 +30,8 @@ V2 长期执行与发布口径见：
 |---|---|---|---|---|---|---|---|
 | E01 reader | Windows | Beta | `tiny.E01` | expected.json / 8 个测试 | open / read / seek / EOF / chunk 解压 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/e01/` multi-segment complex variants | public-medium 目录尚空，多段复杂变体待补 |
 | RAW reader | Windows | GA | `tiny.raw` | expected.json / 1 个测试 | open / read / seek | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` partitioned RAW images | 基础链路稳定 |
+| VMDK flat adapter | Windows / Linux | Experimental | synthetic descriptor + extent | unit tests | 单个 zero-offset FLAT extent 的 open / read / seek；descriptor+extent 组合哈希 | **planned** — controlled monolithic-flat fixture | sparse、streamOptimized、多 extent、snapshot/parent chain fail closed |
+| ISO9660/Joliet reader | Windows / Linux | Experimental | synthetic ISO9660 | unit tests | 目录枚举、文件读取、seekable preview；可叠加 RAW/E01/VMDK reader | **planned** — ISO9660 + Joliet medium fixture | UDF、Rock Ridge、多 extent、交错 extent及 extended attributes 不支持 |
 | NTFS parser | Windows | Beta | `tiny.raw` (NTFS volume) | expected.json / 11 个测试 | 枚举、读取、部分 deleted / hidden / system | **planned** (2026-Q3) — `testdata/fixtures/public-medium/ntfs/` $MFT extracts, INDX buffers | 复杂损坏样本不足。public-medium/ntfs 尚空 |
 | FAT parser | Windows | Experimental | 无 committed fixture | 5 个单元测试 | 基本枚举 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` FAT volume samples | deleted 不承诺。expected.json 待建 |
 | exFAT parser | Windows | Experimental | 无 committed fixture | 37 个单元测试 | 基本枚举（boot/FAT/dir） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` exFAT volume samples | deleted 不承诺。expected.json 待建 |

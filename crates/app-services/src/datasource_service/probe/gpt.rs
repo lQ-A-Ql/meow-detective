@@ -122,6 +122,7 @@ fn gpt_candidate(
         Some(
             kind @ (ImageFilesystemKind::Ntfs
             | ImageFilesystemKind::Fat
+            | ImageFilesystemKind::Iso9660
             | ImageFilesystemKind::Ext4
             | ImageFilesystemKind::Xfs
             | ImageFilesystemKind::Btrfs

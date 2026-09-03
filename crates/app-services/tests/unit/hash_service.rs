@@ -89,6 +89,41 @@ fn hash_evidence_e01_uses_deterministic_manifest_for_multiple_segments() {
 }
 
 #[test]
+fn hash_evidence_vmdk_covers_descriptor_and_flat_extent() {
+    let directory = tempfile::tempdir().unwrap();
+    let descriptor = directory.path().join("disk.vmdk");
+    let extent = directory.path().join("disk-flat.vmdk");
+    let descriptor_bytes = b"# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 1 FLAT \"disk-flat.vmdk\" 0\n";
+    let extent_bytes = vec![0xA5; 512];
+    std::fs::write(&descriptor, descriptor_bytes).unwrap();
+    std::fs::write(&extent, &extent_bytes).unwrap();
+
+    let cancelled = AtomicBool::new(false);
+    let result = HashService::hash_evidence(
+        &descriptor,
+        &domain::DataSourceKind::Raw,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap();
+    let manifest = format!(
+        "segment=00000000;length={};sha256={}\nsegment=00000001;length=512;sha256={}\n",
+        descriptor_bytes.len(),
+        HashService::sha256_bytes(descriptor_bytes),
+        HashService::sha256_bytes(&extent_bytes),
+    );
+    assert_eq!(
+        result.digest,
+        HashService::sha256_bytes(manifest.as_bytes())
+    );
+    assert_eq!(result.parallel_segments, 2);
+    assert_eq!(
+        result.bytes_processed,
+        descriptor_bytes.len() as u64 + extent_bytes.len() as u64
+    );
+}
+
+#[test]
 fn hash_evidence_honors_cancellation_before_reading() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("evidence.raw");

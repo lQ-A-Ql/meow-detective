@@ -98,6 +98,7 @@ pub type Result<T> = std::result::Result<T, DataSourceError>;
 pub enum ImageFilesystemKind {
     Ntfs,
     Fat,
+    Iso9660,
     BitLocker,
     Ext4,
     Xfs,

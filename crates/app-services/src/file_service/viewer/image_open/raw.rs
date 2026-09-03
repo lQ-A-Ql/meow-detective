@@ -126,6 +126,16 @@ fn try_open_candidate(
 ) -> Result<Option<Box<dyn Read>>, FileServiceError> {
     use crate::datasource_service::ImageFilesystemKind;
     match candidate.kind {
+        ImageFilesystemKind::Iso9660 => {
+            let (reader, fs_offset) = candidate_reader(source_path, candidate, source_kind)?;
+            let reader =
+                evidence_core::PartitionWindowReader::new(reader, fs_offset, candidate.length)?;
+            let fs = evidence_core::Iso9660Reader::from_reader(
+                Box::new(reader),
+                source_path.file_name().and_then(|name| name.to_str()),
+            )?;
+            Ok(open_first_image_path(&fs, paths).ok())
+        }
         ImageFilesystemKind::Ntfs => {
             let (reader, offset) = candidate_reader(source_path, candidate, source_kind)?;
             Ok(fs_ntfs::NtfsReader::open(reader, offset)

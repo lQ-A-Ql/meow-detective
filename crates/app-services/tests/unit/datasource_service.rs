@@ -1,4 +1,4 @@
-use super::fs_magic::{read_boot_filesystem, SECTOR_SIZE};
+use super::fs_magic::{read_boot_filesystem, read_iso9660, SECTOR_SIZE};
 use super::lvm::source_identity::lvm_pv_source_key;
 use super::*;
 use domain::{CaseId, CaseMeta, DataSourceHashStatus, DataSourceKind, DataSourceProvenanceStatus};
@@ -614,4 +614,29 @@ fn assign_indices_empty() {
     let candidates: Vec<ImageFilesystemCandidate> = vec![];
     let map = assign_effective_partition_indices(&candidates);
     assert!(map.is_empty());
+}
+
+#[test]
+fn detects_iso9660_as_direct_read_only_volume() {
+    const BLOCK_SIZE: usize = 2048;
+    let mut image = vec![0u8; 18 * BLOCK_SIZE];
+    let pvd = &mut image[16 * BLOCK_SIZE..17 * BLOCK_SIZE];
+    pvd[0] = 1;
+    pvd[1..6].copy_from_slice(b"CD001");
+    pvd[6] = 1;
+    let terminator = &mut image[17 * BLOCK_SIZE..18 * BLOCK_SIZE];
+    terminator[0] = 255;
+    terminator[1..6].copy_from_slice(b"CD001");
+    terminator[6] = 1;
+
+    let mut reader = std::io::Cursor::new(image);
+    assert!(read_iso9660(&mut reader).unwrap());
+    let probe = detect_image_filesystem(&mut reader).unwrap();
+    assert_eq!(probe.candidates.len(), 1);
+    assert_eq!(probe.candidates[0].kind, ImageFilesystemKind::Iso9660);
+    assert_eq!(
+        probe.candidates[0].source,
+        ImageFilesystemSource::DirectVolume
+    );
+    assert_eq!(probe.partitions[0].kind_label, "ISO9660");
 }

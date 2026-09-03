@@ -22,6 +22,24 @@ fn reads_aligned_blocks_from_a_real_raw_file() {
 }
 
 #[test]
+fn reads_blocks_through_a_monolithic_flat_vmdk_descriptor() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let extent = directory.path().join("disk-flat.vmdk");
+    let descriptor = directory.path().join("disk.vmdk");
+    let mut bytes = vec![0u8; 1024];
+    bytes[512..].fill(0xa5);
+    std::fs::write(&extent, bytes).expect("write extent");
+    std::fs::write(
+        &descriptor,
+        "# Disk DescriptorFile\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 2 FLAT \"disk-flat.vmdk\" 0\n",
+    )
+    .expect("write descriptor");
+
+    let device = ReadOnlyScsiDevice::open(&descriptor, EvidenceImageKind::Raw).expect("open VMDK");
+    assert_eq!(device.read(1, 1, 512).expect("read block"), vec![0xa5; 512]);
+}
+
+#[test]
 fn rejects_write_commands_with_data_protect() {
     let (_file, device) = raw_device();
     let cdb = [0x2a, 0, 0, 0, 0, 0, 0, 0, 1, 0];

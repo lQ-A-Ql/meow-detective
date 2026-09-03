@@ -7,7 +7,10 @@ export function useImportDataSourceDialogModel() {
         directory: false,
         multiple: false,
         filters: [
-          { name: filterName, extensions: ['e01', 'E01', 'dd', 'raw', 'img'] },
+          {
+            name: filterName,
+            extensions: ['e01', 'E01', 'ewf', 'dd', 'raw', 'img', 'iso', 'vmdk'],
+          },
         ],
       });
       return singleDialogPath(selected) ?? undefined;

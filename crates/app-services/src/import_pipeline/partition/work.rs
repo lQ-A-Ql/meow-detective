@@ -41,6 +41,18 @@ pub(super) fn open_candidate_filesystem(
     source_kind: &domain::DataSourceKind,
     candidate: &datasource_service::ImageFilesystemCandidate,
 ) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
+    if candidate.kind == ImageFilesystemKind::Iso9660 {
+        let (reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
+        let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, candidate.length)
+            .map_err(|error| error.to_string())?;
+        return Ok(Some(Box::new(
+            evidence_core::Iso9660Reader::from_reader(
+                Box::new(reader),
+                source_path.file_name().and_then(|name| name.to_str()),
+            )
+            .map_err(|error| error.to_string())?,
+        )));
+    }
     let (base_reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => Box::new(
@@ -60,6 +72,7 @@ pub(super) fn open_candidate_filesystem(
                 .map_err(|error| error.to_string())?,
         ),
         ImageFilesystemKind::LvmPool | ImageFilesystemKind::BitLocker => return Ok(None),
+        ImageFilesystemKind::Iso9660 => unreachable!("ISO9660 handled before block reader"),
     };
     Ok(Some(fs))
 }

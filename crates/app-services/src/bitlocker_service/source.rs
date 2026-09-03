@@ -149,6 +149,7 @@ pub(crate) fn probe_plaintext_filesystem(
     Ok(kind.map(|value| match value {
         crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS".to_string(),
         crate::datasource_service::ImageFilesystemKind::Fat => "FAT".to_string(),
+        crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
         crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
         crate::datasource_service::ImageFilesystemKind::Ext4 => "EXT4".to_string(),
         crate::datasource_service::ImageFilesystemKind::Xfs => "XFS".to_string(),

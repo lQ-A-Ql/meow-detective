@@ -1048,6 +1048,7 @@ fn assert_partition_display_names_are_honest(probe: &datasource_service::ImageFi
         let fs_label = match candidate.kind {
             datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
             datasource_service::ImageFilesystemKind::Fat => "FAT",
+            datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
             datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
             datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
             datasource_service::ImageFilesystemKind::Xfs => "XFS",
