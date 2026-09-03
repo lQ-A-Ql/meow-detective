@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File scripts\generate-tiny-fixtures.ps1
 ## Parser Plugins
 
 The standalone plugin workspace at `plugins-src/` is deliberately not part of
-the repository workspace (see `docs/plugin-system-dev-test-plan.md`). Build it
+the repository workspace (see `docs/plugin-development-contract.md`). Build it
 and stage the DLLs into the exe-adjacent `plugins/<platform>/` layout the host
 `plugin_loader` scans:
 

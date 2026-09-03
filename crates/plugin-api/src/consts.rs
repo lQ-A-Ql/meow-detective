@@ -1,7 +1,7 @@
 //! Meow~Detective DLL parser plugin ABI constants.
 //!
-//! See `docs/plugin-abi-contract-design.md` (local design doc) for the full
-//! contract. Anything crossing the DLL boundary is a `#[repr(C)]` type from
+//! See `docs/plugin-development-contract.md` for the full public contract.
+//! Anything crossing the DLL boundary is a `#[repr(C)]` type from
 //! `types`; this crate is the only Meow crate a plugin may depend on.
 
 /// ABI major version. Bump on any breaking layout or semantic change.

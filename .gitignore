@@ -87,6 +87,7 @@ AGENTS.md
 !/docs/known-unsupported-formats.md
 !/docs/mcp-security-model.md
 !/docs/parser-support-matrix.md
+!/docs/plugin-development-contract.md
 !/docs/pst-ost-mbox-support.md
 !/docs/validation-trust-framework.md
 

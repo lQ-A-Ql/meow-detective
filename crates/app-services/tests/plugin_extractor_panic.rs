@@ -58,7 +58,7 @@ fn plugin_panic_becomes_error_and_does_not_block_other_plugins() {
 /// A panic that violates the contract and unwinds across the DLL boundary
 /// aborts the process on MSVC (foreign exception to the host runtime). This
 /// subprocess test pins that documented limitation so it cannot silently
-/// change; see docs/plugin-abi-contract-design.md §8.
+/// change; see docs/plugin-development-contract.md.
 #[test]
 fn cross_boundary_panic_aborts_the_process() {
     if std::env::var_os(CHILD_ENV).is_some() {

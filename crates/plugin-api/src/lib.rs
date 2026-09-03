@@ -3,7 +3,8 @@
 //! This crate is the single allowed dependency of parser plugins. It defines
 //! the C ABI boundary: `#[repr(C)]` types (`types`), the ABI version and the
 //! exported symbol names (`consts`). Bytes in, JSON records out; who
-//! allocates, frees. See `docs/plugin-abi-contract-design.md` (local doc).
+//! allocates, frees. See `docs/plugin-development-contract.md` for the public
+//! development contract.
 
 mod consts;
 mod guard;

@@ -1,7 +1,7 @@
 //! Host-side parser plugin loader (plugin system M2).
 //!
 //! Implements the host behavior described in
-//! `docs/plugin-abi-contract-design.md` §5: directory discovery (`directory`),
+//! `docs/plugin-development-contract.md`: directory discovery (`directory`),
 //! `plugins.*` settings (`settings`), safe DLL loading and the ABI handshake
 //! (`library`), the `ArtifactExtractor` adapter with host-enforced provenance
 //! (`extractor`), and the optional self-describing action channel (`action`).

@@ -1,6 +1,6 @@
 //! `#[repr(C)]` types crossing the plugin DLL boundary.
 //!
-//! Rules (see `docs/plugin-abi-contract-design.md`):
+//! Rules (see `docs/plugin-development-contract.md`):
 //! - only `repr(C)` structs, raw pointers and lengths cross the boundary;
 //!   no Rust heap type (`String`/`Vec`/`Box`/trait object) may appear here;
 //! - who allocates, frees: plugin-allocated buffers are returned to the
