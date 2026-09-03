@@ -1,6 +1,6 @@
 # Standalone fixture plugin workspace for app-services plugin_loader tests.
 # Deliberately NOT a member of the repository workspace (see
-# docs/plugin-system-dev-test-plan.md §2): it is compiled on demand by
+# docs/plugin-development-contract.md): it is compiled on demand by
 # tests/plugin_fixture_util.rs into target/plugin-fixtures/.
 [workspace]
 members = ["crates/*"]
