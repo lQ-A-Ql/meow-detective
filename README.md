@@ -20,6 +20,10 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 ### 证据导入与文件浏览
 
 - 支持 E01、单文件 RAW/dd/img、ISO9660/Joliet、受限 monolithic-flat VMDK、逻辑目录及 Linux 集群目录作为数据源入口。
+- 镜像格式先进入统一的只读 reader，再进行分区探测和文件系统解析：E01/EWF 使用 E01 reader；RAW/dd/img 使用原始字节 reader；ISO 使用 ISO9660/Joliet reader；flat VMDK 使用 descriptor 声明的 extent 作为逻辑字节源。适配器不会修改原始文件，也不会把不支持的容器猜测成 RAW。
+- 文件选择器接受 `.e01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso` 和 `.vmdk`；扩展名只用于选择入口，最终是否可读仍由 magic、descriptor、PVD 和长度校验决定。
+- VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK、VHD/VHDX/QCOW/QCOW2 均明确拒绝。
+- ISO 适配器优先使用 Joliet 名称，目录和文件 extent 均受卷边界限制；ISO 可直接导入，也可嵌套在 E01 或受支持的 flat VMDK 字节流中。UDF、Rock Ridge、交错或 multi-extent 记录不在当前承诺范围。
 - 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs 以及 Linux LVM 直接逻辑卷映射。
 - 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。
 - 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。
@@ -37,7 +41,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 |---|---|---|---|
 | 桌面应用 | 发布版需要管理员令牌 | 启动时由 UAC 授权，不在运行中静默提权 | 拒绝 UAC 后无法启动桌面应用 |
 | 逻辑分区挂载 | 需要预先安装 Dokan runtime/driver | 使用 Dokan `Mount Manager` 发布全局只读盘符；不使用 `CURRENT_SESSION`，不修改 Windows 服务 | 应用负责卸载并清理挂载；Dokan 未安装时返回明确错误，不静默调用外部挂载工具 |
-| 物理磁盘挂载 | 需要管理员令牌和 Microsoft iSCSI Initiator (`MSiSCSI`) | 通过本机 loopback iSCSI 将 E01/RAW 只读字节流交给 Windows；不安装自写驱动、不依赖 Arsenal 授权 | 首个物理挂载建立服务租约；最后一个挂载释放后恢复应用临时修改的启动类型，不强制停止服务 |
+| 物理磁盘挂载 | 需要管理员令牌和 Microsoft iSCSI Initiator (`MSiSCSI`) | 通过本机 loopback iSCSI 将 E01、单文件 RAW/dd/img 或已验证 flat VMDK 的逻辑字节流交给 Windows；不安装自写驱动、不依赖 Arsenal 授权 | 首个物理挂载建立服务租约；最后一个挂载释放后恢复应用临时修改的启动类型，不强制停止服务 |
 | `MSiSCSI` 已禁用 | 需要服务配置权限 | 挂载前临时改为 `Manual` 并启动；仅由应用持有的租约负责恢复 | 若其他程序同时改变配置，应用保留外部修改；应用崩溃或被强制终止后需管理员复核服务启动类型 |
 | Windows Search (`WSearch`) | 不修改系统服务 | 逻辑挂载的虚拟文件节点声明 `NOT_CONTENT_INDEXED`，减少宿主索引对目录回调的争用 | 不停止、不禁用、不修改全局搜索策略 |
 
@@ -59,7 +63,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 ### 仿真取证
 
-- E01/RAW 镜像通过写时复制（COW）overlay 直通给虚拟机：guest 的全部写入只落入单次会话的 overlay 日志，原始证据保持只读；会话结束后 overlay 不复用，崩溃语义等同于物理机断电丢失未落盘写入。
+- E01、单文件 RAW/dd/img 和已验证 flat VMDK 镜像通过写时复制（COW）overlay 直通给虚拟机：guest 的全部写入只落入单次会话的 overlay 日志，原始证据保持只读；会话结束后 overlay 不复用，崩溃语义等同于物理机断电丢失未落盘写入。ISO 文件系统适配器本身是只读导入/预览路径，不等同于已验证的物理磁盘启动介质。
 - 应用生成 VMware 材料（VMDK 描述文件与 VMX 配置），并通过 `vmrun` 直接启动、软关机和释放仿真会话；需要用户自行安装 VMware Workstation，应用不捆绑或再分发 VMware 组件。
 - 预检直接消费镜像导入阶段已建立的全局索引，不重复扫描镜像：Windows 检查注册表配置单元与启动风险，Linux 识别发行版、根文件系统与 LVM 布局并给出启动路线建议。
 - 维护引导 ISO 由应用内生成并可在 UI 探测存在性；guest 侧工具完成 OSDATA 命名空间筛查清除。登录绕密在主机侧通过 COW overlay 写入：Windows 支持 SAM 与 Utilman 绕密，Linux 支持 `/etc/shadow` 绕密，另提供 GRUB 引导参数的手册路线。
@@ -79,7 +83,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 | macOS / APFS / HFS+ | 不支持  | 可识别部分分区类型，但不创建文件系统 reader。                      |
 | PVE / Ceph          | 实验性  | 已覆盖私有样本中的部分 BlueStore、RBD 与派生 VM 文件树；不宣称通用集群重建。 |
 | BitLocker           | 部分支持 | 仅在受支持加密方法、保护器和可验证密钥材料范围内可用。                     |
-| 仿真取证               | 部分支持 | 仅 VMware Workstation 后端；Windows 与 Linux 镜像可仿真；btrfs 根卷不支持主机侧绕密编辑。 |
+| 仿真取证               | 部分支持 | 仅 VMware Workstation 后端；Windows 与 Linux 镜像可仿真；输入支持 E01、单文件 RAW/dd/img 和已验证 flat VMDK；btrfs 根卷不支持主机侧绕密编辑。 |
 | 原始证据写入              | 禁止   | 系统仅读取原始证据；派生数据写入案件工作区或调查员显式选择的导出目录。             |
 
 完整的解析器成熟度、样本基线和已知限制见 [解析器支持矩阵](docs/parser-support-matrix.md) 与 [已知不支持格式](docs/known-unsupported-formats.md)。
@@ -96,7 +100,7 @@ flowchart TB
     SVC["应用服务层\n案件、导入、预览、分析、导出编排"]
     CORE["核心能力层\n证据读取、文件系统、制品、检索、时间线、报告"]
     STORE["持久化与运行时\nSQLite、索引、受限句柄、密钥存储"]
-    EVIDENCE["只读证据源\nE01 / RAW / 目录 / 集群成员"]
+    EVIDENCE["只读证据源\nE01 / RAW / ISO / flat VMDK / 目录 / 集群成员"]
 
     UI --> IPC --> CMD --> SVC
     SVC --> CORE
@@ -178,7 +182,15 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    INPUT["证据输入"] --> PROBE["镜像与分区探测\nE01/RAW/目录"]
+    INPUT["证据输入"] --> ADAPTER{"只读镜像适配器"}
+    ADAPTER -->|"E01/EWF"| E01["E01 reader"]
+    ADAPTER -->|"RAW/dd/img"| RAW["RawImageReader"]
+    ADAPTER -->|"monolithic-flat VMDK"| VMDK["descriptor + FLAT extent"]
+    ADAPTER -->|"ISO9660/Joliet"| ISO["ISO reader"]
+    E01 --> PROBE["镜像与分区探测"]
+    RAW --> PROBE
+    VMDK --> PROBE
+    ISO --> PROBE
     PROBE --> ROUTE{"卷类型"}
     ROUTE -->|"NTFS/FAT/exFAT"| WINFS["Windows 文件系统 reader"]
     ROUTE -->|"ext4/XFS/Btrfs"| LINUXFS["Linux 文件系统 reader"]
@@ -287,7 +299,7 @@ cargo tauri build
 | `crates/transport/` | Rust DTO、请求、事件与错误契约的唯一事实源。 |
 | `crates/app-services/` | 案件、导入、预览、分析、BitLocker、恢复、导出等用例编排。 |
 | `crates/persistence-sqlite/` | SQLite 迁移、仓储与 source-local 数据库访问。 |
-| `crates/evidence-core/`、`image-e01/` | 证据 reader、镜像探测、分区和 E01 读取。 |
+| `crates/evidence-core/`、`image-e01/` | 统一证据 reader、RAW/dd/img、ISO9660/Joliet、flat VMDK 适配、镜像探测、分区和 E01 读取。 |
 | `crates/fs-*/`、`fs-lvm/` | NTFS/FAT/exFAT/ext4/XFS/Btrfs 与 LVM 文件系统能力。 |
 | `crates/artifacts-windows/`、`artifacts-linux/` | Windows 和 Linux 取证制品解析。 |
 | `crates/search/`、`timeline/`、`reports/` | 检索、时间线和报告能力。 |
@@ -312,6 +324,11 @@ cargo tauri build
 - [错误分类手册](docs/error-classification-manual.md)
 - [性能基线](docs/benchmark-baseline.md)
 - [解析器支持矩阵](docs/parser-support-matrix.md)
+- [已知不支持格式](docs/known-unsupported-formats.md)
+- [文档索引](docs/documentation-index.md)
+- [验证可信框架](docs/validation-trust-framework.md)
+- [错误分类与脱敏口径](docs/error-taxonomy.md)
+- [插件开发契约](docs/plugin-development-contract.md)
 - [MCP 安全模型](docs/mcp-security-model.md)
 - [导出与媒体安全](docs/export-and-media-safety.md)
 

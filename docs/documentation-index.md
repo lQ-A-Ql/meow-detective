@@ -19,6 +19,11 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 | 已知不支持格式 | `docs/known-unsupported-formats.md` |
 | PST/OST/mbox 支持契约 | `docs/pst-ost-mbox-support.md` |
 | Expected JSON | `docs/expected-json-contract.md` |
+| 插件开发契约 | `docs/plugin-development-contract.md` |
+
+镜像适配器的公开口径集中在 Parser 支持矩阵：它说明 E01/EWF、单文件 RAW/dd/img、
+ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式与 fail-closed 边界。
+`DataSourceKind::Raw` 是历史兼容的存储类型，不代表所有虚拟磁盘容器都按裸字节读取。
 
 ## 3. 验证、安全与依赖治理
 
@@ -53,6 +58,7 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 治理事实源：
 
 - `testdata/governance/v2-known-limitations.json`
+- `testdata/governance/v2-verification-catalog.json`
 - `testdata/governance/v2-benchmark-baseline.json`
 - `testdata/governance/v2-security-taxonomy.json`
 - `testdata/governance/v2-release-policy.json`
@@ -63,3 +69,15 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 ```
+
+支持矩阵或适配器行为变化时还必须同步检查：
+
+```powershell
+cargo test -p evidence-core --lib
+cargo test -p evidence-block
+cargo test -p app-services --lib
+pnpm --dir frontend typecheck
+```
+
+这些命令覆盖 reader 的字节/seek 语义、物理块 provider、导入预检查、应用路由和前端
+入口；真实镜像只通过受控环境变量进入 ignored 回归，不提交到仓库。

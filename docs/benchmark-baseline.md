@@ -89,6 +89,18 @@ V2 benchmark 至少覆盖：
 - 报告导出
 - 长任务取消
 
+镜像适配器专项至少增加三类轻量测量：
+
+- RAW/dd/img 顺序读取与随机 seek：报告逻辑字节吞吐、p50/p95 延迟和峰值 RSS；
+- flat VMDK descriptor 解析、首扇区/跨扇区读取与 block provider：同时记录 descriptor/extent
+  physical bytes、逻辑容量和 manifest hash 阶段耗时；不得只用 descriptor 文件大小计算吞吐；
+- ISO9660/Joliet 首次 PVD 探测、根目录展开与 bounded 文件 preview：分别记录裸 ISO、E01
+  嵌套和 flat VMDK 嵌套的 reader 准备时间；目录深度和 entry 上限触发时记录 typed failure。
+
+适配器 benchmark 只测只读路径，不转换为完整 VMDK、不 materialize sparse 容器，也不把
+VMware 启动耗时归因于 ISO 文件系统 reader。当前没有公开 medium 镜像，适配器数字只能
+作为本机/CI artifact，不能写入支持矩阵作为发布阈值。
+
 ## 5. 默认阈值
 
 以下阈值作为 V2 当前默认门槛：
@@ -206,7 +218,7 @@ Windows E01 导入门禁还要求至少 90,000 条文件记录、枚举吞吐至
 大文件提取应分别计量 reader/filesystem 准备、复制与 SHA-256、目标同步及原子发布。
 私有样本的路径、文件名、hash、吞吐和原始日志只保存在工作站或 CI artifact，不写入 Git 文档。
 
-当前实现对满足条件的 E01/RAW NTFS 文件可使用两个独立 reader、`4 MiB` 分片和最多四个在途块；条件不足时回退串行。评估时必须分别报告：
+当前实现对满足条件的 E01/RAW/flat VMDK NTFS 文件可使用两个独立 reader、`4 MiB` 分片和最多四个在途块；条件不足时回退串行。评估时必须分别报告：
 
 - 串行与并行模式、文件系统和数据源种类；
 - 端到端耗时、复制阶段耗时、吞吐、峰值 RSS/CPU；

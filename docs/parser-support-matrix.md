@@ -28,10 +28,10 @@ V2 长期执行与发布口径见：
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
 |---|---|---|---|---|---|---|---|
-| E01 reader | Windows | Beta | `tiny.E01` | expected.json / 8 个测试 | open / read / seek / EOF / chunk 解压 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/e01/` multi-segment complex variants | public-medium 目录尚空，多段复杂变体待补 |
-| RAW reader | Windows | GA | `tiny.raw` | expected.json / 1 个测试 | open / read / seek | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` partitioned RAW images | 基础链路稳定 |
-| VMDK flat adapter | Windows / Linux | Experimental | synthetic descriptor + extent | unit tests | 单个 zero-offset FLAT extent 的 open / read / seek；descriptor+extent 组合哈希 | **planned** — controlled monolithic-flat fixture | sparse、streamOptimized、多 extent、snapshot/parent chain fail closed |
-| ISO9660/Joliet reader | Windows / Linux | Experimental | synthetic ISO9660 | unit tests | 目录枚举、文件读取、seekable preview；可叠加 RAW/E01/VMDK reader | **planned** — ISO9660 + Joliet medium fixture | UDF、Rock Ridge、多 extent、交错 extent及 extended attributes 不支持 |
+| E01 reader | Windows | Beta | `tiny.E01` | expected.json / 8 个测试 | open / read / seek / EOF / chunk 解压；多段 segment/table 自动识别 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/e01/` multi-segment complex variants | 多段自动识别已实现，但 public-medium 目录尚空，厂商自定义压缩与复杂变体待补 |
+| RAW reader | Windows | GA | `tiny.raw` | expected.json / 1 个测试 | open / read / seek；逻辑长度与底层文件一致 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` single-file and partitioned RAW images | `.dd`/`.raw`/`.img` 和无扩展名单文件走同一 reader；检测到 `.001/.002/...` 相邻分卷时 fail closed |
+| VMDK flat adapter | Windows / Linux | Experimental | synthetic descriptor + extent | evidence-core/evidence-block/app-services unit tests | 单个 zero-offset FLAT extent 的 open / read / seek；descriptor+extent 组合哈希；预检查使用逻辑容量 | **planned** — controlled monolithic-flat fixture | 仅 UTF-8 `monolithicFlat`；sparse、streamOptimized、多 extent、snapshot/parent chain、非零 offset 和路径逃逸 fail closed |
+| ISO9660/Joliet reader | Windows / Linux | Experimental | synthetic ISO9660/Joliet；本地真实 ISO ignored 回归 | evidence-core unit tests / `FORENSICS_ISO_FIXTURE` | PVD 探测、Joliet 优先、目录枚举、文件读取、seekable preview、extent/卷边界校验；可叠加 RAW/E01/VMDK reader | **planned** — ISO9660 + Joliet medium fixture | UDF、Rock Ridge、多 extent、交错 extent及 extended attributes 不支持；无 committed ISO fixture 时不升级等级 |
 | NTFS parser | Windows | Beta | `tiny.raw` (NTFS volume) | expected.json / 11 个测试 | 枚举、读取、部分 deleted / hidden / system | **planned** (2026-Q3) — `testdata/fixtures/public-medium/ntfs/` $MFT extracts, INDX buffers | 复杂损坏样本不足。public-medium/ntfs 尚空 |
 | FAT parser | Windows | Experimental | 无 committed fixture | 5 个单元测试 | 基本枚举 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` FAT volume samples | deleted 不承诺。expected.json 待建 |
 | exFAT parser | Windows | Experimental | 无 committed fixture | 37 个单元测试 | 基本枚举（boot/FAT/dir） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` exFAT volume samples | deleted 不承诺。expected.json 待建 |
@@ -43,6 +43,32 @@ V2 长期执行与发布口径见：
 | Registry | Windows | Beta | `tiny SYSTEM`、`tiny SOFTWARE`、`NTUSER` (liuyang_pc.E01)、`SAM` (liuyang_pc.E01)、`USRCLASS`、`Amcache.hve`、`SECURITY` (controlled) | expected.json / 48 个测试 | system info (computer_name, timezone, **services/drivers**, **USBSTOR/USB device history**, **MountedDevices**, **shutdown time**, **ShimCache**, network_adapters), software info (product_name, build, version, registered_owner, install_date), **machine persistence** (HKLM Run/RunOnce/RunOnceEx, Winlogon Shell/Userinit/Notify/AutoAdminLogon, LSA Authentication/Notification/Security Packages), NTUSER (user profiles, shell folders, recent files, typed paths, **OpenSavePidlMRU**, **LastVisitedPidlMRU**, **RunMRU**, mount points, UserAssist), USRCLASS (**ShellBags**, **MuiCache**), NetworkList (Profiles/Signatures first/last connect), AppCompatFlags Layers, Amcache.hve (InventoryApplication, InventoryApplicationFile), SAM (local users, group membership, login counts, password policy), SECURITY (local security policy, LSA Secrets metadata, cached domain credentials — encrypted blobs only) | **planned** (2026-Q3) — `testdata/fixtures/public-medium/registry/` full hive suite (SAM, SECURITY, NTUSER) | liuyang_pc.E01 回归已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取。R1–R4 已落地（服务/驱动、USB、MountedDevices、ShutdownTime、ShimCache、HKLM Run/Winlogon/LSA Packages、NTUSER MRU、USRCLASS ShellBags/MuiCache、NetworkList、Amcache、AppCompatFlags Layers、SECURITY 基础字段合成测试通过）。txlog dirty page 合并与键值恢复已完成。UserAssist ROT13 解码已实现。**SECURITY hive 支持以受控披露方式加入：仅输出策略字段与加密 blob 元数据，默认不解密 LSA Secrets / 缓存凭证。** 生产路径已切换为 `analysis_service::extraction::registry::extract_registry_candidate`；旧 `registry::parser::RegistryExtractor` 降级为 fallback/legacy。 |
 | Recycle Bin | Windows | Beta | 无 committed fixture | expected.json（无自动化测试） | 原路径、删除时间（expected.json 契约内） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/recycle-bin/` $I/$R paired samples | testdata/artifacts/windows/recycle-bin/ 仅含 .gitkeep。未发现 #[test]。损坏恢复不承诺 |
 | 微信 4.x（插件形态） | Windows | Experimental | 倩倩PC镜像（4.1.8.67）私有真实样本 opt-in 回归（`FORENSICS_WECHAT_EXTRACT_DIR` 盘点层、`FORENSICS_WECHAT_DECRYPTED_DIR` 内容层）；合成 SQLite/INI/WAL/resource/XML 单元与宿主回归默认 CI | `plugins-src/wechat` 单元测试 / `wechat_plugin_regression` / `wechat_realdata_validation` / `wechat_content_realdata_validation` | 安装/账户/数据库盘点；明文/解密库的**内容解析**：联系人、会话、聊天记录（群聊 sender、收发方向、zstd、完整正文、quick-xml 有界解析、source/compress_content/packed_info_data 号主回复、富媒体/引用）、朋友圈（正文、媒体、点赞、评论及回复目标）、收藏；message_resource 投影为 WeChatMedia（BLOB 大小/SHA-256/MIME、包装头后的媒体签名及受限 base64），message_fts 投影为 WeChatSearchRecord；主库完整读取；`.db-wal` 作为 ABI companion 校验并合并；专用 UI 按证据时间分页展示并将资源图片关联回聊天气泡 | **planned** — 公开合成 fixture 集 | 仅以 DLL 插件形态提供（`meow.plugin.wechat` v0.4.2，`plugins/windows/`）；内存 dump 恢复的页 1 验证密钥写入受限 `keys.json`，并按取证需求在当前插件标题明文显示，但不进入日志/制品/报告；无密钥时加密库仅盘点并告警。媒体单项最多内联 2 MiB、单库累计最多 32 MiB，超限或未知 MIME 只保存元数据与 hash；内容解析单库封顶 20,000 条 |
+
+### 2.1 镜像适配器组合语义
+
+适配器只负责把输入格式转换成统一的 `EvidenceReader` 字节视图；分区探测、文件系统
+解析和案件 source DB 仍由上层路由负责。这个分层避免把容器格式、文件系统格式和
+虚拟机生成格式混为一谈：
+
+| 输入 | 内部路由 | 逻辑长度/身份 | 可组合链路 |
+|---|---|---|---|
+| E01/EWF | `image-e01::E01Reader` | E01 section/table 解压后的逻辑长度；来源类型保持 E01 | E01 -> MBR/GPT -> filesystem；ISO 作为直接卷时可由同一文件系统 reader 读取 |
+| 单文件 RAW/dd/img | `evidence_core::RawImageReader` | OS 文件长度；来源类型保持 Raw | Raw -> MBR/GPT/direct volume -> filesystem |
+| `monolithicFlat` VMDK | `RawImageReader` 读取 descriptor 指定的 FLAT extent | `sector_count * 512`；descriptor 和 extent 都属于证据身份 | VMDK -> MBR/GPT/direct volume -> filesystem；也可进入只读 block provider |
+| ISO9660/Joliet | `evidence_core::Iso9660Reader` | PVD 声明的卷边界；目录项 extent 必须在边界内 | Raw/E01/flat VMDK -> `PartitionWindowReader` -> ISO reader |
+
+当前适配器不会执行格式转换、生成完整 VMDK 或 materialize 稀疏容器。仿真链路生成的
+VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作为证据输入”是两个不同
+的方向。ISO 适配器用于只读导入、浏览和预览，不因此宣称 ISO 可以作为物理磁盘启动。
+
+错误语义也按层区分：
+
+- `InvalidData`：descriptor、PVD、both-endian 字段、长度或 extent 边界自相矛盾；
+- `UnexpectedEof`：声明的卷、extent 或文件在底层证据中提前结束；
+- `Unsupported`：容器需要未实现的 sparse、父盘链、复杂 extent、UDF/Rock Ridge 等映射；
+- `PermissionDenied`：VMDK extent 试图逃出 descriptor 所在目录。
+
+任何拒绝都发生在文件系统枚举之前，避免产生看似完整但实际不完整的 catalog。
 
 ## 3. 数据源分析补充链路 — Browser Medium Fixtures: `testdata/fixtures/public-medium/browser/`
 
@@ -105,6 +131,8 @@ V2 长期执行与发布口径见：
 |---|---|---|---|---|
 | E01 reader | Windows | Beta | Beta / 接近 GA | 前提是 public-medium fixture、真实样本回归与多段边界说明补齐 |
 | RAW reader | Windows | GA | GA | 维持现状并补 benchmark 与发布说明 |
+| VMDK flat adapter | Windows / Linux | Experimental | Experimental / Supported | 先补公开 descriptor+extent fixture、容器身份/逻辑容量断言和物理 block provider 回归；复杂 VMDK 继续保持 unsupported |
+| ISO9660/Joliet reader | Windows / Linux | Experimental | Experimental / Supported | 先补公开 ISO9660/Joliet fixture、卷边界与嵌套 E01/VMDK 回归；UDF/Rock Ridge 不纳入本目标 |
 | NTFS parser | Windows | Beta | Beta / 接近 GA | 重点是复杂损坏、大样本与真实回归说明。补齐 public-medium/ntfs |
 | FAT parser | Windows | Experimental | Experimental / Beta | 以基本枚举稳定性和边界说明为主，不承诺 deleted recovery。需建 expected.json |
 | exFAT parser | Windows | Experimental | Experimental / Beta | 以基本枚举稳定性和边界说明为主，不承诺 deleted recovery。需建 expected.json |
@@ -138,6 +166,7 @@ V2 长期执行与发布口径见：
 以下变化必须同步更新本文档：
 
 - parser 新增支持格式
+- 镜像容器适配器、逻辑容量或嵌套 reader 组合方式变化
 - 真实样本回归完成或失败
 - 字段承诺升级或降级
 - 已知不支持项变化

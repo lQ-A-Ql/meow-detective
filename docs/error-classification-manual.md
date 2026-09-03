@@ -54,10 +54,10 @@ V2 统一从三层表达错误：
 | category | 说明 | 典型示例 |
 |---|---|---|
 | `validation` | 输入不合法或前置条件不满足 | 空路径、非法分页、参数越界 |
-| `unsupported` | 当前能力不支持 | 不支持格式、未承诺字段、未实现功能 |
-| `io` | 宿主文件系统或句柄读写失败 | 文件不存在、目标冲突、重命名失败 |
-| `parser` | 解析失败或样本损坏 | EVTX/Prefetch/LNK/Registry/E01 损坏 |
-| `security` | 被安全策略拦截 | 路径越界、非法 handle、MCP policy block |
+| `unsupported` | 当前能力不支持 | 不支持格式、未承诺字段、未实现功能；复杂 VMDK/ISO 变体 |
+| `io` | 宿主文件系统或句柄读写失败 | 文件不存在、目标冲突、重命名失败、证据 extent 提前 EOF |
+| `parser` | 解析失败或样本损坏 | EVTX/Prefetch/LNK/Registry/E01/ISO descriptor 损坏 |
+| `security` | 被安全策略拦截 | 路径越界、非法 handle、MCP policy block、VMDK extent 目录逃逸 |
 | `external` | 外部依赖失败 | MCP SSE / stdio / 网络错误 |
 | `timeout` | 超时 | 外部连接超时、长任务超时 |
 | `cancelled` | 用户或系统主动取消 | 分析/导入任务取消（可恢复，非超时） |
@@ -100,6 +100,11 @@ V2 统一从三层表达错误：
 - 未识别类别统一降级为通用错误
 - 详情页或调试面板只展示脱敏后的结构化字段
 - 报告导出、MCP、媒体预览类错误必须突出“策略拒绝”与“系统异常”的差异
+
+镜像 reader 错误必须保留结构化类别：`InvalidData`（格式字段自相矛盾）、
+`UnexpectedEof`（底层证据短读）、`Unsupported`（未实现的容器/extent 映射）和
+`PermissionDenied`（路径安全策略拒绝）。Tauri 层将这些类别映射为脱敏 `ApiErrorDto`；
+不得把 descriptor 内容、extent 绝对路径或完整外部 stderr 原样带入 UI。
 
 ## 8. 与 V2 文档联动
 

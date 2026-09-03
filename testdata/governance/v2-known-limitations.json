@@ -1,12 +1,12 @@
 {
-  "lastVerifiedAt": "2026-09-02T00:00:00Z",
+  "lastVerifiedAt": "2026-09-03T00:00:00Z",
   "documentedLimitCount": 58,
   "items": [
     {
       "category": "E01",
       "item": "多段复杂样本",
       "status": "partial",
-      "summary": "当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空",
+      "summary": "多段 segment/table 自动识别已实现；当前公开样本仅 tiny.E01 单段，public-medium/e01 尚空，厂商自定义压缩与复杂变体仍需单独验证",
       "affectedChains": [
         "E01"
       ],

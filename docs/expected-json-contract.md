@@ -122,7 +122,28 @@ V2 期间，以下链路至少应配套 expected JSON：
 - Browser History
 - Email
 
-对于 E01 / RAW / NTFS，如果更适合用结构化测试或 synthetic 断言承接，也必须在文档中说明其对齐口径。
+对于 E01 / RAW / flat VMDK / ISO9660 / NTFS，如果更适合用结构化测试或 synthetic 断言承接，也必须在文档中说明其对齐口径。
+
+### 6.1 镜像适配器的结构化断言
+
+RAW、flat VMDK 和 ISO9660/Joliet 目前没有提交到仓库的公开中型二进制 fixture，因此使用
+结构化单元测试作为第一阶段基线。此类测试的断言应覆盖逻辑字节视图，而不是依赖主机
+文件名或平台特定的错误文本：
+
+| 链路 | 应固定的断言 | 不应写入 guaranteedFields |
+|---|---|---|
+| RAW/dd/img | `kind=raw`、长度、首/尾部读取、seek/EOF、重复读取字节相等 | 主机文件句柄、缓存命中率、设备路径 |
+| flat VMDK | `kind=vmdk`、descriptor/extent 组合身份、`sectorCount * 512` 逻辑长度、跨 extent 读取、截断/溢出拒绝 | descriptor 的物理路径、文件系统探测结果、VMware 启动结果 |
+| ISO9660/Joliet | PVD 存在、逻辑块大小、Joliet 优先、目录/文件名、文件内容、卷边界与 seekable read | Rock Ridge/UDF 语义、未提交样本的时间字段、宿主路径 |
+
+适配器的错误断言可按稳定类别表达：`InvalidData` 表示结构自相矛盾，`UnexpectedEof`
+表示底层证据提前结束，`Unsupported` 表示未实现容器或 extent 映射，`PermissionDenied`
+表示 VMDK extent 路径逃逸。断言不应要求完整错误字符串，以免把实现诊断文案误当作证据
+字段；但错误类别变化必须同步更新支持矩阵和已知限制。
+
+flat VMDK 的 manifest digest 是由 descriptor 与 FLAT extent 的长度和 SHA-256 组成的稳定
+派生值。Expected JSON 可以断言 manifest 规则和 segment 顺序，但不能把该派生摘要冒充
+为“原始单文件镜像 SHA-256”，也不能省略 descriptor 或 extent 的来源说明。
 
 ## 7. 文档联动
 
@@ -131,6 +152,7 @@ V2 期间，以下链路至少应配套 expected JSON：
 - `docs/parser-support-matrix.md`
 - `docs/known-unsupported-formats.md`
 - `docs/validation-trust-framework.md`
+- `testdata/governance/v2-verification-catalog.json`
 - 私有真实样本不进入 Git；样本执行入口和结果摘要必须与
   `docs/parser-support-matrix.md` 的支持等级保持一致
 

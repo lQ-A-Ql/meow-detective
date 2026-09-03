@@ -10,11 +10,11 @@
       "expectedJsonVersion": "v1",
       "verifiedSampleCount": 1,
       "result": "partial",
-      "notes": ["8 个测试覆盖 open/read/seek/chunk 解压。tiny.E01 为 synthetic 单段 fixture。多段 auto-detection 已实现。"],
+      "notes": ["8 个测试覆盖 open/read/seek/chunk 解压。tiny.E01 为 synthetic 单段 fixture；多段 segment/table auto-detection 已实现。"],
       "verifiedSamples": ["tiny.E01"],
       "baseline": "项目内 fixture / expected.json",
       "guaranteeSummary": "open/read/seek 核心行为为 bestEffort",
-      "matrixNotes": ["多段复杂样本待补。public-medium/e01 目录尚空。"]
+      "matrixNotes": ["多段自动识别已实现；public-medium/e01 目录尚空，厂商自定义压缩与复杂变体待补。"]
     },
     {
       "chain": "RAW",
@@ -31,6 +31,46 @@
       "baseline": "项目内 fixture / expected.json",
       "guaranteeSummary": "open/read/seek 为 guaranteed",
       "matrixNotes": ["基础链路稳定。"]
+    },
+    {
+      "chain": "VMDKFlat",
+      "platform": "Windows / Linux",
+      "displayName": "monolithic-flat VMDK 适配器",
+      "maturity": "experimental",
+      "guaranteeLevel": "experimental",
+      "fixtureTier": "code-path (synthetic)",
+      "expectedJsonVersion": "none",
+      "verifiedSampleCount": 0,
+      "result": "partial",
+      "notes": [
+        "synthetic descriptor + FLAT extent 已覆盖 descriptor 解析、逻辑容量、跨扇区读取、路径边界、截断/溢出与只读 block provider；app-services 还覆盖 descriptor+extent 组合哈希和预检查逻辑容量。"
+      ],
+      "verifiedSamples": [],
+      "baseline": "evidence-core/evidence-block/app-services synthetic unit tests",
+      "guaranteeSummary": "单个 zero-offset FLAT extent 的只读映射为 experimental",
+      "matrixNotes": [
+        "仅 UTF-8 createType=monolithicFlat；sparse、streamOptimized、多 extent、snapshot/parent chain、非零 offset 和路径逃逸 fail closed。"
+      ]
+    },
+    {
+      "chain": "ISO9660",
+      "platform": "Windows / Linux",
+      "displayName": "ISO9660/Joliet 文件系统",
+      "maturity": "experimental",
+      "guaranteeLevel": "experimental",
+      "fixtureTier": "code-path + local opt-in",
+      "expectedJsonVersion": "none",
+      "verifiedSampleCount": 0,
+      "result": "partial",
+      "notes": [
+        "synthetic ISO9660/Joliet fixture 已覆盖 PVD、Joliet 名称、目录枚举、文件读取、seekable preview、非零分区窗口和 extent 边界；本地真实 ISO 通过 FORENSICS_ISO_FIXTURE ignored 回归。"
+      ],
+      "verifiedSamples": [],
+      "baseline": "evidence-core synthetic unit tests + opt-in ISO integration test",
+      "guaranteeSummary": "ISO9660 基础目录和 Joliet 名称读取为 experimental",
+      "matrixNotes": [
+        "可叠加 RAW、E01 或受支持 flat VMDK reader；无 committed binary fixture，不升级公开等级；UDF、Rock Ridge、multi-extent、interleaved extent 和 extended attributes 不支持。"
+      ]
     },
     {
       "chain": "NTFS",

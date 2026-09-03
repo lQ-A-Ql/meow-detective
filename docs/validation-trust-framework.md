@@ -14,7 +14,6 @@ V2 长期执行总计划见：
 - `docs/documentation-index.md`
 - `testdata/fixtures/` 的目录和 expected JSON 契约
 - `docs/expected-json-contract.md`
-- `docs/documentation-index.md`
 
 ## 2. 样本分层
 
@@ -29,6 +28,18 @@ V2 长期执行总计划见：
 - `testdata/fixtures/public-small/evtx/system.evtx`
 - `testdata/fixtures/public-small/logical/**`
 
+当前没有提交 ISO 或 VMDK 二进制 fixture。ISO9660/Joliet 与 flat VMDK 使用确定性的
+synthetic unit fixtures 验证；本地真实 ISO 只能通过 `FORENSICS_ISO_FIXTURE` 进入
+ignored 回归，不提升公开支持等级，也不把主机路径写入文档或治理 artifact。
+
+真实 ISO 回归命令（仅在本机已有样本时运行）为：
+
+```powershell
+$env:FORENSICS_ISO_FIXTURE = '<read-only ISO path>'
+cargo test -p evidence-core --test iso_real -- --ignored --nocapture
+Remove-Item Env:FORENSICS_ISO_FIXTURE -ErrorAction SilentlyContinue
+```
+
 要求：
 
 - 可直接进入仓库
@@ -42,14 +53,17 @@ V2 长期执行总计划见：
 
 当前状态：
 
-- 仓库内尚未形成稳定的 `testdata/fixtures/medium/` 目录
-- 后续建议按链路拆分：
-  - `medium/e01/`
-  - `medium/ntfs/`
-  - `medium/prefetch/`
-  - `medium/lnk/`
-  - `medium/registry/`
-  - `medium/recycle-bin/`
+- 仓库已经使用 `testdata/fixtures/public-medium/` 承载可公开的 email 与 Linux journal
+  fixture；镜像适配器和 Windows parser 的 medium fixture 仍按链路逐项补齐。
+- 后续建议在同一 `public-medium/` 根目录下按链路拆分：
+  - `public-medium/e01/`
+  - `public-medium/iso/`
+  - `public-medium/vmdk/`
+  - `public-medium/ntfs/`
+  - `public-medium/prefetch/`
+  - `public-medium/lnk/`
+  - `public-medium/registry/`
+  - `public-medium/recycle-bin/`
 
 要求：
 
@@ -120,8 +134,29 @@ V2 长期执行总计划见：
 - 基准：
   - 项目内 synthetic fixture 预期
 - 当前不保证：
-  - 多段 E01
+  - 复杂多段 E01 的全部厂商变体（多段自动识别已实现，但仍缺公开 medium fixture）
   - 厂商自定义压缩 / segment 变体
+
+### 4.1a 镜像格式适配器（RAW、flat VMDK、ISO9660/Joliet）
+
+这些适配器的验证对象是“逻辑字节视图和边界行为”，不是把所有格式都标成可启动或
+可写。测试与生产链路必须遵守以下分层：
+
+| 适配器 | 必测断言 | 当前验证入口 | 公开承诺边界 |
+|---|---|---|---|
+| RAW/dd/img | `Read + Seek`、EOF、独立 cursor、长度与 OS metadata 一致 | `cargo test -p evidence-core --lib` | 单文件原始字节透传；不合并分卷 |
+| monolithic-flat VMDK | descriptor 解析、`sector_count * 512` 逻辑容量、extent 截断/溢出、相对路径安全、跨扇区读取 | `cargo test -p evidence-core --lib`、`cargo test -p evidence-block`、`cargo test -p app-services hash_evidence_vmdk_covers_descriptor_and_flat_extent --lib` | 仅 UTF-8、单个零偏移 `FLAT` extent；descriptor 与 extent 都计入证据身份 |
+| ISO9660/Joliet | PVD/终止描述符、Joliet 优先、目录递归上限、both-endian 一致性、文件/目录 extent 卷边界、seekable preview | `cargo test -p evidence-core --lib`；真实 ISO 使用 `FORENSICS_ISO_FIXTURE` ignored 测试 | 可叠加任意 `EvidenceReader`，包括 RAW、E01 和受支持 flat VMDK；不支持 UDF/Rock Ridge/交错或 multi-extent |
+
+适配器组合测试还必须覆盖非零分区窗口：先用 `PartitionWindowReader` 将分区变为零起点，
+再探测文件系统，不能把绝对镜像偏移传入 ISO 或其他文件系统 reader。ISO 的 PVD 卷大小
+超过底层证据时返回 `UnexpectedEof`；记录格式自相矛盾时返回 `InvalidData`；未实现的
+容器映射返回 `Unsupported`。错误类别是验收的一部分，不能用普通 RAW fallback 掩盖。
+
+flat VMDK 的组合哈希采用稳定 manifest：按 descriptor、extent 的固定顺序记录文件长度
+与 SHA-256，再对 manifest 求摘要。该摘要用于来源身份和后台任务完整性，不等同于虚拟机
+启动成功证明。导入预检查同样使用 VMDK 的逻辑容量，避免用几 KB descriptor 大小低估
+资源需求。
 
 ### 4.2 NTFS
 
@@ -207,7 +242,7 @@ V2 长期执行总计划见：
 Linux 单盘真实样本通过 `FORENSICS_LINUX_E01_FIXTURE` opt-in 注入，默认 CI 不运行。Git 只保留可复验的契约与测试入口，不记录工作站路径、枚举数量、耗时或样本 hash。
 
 - 目标：
-  - E01/RAW 读取与分区探测
+  - E01/RAW/flat VMDK 读取与分区探测（检材3 baseline 实际使用 E01；其他格式以各自适配器契约为准）
   - LVM direct linear/striped LV 展开
   - XFS root LV 文件树枚举
   - 通过 `FileEntryId` 预览 `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp`
@@ -318,7 +353,9 @@ replay is validated. No Windows candidate should be exported merely because
 
 ### 4.8 Windows/Linux 双源隔离 baseline
 
-双源隔离使用两个不入库的 Windows/Linux E01 通过环境变量注入。`scripts/check-stage2-real-sample-isolation.ps1` 默认验证两种串行导入顺序；带 `-RequireFixtures` 时，缺少 fixture 必须失败，不能伪装为通过。
+双源隔离使用两个不入库的 Windows/Linux E01 通过环境变量注入。格式适配器的真实样本
+回归同样只允许环境变量注入，且每个 reader 必须在独立 source DB 中完成。`scripts/check-stage2-real-sample-isolation.ps1`
+默认验证两种串行导入顺序；带 `-RequireFixtures` 时，缺少 fixture 必须失败，不能伪装为通过。
 
 验收必须同时证明：`app.db` 不承载文件树、两个 `source.db` 均为 `ready`、分区平台不串染、文件 ID 为全局 `ds:<dataSourceId>:<localId>` 形式、两源均可预览，且 artifact/timeline/correlation ID 保持数据源作用域。
 
@@ -426,6 +463,7 @@ PVE 集群测试通过 `FORENSICS_PVE_CLUSTER_ROOT` 等环境变量 opt-in，默
 3. 更新 parser 支持矩阵
 4. 更新已知不支持项
 5. 如边界变化，更新错误分类与安全文档
+6. 如镜像适配器或嵌套链路变化，补齐逻辑长度、reader 组合、哈希身份和 fail-closed 回归
 
 ## 10. 与其他权威文档的关系
 
@@ -434,3 +472,4 @@ PVE 集群测试通过 `FORENSICS_PVE_CLUSTER_ROOT` 等环境变量 opt-in，默
 - 当前支持等级：`docs/parser-support-matrix.md`
 - 当前已知不承诺边界：`docs/known-unsupported-formats.md`
 - 治理事实源与技术文档入口：`docs/documentation-index.md`
+- 验证链路事实源：`testdata/governance/v2-verification-catalog.json`

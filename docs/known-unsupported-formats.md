@@ -15,9 +15,14 @@ V2 长期计划与能力评级请同时参考：
 
 ## 2. 当前已知不支持或不承诺项
 
+镜像输入先经过格式适配器，再进入分区和文件系统解析。`DataSourceKind::Raw` 是历史
+兼容的存储类型，并不表示任意虚拟磁盘都可当作裸盘读取；适配器无法证明容器布局时
+必须停止在导入/预览之前。下表中的“不支持”是明确的 fail-closed 行为，不是建议用户
+忽略错误继续分析。
+
 | 分类 | 项目 | 状态 | 说明 |
 |---|---|---|---|
-| E01 | 多段复杂样本 | 部分支持 | 当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空 |
+| E01 | 多段复杂样本 | 部分支持 | 多段 segment/table 自动识别已实现；当前公开样本仅 tiny.E01 单段，public-medium/e01 尚空，厂商自定义压缩与复杂变体仍需单独验证 |
 | RAW | `.001/.002/...` 分卷集合 | 不支持 | 当前适配器仅接受单文件 RAW/dd/img；检测到相邻分卷时 fail closed，避免只导入首段 |
 | VMDK | sparse / streamOptimized / 多 extent / snapshot / parent chain | 不支持 | 当前只读适配器仅接受单个 zero-offset FLAT extent 的 `monolithicFlat` descriptor；不猜测复杂块映射 |
 | 光盘镜像 | UDF / Rock Ridge / multi-extent / interleaved extent | 不支持 | 当前仅 ISO9660 基础目录与 Joliet 名称；遇到需要复杂 extent 映射的记录时 fail closed |
@@ -81,6 +86,10 @@ V2 长期计划与能力评级请同时参考：
 以下能力即便在 V2 期间有实现增量，也不得在 README、PRD、用户文案中写成“完整支持”：
 
 - 多段复杂 E01 全覆盖
+- `.001/.002/...` 分卷 RAW 集合的自动拼接
+- sparse、streamOptimized、快照/父盘链或多 extent VMDK 的完整支持
+- ISO9660 之外的 UDF/Rock Ridge 语义，以及交错或 multi-extent 记录
+- “可导入 ISO/flat VMDK”与“可作为物理磁盘启动”之间的等价宣传
 - NTFS 极端损坏恢复
 - FAT / exFAT deleted recovery
 - Registry transaction log 完整重放

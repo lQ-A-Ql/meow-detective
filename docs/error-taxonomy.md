@@ -20,10 +20,10 @@
 | 类别 | 含义 | 示例 |
 |---|---|---|
 | `validation` | 输入不合法或前置条件不满足 | `NO_ACTIVE_CASE`、`INVALID_INPUT`、`CONFLICT`、`NOT_FOUND` |
-| `unsupported` | 当前能力不支持 | 不支持的格式或操作 |
-| `io` | 文件系统或宿主 IO 失败 | `From<std::io::Error>`、导出写入失败、文件读取失败、路径相关错误 |
-| `parser` | 解析输入不可靠或损坏 | hive / prefetch / lnk / image parse 失败、corrupt、truncated |
-| `security` | 被安全策略拦截 | MCP policy block、路径越界、非法 handle、permission denied、forbidden |
+| `unsupported` | 当前能力不支持 | 不支持的格式或操作；sparse/parent-chain VMDK、UDF/Rock Ridge、RAW 分卷 |
+| `io` | 文件系统或宿主 IO 失败 | `From<std::io::Error>`、导出写入失败、文件读取失败、路径相关错误、物理 extent 短读 |
+| `parser` | 解析输入不可靠或损坏 | hive / prefetch / lnk / E01 / ISO descriptor parse 失败、corrupt、truncated |
+| `security` | 被安全策略拦截 | MCP policy block、路径越界、非法 handle、permission denied、forbidden、VMDK extent 路径逃逸 |
 | `external` | 外部依赖失败 | MCP SSE / stdio / 网络错误、connection / http 错误 |
 | `timeout` | 超时 | 外部连接或长操作超时 |
 | `cancelled` | 用户或系统主动取消 | 分析/导入任务取消（可恢复） |
@@ -81,3 +81,13 @@ V2 期间以下场景必须优先使用结构化错误，而不是裸字符串�
 - benchmark 数据缺失或门槛失败
 - MCP 权限拒绝
 - 导出 / 媒体 / overwrite 安全策略拒绝
+- 镜像适配器拒绝不支持的容器、损坏 descriptor 或越界 extent
+
+镜像适配器的稳定错误映射如下：
+
+| reader 条件 | 对外类别 | 处理要求 |
+|---|---|---|
+| VMDK `createType`、extent 数量、parent chain 或容器布局不在支持范围 | `unsupported` | 在导入、预览和挂载前停止，不回退为 RAW |
+| VMDK extent 路径逃出 descriptor 目录 | `security` | 拒绝访问；对外消息不得包含完整宿主路径 |
+| VMDK sector count、ISO both-endian 字段或卷边界自相矛盾 | reader `InvalidData`；上层按场景映射为 `parser` 或 `validation` | 保留结构失败原因，禁止生成部分 catalog |
+| 声明的 extent、卷或文件在底层证据中提前结束 | `io` | 标记可重试的源读取失败；不填充猜测字节 |
