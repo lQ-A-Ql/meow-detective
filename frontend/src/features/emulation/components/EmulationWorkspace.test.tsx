@@ -486,17 +486,17 @@ describe('EmulationWorkspace', () => {
 
     const { rerender } = render(<EmulationWorkspace model={linuxModel(['xfs-log-dirty'])} />);
     expect(screen.getByText('XFS 日志脏')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' }));
     expect(toggleRepairFilesystems).toHaveBeenCalledOnce();
 
     rerender(<EmulationWorkspace model={linuxModel(undefined)} />);
     expect(screen.queryByText('XFS 日志脏')).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' })).not.toBeInTheDocument();
 
     rerender(<EmulationWorkspace model={linuxModel(['xfs-log-unverified'])} />);
     expect(screen.getByText('XFS 日志未验证')).toBeInTheDocument();
     expect(screen.getByText(/无法安全处理时阻止启动/)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '启动前回放并修复 XFS 日志（仅写入覆盖层）' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' })).toBeInTheDocument();
   });
 
   it('identifies image-side service loops without calling them XFS damage', () => {

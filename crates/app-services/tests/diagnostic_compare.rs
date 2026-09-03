@@ -50,6 +50,11 @@ fn compare_source_and_cow_files() {
     ] {
         let left = read_file(&source_fs, path);
         let right = read_file(&cow_fs, path);
-        println!("{path}: source={} cow={} equal={}", left.as_ref().map_or("missing".into(), |v| digest(v)), right.as_ref().map_or("missing".into(), |v| digest(v)), left == right);
+        println!(
+            "{path}: source={} cow={} equal={}",
+            left.as_ref().map_or("missing".into(), |v| digest(v)),
+            right.as_ref().map_or("missing".into(), |v| digest(v)),
+            left == right
+        );
     }
 }

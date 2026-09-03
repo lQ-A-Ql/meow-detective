@@ -1,6 +1,6 @@
+use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
 use std::io::Read;
 use std::path::PathBuf;
-use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
 
 #[test]
 #[ignore]
@@ -8,7 +8,11 @@ fn dump_current_boot_window() {
     let path = PathBuf::from(std::env::var_os("FORENSICS_XFS_COW_E01_FIXTURE").unwrap());
     let reader: Box<dyn EvidenceReader> = Box::new(RawImageReader::open(&path).unwrap());
     let pool = fs_lvm::LvmPool::discover(vec![reader], vec![1_074_790_400]).unwrap();
-    let index = pool.list_volumes().iter().position(|v| v.name == "root").unwrap();
+    let index = pool
+        .list_volumes()
+        .iter()
+        .position(|v| v.name == "root")
+        .unwrap();
     let root = pool.open_volume(index).unwrap();
     let fs = fs_xfs::XfsReader::open(Box::new(root), 0).unwrap();
     for path in [

@@ -18,7 +18,12 @@ fn dump_linux_boot_configuration() {
     let snapshot = fs
         .read_internal_log_snapshot(fs_xfs::log::XFS_LOG_MAX_SNAPSHOT_BYTES)
         .unwrap();
-    println!("=== XFS log: bytes={} complete={} state={:?} ===", snapshot.bytes.len(), snapshot.complete, fs_xfs::log::assess_log_state(&snapshot));
+    println!(
+        "=== XFS log: bytes={} complete={} state={:?} ===",
+        snapshot.bytes.len(),
+        snapshot.complete,
+        fs_xfs::log::assess_log_state(&snapshot)
+    );
     for path in [
         "etc/fstab",
         "etc/hosts",
@@ -71,10 +76,14 @@ fn dump_linux_boot_configuration() {
         "var/log/secure",
     ] {
         match fs.open_file(path) {
-            Ok(mut file) => {
+            Ok(file) => {
                 let mut bytes = Vec::new();
                 file.take(256 * 1024).read_to_end(&mut bytes).unwrap();
-                println!("=== {path} ({}) ===\n{}", bytes.len(), String::from_utf8_lossy(&bytes));
+                println!(
+                    "=== {path} ({}) ===\n{}",
+                    bytes.len(),
+                    String::from_utf8_lossy(&bytes)
+                );
             }
             Err(error) => println!("=== {path}: ERROR {error} ==="),
         }

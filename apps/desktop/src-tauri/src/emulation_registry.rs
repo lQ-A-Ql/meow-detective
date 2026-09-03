@@ -13,6 +13,7 @@ use thiserror::Error;
 
 use crate::emulation_backend::{self, EmulationBackendHandle};
 
+mod guest;
 mod materials;
 mod recovery_media;
 mod session_discovery;
@@ -20,6 +21,7 @@ mod session_ops;
 mod vmware;
 mod workspace;
 
+use guest::guest_profile_for_source;
 pub(crate) use materials::maintenance_tool_available;
 use materials::{
     build_maintenance_payload, detect_firmware, image_kind, prepare_machine_materials,
@@ -356,51 +358,6 @@ impl EmulationRegistry {
 
     fn lock_error() -> EmulationRegistryError {
         EmulationRegistryError::LockPoisoned
-    }
-}
-
-/// Resolved VM identity and storage-controller policy for one source.
-struct GuestProfile {
-    is_linux: bool,
-    guest_os: String,
-    disk_adapter: evidence_emulation::VmdkAdapter,
-    disk_adapter_reason: String,
-}
-
-/// Linux derives both the guestid and storage controller from read-only
-/// evidence probes. Windows keeps the inbox IDE path and windows9-64 profile.
-fn guest_profile_for_source(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-) -> Result<GuestProfile, EmulationRegistryError> {
-    let is_linux =
-        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_conn)
-            .find_storage(data_source_id)
-            .map_err(MountServiceError::from)?
-            .map(|storage| storage.platform == "linux")
-            .unwrap_or(false);
-    if is_linux {
-        let profile = app_services::mount_service::linux_guest_profile(
-            case_conn,
-            case_root,
-            case_id,
-            data_source_id,
-        )?;
-        Ok(GuestProfile {
-            is_linux: true,
-            guest_os: profile.guest_os,
-            disk_adapter: profile.disk_adapter,
-            disk_adapter_reason: profile.disk_adapter_reason,
-        })
-    } else {
-        Ok(GuestProfile {
-            is_linux: false,
-            guest_os: "windows9-64".to_string(),
-            disk_adapter: evidence_emulation::VmdkAdapter::Ide,
-            disk_adapter_reason: "Windows guest uses the inbox IDE controller".to_string(),
-        })
     }
 }
 
