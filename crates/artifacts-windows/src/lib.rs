@@ -58,7 +58,6 @@ pub use registry::lookup::{
     ShutdownTimeEntry, SoftwareHiveInfo, SystemHiveInfo, SystemServiceEntry, SystemServiceInfo,
     UsbDeviceHistoryEntry, UserAssistEntry, WinlogonConfig,
 };
-pub use registry::parser::RegistryExtractor;
 pub use registry::recovery::{
     scan_deleted_registry_cells, RecoverResult, RecoveredKey, RecoveredValue,
 };

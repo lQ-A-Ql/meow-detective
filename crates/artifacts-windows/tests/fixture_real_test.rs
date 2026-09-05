@@ -4,7 +4,7 @@
 //! Run: cargo test -p artifacts-windows -- --ignored
 
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
-use artifacts_windows::{LnkExtractor, PrefetchExtractor, RecycleBinExtractor, RegistryExtractor};
+use artifacts_windows::{LnkExtractor, PrefetchExtractor, RecycleBinExtractor};
 use domain::FileEntryId;
 use serde::Deserialize;
 use std::fs;
@@ -15,7 +15,6 @@ struct Expected {
     file: String,
     expected: serde_json::Value,
 }
-
 fn testdata_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/artifacts/windows")
 }
@@ -70,7 +69,6 @@ fn prefetch_real_fixtures() {
         }
     }
 }
-
 #[test]
 #[ignore]
 fn lnk_real_fixtures() {
@@ -121,26 +119,6 @@ fn recycle_bin_real_fixtures() {
         let ctx = ArtifactContext {
             file_id: FileEntryId(format!("real-{}", exp.file)),
             file_path: format!("$Recycle.Bin/{}", exp.file),
-            reader: Box::new(std::io::Cursor::new(data)),
-        };
-        let mut sink = VecSink::new();
-        let _ = extractor.run(ctx, &mut sink).unwrap();
-        assert!(!sink.artifacts.is_empty(), "Expected artifact");
-    }
-}
-
-#[test]
-#[ignore]
-fn registry_real_fixtures() {
-    for exp in load_expected("registry") {
-        let data = read_artifact_file("registry", &exp.file);
-        if data.is_empty() {
-            continue;
-        }
-        let extractor = RegistryExtractor;
-        let ctx = ArtifactContext {
-            file_id: FileEntryId(format!("real-{}", exp.file)),
-            file_path: format!("C:/Windows/System32/config/{}", exp.file),
             reader: Box::new(std::io::Cursor::new(data)),
         };
         let mut sink = VecSink::new();

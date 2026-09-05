@@ -3,8 +3,8 @@ mod fixture_builder;
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ExtractorRegistry, VecSink};
 use artifacts_windows::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
-    JumpListExtractor, LnkExtractor, PrefetchExtractor, RecycleBinExtractor, RegistryExtractor,
-    SruExtractor, ThumbcacheExtractor,
+    JumpListExtractor, LnkExtractor, PrefetchExtractor, RecycleBinExtractor, SruExtractor,
+    ThumbcacheExtractor,
 };
 use chrono::{TimeZone, Utc};
 use domain::FileEntryId;
@@ -36,19 +36,6 @@ fn lnk_truncated_no_panic() {
         file_id: t("trunc"),
         file_path: "bad.lnk".into(),
         reader: Box::new(std::io::Cursor::new(vec![0u8; 10])),
-    };
-    let mut sink = VecSink::new();
-    let _ = extractor.run(ctx, &mut sink);
-}
-
-#[test]
-fn registry_random_bytes_no_panic() {
-    let extractor = RegistryExtractor;
-    let data: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
-    let ctx = ArtifactContext {
-        file_id: t("rand"),
-        file_path: "C:/Windows/System32/config/SYSTEM.dat".into(),
-        reader: Box::new(std::io::Cursor::new(data)),
     };
     let mut sink = VecSink::new();
     let _ = extractor.run(ctx, &mut sink);
@@ -210,32 +197,6 @@ fn recycle_bin_fixture_extracts_path_and_time() {
     assert!(
         !sink.timeline_events.is_empty(),
         "Expected FILE_DELETED event"
-    );
-}
-
-#[test]
-fn registry_hive_fixture_parses_name() {
-    let lw = Utc.with_ymd_and_hms(2025, 3, 1, 18, 0, 0).unwrap();
-    let data = build_registry_hive("SYSTEM", lw);
-
-    let extractor = RegistryExtractor;
-    let ctx = ArtifactContext {
-        file_id: t("reg-001"),
-        file_path: "C:/Windows/System32/config/SYSTEM.dat".into(),
-        reader: Box::new(std::io::Cursor::new(data)),
-    };
-    let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-    assert!(report.artifacts_found > 0);
-    let attrs = &sink.artifacts[0].attrs;
-    assert!(
-        attrs.contains_key("hive_name"),
-        "Expected hive_name in attrs: {:?}",
-        attrs
-    );
-    assert!(
-        !sink.timeline_events.is_empty(),
-        "Expected REGISTRY_HIVE_LAST_WRITE event"
     );
 }
 
@@ -477,21 +438,6 @@ fn sru_ese_header_reports_file_level_artifact() {
     assert!(report.errors.is_empty());
     assert_eq!(sink.artifacts.len(), 1);
     assert_eq!(sink.artifacts[0].family, "SRU");
-}
-
-#[test]
-fn registry_supports_standard_extensionless_hives_only_in_config_path() {
-    let extractor = RegistryExtractor;
-
-    assert!(extractor.supports_path("C:/Windows/System32/config/SYSTEM"));
-    assert!(extractor.supports_path("Windows\\System32\\config\\SOFTWARE"));
-    assert!(extractor.supports_path("C:/Users/alice/NTUSER.DAT"));
-    assert!(extractor.supports_path("C:/Users/alice/AppData/Local/Microsoft/Windows/UsrClass.dat"));
-    assert!(!extractor.supports_path("C:/Temp/SYSTEM"));
-    assert!(!extractor.supports_path("C:/Temp/software"));
-    assert!(!extractor.supports_path("C:/Temp/system-backup.dat"));
-    assert!(!extractor.supports_path("C:/Temp/awesome.dat"));
-    assert!(!extractor.supports_path("notes.txt"));
 }
 
 #[test]

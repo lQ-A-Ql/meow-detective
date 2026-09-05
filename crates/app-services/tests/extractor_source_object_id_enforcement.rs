@@ -9,11 +9,10 @@ mod fixture_builder;
 
 use app_services::analysis_service::EvidenceCandidate;
 use app_services::{analysis_service::extract_registry_candidate, artifact_service};
-use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
-use artifacts_windows::RegistryExtractor;
+use artifacts_core::VecSink;
 use chrono::{TimeZone, Utc};
 use domain::FileEntryId;
-use fixture_builder::{build_lnk, build_prefetch_v30, build_recycle_bin_i, build_registry_hive};
+use fixture_builder::{build_lnk, build_prefetch_v30, build_recycle_bin_i};
 
 fn fid(s: &str) -> FileEntryId {
     FileEntryId(s.to_string())
@@ -134,28 +133,6 @@ fn recycle_bin_extractor_sets_source_object_id() {
         "RecycleBin fixture should produce at least one output"
     );
     assert_source_object_id(&sink, &file_id, "RecycleBinExtractor");
-}
-
-#[test]
-fn registry_extractor_sets_source_object_id() {
-    let file_id = fid("reg-src-001");
-    let lw = Utc.with_ymd_and_hms(2025, 3, 1, 18, 0, 0).unwrap();
-    let data = build_registry_hive("SYSTEM", lw);
-    let extractor = RegistryExtractor;
-    assert!(extractor.supports_path("C:/Windows/System32/config/SYSTEM"));
-    let ctx = ArtifactContext {
-        file_id: file_id.clone(),
-        file_path: "C:/Windows/System32/config/SYSTEM".to_string(),
-        reader: Box::new(std::io::Cursor::new(data)),
-    };
-    let mut sink = VecSink::new();
-    extractor.run(ctx, &mut sink).unwrap();
-
-    assert!(
-        !sink.artifacts.is_empty() || !sink.timeline_events.is_empty(),
-        "Registry fixture should produce at least one output"
-    );
-    assert_source_object_id(&sink, &file_id, "RegistryExtractor");
 }
 
 #[test]
