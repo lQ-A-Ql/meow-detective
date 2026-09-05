@@ -1,0 +1,34 @@
+[
+  {
+    "file": "medium-flat.vmdk",
+    "expected": {
+      "baseline": "evidence-core public-medium image adapter v1",
+      "assertions": {
+        "logicalSize": 524288,
+        "sectorSize": 512,
+        "sectorCount": 1024,
+        "descriptorSha256": "d7add8fcd50eccb76675c12c13d4298a82e2a7a32148a40f6a89ee05790fe3de",
+        "extentSha256": "dec400ceb2ff73e2f51c75323e14310c3bb8b7ea94315975eac644835d3e95a1",
+        "backingPathCount": 2,
+        "isoComposition": true,
+        "firstIsoDescriptorSignature": "CD001"
+      },
+      "guaranteedFields": [
+        "kind",
+        "logicalSize",
+        "sectorGeometry",
+        "descriptorExtentIdentity",
+        "readSeek"
+      ],
+      "bestEffortFields": [],
+      "notGuaranteedFields": [
+        "bootability",
+        "sparseExtentMapping",
+        "parentSnapshotChain"
+      ],
+      "fieldNamingConvention": "camelCase",
+      "timezoneNormalizationRule": "not applicable; VMDK adapter produces no timestamps",
+      "sortOrderRule": "descriptor before FLAT extent in backing manifest"
+    }
+  }
+]

@@ -1,0 +1,6 @@
+# Disk DescriptorFile
+version=1
+CID=12345678
+parentCID=ffffffff
+createType="monolithicFlat"
+RW 1024 FLAT "medium-flat.bin" 0

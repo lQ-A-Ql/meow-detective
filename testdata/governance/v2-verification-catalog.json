@@ -38,18 +38,18 @@
       "displayName": "monolithic-flat VMDK 适配器",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
-      "fixtureTier": "code-path (synthetic)",
-      "expectedJsonVersion": "none",
-      "verifiedSampleCount": 0,
+      "fixtureTier": "public-medium",
+      "expectedJsonVersion": "v1",
+      "verifiedSampleCount": 1,
       "result": "partial",
       "notes": [
-        "synthetic descriptor + FLAT extent 已覆盖 descriptor 解析、逻辑容量、跨扇区读取、路径边界、截断/溢出与只读 block provider；app-services 还覆盖 descriptor+extent 组合哈希和预检查逻辑容量。"
+        "public-medium/vmdk/medium-flat.vmdk 与 medium-flat.bin 覆盖 descriptor 解析、逻辑容量、跨扇区读取、descriptor+extent 组合身份和 ISO 组合；synthetic unit tests 继续覆盖路径边界、截断/溢出与只读 block provider。"
       ],
-      "verifiedSamples": [],
-      "baseline": "evidence-core/evidence-block/app-services synthetic unit tests",
+      "verifiedSamples": ["public-medium/vmdk/medium-flat.vmdk"],
+      "baseline": "public-medium expected.json + evidence-core/evidence-block/app-services tests",
       "guaranteeSummary": "单个 zero-offset FLAT extent 的只读映射为 experimental",
       "matrixNotes": [
-        "仅 UTF-8 createType=monolithicFlat；sparse、streamOptimized、多 extent、snapshot/parent chain、非零 offset 和路径逃逸 fail closed。"
+        "仅 UTF-8 createType=monolithicFlat；sparse、streamOptimized、多 extent、snapshot/parent chain、非零 offset 和路径逃逸 fail closed；medium fixture 不代表可启动 VMDK。"
       ]
     },
     {
@@ -58,18 +58,18 @@
       "displayName": "ISO9660/Joliet 文件系统",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
-      "fixtureTier": "code-path + local opt-in",
-      "expectedJsonVersion": "none",
-      "verifiedSampleCount": 0,
+      "fixtureTier": "public-medium + local opt-in",
+      "expectedJsonVersion": "v1",
+      "verifiedSampleCount": 1,
       "result": "partial",
       "notes": [
-        "synthetic ISO9660/Joliet fixture 已覆盖 PVD、Joliet 名称、目录枚举、文件读取、seekable preview、非零分区窗口和 extent 边界；本地真实 ISO 通过 FORENSICS_ISO_FIXTURE ignored 回归。"
+        "public-medium/iso/medium.iso 覆盖 PVD、Joliet 名称、目录枚举、嵌套文件读取和 seekable preview；synthetic tests 继续覆盖非零分区窗口与 extent 边界；本地真实 ISO 通过 FORENSICS_ISO_FIXTURE ignored 回归。"
       ],
-      "verifiedSamples": [],
-      "baseline": "evidence-core synthetic unit tests + opt-in ISO integration test",
+      "verifiedSamples": ["public-medium/iso/medium.iso"],
+      "baseline": "public-medium expected.json + evidence-core integration/unit tests + opt-in ISO integration test",
       "guaranteeSummary": "ISO9660 基础目录和 Joliet 名称读取为 experimental",
       "matrixNotes": [
-        "可叠加 RAW、E01 或受支持 flat VMDK reader；无 committed binary fixture，不升级公开等级；UDF、Rock Ridge、multi-extent、interleaved extent 和 extended attributes 不支持。"
+        "可叠加 RAW、E01 或受支持 flat VMDK reader；medium fixture 只证明 ISO9660/Joliet 逻辑读取，不升级为 GA；UDF、Rock Ridge、multi-extent、interleaved extent 和 extended attributes 不支持。"
       ]
     },
     {

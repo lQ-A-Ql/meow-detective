@@ -14,6 +14,8 @@
 | Directory | Content | Typical Artifact Types |
 |-----------|---------|----------------------|
 | `e01/` | Synthetic E01 forensic images | Disk image parsing, evidence reader integration |
+| `iso/` | Deterministic ISO9660/Joliet image | Optical image reader, Joliet names, bounded extents |
+| `vmdk/` | Deterministic monolithic-flat VMDK + FLAT extent | Descriptor parsing, logical geometry, ISO composition |
 | `ntfs/` | NTFS filesystem samples ($MFT extracts, etc.) | MFT parsing, file record extraction, INDX parsing |
 | `prefetch/` | Windows Prefetch files (.pf) | Prefetch parser regression, execution timeline |
 | `lnk/` | Windows LNK shortcut files | LNK parsing, shell item extraction |
@@ -47,7 +49,8 @@ When adding new fixtures, provide an alignment baseline table so parsers can be 
 ## Current Status
 
 - Directory structure established
-- Individual medium fixtures to be populated per implementation roadmap
+- ISO9660/Joliet and monolithic-flat VMDK adapter fixtures are committed
+- Remaining individual medium fixtures continue to be populated per implementation roadmap
 - See `docs/parser-support-matrix.md` for per-parser fixture requirements
 
 ## Relationship to Other Fixture Tiers

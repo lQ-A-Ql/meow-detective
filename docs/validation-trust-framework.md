@@ -28,18 +28,6 @@ V2 长期执行总计划见：
 - `testdata/fixtures/public-small/evtx/system.evtx`
 - `testdata/fixtures/public-small/logical/**`
 
-当前没有提交 ISO 或 VMDK 二进制 fixture。ISO9660/Joliet 与 flat VMDK 使用确定性的
-synthetic unit fixtures 验证；本地真实 ISO 只能通过 `FORENSICS_ISO_FIXTURE` 进入
-ignored 回归，不提升公开支持等级，也不把主机路径写入文档或治理 artifact。
-
-真实 ISO 回归命令（仅在本机已有样本时运行）为：
-
-```powershell
-$env:FORENSICS_ISO_FIXTURE = '<read-only ISO path>'
-cargo test -p evidence-core --test iso_real -- --ignored --nocapture
-Remove-Item Env:FORENSICS_ISO_FIXTURE -ErrorAction SilentlyContinue
-```
-
 要求：
 
 - 可直接进入仓库
@@ -53,17 +41,36 @@ Remove-Item Env:FORENSICS_ISO_FIXTURE -ErrorAction SilentlyContinue
 
 当前状态：
 
-- 仓库已经使用 `testdata/fixtures/public-medium/` 承载可公开的 email 与 Linux journal
-  fixture；镜像适配器和 Windows parser 的 medium fixture 仍按链路逐项补齐。
-- 后续建议在同一 `public-medium/` 根目录下按链路拆分：
+- 仓库已经使用 `testdata/fixtures/public-medium/` 承载可公开的 email、Linux journal
+  和镜像适配器 fixture；Windows parser 的 medium fixture 仍按链路逐项补齐。
+- 同一 `public-medium/` 根目录下按链路拆分：
   - `public-medium/e01/`
-  - `public-medium/iso/`
-  - `public-medium/vmdk/`
+  - `public-medium/iso/`（已提交）
+  - `public-medium/vmdk/`（已提交）
   - `public-medium/ntfs/`
   - `public-medium/prefetch/`
   - `public-medium/lnk/`
   - `public-medium/registry/`
   - `public-medium/recycle-bin/`
+
+ISO9660/Joliet 与 flat VMDK 已有可公开复验的 medium fixture：
+
+- `testdata/fixtures/public-medium/iso/medium.iso`
+- `testdata/fixtures/public-medium/vmdk/medium-flat.vmdk`
+- `testdata/fixtures/public-medium/vmdk/medium-flat.bin`
+
+这些 fixture 由 `scripts/generate-image-fixtures.ps1` 确定性生成，并配套 README、
+SHA-256 和 expected JSON。它们验证逻辑字节视图、Joliet 名称、descriptor/extent
+几何和 ISO-on-VMDK 组合；本地真实 ISO 仍可通过 `FORENSICS_ISO_FIXTURE` 进入
+ignored 回归，不把主机路径写入文档或治理 artifact。
+
+真实 ISO 回归命令（仅在本机已有样本时运行）为：
+
+```powershell
+$env:FORENSICS_ISO_FIXTURE = '<read-only ISO path>'
+cargo test -p evidence-core --test iso_real -- --ignored --nocapture
+Remove-Item Env:FORENSICS_ISO_FIXTURE -ErrorAction SilentlyContinue
+```
 
 要求：
 
@@ -145,8 +152,8 @@ Remove-Item Env:FORENSICS_ISO_FIXTURE -ErrorAction SilentlyContinue
 | 适配器 | 必测断言 | 当前验证入口 | 公开承诺边界 |
 |---|---|---|---|
 | RAW/dd/img | `Read + Seek`、EOF、独立 cursor、长度与 OS metadata 一致 | `cargo test -p evidence-core --lib` | 单文件原始字节透传；不合并分卷 |
-| monolithic-flat VMDK | descriptor 解析、`sector_count * 512` 逻辑容量、extent 截断/溢出、相对路径安全、跨扇区读取 | `cargo test -p evidence-core --lib`、`cargo test -p evidence-block`、`cargo test -p app-services hash_evidence_vmdk_covers_descriptor_and_flat_extent --lib` | 仅 UTF-8、单个零偏移 `FLAT` extent；descriptor 与 extent 都计入证据身份 |
-| ISO9660/Joliet | PVD/终止描述符、Joliet 优先、目录递归上限、both-endian 一致性、文件/目录 extent 卷边界、seekable preview | `cargo test -p evidence-core --lib`；真实 ISO 使用 `FORENSICS_ISO_FIXTURE` ignored 测试 | 可叠加任意 `EvidenceReader`，包括 RAW、E01 和受支持 flat VMDK；不支持 UDF/Rock Ridge/交错或 multi-extent |
+| monolithic-flat VMDK | descriptor 解析、`sector_count * 512` 逻辑容量、extent 截断/溢出、相对路径安全、跨扇区读取 | `cargo test -p evidence-core --test public_medium_images`、`cargo test -p evidence-core --lib`、`cargo test -p evidence-block`、`cargo test -p app-services hash_evidence_vmdk_covers_descriptor_and_flat_extent --lib` | 仅 UTF-8、单个零偏移 `FLAT` extent；descriptor 与 extent 都计入证据身份；不等同于可启动 VMDK |
+| ISO9660/Joliet | PVD/终止描述符、Joliet 优先、目录递归上限、both-endian 一致性、文件/目录 extent 卷边界、seekable preview | `cargo test -p evidence-core --test public_medium_images`、`cargo test -p evidence-core --lib`；真实 ISO 使用 `FORENSICS_ISO_FIXTURE` ignored 测试 | 可叠加任意 `EvidenceReader`，包括 RAW、E01 和受支持 flat VMDK；不支持 UDF/Rock Ridge/交错或 multi-extent |
 
 适配器组合测试还必须覆盖非零分区窗口：先用 `PartitionWindowReader` 将分区变为零起点，
 再探测文件系统，不能把绝对镜像偏移传入 ISO 或其他文件系统 reader。ISO 的 PVD 卷大小

@@ -1,0 +1,53 @@
+[
+  {
+    "file": "medium.iso",
+    "expected": {
+      "baseline": "evidence-core public-medium image adapter v1",
+      "assertions": {
+        "size": 524288,
+        "sha256": "dec400ceb2ff73e2f51c75323e14310c3bb8b7ea94315975eac644835d3e95a1",
+        "jolietPreferred": true,
+        "rootEntries": [
+          "REPORT",
+          "README.TXT",
+          "\u62a5\u544a.TXT"
+        ],
+        "nestedEntries": {
+          "REPORT": [
+            "DATA",
+            "SUMMARY.TXT"
+          ],
+          "REPORT/DATA": [
+            "VALUES.BIN"
+          ]
+        },
+        "valuesBinLength": 2048,
+        "valuesBinBytesAt1020": [
+          252,
+          253,
+          254,
+          255,
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "guaranteedFields": [
+        "logicalSize",
+        "jolietPreferred",
+        "directoryNames",
+        "seekableFileRead"
+      ],
+      "bestEffortFields": [],
+      "notGuaranteedFields": [
+        "rockRidgeMetadata",
+        "udfSemantics",
+        "bootability"
+      ],
+      "fieldNamingConvention": "camelCase",
+      "timezoneNormalizationRule": "not applicable; ISO reader produces no timestamps",
+      "sortOrderRule": "directories first, then case-sensitive name ascending"
+    }
+  }
+]
