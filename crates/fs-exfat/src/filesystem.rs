@@ -21,7 +21,7 @@ impl FileSystemReader for ExfatReader {
         }
 
         let nodes: Vec<FsNode> = self
-            .read_directory_entries(entry.cluster)?
+            .read_directory_entries(entry.cluster, entry.no_fat_chain, entry.data_length)?
             .into_iter()
             .filter(|entry| !is_special_directory_name(&entry.name))
             .map(|entry| {

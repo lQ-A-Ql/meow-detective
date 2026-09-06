@@ -1,7 +1,10 @@
+use crate::fat::{self, FatEntry};
 use crate::reader::ExfatReader;
 use evidence_core::filesystem::{fs_out_of_memory, invalid_fs_data};
 use std::collections::HashSet;
 use std::io::{self, Read, Seek, SeekFrom};
+
+const MAX_DIRECTORY_DATA_BYTES: u64 = 64 * 1024 * 1024;
 
 impl ExfatReader {
     pub(crate) fn read_entry_data(
@@ -16,14 +19,90 @@ impl ExfatReader {
         if no_fat_chain {
             self.read_no_fat_chain_data(cluster, data_length)
         } else {
-            self.read_cluster_chain_data(cluster)
+            let length = usize::try_from(data_length)
+                .map_err(|_| fs_out_of_memory("file data length exceeds addressable memory"))?;
+            self.validate_chain_matches_length(cluster, data_length)?;
+            self.read_cluster_chain_range(cluster, data_length, 0, length)
         }
     }
 
+    fn validate_chain_matches_length(
+        &self,
+        start_cluster: u32,
+        data_length: u64,
+    ) -> io::Result<()> {
+        self.validate_cluster(start_cluster)?;
+        let cluster_size = self.boot.cluster_size();
+        let required_clusters = data_length.div_ceil(cluster_size).max(1);
+        let mut current = start_cluster;
+        let mut visited = HashSet::new();
+        for index in 0..required_clusters {
+            if !visited.insert(current) {
+                return Err(invalid_fs_data(format!(
+                    "cycle detected in cluster chain at cluster {}",
+                    current
+                )));
+            }
+            let next = self.read_fat_entry(current)?;
+            if index + 1 < required_clusters {
+                current = match next {
+                    FatEntry::Cluster(next) => {
+                        self.validate_cluster(next)?;
+                        next
+                    }
+                    FatEntry::EndOfChain => {
+                        return Err(invalid_fs_data(
+                            "cluster chain ended before the declared file data length",
+                        ));
+                    }
+                    FatEntry::BadCluster => {
+                        return Err(invalid_fs_data("bad cluster marker in file chain"));
+                    }
+                    FatEntry::Free => {
+                        return Err(invalid_fs_data("free cluster marker in file chain"));
+                    }
+                    FatEntry::Reserved(value) => {
+                        return Err(invalid_fs_data(format!(
+                            "reserved FAT marker {value:#010x} in file chain"
+                        )));
+                    }
+                };
+            } else if !matches!(next, FatEntry::EndOfChain) {
+                return Err(invalid_fs_data(format!(
+                    "cluster chain extends beyond the declared cluster count/data length ({})",
+                    self.boot.cluster_count
+                )));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn read_cluster_chain_data(&self, start_cluster: u32) -> io::Result<Vec<u8>> {
-        let clusters = self.walk_cluster_chain(start_cluster)?;
-        let cluster_size = self.boot.cluster_size() as usize;
-        let mut data = Vec::with_capacity(clusters.len() * cluster_size);
+        let cluster_size = usize::try_from(self.boot.cluster_size())
+            .map_err(|_| fs_out_of_memory("exFAT cluster size exceeds addressable memory"))?;
+        let max_clusters =
+            usize::try_from(MAX_DIRECTORY_DATA_BYTES / self.boot.cluster_size().max(1))
+                .unwrap_or(0);
+        if max_clusters == 0 {
+            return Err(fs_out_of_memory(
+                "exFAT cluster size exceeds directory read limit",
+            ));
+        }
+        let clusters =
+            fat::walk_cluster_chain_with_limit(start_cluster, Some(max_clusters), |cluster| {
+                self.read_fat_entry(cluster)
+            })?;
+        let capacity = clusters
+            .len()
+            .checked_mul(cluster_size)
+            .ok_or_else(|| fs_out_of_memory("directory data size overflows memory capacity"))?;
+        if u64::try_from(capacity).unwrap_or(u64::MAX) > MAX_DIRECTORY_DATA_BYTES {
+            return Err(fs_out_of_memory(format!(
+                "directory data exceeds {} MiB",
+                MAX_DIRECTORY_DATA_BYTES / (1024 * 1024)
+            )));
+        }
+        let mut data = Vec::with_capacity(capacity);
 
         for cluster in clusters {
             let offset = self.cluster_to_abs_offset(cluster);
@@ -38,7 +117,11 @@ impl ExfatReader {
         Ok(data)
     }
 
-    fn read_no_fat_chain_data(&self, start_cluster: u32, data_length: u64) -> io::Result<Vec<u8>> {
+    pub(crate) fn read_no_fat_chain_data(
+        &self,
+        start_cluster: u32,
+        data_length: u64,
+    ) -> io::Result<Vec<u8>> {
         let (end_cluster, cluster_size) =
             self.validate_contiguous_run(start_cluster, data_length)?;
         let capacity = data_length.div_ceil(cluster_size).max(1) * cluster_size;

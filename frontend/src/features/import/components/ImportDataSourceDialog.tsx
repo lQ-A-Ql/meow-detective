@@ -16,6 +16,13 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import type { ImportDataSourceRequest, ImportTargetPlatform, LocalDisk } from '@/types/models';
 import { BrandWatermark } from '@/components/brand';
 
@@ -269,19 +276,25 @@ export function ImportDataSourceDialog({
             <div className="space-y-2">
               <Label htmlFor="ds-path">{t('importDataSource.fields.path')}</Label>
               {sourceKind === 'localDisk' && disks.length > 0 ? (
-                <select
-                  aria-label={t('importDataSource.fields.localDisk')}
-                  value={path}
-                  onChange={(event) => setPath(event.target.value)}
-                  className="h-9 w-full border border-forensics-border bg-forensics-surface px-2 text-xs text-forensics-text"
-                  disabled={disksLoading}
-                >
-                  {disks.map((disk) => (
-                    <option key={disk.path} value={disk.path}>
-                      {disk.path} ({(disk.size / (1024 ** 3)).toFixed(1)} GB)
-                    </option>
-                  ))}
-                </select>
+                <Select value={path} onValueChange={setPath} disabled={disksLoading}>
+                  <SelectTrigger
+                    aria-label={t('importDataSource.fields.localDisk')}
+                    variant="forensics"
+                    size="sm"
+                  >
+                    <SelectValue placeholder={t('importDataSource.fields.localDisk')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {disks.map((disk) => (
+                      <SelectItem key={disk.path} value={disk.path}>
+                        <span className="font-mono text-xs">{disk.path}</span>
+                        <span className="text-[10px] text-forensics-muted">
+                          {(disk.size / (1024 ** 3)).toFixed(1)} GB
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : null}
               <div className="flex gap-2">
                 <Input

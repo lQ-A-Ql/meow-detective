@@ -5,6 +5,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 const MAX_LOCAL_DISK_INDEX: u32 = 64;
+const READ_CACHE_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalDiskInfo {
@@ -18,6 +19,9 @@ pub struct LocalDiskReader {
     file: std::fs::File,
     info: ReaderInfo,
     cursor: u64,
+    cache: Vec<u8>,
+    cache_start: u64,
+    cache_len: usize,
 }
 
 impl LocalDiskReader {
@@ -52,6 +56,9 @@ impl LocalDiskReader {
             file: self.file.try_clone()?,
             info: self.info.clone(),
             cursor: self.cursor,
+            cache: Vec::new(),
+            cache_start: 0,
+            cache_len: 0,
         })
     }
 }
@@ -62,10 +69,36 @@ impl Read for LocalDiskReader {
             return Ok(0);
         }
         let requested = (self.info.size - self.cursor).min(buf.len() as u64) as usize;
-        self.file.seek(SeekFrom::Start(self.cursor))?;
-        let read = self.file.read(&mut buf[..requested])?;
+        let read = if requested >= READ_CACHE_BYTES / 2 {
+            read_at(&self.file, self.cursor, &mut buf[..requested])?
+        } else {
+            self.read_cached(&mut buf[..requested])?
+        };
         self.cursor = self.cursor.saturating_add(read as u64);
         Ok(read)
+    }
+}
+
+impl LocalDiskReader {
+    fn read_cached(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let end = self.cursor.saturating_add(buffer.len() as u64);
+        let cache_end = self.cache_start.saturating_add(self.cache_len as u64);
+        if self.cursor < self.cache_start || end > cache_end {
+            let aligned_start = self.cursor / READ_CACHE_BYTES as u64 * READ_CACHE_BYTES as u64;
+            let available = self.info.size.saturating_sub(aligned_start);
+            let fill_len = available.min(READ_CACHE_BYTES as u64) as usize;
+            self.cache.resize(fill_len, 0);
+            self.cache_len = read_at(&self.file, aligned_start, &mut self.cache)?;
+            self.cache_start = aligned_start;
+            if self.cache_len == 0 {
+                return Ok(0);
+            }
+        }
+        let start = (self.cursor - self.cache_start) as usize;
+        let available = self.cache_len.saturating_sub(start);
+        let copied = available.min(buffer.len());
+        buffer[..copied].copy_from_slice(&self.cache[start..start + copied]);
+        Ok(copied)
     }
 }
 
@@ -152,6 +185,9 @@ fn open_local_disk(path: &Path, disk_number: u32) -> io::Result<LocalDiskReader>
                 kind: "local_disk".to_string(),
             },
             cursor: 0,
+            cache: Vec::new(),
+            cache_start: 0,
+            cache_len: 0,
         })
     }
     #[cfg(not(windows))]
@@ -238,6 +274,20 @@ fn parse_physical_drive_path(path: &Path) -> Option<u32> {
 
 fn physical_drive_path(disk_number: u32) -> PathBuf {
     PathBuf::from(format!(r"\\.\PhysicalDrive{disk_number}"))
+}
+
+fn read_at(file: &std::fs::File, offset: u64, buffer: &mut [u8]) -> io::Result<usize> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileExt;
+        file.seek_read(buffer, offset)
+    }
+    #[cfg(not(windows))]
+    {
+        let mut file = file.try_clone()?;
+        file.seek(SeekFrom::Start(offset))?;
+        file.read(buffer)
+    }
 }
 
 #[cfg(test)]

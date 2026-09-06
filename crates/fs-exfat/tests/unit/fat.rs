@@ -8,6 +8,10 @@ fn fat_entry_from_raw() {
     assert_eq!(FatEntry::from_raw(0xFFFF_FFF7), FatEntry::BadCluster);
     assert_eq!(FatEntry::from_raw(2), FatEntry::Cluster(2));
     assert_eq!(FatEntry::from_raw(100), FatEntry::Cluster(100));
+    assert_eq!(
+        FatEntry::from_raw(0xFFFF_FFF0),
+        FatEntry::Reserved(0xFFFF_FFF0)
+    );
 }
 
 #[test]
@@ -92,6 +96,13 @@ fn walk_unexpected_free_cluster_errors() {
         .unwrap_err()
         .to_string()
         .contains("unexpected free cluster"));
+}
+
+#[test]
+fn walk_bad_cluster_errors_instead_of_treating_it_as_end() {
+    let result = walk_cluster_chain(2, |_cluster| Ok(FatEntry::BadCluster));
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("bad cluster"));
 }
 
 #[test]

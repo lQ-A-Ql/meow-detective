@@ -1,6 +1,6 @@
 use super::*;
 use crate::types::*;
-use evidence_core::{EvidenceReader, FileSystemReader};
+use evidence_core::{EvidenceReader, FileSystemReader, LocalDiskReader};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 
@@ -325,4 +325,22 @@ fn exfat_open_file_errors_on_chain_longer_than_cluster_count() {
     };
     let err = err.to_string();
     assert!(err.contains("declared cluster count") || err.contains("out of range"));
+}
+
+#[test]
+#[ignore = "requires an administrator-readable exFAT physical volume"]
+fn exfat_real_physical_volume_is_read_only_parseable() {
+    let device = std::env::var("FORENSICS_EXFAT_DEVICE")
+        .expect("set FORENSICS_EXFAT_DEVICE to \\\\.\\PhysicalDriveN");
+    let offset = std::env::var("FORENSICS_EXFAT_OFFSET")
+        .expect("set FORENSICS_EXFAT_OFFSET to the exFAT partition byte offset")
+        .parse::<u64>()
+        .expect("FORENSICS_EXFAT_OFFSET must be an unsigned byte offset");
+    let reader = LocalDiskReader::open(std::path::Path::new(&device)).unwrap();
+    let filesystem = ExfatReader::open(Box::new(reader), offset).unwrap();
+    let children = filesystem.list_children("").unwrap();
+    assert!(
+        !children.is_empty(),
+        "the exFAT root directory is unexpectedly empty"
+    );
 }

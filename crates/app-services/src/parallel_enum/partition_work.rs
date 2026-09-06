@@ -20,6 +20,11 @@ impl PartitionWork {
     pub(super) fn uses_e01_reader(&self) -> bool {
         self.source_kind.eq_ignore_ascii_case("e01")
     }
+
+    pub(super) fn uses_local_disk_reader(&self) -> bool {
+        self.source_kind.eq_ignore_ascii_case("localdisk")
+            || self.source_kind.eq_ignore_ascii_case("local_disk")
+    }
 }
 
 /// Result from a single partition enumeration.

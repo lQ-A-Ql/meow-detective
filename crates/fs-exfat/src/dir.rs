@@ -6,6 +6,7 @@
 //! 2. Stream Extension (type 0) - data location
 //! 3. File Name entries (type 1) - 15 chars each
 
+use crate::time::parse_exfat_date_time;
 use crate::types::*;
 use chrono::{DateTime, Utc};
 use evidence_core::filesystem::{invalid_fs_data, unexpected_fs_eof};
@@ -41,6 +42,7 @@ pub enum DirectoryEntry {
     },
     /// Up-case Table.
     UpcaseTable {
+        checksum: u32,
         first_cluster: u32,
         data_length: u64,
     },
@@ -80,28 +82,24 @@ impl DirectoryEntry {
 
     fn parse_file_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let create_ts = u32::from_le_bytes(
-            data[8..12]
-                .try_into()
-                .map_err(|_| invalid_fs_data("invalid create timestamp"))?,
-        );
-        let modified_ts = u32::from_le_bytes(
-            data[12..16]
-                .try_into()
-                .map_err(|_| invalid_fs_data("invalid modified timestamp"))?,
-        );
-        let accessed_ts = u32::from_le_bytes(
-            data[16..20]
-                .try_into()
-                .map_err(|_| invalid_fs_data("invalid accessed timestamp"))?,
-        );
+        let create_date = u16::from_le_bytes([data[8], data[9]]);
+        let create_time = u16::from_le_bytes([data[10], data[11]]);
+        let modified_date = u16::from_le_bytes([data[12], data[13]]);
+        let modified_time = u16::from_le_bytes([data[14], data[15]]);
+        let accessed_date = u16::from_le_bytes([data[16], data[17]]);
+        let accessed_time = u16::from_le_bytes([data[18], data[19]]);
 
         Ok(Self::File {
             secondary_count: data[1],
             file_attributes: u16::from_le_bytes([data[4], data[5]]),
-            create_timestamp: parse_exfat_timestamp(create_ts, data[20], data[22]),
-            modified_timestamp: parse_exfat_timestamp(modified_ts, data[21], data[23]),
-            accessed_timestamp: parse_exfat_timestamp(accessed_ts, 0, data[24]),
+            create_timestamp: parse_exfat_date_time(create_date, create_time, data[20], data[22]),
+            modified_timestamp: parse_exfat_date_time(
+                modified_date,
+                modified_time,
+                data[21],
+                data[23],
+            ),
+            accessed_timestamp: parse_exfat_date_time(accessed_date, accessed_time, 0, data[24]),
         })
     }
 
@@ -148,6 +146,11 @@ impl DirectoryEntry {
 
     fn parse_upcase_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
+        let checksum = u32::from_le_bytes(
+            data[4..8]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid up-case table checksum"))?,
+        );
         let first_cluster = u32::from_le_bytes(
             data[20..24]
                 .try_into()
@@ -160,6 +163,7 @@ impl DirectoryEntry {
         );
 
         Ok(Self::UpcaseTable {
+            checksum,
             first_cluster,
             data_length,
         })
@@ -303,6 +307,21 @@ pub fn parse_directory_entries(data: &[u8]) -> io::Result<Vec<FileEntrySet>> {
             ..
         } = entry
         {
+            let set_len = (secondary_count as usize + 1)
+                .checked_mul(DIR_ENTRY_SIZE)
+                .ok_or_else(|| invalid_fs_data("exFAT directory entry set length overflows"))?;
+            let set_end = i
+                .checked_add(set_len)
+                .ok_or_else(|| invalid_fs_data("exFAT directory entry set offset overflows"))?;
+            if set_end > data.len() {
+                return Err(unexpected_fs_eof("truncated exFAT directory entry set"));
+            }
+            let stored_checksum = u16::from_le_bytes([data[i + 2], data[i + 3]]);
+            if stored_checksum != 0 && stored_checksum != entry_set_checksum(&data[i..set_end]) {
+                return Err(invalid_fs_data(
+                    "exFAT directory entry set checksum mismatch",
+                ));
+            }
             let mut file_set = FileEntrySet {
                 attributes: file_attributes,
                 created_at: create_timestamp,
@@ -314,29 +333,36 @@ pub fn parse_directory_entries(data: &[u8]) -> io::Result<Vec<FileEntrySet>> {
             // Parse secondary entries
             let expected_secondaries = secondary_count as usize;
             let mut name_parts = Vec::new();
+            let mut entry_name_length: Option<usize> = None;
+            let mut has_stream = false;
 
             for _ in 0..expected_secondaries {
                 i += DIR_ENTRY_SIZE;
                 if i + DIR_ENTRY_SIZE > data.len() {
-                    break;
+                    return Err(unexpected_fs_eof("truncated exFAT directory entry set"));
                 }
 
                 let secondary = DirectoryEntry::parse(&data[i..i + DIR_ENTRY_SIZE])?;
                 match secondary {
                     DirectoryEntry::Stream {
-                        name_length,
+                        name_length: stream_name_length,
                         first_cluster,
                         valid_data_length,
                         data_length,
                         no_fat_chain,
                         ..
                     } => {
+                        if has_stream {
+                            return Err(invalid_fs_data(
+                                "exFAT directory entry set contains multiple stream extensions",
+                            ));
+                        }
+                        has_stream = true;
+                        entry_name_length = Some(stream_name_length as usize);
                         file_set.first_cluster = first_cluster;
                         file_set.valid_data_length = valid_data_length;
                         file_set.data_length = data_length;
                         file_set.no_fat_chain = no_fat_chain;
-                        // Store name_length for validation
-                        let _ = name_length;
                     }
                     DirectoryEntry::FileName { name } => {
                         name_parts.push(name);
@@ -346,7 +372,13 @@ pub fn parse_directory_entries(data: &[u8]) -> io::Result<Vec<FileEntrySet>> {
             }
 
             file_set.name = name_parts.join("");
-            if !file_set.name.is_empty() || file_set.first_cluster >= MIN_CLUSTER {
+            let expected_name_length = entry_name_length.unwrap_or(0);
+            let expected_name_entries = expected_name_length.div_ceil(CHARS_PER_FILENAME_ENTRY);
+            if has_stream
+                && expected_name_length <= MAX_FILENAME_ENTRIES * CHARS_PER_FILENAME_ENTRY
+                && expected_name_entries == name_parts.len()
+                && file_set.name.encode_utf16().count() == expected_name_length
+            {
                 entries.push(file_set);
             }
         }
@@ -357,68 +389,18 @@ pub fn parse_directory_entries(data: &[u8]) -> io::Result<Vec<FileEntrySet>> {
     Ok(entries)
 }
 
-/// Parse an exFAT timestamp.
-///
-/// exFAT timestamps are 32-bit values with:
-/// - Bits 31-25: Year (0-127, add 1980)
-/// - Bits 24-20: Month (1-12)
-/// - Bits 19-15: Day (1-31)
-/// - Bits 14-10: Hour (0-23)
-/// - Bits 9-4: Minute (0-59)
-/// - Bits 3-0: 2-second increment (0-29)
-///
-/// `increment_10ms` adds 0-199 milliseconds (in 10ms increments).
-/// `utc_offset` is in 15-minute increments from UTC (-48 to +48).
-fn parse_exfat_timestamp(
-    timestamp: u32,
-    increment_10ms: u8,
-    utc_offset: u8,
-) -> Option<DateTime<Utc>> {
-    if timestamp == 0 {
-        return None;
-    }
-
-    let year = ((timestamp >> 25) & 0x7F) as i32 + 1980;
-    let month = (timestamp >> 20) & 0x1F;
-    let day = (timestamp >> 15) & 0x1F;
-    let hour = (timestamp >> 10) & 0x1F;
-    let minute = (timestamp >> 4) & 0x3F;
-    let second = (timestamp & 0x0F) * 2;
-
-    // Validate ranges
-    if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return None;
-    }
-
-    // Create NaiveDateTime
-    let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?.and_hms_milli_opt(
-        hour,
-        minute,
-        second,
-        increment_10ms as u32 * 10,
-    )?;
-
-    // exFAT UTC offset: signed 15-minute increments
-    // 0x00 = UTC, 0xFF = unknown (treat as UTC)
-    // 0x01..0xDF = positive offset (+15 to +3435 minutes)
-    // 0xE0..0xFE = negative offset (-480 to -15 minutes)
-    let offset_minutes: i64 = if utc_offset == 0xFF {
-        // Unknown offset — treat as local time (best effort)
-        0
-    } else if utc_offset <= 0xDF {
-        (utc_offset as i64) * 15
-    } else {
-        ((utc_offset as i64) - 256) * 15
-    };
-
-    // Convert local time to UTC by subtracting the offset
-    let utc_naive = naive - chrono::Duration::minutes(offset_minutes);
-    Some(utc_naive.and_utc())
+fn entry_set_checksum(data: &[u8]) -> u16 {
+    data.iter()
+        .enumerate()
+        .fold(0u16, |checksum, (index, byte)| {
+            // Only the primary File entry's checksum field is excluded. The
+            // same offsets in secondary entries are ordinary data bytes.
+            if index < DIR_ENTRY_SIZE && (index == 2 || index == 3) {
+                checksum
+            } else {
+                checksum.rotate_right(1).wrapping_add(u16::from(*byte))
+            }
+        })
 }
 
 #[cfg(test)]

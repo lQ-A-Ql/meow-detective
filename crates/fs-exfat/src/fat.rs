@@ -18,6 +18,8 @@ pub enum FatEntry {
     EndOfChain,
     /// Bad cluster (media error)
     BadCluster,
+    /// Reserved or otherwise invalid FAT marker.
+    Reserved(u32),
 }
 
 impl FatEntry {
@@ -27,6 +29,7 @@ impl FatEntry {
             FREE_CLUSTER => FatEntry::Free,
             BAD_CLUSTER => FatEntry::BadCluster,
             e if e >= 0xFFFF_FFF8 => FatEntry::EndOfChain,
+            e if e == 1 || (0xFFFF_FFF0..=0xFFFF_FFF6).contains(&e) => FatEntry::Reserved(e),
             e if e >= MIN_CLUSTER => FatEntry::Cluster(e),
             _ => FatEntry::Free, // Treat invalid low values as free
         }
@@ -127,7 +130,7 @@ where
         let entry = read_fat_entry(current)?;
 
         match entry {
-            FatEntry::EndOfChain | FatEntry::BadCluster => break,
+            FatEntry::EndOfChain => break,
             FatEntry::Free => {
                 return Err(invalid_fs_data(format!(
                     "unexpected free cluster {} in chain starting at {}",
@@ -143,6 +146,18 @@ where
                     )));
                 }
                 current = next;
+            }
+            FatEntry::BadCluster => {
+                return Err(invalid_fs_data(format!(
+                    "bad cluster marker in chain starting at {} after cluster {}",
+                    start_cluster, current
+                )));
+            }
+            FatEntry::Reserved(value) => {
+                return Err(invalid_fs_data(format!(
+                    "reserved FAT marker {value:#010x} in chain starting at {}",
+                    start_cluster
+                )));
             }
         }
 

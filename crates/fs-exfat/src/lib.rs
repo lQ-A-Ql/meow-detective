@@ -10,7 +10,9 @@ pub mod fat;
 mod filesystem;
 mod navigation;
 mod reader;
+mod time;
 pub mod types;
+mod upcase;
 
 pub use reader::ExfatReader;
 

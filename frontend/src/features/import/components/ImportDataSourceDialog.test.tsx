@@ -193,7 +193,7 @@ describe('ImportDataSourceDialog', () => {
     const selector = await screen.findByRole('combobox', { name: '本地物理磁盘' });
 
     expect(listLocalDisks).toHaveBeenCalledOnce();
-    expect((selector as HTMLSelectElement).value).toBe('\\\\.\\PhysicalDrive0');
+    expect(selector).toHaveTextContent('\\\\.\\PhysicalDrive0');
 
     clickImport();
     expect(baseProps.onImport).toHaveBeenCalledWith({

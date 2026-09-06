@@ -1,4 +1,5 @@
 use super::*;
+use std::io::Cursor;
 
 fn make_valid_boot_sector() -> Vec<u8> {
     let mut data = vec![0u8; 512];
@@ -100,4 +101,90 @@ fn cluster_to_offset_calculation() {
 fn too_small_data_rejected() {
     let data = vec![0u8; 100];
     assert!(ExfatBootSector::parse(&data).is_err());
+}
+
+#[test]
+fn reject_fat_region_overlapping_cluster_heap() {
+    let mut data = make_valid_boot_sector();
+    data[88..92].copy_from_slice(&24u32.to_le_bytes());
+    let error = ExfatBootSector::parse(&data).unwrap_err();
+    assert!(error.to_string().contains("overlaps"));
+}
+
+#[test]
+fn reject_cluster_heap_outside_volume() {
+    let mut data = make_valid_boot_sector();
+    data[72..80].copy_from_slice(&64u64.to_le_bytes());
+    let error = ExfatBootSector::parse(&data).unwrap_err();
+    assert!(error.to_string().contains("beyond"));
+}
+
+#[test]
+fn reject_root_cluster_outside_cluster_heap() {
+    let mut data = make_valid_boot_sector();
+    data[96..100].copy_from_slice(&102u32.to_le_bytes());
+    let error = ExfatBootSector::parse(&data).unwrap_err();
+    assert!(error.to_string().contains("root directory cluster"));
+}
+
+#[test]
+fn active_fat_offset_follows_volume_flags() {
+    let mut data = make_valid_boot_sector();
+    data[110] = 2;
+    data[84..88].copy_from_slice(&2u32.to_le_bytes());
+    data[88..92].copy_from_slice(&30u32.to_le_bytes());
+    data[106..108].copy_from_slice(&1u16.to_le_bytes());
+    let boot = ExfatBootSector::parse(&data).unwrap();
+    assert_eq!(boot.fat_byte_offset(), 24 * 512);
+    assert_eq!(boot.active_fat_byte_offset(), 26 * 512);
+}
+
+fn make_valid_boot_region() -> Vec<u8> {
+    let sector_size = 512;
+    let mut data = vec![0u8; sector_size * 24];
+    let boot = make_valid_boot_sector();
+    data[..sector_size].copy_from_slice(&boot);
+    data[12 * sector_size..13 * sector_size].copy_from_slice(&boot);
+
+    for region_start in [0usize, 12 * sector_size] {
+        let checksum = calculate_boot_checksum(
+            &data[region_start..region_start + 11 * sector_size],
+            sector_size,
+        )
+        .unwrap();
+        for chunk in data[region_start + 11 * sector_size..region_start + 12 * sector_size]
+            .chunks_exact_mut(4)
+        {
+            chunk.copy_from_slice(&checksum.to_le_bytes());
+        }
+    }
+    data
+}
+
+fn calculate_boot_checksum(data: &[u8], sector_size: usize) -> io::Result<u32> {
+    let expected = sector_size
+        .checked_mul(11)
+        .ok_or_else(|| invalid_fs_data("exFAT boot checksum input size overflows"))?;
+    if data.len() < expected {
+        return Err(invalid_fs_data("exFAT boot checksum input is truncated"));
+    }
+    let mut checksum = 0u32;
+    for (sector_index, sector) in data[..expected].chunks_exact(sector_size).enumerate() {
+        checksum = update_boot_checksum(checksum, sector_index as u64, sector);
+    }
+    Ok(checksum)
+}
+
+#[test]
+fn verify_main_and_backup_boot_regions() {
+    let data = make_valid_boot_region();
+    verify_boot_region(&mut Cursor::new(data), 0, 512).unwrap();
+}
+
+#[test]
+fn reject_corrupted_backup_boot_region() {
+    let mut data = make_valid_boot_region();
+    data[12 * 512 + 20] ^= 0x40;
+    let error = verify_boot_region(&mut Cursor::new(data), 0, 512).unwrap_err();
+    assert!(error.to_string().contains("checksum"));
 }

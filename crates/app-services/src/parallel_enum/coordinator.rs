@@ -80,7 +80,10 @@ pub fn enumerate_partitions_parallel(
 /// Resolve the actual partition-worker count after evidence-reader safeguards.
 pub fn effective_worker_count(partitions: &[PartitionWork], requested: usize) -> usize {
     let bounded = partitions.len().min(requested.max(1)).max(1);
-    if partitions.iter().any(PartitionWork::uses_e01_reader) {
+    if partitions
+        .iter()
+        .any(|partition| partition.uses_e01_reader() || partition.uses_local_disk_reader())
+    {
         1
     } else {
         bounded

@@ -8,6 +8,7 @@ pub(crate) struct ResolvedEntry {
     pub(crate) cluster: u32,
     pub(crate) is_dir: bool,
     pub(crate) size: u64,
+    pub(crate) data_length: u64,
     pub(crate) no_fat_chain: bool,
 }
 
@@ -19,6 +20,7 @@ impl ExfatReader {
                 cluster: self.boot.first_cluster_of_root,
                 is_dir: true,
                 size: 0,
+                data_length: 0,
                 no_fat_chain: false,
             }));
         }
@@ -27,6 +29,7 @@ impl ExfatReader {
             cluster: self.boot.first_cluster_of_root,
             is_dir: true,
             size: 0,
+            data_length: 0,
             no_fat_chain: false,
         };
         for component in components {
@@ -34,11 +37,14 @@ impl ExfatReader {
                 return Ok(None);
             }
 
-            let entries = self.read_directory_entries(resolved.cluster)?;
-            let lower_component = component.to_lowercase();
+            let entries = self.read_directory_entries(
+                resolved.cluster,
+                resolved.no_fat_chain,
+                resolved.data_length,
+            )?;
             let found = entries
                 .into_iter()
-                .find(|entry| entry.name.to_lowercase() == lower_component);
+                .find(|entry| self.names_equal(&entry.name, component));
             let Some(entry) = found else {
                 return Ok(None);
             };
@@ -51,6 +57,7 @@ impl ExfatReader {
                 } else {
                     entry.valid_data_length
                 },
+                data_length: entry.data_length,
                 no_fat_chain: entry.no_fat_chain,
             };
         }

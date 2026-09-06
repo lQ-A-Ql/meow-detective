@@ -1,6 +1,6 @@
 use super::super::error::ParallelEnumError;
 use super::super::partition_work::PartitionWork;
-use evidence_core::{EvidenceReader, RawImageReader};
+use evidence_core::{EvidenceReader, LocalDiskReader, RawImageReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
@@ -196,14 +196,20 @@ pub(in crate::parallel_enum) fn open_partition_evidence_reader(
     partition: &PartitionWork,
 ) -> Result<Box<dyn EvidenceReader>, ParallelEnumError> {
     if partition.uses_e01_reader() {
-        Ok(Box::new(
+        return Ok(Box::new(
             E01Reader::open(&partition.source_path).map_err(|error| error.to_string())?,
-        ))
-    } else {
-        Ok(Box::new(
-            RawImageReader::open(&partition.source_path).map_err(|error| error.to_string())?,
-        ))
+        ));
     }
+    if partition.source_kind.eq_ignore_ascii_case("localdisk")
+        || partition.source_kind.eq_ignore_ascii_case("local_disk")
+    {
+        return Ok(Box::new(
+            LocalDiskReader::open(&partition.source_path).map_err(|error| error.to_string())?,
+        ));
+    }
+    Ok(Box::new(
+        RawImageReader::open(&partition.source_path).map_err(|error| error.to_string())?,
+    ))
 }
 
 fn mft_record_size_from_boot(boot: &[u8]) -> u32 {
