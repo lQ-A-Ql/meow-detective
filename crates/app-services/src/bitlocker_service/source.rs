@@ -159,7 +159,10 @@ pub(crate) fn probe_plaintext_filesystem(
 }
 
 fn validate_source_kind(kind: &DataSourceKind) -> Result<(), BitLockerServiceError> {
-    if matches!(kind, DataSourceKind::E01 | DataSourceKind::Raw) {
+    if matches!(
+        kind,
+        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::LocalDisk
+    ) {
         return Ok(());
     }
     Err(BitLockerServiceError::UnsupportedSourceKind {

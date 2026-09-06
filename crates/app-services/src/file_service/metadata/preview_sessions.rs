@@ -215,7 +215,10 @@ fn prepare_native_filesystem_file(
     data_source_id: &DataSourceId,
     descriptor: &crate::file_service::PreviewDescriptor,
 ) -> Result<Option<PreparedFile>, FileServiceError> {
-    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+    if !matches!(
+        descriptor.source_kind.as_str(),
+        "e01" | "raw" | "local_disk"
+    ) {
         return Ok(None);
     }
     let candidate = match exact_partition_candidate(descriptor) {

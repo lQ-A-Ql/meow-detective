@@ -14,6 +14,8 @@ pub struct DataSourceId(pub String);
 pub enum DataSourceKind {
     E01,
     Raw,
+    /// A host-local physical disk exposed through a read-only device handle.
+    LocalDisk,
     LogicalDirectory,
     CephRbd,
     /// A reconstructed CephFS namespace backed by a cluster source set.
@@ -73,6 +75,7 @@ impl fmt::Display for DataSourceKind {
         match self {
             Self::E01 => write!(f, "e01"),
             Self::Raw => write!(f, "raw"),
+            Self::LocalDisk => write!(f, "local_disk"),
             Self::LogicalDirectory => write!(f, "logical_directory"),
             Self::CephRbd => write!(f, "ceph_rbd"),
             Self::CephFs => write!(f, "ceph_fs"),

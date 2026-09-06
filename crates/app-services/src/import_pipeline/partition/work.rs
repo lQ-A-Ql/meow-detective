@@ -92,6 +92,9 @@ pub(crate) fn open_candidate_reader(
         domain::DataSourceKind::Raw => Box::new(
             evidence_core::RawImageReader::open(source_path).map_err(|error| error.to_string())?,
         ),
+        domain::DataSourceKind::LocalDisk => Box::new(
+            evidence_core::LocalDiskReader::open(source_path).map_err(|error| error.to_string())?,
+        ),
         domain::DataSourceKind::LogicalDirectory => {
             return Err("logical directories do not expose image candidates".to_string())
         }
@@ -172,6 +175,9 @@ fn open_lvm_physical_volume_reader(
     let mut reader: Box<dyn EvidenceReader> = match kind {
         domain::DataSourceKind::E01 => Box::new(E01Reader::open(path).ok()?),
         domain::DataSourceKind::Raw => Box::new(evidence_core::RawImageReader::open(path).ok()?),
+        domain::DataSourceKind::LocalDisk => {
+            Box::new(evidence_core::LocalDiskReader::open(path).ok()?)
+        }
         domain::DataSourceKind::LogicalDirectory => return None,
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => return None,
     };

@@ -10,6 +10,7 @@ pub use filesystem::{
     FileSystemFileLocator, FileSystemReadMetrics, FileSystemReader, FsNode, ReadSeek,
 };
 pub use image::iso9660::Iso9660Reader;
+pub use image::local_disk::{list_local_disks, LocalDiskInfo, LocalDiskReader};
 pub use image::raw_reader::RawImageReader;
 pub use probe::{probe, ProbeResult};
 pub use reader::{EvidenceReader, PartitionWindowReader, ReaderInfo};

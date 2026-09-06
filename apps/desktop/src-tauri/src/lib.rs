@@ -35,6 +35,7 @@ macro_rules! desktop_command_handler {
             cancel_import,
             get_file_children_request,
             get_file_tree_request,
+            list_local_disks,
             get_file_rows_request,
             get_file_jump_context,
             list_deleted_recoveries,

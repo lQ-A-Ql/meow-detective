@@ -129,6 +129,7 @@ export function useCaseHomeModel() {
     importPending: importMutation.isPending,
     pickImportDirectoryPath: importDialog.pickDirectoryPath,
     pickImportSourcePath: importDialog.pickSourcePath,
+    listLocalDisks: importDialog.listLocalDisks,
     importButtonLabel: t('importDataSource.openButton'),
     metrics: caseMetricsQuery.data,
     openCase,

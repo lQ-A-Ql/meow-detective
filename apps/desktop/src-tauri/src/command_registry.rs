@@ -35,7 +35,7 @@ pub(crate) use crate::commands::{
         get_document_preview, get_file_children_request, get_file_jump_context,
         get_file_rows_request, get_file_tree_request, get_image_preview, get_media_url,
         get_text_preview, import_unlocked_bitlocker_catalog, inspect_bitlocker_volume,
-        list_deleted_recoveries, lock_bitlocker_volume, open_file_handle_request,
+        list_deleted_recoveries, list_local_disks, lock_bitlocker_volume, open_file_handle_request,
         read_deleted_recovery_range, read_file_range, read_media_range,
         restore_persisted_bitlocker_key, run_deleted_recovery, search_deleted_recoveries_by_hash,
         unlock_bitlocker_with_memory_image, unlock_bitlocker_with_password,

@@ -21,6 +21,7 @@ export const COMMANDS = {
   },
   files: {
     GET_FILE_TREE_REQUEST: 'get_file_tree_request',
+    LIST_LOCAL_DISKS: 'list_local_disks',
     GET_FILE_ROWS_REQUEST: 'get_file_rows_request',
     IMPORT_DATA_SOURCE: 'import_data_source',
     GET_FILE_CHILDREN_REQUEST: 'get_file_children_request',

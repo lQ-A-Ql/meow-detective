@@ -48,6 +48,28 @@ pub fn attach_data_source_with_storage(
 }
 
 fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSourceProvenance {
+    if *kind == DataSourceKind::LocalDisk {
+        return match evidence_core::LocalDiskReader::open(source_path) {
+            Ok(reader) => DataSourceProvenance {
+                source_hash_sha256: None,
+                hash_status: DataSourceHashStatus::Pending,
+                canonical_source_path: Some(source_path.to_path_buf()),
+                evidence_size: Some(reader.len()),
+                reader_kind: Some(kind.to_string()),
+                provenance_status: DataSourceProvenanceStatus::Recorded,
+                warnings: Vec::new(),
+            },
+            Err(error) => DataSourceProvenance {
+                source_hash_sha256: None,
+                hash_status: DataSourceHashStatus::Unknown,
+                canonical_source_path: Some(source_path.to_path_buf()),
+                evidence_size: None,
+                reader_kind: Some(kind.to_string()),
+                provenance_status: DataSourceProvenanceStatus::Partial,
+                warnings: vec![format!("local disk probe failed: {error}")],
+            },
+        };
+    }
     let mut warnings = Vec::new();
     let canonical_source_path = match std::fs::canonicalize(source_path) {
         Ok(path) => Some(path),
@@ -100,6 +122,10 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
 }
 
 pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
+    #[cfg(windows)]
+    if evidence_core::LocalDiskReader::is_supported_path(source_path) {
+        return Ok(DataSourceKind::LocalDisk);
+    }
     let metadata = std::fs::metadata(source_path)?;
     if metadata.is_dir() {
         return Ok(DataSourceKind::LogicalDirectory);

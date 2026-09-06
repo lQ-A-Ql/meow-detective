@@ -93,6 +93,10 @@ fn probe_image(
         domain::DataSourceKind::Raw => {
             Box::new(RawImageReader::open(path).map_err(CommandError::from_typed_service_error)?)
         }
+        domain::DataSourceKind::LocalDisk => Box::new(
+            evidence_core::LocalDiskReader::open(path)
+                .map_err(CommandError::from_typed_service_error)?,
+        ),
         domain::DataSourceKind::LogicalDirectory => {
             return Err(CommandError::unsupported(
                 "logical directories do not expose image probe candidates",

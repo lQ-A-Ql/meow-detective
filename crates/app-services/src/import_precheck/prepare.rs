@@ -50,7 +50,19 @@ pub fn prepare_import_source_config(
     platform: DataSourcePlatform,
     profile: Option<String>,
 ) -> Result<ImportSourceConfig, ImportSourceConfigError> {
-    let mut config = prepare_import_source_config_from_path(source_path, platform)?;
+    let mut config = prepare_import_source_config_from_path_with_kind(source_path, platform, None)?;
+    config.profile = profile;
+    Ok(config)
+}
+
+pub fn prepare_import_source_config_with_kind(
+    source_path: &str,
+    platform: DataSourcePlatform,
+    profile: Option<String>,
+    kind_hint: Option<DataSourceKind>,
+) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    let mut config =
+        prepare_import_source_config_from_path_with_kind(source_path, platform, kind_hint)?;
     config.profile = profile;
     Ok(config)
 }
@@ -59,10 +71,30 @@ pub fn prepare_import_source_config_from_path(
     source_path: &str,
     platform: DataSourcePlatform,
 ) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    prepare_import_source_config_from_path_with_kind(source_path, platform, None)
+}
+
+pub fn prepare_import_source_config_from_path_with_kind(
+    source_path: &str,
+    platform: DataSourcePlatform,
+    kind_hint: Option<DataSourceKind>,
+) -> Result<ImportSourceConfig, ImportSourceConfigError> {
     ensure_supported_import_platform(platform)?;
     let path = PathBuf::from(source_path);
-    validate_import_source_for_filesystem(&path)?;
-    let kind = datasource_service::classify_data_source_path(&path)?;
+    if kind_hint == Some(DataSourceKind::LocalDisk) {
+        if platform != DataSourcePlatform::Windows {
+            return Err(ImportSourceConfigError::UnsupportedPlatform);
+        }
+        if !evidence_core::LocalDiskReader::is_supported_path(&path) {
+            return Err(ImportSourceConfigError::UnsupportedSourceType);
+        }
+    } else {
+        validate_import_source_for_filesystem(&path)?;
+    }
+    let kind = match kind_hint {
+        Some(kind) => kind,
+        None => datasource_service::classify_data_source_path(&path)?,
+    };
     let source_name = derive_source_name(&path);
     let mode = import_source_mode(&kind).ok_or(ImportSourceConfigError::UnsupportedSourceType)?;
 
@@ -111,6 +143,9 @@ fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
         }),
         DataSourceKind::Raw => Some(ImportSourceMode::Image {
             staging_kind: "Raw",
+        }),
+        DataSourceKind::LocalDisk => Some(ImportSourceMode::Image {
+            staging_kind: "LocalDisk",
         }),
         DataSourceKind::CephRbd | DataSourceKind::CephFs => None,
     }

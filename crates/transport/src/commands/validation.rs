@@ -50,6 +50,32 @@ pub(super) fn validate_import_source_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn validate_local_disk_source_path(path: &str) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("sourcePath is required".to_string());
+    }
+    if trimmed.contains('\0') {
+        return Err("sourcePath contains a null byte".to_string());
+    }
+    let normalized = trimmed.replace('/', "\\");
+    let prefix = r"\\.\PhysicalDrive";
+    let has_prefix = normalized
+        .get(..prefix.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix));
+    if !has_prefix {
+        return Err("localDisk sourcePath must be \\\\.\\PhysicalDriveN".to_string());
+    }
+    let suffix = &normalized[prefix.len()..];
+    if suffix.is_empty() || !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("localDisk sourcePath must be \\\\.\\PhysicalDriveN".to_string());
+    }
+    if suffix.parse::<u32>().is_err() {
+        return Err("localDisk sourcePath disk number is out of range".to_string());
+    }
+    Ok(())
+}
+
 pub(super) fn validate_export_destination_path(path: &str) -> Result<(), String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {

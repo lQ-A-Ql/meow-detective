@@ -8,8 +8,8 @@ use crate::file_service::{
     viewer::{
         descriptor_file_entry, exact_partition_candidate, open_descriptor_image_file,
         open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
-        open_raw_file, resolve_partition_index_for_entry, validate_readable_file_entry,
-        PreviewDescriptor, PreviewReadContext, RangeContentReader,
+        open_local_disk_file, open_raw_file, resolve_partition_index_for_entry,
+        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -20,7 +20,7 @@ pub(crate) fn open_file_content_for_descriptor(
     let reader = match descriptor.source_kind.as_str() {
         "logical_directory" => open_logical_descriptor_file(descriptor),
         "e01" => open_e01_descriptor_file(descriptor),
-        "raw" => open_raw_descriptor_file(descriptor),
+        "raw" | "local_disk" => open_raw_descriptor_file(descriptor),
         other => unsupported_source(other),
     }?;
     Ok(match reader {
@@ -36,13 +36,18 @@ pub(crate) fn open_file_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    if matches!(descriptor.source_kind.as_str(), "e01" | "raw")
-        && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
+    if matches!(
+        descriptor.source_kind.as_str(),
+        "e01" | "raw" | "local_disk"
+    ) && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
     {
         return open_file_content_for_descriptor(descriptor);
     }
     if descriptor.source_kind != "ceph_rbd"
-        && !matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+        && !matches!(
+            descriptor.source_kind.as_str(),
+            "e01" | "raw" | "local_disk"
+        )
     {
         return open_file_content_for_descriptor(descriptor);
     }
@@ -75,7 +80,7 @@ pub(crate) fn open_range_content_for_descriptor(
             open_logical_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
         }
         "e01" => open_e01_descriptor_file(descriptor),
-        "raw" => open_raw_descriptor_file(descriptor),
+        "raw" | "local_disk" => open_raw_descriptor_file(descriptor),
         other => unsupported_source(other),
     }
 }
@@ -87,13 +92,18 @@ pub(crate) fn open_range_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    if matches!(descriptor.source_kind.as_str(), "e01" | "raw")
-        && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
+    if matches!(
+        descriptor.source_kind.as_str(),
+        "e01" | "raw" | "local_disk"
+    ) && !context.is_bitlocker_candidate(exact_partition_candidate(descriptor)?)?
     {
         return open_range_content_for_descriptor(descriptor);
     }
     if descriptor.source_kind != "ceph_rbd"
-        && !matches!(descriptor.source_kind.as_str(), "e01" | "raw")
+        && !matches!(
+            descriptor.source_kind.as_str(),
+            "e01" | "raw" | "local_disk"
+        )
     {
         return open_range_content_for_descriptor(descriptor);
     }
@@ -114,8 +124,13 @@ fn open_raw_descriptor_file(
     descriptor: &PreviewDescriptor,
 ) -> Result<RangeContentReader, FileServiceError> {
     open_descriptor_image_file(descriptor, |source_path| {
-        evidence_core::RawImageReader::open(source_path)
-            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+        if descriptor.source_kind == "local_disk" {
+            evidence_core::LocalDiskReader::open(source_path)
+                .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+        } else {
+            evidence_core::RawImageReader::open(source_path)
+                .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+        }
     })
 }
 
@@ -132,9 +147,13 @@ pub(crate) fn open_file_content_for_entry(
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
             open_e01_file(conn, &source_path, entry, partition_index)
         }
-        "raw" => {
+        "raw" | "local_disk" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            open_raw_file(&source_path, entry, partition_index)
+            if kind == "local_disk" {
+                open_local_disk_file(&source_path, entry, partition_index)
+            } else {
+                open_raw_file(&source_path, entry, partition_index)
+            }
         }
         other => unsupported_source(other),
     }
@@ -156,9 +175,15 @@ pub(crate) fn open_range_content_for_entry(
             open_e01_file(conn, &source_path, entry, partition_index)
                 .map(RangeContentReader::Streaming)
         }
-        "raw" => {
+        "raw" | "local_disk" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            open_raw_file(&source_path, entry, partition_index).map(RangeContentReader::Streaming)
+            if kind == "local_disk" {
+                open_local_disk_file(&source_path, entry, partition_index)
+                    .map(RangeContentReader::Streaming)
+            } else {
+                open_raw_file(&source_path, entry, partition_index)
+                    .map(RangeContentReader::Streaming)
+            }
         }
         other => unsupported_source(other),
     }

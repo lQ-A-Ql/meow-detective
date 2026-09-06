@@ -373,6 +373,8 @@ fn candidate_start_detail(kind: ImageFilesystemKind, root_name: &str) -> String 
 fn source_kind(kind: &str) -> domain::DataSourceKind {
     if kind.eq_ignore_ascii_case("e01") {
         domain::DataSourceKind::E01
+    } else if kind.eq_ignore_ascii_case("local_disk") {
+        domain::DataSourceKind::LocalDisk
     } else {
         domain::DataSourceKind::Raw
     }

@@ -61,6 +61,18 @@ pub async fn import_data_source(
                     analysis_mode,
                 )?
             }
+            ImportSourceKindDto::LocalDisk => {
+                let import_config = prepare_import_config(&request, platform)?;
+                schedule_import_for_active_case(
+                    active,
+                    import_config,
+                    Some(&app_clone),
+                    app_state.task_manager.clone(),
+                    settings.max_import_workers,
+                    settings.max_analysis_workers,
+                    analysis_mode,
+                )?
+            }
         };
         Ok(format!(
             "Import started for {}. Watch the Jobs panel for progress.",

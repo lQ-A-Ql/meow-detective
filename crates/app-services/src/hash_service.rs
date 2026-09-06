@@ -61,6 +61,9 @@ impl HashService {
         cancelled: &AtomicBool,
         progress: &(dyn Fn(u64, u64) + Sync),
     ) -> Result<EvidenceHashResult, EvidenceHashError> {
+        if *kind == DataSourceKind::LocalDisk {
+            return hash_local_disk(path, cancelled, progress);
+        }
         let segments = match kind {
             DataSourceKind::E01 => volumes::discover_e01_segments(path)
                 .map_err(|error| io_error("discover E01 segments", error))?,
@@ -130,6 +133,30 @@ impl HashService {
             },
         })
     }
+}
+
+fn hash_local_disk(
+    path: &Path,
+    cancelled: &AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> Result<EvidenceHashResult, EvidenceHashError> {
+    let mut reader = evidence_core::LocalDiskReader::open(path)
+        .map_err(|error| io_error("open local physical disk", error))?;
+    let total_bytes = reader.len();
+    let digest = hashing::sha256_reader_with_cancel(
+        &mut reader,
+        || cancelled.load(Ordering::Acquire),
+        |processed| progress(processed.min(total_bytes), total_bytes),
+    )
+    .map_err(|error| io_error("read local physical disk", error))?
+    .ok_or(EvidenceHashError::Cancelled)?;
+    Ok(EvidenceHashResult {
+        digest,
+        bytes_processed: total_bytes,
+        acceleration: HashService::sha256_acceleration(),
+        parallel_segments: 1,
+        worker_threads: 1,
+    })
 }
 
 #[derive(Debug)]

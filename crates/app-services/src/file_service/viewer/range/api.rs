@@ -155,7 +155,10 @@ where
     if descriptor.source_kind == "ceph_rbd" {
         return read_ceph_rbd_descriptor_range(context, descriptor, offset, length);
     }
-    if matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+    if matches!(
+        descriptor.source_kind.as_str(),
+        "e01" | "raw" | "local_disk"
+    ) {
         let candidate = exact_partition_candidate(descriptor)?;
         if context.is_bitlocker_candidate(candidate)? {
             if let Some(bytes) = try_read_bitlocker_ntfs_range_for_descriptor(

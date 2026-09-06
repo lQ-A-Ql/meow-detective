@@ -55,6 +55,13 @@ impl LinuxClusterImportPlan {
                     DataSourceKind::Raw => ImportSourceMode::Image {
                         staging_kind: "Raw",
                     },
+                    DataSourceKind::LocalDisk => {
+                        tracing::warn!(
+                            source = %member.source_path.display(),
+                            "local physical-disk sources cannot enter the Linux cluster import pipeline"
+                        );
+                        return None;
+                    }
                     DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
                     DataSourceKind::CephRbd | DataSourceKind::CephFs => {
                         tracing::warn!(

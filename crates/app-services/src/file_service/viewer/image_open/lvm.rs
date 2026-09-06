@@ -184,6 +184,8 @@ where
             .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
         "raw" => evidence_core::RawImageReader::open(reader_path)
             .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+        "local_disk" => evidence_core::LocalDiskReader::open(reader_path)
+            .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
         _ => open_reader(reader_path),
     }
 }

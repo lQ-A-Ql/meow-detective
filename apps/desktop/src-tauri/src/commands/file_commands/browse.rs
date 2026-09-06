@@ -4,13 +4,33 @@ use transport::{
     commands::{
         GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,
     },
-    dto::{FileChildrenDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto},
+    dto::{FileChildrenDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto, LocalDiskDto},
     CommandError,
 };
 
 use crate::state::AppState;
 
 use super::support::{run_active_case_command, run_optional_active_case_command};
+
+#[tauri::command]
+pub async fn list_local_disks() -> Result<Vec<LocalDiskDto>, CommandError> {
+    tauri::async_runtime::spawn_blocking(|| {
+        app_services::datasource_service::list_local_disks()
+            .map(|disks| {
+                disks
+                    .into_iter()
+                    .map(|disk| LocalDiskDto {
+                        disk_number: disk.disk_number,
+                        path: disk.path.display().to_string(),
+                        size: disk.size,
+                    })
+                    .collect()
+            })
+            .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
 
 /// Get children of a file tree node with explicit request.
 #[tauri::command]

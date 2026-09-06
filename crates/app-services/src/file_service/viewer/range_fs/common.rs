@@ -5,8 +5,8 @@ use rusqlite::Connection;
 
 use crate::file_service::{
     viewer::{
-        descriptor_image_path_candidates, e01_partition_candidates, entry_image_path_candidates,
-        exact_partition_candidate, open_e01_reader_cached, raw_partition_candidates,
+        block_partition_candidates, descriptor_image_path_candidates, e01_partition_candidates,
+        entry_image_path_candidates, exact_partition_candidate, open_e01_reader_cached,
         resolve_partition_index_for_entry, PreviewDescriptor, PreviewPartitionCandidate,
     },
     FileServiceError,
@@ -32,8 +32,10 @@ pub(super) fn read_descriptor_range(
     reasons: &mut Vec<String>,
     read_candidates: CandidateRangeReader,
 ) -> Result<Option<Vec<u8>>, FileServiceError> {
-    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw")
-        || descriptor.partition_candidates.is_empty()
+    if !matches!(
+        descriptor.source_kind.as_str(),
+        "e01" | "raw" | "local_disk"
+    ) || descriptor.partition_candidates.is_empty()
     {
         return Ok(None);
     }
@@ -58,10 +60,15 @@ pub(super) fn read_descriptor_range(
                 reasons,
             )
         }
-        "raw" => {
+        "raw" | "local_disk" => {
             let mut factory = |path: &Path| {
-                evidence_core::RawImageReader::open(path)
-                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                if descriptor.source_kind == "local_disk" {
+                    evidence_core::LocalDiskReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                } else {
+                    evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                }
             };
             read_candidates(
                 source_path,
@@ -107,12 +114,18 @@ pub(super) fn read_entry_range(
                 &mut Vec::new(),
             )
         }
-        "raw" => {
+        "raw" | "local_disk" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            let candidates = raw_partition_candidates(&source_path, partition_index)?;
+            let candidates =
+                block_partition_candidates(&source_path, partition_index, &source_kind)?;
             let mut factory = |path: &Path| {
-                evidence_core::RawImageReader::open(path)
-                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                if source_kind == "local_disk" {
+                    evidence_core::LocalDiskReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                } else {
+                    evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                }
             };
             read_candidates(
                 Path::new(&source_path),

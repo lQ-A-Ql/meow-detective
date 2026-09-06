@@ -19,6 +19,15 @@ pub(crate) fn open_raw_file(
     open_raw_image_file(entry, reader, expected_partition_index)
 }
 
+pub(crate) fn open_local_disk_file(
+    source_path: &str,
+    entry: &FileEntry,
+    expected_partition_index: Option<usize>,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let reader = evidence_core::LocalDiskReader::open(Path::new(source_path))?;
+    open_raw_image_file(entry, reader, expected_partition_index)
+}
+
 fn open_raw_image_file<R>(
     entry: &FileEntry,
     mut reader: R,
@@ -27,12 +36,19 @@ fn open_raw_image_file<R>(
 where
     R: EvidenceReader + Read + std::io::Seek + 'static,
 {
+    let source_kind = reader.info().kind.clone();
+    let data_source_kind = if source_kind.contains("E01") {
+        domain::DataSourceKind::E01
+    } else if source_kind.eq_ignore_ascii_case("local_disk") {
+        domain::DataSourceKind::LocalDisk
+    } else {
+        domain::DataSourceKind::Raw
+    };
     let mut probe =
         crate::datasource_service::detect_image_filesystem(&mut reader).map_err(|error| {
             FileServiceError::other(format!("Failed to detect RAW filesystem: {error}"))
         })?;
     let source_path = reader.info().path.clone();
-    let source_kind = reader.info().kind.clone();
     let paths = entry_image_path_candidates(entry);
     if probe.candidates.is_empty() {
         return open_unpartitioned_exfat(
@@ -41,13 +57,9 @@ where
             &source_path,
             &paths,
             expected_partition_index,
+            &data_source_kind,
         );
     }
-    let data_source_kind = if source_kind.contains("E01") {
-        domain::DataSourceKind::E01
-    } else {
-        domain::DataSourceKind::Raw
-    };
     crate::datasource_service::expand_lvm_pool_candidates(
         &mut probe,
         &source_path,
@@ -83,6 +95,7 @@ fn open_unpartitioned_exfat<R>(
     source_path: &Path,
     paths: &[String],
     expected_partition_index: Option<usize>,
+    source_kind: &domain::DataSourceKind,
 ) -> Result<Box<dyn Read>, FileServiceError>
 where
     R: EvidenceReader + Read + std::io::Seek,
@@ -90,14 +103,14 @@ where
     if expected_partition_index.is_none_or(|expected| expected == 0)
         && looks_like_exfat_boot_sector(reader, 0)?
     {
-        return open_exfat_at(source_path, paths, 0);
+        return open_exfat_at(source_path, paths, 0, source_kind);
     }
     for partition in partitions {
         if expected_partition_index.is_some_and(|expected| expected != partition.index) {
             continue;
         }
         if looks_like_exfat_boot_sector(reader, partition.offset)? {
-            return open_exfat_at(source_path, paths, partition.offset);
+            return open_exfat_at(source_path, paths, partition.offset, source_kind);
         }
     }
     Err(FileServiceError::other(
@@ -109,9 +122,14 @@ fn open_exfat_at(
     source_path: &Path,
     paths: &[String],
     offset: u64,
+    source_kind: &domain::DataSourceKind,
 ) -> Result<Box<dyn Read>, FileServiceError> {
-    let reader: Box<dyn EvidenceReader> =
-        Box::new(evidence_core::RawImageReader::open(source_path)?);
+    let reader: Box<dyn EvidenceReader> = match source_kind {
+        domain::DataSourceKind::LocalDisk => {
+            Box::new(evidence_core::LocalDiskReader::open(source_path)?)
+        }
+        _ => Box::new(evidence_core::RawImageReader::open(source_path)?),
+    };
     let fs = fs_exfat::ExfatReader::open(reader, offset)?;
     open_first_image_path(&fs, paths).map_err(FileServiceError::from)
 }
@@ -240,6 +258,8 @@ fn candidate_reader(
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
                 domain::DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+                domain::DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
+                    .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
                 domain::DataSourceKind::LogicalDirectory
                 | domain::DataSourceKind::CephRbd
                 | domain::DataSourceKind::CephFs => Err(std::io::Error::new(
@@ -257,6 +277,9 @@ fn candidate_reader(
                 domain::DataSourceKind::E01 => Box::new(image_e01::E01Reader::open(source_path)?),
                 domain::DataSourceKind::Raw => {
                     Box::new(evidence_core::RawImageReader::open(source_path)?)
+                }
+                domain::DataSourceKind::LocalDisk => {
+                    Box::new(evidence_core::LocalDiskReader::open(source_path)?)
                 }
                 domain::DataSourceKind::LogicalDirectory
                 | domain::DataSourceKind::CephRbd

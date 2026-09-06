@@ -44,13 +44,20 @@ fn preview_descriptor_for_entry(
                 expected_partition_index,
             )?
         }
-        "raw" => {
+        "raw" | "local_disk" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
-            crate::file_service::viewer::raw_partition_candidates(
-                &source_path,
-                expected_partition_index,
-            )?
+            if source_kind == "local_disk" {
+                crate::file_service::viewer::local_disk_partition_candidates(
+                    &source_path,
+                    expected_partition_index,
+                )?
+            } else {
+                crate::file_service::viewer::raw_partition_candidates(
+                    &source_path,
+                    expected_partition_index,
+                )?
+            }
         }
         other => {
             return Err(FileServiceError::other(format!(

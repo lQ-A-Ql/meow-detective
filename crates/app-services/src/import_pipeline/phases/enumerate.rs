@@ -26,7 +26,9 @@ pub(crate) fn run_enumeration_phase(
     let mut stats = match ctx.import_config.kind {
         domain::DataSourceKind::LogicalDirectory => enumerate_logical_directory(ctx, data_source)
             .map_err(CommandError::from_service_error)?,
-        domain::DataSourceKind::E01 | domain::DataSourceKind::Raw => {
+        domain::DataSourceKind::E01
+        | domain::DataSourceKind::Raw
+        | domain::DataSourceKind::LocalDisk => {
             enumerate_image_data_source_with_staging(ctx, data_source)?
         }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
@@ -35,14 +37,12 @@ pub(crate) fn run_enumeration_phase(
             ))
         }
     };
-
     populate_file_graph(ctx, data_source, &mut stats);
     ctx.counts.add_warnings(stats.warnings.len());
     report_catalog_ready(ctx, data_source, &stats);
     reject_cancelled_before_analysis(ctx, data_source)?;
     Ok(stats)
 }
-
 fn enumerate_logical_directory(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
@@ -60,7 +60,6 @@ fn enumerate_logical_directory(
         Some(ctx.options.cancel_token),
     )
 }
-
 fn enumerate_image_data_source_with_staging(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,

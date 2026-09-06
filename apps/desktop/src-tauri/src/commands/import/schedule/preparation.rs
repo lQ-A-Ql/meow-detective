@@ -1,7 +1,9 @@
 use app_services::{import_analysis, import_precheck};
-use domain::DataSourcePlatform;
+use domain::{DataSourceKind, DataSourcePlatform};
 use transport::{
-    commands::{AppSettingsDto, ImportDataSourceRequest, ImportTargetPlatformDto},
+    commands::{
+        AppSettingsDto, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
+    },
     CommandError,
 };
 
@@ -55,10 +57,13 @@ pub(super) fn prepare_import_config(
     request: &ImportDataSourceRequest,
     platform: DataSourcePlatform,
 ) -> Result<import_precheck::ImportSourceConfig, CommandError> {
-    import_precheck::prepare_import_source_config(
+    let kind_hint = (request.source_kind == ImportSourceKindDto::LocalDisk)
+        .then_some(DataSourceKind::LocalDisk);
+    import_precheck::prepare_import_source_config_with_kind(
         &request.source_path,
         platform,
         request.profile.clone(),
+        kind_hint,
     )
     .map_err(super::import_config_error_to_command_error)
 }

@@ -175,6 +175,31 @@ fn ceph_rbd_kind_round_trips_without_raw_downgrade() {
 }
 
 #[test]
+fn local_disk_kind_round_trips_without_raw_downgrade() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let mut ds = make_ds("ds-local-disk", "Physical disk");
+    ds.kind = DataSourceKind::LocalDisk;
+    ds.source_path = std::path::PathBuf::from(r"\\.\PhysicalDrive0");
+
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    let stored = repo
+        .find_by_case(&CaseId("case-1".to_string()))
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    assert_eq!(stored.kind, DataSourceKind::LocalDisk);
+    assert_eq!(stored.source_path, ds.source_path);
+    assert_eq!(
+        repo.source_kind(&DataSourceId("ds-local-disk".to_string()))
+            .unwrap(),
+        DataSourceKind::LocalDisk
+    );
+}
+
+#[test]
 fn insert_then_find_by_case_round_trips_provenance() {
     let conn = setup_db();
     let repo = DataSourceRepo::new(&conn);

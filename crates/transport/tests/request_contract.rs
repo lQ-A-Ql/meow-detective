@@ -7,7 +7,7 @@ use transport::commands::{
     ImportTargetPlatformDto, ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
     RunDeletedRecoveryRequest, SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
 };
-use transport::dto::EvtxEventViewDto;
+use transport::dto::{EvtxEventViewDto, LocalDiskDto};
 
 #[test]
 fn classify_files_request_deserializes_sample_size() {
@@ -17,6 +17,20 @@ fn classify_files_request_deserializes_sample_size() {
 
     assert_eq!(request.data_source_id, "ds-1");
     assert_eq!(request.sample_size, Some(1000));
+}
+
+#[test]
+fn local_disk_dto_round_trips_camel_case_fields() {
+    let dto = LocalDiskDto {
+        disk_number: 2,
+        path: r"\\.\PhysicalDrive2".to_string(),
+        size: 512,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    assert_eq!(json["diskNumber"], 2);
+    assert_eq!(json["path"], r"\\.\PhysicalDrive2");
+    assert_eq!(json["size"], 512);
+    assert_eq!(serde_json::from_value::<LocalDiskDto>(json).unwrap(), dto);
 }
 
 #[test]
@@ -78,6 +92,44 @@ fn import_source_rejects_windows_device_paths() {
     };
 
     assert!(request.validate().is_err());
+}
+
+#[test]
+fn import_source_accepts_local_disk_only_with_explicit_kind() {
+    let request: ImportDataSourceRequest = serde_json::from_str(
+        r#"{"sourcePath":"\\\\.\\PhysicalDrive0","sourceKind":"localDisk","platform":"windows"}"#,
+    )
+    .unwrap();
+
+    assert_eq!(request.source_kind, ImportSourceKindDto::LocalDisk);
+    assert!(request.validate().is_ok());
+    assert_eq!(
+        serde_json::to_value(request).unwrap()["sourceKind"],
+        "localDisk"
+    );
+}
+
+#[test]
+fn import_source_accepts_case_insensitive_local_disk_path() {
+    let request: ImportDataSourceRequest = serde_json::from_str(
+        r#"{"sourcePath":"\\\\.\\physicaldrive0","sourceKind":"localDisk","platform":"windows"}"#,
+    )
+    .unwrap();
+
+    assert!(request.validate().is_ok());
+}
+
+#[test]
+fn import_source_rejects_local_disk_on_linux() {
+    let request: ImportDataSourceRequest = serde_json::from_str(
+        r#"{"sourcePath":"\\\\.\\PhysicalDrive0","sourceKind":"localDisk","platform":"linux"}"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        request.validate().unwrap_err(),
+        "localDisk imports must use platform windows"
+    );
 }
 
 #[test]

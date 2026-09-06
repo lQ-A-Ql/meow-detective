@@ -173,6 +173,37 @@ fn import_source_config_classifies_e01_by_name() {
 }
 
 #[test]
+fn import_source_config_accepts_explicit_local_disk_without_filesystem_metadata() {
+    let config = prepare_import_source_config_with_kind(
+        r"\\.\PhysicalDrive0",
+        DataSourcePlatform::Windows,
+        None,
+        Some(DataSourceKind::LocalDisk),
+    )
+    .unwrap();
+
+    assert_eq!(config.kind, DataSourceKind::LocalDisk);
+    assert_eq!(config.source_path, Path::new(r"\\.\PhysicalDrive0"));
+    assert_eq!(config.staging_kind(), Some("LocalDisk"));
+}
+
+#[test]
+fn import_source_config_rejects_local_disk_for_linux_platform() {
+    let error = prepare_import_source_config_with_kind(
+        r"\\.\PhysicalDrive0",
+        DataSourcePlatform::Linux,
+        None,
+        Some(DataSourceKind::LocalDisk),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        ImportSourceConfigError::UnsupportedPlatform
+    ));
+}
+
+#[test]
 fn import_source_config_classifies_e01_by_magic() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source = tmp.path().join("capture.bin");

@@ -167,11 +167,13 @@
     "fields": {
       "name": "数据源名称",
       "mode": "导入模式",
-      "path": "数据源路径"
+      "path": "数据源路径",
+      "localDisk": "本地物理磁盘"
     },
     "placeholders": {
       "name": "例如：Win10-C盘",
-      "path": "镜像路径或逻辑目录路径"
+      "path": "镜像路径或逻辑目录路径",
+      "localDisk": "例如：\\\\.\\PhysicalDrive0"
     },
     "buttons": {
       "next": "下一步",
@@ -184,11 +186,13 @@
     },
     "modes": {
       "single": "单源镜像",
-      "linuxCluster": "Linux 集群"
+      "linuxCluster": "Linux 集群",
+      "localDisk": "本地物理磁盘"
     },
     "hints": {
       "single": "按单个镜像或逻辑目录导入。",
-      "linuxCluster": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 集群整体登记并串行导入成员。"
+      "linuxCluster": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 集群整体登记并串行导入成员。",
+      "localDisk": "以只读方式导入 Windows 主机物理磁盘。需要管理员权限，输入 \\\\.\\PhysicalDriveN。"
     },
     "errors": {
       "pathRequired": "请选择数据源路径"

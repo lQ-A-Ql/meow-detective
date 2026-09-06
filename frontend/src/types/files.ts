@@ -98,11 +98,17 @@ export interface FileJumpContext {
 }
 
 export type ImportTargetPlatform = 'windows' | 'linux';
-export type ImportSourceKind = 'auto' | 'linuxCluster';
+export type ImportSourceKind = 'auto' | 'linuxCluster' | 'localDisk';
 
 export interface ImportDataSourceRequest {
   sourcePath: string;
   sourceKind?: ImportSourceKind;
   platform: ImportTargetPlatform;
   profile?: string;
+}
+
+export interface LocalDisk {
+  diskNumber: number;
+  path: string;
+  size: number;
 }

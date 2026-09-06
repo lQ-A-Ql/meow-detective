@@ -44,8 +44,8 @@ pub(crate) use filesystem::{
 };
 pub(crate) use image_open::{
     open_candidate_block_reader_with_lvm_cache, open_descriptor_image_file,
-    open_descriptor_image_file_with_context, open_e01_file, open_ntfs_descriptor_stream,
-    open_raw_file, LvmPoolRequestCache,
+    open_descriptor_image_file_with_context, open_e01_file, open_local_disk_file,
+    open_ntfs_descriptor_stream, open_raw_file, LvmPoolRequestCache,
 };
 pub(crate) use io::{
     open_first_image_path, open_first_image_path_seekable, read_bounded, read_seekable_range,
@@ -56,7 +56,8 @@ pub(crate) use model::{
     PreviewPartitionCandidate, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
 pub(crate) use partition::{
-    e01_partition_candidates, exact_partition_candidate, preview_lvm_identity_from_datasource,
+    block_partition_candidates, e01_partition_candidates, exact_partition_candidate,
+    local_disk_partition_candidates, preview_lvm_identity_from_datasource,
     preview_partition_candidate_from_record, raw_partition_candidates,
 };
 pub(crate) use path::{

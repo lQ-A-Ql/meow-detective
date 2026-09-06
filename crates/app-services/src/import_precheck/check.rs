@@ -30,7 +30,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     }
 
     // Check if path exists
-    if !source_path.exists() {
+    if *kind != DataSourceKind::LocalDisk && !source_path.exists() {
         errors.push(format!("Path does not exist: {}", source_path.display()));
         return PreCheckResult {
             plan: ImportPlan::new(ImportStrategy::Sequential, 0, 0),
@@ -42,7 +42,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     // Analyze based on type
     let (total_files, total_size) = match kind {
         DataSourceKind::LogicalDirectory => analyze_directory(source_path, &mut warnings),
-        DataSourceKind::E01 | DataSourceKind::Raw => {
+        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::LocalDisk => {
             analyze_image(source_path, kind, &mut warnings)
         }
         DataSourceKind::CephRbd | DataSourceKind::CephFs => {
@@ -145,6 +145,9 @@ fn analyze_image(path: &Path, kind: &DataSourceKind, warnings: &mut Vec<String>)
 fn image_logical_size(path: &Path, kind: &DataSourceKind) -> std::io::Result<u64> {
     match kind {
         DataSourceKind::Raw => evidence_core::RawImageReader::open(path).map(|reader| reader.len()),
+        DataSourceKind::LocalDisk => {
+            evidence_core::LocalDiskReader::open(path).map(|reader| reader.len())
+        }
         _ => std::fs::metadata(path).map(|metadata| metadata.len()),
     }
 }

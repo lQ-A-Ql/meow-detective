@@ -270,9 +270,10 @@ impl<'a> SourceReadContext<'a> {
                 &entry,
                 Some(partition_index),
             )?,
-            "raw" => crate::file_service::viewer::raw_partition_candidates(
+            "raw" | "local_disk" => crate::file_service::viewer::block_partition_candidates(
                 source_path,
                 Some(partition_index),
+                source_kind,
             )?,
             "logical_directory" => Vec::new(),
             other => {

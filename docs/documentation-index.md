@@ -43,7 +43,7 @@ ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 39 |
-| Tauri commands | 132 |
+| Tauri commands | 133 |
 | app-services source modules | 35 |
 | SQLite repositories | 43 logical repositories |
 | SQLite migration scripts | 83 |
@@ -53,7 +53,7 @@ ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 11 |
 | `frontend/src/**/*.test.ts(x)` | 119 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 132 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 133 |
 
 治理事实源：
 

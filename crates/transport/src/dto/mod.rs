@@ -92,7 +92,7 @@ pub use emulation::{
 };
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileExtractionPhaseDto, FileExtractionProgressDto,
-    FileExtractionResultDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+    FileExtractionResultDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto, LocalDiskDto,
 };
 pub use graph::{
     GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphEdgeDto, GraphEdgeTypeDto,

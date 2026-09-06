@@ -16,6 +16,7 @@ pub use bitlocker::{
 };
 pub use browse::{
     get_file_children_request, get_file_jump_context, get_file_rows_request, get_file_tree_request,
+    list_local_disks,
 };
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};

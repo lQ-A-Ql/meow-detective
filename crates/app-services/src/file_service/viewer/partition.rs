@@ -5,7 +5,7 @@ use crate::file_service::{
     FileServiceError,
 };
 use domain::FileEntry;
-use evidence_core::RawImageReader;
+use evidence_core::{EvidenceReader, LocalDiskReader, RawImageReader};
 use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::Connection;
 use std::path::Path;
@@ -77,16 +77,53 @@ pub(crate) fn raw_partition_candidates(
     source_path: &str,
     expected_partition_index: Option<usize>,
 ) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
-    let mut reader = RawImageReader::open(Path::new(source_path))?;
+    partition_candidates_for_kind(
+        source_path,
+        expected_partition_index,
+        &domain::DataSourceKind::Raw,
+    )
+}
+
+pub(crate) fn local_disk_partition_candidates(
+    source_path: &str,
+    expected_partition_index: Option<usize>,
+) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
+    partition_candidates_for_kind(
+        source_path,
+        expected_partition_index,
+        &domain::DataSourceKind::LocalDisk,
+    )
+}
+
+pub(crate) fn block_partition_candidates(
+    source_path: &str,
+    expected_partition_index: Option<usize>,
+    source_kind: &str,
+) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
+    match source_kind {
+        "raw" => raw_partition_candidates(source_path, expected_partition_index),
+        "local_disk" => local_disk_partition_candidates(source_path, expected_partition_index),
+        other => Err(FileServiceError::other(format!(
+            "unsupported block source kind '{other}'"
+        ))),
+    }
+}
+
+fn partition_candidates_for_kind(
+    source_path: &str,
+    expected_partition_index: Option<usize>,
+    source_kind: &domain::DataSourceKind,
+) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
+    let mut reader = open_block_reader(source_path, source_kind)?;
     let mut probe = crate::datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
     crate::datasource_service::expand_lvm_pool_candidates(
         &mut probe,
         Path::new(source_path),
-        &domain::DataSourceKind::Raw,
+        source_kind,
     );
     if probe.candidates.is_empty() {
-        if let Some(candidate) = direct_exfat_raw_partition_candidate(source_path)? {
+        if let Some(candidate) = direct_exfat_partition_candidate(source_path, source_kind)? {
             if expected_partition_index.is_none_or(|expected| expected == candidate.partition_index)
             {
                 return Ok(vec![candidate]);
@@ -94,69 +131,44 @@ pub(crate) fn raw_partition_candidates(
         }
 
         return Err(FileServiceError::other(
-            "No supported filesystem detected in RAW image",
+            "No supported filesystem detected in image",
         ));
     }
 
     let index_map =
         crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
-    let mut candidates = Vec::new();
-    for (candidate_pos, candidate) in probe.candidates.iter().enumerate() {
-        let partition_index = crate::datasource_service::effective_partition_index(
-            candidate,
-            candidate_pos,
-            &index_map,
-        );
-        if expected_partition_index.is_some_and(|expected| partition_index != expected) {
-            continue;
-        }
-
-        let filesystem_kind = match candidate.kind {
-            crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
-            crate::datasource_service::ImageFilesystemKind::Fat => "FAT",
-            crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
-            crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
-            crate::datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
-            crate::datasource_service::ImageFilesystemKind::Xfs => "XFS",
-            crate::datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
-            crate::datasource_service::ImageFilesystemKind::LvmPool => continue,
-        };
-        candidates.push(crate::file_service::viewer::PreviewPartitionCandidate {
-            partition_index,
-            filesystem_kind: filesystem_kind.to_string(),
-            offset: candidate.offset,
-            lvm_identity: candidate
-                .lvm_identity
-                .as_ref()
-                .map(preview_lvm_identity_from_datasource),
-        });
-    }
-
-    let mut exfat_reader = RawImageReader::open(Path::new(source_path))?;
-    for partition in &probe.partitions {
-        if expected_partition_index.is_some_and(|expected| partition.index != expected) {
-            continue;
-        }
-        if candidates
-            .iter()
-            .any(|candidate| candidate.partition_index == partition.index)
-        {
-            continue;
-        }
-        if !crate::file_service::viewer::looks_like_exfat_boot_sector(
-            &mut exfat_reader,
-            partition.offset,
-        )? {
-            continue;
-        }
-
-        candidates.push(crate::file_service::viewer::PreviewPartitionCandidate {
-            partition_index: partition.index,
-            filesystem_kind: "EXFAT".to_string(),
-            offset: partition.offset,
-            lvm_identity: None,
-        });
-    }
+    let mut candidates = probe
+        .candidates
+        .iter()
+        .enumerate()
+        .filter_map(|(candidate_pos, candidate)| {
+            let partition_index = crate::datasource_service::effective_partition_index(
+                candidate,
+                candidate_pos,
+                &index_map,
+            );
+            if expected_partition_index.is_some_and(|expected| partition_index != expected) {
+                return None;
+            }
+            let filesystem_kind = filesystem_kind_label(candidate.kind)?;
+            Some(crate::file_service::viewer::PreviewPartitionCandidate {
+                partition_index,
+                filesystem_kind: filesystem_kind.to_string(),
+                offset: candidate.offset,
+                lvm_identity: candidate
+                    .lvm_identity
+                    .as_ref()
+                    .map(preview_lvm_identity_from_datasource),
+            })
+        })
+        .collect();
+    append_exfat_candidates(
+        &mut candidates,
+        &probe.partitions,
+        source_path,
+        source_kind,
+        expected_partition_index,
+    )?;
 
     if candidates.is_empty() {
         return Err(FileServiceError::other(match expected_partition_index {
@@ -167,7 +179,80 @@ pub(crate) fn raw_partition_candidates(
         }));
     }
 
-    require_unambiguous_candidates(candidates, expected_partition_index, "RAW")
+    require_unambiguous_candidates(
+        candidates,
+        expected_partition_index,
+        if *source_kind == domain::DataSourceKind::LocalDisk {
+            "LOCAL_DISK"
+        } else {
+            "RAW"
+        },
+    )
+}
+
+fn open_block_reader(
+    source_path: &str,
+    source_kind: &domain::DataSourceKind,
+) -> Result<Box<dyn EvidenceReader>, FileServiceError> {
+    match source_kind {
+        domain::DataSourceKind::Raw => Ok(Box::new(RawImageReader::open(Path::new(source_path))?)),
+        domain::DataSourceKind::LocalDisk => {
+            Ok(Box::new(LocalDiskReader::open(Path::new(source_path))?))
+        }
+        _ => Err(FileServiceError::other(
+            "partition candidates require a block image reader",
+        )),
+    }
+}
+
+fn filesystem_kind_label(
+    kind: crate::datasource_service::ImageFilesystemKind,
+) -> Option<&'static str> {
+    Some(match kind {
+        crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+        crate::datasource_service::ImageFilesystemKind::Fat => "FAT",
+        crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
+        crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+        crate::datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
+        crate::datasource_service::ImageFilesystemKind::Xfs => "XFS",
+        crate::datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
+        crate::datasource_service::ImageFilesystemKind::LvmPool => return None,
+    })
+}
+
+fn append_exfat_candidates(
+    candidates: &mut Vec<PreviewPartitionCandidate>,
+    partitions: &[crate::datasource_service::PartitionRecord],
+    source_path: &str,
+    source_kind: &domain::DataSourceKind,
+    expected_partition_index: Option<usize>,
+) -> Result<(), FileServiceError> {
+    let mut reader = open_block_reader(source_path, source_kind)?;
+    for partition in partitions {
+        if expected_partition_index.is_some_and(|expected| partition.index != expected) {
+            continue;
+        }
+        if candidates
+            .iter()
+            .any(|candidate| candidate.partition_index == partition.index)
+        {
+            continue;
+        }
+        if !crate::file_service::viewer::looks_like_exfat_boot_sector(
+            &mut reader,
+            partition.offset,
+        )? {
+            continue;
+        }
+
+        candidates.push(PreviewPartitionCandidate {
+            partition_index: partition.index,
+            filesystem_kind: "EXFAT".to_string(),
+            offset: partition.offset,
+            lvm_identity: None,
+        });
+    }
+    Ok(())
 }
 
 fn require_unambiguous_candidates(
@@ -233,10 +318,21 @@ pub(crate) fn exact_partition_candidate(
     Ok(candidate)
 }
 
-pub(crate) fn direct_exfat_raw_partition_candidate(
+fn direct_exfat_partition_candidate(
     source_path: &str,
+    source_kind: &domain::DataSourceKind,
 ) -> Result<Option<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
-    let mut reader = RawImageReader::open(Path::new(source_path))?;
+    let mut reader: Box<dyn EvidenceReader> = match source_kind {
+        domain::DataSourceKind::Raw => Box::new(RawImageReader::open(Path::new(source_path))?),
+        domain::DataSourceKind::LocalDisk => {
+            Box::new(LocalDiskReader::open(Path::new(source_path))?)
+        }
+        _ => {
+            return Err(FileServiceError::other(
+                "direct exFAT probe requires a block image reader",
+            ))
+        }
+    };
     if !crate::file_service::viewer::looks_like_exfat_boot_sector(&mut reader, 0)? {
         return Ok(None);
     }

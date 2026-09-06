@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 39 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：11 frontend pages、132 Tauri commands、35 source modules、migration scripts (83)、119 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：11 frontend pages、133 Tauri commands、35 source modules、migration scripts (83)、119 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -19,8 +19,8 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 ### 证据导入与文件浏览
 
-- 支持 E01、单文件 RAW/dd/img、ISO9660/Joliet、受限 monolithic-flat VMDK、逻辑目录及 Linux 集群目录作为数据源入口。
-- 镜像格式先进入统一的只读 reader，再进行分区探测和文件系统解析：E01/EWF 使用 E01 reader；RAW/dd/img 使用原始字节 reader；ISO 使用 ISO9660/Joliet reader；flat VMDK 使用 descriptor 声明的 extent 作为逻辑字节源。适配器不会修改原始文件，也不会把不支持的容器猜测成 RAW。
+- 支持 E01、单文件 RAW/dd/img、ISO9660/Joliet、受限 monolithic-flat VMDK、逻辑目录及 Linux 集群目录作为数据源入口；Windows 主机物理磁盘可通过 `\\.\PhysicalDriveN` 以只读方式导入。
+- 镜像格式先进入统一的只读 reader，再进行分区探测和文件系统解析：E01/EWF 使用 E01 reader；RAW/dd/img 使用原始字节 reader；主机物理磁盘使用 LocalDiskReader；ISO 使用 ISO9660/Joliet reader；flat VMDK 使用 descriptor 声明的 extent 作为逻辑字节源。适配器不会修改原始文件，也不会把不支持的容器猜测成 RAW。
 - 文件选择器接受 `.e01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso` 和 `.vmdk`；扩展名只用于选择入口，最终是否可读仍由 magic、descriptor、PVD 和长度校验决定。
 - VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK、VHD/VHDX/QCOW/QCOW2 均明确拒绝。
 - ISO 适配器优先使用 Joliet 名称，目录和文件 extent 均受卷边界限制；ISO 可直接导入，也可嵌套在 E01 或受支持的 flat VMDK 字节流中。UDF、Rock Ridge、交错或 multi-extent 记录不在当前承诺范围。

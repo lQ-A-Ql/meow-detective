@@ -139,6 +139,9 @@ fn source_kind(kind: &domain::DataSourceKind) -> Result<&'static str, CommandErr
     match kind {
         domain::DataSourceKind::E01 => Ok("e01"),
         domain::DataSourceKind::Raw => Ok("raw"),
+        domain::DataSourceKind::LocalDisk => Err(CommandError::unsupported(
+            "BlueStore LVM devices cannot be bound to local physical-disk sources",
+        )),
         domain::DataSourceKind::LogicalDirectory => Err(CommandError::from_service_error(
             "BlueStore LVM devices cannot be bound to logical-directory sources",
         )),

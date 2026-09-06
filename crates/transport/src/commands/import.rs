@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::{validation::validate_import_source_path, ImportTargetPlatformDto};
+use super::{
+    validation::{validate_import_source_path, validate_local_disk_source_path},
+    ImportTargetPlatformDto,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,7 +18,11 @@ pub struct ImportDataSourceRequest {
 
 impl ImportDataSourceRequest {
     pub fn validate(&self) -> Result<(), String> {
-        validate_import_source_path(&self.source_path)?;
+        if self.source_kind == ImportSourceKindDto::LocalDisk {
+            validate_local_disk_source_path(&self.source_path)?;
+        } else {
+            validate_import_source_path(&self.source_path)?;
+        }
         if let Some(profile) = &self.profile {
             if profile.trim().is_empty() {
                 return Err("profile must not be empty when provided".to_string());
@@ -29,6 +36,11 @@ impl ImportDataSourceRequest {
         {
             return Err("linuxCluster imports must use platform linux".to_string());
         }
+        if self.source_kind == ImportSourceKindDto::LocalDisk
+            && self.platform != ImportTargetPlatformDto::Windows
+        {
+            return Err("localDisk imports must use platform windows".to_string());
+        }
         Ok(())
     }
 }
@@ -39,6 +51,7 @@ pub enum ImportSourceKindDto {
     #[default]
     Auto,
     LinuxCluster,
+    LocalDisk,
 }
 
 fn is_default_import_source_kind(value: &ImportSourceKindDto) -> bool {

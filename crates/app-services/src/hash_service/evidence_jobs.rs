@@ -200,11 +200,13 @@ fn is_ready(
 }
 
 fn is_hash_candidate(source: &DataSource) -> bool {
-    matches!(source.kind, DataSourceKind::E01 | DataSourceKind::Raw)
-        && matches!(
-            source.provenance.hash_status,
-            DataSourceHashStatus::Pending | DataSourceHashStatus::Failed
-        )
+    matches!(
+        source.kind,
+        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::LocalDisk
+    ) && matches!(
+        source.provenance.hash_status,
+        DataSourceHashStatus::Pending | DataSourceHashStatus::Failed
+    )
 }
 
 fn detail_prefix(data_source_id: &DataSourceId) -> String {

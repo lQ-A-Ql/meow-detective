@@ -11,6 +11,7 @@ import {
   DocumentPreviewResponse,
   ImagePreviewResponse,
   ImportDataSourceRequest,
+  LocalDisk,
   MediaRangeRequest,
   MediaRangeResponse,
   MediaUrl,
@@ -57,6 +58,10 @@ export async function getFileRowsPage(
 
 export async function importDataSource(request: ImportDataSourceRequest): Promise<string> {
   return apiClient.request(COMMANDS.files.IMPORT_DATA_SOURCE, { request });
+}
+
+export async function listLocalDisks(): Promise<LocalDisk[]> {
+  return apiClient.request<LocalDisk[]>(COMMANDS.files.LIST_LOCAL_DISKS, {});
 }
 
 export async function getFileChildren(parentId: string, showHidden = false): Promise<FileTreeNode[]> {

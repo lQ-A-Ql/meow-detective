@@ -31,7 +31,12 @@ impl SourceReadContext<'_> {
             rss_mb,
             soft_limit_mb,
         );
-        if worker_count < 2 || !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        if worker_count < 2
+            || !matches!(
+                descriptor.source_kind.as_str(),
+                "e01" | "raw" | "local_disk"
+            )
+        {
             return Ok(None);
         }
 

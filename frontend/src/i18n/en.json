@@ -167,11 +167,13 @@
     "fields": {
       "name": "Data Source Name",
       "mode": "Import Mode",
-      "path": "Data Source Path"
+      "path": "Data Source Path",
+      "localDisk": "Local Physical Disk"
     },
     "placeholders": {
       "name": "Example: Win10-C",
-      "path": "Image path or logical directory path"
+      "path": "Image path or logical directory path",
+      "localDisk": "Example: \\\\.\\PhysicalDrive0"
     },
     "buttons": {
       "next": "Next",
@@ -184,11 +186,13 @@
     },
     "modes": {
       "single": "Single Image",
-      "linuxCluster": "Linux Cluster"
+      "linuxCluster": "Linux Cluster",
+      "localDisk": "Local Physical Disk"
     },
     "hints": {
       "single": "Import one image or logical directory.",
-      "linuxCluster": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux cluster and imports members serially."
+      "linuxCluster": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux cluster and imports members serially.",
+      "localDisk": "Import a Windows host physical disk read-only. Administrator access is required; enter \\\\.\\PhysicalDriveN."
     },
     "errors": {
       "pathRequired": "Select a data source path"

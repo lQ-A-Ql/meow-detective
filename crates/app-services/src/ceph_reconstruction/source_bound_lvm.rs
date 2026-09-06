@@ -176,6 +176,9 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                 .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
                 .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
+            DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
+                .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
             DataSourceKind::LogicalDirectory => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
@@ -232,6 +235,9 @@ impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
                     })
             }
             DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
+                .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
+            DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
                 .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
                 .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
             DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
@@ -405,6 +411,7 @@ fn parse_source_kind(value: &str) -> Result<DataSourceKind, SourceBoundLvmError>
     match value {
         "e01" => Ok(DataSourceKind::E01),
         "raw" => Ok(DataSourceKind::Raw),
+        "local_disk" => Ok(DataSourceKind::LocalDisk),
         "ceph_rbd" => Ok(DataSourceKind::CephRbd),
         _ => Err(SourceBoundLvmError::UnsupportedSourceKind {
             kind: value.to_string(),

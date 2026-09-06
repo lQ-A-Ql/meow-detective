@@ -380,6 +380,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
     match kind {
         DataSourceKind::Raw => "raw",
         DataSourceKind::E01 => "e01",
+        DataSourceKind::LocalDisk => "local_disk",
         DataSourceKind::LogicalDirectory => "logical_directory",
         DataSourceKind::CephRbd => "ceph_rbd",
         DataSourceKind::CephFs => "ceph_fs",
@@ -389,6 +390,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
 fn str_to_kind(s: &str) -> DataSourceKind {
     match s {
         "e01" => DataSourceKind::E01,
+        "local_disk" => DataSourceKind::LocalDisk,
         "logical_directory" => DataSourceKind::LogicalDirectory,
         "ceph_rbd" => DataSourceKind::CephRbd,
         "ceph_fs" => DataSourceKind::CephFs,

@@ -8,6 +8,9 @@ mod reader;
 mod types;
 
 pub use attach::{attach_data_source, attach_data_source_with_storage, classify_data_source_path};
+pub fn list_local_disks() -> Result<Vec<evidence_core::LocalDiskInfo>> {
+    evidence_core::list_local_disks().map_err(DataSourceError::Io)
+}
 pub(crate) use bluestore::has_bluestore_label;
 pub(crate) use fs_magic::read_boot_filesystem;
 pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};

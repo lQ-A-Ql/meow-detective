@@ -181,4 +181,39 @@ describe('ImportDataSourceDialog', () => {
 
     expect(screen.getByRole('button', { name: '集群目录' })).toBeDefined();
   });
+
+  it('loads and submits a selected local physical disk', async () => {
+    const listLocalDisks = vi.fn().mockResolvedValue([
+      { diskNumber: 0, path: '\\\\.\\PhysicalDrive0', size: 128 * 1024 ** 3 },
+    ]);
+    render(createElement(ImportDataSourceDialog, { ...baseProps, listLocalDisks }));
+
+    advanceToForm();
+    fireEvent.click(screen.getByLabelText('本地物理磁盘'));
+    const selector = await screen.findByRole('combobox', { name: '本地物理磁盘' });
+
+    expect(listLocalDisks).toHaveBeenCalledOnce();
+    expect((selector as HTMLSelectElement).value).toBe('\\\\.\\PhysicalDrive0');
+
+    clickImport();
+    expect(baseProps.onImport).toHaveBeenCalledWith({
+      sourcePath: '\\\\.\\PhysicalDrive0',
+      sourceKind: 'localDisk',
+      platform: 'windows',
+      profile: undefined,
+    });
+  });
+
+  it('resets a Windows-only mode when switching to Linux', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    advanceToForm();
+    fireEvent.click(screen.getByLabelText('本地物理磁盘'));
+    fireEvent.click(screen.getByRole('button', { name: '上一步' }));
+    fireEvent.click(screen.getByLabelText('Linux'));
+    advanceToForm();
+
+    expect(screen.getByLabelText('单源镜像')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByLabelText('本地物理磁盘')).toBeNull();
+  });
 });
