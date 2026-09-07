@@ -1,5 +1,6 @@
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
+use std::io::SeekFrom;
 
 use crate::datasource_service::{
     self, ImageFilesystemKind, ImageFilesystemSource, LvmLogicalVolumeIdentity,
@@ -53,14 +54,24 @@ pub(super) fn open_candidate_filesystem(
             .map_err(|error| error.to_string())?,
         )));
     }
-    let (base_reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
+    let (mut base_reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => Box::new(
             fs_ntfs::NtfsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
         ),
-        ImageFilesystemKind::Fat => Box::new(
-            fs_fat::FatReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
-        ),
+        ImageFilesystemKind::Fat => {
+            if is_exfat_boot(&mut *base_reader, fs_offset).map_err(|error| error.to_string())? {
+                Box::new(
+                    fs_exfat::ExfatReader::open(base_reader, fs_offset)
+                        .map_err(|error| error.to_string())?,
+                )
+            } else {
+                Box::new(
+                    fs_fat::FatReader::open(base_reader, fs_offset)
+                        .map_err(|error| error.to_string())?,
+                )
+            }
+        }
         ImageFilesystemKind::Ext4 => Box::new(
             fs_ext4::Ext4Reader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
         ),
@@ -75,6 +86,13 @@ pub(super) fn open_candidate_filesystem(
         ImageFilesystemKind::Iso9660 => unreachable!("ISO9660 handled before block reader"),
     };
     Ok(Some(fs))
+}
+
+fn is_exfat_boot(reader: &mut dyn EvidenceReader, offset: u64) -> std::io::Result<bool> {
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut sector = [0u8; 512];
+    reader.read_exact(&mut sector)?;
+    Ok(&sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA])
 }
 
 pub(crate) fn open_candidate_reader(

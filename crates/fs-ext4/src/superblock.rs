@@ -1,8 +1,9 @@
 use crate::format::{
     EXT4_64BIT_GROUP_DESCRIPTOR_SIZE, EXT4_FEATURE_COMPAT_HAS_JOURNAL, EXT4_FEATURE_INCOMPAT_64BIT,
-    EXT4_FEATURE_INCOMPAT_CSUM_SEED, EXT4_FEATURE_RO_COMPAT_BIGALLOC,
-    EXT4_FEATURE_RO_COMPAT_GDT_CSUM, EXT4_FEATURE_RO_COMPAT_METADATA_CSUM, EXT4_MAGIC,
-    EXT4_MIN_GROUP_DESCRIPTOR_SIZE, EXT4_SUPERBLOCK_OFFSET,
+    EXT4_FEATURE_INCOMPAT_CSUM_SEED, EXT4_FEATURE_INCOMPAT_ENCRYPT,
+    EXT4_FEATURE_RO_COMPAT_BIGALLOC, EXT4_FEATURE_RO_COMPAT_GDT_CSUM,
+    EXT4_FEATURE_RO_COMPAT_METADATA_CSUM, EXT4_MAGIC, EXT4_MIN_GROUP_DESCRIPTOR_SIZE,
+    EXT4_SUPERBLOCK_OFFSET,
 };
 use evidence_core::filesystem::invalid_fs_data;
 use evidence_core::EvidenceReader;
@@ -26,6 +27,7 @@ pub(crate) struct Ext4Superblock {
     pub(crate) num_block_groups: u32,
     pub(crate) has_journal: bool,
     pub(crate) journal_inode: Option<u32>,
+    pub(crate) has_encryption_feature: bool,
 }
 
 impl Ext4Superblock {
@@ -67,6 +69,7 @@ impl Ext4Superblock {
         let raw_journal_inode = read_u32(&data, 0xE0)?;
         let journal_inode = (has_journal && raw_journal_inode != 0).then_some(raw_journal_inode);
         let has_64bit = feature_incompat & EXT4_FEATURE_INCOMPAT_64BIT != 0;
+        let has_encryption_feature = feature_incompat & EXT4_FEATURE_INCOMPAT_ENCRYPT != 0;
         let has_bigalloc = feature_ro_compat & EXT4_FEATURE_RO_COMPAT_BIGALLOC != 0;
         let has_gdt_csum = feature_ro_compat & EXT4_FEATURE_RO_COMPAT_GDT_CSUM != 0;
         let has_metadata_csum = feature_ro_compat & EXT4_FEATURE_RO_COMPAT_METADATA_CSUM != 0;
@@ -118,6 +121,7 @@ impl Ext4Superblock {
             num_block_groups,
             has_journal,
             journal_inode,
+            has_encryption_feature,
         })
     }
 }

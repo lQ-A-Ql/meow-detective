@@ -89,6 +89,32 @@ fn rejects_chunks_that_exceed_declared_logical_blocks() {
     assert!(matches!(error, SparseImageError::InvalidChunk { .. }));
 }
 
+#[test]
+fn verifies_logical_crc32_and_header_checksum() {
+    let logical = b"ABCDXYZ!XYZ!";
+    let checksum = crc32(0, logical);
+    let bytes = sparse_image_with_checksum(
+        &[raw_chunk(b"ABCD"), fill_chunk(2, [b'X', b'Y', b'Z', b'!'])],
+        3,
+        checksum,
+        checksum,
+    );
+    let file = write_temp(&bytes);
+    let mut reader = AndroidSparseReader::open(file.path()).expect("open sparse image");
+    reader.verify_integrity().expect("integrity check");
+}
+
+#[test]
+fn rejects_corrupted_logical_crc32() {
+    let bytes = sparse_image_with_checksum(&[raw_chunk(b"ABCD")], 1, 0, 0xdead_beef);
+    let file = write_temp(&bytes);
+    let mut reader = AndroidSparseReader::open(file.path()).expect("open sparse image");
+    assert!(matches!(
+        reader.verify_integrity(),
+        Err(SparseImageError::Crc32Mismatch { .. })
+    ));
+}
+
 fn raw_chunk(data: &[u8]) -> Vec<u8> {
     assert_eq!(data.len() % BLOCK_SIZE as usize, 0);
     chunk_header(
@@ -144,6 +170,39 @@ fn sparse_image(chunks: &[Vec<u8>], total_blocks: u32) -> Vec<u8> {
         output.extend(chunk);
     }
     output
+}
+
+fn sparse_image_with_checksum(
+    chunks: &[Vec<u8>],
+    total_blocks: u32,
+    image_checksum: u32,
+    crc_checksum: u32,
+) -> Vec<u8> {
+    let mut output = Vec::new();
+    output.extend(SPARSE_MAGIC.to_le_bytes());
+    output.extend(1u16.to_le_bytes());
+    output.extend(0u16.to_le_bytes());
+    output.extend(28u16.to_le_bytes());
+    output.extend(12u16.to_le_bytes());
+    output.extend(BLOCK_SIZE.to_le_bytes());
+    output.extend(total_blocks.to_le_bytes());
+    output.extend((chunks.len() as u32 + 1).to_le_bytes());
+    output.extend(image_checksum.to_le_bytes());
+    for chunk in chunks {
+        output.extend(chunk);
+    }
+    output.extend(crc_chunk(crc_checksum));
+    output
+}
+
+fn crc32(mut checksum: u32, bytes: &[u8]) -> u32 {
+    for byte in bytes {
+        checksum ^= u32::from(*byte);
+        for _ in 0..8 {
+            checksum = (checksum >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(checksum & 1));
+        }
+    }
+    checksum
 }
 
 fn write_temp(bytes: &[u8]) -> NamedTempFile {

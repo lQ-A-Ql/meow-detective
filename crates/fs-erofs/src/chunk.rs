@@ -46,7 +46,14 @@ impl ErofsChunkFile {
             .and_then(|offset| offset.checked_add(inode.xattr_size as u64))
             .ok_or_else(|| ErofsError::Invalid("chunk index offset overflows".to_string()))?;
         let index_offset = align_up(metadata_end, layout.entry_size)?;
-        validate_index_table(index_offset, inode.size, layout)?;
+        let filesystem_size = superblock
+            .block_count
+            .checked_mul(superblock.block_size as u64)
+            .ok_or_else(|| ErofsError::Invalid("filesystem size overflows".to_string()))?;
+        let filesystem_end = volume_offset
+            .checked_add(filesystem_size)
+            .ok_or_else(|| ErofsError::Invalid("filesystem end offset overflows".to_string()))?;
+        validate_index_table(index_offset, inode.size, layout, filesystem_end)?;
         Ok(Self {
             source,
             volume_offset,
@@ -180,11 +187,21 @@ fn align_up(value: u64, alignment: u64) -> Result<u64> {
         .ok_or_else(|| ErofsError::Invalid("chunk index alignment overflows".to_string()))
 }
 
-fn validate_index_table(index_offset: u64, size: u64, layout: ChunkLayout) -> Result<()> {
+fn validate_index_table(
+    index_offset: u64,
+    size: u64,
+    layout: ChunkLayout,
+    filesystem_size: u64,
+) -> Result<()> {
     let entries = size.div_ceil(layout.chunk_size);
-    entries
+    let index_end = entries
         .checked_mul(layout.entry_size)
         .and_then(|bytes| index_offset.checked_add(bytes))
         .ok_or_else(|| ErofsError::Invalid("chunk index table overflows".to_string()))?;
+    if index_end > filesystem_size {
+        return Err(ErofsError::Invalid(
+            "chunk index table exceeds filesystem".to_string(),
+        ));
+    }
     Ok(())
 }

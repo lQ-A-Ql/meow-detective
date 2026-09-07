@@ -68,10 +68,16 @@ pub(super) fn parse_header(bytes: &[u8], geometry: LpGeometry) -> Result<Metadat
             "unsupported metadata version {major}.{minor}"
         )));
     }
-    if minor >= 2 && bytes.len() < LP_HEADER_V1_2_SIZE {
-        return Err(VolumeAndroidError::InvalidMetadata(
-            "metadata version 10.2 requires the expanded header".to_string(),
-        ));
+    let expected_header_size = if minor >= 2 {
+        LP_HEADER_V1_2_SIZE
+    } else {
+        LP_HEADER_V1_0_SIZE
+    };
+    if bytes.len() != expected_header_size {
+        return Err(VolumeAndroidError::InvalidMetadata(format!(
+            "metadata version 10.{minor} requires a {expected_header_size}-byte header, got {}",
+            bytes.len()
+        )));
     }
     let tables_size = read_u32(bytes, 44, "metadata tables size")? as usize;
     if bytes.len().saturating_add(tables_size) > geometry.metadata_max_size as usize {

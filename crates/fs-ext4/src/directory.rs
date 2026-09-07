@@ -45,6 +45,12 @@ impl Ext4Reader {
                 inode_number
             )));
         }
+        if Self::inode_is_encrypted(&inode)? {
+            return Err(evidence_core::filesystem::unsupported_fs(format!(
+                "directory inode {} is encrypted",
+                inode_number
+            )));
+        }
         require_extents_layout(&inode, &format!("directory inode {inode_number}"))?;
         let data = self.read_extent_data(Self::inode_i_block(&inode), Self::inode_size(&inode)?)?;
         Self::parse_directory_entries(&data)

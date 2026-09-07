@@ -1,7 +1,7 @@
 use crate::format::{require_extents_layout, S_IFDIR, S_IFLNK};
 use crate::Ext4Reader;
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps,
+    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,
     is_special_directory_name, path_is_directory, path_not_found, root_node, FileSystemReader,
     FsNode,
 };
@@ -25,22 +25,23 @@ impl FileSystemReader for Ext4Reader {
                 continue;
             }
             let fallback_is_dir = file_type == 2;
-            let node = self
-                .read_inode(child_inode)
-                .and_then(|inode| {
-                    let mode = Self::inode_mode(&inode)?;
-                    let is_dir = mode & 0xF000 == S_IFDIR;
-                    let size = if is_dir { 0 } else { Self::inode_size(&inode)? };
-                    let mut node = fs_node_without_timestamps(name.clone(), is_dir, size);
-                    node.read_only = mode & 0o222 == 0;
-                    node.unix_mode = Some(u32::from(mode));
-                    node.created_at = Self::inode_created_at(&inode);
-                    node.modified_at = Self::inode_modified_at(&inode);
-                    node.accessed_at = Self::inode_accessed_at(&inode);
-                    node.changed_at = Self::inode_changed_at(&inode);
-                    Ok(node)
-                })
-                .unwrap_or_else(|_| fs_node_without_timestamps(name, fallback_is_dir, 0));
+            let inode = self.read_inode(child_inode)?;
+            let mode = Self::inode_mode(&inode)?;
+            let is_dir = mode & 0xF000 == S_IFDIR;
+            if is_dir != fallback_is_dir && file_type != 0 {
+                return Err(invalid_fs_data(format!(
+                    "directory entry `{name}` inode type disagrees with directory file type"
+                )));
+            }
+            let size = if is_dir { 0 } else { Self::inode_size(&inode)? };
+            let mut node = fs_node_without_timestamps(name, is_dir, size);
+            node.read_only = mode & 0o222 == 0;
+            node.encrypted = Self::inode_is_encrypted(&inode)?;
+            node.unix_mode = Some(u32::from(mode));
+            node.created_at = Self::inode_created_at(&inode);
+            node.modified_at = Self::inode_modified_at(&inode);
+            node.accessed_at = Self::inode_accessed_at(&inode);
+            node.changed_at = Self::inode_changed_at(&inode);
             nodes.push(node);
         }
         Ok(child_nodes_with_parent_path(nodes, path))
@@ -48,6 +49,11 @@ impl FileSystemReader for Ext4Reader {
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
         let inode = self.resolve_file_inode(path)?;
+        if Self::inode_is_encrypted(&inode)? {
+            return Err(evidence_core::filesystem::unsupported_fs(format!(
+                "file `{path}` is encrypted"
+            )));
+        }
         if Self::inode_mode(&inode)? & 0xF000 == S_IFLNK {
             return Ok(Box::new(io::Cursor::new(
                 self.read_symlink_target(&inode)?.into_bytes(),
@@ -60,6 +66,11 @@ impl FileSystemReader for Ext4Reader {
 
     fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
         let inode = self.resolve_file_inode(path)?;
+        if Self::inode_is_encrypted(&inode)? {
+            return Err(evidence_core::filesystem::unsupported_fs(format!(
+                "file `{path}` is encrypted"
+            )));
+        }
         if Self::inode_mode(&inode)? & 0xF000 == S_IFLNK {
             let target = self.read_symlink_target(&inode)?.into_bytes();
             let start = usize::try_from(offset)

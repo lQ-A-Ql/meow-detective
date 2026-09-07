@@ -121,23 +121,29 @@ fn write_exfat_single_file_raw_fixture(
     let file_size = content.len();
     let file_clusters = file_size.div_ceil(CLUSTER_SIZE).max(1);
 
-    let boot = &mut data[0..SECTOR_SIZE];
-    boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
-    boot[3..11].copy_from_slice(b"EXFAT   ");
-    boot[72..80].copy_from_slice(&(TOTAL_SECTORS as u64).to_le_bytes());
-    boot[80..84].copy_from_slice(&(FAT_SECTOR as u32).to_le_bytes());
-    boot[84..88].copy_from_slice(&1u32.to_le_bytes());
-    boot[88..92].copy_from_slice(&(CLUSTER_HEAP_SECTOR as u32).to_le_bytes());
-    boot[92..96].copy_from_slice(&100u32.to_le_bytes());
-    boot[96..100].copy_from_slice(&2u32.to_le_bytes());
-    boot[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
-    boot[104..106].copy_from_slice(&0x0100u16.to_le_bytes());
-    boot[108] = 9;
-    boot[109] = 0;
-    boot[110] = 1;
-    boot[111] = 0x80;
-    boot[112] = 0xFF;
-    boot[510..512].copy_from_slice(&0xAA55u16.to_le_bytes());
+    {
+        let boot = &mut data[0..SECTOR_SIZE];
+        boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
+        boot[3..11].copy_from_slice(b"EXFAT   ");
+        boot[72..80].copy_from_slice(&(TOTAL_SECTORS as u64).to_le_bytes());
+        boot[80..84].copy_from_slice(&(FAT_SECTOR as u32).to_le_bytes());
+        boot[84..88].copy_from_slice(&1u32.to_le_bytes());
+        boot[88..92].copy_from_slice(&(CLUSTER_HEAP_SECTOR as u32).to_le_bytes());
+        boot[92..96].copy_from_slice(&100u32.to_le_bytes());
+        boot[96..100].copy_from_slice(&2u32.to_le_bytes());
+        boot[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
+        boot[104..106].copy_from_slice(&0x0100u16.to_le_bytes());
+        boot[108] = 9;
+        boot[109] = 0;
+        boot[110] = 1;
+        boot[111] = 0x80;
+        boot[112] = 0xFF;
+        boot[510..512].copy_from_slice(&0xAA55u16.to_le_bytes());
+    }
+    let backup_boot = data[..SECTOR_SIZE].to_vec();
+    data[12 * SECTOR_SIZE..13 * SECTOR_SIZE].copy_from_slice(&backup_boot);
+    write_exfat_boot_checksum(&mut data, 0, SECTOR_SIZE);
+    write_exfat_boot_checksum(&mut data, 12 * SECTOR_SIZE, SECTOR_SIZE);
 
     let fat_offset = FAT_SECTOR * SECTOR_SIZE;
     let fat = &mut data[fat_offset..fat_offset + SECTOR_SIZE];
@@ -176,6 +182,27 @@ fn write_exfat_single_file_raw_fixture(
     data[file_offset..file_offset + content.len()].copy_from_slice(content);
 
     std::fs::write(path, data)
+}
+
+fn write_exfat_boot_checksum(data: &mut [u8], region_offset: usize, sector_size: usize) {
+    let mut checksum = 0u32;
+    for sector_index in 0..11usize {
+        let sector_offset = region_offset + sector_index * sector_size;
+        for (index, byte) in data[sector_offset..sector_offset + sector_size]
+            .iter()
+            .enumerate()
+        {
+            if sector_index == 0 && matches!(index, 106 | 107 | 112) {
+                continue;
+            }
+            checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
+        }
+    }
+    for checksum_bytes in
+        data[region_offset + 11 * sector_size..region_offset + 12 * sector_size].chunks_exact_mut(4)
+    {
+        checksum_bytes.copy_from_slice(&checksum.to_le_bytes());
+    }
 }
 
 fn recycle_bin_i_file_bytes(original_path: &str) -> Vec<u8> {

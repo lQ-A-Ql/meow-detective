@@ -1,6 +1,9 @@
 use evidence_core::FileSystemReader;
 
-use crate::file_service::{viewer::PreviewPartitionCandidate, FileServiceError};
+use crate::file_service::{
+    viewer::{looks_like_exfat_boot_sector, PreviewPartitionCandidate},
+    FileServiceError,
+};
 
 pub(crate) fn open_filesystem_reader(
     candidate: &PreviewPartitionCandidate,
@@ -14,8 +17,14 @@ pub(crate) fn open_filesystem_reader(
                 .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
         }
         kind if kind.eq_ignore_ascii_case("FAT") => {
-            fs_fat::FatReader::open(reader, filesystem_offset)
-                .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
+            let mut reader = reader;
+            if looks_like_exfat_boot_sector(reader.as_mut(), filesystem_offset)? {
+                fs_exfat::ExfatReader::open(reader, filesystem_offset)
+                    .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
+            } else {
+                fs_fat::FatReader::open(reader, filesystem_offset)
+                    .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
+            }
         }
         kind if kind.eq_ignore_ascii_case("EXFAT") => {
             fs_exfat::ExfatReader::open(reader, filesystem_offset)

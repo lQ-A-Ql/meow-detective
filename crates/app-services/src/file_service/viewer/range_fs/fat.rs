@@ -5,8 +5,8 @@ use rusqlite::Connection;
 
 use crate::file_service::{
     viewer::{
-        image_open::LvmPoolRequestCache, is_fat_filesystem_kind, PreviewDescriptor,
-        PreviewPartitionCandidate,
+        image_open::LvmPoolRequestCache, is_fat_filesystem_kind, looks_like_exfat_boot_sector,
+        PreviewDescriptor, PreviewPartitionCandidate,
     },
     FileServiceError,
 };
@@ -66,6 +66,10 @@ fn read_candidates(
                     continue;
                 }
             };
+        let mut reader = reader;
+        if looks_like_exfat_boot_sector(reader.as_mut(), fs_offset).unwrap_or(false) {
+            continue;
+        }
         let fs = match fs_fat::FatReader::open(reader, fs_offset) {
             Ok(fs) => fs,
             Err(error) => {

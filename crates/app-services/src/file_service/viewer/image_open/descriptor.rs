@@ -76,7 +76,7 @@ fn open_candidate_with_context<C>(
 where
     C: PreviewReadContext,
 {
-    let (reader, fs_offset, filesystem_kind) =
+    let (mut reader, fs_offset, filesystem_kind) =
         context.open_candidate_block_reader(descriptor, candidate)?;
     if filesystem_kind.eq_ignore_ascii_case("ISO9660") {
         let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, None)?;
@@ -122,6 +122,12 @@ where
             .map_err(FileServiceError::Io);
     }
     if is_fat_filesystem_kind(&filesystem_kind) {
+        if looks_like_exfat_boot_sector(reader.as_mut(), fs_offset).unwrap_or(false) {
+            return fs_exfat::ExfatReader::open(reader, fs_offset)
+                .and_then(|filesystem| open_first_image_path_seekable(&filesystem, paths))
+                .map(Some)
+                .map_err(FileServiceError::Io);
+        }
         return match fs_fat::FatReader::open(reader, fs_offset) {
             Ok(filesystem) => open_first_image_path_seekable(&filesystem, paths)
                 .map(Some)
@@ -212,7 +218,11 @@ fn open_fat_or_exfat_image_candidate<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
-    let (reader, fs_offset) = open_candidate_block_reader(source_path, candidate, open_reader)?;
+    let (mut reader, fs_offset) = open_candidate_block_reader(source_path, candidate, open_reader)?;
+    if looks_like_exfat_boot_sector(reader.as_mut(), fs_offset)? {
+        let fs = fs_exfat::ExfatReader::open(reader, fs_offset)?;
+        return open_first_image_path_seekable(&fs, paths);
+    }
     match fs_fat::FatReader::open(reader, fs_offset) {
         Ok(fs) => open_first_image_path_seekable(&fs, paths),
         Err(fat_error) => {

@@ -35,6 +35,7 @@ impl LogicalPartitionReader {
                 source_index,
             });
         }
+        validate_partition_layout(&partition)?;
         validate_source_bounds(source.as_ref(), &partition)?;
         let info = ReaderInfo {
             path: source.info().path.clone(),
@@ -99,6 +100,34 @@ impl LogicalPartitionReader {
             .then_some(extent)
             .ok_or(VolumeAndroidError::MissingExtent(offset))
     }
+}
+
+fn validate_partition_layout(partition: &LogicalPartition) -> Result<()> {
+    if partition.size == 0 || partition.extents.is_empty() {
+        return Err(VolumeAndroidError::InvalidMetadata(format!(
+            "logical partition `{}` has no readable extent",
+            partition.name
+        )));
+    }
+    let mut expected_offset = 0u64;
+    for extent in &partition.extents {
+        if extent.length == 0 || extent.logical_offset != expected_offset {
+            return Err(VolumeAndroidError::InvalidMetadata(format!(
+                "logical partition `{}` extents are not contiguous",
+                partition.name
+            )));
+        }
+        expected_offset = expected_offset.checked_add(extent.length).ok_or(
+            VolumeAndroidError::ArithmeticOverflow("logical partition extent end"),
+        )?;
+    }
+    if expected_offset != partition.size {
+        return Err(VolumeAndroidError::InvalidMetadata(format!(
+            "logical partition `{}` size {} does not match extent end {}",
+            partition.name, partition.size, expected_offset
+        )));
+    }
+    Ok(())
 }
 
 fn validate_source_bounds(source: &dyn EvidenceReader, partition: &LogicalPartition) -> Result<()> {

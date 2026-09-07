@@ -28,15 +28,17 @@ pub struct LpGeometry {
 
 impl LpGeometry {
     pub fn read<R: Read + Seek>(source: &mut R) -> Result<Self> {
-        match read_copy(source, PRIMARY_GEOMETRY_OFFSET, GeometryCopy::Primary) {
-            Ok(geometry) => Ok(geometry),
-            Err(primary) => match read_copy(source, BACKUP_GEOMETRY_OFFSET, GeometryCopy::Backup) {
-                Ok(geometry) => Ok(geometry),
-                Err(backup) => Err(VolumeAndroidError::GeometryCopiesInvalid {
-                    primary: primary.to_string(),
-                    backup: backup.to_string(),
-                }),
-            },
+        let primary = read_copy(source, PRIMARY_GEOMETRY_OFFSET, GeometryCopy::Primary);
+        let backup = read_copy(source, BACKUP_GEOMETRY_OFFSET, GeometryCopy::Backup);
+        match (primary, backup) {
+            (Ok(primary), Ok(backup)) if same_geometry(primary, backup) => Ok(primary),
+            (Ok(_), Ok(_)) => Err(VolumeAndroidError::GeometryCopiesConflict),
+            (Ok(primary), Err(_)) => Ok(primary),
+            (Err(_), Ok(backup)) => Ok(backup),
+            (Err(primary), Err(backup)) => Err(VolumeAndroidError::GeometryCopiesInvalid {
+                primary: primary.to_string(),
+                backup: backup.to_string(),
+            }),
         }
     }
 
@@ -75,6 +77,12 @@ impl LpGeometry {
                 "total metadata size",
             ))
     }
+}
+
+fn same_geometry(left: LpGeometry, right: LpGeometry) -> bool {
+    left.metadata_max_size == right.metadata_max_size
+        && left.metadata_slot_count == right.metadata_slot_count
+        && left.logical_block_size == right.logical_block_size
 }
 
 fn read_copy<R: Read + Seek>(

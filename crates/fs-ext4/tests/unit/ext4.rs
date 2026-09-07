@@ -312,6 +312,88 @@ mod cases {
     }
 
     #[test]
+    fn encrypted_ext4_inode_is_marked_and_never_read_as_plaintext() {
+        let mut img = build_ext4_fixture();
+        img[FILE_INODE_OFFSET + I_FLAGS_OFFSET..FILE_INODE_OFFSET + I_FLAGS_OFFSET + 4]
+            .copy_from_slice(&EXT4_ENCRYPT_FL.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let file = ext4
+            .list_children("")
+            .unwrap()
+            .into_iter()
+            .find(|node| node.name == "test.txt")
+            .expect("encrypted test file");
+        assert!(file.encrypted);
+
+        let error = match ext4.open_file("test.txt") {
+            Ok(_) => panic!("encrypted file was read"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+        let error = ext4
+            .read_file_range("test.txt", 0, 4)
+            .expect_err("encrypted range was read");
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn encrypted_ext4_directory_is_marked_and_rejected() {
+        let mut img = build_ext4_fixture();
+        img[SUBDIR_INODE_OFFSET + I_FLAGS_OFFSET..SUBDIR_INODE_OFFSET + I_FLAGS_OFFSET + 4]
+            .copy_from_slice(&EXT4_ENCRYPT_FL.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let subdir = ext4
+            .list_children("")
+            .unwrap()
+            .into_iter()
+            .find(|node| node.name == "subdir")
+            .expect("encrypted subdirectory");
+        assert!(subdir.encrypted);
+
+        let error = ext4
+            .list_children("subdir")
+            .expect_err("encrypted directory was traversed");
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn directory_listing_does_not_fabricate_nodes_for_unreadable_inodes() {
+        let mut img = build_ext4_fixture();
+        let directory_entry_inode = 12288 + 24;
+        img[directory_entry_inode..directory_entry_inode + 4].copy_from_slice(&99u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4
+            .list_children("")
+            .expect_err("unreadable inode was downgraded to a fake node");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn reports_ext4_fscrypt_superblock_feature_without_claiming_all_files_are_encrypted() {
+        let mut img = build_ext4_fixture();
+        let feature_offset = 1024 + 0x60;
+        img[feature_offset..feature_offset + 4]
+            .copy_from_slice(&EXT4_FEATURE_INCOMPAT_ENCRYPT.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        assert!(ext4.has_encryption_feature());
+        let file = ext4
+            .list_children("")
+            .unwrap()
+            .into_iter()
+            .find(|node| node.name == "test.txt")
+            .expect("plain test file");
+        assert!(!file.encrypted);
+    }
+
+    #[test]
     fn test_large_sparse_file_range_reads_only_requested_extent() {
         let marker = b"EXT4-RANGE-ONLY";
         let (img, offset) = build_large_sparse_ext4_fixture(marker);

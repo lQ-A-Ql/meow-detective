@@ -12,7 +12,7 @@ pub struct FsNode {
     pub system: bool,
     /// True when the filesystem metadata exposes no write permission.
     pub read_only: bool,
-    /// True when the file is encrypted via NTFS Encrypting File System (EFS).
+    /// True when filesystem metadata marks the file or directory as encrypted.
     pub encrypted: bool,
     /// True when the archive bit is set (NTFS/FAT/exFAT directory metadata).
     /// Filesystems without an archive concept always report false.

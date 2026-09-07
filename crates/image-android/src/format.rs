@@ -113,6 +113,69 @@ impl SparseImage {
         &self.checksums
     }
 
+    /// Verify the optional AOSP logical image checksum and CRC32 checkpoints.
+    ///
+    /// The sparse container remains lazy after parsing; callers that need an
+    /// integrity claim must explicitly request this bounded streaming pass.
+    pub fn verify_integrity<R: Read + Seek>(&self, source: &mut R) -> Result<()> {
+        let mut checksum = 0u32;
+        let mut checkpoint_index = 0usize;
+        for chunk in &self.chunks {
+            let mut remaining = chunk.logical_length;
+            let mut logical_offset = chunk.logical_offset;
+            let mut buffer = [0u8; 64 * 1024];
+            while remaining > 0 {
+                let length = remaining.min(buffer.len() as u64) as usize;
+                match chunk.kind {
+                    SparseChunkKind::Raw => {
+                        let source_offset = chunk
+                            .source_offset
+                            .checked_add(logical_offset - chunk.logical_offset)
+                            .ok_or(SparseImageError::ArithmeticOverflow(
+                                "integrity source offset",
+                            ))?;
+                        source.seek(SeekFrom::Start(source_offset))?;
+                        source.read_exact(&mut buffer[..length])?;
+                    }
+                    SparseChunkKind::Fill(pattern) => {
+                        fill_pattern(
+                            &mut buffer[..length],
+                            &pattern,
+                            logical_offset - chunk.logical_offset,
+                        );
+                    }
+                    SparseChunkKind::DontCare => buffer[..length].fill(0),
+                }
+                checksum = crc32(checksum, &buffer[..length]);
+                logical_offset = logical_offset.checked_add(length as u64).ok_or(
+                    SparseImageError::ArithmeticOverflow("integrity logical offset"),
+                )?;
+                remaining -= length as u64;
+            }
+            while checkpoint_index < self.checksums.len()
+                && self.checksums[checkpoint_index].logical_offset
+                    <= chunk.logical_offset + chunk.logical_length
+            {
+                let checkpoint = self.checksums[checkpoint_index];
+                if checkpoint.value != checksum {
+                    return Err(SparseImageError::Crc32Mismatch {
+                        offset: checkpoint.logical_offset,
+                        expected: checkpoint.value,
+                        actual: checksum,
+                    });
+                }
+                checkpoint_index += 1;
+            }
+        }
+        if self.header.image_checksum != 0 && self.header.image_checksum != checksum {
+            return Err(SparseImageError::ChecksumMismatch {
+                expected: self.header.image_checksum,
+                actual: checksum,
+            });
+        }
+        Ok(())
+    }
+
     pub(crate) fn chunk_for(&self, offset: u64) -> Option<&SparseChunk> {
         let index = self
             .chunks
@@ -125,6 +188,23 @@ impl SparseImage {
             .checked_add(chunk.logical_length)
             .is_some_and(|end| offset < end)
             .then_some(chunk)
+    }
+}
+
+fn crc32(mut checksum: u32, bytes: &[u8]) -> u32 {
+    for byte in bytes {
+        checksum ^= u32::from(*byte);
+        for _ in 0..8 {
+            checksum = (checksum >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(checksum & 1));
+        }
+    }
+    checksum
+}
+
+fn fill_pattern(buffer: &mut [u8], pattern: &[u8; 4], offset: u64) {
+    let start = (offset % 4) as usize;
+    for (index, byte) in buffer.iter_mut().enumerate() {
+        *byte = pattern[(start + index) % 4];
     }
 }
 

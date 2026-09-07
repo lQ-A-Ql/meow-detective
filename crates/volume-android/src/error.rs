@@ -18,6 +18,8 @@ pub enum VolumeAndroidError {
     InvalidMetadata(String),
     #[error("both geometry copies are invalid: primary={primary}; backup={backup}")]
     GeometryCopiesInvalid { primary: String, backup: String },
+    #[error("Android dynamic-partition geometry copies disagree")]
+    GeometryCopiesConflict,
     #[error(
         "both metadata copies are invalid for slot {slot}: primary={primary}; backup={backup}"
     )]
@@ -26,6 +28,8 @@ pub enum VolumeAndroidError {
         primary: String,
         backup: String,
     },
+    #[error("Android dynamic-partition metadata copies disagree for slot {slot}")]
+    MetadataCopiesConflict { slot: u32 },
     #[error("Android dynamic-partition arithmetic overflow while calculating {0}")]
     ArithmeticOverflow(&'static str),
     #[error(

@@ -100,6 +100,23 @@ fn reads_wide_indexed_chunks_and_larger_chunk_sizes() {
 }
 
 #[test]
+fn reads_chunked_file_with_nonzero_volume_offset() {
+    let mut filesystem = chunked_image(0, 3 * BLOCK_SIZE as u64);
+    write_u32(&mut filesystem, FILE_INDEX, 4);
+    filesystem[4 * BLOCK_SIZE..5 * BLOCK_SIZE].fill(b'E');
+    let mut image = vec![0u8; BLOCK_SIZE];
+    image.extend(filesystem);
+    let reader = ErofsReader::open(Box::new(MemoryReader::new(image)), BLOCK_SIZE as u64)
+        .expect("open offset chunked EROFS");
+    assert_eq!(
+        reader
+            .read_file_range("hello.txt", 0, 4)
+            .expect("read offset chunk"),
+        b"EEEE"
+    );
+}
+
+#[test]
 fn rejects_external_chunk_devices_and_missing_feature_flags() {
     let mut external = chunked_image(0x0020, 10);
     write_chunk_index(&mut external, FILE_INDEX, 4, 1);
@@ -116,6 +133,19 @@ fn rejects_external_chunk_devices_and_missing_feature_flags() {
         Err(error) => error,
     };
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn rejects_chunk_index_table_beyond_filesystem() {
+    let image = chunked_image(0, u64::from(u32::MAX));
+    let error = match open(image).open_file("hello.txt") {
+        Ok(_) => panic!("chunk index table outside filesystem was accepted"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error
+        .to_string()
+        .contains("chunk index table exceeds filesystem"));
 }
 
 fn chunked_image(format: u16, size: u64) -> Vec<u8> {

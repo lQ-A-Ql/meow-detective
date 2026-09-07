@@ -210,6 +210,30 @@ fn falls_back_to_valid_geometry_and_metadata_backups() {
 }
 
 #[test]
+fn rejects_conflicting_valid_geometry_copies() {
+    let mut image = valid_super_image(0);
+    let offset = GEOMETRY_BACKUP;
+    write_u32(&mut image, offset + 40, 8192);
+    rewrite_geometry_checksum(&mut image, offset);
+    let error = SuperMetadata::read_slot(&mut std::io::Cursor::new(image), 0)
+        .expect_err("conflicting geometry copies were accepted");
+    assert!(matches!(error, VolumeAndroidError::GeometryCopiesConflict));
+}
+
+#[test]
+fn rejects_conflicting_valid_metadata_copies() {
+    let mut image = valid_super_image(0);
+    let backup = metadata_bytes(1);
+    image[METADATA_BACKUP..METADATA_BACKUP + backup.len()].copy_from_slice(&backup);
+    let error = SuperMetadata::read_slot(&mut std::io::Cursor::new(image), 0)
+        .expect_err("conflicting metadata copies were accepted");
+    assert!(matches!(
+        error,
+        VolumeAndroidError::MetadataCopiesConflict { slot: 0 }
+    ));
+}
+
+#[test]
 fn rejects_both_metadata_copies_when_tables_are_tampered() {
     let mut image = valid_super_image(0);
     image[METADATA_PRIMARY + 128] ^= 0x01;
@@ -229,6 +253,35 @@ fn applies_slot_suffix_without_guessing_an_active_slot() {
         .expect("slot-suffixed metadata");
     assert!(metadata.partition("system_a").is_some());
     assert!(metadata.partition("system").is_none());
+}
+
+#[test]
+fn rejects_non_contiguous_public_partition_mapping() {
+    let source = RawImageReader::open(write_temp(&vec![0u8; IMAGE_SIZE]).path()).unwrap();
+    let partition = volume_android::LogicalPartition {
+        name: "forged".to_string(),
+        attributes: 0,
+        group_index: 0,
+        size: 1024,
+        disabled: false,
+        extents: vec![
+            volume_android::LogicalExtent {
+                logical_offset: 0,
+                length: 512,
+                target: volume_android::LogicalExtentTarget::Zero,
+            },
+            volume_android::LogicalExtent {
+                logical_offset: 1024,
+                length: 512,
+                target: volume_android::LogicalExtentTarget::Zero,
+            },
+        ],
+    };
+    let error = match LogicalPartitionReader::new(Box::new(source), partition) {
+        Ok(_) => panic!("forged mapping unexpectedly accepted"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("not contiguous"));
 }
 
 fn valid_super_image(partition_attributes: u32) -> Vec<u8> {
@@ -272,6 +325,12 @@ fn geometry_bytes() -> Vec<u8> {
     let checksum = Sha256::digest(&bytes);
     bytes[8..40].copy_from_slice(&checksum);
     bytes
+}
+
+fn rewrite_geometry_checksum(image: &mut [u8], offset: usize) {
+    image[offset + 8..offset + 40].fill(0);
+    let checksum = Sha256::digest(&image[offset..offset + 52]);
+    image[offset + 8..offset + 40].copy_from_slice(&checksum);
 }
 
 fn metadata_bytes(partition_attributes: u32) -> Vec<u8> {

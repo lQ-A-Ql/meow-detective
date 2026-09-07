@@ -191,8 +191,12 @@ fn open_fat<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
-    let (reader, offset) =
+    let (mut reader, offset) =
         open_candidate_block_reader(Path::new(source_path), candidate, open_reader)?;
+    if looks_like_exfat_boot_sector(reader.as_mut(), offset)? {
+        let fs = fs_exfat::ExfatReader::open(reader, offset)?;
+        return open_first_image_path(&fs, paths);
+    }
     match fs_fat::FatReader::open(reader, offset) {
         Ok(fs) => open_first_image_path(&fs, paths),
         Err(fat_error) => {

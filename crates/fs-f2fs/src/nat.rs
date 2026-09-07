@@ -15,6 +15,7 @@ pub(crate) struct NatEntry {
 
 pub(crate) struct NatTable {
     nat_block: u32,
+    main_block: u32,
     blocks_per_segment: u32,
     bitmap: Vec<u8>,
     journal: HashMap<u32, NatEntry>,
@@ -37,6 +38,7 @@ impl NatTable {
             .collect();
         Self {
             nat_block: superblock.nat_block,
+            main_block: superblock.main_block,
             blocks_per_segment: superblock.blocks_per_segment,
             bitmap: checkpoint.nat_bitmap.clone(),
             journal,
@@ -58,6 +60,11 @@ impl NatTable {
         let block_index = nid / NAT_ENTRIES_PER_BLOCK;
         let entry_index = nid % NAT_ENTRIES_PER_BLOCK;
         let mut block = self.current_block(block_index)?;
+        if block >= self.main_block {
+            return Err(F2fsError::Invalid(format!(
+                "NAT block {block} is outside the NAT area"
+            )));
+        }
         if block >= u32::MAX - 1 {
             return Err(F2fsError::Invalid(
                 "NAT block address overflows".to_string(),

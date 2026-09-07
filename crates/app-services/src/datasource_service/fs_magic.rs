@@ -118,6 +118,14 @@ where
     Ok(sector)
 }
 
+pub(crate) fn read_exfat_boot<R>(reader: &mut R, offset: u64) -> Result<bool>
+where
+    R: Read + Seek + ?Sized,
+{
+    let sector = read_sector(reader, offset)?;
+    Ok(&sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA])
+}
+
 fn looks_like_bitlocker_boot_sector(sector: &[u8; 512]) -> bool {
     &sector[3..11] == b"-FVE-FS-"
 }

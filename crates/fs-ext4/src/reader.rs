@@ -27,6 +27,7 @@ pub struct Ext4Reader {
     pub(crate) num_block_groups: u32,
     pub(crate) has_journal: bool,
     pub(crate) journal_inode: Option<u32>,
+    pub(crate) has_encryption_feature: bool,
     pub(crate) volume_offset: u64,
     pub(crate) metadata_block_cache: RefCell<BlockCache>,
 }
@@ -55,6 +56,7 @@ impl Ext4Reader {
             num_block_groups: superblock.num_block_groups,
             has_journal: superblock.has_journal,
             journal_inode: superblock.journal_inode,
+            has_encryption_feature: superblock.has_encryption_feature,
             volume_offset: offset,
             metadata_block_cache: RefCell::new(BlockCache::with_byte_budget(
                 superblock.block_size,
@@ -200,6 +202,28 @@ impl Ext4Reader {
             .get(0..2)
             .ok_or_else(|| invalid_fs_data("inode is too short to contain a mode"))?;
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    pub fn inode_flags(inode: &[u8]) -> io::Result<u32> {
+        let bytes = inode
+            .get(crate::format::I_FLAGS_OFFSET..crate::format::I_FLAGS_OFFSET + 4)
+            .ok_or_else(|| invalid_fs_data("inode is too short to contain flags"))?;
+        Ok(u32::from_le_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ))
+    }
+
+    pub fn inode_is_encrypted(inode: &[u8]) -> io::Result<bool> {
+        Ok(Self::inode_flags(inode)? & crate::format::EXT4_ENCRYPT_FL != 0)
+    }
+
+    /// Returns whether the filesystem advertises ext4 fscrypt support.
+    ///
+    /// This is a format capability, not proof that every inode is encrypted.
+    pub fn has_encryption_feature(&self) -> bool {
+        self.has_encryption_feature
     }
 
     pub fn inode_size(inode: &[u8]) -> io::Result<u64> {

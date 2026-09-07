@@ -226,7 +226,12 @@ fn open_fat_candidate(
     partition_index: usize,
     source_kind: &domain::DataSourceKind,
 ) -> Result<Option<Box<dyn Read>>, FileServiceError> {
-    let (reader, offset) = candidate_reader(source_path, candidate, source_kind)?;
+    let (mut reader, offset) = candidate_reader(source_path, candidate, source_kind)?;
+    if looks_like_exfat_boot_sector(reader.as_mut(), offset)? {
+        return Ok(fs_exfat::ExfatReader::open(reader, offset)
+            .ok()
+            .and_then(|fs| open_first_image_path(&fs, paths).ok()));
+    }
     if let Ok(fs) = fs_fat::FatReader::open(reader, offset) {
         return Ok(open_first_image_path(&fs, paths).ok());
     }

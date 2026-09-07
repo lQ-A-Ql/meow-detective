@@ -71,29 +71,31 @@ impl SuperMetadata {
     pub fn read_slot<R: Read + Seek>(source: &mut R, slot_number: u32) -> Result<Self> {
         let geometry = LpGeometry::read(source)?;
         let primary_offset = geometry.primary_metadata_offset(slot_number)?;
-        match read_metadata_copy(
+        let primary = read_metadata_copy(
             source,
             geometry,
             slot_number,
             primary_offset,
             MetadataCopy::Primary,
-        ) {
-            Ok(metadata) => Ok(metadata),
-            Err(primary) => {
-                let backup_offset = geometry.backup_metadata_offset(slot_number)?;
-                read_metadata_copy(
-                    source,
-                    geometry,
-                    slot_number,
-                    backup_offset,
-                    MetadataCopy::Backup,
-                )
-                .map_err(|backup| VolumeAndroidError::MetadataCopiesInvalid {
-                    slot: slot_number,
-                    primary: primary.to_string(),
-                    backup: backup.to_string(),
-                })
-            }
+        );
+        let backup_offset = geometry.backup_metadata_offset(slot_number)?;
+        let backup = read_metadata_copy(
+            source,
+            geometry,
+            slot_number,
+            backup_offset,
+            MetadataCopy::Backup,
+        );
+        match (primary, backup) {
+            (Ok(primary), Ok(backup)) if same_metadata(&primary, &backup) => Ok(primary),
+            (Ok(_), Ok(_)) => Err(VolumeAndroidError::MetadataCopiesConflict { slot: slot_number }),
+            (Ok(primary), Err(_)) => Ok(primary),
+            (Err(_), Ok(backup)) => Ok(backup),
+            (Err(primary), Err(backup)) => Err(VolumeAndroidError::MetadataCopiesInvalid {
+                slot: slot_number,
+                primary: primary.to_string(),
+                backup: backup.to_string(),
+            }),
         }
     }
 
@@ -102,6 +104,17 @@ impl SuperMetadata {
             .iter()
             .find(|partition| partition.name == name)
     }
+}
+
+fn same_metadata(left: &SuperMetadata, right: &SuperMetadata) -> bool {
+    left.geometry.metadata_max_size == right.geometry.metadata_max_size
+        && left.geometry.metadata_slot_count == right.geometry.metadata_slot_count
+        && left.geometry.logical_block_size == right.geometry.logical_block_size
+        && left.slot_number == right.slot_number
+        && left.minor_version == right.minor_version
+        && left.header_flags == right.header_flags
+        && left.partitions == right.partitions
+        && left.block_devices == right.block_devices
 }
 
 fn read_metadata_copy<R: Read + Seek>(

@@ -18,7 +18,9 @@ pub(crate) const S_IFLNK: u16 = 0xA000;
 pub(crate) const I_BLOCK_SIZE: usize = 60;
 pub(crate) const I_FLAGS_OFFSET: usize = 0x20;
 pub(crate) const EXT4_EXTENTS_FL: u32 = 0x0008_0000;
+pub(crate) const EXT4_ENCRYPT_FL: u32 = 0x0000_0800;
 pub(crate) const EXT4_INLINE_DATA_FL: u32 = 0x1000_0000;
+pub(crate) const EXT4_FEATURE_INCOMPAT_ENCRYPT: u32 = 0x0001_0000;
 /// On-disk maximum depth of an ext4 extent tree.
 pub(crate) const EXT4_EXTENT_MAX_DEPTH: u16 = 5;
 

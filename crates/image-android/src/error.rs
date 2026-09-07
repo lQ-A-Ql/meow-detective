@@ -16,6 +16,14 @@ pub enum SparseImageError {
     ArithmeticOverflow(&'static str),
     #[error("sparse image has no chunk covering logical offset {0}")]
     MissingChunk(u64),
+    #[error("sparse image checksum mismatch: expected {expected:#010x}, computed {actual:#010x}")]
+    ChecksumMismatch { expected: u32, actual: u32 },
+    #[error("sparse image CRC32 chunk mismatch at logical offset {offset}: expected {expected:#010x}, computed {actual:#010x}")]
+    Crc32Mismatch {
+        offset: u64,
+        expected: u32,
+        actual: u32,
+    },
 }
 
 impl SparseImageError {

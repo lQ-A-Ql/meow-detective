@@ -35,6 +35,11 @@ impl AndroidSparseReader {
         &self.image
     }
 
+    /// Verify the sparse container against its declared logical checksums.
+    pub fn verify_integrity(&mut self) -> Result<()> {
+        self.image.verify_integrity(&mut self.file)
+    }
+
     pub fn logical_size(&self) -> u64 {
         self.image.logical_size()
     }

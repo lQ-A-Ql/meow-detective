@@ -297,7 +297,11 @@ fn open_ceph_rbd_filesystem(
     let filesystem: Box<dyn FileSystemReader> = if kind == "NTFS" {
         Box::new(fs_ntfs::NtfsReader::open(reader, fs_offset)?)
     } else if is_fat_filesystem_kind(kind) {
-        Box::new(fs_fat::FatReader::open(reader, fs_offset)?)
+        if looks_like_exfat_boot_sector(reader.as_mut(), fs_offset).unwrap_or(false) {
+            Box::new(fs_exfat::ExfatReader::open(reader, fs_offset)?)
+        } else {
+            Box::new(fs_fat::FatReader::open(reader, fs_offset)?)
+        }
     } else if is_linux_filesystem_kind(kind) {
         open_linux_ceph_rbd_filesystem(kind, reader, fs_offset)?
     } else if is_exfat_filesystem_kind(kind)
