@@ -34,7 +34,7 @@ fn preview_descriptor_for_entry(
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
 
     let partition_candidates = match source_kind.as_str() {
-        "logical_directory" | "ceph_fs" => Vec::new(),
+        "logical_directory" | "logical_archive" | "ceph_fs" => Vec::new(),
         "e01" | "ceph_rbd" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
@@ -44,20 +44,14 @@ fn preview_descriptor_for_entry(
                 expected_partition_index,
             )?
         }
-        "raw" | "local_disk" => {
+        "raw" | "local_disk" | "android_sparse" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
-            if source_kind == "local_disk" {
-                crate::file_service::viewer::local_disk_partition_candidates(
-                    &source_path,
-                    expected_partition_index,
-                )?
-            } else {
-                crate::file_service::viewer::raw_partition_candidates(
-                    &source_path,
-                    expected_partition_index,
-                )?
-            }
+            crate::file_service::viewer::block_partition_candidates(
+                &source_path,
+                expected_partition_index,
+                &source_kind,
+            )?
         }
         other => {
             return Err(FileServiceError::other(format!(

@@ -1,3 +1,7 @@
+pub mod archive;
+mod archive_helpers;
+mod archive_index;
+mod archive_readers;
 mod diagnostic;
 mod errors;
 pub mod logical_fs;

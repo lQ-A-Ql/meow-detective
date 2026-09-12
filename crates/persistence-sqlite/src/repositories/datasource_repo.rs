@@ -382,6 +382,8 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
         DataSourceKind::E01 => "e01",
         DataSourceKind::LocalDisk => "local_disk",
         DataSourceKind::LogicalDirectory => "logical_directory",
+        DataSourceKind::LogicalArchive => "logical_archive",
+        DataSourceKind::AndroidSparse => "android_sparse",
         DataSourceKind::CephRbd => "ceph_rbd",
         DataSourceKind::CephFs => "ceph_fs",
     }
@@ -392,6 +394,8 @@ fn str_to_kind(s: &str) -> DataSourceKind {
         "e01" => DataSourceKind::E01,
         "local_disk" => DataSourceKind::LocalDisk,
         "logical_directory" => DataSourceKind::LogicalDirectory,
+        "logical_archive" => DataSourceKind::LogicalArchive,
+        "android_sparse" => DataSourceKind::AndroidSparse,
         "ceph_rbd" => DataSourceKind::CephRbd,
         "ceph_fs" => DataSourceKind::CephFs,
         _ => DataSourceKind::Raw,

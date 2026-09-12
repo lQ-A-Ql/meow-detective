@@ -63,7 +63,7 @@ fn source_version_order_accepts_equal_and_newer_versions() {
         "source_031_mount_directory_index"
     ));
     assert!(runner::source_version_is_at_least(
-        "source_035_file_entry_unix_mode",
+        "source_036_android_analysis",
         "source_034_file_entry_archive"
     ));
 }
@@ -174,7 +174,7 @@ fn source_024_through_032_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 12);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 13);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(

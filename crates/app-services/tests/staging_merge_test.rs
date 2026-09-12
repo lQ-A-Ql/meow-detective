@@ -1,14 +1,42 @@
 mod staging_support;
 
 use app_services::staging::{
-    get_staging_meta, merge_all_staging_to_main, merge_all_staging_to_main_with_stats,
-    merge_analysis_staging_to_main, open_analysis_staging, open_partition_staging,
-    set_staging_meta, set_worker_meta, StagingManifest,
+    get_staging_meta, merge_all_staging_to_main, merge_all_staging_to_main_with_cancel,
+    merge_all_staging_to_main_with_stats, merge_analysis_staging_to_main, open_analysis_staging,
+    open_partition_staging, set_staging_meta, set_worker_meta, StagingError, StagingManifest,
 };
 use rusqlite::params;
 use staging_support::{
     attached_db_names, create_main_analysis_tables, create_main_file_entries_table, done_partition,
 };
+
+#[test]
+fn staging_merge_honors_cancellation_before_writing() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let main = persistence_sqlite::connection::open_in_memory().unwrap();
+    create_main_file_entries_table(&main);
+    let mut manifest = StagingManifest::create("ds-cancel", "/test.E01", "E01");
+    manifest.partitions.push(done_partition(0, "P0", 1));
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+
+    let error = match merge_all_staging_to_main_with_cancel(
+        &main,
+        tmp.path(),
+        "ds-cancel",
+        &manifest,
+        None,
+        Some(&cancelled),
+    ) {
+        Ok(_) => panic!("cancelled merge unexpectedly succeeded"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(error, StagingError::Cancelled));
+    let total: i64 = main
+        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(total, 0);
+}
 
 #[test]
 fn staging_merge_combines_two_partitions_and_reports_progress() {

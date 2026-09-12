@@ -6,8 +6,9 @@ pub mod volume;
 
 pub use filesystem::logical_fs::LogicalFsReader;
 pub use filesystem::{
-    FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemDirectoryLocator,
-    FileSystemFileLocator, FileSystemReadMetrics, FileSystemReader, FsNode, ReadSeek,
+    archive::ArchiveFsReader, FileSystemDiagnostic, FileSystemDiagnosticKind,
+    FileSystemDirectoryLocator, FileSystemFileLocator, FileSystemReadMetrics, FileSystemReader,
+    FsNode, ReadSeek,
 };
 pub use image::iso9660::Iso9660Reader;
 pub use image::local_disk::{list_local_disks, LocalDiskInfo, LocalDiskReader};

@@ -27,7 +27,11 @@ fn unsupported_platform(
             return Ok(Some("missing storage metadata".to_string()));
         };
         match DataSourcePlatform::from_storage_str(Some(&storage.platform)) {
-            Ok(DataSourcePlatform::Windows | DataSourcePlatform::Linux) => {}
+            Ok(
+                DataSourcePlatform::Windows
+                | DataSourcePlatform::Linux
+                | DataSourcePlatform::Android,
+            ) => {}
             Ok(DataSourcePlatform::Unknown) => {
                 return Ok(Some(platform_label(&storage.platform)));
             }

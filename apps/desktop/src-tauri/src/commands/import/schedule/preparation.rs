@@ -74,8 +74,9 @@ pub(super) fn import_platform_from_dto(
     match platform {
         ImportTargetPlatformDto::Windows => Ok(DataSourcePlatform::Windows),
         ImportTargetPlatformDto::Linux => Ok(DataSourcePlatform::Linux),
+        ImportTargetPlatformDto::Android => Ok(DataSourcePlatform::Android),
         ImportTargetPlatformDto::Unsupported => Err(CommandError::unsupported(
-            "unsupported data source platform; only Windows and Linux are supported",
+            "unsupported data source platform; supported values are Windows, Linux, and Android",
         )),
     }
 }

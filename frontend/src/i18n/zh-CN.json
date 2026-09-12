@@ -456,7 +456,8 @@
   "analysis": {
     "platformViews": {
       "windows": "Windows 取证",
-      "linux": "Linux 取证"
+      "linux": "Linux 取证",
+      "android": "Android 取证"
     },
     "tabs": {
       "system": "系统信息",
@@ -467,6 +468,34 @@
       "eventlogs": "事件日志",
       "files": "文件分类",
       "report": "报告"
+    },
+    "sidebar": {
+      "title": "数据源",
+      "description": "按来源展开提取结果",
+      "treeLabel": "数据源树",
+      "collapseSource": "收起数据源",
+      "expandSource": "展开数据源",
+      "deletedRecovery": "删除恢复",
+      "linuxOverview": "概览",
+      "linuxJournal": "系统日志",
+      "linuxLogin": "登录记录",
+      "linuxCommands": "命令历史",
+      "linuxPackages": "软件包",
+      "linuxCron": "定时任务",
+      "linuxSudo": "Sudo",
+      "linuxSystemConfig": "系统配置",
+      "linuxWebServices": "Web 服务",
+      "linuxMysqlServices": "MySQL 服务",
+      "androidOverview": "Android 分析"
+    },
+    "header": {
+      "title": "数据源分析",
+      "capabilities": "证据分类 · 系统信息 · 应用数据",
+      "sourceBound": "分析结果绑定当前数据源，并按平台独立执行。",
+      "selectSource": "请从左侧数据源树选择一个来源后再刷新或运行提取。",
+      "refresh": "刷新",
+      "run": "运行分析",
+      "running": "分析中..."
     },
     "extraction": {
       "Registry": "注册表提取",
@@ -499,6 +528,54 @@
       "eventLogs": "正在读取事件日志...",
       "linuxArtifacts": "正在读取 Linux 痕迹...",
       "files": "正在按元数据分类文件..."
+    },
+    "android": {
+      "deviceTab": "手机信息",
+      "packagesTab": "已安装包",
+      "deviceTitle": "手机信息",
+      "deviceDescription": "标准系统属性与 SettingsProvider 证据",
+      "packagesTitle": "已安装包",
+      "packagesDescription": "PackageManager packages.xml 记录",
+      "notAnalyzed": "当前数据源尚未运行 Android 分析。",
+      "noPackages": "未从已解析的 PackageManager 记录中发现安装包。",
+      "loadMore": "加载更多",
+      "loading": "正在读取 Android 分析结果...",
+      "running": "正在运行 Android 分析...",
+      "lastRun": "已扫描 {{scanned}} 个文件，提取 {{facts}} 项设备字段和 {{packages}} 个安装包",
+      "sourceUnavailable": "当前 Android 数据源尚未就绪，无法运行分析。",
+      "unavailable": "不可用",
+      "packageName": "包名",
+      "appName": "应用名",
+      "versionCode": "版本代码",
+      "installTime": "安装时间",
+      "updateTime": "更新时间",
+      "installer": "安装来源",
+      "uid": "UID",
+      "fields": {
+        "model": "型号",
+        "manufacturer": "制造商",
+        "brand": "品牌",
+        "device": "设备代号",
+        "androidVersion": "Android 版本",
+        "sdkInt": "SDK 版本",
+        "buildId": "Build ID",
+        "buildDisplayId": "Build 显示标识",
+        "buildFingerprint": "Build 指纹",
+        "serialNumber": "序列号",
+        "deviceName": "设备名称",
+        "androidId": "Android ID",
+        "imei": "IMEI"
+      },
+      "imeiUnavailable": "未从已支持且可追溯的系统证据中解析到 IMEI。",
+      "packageResourceUnavailable": "应用标签和图标需由 APK 资源解码器提供；当前使用统一后备标识。",
+      "userStates": {
+        "installed": "已安装",
+        "notInstalled": "未安装",
+        "disabled": "已禁用",
+        "hidden": "已隐藏",
+        "stopped": "已停止",
+        "suspended": "已挂起"
+      }
     }
   },
   "emulationPage": {

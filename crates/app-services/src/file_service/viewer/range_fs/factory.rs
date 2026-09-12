@@ -34,6 +34,16 @@ pub(crate) fn open_filesystem_reader(
             fs_ext4::Ext4Reader::open(reader, filesystem_offset)
                 .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
         }
+        kind if kind.eq_ignore_ascii_case("F2FS") => {
+            fs_f2fs::F2fsReader::open(reader, filesystem_offset)
+                .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
+                .map_err(std::io::Error::other)
+        }
+        kind if kind.eq_ignore_ascii_case("EROFS") => {
+            fs_erofs::ErofsReader::open(reader, filesystem_offset)
+                .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)
+                .map_err(std::io::Error::other)
+        }
         kind if kind.eq_ignore_ascii_case("XFS") => {
             fs_xfs::XfsReader::open(reader, filesystem_offset)
                 .map(|fs| Box::new(fs) as Box<dyn FileSystemReader + Send>)

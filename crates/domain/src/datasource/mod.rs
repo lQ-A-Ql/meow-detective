@@ -17,6 +17,10 @@ pub enum DataSourceKind {
     /// A host-local physical disk exposed through a read-only device handle.
     LocalDisk,
     LogicalDirectory,
+    /// A read-only tar or gzip logical archive.
+    LogicalArchive,
+    /// An Android sparse image backed by a validated logical reader.
+    AndroidSparse,
     CephRbd,
     /// A reconstructed CephFS namespace backed by a cluster source set.
     CephFs,
@@ -77,6 +81,8 @@ impl fmt::Display for DataSourceKind {
             Self::Raw => write!(f, "raw"),
             Self::LocalDisk => write!(f, "local_disk"),
             Self::LogicalDirectory => write!(f, "logical_directory"),
+            Self::LogicalArchive => write!(f, "logical_archive"),
+            Self::AndroidSparse => write!(f, "android_sparse"),
             Self::CephRbd => write!(f, "ceph_rbd"),
             Self::CephFs => write!(f, "ceph_fs"),
         }

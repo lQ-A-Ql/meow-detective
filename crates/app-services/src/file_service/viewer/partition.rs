@@ -95,6 +95,17 @@ pub(crate) fn local_disk_partition_candidates(
     )
 }
 
+pub(crate) fn android_sparse_partition_candidates(
+    source_path: &str,
+    expected_partition_index: Option<usize>,
+) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
+    partition_candidates_for_kind(
+        source_path,
+        expected_partition_index,
+        &domain::DataSourceKind::AndroidSparse,
+    )
+}
+
 pub(crate) fn block_partition_candidates(
     source_path: &str,
     expected_partition_index: Option<usize>,
@@ -103,6 +114,9 @@ pub(crate) fn block_partition_candidates(
     match source_kind {
         "raw" => raw_partition_candidates(source_path, expected_partition_index),
         "local_disk" => local_disk_partition_candidates(source_path, expected_partition_index),
+        "android_sparse" => {
+            android_sparse_partition_candidates(source_path, expected_partition_index)
+        }
         other => Err(FileServiceError::other(format!(
             "unsupported block source kind '{other}'"
         ))),
@@ -182,10 +196,10 @@ fn partition_candidates_for_kind(
     require_unambiguous_candidates(
         candidates,
         expected_partition_index,
-        if *source_kind == domain::DataSourceKind::LocalDisk {
-            "LOCAL_DISK"
-        } else {
-            "RAW"
+        match source_kind {
+            domain::DataSourceKind::LocalDisk => "LOCAL_DISK",
+            domain::DataSourceKind::AndroidSparse => "ANDROID_SPARSE",
+            _ => "RAW",
         },
     )
 }
@@ -198,6 +212,11 @@ fn open_block_reader(
         domain::DataSourceKind::Raw => Ok(Box::new(RawImageReader::open(Path::new(source_path))?)),
         domain::DataSourceKind::LocalDisk => {
             Ok(Box::new(LocalDiskReader::open(Path::new(source_path))?))
+        }
+        domain::DataSourceKind::AndroidSparse => {
+            image_android::AndroidSparseReader::open(Path::new(source_path))
+                .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                .map_err(|error| FileServiceError::Io(std::io::Error::other(error)))
         }
         _ => Err(FileServiceError::other(
             "partition candidates require a block image reader",
@@ -214,6 +233,8 @@ fn filesystem_kind_label(
         crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
         crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
         crate::datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
+        crate::datasource_service::ImageFilesystemKind::F2fs => "F2FS",
+        crate::datasource_service::ImageFilesystemKind::Erofs => "EROFS",
         crate::datasource_service::ImageFilesystemKind::Xfs => "XFS",
         crate::datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
         crate::datasource_service::ImageFilesystemKind::LvmPool => return None,
@@ -327,6 +348,10 @@ fn direct_exfat_partition_candidate(
         domain::DataSourceKind::LocalDisk => {
             Box::new(LocalDiskReader::open(Path::new(source_path))?)
         }
+        domain::DataSourceKind::AndroidSparse => Box::new(
+            image_android::AndroidSparseReader::open(Path::new(source_path))
+                .map_err(|error| FileServiceError::Io(std::io::Error::other(error)))?,
+        ),
         _ => {
             return Err(FileServiceError::other(
                 "direct exFAT probe requires a block image reader",

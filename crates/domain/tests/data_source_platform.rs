@@ -5,6 +5,7 @@ fn platform_storage_values_are_stable_and_round_trip() {
     let cases = [
         (DataSourcePlatform::Windows, "windows"),
         (DataSourcePlatform::Linux, "linux"),
+        (DataSourcePlatform::Android, "android"),
         (DataSourcePlatform::Unknown, "unknown"),
     ];
 
@@ -42,7 +43,7 @@ fn absent_or_blank_storage_values_map_to_unknown() {
 }
 
 #[test]
-fn explicit_platform_accepts_only_windows_or_linux() {
+fn explicit_platform_accepts_supported_platforms() {
     assert_eq!(
         DataSourcePlatform::parse_explicit(" windows "),
         Ok(DataSourcePlatform::Windows)
@@ -50,6 +51,10 @@ fn explicit_platform_accepts_only_windows_or_linux() {
     assert_eq!(
         DataSourcePlatform::parse_explicit("LINUX"),
         Ok(DataSourcePlatform::Linux)
+    );
+    assert_eq!(
+        DataSourcePlatform::parse_explicit("Android"),
+        Ok(DataSourcePlatform::Android)
     );
     assert_eq!(
         DataSourcePlatform::parse_explicit("unknown"),
@@ -67,7 +72,7 @@ fn explicit_platform_accepts_only_windows_or_linux() {
 
 #[test]
 fn retired_and_invalid_platforms_are_rejected_instead_of_downgraded() {
-    for value in ["macos", "android", "not-a-platform"] {
+    for value in ["macos", "not-a-platform"] {
         let expected = DataSourcePlatformParseError::UnsupportedValue {
             value: value.to_owned(),
         };

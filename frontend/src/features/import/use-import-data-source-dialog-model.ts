@@ -11,7 +11,23 @@ export function useImportDataSourceDialogModel() {
         filters: [
           {
             name: filterName,
-            extensions: ['e01', 'E01', 'ewf', 'dd', 'raw', 'img', 'iso', 'vmdk'],
+            extensions: [
+              'e01',
+              'E01',
+              'ewf',
+              'dd',
+              'raw',
+              'img',
+              'simg',
+              'sparse',
+              'iso',
+              'vmdk',
+              'tar',
+              'tar.gz',
+              'tgz',
+              'gz',
+              'gzip',
+            ],
           },
         ],
       });

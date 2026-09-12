@@ -101,6 +101,8 @@ pub enum ImageFilesystemKind {
     Iso9660,
     BitLocker,
     Ext4,
+    F2fs,
+    Erofs,
     Xfs,
     Btrfs,
     LvmPool,

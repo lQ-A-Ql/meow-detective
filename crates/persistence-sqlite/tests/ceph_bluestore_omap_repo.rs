@@ -230,7 +230,7 @@ fn source_migrations_install_raw_free_omap_schema_and_targeted_indexes() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_035_file_entry_unix_mode"
+        "source_036_android_analysis"
     );
     for table in [
         "ceph_bluestore_omap_scans",

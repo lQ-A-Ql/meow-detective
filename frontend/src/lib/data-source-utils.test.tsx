@@ -3,6 +3,9 @@ import type { DataSourceSummary } from '@/types/models';
 import {
   dataSourcePlatformLabel,
   inferDataSourcePlatform,
+  sourceKindIcon,
+  sourceKindIconLarge,
+  sourceKindLabel,
   type DataSourcePlatform,
 } from './data-source-utils';
 
@@ -23,8 +26,10 @@ function dataSource(
 
 describe('data source platform selection', () => {
   it('exposes only backend-supported persisted platform values', () => {
-    expectTypeOf<DataSourcePlatform>().toEqualTypeOf<'windows' | 'linux'>();
-    expectTypeOf<DataSourceSummary['platform']>().toEqualTypeOf<'windows' | 'linux'>();
+    expectTypeOf<DataSourcePlatform>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
+    expectTypeOf<DataSourceSummary['platform']>().toEqualTypeOf<
+      'windows' | 'linux' | 'android'
+    >();
   });
 
   it('keeps persisted Windows platform despite Linux-looking metadata', () => {
@@ -63,5 +68,25 @@ describe('data source platform selection', () => {
 
     expect(inferDataSourcePlatform(source)).toBe('linux');
     expect(dataSourcePlatformLabel(source)).toBe('Linux');
+  });
+});
+
+describe('Android platform presentation', () => {
+  it('keeps Android as a distinct persisted platform', () => {
+    const source = dataSource('android', {});
+    expect(inferDataSourcePlatform(source)).toBe('android');
+    expect(dataSourcePlatformLabel(source)).toBe('Android');
+  });
+});
+
+describe('logical archive presentation', () => {
+  it('uses a stable label and archive icons', () => {
+    expect(sourceKindLabel('logical_archive')).toBe('归档');
+    expect(sourceKindIcon('logical_archive')).toBe(sourceKindIconLarge('logical_archive'));
+  });
+
+  it('uses a stable local disk label and icon', () => {
+    expect(sourceKindLabel('local_disk')).toBe('本地磁盘');
+    expect(sourceKindIcon('local_disk')).toBe(sourceKindIconLarge('local_disk'));
   });
 });

@@ -110,6 +110,8 @@ pub(crate) fn is_exfat_filesystem_kind(kind: &str) -> bool {
 
 pub(crate) fn is_linux_filesystem_kind(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("ext4")
+        || kind.eq_ignore_ascii_case("f2fs")
+        || kind.eq_ignore_ascii_case("erofs")
         || kind.eq_ignore_ascii_case("xfs")
         || kind.eq_ignore_ascii_case("btrfs")
 }

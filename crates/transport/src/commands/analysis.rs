@@ -59,6 +59,37 @@ impl GetAnalysisSourceRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetAndroidPackagesRequest {
+    pub data_source_id: String,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_analysis_extraction_limit")]
+    pub limit: u32,
+}
+
+impl Default for GetAndroidPackagesRequest {
+    fn default() -> Self {
+        Self {
+            data_source_id: String::new(),
+            offset: 0,
+            limit: default_analysis_extraction_limit(),
+        }
+    }
+}
+
+impl GetAndroidPackagesRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)?;
+        if self.limit == 0 {
+            self.limit = default_analysis_extraction_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetAnalysisExtractionRequest {
     pub data_source_id: String,
     #[serde(default)]

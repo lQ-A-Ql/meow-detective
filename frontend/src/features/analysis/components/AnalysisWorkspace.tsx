@@ -1,6 +1,7 @@
 import { errorMessage } from '@/lib/errors';
 import { AnalysisEmptyState, AnalysisHeader } from '@/features/analysis/components/AnalysisPanels';
 import { AnalysisSourceSidebar } from '@/features/analysis/components/AnalysisSourceSidebar';
+import { AndroidAnalysisView } from '@/features/analysis/components/AndroidAnalysisView';
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
 import type { AnalysisWorkspaceModel } from '@/features/analysis/use-analysis-workspace-model';
@@ -22,9 +23,11 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           linuxNodeCounts={model.linuxNodeCounts}
           activeWindowsTab={model.activeTab}
           activeLinuxTab={model.activeLinuxTab}
+          activeAndroidTab={model.activeAndroidTab}
           onSelectDataSource={model.selectDataSource}
           onWindowsTabChange={model.setActiveTab}
           onLinuxTabChange={model.setActiveLinuxTab}
+          onAndroidTabChange={model.setActiveAndroidTab}
           pluginModules={model.pluginModules}
           activePluginId={model.activePluginId}
           onSelectPluginModule={model.selectPluginModule}
@@ -34,9 +37,13 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
         <AnalysisHeader
           loading={model.loading}
           hasCase={model.hasCase}
-          extractionPending={model.extractionPending}
+          extractionPending={model.selectedPlatform === 'android'
+            ? model.analysisMutationPending
+            : model.extractionPending}
           onRefresh={model.refresh}
-          onRunExtraction={model.runExtraction}
+          onRunExtraction={model.selectedPlatform === 'android'
+            ? model.runAndroidAnalysis
+            : model.runExtraction}
           selectedDataSourceId={model.selectedDataSourceId}
         />
 
@@ -90,6 +97,20 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             pluginModules={model.pluginModules}
             activePluginId={model.activePluginId}
             dataSourceId={model.selectedDataSourceId}
+          />
+        ) : model.selectedPlatform === 'android' ? (
+          <AndroidAnalysisView
+            deviceInfo={model.androidDeviceInfo}
+            packageSummary={model.androidPackages}
+            activePanel={model.activeAndroidTab}
+            loading={model.loading || model.androidLoading}
+            running={model.androidAnalysisRunning}
+            lastRun={model.androidAnalysisLastRun}
+            error={model.androidError ? errorMessage(model.androidError) : undefined}
+            hasMore={model.androidPackagesHasMore}
+            loadingMore={model.androidPackagesLoadingMore}
+            onRetry={model.refresh}
+            onLoadMore={model.loadMoreAndroidPackages}
           />
         ) : null}
       </div>

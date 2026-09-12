@@ -2,9 +2,10 @@ use app_services::analysis_service;
 use domain::DataSourceId;
 use tauri::State;
 use transport::{
-    commands::{ClassifyFilesRequest, GetAnalysisSourceRequest},
+    commands::{ClassifyFilesRequest, GetAnalysisSourceRequest, GetAndroidPackagesRequest},
     dto::{
-        AnalysisFileClassificationDto, AnalysisSystemInfoDto, EvidenceClassificationSummaryDto,
+        AnalysisFileClassificationDto, AnalysisSystemInfoDto, AndroidAnalysisRunDto,
+        AndroidDeviceInfoDto, AndroidPackageSummaryDto, EvidenceClassificationSummaryDto,
         FileClassificationBoardDto,
     },
     CommandError,
@@ -31,6 +32,79 @@ pub async fn get_system_info(
             &active.case_root,
             &active.meta.id,
             &data_source_id,
+            &source_runtime,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn run_android_analysis(
+    state: State<'_, AppState>,
+    request: GetAnalysisSourceRequest,
+) -> Result<AndroidAnalysisRunDto, CommandError> {
+    validate_source_request(&request)?;
+    let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
+    let data_source_id = DataSourceId(request.data_source_id);
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        analysis_service::run_source_android_analysis(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
+            &source_runtime,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_android_device_info(
+    state: State<'_, AppState>,
+    request: GetAnalysisSourceRequest,
+) -> Result<AndroidDeviceInfoDto, CommandError> {
+    validate_source_request(&request)?;
+    let app_state = state.inner().clone();
+    let data_source_id = DataSourceId(request.data_source_id);
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        analysis_service::get_source_android_device_info(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_android_package_summary(
+    state: State<'_, AppState>,
+    mut request: GetAndroidPackagesRequest,
+) -> Result<AndroidPackageSummaryDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    let source_runtime = analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        app_state.bitlocker_runtime.clone(),
+    );
+    let data_source_id = DataSourceId(request.data_source_id);
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        analysis_service::get_source_android_package_summary(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
+            request.offset,
+            request.limit,
             &source_runtime,
         )
         .map_err(CommandError::from_typed_service_error)

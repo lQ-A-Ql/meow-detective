@@ -31,7 +31,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
 
     // Check if path exists
     if *kind != DataSourceKind::LocalDisk && !source_path.exists() {
-        errors.push(format!("Path does not exist: {}", source_path.display()));
+        errors.push("Evidence source does not exist".to_string());
         return PreCheckResult {
             plan: ImportPlan::new(ImportStrategy::Sequential, 0, 0),
             warnings,
@@ -42,9 +42,11 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     // Analyze based on type
     let (total_files, total_size) = match kind {
         DataSourceKind::LogicalDirectory => analyze_directory(source_path, &mut warnings),
-        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::LocalDisk => {
-            analyze_image(source_path, kind, &mut warnings)
-        }
+        DataSourceKind::LogicalArchive => analyze_archive(source_path, &mut warnings),
+        DataSourceKind::E01
+        | DataSourceKind::Raw
+        | DataSourceKind::LocalDisk
+        | DataSourceKind::AndroidSparse => analyze_image(source_path, kind, &mut warnings),
         DataSourceKind::CephRbd | DataSourceKind::CephFs => {
             unreachable!("derived Ceph sources are rejected before filesystem access")
         }
@@ -75,6 +77,23 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     }
 }
 
+fn analyze_archive(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            let size = metadata.len();
+            (estimate_files_from_size(size), size)
+        }
+        Ok(_) => {
+            warnings.push("Archive source is not a regular file".to_string());
+            (0, 0)
+        }
+        Err(_) => {
+            warnings.push("Cannot read archive metadata".to_string());
+            (0, 0)
+        }
+    }
+}
+
 /// Analyze a directory data source
 fn analyze_directory(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
     let mut total_files = 0u64;
@@ -96,8 +115,8 @@ fn analyze_directory(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
                 }
             }
         }
-        Err(e) => {
-            warnings.push(format!("Cannot read directory: {}", e));
+        Err(_) => {
+            warnings.push("Cannot read directory".to_string());
         }
     }
 
@@ -135,8 +154,8 @@ fn analyze_image(path: &Path, kind: &DataSourceKind, warnings: &mut Vec<String>)
             let estimated_files = estimate_files_from_size(size);
             (estimated_files, size)
         }
-        Err(e) => {
-            warnings.push(format!("Cannot read image file: {}", e));
+        Err(_) => {
+            warnings.push("Cannot read image file".to_string());
             (0, 0)
         }
     }
@@ -148,6 +167,9 @@ fn image_logical_size(path: &Path, kind: &DataSourceKind) -> std::io::Result<u64
         DataSourceKind::LocalDisk => {
             evidence_core::LocalDiskReader::open(path).map(|reader| reader.len())
         }
+        DataSourceKind::AndroidSparse => image_android::AndroidSparseReader::open(path)
+            .map(|reader| reader.logical_size())
+            .map_err(std::io::Error::other),
         _ => std::fs::metadata(path).map(|metadata| metadata.len()),
     }
 }

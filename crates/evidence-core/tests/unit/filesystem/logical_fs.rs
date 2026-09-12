@@ -1,6 +1,17 @@
 use super::*;
 use crate::filesystem::FileSystemReader;
 
+#[test]
+fn rejects_parent_traversal_for_reads_and_lists() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let outside = tempfile::TempDir::new().unwrap();
+    std::fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
+
+    let reader = LogicalFsReader::open(tmp.path(), "fixture").unwrap();
+    assert!(reader.list_children("../").is_err());
+    assert!(reader.open_file("../outside.txt").is_err());
+}
+
 #[cfg(unix)]
 #[test]
 fn list_children_does_not_descend_into_symlinked_directories() {

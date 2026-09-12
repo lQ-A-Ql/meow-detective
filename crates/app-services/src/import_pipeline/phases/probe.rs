@@ -97,9 +97,13 @@ fn probe_image(
             evidence_core::LocalDiskReader::open(path)
                 .map_err(CommandError::from_typed_service_error)?,
         ),
-        domain::DataSourceKind::LogicalDirectory => {
+        domain::DataSourceKind::AndroidSparse => Box::new(
+            image_android::AndroidSparseReader::open(path)
+                .map_err(|error| CommandError::parser(error.to_string()))?,
+        ),
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
             return Err(CommandError::unsupported(
-                "logical directories do not expose image probe candidates",
+                "logical sources do not expose image probe candidates",
             ))
         }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {

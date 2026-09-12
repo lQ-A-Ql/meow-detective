@@ -1,7 +1,14 @@
 export interface DataSourceSummary {
   id: string;
   name: string;
-  kind: 'e01' | 'raw' | 'logical_directory' | string;
+  kind:
+    | 'e01'
+    | 'raw'
+    | 'local_disk'
+    | 'logical_directory'
+    | 'logical_archive'
+    | 'android_sparse'
+    | string;
   sourcePath: string;
   importedAt: string;
   fileCount?: number;
@@ -9,7 +16,7 @@ export interface DataSourceSummary {
   sourceDbRelPath?: string;
   indexRelPath?: string;
   stagingRelPath?: string;
-  platform: 'windows' | 'linux';
+  platform: 'windows' | 'linux' | 'android';
   profile?: string;
   importState?: 'pending' | 'importing' | 'ready' | 'ready_metadata' | 'failed' | string;
   schemaVersion?: string;

@@ -115,6 +115,7 @@ fn categories_for(platform: DataSourcePlatform) -> Result<Vec<&'static str>, Str
     match platform {
         DataSourcePlatform::Linux => Ok(vec!["LinuxArtifacts"]),
         DataSourcePlatform::Windows => Ok(Vec::new()),
+        DataSourcePlatform::Android => Ok(Vec::new()),
         DataSourcePlatform::Unknown => {
             Err("unknown guest platform cannot run artifact extraction".to_string())
         }

@@ -1,4 +1,5 @@
 mod analyzer;
+mod android;
 mod evidence;
 mod linux;
 mod source;

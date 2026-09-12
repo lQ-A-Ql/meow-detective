@@ -142,9 +142,14 @@ fn source_kind(kind: &domain::DataSourceKind) -> Result<&'static str, CommandErr
         domain::DataSourceKind::LocalDisk => Err(CommandError::unsupported(
             "BlueStore LVM devices cannot be bound to local physical-disk sources",
         )),
-        domain::DataSourceKind::LogicalDirectory => Err(CommandError::from_service_error(
-            "BlueStore LVM devices cannot be bound to logical-directory sources",
+        domain::DataSourceKind::AndroidSparse => Err(CommandError::unsupported(
+            "BlueStore LVM devices cannot be bound to Android sparse sources",
         )),
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            Err(CommandError::from_service_error(
+                "BlueStore LVM devices cannot be bound to logical sources",
+            ))
+        }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
             Err(CommandError::unsupported(
                 "BlueStore LVM devices cannot be bound to Ceph RBD derived sources",

@@ -8,6 +8,7 @@ use super::writer::{get_staging_meta, get_worker_meta, set_staging_meta, set_wor
 use persistence_sqlite::repositories::staging_repo::StagingRepo;
 use rusqlite::Connection;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 const INDEX_DOC_MERGE_PAGE_SIZE: i64 = 50;
@@ -58,10 +59,31 @@ pub fn merge_all_staging_to_main_with_stats(
     manifest: &StagingManifest,
     progress_cb: Option<&dyn Fn(usize, usize)>,
 ) -> Result<StagingMergeStats, StagingError> {
+    merge_all_staging_to_main_with_cancel(
+        main_conn,
+        case_root,
+        data_source_id,
+        manifest,
+        progress_cb,
+        None,
+    )
+}
+
+pub fn merge_all_staging_to_main_with_cancel(
+    main_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &str,
+    manifest: &StagingManifest,
+    progress_cb: Option<&dyn Fn(usize, usize)>,
+    cancel_token: Option<&AtomicBool>,
+) -> Result<StagingMergeStats, StagingError> {
     let mut stats = StagingMergeStats::default();
     let total = manifest.partitions.len();
 
     for (position, partition) in manifest.partitions.iter().enumerate() {
+        if cancel_token.is_some_and(|token| token.load(Ordering::Relaxed)) {
+            return Err(StagingError::Cancelled);
+        }
         if partition.status != PartitionStatus::Done {
             continue;
         }

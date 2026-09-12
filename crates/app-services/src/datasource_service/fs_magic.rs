@@ -10,6 +10,8 @@ pub(crate) fn kind_label(kind: ImageFilesystemKind) -> String {
         ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
         ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
         ImageFilesystemKind::Ext4 => "Ext4".to_string(),
+        ImageFilesystemKind::F2fs => "F2FS".to_string(),
+        ImageFilesystemKind::Erofs => "EROFS".to_string(),
         ImageFilesystemKind::Xfs => "XFS".to_string(),
         ImageFilesystemKind::Btrfs => "Btrfs".to_string(),
         ImageFilesystemKind::LvmPool => "LVM".to_string(),
@@ -60,6 +62,18 @@ where
         let magic = u32::from_be_bytes([sector[0], sector[1], sector[2], sector[3]]);
         if magic == 0x5846_5342 {
             return Ok(Some(ImageFilesystemKind::Xfs));
+        }
+    }
+
+    // Android F2FS and EROFS both place their distinguishing little-endian
+    // magic at byte 1024. Check it before the ext4 superblock field below.
+    reader.seek(SeekFrom::Start(offset + 1024))?;
+    let mut android_magic = [0u8; 4];
+    if reader.read_exact(&mut android_magic).is_ok() {
+        match u32::from_le_bytes(android_magic) {
+            fs_f2fs::F2FS_MAGIC => return Ok(Some(ImageFilesystemKind::F2fs)),
+            fs_erofs::EROFS_MAGIC => return Ok(Some(ImageFilesystemKind::Erofs)),
+            _ => {}
         }
     }
 

@@ -1,3 +1,4 @@
+mod android;
 mod classification;
 mod evidence;
 mod extraction;
@@ -7,6 +8,9 @@ mod source;
 mod summary;
 mod system_info;
 
+pub use android::{
+    get_source_android_device_info, get_source_android_package_summary, run_source_android_analysis,
+};
 pub use classification::{classify_source_files, get_file_classification_board};
 pub use evidence::{get_source_evidence_summary, run_source_evidence_scan};
 pub(crate) use extraction::run_source_analysis_extraction_execution_with_cancel;

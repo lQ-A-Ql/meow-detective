@@ -346,6 +346,8 @@ pub(super) fn partition_status_for_filesystem(kind: ImageFilesystemKind) -> Part
         | ImageFilesystemKind::Fat
         | ImageFilesystemKind::Iso9660
         | ImageFilesystemKind::Ext4
+        | ImageFilesystemKind::F2fs
+        | ImageFilesystemKind::Erofs
         | ImageFilesystemKind::Xfs
         | ImageFilesystemKind::Btrfs
         | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,

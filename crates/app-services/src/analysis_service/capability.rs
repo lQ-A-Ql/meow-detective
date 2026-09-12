@@ -5,6 +5,8 @@ use super::MAX_ANALYSIS_SOURCE_BYTES;
 
 pub(crate) const LINUX_UMBRELLA_KEY: &str = "LinuxArtifacts";
 pub(crate) const PLUGIN_CAPABILITY_KEY: &str = "PluginArtifacts";
+const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
+const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +100,23 @@ pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
     ),
 ];
 
+pub(crate) const ANDROID_CAPABILITIES: &[AnalysisCapability] = &[
+    capability(
+        ANDROID_DEVICE_KEY,
+        DataSourcePlatform::Android,
+        "Android Device",
+        ANDROID_DEVICE_KEY,
+        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+    ),
+    capability(
+        ANDROID_PACKAGES_KEY,
+        DataSourcePlatform::Android,
+        "Android Packages",
+        ANDROID_PACKAGES_KEY,
+        CandidateReadPolicy::Bounded(MAX_ANALYSIS_SOURCE_BYTES),
+    ),
+];
+
 const fn capability(
     key: &'static str,
     platform: DataSourcePlatform,
@@ -163,6 +182,7 @@ pub(crate) fn find_capability(key: &str) -> Option<AnalysisCapability> {
     WINDOWS_CAPABILITIES
         .iter()
         .chain(LINUX_CAPABILITIES)
+        .chain(ANDROID_CAPABILITIES)
         .find(|capability| capability.key == key)
         .copied()
 }

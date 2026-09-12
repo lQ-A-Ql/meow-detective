@@ -63,6 +63,20 @@ impl LinuxClusterImportPlan {
                         return None;
                     }
                     DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
+                    DataSourceKind::LogicalArchive => {
+                        tracing::warn!(
+                            source = %member.source_path.display(),
+                            "logical archive sources cannot enter the Linux cluster import pipeline"
+                        );
+                        return None;
+                    }
+                    DataSourceKind::AndroidSparse => {
+                        tracing::warn!(
+                            source = %member.source_path.display(),
+                            "Android sparse sources cannot enter the Linux cluster import pipeline"
+                        );
+                        return None;
+                    }
                     DataSourceKind::CephRbd | DataSourceKind::CephFs => {
                         tracing::warn!(
                             source = %member.source_path.display(),

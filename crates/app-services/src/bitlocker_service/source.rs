@@ -152,6 +152,8 @@ pub(crate) fn probe_plaintext_filesystem(
         crate::datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
         crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
         crate::datasource_service::ImageFilesystemKind::Ext4 => "EXT4".to_string(),
+        crate::datasource_service::ImageFilesystemKind::F2fs => "F2FS".to_string(),
+        crate::datasource_service::ImageFilesystemKind::Erofs => "EROFS".to_string(),
         crate::datasource_service::ImageFilesystemKind::Xfs => "XFS".to_string(),
         crate::datasource_service::ImageFilesystemKind::Btrfs => "BTRFS".to_string(),
         crate::datasource_service::ImageFilesystemKind::LvmPool => "LVM".to_string(),

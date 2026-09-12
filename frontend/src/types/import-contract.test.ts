@@ -13,8 +13,10 @@ import type {
 
 describe('import progress contract models', () => {
   it('requires an explicit supported platform for data-source imports', () => {
-    expectTypeOf<ImportTargetPlatform>().toEqualTypeOf<'windows' | 'linux'>();
-    expectTypeOf<ImportDataSourceRequest['platform']>().toEqualTypeOf<'windows' | 'linux'>();
+    expectTypeOf<ImportTargetPlatform>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
+    expectTypeOf<ImportDataSourceRequest['platform']>().toEqualTypeOf<
+      'windows' | 'linux' | 'android'
+    >();
 
     const request = {
       sourcePath: 'D:/evidence/windows.E01',

@@ -1,6 +1,6 @@
 type QueryRefetch = () => Promise<unknown>;
 
-type AnalysisPlatform = 'windows' | 'linux' | undefined;
+type AnalysisPlatform = 'windows' | 'linux' | 'android' | undefined;
 
 function queryError(result: unknown): unknown {
   if (!result || typeof result !== 'object' || !('error' in result)) {

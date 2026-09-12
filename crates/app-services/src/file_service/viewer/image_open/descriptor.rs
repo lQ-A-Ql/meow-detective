@@ -100,24 +100,7 @@ where
         .map(Some);
     }
     if is_linux_filesystem_kind(&filesystem_kind) {
-        let filesystem = match filesystem_kind.as_str() {
-            kind if kind.eq_ignore_ascii_case("ext4") => {
-                fs_ext4::Ext4Reader::open(reader, fs_offset).map(|filesystem| {
-                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
-                })?
-            }
-            kind if kind.eq_ignore_ascii_case("xfs") => fs_xfs::XfsReader::open(reader, fs_offset)
-                .map(|filesystem| {
-                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
-                })?,
-            kind if kind.eq_ignore_ascii_case("btrfs") => {
-                fs_btrfs::BtrfsReader::open(reader, fs_offset).map(|filesystem| {
-                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
-                })?
-            }
-            _ => return Ok(None),
-        };
-        return open_first_image_path_seekable(filesystem.as_ref(), paths)
+        return open_context_linux_filesystem(reader, fs_offset, &filesystem_kind, paths)
             .map(Some)
             .map_err(FileServiceError::Io);
     }
@@ -157,6 +140,39 @@ where
     open_first_image_path_seekable(&filesystem, paths)
         .map(Some)
         .map_err(FileServiceError::Io)
+}
+
+fn open_context_linux_filesystem(
+    reader: Box<dyn EvidenceReader>,
+    fs_offset: u64,
+    filesystem_kind: &str,
+    paths: &[String],
+) -> std::io::Result<RangeContentReader> {
+    let filesystem = match filesystem_kind {
+        kind if kind.eq_ignore_ascii_case("ext4") => fs_ext4::Ext4Reader::open(reader, fs_offset)
+            .map(|filesystem| {
+            Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+        })?,
+        kind if kind.eq_ignore_ascii_case("f2fs") => fs_f2fs::F2fsReader::open(reader, fs_offset)
+            .map_err(std::io::Error::other)
+            .map(|filesystem| Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>)?,
+        kind if kind.eq_ignore_ascii_case("erofs") => {
+            fs_erofs::ErofsReader::open(reader, fs_offset)
+                .map_err(std::io::Error::other)
+                .map(|filesystem| {
+                    Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+                })?
+        }
+        kind if kind.eq_ignore_ascii_case("xfs") => fs_xfs::XfsReader::open(reader, fs_offset)
+            .map(|filesystem| Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>)?,
+        kind if kind.eq_ignore_ascii_case("btrfs") => {
+            fs_btrfs::BtrfsReader::open(reader, fs_offset).map(|filesystem| {
+                Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>
+            })?
+        }
+        _ => return Err(std::io::Error::other("unsupported Unix filesystem")),
+    };
+    open_first_image_path_seekable(filesystem.as_ref(), paths)
 }
 
 fn open_candidate<F>(
@@ -278,6 +294,14 @@ where
         kind if kind.eq_ignore_ascii_case("ext4") => {
             open_first_image_path_seekable(&fs_ext4::Ext4Reader::open(reader, fs_offset)?, paths)
         }
+        kind if kind.eq_ignore_ascii_case("f2fs") => open_first_image_path_seekable(
+            &fs_f2fs::F2fsReader::open(reader, fs_offset).map_err(std::io::Error::other)?,
+            paths,
+        ),
+        kind if kind.eq_ignore_ascii_case("erofs") => open_first_image_path_seekable(
+            &fs_erofs::ErofsReader::open(reader, fs_offset).map_err(std::io::Error::other)?,
+            paths,
+        ),
         kind if kind.eq_ignore_ascii_case("xfs") => {
             open_first_image_path_seekable(&fs_xfs::XfsReader::open(reader, fs_offset)?, paths)
         }

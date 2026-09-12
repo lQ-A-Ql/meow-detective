@@ -3,6 +3,9 @@ import {
   AnalysisExtractionRequest,
   AnalysisExtractionRun,
   AnalysisSystemInfo,
+  AndroidAnalysisRun,
+  AndroidDeviceInfo,
+  AndroidPackageSummary,
   BrowserHistorySummary,
   CaseOverviewSnapshot,
   CorrelationSnapshot,
@@ -97,6 +100,20 @@ export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
+}
+
+export async function runAndroidAnalysis(dataSourceId: string): Promise<AndroidAnalysisRun> {
+  return apiClient.request(COMMANDS.analysis.RUN_ANDROID_ANALYSIS, { request: { dataSourceId } });
+}
+
+export async function getAndroidDeviceInfo(dataSourceId: string): Promise<AndroidDeviceInfo> {
+  return apiClient.request(COMMANDS.analysis.GET_ANDROID_DEVICE_INFO, { request: { dataSourceId } });
+}
+
+export async function getAndroidPackageSummary(
+  request: AnalysisExtractionPageRequest,
+): Promise<AndroidPackageSummary> {
+  return apiClient.request(COMMANDS.analysis.GET_ANDROID_PACKAGE_SUMMARY, { request });
 }
 
 export async function getCaseOverviewSnapshot(): Promise<CaseOverviewSnapshot> {

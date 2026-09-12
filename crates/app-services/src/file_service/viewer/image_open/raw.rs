@@ -16,7 +16,12 @@ pub(crate) fn open_raw_file(
     expected_partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, FileServiceError> {
     let reader = evidence_core::RawImageReader::open(Path::new(source_path))?;
-    open_raw_image_file(entry, reader, expected_partition_index)
+    open_image_file(
+        entry,
+        reader,
+        expected_partition_index,
+        &domain::DataSourceKind::Raw,
+    )
 }
 
 pub(crate) fn open_local_disk_file(
@@ -25,28 +30,41 @@ pub(crate) fn open_local_disk_file(
     expected_partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, FileServiceError> {
     let reader = evidence_core::LocalDiskReader::open(Path::new(source_path))?;
-    open_raw_image_file(entry, reader, expected_partition_index)
+    open_image_file(
+        entry,
+        reader,
+        expected_partition_index,
+        &domain::DataSourceKind::LocalDisk,
+    )
 }
 
-fn open_raw_image_file<R>(
+pub(crate) fn open_android_sparse_file(
+    source_path: &str,
+    entry: &FileEntry,
+    expected_partition_index: Option<usize>,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let reader = image_android::AndroidSparseReader::open(Path::new(source_path))
+        .map_err(std::io::Error::other)?;
+    open_image_file(
+        entry,
+        reader,
+        expected_partition_index,
+        &domain::DataSourceKind::AndroidSparse,
+    )
+}
+
+fn open_image_file<R>(
     entry: &FileEntry,
     mut reader: R,
     expected_partition_index: Option<usize>,
+    data_source_kind: &domain::DataSourceKind,
 ) -> Result<Box<dyn Read>, FileServiceError>
 where
     R: EvidenceReader + Read + std::io::Seek + 'static,
 {
-    let source_kind = reader.info().kind.clone();
-    let data_source_kind = if source_kind.contains("E01") {
-        domain::DataSourceKind::E01
-    } else if source_kind.eq_ignore_ascii_case("local_disk") {
-        domain::DataSourceKind::LocalDisk
-    } else {
-        domain::DataSourceKind::Raw
-    };
     let mut probe =
         crate::datasource_service::detect_image_filesystem(&mut reader).map_err(|error| {
-            FileServiceError::other(format!("Failed to detect RAW filesystem: {error}"))
+            FileServiceError::other(format!("Failed to detect image filesystem: {error}"))
         })?;
     let source_path = reader.info().path.clone();
     let paths = entry_image_path_candidates(entry);
@@ -57,13 +75,13 @@ where
             &source_path,
             &paths,
             expected_partition_index,
-            &data_source_kind,
+            data_source_kind,
         );
     }
     crate::datasource_service::expand_lvm_pool_candidates(
         &mut probe,
         &source_path,
-        &data_source_kind,
+        data_source_kind,
     );
     let indices = crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
     for (position, candidate) in probe.candidates.iter().enumerate() {
@@ -78,13 +96,13 @@ where
             &paths,
             candidate,
             index,
-            &data_source_kind,
+            data_source_kind,
         )? {
             return Ok(reader);
         }
     }
     Err(FileServiceError::other(format!(
-        "Cannot open RAW image file '{}' from any partition",
+        "Cannot open image file '{}' from any partition",
         entry.path
     )))
 }
@@ -128,6 +146,10 @@ fn open_exfat_at(
         domain::DataSourceKind::LocalDisk => {
             Box::new(evidence_core::LocalDiskReader::open(source_path)?)
         }
+        domain::DataSourceKind::AndroidSparse => Box::new(
+            image_android::AndroidSparseReader::open(source_path)
+                .map_err(|error| FileServiceError::Io(std::io::Error::other(error)))?,
+        ),
         _ => Box::new(evidence_core::RawImageReader::open(source_path)?),
     };
     let fs = fs_exfat::ExfatReader::open(reader, offset)?;
@@ -171,6 +193,15 @@ fn try_open_candidate(
         ImageFilesystemKind::Ext4 => {
             open_linux_candidate::<fs_ext4::Ext4Reader>(source_path, paths, candidate, source_kind)
         }
+        ImageFilesystemKind::F2fs => {
+            open_linux_candidate::<fs_f2fs::F2fsReader>(source_path, paths, candidate, source_kind)
+        }
+        ImageFilesystemKind::Erofs => open_linux_candidate::<fs_erofs::ErofsReader>(
+            source_path,
+            paths,
+            candidate,
+            source_kind,
+        ),
         ImageFilesystemKind::Xfs => {
             open_linux_candidate::<fs_xfs::XfsReader>(source_path, paths, candidate, source_kind)
         }
@@ -191,6 +222,18 @@ trait OpenFilesystem: FileSystemReader + Sized {
 impl OpenFilesystem for fs_ext4::Ext4Reader {
     fn open_fs(reader: Box<dyn EvidenceReader>, offset: u64) -> std::io::Result<Self> {
         Self::open(reader, offset)
+    }
+}
+
+impl OpenFilesystem for fs_f2fs::F2fsReader {
+    fn open_fs(reader: Box<dyn EvidenceReader>, offset: u64) -> std::io::Result<Self> {
+        Self::open(reader, offset).map_err(std::io::Error::other)
+    }
+}
+
+impl OpenFilesystem for fs_erofs::ErofsReader {
+    fn open_fs(reader: Box<dyn EvidenceReader>, offset: u64) -> std::io::Result<Self> {
+        Self::open(reader, offset).map_err(std::io::Error::other)
     }
 }
 
@@ -265,7 +308,13 @@ fn candidate_reader(
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
                 domain::DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+                domain::DataSourceKind::AndroidSparse => {
+                    image_android::AndroidSparseReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                        .map_err(std::io::Error::other)
+                }
                 domain::DataSourceKind::LogicalDirectory
+                | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
                 | domain::DataSourceKind::CephFs => Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
@@ -286,7 +335,12 @@ fn candidate_reader(
                 domain::DataSourceKind::LocalDisk => {
                     Box::new(evidence_core::LocalDiskReader::open(source_path)?)
                 }
+                domain::DataSourceKind::AndroidSparse => Box::new(
+                    image_android::AndroidSparseReader::open(source_path)
+                        .map_err(|error| FileServiceError::Io(std::io::Error::other(error)))?,
+                ),
                 domain::DataSourceKind::LogicalDirectory
+                | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
                 | domain::DataSourceKind::CephFs => {
                     return Err(FileServiceError::Unsupported(format!(

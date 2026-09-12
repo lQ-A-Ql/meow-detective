@@ -323,6 +323,16 @@ fn open_linux_ceph_rbd_filesystem(
         return fs_ext4::Ext4Reader::open(reader, fs_offset)
             .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader>);
     }
+    if kind.eq_ignore_ascii_case("f2fs") {
+        return fs_f2fs::F2fsReader::open(reader, fs_offset)
+            .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader>)
+            .map_err(std::io::Error::other);
+    }
+    if kind.eq_ignore_ascii_case("erofs") {
+        return fs_erofs::ErofsReader::open(reader, fs_offset)
+            .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader>)
+            .map_err(std::io::Error::other);
+    }
     if kind.eq_ignore_ascii_case("xfs") {
         return fs_xfs::XfsReader::open(reader, fs_offset)
             .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader>);

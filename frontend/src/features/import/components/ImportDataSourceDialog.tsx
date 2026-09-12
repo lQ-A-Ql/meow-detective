@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Monitor, Server, FolderOpen, HardDrive, Loader2 } from 'lucide-react';
+import { Monitor, Server, Smartphone, FolderOpen, HardDrive, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -203,6 +203,19 @@ export function ImportDataSourceDialog({
                     Linux
                   </span>
                   <span className="text-[10px] font-light text-forensics-muted">XFS / LVM / systemd</span>
+                </div>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="android"
+                aria-label="Android"
+                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
+              >
+                <div className="relative z-10 flex flex-col items-start gap-0.5">
+                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
+                    <Smartphone size={20} />
+                    Android
+                  </span>
+                  <span className="text-[10px] font-light text-forensics-muted">Sparse / ext4 / F2FS / EROFS</span>
                 </div>
               </ToggleGroupItem>
             </ToggleGroup>

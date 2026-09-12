@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use evidence_core::LogicalFsReader;
 use transport::CommandError;
 
 use crate::{datasource_service, file_service, staging};
 
-use super::{merge, probe};
+use super::{logical_enumeration::enumerate_logical_source, merge, probe};
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::execute::{emit_import_cancellation_state, mark_import_cancelling};
 use crate::import_pipeline::partition::build_partition_work;
@@ -24,11 +23,13 @@ pub(crate) fn run_enumeration_phase(
 ) -> Result<file_service::EnumerationStats, CommandError> {
     ctx.report_job_progress(25, "Enumerating filesystem...")?;
     let mut stats = match ctx.import_config.kind {
-        domain::DataSourceKind::LogicalDirectory => enumerate_logical_directory(ctx, data_source)
-            .map_err(CommandError::from_service_error)?,
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            enumerate_logical_source(ctx, data_source).map_err(CommandError::from_service_error)?
+        }
         domain::DataSourceKind::E01
         | domain::DataSourceKind::Raw
-        | domain::DataSourceKind::LocalDisk => {
+        | domain::DataSourceKind::LocalDisk
+        | domain::DataSourceKind::AndroidSparse => {
             enumerate_image_data_source_with_staging(ctx, data_source)?
         }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
@@ -42,23 +43,6 @@ pub(crate) fn run_enumeration_phase(
     report_catalog_ready(ctx, data_source, &stats);
     reject_cancelled_before_analysis(ctx, data_source)?;
     Ok(stats)
-}
-fn enumerate_logical_directory(
-    ctx: &ImportJobContext<'_>,
-    data_source: &domain::DataSource,
-) -> Result<file_service::EnumerationStats, persistence_sqlite::DbError> {
-    let fs = LogicalFsReader::open(&ctx.import_config.source_path, &data_source.name)?;
-    let source_conn = ctx.source_conn.ok_or_else(|| {
-        persistence_sqlite::DbError::System("source DB connection is not initialized".to_string())
-    })?;
-    file_service::enumerate_filesystem_with_root_name_and_cancel(
-        source_conn,
-        &data_source.id,
-        &fs,
-        None,
-        None::<&dyn Fn(u32)>,
-        Some(ctx.options.cancel_token),
-    )
 }
 fn enumerate_image_data_source_with_staging(
     ctx: &mut ImportJobContext<'_>,

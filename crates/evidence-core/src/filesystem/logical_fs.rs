@@ -1,7 +1,7 @@
 use crate::filesystem::{FileSystemReader, FsNode};
 use std::fs;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 pub struct LogicalFsReader {
@@ -24,12 +24,44 @@ impl LogicalFsReader {
             .unwrap_or_else(|_| full.display().to_string())
     }
 
-    fn to_full(&self, relative: &str) -> PathBuf {
+    fn to_full(&self, relative: &str) -> io::Result<PathBuf> {
         if relative.is_empty() {
-            self.root.clone()
-        } else {
-            self.root.join(relative)
+            return Ok(self.root.clone());
         }
+        if relative.as_bytes().contains(&0) || relative.contains('\\') {
+            return Err(invalid_path("logical path contains an invalid separator"));
+        }
+        let relative_path = Path::new(relative);
+        if relative_path.is_absolute()
+            || relative_path.components().any(|component| {
+                matches!(
+                    component,
+                    Component::Prefix(_) | Component::RootDir | Component::ParentDir
+                )
+            })
+        {
+            return Err(invalid_path("logical path escapes the data source root"));
+        }
+
+        let full = self.root.join(relative_path);
+        let mut check = self.root.clone();
+        for component in relative_path.components() {
+            let Component::Normal(name) = component else {
+                continue;
+            };
+            check.push(name);
+            let metadata = fs::symlink_metadata(&check)?;
+            if metadata.file_type().is_symlink() {
+                return Err(invalid_path(
+                    "symlinks are not readable through a logical source",
+                ));
+            }
+        }
+        let canonical = full.canonicalize()?;
+        if !canonical.starts_with(&self.root) {
+            return Err(invalid_path("logical path escapes the data source root"));
+        }
+        Ok(canonical)
     }
 
     fn node_from_entry(&self, entry: &fs::DirEntry) -> io::Result<FsNode> {
@@ -82,7 +114,7 @@ impl FileSystemReader for LogicalFsReader {
     }
 
     fn list_children(&self, relative_path: &str) -> io::Result<Vec<FsNode>> {
-        let full = self.to_full(relative_path);
+        let full = self.to_full(relative_path)?;
         let dir = fs::read_dir(&full)?;
         let mut children = Vec::new();
         for entry in dir {
@@ -98,7 +130,7 @@ impl FileSystemReader for LogicalFsReader {
     }
 
     fn open_file(&self, relative_path: &str) -> io::Result<Box<dyn Read>> {
-        let full = self.to_full(relative_path);
+        let full = self.to_full(relative_path)?;
         Ok(Box::new(fs::File::open(full)?))
     }
 
@@ -155,6 +187,10 @@ fn path_to_relative_string(path: &Path) -> String {
         .filter(|component| !component.is_empty())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+fn invalid_path(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, message)
 }
 
 #[cfg(test)]

@@ -358,6 +358,8 @@ fn candidate_start_detail(kind: ImageFilesystemKind, root_name: &str) -> String 
         | ImageFilesystemKind::Fat
         | ImageFilesystemKind::Iso9660
         | ImageFilesystemKind::Ext4
+        | ImageFilesystemKind::F2fs
+        | ImageFilesystemKind::Erofs
         | ImageFilesystemKind::Xfs
         | ImageFilesystemKind::Btrfs => format!("Enumerating {root_name}"),
         ImageFilesystemKind::BitLocker => format!("Skipping locked {root_name}"),
@@ -375,6 +377,10 @@ fn source_kind(kind: &str) -> domain::DataSourceKind {
         domain::DataSourceKind::E01
     } else if kind.eq_ignore_ascii_case("local_disk") {
         domain::DataSourceKind::LocalDisk
+    } else if kind.eq_ignore_ascii_case("android_sparse")
+        || kind.eq_ignore_ascii_case("android-sparse")
+    {
+        domain::DataSourceKind::AndroidSparse
     } else {
         domain::DataSourceKind::Raw
     }

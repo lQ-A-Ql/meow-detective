@@ -1,6 +1,7 @@
 mod analyze;
 mod enumerate;
 mod finalize;
+mod logical_enumeration;
 mod merge;
 mod probe;
 mod register;

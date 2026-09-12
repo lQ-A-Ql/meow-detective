@@ -128,6 +128,8 @@ fn gpt_candidate(
             | ImageFilesystemKind::Fat
             | ImageFilesystemKind::Iso9660
             | ImageFilesystemKind::Ext4
+            | ImageFilesystemKind::F2fs
+            | ImageFilesystemKind::Erofs
             | ImageFilesystemKind::Xfs
             | ImageFilesystemKind::Btrfs
             | ImageFilesystemKind::LvmPool

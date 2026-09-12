@@ -456,7 +456,8 @@
   "analysis": {
     "platformViews": {
       "windows": "Windows Forensics",
-      "linux": "Linux Forensics"
+      "linux": "Linux Forensics",
+      "android": "Android Forensics"
     },
     "tabs": {
       "system": "System Info",
@@ -467,6 +468,34 @@
       "eventlogs": "Event Logs",
       "files": "Files",
       "report": "Report"
+    },
+    "sidebar": {
+      "title": "Data sources",
+      "description": "Expand results by source",
+      "treeLabel": "Data source tree",
+      "collapseSource": "Collapse data source",
+      "expandSource": "Expand data source",
+      "deletedRecovery": "Deleted recovery",
+      "linuxOverview": "Overview",
+      "linuxJournal": "System logs",
+      "linuxLogin": "Login records",
+      "linuxCommands": "Command history",
+      "linuxPackages": "Packages",
+      "linuxCron": "Scheduled tasks",
+      "linuxSudo": "Sudo",
+      "linuxSystemConfig": "System configuration",
+      "linuxWebServices": "Web services",
+      "linuxMysqlServices": "MySQL services",
+      "androidOverview": "Android analysis"
+    },
+    "header": {
+      "title": "Data source analysis",
+      "capabilities": "Evidence classification · System information · Application data",
+      "sourceBound": "Analysis results are bound to the current data source and run independently by platform.",
+      "selectSource": "Select a source from the data-source tree before refreshing or running analysis.",
+      "refresh": "Refresh",
+      "run": "Run analysis",
+      "running": "Analyzing..."
     },
     "extraction": {
       "Registry": "Registry Extraction",
@@ -499,6 +528,54 @@
       "eventLogs": "Reading event logs...",
       "linuxArtifacts": "Reading Linux artifacts...",
       "files": "Classifying files by metadata..."
+    },
+    "android": {
+      "deviceTab": "Device",
+      "packagesTab": "Installed packages",
+      "deviceTitle": "Device information",
+      "deviceDescription": "Standard system properties and SettingsProvider evidence",
+      "packagesTitle": "Installed packages",
+      "packagesDescription": "PackageManager packages.xml records",
+      "notAnalyzed": "Android analysis has not run for this data source.",
+      "noPackages": "No installed packages were found in parsed PackageManager records.",
+      "loadMore": "Load more",
+      "loading": "Loading Android analysis results...",
+      "running": "Running Android analysis...",
+      "lastRun": "Scanned {{scanned}} files, extracted {{facts}} device facts and {{packages}} installed packages",
+      "sourceUnavailable": "The current Android data source is not ready for analysis.",
+      "unavailable": "Unavailable",
+      "packageName": "Package name",
+      "appName": "Application name",
+      "versionCode": "Version code",
+      "installTime": "Installed",
+      "updateTime": "Updated",
+      "installer": "Installer",
+      "uid": "UID",
+      "fields": {
+        "model": "Model",
+        "manufacturer": "Manufacturer",
+        "brand": "Brand",
+        "device": "Device",
+        "androidVersion": "Android version",
+        "sdkInt": "SDK version",
+        "buildId": "Build ID",
+        "buildDisplayId": "Build display ID",
+        "buildFingerprint": "Build fingerprint",
+        "serialNumber": "Serial number",
+        "deviceName": "Device name",
+        "androidId": "Android ID",
+        "imei": "IMEI"
+      },
+      "imeiUnavailable": "No IMEI was parsed from supported, provenance-preserving system evidence.",
+      "packageResourceUnavailable": "Application labels and icons require an APK resource decoder; the common fallback marker is in use.",
+      "userStates": {
+        "installed": "Installed",
+        "notInstalled": "Not installed",
+        "disabled": "Disabled",
+        "hidden": "Hidden",
+        "stopped": "Stopped",
+        "suspended": "Suspended"
+      }
     }
   },
   "emulationPage": {

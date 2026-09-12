@@ -179,7 +179,9 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
                 .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
                 .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
-            DataSourceKind::LogicalDirectory => Err(BoundEvidenceOpenError {
+            DataSourceKind::LogicalDirectory
+            | DataSourceKind::LogicalArchive
+            | DataSourceKind::AndroidSparse => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
             DataSourceKind::CephRbd | DataSourceKind::CephFs => Err(BoundEvidenceOpenError {
@@ -240,11 +242,13 @@ impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
             DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(path)
                 .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
                 .map_err(|error| BoundEvidenceOpenError { kind: error.kind() }),
-            DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
-                Err(BoundEvidenceOpenError {
-                    kind: io::ErrorKind::Unsupported,
-                })
-            }
+            DataSourceKind::LogicalDirectory
+            | DataSourceKind::LogicalArchive
+            | DataSourceKind::AndroidSparse
+            | DataSourceKind::CephRbd
+            | DataSourceKind::CephFs => Err(BoundEvidenceOpenError {
+                kind: io::ErrorKind::Unsupported,
+            }),
         }
     }
 }

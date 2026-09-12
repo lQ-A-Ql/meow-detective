@@ -50,7 +50,7 @@ fn upgrade_from_source_034_adds_unix_mode_without_losing_rows() {
         )
         .expect("insert legacy file row");
 
-    assert_eq!(runner::run_source_all(&connection).expect("upgrade"), 1);
+    assert_eq!(runner::run_source_all(&connection).expect("upgrade"), 2);
 
     let row: (String, Option<i64>) = connection
         .query_row(

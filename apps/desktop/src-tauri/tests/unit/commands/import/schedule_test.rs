@@ -11,6 +11,10 @@ fn transport_platforms_map_to_domain_platforms() {
             DataSourcePlatform::Windows,
         ),
         (ImportTargetPlatformDto::Linux, DataSourcePlatform::Linux),
+        (
+            ImportTargetPlatformDto::Android,
+            DataSourcePlatform::Android,
+        ),
     ];
 
     for (transport, domain) in cases {

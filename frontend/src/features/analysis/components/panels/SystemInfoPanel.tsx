@@ -1,4 +1,5 @@
 import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { BrandEmptyState } from '@/components/brand';
 import type {
@@ -136,19 +137,20 @@ export function AnalysisHeader({
   onRunExtraction: () => void;
   selectedDataSourceId?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-6 py-3">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <div className="font-serif text-lg tracking-wide text-forensics-text">数据源分析</div>
+            <div className="font-serif text-lg tracking-wide text-forensics-text">{t('analysis.header.title')}</div>
             <div className="font-mono text-[10px] text-forensics-muted">
-              证据分类 · 注册表提取 · 浏览器记录 · 邮件信息
+              {t('analysis.header.capabilities')}
             </div>
             <div className="text-[10px] leading-4 text-forensics-muted-lighter">
               {selectedDataSourceId
-                ? '分析结果绑定当前数据源，Windows/Linux 视图会按数据源平台独立执行。'
-                : '请从左侧数据源树选择一个来源后再刷新或运行提取。'}
+                ? t('analysis.header.sourceBound')
+                : t('analysis.header.selectSource')}
             </div>
           </div>
         </div>
@@ -161,7 +163,7 @@ export function AnalysisHeader({
             className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
           >
             <RefreshCw size={14} className={loading ? 'opacity-70' : ''} />
-            刷新
+            {t('analysis.header.refresh')}
           </Button>
           <Button
             type="button"
@@ -170,7 +172,7 @@ export function AnalysisHeader({
             className="h-8 rounded-none border border-forensics-text bg-forensics-text px-3 text-[12px] text-white hover:bg-forensics-text-secondary"
           >
             {extractionPending ? <RefreshCw size={14} className="opacity-70" /> : <Shield size={14} />}
-            {extractionPending ? '提取中...' : '运行提取'}
+            {extractionPending ? t('analysis.header.running') : t('analysis.header.run')}
           </Button>
         </div>
       </div>

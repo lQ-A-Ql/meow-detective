@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum ImportTargetPlatformDto {
     Windows,
     Linux,
+    Android,
     #[serde(other)]
     Unsupported,
 }

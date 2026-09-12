@@ -75,6 +75,13 @@ pub(super) fn open_candidate_filesystem(
         ImageFilesystemKind::Ext4 => Box::new(
             fs_ext4::Ext4Reader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
         ),
+        ImageFilesystemKind::F2fs => Box::new(
+            fs_f2fs::F2fsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::Erofs => Box::new(
+            fs_erofs::ErofsReader::open(base_reader, fs_offset)
+                .map_err(|error| error.to_string())?,
+        ),
         ImageFilesystemKind::Xfs => Box::new(
             fs_xfs::XfsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
         ),
@@ -113,8 +120,12 @@ pub(crate) fn open_candidate_reader(
         domain::DataSourceKind::LocalDisk => Box::new(
             evidence_core::LocalDiskReader::open(source_path).map_err(|error| error.to_string())?,
         ),
-        domain::DataSourceKind::LogicalDirectory => {
-            return Err("logical directories do not expose image candidates".to_string())
+        domain::DataSourceKind::AndroidSparse => Box::new(
+            image_android::AndroidSparseReader::open(source_path)
+                .map_err(|error| error.to_string())?,
+        ),
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            return Err("logical sources do not expose image candidates".to_string())
         }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
             return Err(
@@ -196,7 +207,12 @@ fn open_lvm_physical_volume_reader(
         domain::DataSourceKind::LocalDisk => {
             Box::new(evidence_core::LocalDiskReader::open(path).ok()?)
         }
-        domain::DataSourceKind::LogicalDirectory => return None,
+        domain::DataSourceKind::AndroidSparse => {
+            Box::new(image_android::AndroidSparseReader::open(path).ok()?)
+        }
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            return None
+        }
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => return None,
     };
     if let Some(expected) = source {

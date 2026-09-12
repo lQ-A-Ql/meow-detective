@@ -322,6 +322,8 @@ fn image_filesystem_kind_label(kind: crate::datasource_service::ImageFilesystemK
         ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
         ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
         ImageFilesystemKind::Ext4 => "Ext4".to_string(),
+        ImageFilesystemKind::F2fs => "F2FS".to_string(),
+        ImageFilesystemKind::Erofs => "EROFS".to_string(),
         ImageFilesystemKind::Xfs => "XFS".to_string(),
         ImageFilesystemKind::Btrfs => "Btrfs".to_string(),
         ImageFilesystemKind::LvmPool => "LVM".to_string(),

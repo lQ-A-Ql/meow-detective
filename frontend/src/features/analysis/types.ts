@@ -50,6 +50,8 @@ export type LinuxAnalysisTabKey =
   | 'deletedRecovery'
   | 'plugin';
 
+export type AndroidAnalysisTabKey = 'device' | 'packages';
+
 export type ExtractionCategory =
   | 'Registry'
   | 'BrowserHistory'
@@ -88,11 +90,13 @@ export const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
 export const EXTRACTION_CATEGORIES_BY_PLATFORM: Record<AnalysisPlatformView, ExtractionCategory[]> = {
   windows: WINDOWS_EXTRACTION_CATEGORIES,
   linux: ['LinuxArtifacts'],
+  android: [],
 };
 
 export const PROGRESS_CATEGORIES_BY_PLATFORM: Record<AnalysisPlatformView, ExtractionCategory[]> = {
   windows: WINDOWS_EXTRACTION_CATEGORIES,
   linux: LINUX_PROGRESS_CATEGORIES,
+  android: [],
 };
 
 export const ANALYSIS_EXTRACTION_CATEGORIES = [

@@ -17,6 +17,7 @@ pub(crate) fn evidence_summary_category_allowed(
         || match platform {
             DataSourcePlatform::Windows => WINDOWS_EVIDENCE_CATEGORIES.contains(&category),
             DataSourcePlatform::Linux => category == LINUX_UMBRELLA_KEY,
+            DataSourcePlatform::Android => false,
             DataSourcePlatform::Unknown => false,
         })
 }

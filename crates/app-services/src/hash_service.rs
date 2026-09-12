@@ -70,6 +70,8 @@ impl HashService {
             DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
                 .map(|reader| reader.backing_paths().to_vec())
                 .map_err(|error| io_error("discover raw image backing files", error))?,
+            DataSourceKind::AndroidSparse => vec![path.to_path_buf()],
+            DataSourceKind::LogicalArchive => vec![path.to_path_buf()],
             _ => return Err(EvidenceHashError::Unsupported),
         };
         let total_bytes = segments

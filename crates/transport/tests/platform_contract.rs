@@ -32,6 +32,7 @@ fn supported_platform_contract_is_unchanged() {
     for (wire_value, expected) in [
         ("windows", ImportTargetPlatformDto::Windows),
         ("linux", ImportTargetPlatformDto::Linux),
+        ("android", ImportTargetPlatformDto::Android),
     ] {
         let raw = format!(r#"{{"sourcePath":"D:/evidence/disk.e01","platform":"{wire_value}"}}"#);
         let request: ImportDataSourceRequest =

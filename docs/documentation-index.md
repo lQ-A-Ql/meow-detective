@@ -42,18 +42,18 @@ ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式
 
 | 事实 | 当前值 |
 |---|---:|
-| Rust workspace crate | 39 |
-| Tauri commands | 133 |
+| Rust workspace crate | 40 |
+| Tauri commands | 136 |
 | app-services source modules | 35 |
 | SQLite repositories | 43 logical repositories |
-| SQLite migration scripts | 83 |
-| frontend test files | 119 |
+| SQLite migration scripts | 84 |
+| frontend test files | 121 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 11 |
-| `frontend/src/**/*.test.ts(x)` | 119 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 133 |
+| `frontend/src/**/*.test.ts(x)` | 121 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 136 |
 
 治理事实源：
 

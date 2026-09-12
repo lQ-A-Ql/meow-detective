@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   useFileClassificationBoard,
   useAnalysisSystemInfo,
+  useAndroidDeviceInfo,
+  useAndroidPackageSummary,
   useBrowserHistorySummary,
   useEmailExtractionSummary,
   useEvtxEventSummary,
@@ -13,6 +15,7 @@ import {
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
   useRunAnalysisExtraction,
+  useRunAndroidAnalysis,
   useRunEvidenceClassification,
 } from '@/features/analysis/hooks';
 import { runSelectedSourceExtraction } from '@/features/analysis/extraction-runner';
@@ -32,7 +35,11 @@ import {
   useAnalysisStore,
 } from '@/stores/analysis-store';
 import { useUiStore } from '@/stores/ui-store';
-import type { AnalysisExtractionProgress, EvtxEventView } from '@/types/models';
+import type {
+  AnalysisExtractionProgress,
+  AndroidAnalysisRun,
+  EvtxEventView,
+} from '@/types/models';
 
 export function useAnalysisWorkspaceModel() {
   const { t } = useTranslation();
@@ -43,7 +50,7 @@ export function useAnalysisWorkspaceModel() {
   const readyDataSources = useMemo(
     () => (dataSources ?? []).filter(
       (source) => source.importState === 'ready'
-        && (source.platform === 'windows' || source.platform === 'linux'),
+        && (source.platform === 'windows' || source.platform === 'linux' || source.platform === 'android'),
     ),
     [dataSources],
   );
@@ -59,6 +66,8 @@ export function useAnalysisWorkspaceModel() {
   const sourceEpoch = useRef(new AnalysisSourceEpoch(selectedSourceContextKey)).current;
   const extractionOperationRef = useRef<ReturnType<AnalysisSourceEpoch['begin']>>();
   const [analysisRefreshError, setAnalysisRefreshError] = useState<unknown>();
+  const [androidAnalysisRunning, setAndroidAnalysisRunning] = useState(false);
+  const [androidAnalysisLastRun, setAndroidAnalysisLastRun] = useState<AndroidAnalysisRun>();
   const [eventLogView, setEventLogView] = useState<EvtxEventView>('boot');
 
   const systemInfo = useAnalysisSystemInfo(selectedDataSource);
@@ -74,6 +83,9 @@ export function useAnalysisWorkspaceModel() {
     view: eventLogView,
   });
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
+  const androidDeviceInfo = useAndroidDeviceInfo(selectedDataSource);
+  const androidPackages = useAndroidPackageSummary({ source: selectedDataSource, limit: 100 });
+  const androidAnalysisRun = useRunAndroidAnalysis();
   const pluginModulesQuery = usePluginModules(selectedDataSource);
   const classificationBoard = useFileClassificationBoard(selectedDataSource, 300);
   const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
@@ -85,11 +97,13 @@ export function useAnalysisWorkspaceModel() {
   const extractionRunning = useAnalysisStore((state) => state.extractionRunning);
   const activeTab = useAnalysisStore((state) => state.activeTab);
   const activeLinuxTab = useAnalysisStore((state) => state.activeLinuxTab);
+  const activeAndroidTab = useAnalysisStore((state) => state.activeAndroidTab);
   const updateExtractionProgress = useAnalysisStore((state) => state.updateExtractionProgress);
   const resetExtractionProgress = useAnalysisStore((state) => state.resetExtractionProgress);
   const setExtractionRunning = useAnalysisStore((state) => state.setExtractionRunning);
   const setActiveTab = useAnalysisStore((state) => state.setActiveTab);
   const setActiveLinuxTab = useAnalysisStore((state) => state.setActiveLinuxTab);
+  const setActiveAndroidTab = useAnalysisStore((state) => state.setActiveAndroidTab);
   const activePluginId = useAnalysisStore((state) => state.activePluginId);
   const setActivePluginId = useAnalysisStore((state) => state.setActivePluginId);
   const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
@@ -101,6 +115,8 @@ export function useAnalysisWorkspaceModel() {
 
   const analysisMutationPending = evidenceScan.isPending
     || extractionRun.isPending
+    || androidAnalysisRun.isPending
+    || androidAnalysisRunning
     || summaryMutation.isPending
     || extractionRunning
     || deletedRecovery.scanning
@@ -157,10 +173,16 @@ export function useAnalysisWorkspaceModel() {
     ?? extractionRun.error
     ?? linuxSummary.error
     ?? analysisRefreshError;
+  const androidError = currentCase.error
+    ?? androidAnalysisRun.error
+    ?? androidDeviceInfo.error
+    ?? androidPackages.error
+    ?? analysisRefreshError;
 
   useLayoutEffect(() => {
     if (sourceEpoch.sync(selectedSourceContextKey)) {
       setAnalysisRefreshError(undefined);
+      setAndroidAnalysisLastRun(undefined);
       resetExtractionProgress();
       resetEvidenceScan();
       resetExtractionRun();
@@ -292,21 +314,25 @@ export function useAnalysisWorkspaceModel() {
 
   async function refresh() {
     try {
-      await refreshAnalysisQueries(
-        selectedPlatform,
-        [
-          systemInfo.refetch,
-          evidenceSummary.refetch,
-          registrySummary.refetch,
-          registryStructured.refetch,
-          browserSummary.refetch,
-          emailSummary.refetch,
-          eventLogSummary.refetch,
-          classificationBoard.refetch,
-          pluginModulesQuery.refetch,
-        ],
-        [linuxSummary.refetch, pluginModulesQuery.refetch],
-      );
+      if (selectedPlatform === 'android') {
+        await Promise.all([androidDeviceInfo.refetch(), androidPackages.refetch()]);
+      } else {
+        await refreshAnalysisQueries(
+          selectedPlatform,
+          [
+            systemInfo.refetch,
+            evidenceSummary.refetch,
+            registrySummary.refetch,
+            registryStructured.refetch,
+            browserSummary.refetch,
+            emailSummary.refetch,
+            eventLogSummary.refetch,
+            classificationBoard.refetch,
+            pluginModulesQuery.refetch,
+          ],
+          [linuxSummary.refetch, pluginModulesQuery.refetch],
+        );
+      }
       setAnalysisRefreshError(undefined);
     } catch (error) {
       setAnalysisRefreshError(error);
@@ -344,6 +370,33 @@ export function useAnalysisWorkspaceModel() {
       },
       isActiveOperation: (operation) => extractionOperationRef.current === operation,
     });
+  }
+
+  async function runAndroidAnalysis() {
+    if (!selectedDataSource || selectedDataSource.platform !== 'android') {
+      return;
+    }
+    const operation = sourceEpoch.begin(selectedSourceContextKey);
+    if (!operation) {
+      setAnalysisRefreshError(new Error(t('analysis.android.sourceUnavailable')));
+      return;
+    }
+    try {
+      setAnalysisRefreshError(undefined);
+      setAndroidAnalysisRunning(true);
+      const result = await androidAnalysisRun.mutateAsync(selectedDataSource.id);
+      if (sourceEpoch.isCurrent(operation)) {
+        setAndroidAnalysisLastRun(result);
+        await Promise.all([androidDeviceInfo.refetch(), androidPackages.refetch()]);
+      }
+    } catch (error) {
+      if (sourceEpoch.isCurrent(operation)) {
+        setAnalysisRefreshError(error);
+      }
+    } finally {
+      setAndroidAnalysisRunning(false);
+      sourceEpoch.finish(operation);
+    }
   }
 
   function selectPluginModule(pluginId: string) {
@@ -412,10 +465,14 @@ export function useAnalysisWorkspaceModel() {
     linuxNodeCounts,
     activeTab,
     activeLinuxTab,
+    activeAndroidTab,
     extractionPending: extractionRun.isPending || extractionRunning,
     extractionRunning,
+    androidAnalysisRunning,
+    androidAnalysisLastRun,
     windowsError,
     linuxError,
+    androidError,
     systemInfo,
     evidenceSummary,
     registrySummary,
@@ -439,6 +496,14 @@ export function useAnalysisWorkspaceModel() {
       void linuxSummary.fetchNextPage();
     },
     retryLinuxSummaryLoad: () => linuxSummary.refetch(),
+    androidDeviceInfo: androidDeviceInfo.data,
+    androidPackages: androidPackages.data,
+    androidLoading: androidDeviceInfo.isLoading || androidPackages.isLoading,
+    androidPackagesHasMore: Boolean(androidPackages.hasNextPage),
+    androidPackagesLoadingMore: androidPackages.isFetchingNextPage,
+    loadMoreAndroidPackages: () => {
+      void androidPackages.fetchNextPage();
+    },
     recoveryModel: deletedRecovery,
     pluginModules: pluginModulesQuery.data ?? [],
     activePluginId,
@@ -446,9 +511,11 @@ export function useAnalysisWorkspaceModel() {
     refresh,
     runEvidenceScan,
     runExtraction,
+    runAndroidAnalysis,
     selectDataSource,
     setActiveTab,
     setActiveLinuxTab,
+    setActiveAndroidTab,
     setEventLogView,
     downloadSummary,
   };

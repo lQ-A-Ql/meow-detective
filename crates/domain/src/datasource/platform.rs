@@ -11,13 +11,14 @@ use thiserror::Error;
 pub enum DataSourcePlatform {
     Windows,
     Linux,
+    Android,
     Unknown,
 }
 
 /// Validation failures for persisted or explicitly supplied platform values.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DataSourcePlatformParseError {
-    #[error("data source platform must be specified as `windows` or `linux`")]
+    #[error("data source platform must be specified as `windows`, `linux`, or `android`")]
     MissingExplicitValue,
     #[error("data source platform `unknown` is not valid for explicit input")]
     UnknownExplicitValue,
@@ -31,6 +32,7 @@ impl DataSourcePlatform {
         match self {
             Self::Windows => "windows",
             Self::Linux => "linux",
+            Self::Android => "android",
             Self::Unknown => "unknown",
         }
     }
@@ -77,6 +79,8 @@ impl FromStr for DataSourcePlatform {
             Ok(Self::Windows)
         } else if value.eq_ignore_ascii_case("linux") {
             Ok(Self::Linux)
+        } else if value.eq_ignore_ascii_case("android") {
+            Ok(Self::Android)
         } else if value.eq_ignore_ascii_case("unknown") {
             Ok(Self::Unknown)
         } else {

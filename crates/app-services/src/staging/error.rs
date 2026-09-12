@@ -13,6 +13,8 @@ pub enum StagingError {
     MergeConflict(String),
     #[error("Invalid staging state: {0}")]
     InvalidState(String),
+    #[error("Staging merge cancelled")]
+    Cancelled,
     #[error("{0}")]
     Other(String),
 }
@@ -41,6 +43,7 @@ impl transport::ServiceErrorCategory for StagingError {
             Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::MergeConflict(_) | Self::InvalidState(_) => transport::ErrorCategory::Validation,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

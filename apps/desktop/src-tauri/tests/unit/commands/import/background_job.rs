@@ -909,7 +909,9 @@ fn filesystem_oracle_offset(kind: ImageFilesystemKind, base: u64) -> u64 {
         | ImageFilesystemKind::Fat
         | ImageFilesystemKind::Iso9660
         | ImageFilesystemKind::BitLocker
-        | ImageFilesystemKind::Xfs => base,
+        | ImageFilesystemKind::Xfs
+        | ImageFilesystemKind::F2fs
+        | ImageFilesystemKind::Erofs => base,
     }
 }
 

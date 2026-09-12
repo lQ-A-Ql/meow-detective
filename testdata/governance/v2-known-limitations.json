@@ -1,5 +1,5 @@
 {
-  "lastVerifiedAt": "2026-09-03T00:00:00Z",
+  "lastVerifiedAt": "2026-09-08T00:00:00Z",
   "documentedLimitCount": 58,
   "items": [
     {
@@ -522,9 +522,9 @@
     },
     {
       "category": "移动设备",
-      "item": "Android 制品",
-      "status": "unsupported",
-      "summary": "Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）无实现；artifacts-android crate 已退役，仅 transport/src/dto/android.rs 保留为零消费者预留契约面",
+      "item": "Android 制品与动态分区",
+      "status": "partial",
+      "summary": "direct Android sparse 中的明文 ext4/F2FS/EROFS 支持文件树、预览、提取和通用搜索；标准 build properties、SettingsProvider XML 和 PackageManager packages.xml 支持有来源的设备与包元数据，APK 标签和 PNG/WebP launcher 图标仅按当前页受限读取。super/liblp 逻辑分区、Android 备份、SMS/MMS、联系人、应用数据、Chrome 历史、FBE/FDE/metadata encryption 及 vendor IMEI stores 仍未实现。",
       "affectedChains": [
         "Android"
       ],

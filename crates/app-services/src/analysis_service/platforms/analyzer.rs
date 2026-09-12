@@ -1,6 +1,6 @@
 use domain::DataSourcePlatform;
 
-use super::{linux, windows};
+use super::{android, linux, windows};
 use crate::analysis_service::capability::{select_capabilities, AnalysisCapability};
 use crate::analysis_service::error::AnalysisServiceError;
 
@@ -23,6 +23,7 @@ pub(crate) fn analyzer_for(
     match platform {
         DataSourcePlatform::Windows => Ok(&windows::WINDOWS_ANALYZER),
         DataSourcePlatform::Linux => Ok(&linux::LINUX_ANALYZER),
+        DataSourcePlatform::Android => Ok(&android::ANDROID_ANALYZER),
         DataSourcePlatform::Unknown => Err(AnalysisServiceError::unsupported_platform(
             "platform metadata is missing",
         )),

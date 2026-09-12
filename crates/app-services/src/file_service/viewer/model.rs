@@ -253,6 +253,11 @@ pub(crate) fn open_host_evidence_reader(
         "local_disk" => evidence_core::LocalDiskReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             .map_err(crate::file_service::FileServiceError::Io),
+        "android_sparse" => image_android::AndroidSparseReader::open(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(|error| {
+                crate::file_service::FileServiceError::Io(std::io::Error::other(error))
+            }),
         other => Err(crate::file_service::FileServiceError::Unsupported(format!(
             "Evidence reader is not available for source kind '{other}'",
         ))),

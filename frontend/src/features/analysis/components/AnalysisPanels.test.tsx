@@ -231,7 +231,7 @@ describe('AnalysisPanels sub-components', () => {
       expect(screen.getByText('数据源分析')).toBeDefined();
       expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
       expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
-      expect(screen.getByRole('button', { name: /运行提取/ })).toBeDefined();
+      expect(screen.getByRole('button', { name: /运行分析/ })).toBeDefined();
     });
 
     it('asks for a data source before running source-bound analysis', () => {
@@ -246,7 +246,7 @@ describe('AnalysisPanels sub-components', () => {
       );
       expect(screen.getByText(/左侧数据源树选择一个来源/)).toBeDefined();
       expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
-      expect(screen.getByRole('button', { name: /运行提取/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(true);
     });
 
     it('shows source-bound analysis notice once a data source is selected', () => {
@@ -262,7 +262,7 @@ describe('AnalysisPanels sub-components', () => {
       );
       expect(screen.getByText(/分析结果绑定当前数据源/)).toBeDefined();
       expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
-      expect(screen.getByRole('button', { name: /运行提取/ }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(false);
     });
   });
 });

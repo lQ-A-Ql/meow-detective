@@ -148,6 +148,8 @@ fn enumerate_staged_catalog(
             ImageFilesystemKind::Fat => "FAT",
             ImageFilesystemKind::Iso9660 => "ISO9660",
             ImageFilesystemKind::Ext4 => "EXT4",
+            ImageFilesystemKind::F2fs => "F2FS",
+            ImageFilesystemKind::Erofs => "EROFS",
             ImageFilesystemKind::Xfs => "XFS",
             ImageFilesystemKind::Btrfs => "BTRFS",
             ImageFilesystemKind::BitLocker | ImageFilesystemKind::LvmPool => continue,

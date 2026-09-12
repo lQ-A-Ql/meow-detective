@@ -113,6 +113,9 @@ export const COMMANDS = {
   },
   analysis: {
     GET_SYSTEM_INFO: 'get_system_info',
+    RUN_ANDROID_ANALYSIS: 'run_android_analysis',
+    GET_ANDROID_DEVICE_INFO: 'get_android_device_info',
+    GET_ANDROID_PACKAGE_SUMMARY: 'get_android_package_summary',
     CLASSIFY_FILES: 'classify_files',
     GET_FILE_CLASSIFICATION_BOARD: 'get_file_classification_board',
     GET_EVIDENCE_CLASSIFICATION_SUMMARY: 'get_evidence_classification_summary',

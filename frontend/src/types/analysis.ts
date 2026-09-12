@@ -185,6 +185,65 @@ export interface AnalysisExtractionSectionRun {
   warnings: string[];
 }
 
+export interface AndroidDeviceInfo {
+  status: AnalysisParseStatus;
+  model?: string;
+  manufacturer?: string;
+  androidVersion?: string;
+  sdkInt?: string;
+  buildId?: string;
+  buildFingerprint?: string;
+  serialNumber?: string;
+  androidId?: string;
+  imei?: string;
+  facts: AndroidDeviceFact[];
+  warnings: string[];
+}
+
+export interface AndroidDeviceFact {
+  field: string;
+  value: string;
+  confidence: string;
+  sourceFileId: string;
+  sourcePath: string;
+  parser: string;
+  warning?: string;
+}
+
+export interface AndroidPackageSummary {
+  status: AnalysisParseStatus;
+  totalCount: number;
+  pageTotal: number;
+  packages: AndroidPackage[];
+  warnings: string[];
+}
+
+export interface AndroidPackage {
+  packageName: string;
+  appName?: string;
+  versionCode?: string;
+  installTime?: string;
+  updateTime?: string;
+  installer?: string;
+  uid?: number;
+  userId?: number;
+  userState?: string;
+  codePath?: string;
+  sourceFileId: string;
+  sourcePath: string;
+  parser: string;
+  iconDataUrl?: string;
+  warning?: string;
+}
+
+export interface AndroidAnalysisRun {
+  status: AnalysisParseStatus;
+  scannedFileCount: number;
+  deviceFactCount: number;
+  packageCount: number;
+  warnings: string[];
+}
+
 export interface ClassifiedFileRow {
   fileId: string;
   name: string;

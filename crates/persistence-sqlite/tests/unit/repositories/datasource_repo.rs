@@ -200,6 +200,72 @@ fn local_disk_kind_round_trips_without_raw_downgrade() {
 }
 
 #[test]
+fn logical_archive_kind_round_trips_without_raw_downgrade() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let mut ds = make_ds("ds-logical-archive", "Collected archive");
+    ds.kind = DataSourceKind::LogicalArchive;
+    ds.source_path = std::path::PathBuf::from("D:/evidence/collection.tar.gz");
+
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    let stored = repo
+        .find_by_case(&CaseId("case-1".to_string()))
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    assert_eq!(stored.kind, DataSourceKind::LogicalArchive);
+    assert_eq!(stored.source_path, ds.source_path);
+    assert_eq!(
+        repo.source_kind(&DataSourceId("ds-logical-archive".to_string()))
+            .unwrap(),
+        DataSourceKind::LogicalArchive
+    );
+    let raw_kind: String = conn
+        .query_row(
+            "SELECT kind FROM data_sources WHERE id = 'ds-logical-archive'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(raw_kind, "logical_archive");
+}
+
+#[test]
+fn android_sparse_kind_round_trips_without_raw_downgrade() {
+    let conn = setup_db();
+    let repo = DataSourceRepo::new(&conn);
+    let mut ds = make_ds("ds-android-sparse", "Android system image");
+    ds.kind = DataSourceKind::AndroidSparse;
+    ds.source_path = std::path::PathBuf::from("D:/evidence/system.img");
+
+    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+    let stored = repo
+        .find_by_case(&CaseId("case-1".to_string()))
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    assert_eq!(stored.kind, DataSourceKind::AndroidSparse);
+    assert_eq!(stored.source_path, ds.source_path);
+    assert_eq!(
+        repo.source_kind(&DataSourceId("ds-android-sparse".to_string()))
+            .unwrap(),
+        DataSourceKind::AndroidSparse
+    );
+    let raw_kind: String = conn
+        .query_row(
+            "SELECT kind FROM data_sources WHERE id = 'ds-android-sparse'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(raw_kind, "android_sparse");
+}
+
+#[test]
 fn insert_then_find_by_case_round_trips_provenance() {
     let conn = setup_db();
     let repo = DataSourceRepo::new(&conn);

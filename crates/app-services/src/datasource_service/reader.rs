@@ -12,11 +12,15 @@ pub(crate) fn open_evidence_reader(
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>),
         DataSourceKind::LocalDisk => evidence_core::LocalDiskReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>),
-        DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                format!("data source kind {source_kind} is not a host image reader"),
-            ))
-        }
+        DataSourceKind::AndroidSparse => image_android::AndroidSparseReader::open(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(std::io::Error::other),
+        DataSourceKind::LogicalDirectory
+        | DataSourceKind::LogicalArchive
+        | DataSourceKind::CephRbd
+        | DataSourceKind::CephFs => Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("data source kind {source_kind} is not a host image reader"),
+        )),
     }
 }

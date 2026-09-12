@@ -72,3 +72,14 @@ fn directories_sorted_first() {
     assert_eq!(children[0].name, "zzz_dir");
     assert!(!children[1].is_dir);
 }
+
+#[test]
+fn rejects_parent_traversal_for_reads_and_lists() {
+    let tmp = TempDir::new().unwrap();
+    let outside = TempDir::new().unwrap();
+    std::fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
+
+    let fs = LogicalFsReader::open(tmp.path(), "test").unwrap();
+    assert!(fs.list_children("../").is_err());
+    assert!(fs.open_file("../outside.txt").is_err());
+}

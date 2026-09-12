@@ -168,6 +168,7 @@ fn plugin_metas_for_platform(platform: DataSourcePlatform) -> Vec<PluginModuleMe
     let expected = match platform {
         DataSourcePlatform::Windows => "windows",
         DataSourcePlatform::Linux => "linux",
+        DataSourcePlatform::Android => return Vec::new(),
         DataSourcePlatform::Unknown => return Vec::new(),
     };
     crate::plugin_loader::load_all()

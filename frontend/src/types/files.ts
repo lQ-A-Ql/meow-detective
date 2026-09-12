@@ -97,7 +97,7 @@ export interface FileJumpContext {
   requiresShowHidden: boolean;
 }
 
-export type ImportTargetPlatform = 'windows' | 'linux';
+export type ImportTargetPlatform = 'windows' | 'linux' | 'android';
 export type ImportSourceKind = 'auto' | 'linuxCluster' | 'localDisk';
 
 export interface ImportDataSourceRequest {

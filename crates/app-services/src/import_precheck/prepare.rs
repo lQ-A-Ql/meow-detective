@@ -29,6 +29,7 @@ pub struct ImportClusterMemberConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSourceMode {
     LogicalDirectory,
+    LogicalArchive,
     Image { staging_kind: &'static str },
 }
 
@@ -39,7 +40,7 @@ impl ImportSourceConfig {
 
     pub fn staging_kind(&self) -> Option<&'static str> {
         match self.mode {
-            ImportSourceMode::LogicalDirectory => None,
+            ImportSourceMode::LogicalDirectory | ImportSourceMode::LogicalArchive => None,
             ImportSourceMode::Image { staging_kind } => Some(staging_kind),
         }
     }
@@ -95,6 +96,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         Some(kind) => kind,
         None => datasource_service::classify_data_source_path(&path)?,
     };
+    ensure_kind_matches_platform(&kind, platform)?;
     let source_name = derive_source_name(&path);
     let mode = import_source_mode(&kind).ok_or(ImportSourceConfigError::UnsupportedSourceType)?;
 
@@ -119,6 +121,16 @@ fn ensure_supported_import_platform(
     Ok(())
 }
 
+fn ensure_kind_matches_platform(
+    kind: &DataSourceKind,
+    platform: DataSourcePlatform,
+) -> Result<(), ImportSourceConfigError> {
+    if *kind == DataSourceKind::AndroidSparse && platform != DataSourcePlatform::Android {
+        return Err(ImportSourceConfigError::AndroidSparsePlatformMismatch);
+    }
+    Ok(())
+}
+
 fn validate_import_source_for_filesystem(path: &Path) -> Result<(), ImportSourceConfigError> {
     let metadata = std::fs::metadata(path)
         .map_err(|_| ImportSourceConfigError::MissingOrInaccessibleSource)?;
@@ -138,6 +150,10 @@ fn derive_source_name(path: &Path) -> String {
 fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
     match kind {
         DataSourceKind::LogicalDirectory => Some(ImportSourceMode::LogicalDirectory),
+        DataSourceKind::LogicalArchive => Some(ImportSourceMode::LogicalArchive),
+        DataSourceKind::AndroidSparse => Some(ImportSourceMode::Image {
+            staging_kind: "AndroidSparse",
+        }),
         DataSourceKind::E01 => Some(ImportSourceMode::Image {
             staging_kind: "E01",
         }),

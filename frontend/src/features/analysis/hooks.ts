@@ -2,6 +2,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 import {
   generateAnalysisSummary,
   getBrowserHistorySummary,
+  getAndroidDeviceInfo,
+  getAndroidPackageSummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvtxEventSummary,
@@ -17,6 +19,7 @@ import {
   getV3GovernanceSnapshot,
   getCaseOverviewSnapshot,
   runAnalysisExtraction,
+  runAndroidAnalysis,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
@@ -24,6 +27,7 @@ import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/type
 import type { DataSourceSummary } from '@/types/models';
 import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
 import type { LinuxArtifactSummary } from '@/types/models';
+import type { AndroidPackageSummary } from '@/types/models';
 import type { PluginFamilyEntries } from '@/types/models';
 
 type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
@@ -43,6 +47,7 @@ const ANALYSIS_QUERY_OPTIONS = {
 } as const;
 
 const EVTX_PAGE_SIZE = 500;
+const ANDROID_PACKAGE_PAGE_SIZE = 100;
 const LINUX_PAGE_SIZE = 200;
 const PLUGIN_PAGE_SIZE = 200;
 
@@ -483,6 +488,61 @@ export function useV3GovernanceSnapshot() {
   });
 }
 
+function mergeAndroidPackagePages(pages: AndroidPackageSummary[]): AndroidPackageSummary | undefined {
+  const first = pages[0];
+  if (!first) return undefined;
+  return {
+    ...first,
+    packages: pages.flatMap((page) => page.packages),
+    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
+  };
+}
+
+export function useAndroidDeviceInfo(source?: AnalysisSource) {
+  const currentCase = useCurrentCase();
+  const dataSourceId = source?.id;
+  return useQuery({
+    queryKey: ['analysis', 'android-device', currentCase.data?.id ?? null, dataSourceId ?? null],
+    queryFn: () => getAndroidDeviceInfo(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess
+      && Boolean(currentCase.data)
+      && Boolean(dataSourceId)
+      && source?.platform === 'android',
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+}
+
+export function useAndroidPackageSummary(request: OptionalAnalysisPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const dataSourceId = request.source?.id;
+  const limit = Math.min(request.limit ?? ANDROID_PACKAGE_PAGE_SIZE, ANDROID_PACKAGE_PAGE_SIZE);
+  const query = useInfiniteQuery({
+    queryKey: ['analysis', 'android-packages', currentCase.data?.id ?? null, dataSourceId ?? null, limit],
+    queryFn: ({ pageParam }) => getAndroidPackageSummary({
+      dataSourceId: dataSourceId ?? '',
+      offset: pageParam,
+      limit,
+    }),
+    initialPageParam: request.offset ?? 0,
+    getNextPageParam: (lastPage, pages) => {
+      if (lastPage.packages.length === 0) return undefined;
+      const loaded = pages.reduce((total, page) => total + page.packages.length, 0);
+      return loaded < lastPage.totalCount ? (request.offset ?? 0) + loaded : undefined;
+    },
+    enabled: currentCase.isSuccess
+      && Boolean(currentCase.data)
+      && Boolean(dataSourceId)
+      && request.source?.platform === 'android',
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+  return {
+    ...query,
+    data: mergeAndroidPackagePages(query.data?.pages ?? []),
+  };
+}
+
 export function useCaseOverviewSnapshot() {
   const currentCase = useCurrentCase();
   return useQuery({
@@ -526,6 +586,26 @@ export function useRunAnalysisExtraction() {
       currentCase.data?.id ?? null,
       variables,
     ),
+  });
+}
+
+export function useRunAndroidAnalysis() {
+  const qc = useQueryClient();
+  const currentCase = useCurrentCase();
+  return useMutation({
+    mutationFn: (dataSourceId: string) => runAndroidAnalysis(dataSourceId),
+    onSuccess: async (_data, dataSourceId) => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['analysis', 'android-device', currentCase.data?.id ?? null, dataSourceId],
+          refetchType: 'active',
+        }),
+        qc.invalidateQueries({
+          queryKey: ['analysis', 'android-packages', currentCase.data?.id ?? null, dataSourceId],
+          refetchType: 'active',
+        }),
+      ]);
+    },
   });
 }
 

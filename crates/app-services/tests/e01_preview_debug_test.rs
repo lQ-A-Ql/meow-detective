@@ -90,6 +90,8 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                                 datasource_service::ImageFilesystemKind::Iso9660 => "ISO9660",
                                 datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
                                 datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
+                                datasource_service::ImageFilesystemKind::F2fs => "F2FS",
+                                datasource_service::ImageFilesystemKind::Erofs => "EROFS",
                                 datasource_service::ImageFilesystemKind::Xfs => "XFS",
                                 datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
                                 datasource_service::ImageFilesystemKind::LvmPool => "LVM",

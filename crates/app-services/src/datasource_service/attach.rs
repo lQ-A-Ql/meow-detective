@@ -133,6 +133,10 @@ pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
 
     if has_e01_magic(source_path)? || has_e01_name(source_path) {
         Ok(DataSourceKind::E01)
+    } else if has_android_sparse_magic(source_path)? {
+        Ok(DataSourceKind::AndroidSparse)
+    } else if has_archive_magic(source_path)? || has_archive_name(source_path) {
+        Ok(DataSourceKind::LogicalArchive)
     } else {
         Ok(DataSourceKind::Raw)
     }
@@ -163,4 +167,40 @@ fn has_e01_name(source_path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .map(|name| name.to_ascii_lowercase().contains(".e01."))
         .unwrap_or(false)
+}
+
+fn has_android_sparse_magic(source_path: &Path) -> Result<bool> {
+    let mut file = std::fs::File::open(source_path)?;
+    let mut magic = [0u8; 4];
+    match file.read_exact(&mut magic) {
+        Ok(()) => Ok(u32::from_le_bytes(magic) == image_android::SPARSE_MAGIC),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn has_archive_magic(source_path: &Path) -> Result<bool> {
+    let mut file = std::fs::File::open(source_path)?;
+    let mut header = [0u8; 512];
+    let bytes_read = file.read(&mut header)?;
+    if bytes_read >= 2 && header[..2] == [0x1f, 0x8b] {
+        return Ok(true);
+    }
+    Ok(bytes_read >= 263
+        && (&header[257..262] == b"ustar"
+            || &header[257..263] == b"ustar\0"
+            || &header[257..263] == b"ustar "))
+}
+
+fn has_archive_name(source_path: &Path) -> bool {
+    let name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    name.ends_with(".tar")
+        || name.ends_with(".tar.gz")
+        || name.ends_with(".tgz")
+        || name.ends_with(".gz")
+        || name.ends_with(".gzip")
 }

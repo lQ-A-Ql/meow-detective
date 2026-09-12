@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   emailSummary: vi.fn(),
   eventLogSummary: vi.fn(),
   linuxSummary: vi.fn(),
+  androidDeviceInfo: vi.fn(),
+  androidPackageSummary: vi.fn(),
+  androidAnalysisRun: vi.fn(),
   pluginModules: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
@@ -41,6 +44,9 @@ vi.mock('@/features/analysis/hooks', () => ({
   useEmailExtractionSummary: mocks.emailSummary,
   useEvtxEventSummary: mocks.eventLogSummary,
   useLinuxArtifactSummary: mocks.linuxSummary,
+  useAndroidDeviceInfo: mocks.androidDeviceInfo,
+  useAndroidPackageSummary: mocks.androidPackageSummary,
+  useRunAndroidAnalysis: mocks.androidAnalysisRun,
   usePluginModules: mocks.pluginModules,
   useFileClassificationBoard: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
@@ -508,6 +514,39 @@ describe('DataAnalysis page', () => {
         generatedAt: '2026-06-01T10:14:00Z',
       },
     }));
+    mocks.androidDeviceInfo.mockReturnValue(queryState({
+      data: {
+        status: 'notParsed',
+        facts: [],
+        warnings: [],
+      },
+    }));
+    mocks.androidPackageSummary.mockReturnValue({
+      ...queryState({
+        data: {
+          status: 'notParsed',
+          totalCount: 0,
+          pageTotal: 0,
+          packages: [],
+          warnings: [],
+        },
+      }),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+    });
+    mocks.androidAnalysisRun.mockReturnValue({
+      error: null,
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({
+        status: 'notFound',
+        scannedFileCount: 0,
+        deviceFactCount: 0,
+        packageCount: 0,
+        warnings: [],
+      }),
+      reset: vi.fn(),
+    });
     mocks.classifications.mockReturnValue(queryState({
       data: {
         status: 'parsed',
@@ -597,7 +636,7 @@ describe('DataAnalysis page', () => {
     expect(screen.getByLabelText('Windows Evidence / 邮件信息')).toBeDefined();
     expect(screen.getByLabelText('Windows Evidence / 事件日志')).toBeDefined();
     expect(screen.getByLabelText('Windows Evidence / 文件分类')).toBeDefined();
-    expect(screen.getByLabelText('Windows Evidence / 分析报告')).toBeDefined();
+    expect(screen.getByLabelText('Windows Evidence / 报告')).toBeDefined();
     expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
     expect(screen.getAllByText('BETA-LAB').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Windows Evidence Edition 24H2').length).toBeGreaterThan(0);
@@ -747,7 +786,7 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
     expect(mutateAsync).toHaveBeenNthCalledWith(1, { dataSourceId: 'ds-win', categories: ['Registry'] });
@@ -781,7 +820,7 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(mutateAsync).toHaveBeenCalledWith({ dataSourceId: 'ds-linux', categories: ['LinuxArtifacts'] });
@@ -817,7 +856,7 @@ describe('DataAnalysis page', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
     await waitFor(() => expect(useAnalysisStore.getState().extractionProgress.EventLogs.status).toBe('success'));
@@ -866,7 +905,7 @@ describe('DataAnalysis page', () => {
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(useAnalysisStore.getState().extractionProgress.LinuxMysqlServices.status).toBe('success'));
     expect(useAnalysisStore.getState().extractionProgress.LinuxJournal.artifactCount).toBe(1);
@@ -1068,7 +1107,7 @@ describe('DataAnalysis page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
 
     act(() => useAnalysisStore.getState().setSelectedDataSourceId('ds-linux'));
@@ -1105,7 +1144,7 @@ describe('DataAnalysis page', () => {
     }));
 
     renderPage();
-    fireEvent.click(screen.getByLabelText('Windows Evidence / 分析报告'));
+    fireEvent.click(screen.getByLabelText('Windows Evidence / 报告'));
     fireEvent.click(await screen.findByRole('button', { name: /下载 Markdown 报告/ }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
 
@@ -1277,7 +1316,7 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByLabelText('Windows Evidence / 分析报告'));
+    fireEvent.click(screen.getByLabelText('Windows Evidence / 报告'));
     await waitFor(() => expect(screen.getByRole('button', { name: /下载 Markdown 报告/ })).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: /下载 Markdown 报告/ }));
 

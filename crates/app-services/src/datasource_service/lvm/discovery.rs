@@ -241,7 +241,10 @@ fn should_skip_extra_source(
     primary_source_kind: &DataSourceKind,
     scanned_sources: &mut HashSet<(String, String)>,
 ) -> bool {
-    if matches!(source.source_kind, DataSourceKind::LogicalDirectory) {
+    if matches!(
+        source.source_kind,
+        DataSourceKind::LogicalDirectory | DataSourceKind::LogicalArchive
+    ) {
         return true;
     }
 

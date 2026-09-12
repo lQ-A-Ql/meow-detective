@@ -23,6 +23,7 @@ members = [
   "crates/search",
   "crates/timeline",
   "crates/artifacts-core",
+  "crates/artifacts-android",
   "crates/artifacts-windows",
   "crates/artifacts-linux",
   "crates/reports",
@@ -103,6 +104,7 @@ volume-android = { path = "crates/volume-android" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
+artifacts-android = { path = "crates/artifacts-android" }
 artifacts-windows = { path = "crates/artifacts-windows" }
 artifacts-linux = { path = "crates/artifacts-linux" }
 reports = { path = "crates/reports" }
@@ -110,6 +112,7 @@ testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false, features = ["multithreading"] }
 flate2 = "1"
+tar = { version = "0.4", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }
@@ -162,6 +165,7 @@ rand = "~0.8"
 mailparse = "0.16"
 zip = { version = "~2", default-features = false, features = ["deflate"] }
 quick-xml = "~0.41"
+android-abx = "~0.3"
 lopdf = "0.44"
 winres = "~0.1"
 binread = "~2.2"

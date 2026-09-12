@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AppWindow,
   ChevronDown,
   ChevronRight,
   Database,
@@ -13,6 +14,7 @@ import {
   Puzzle,
   Server,
   Shield,
+  Smartphone,
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -22,48 +24,55 @@ import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-
 import type { DataSourceSummary, PluginModule } from '@/types/models';
 import type {
   AnalysisExtractionProgressInfo,
+  AndroidAnalysisTabKey,
   AnalysisTabKey,
   ExtractionCategory,
   LinuxAnalysisTabKey,
 } from '@/features/analysis/types';
 
 type SourceTreeNode = {
-  label: string;
+  labelKey: string;
   icon: ComponentType<{ size?: number | string; className?: string }>;
   category?: ExtractionCategory;
   windowsTab?: AnalysisTabKey;
   linuxTab?: LinuxAnalysisTabKey;
+  androidTab?: AndroidAnalysisTabKey;
 };
 
 const WINDOWS_NODES: SourceTreeNode[] = [
-  { label: '系统信息', icon: Monitor, windowsTab: 'system' },
-  { label: '证据分类', icon: Shield, windowsTab: 'evidence' },
-  { label: '注册表', icon: Database, category: 'Registry', windowsTab: 'registry' },
-  { label: '浏览器记录', icon: Globe, category: 'BrowserHistory', windowsTab: 'browser' },
-  { label: '邮件信息', icon: Mail, category: 'Email', windowsTab: 'email' },
-  { label: '事件日志', icon: FileClock, category: 'EventLogs', windowsTab: 'eventlogs' },
-  { label: '文件分类', icon: FileText, windowsTab: 'files' },
-  { label: '分析报告', icon: FileText, windowsTab: 'report' },
+  { labelKey: 'analysis.tabs.system', icon: Monitor, windowsTab: 'system' },
+  { labelKey: 'analysis.tabs.evidence', icon: Shield, windowsTab: 'evidence' },
+  { labelKey: 'analysis.tabs.registry', icon: Database, category: 'Registry', windowsTab: 'registry' },
+  { labelKey: 'analysis.tabs.browser', icon: Globe, category: 'BrowserHistory', windowsTab: 'browser' },
+  { labelKey: 'analysis.tabs.email', icon: Mail, category: 'Email', windowsTab: 'email' },
+  { labelKey: 'analysis.tabs.eventlogs', icon: FileClock, category: 'EventLogs', windowsTab: 'eventlogs' },
+  { labelKey: 'analysis.tabs.files', icon: FileText, windowsTab: 'files' },
+  { labelKey: 'analysis.tabs.report', icon: FileText, windowsTab: 'report' },
 ];
 
 const WINDOWS_DELETED_RECOVERY_NODE: SourceTreeNode = {
-  label: '删除恢复',
+  labelKey: 'analysis.sidebar.deletedRecovery',
   icon: FileX2,
   windowsTab: 'deletedRecovery',
 };
 
 const LINUX_NODES: SourceTreeNode[] = [
-  { label: '概览', icon: Server, category: 'LinuxArtifacts', linuxTab: 'overview' },
-  { label: '系统日志', icon: FileClock, category: 'LinuxJournal', linuxTab: 'journal' },
-  { label: '登录记录', icon: Monitor, category: 'LinuxLogin', linuxTab: 'login' },
-  { label: '命令历史', icon: FileText, category: 'LinuxCommands', linuxTab: 'commands' },
-  { label: '软件包', icon: Database, category: 'LinuxPackages', linuxTab: 'packages' },
-  { label: '定时任务', icon: FileClock, category: 'LinuxCron', linuxTab: 'cron' },
-  { label: 'Sudo', icon: Shield, category: 'LinuxSudo', linuxTab: 'sudo' },
-  { label: '系统配置', icon: Database, category: 'LinuxSystemConfig', linuxTab: 'systemConfig' },
-  { label: 'Web 服务', icon: Globe, category: 'LinuxWebServices', linuxTab: 'webServices' },
-  { label: 'MySQL 服务', icon: Database, category: 'LinuxMysqlServices', linuxTab: 'mysqlServices' },
-  { label: '删除恢复', icon: FileX2, linuxTab: 'deletedRecovery' },
+  { labelKey: 'analysis.sidebar.linuxOverview', icon: Server, category: 'LinuxArtifacts', linuxTab: 'overview' },
+  { labelKey: 'analysis.sidebar.linuxJournal', icon: FileClock, category: 'LinuxJournal', linuxTab: 'journal' },
+  { labelKey: 'analysis.sidebar.linuxLogin', icon: Monitor, category: 'LinuxLogin', linuxTab: 'login' },
+  { labelKey: 'analysis.sidebar.linuxCommands', icon: FileText, category: 'LinuxCommands', linuxTab: 'commands' },
+  { labelKey: 'analysis.sidebar.linuxPackages', icon: Database, category: 'LinuxPackages', linuxTab: 'packages' },
+  { labelKey: 'analysis.sidebar.linuxCron', icon: FileClock, category: 'LinuxCron', linuxTab: 'cron' },
+  { labelKey: 'analysis.sidebar.linuxSudo', icon: Shield, category: 'LinuxSudo', linuxTab: 'sudo' },
+  { labelKey: 'analysis.sidebar.linuxSystemConfig', icon: Database, category: 'LinuxSystemConfig', linuxTab: 'systemConfig' },
+  { labelKey: 'analysis.sidebar.linuxWebServices', icon: Globe, category: 'LinuxWebServices', linuxTab: 'webServices' },
+  { labelKey: 'analysis.sidebar.linuxMysqlServices', icon: Database, category: 'LinuxMysqlServices', linuxTab: 'mysqlServices' },
+  { labelKey: 'analysis.sidebar.deletedRecovery', icon: FileX2, linuxTab: 'deletedRecovery' },
+];
+
+const ANDROID_NODES: SourceTreeNode[] = [
+  { labelKey: 'analysis.android.deviceTab', icon: Smartphone, androidTab: 'device' },
+  { labelKey: 'analysis.android.packagesTab', icon: AppWindow, androidTab: 'packages' },
 ];
 
 export interface AnalysisSourceSidebarProps {
@@ -74,12 +83,14 @@ export interface AnalysisSourceSidebarProps {
   linuxNodeCounts?: Partial<Record<LinuxAnalysisTabKey, number>>;
   activeWindowsTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
+  activeAndroidTab: AndroidAnalysisTabKey;
   /** Plugin modules of the currently selected data source (already fetched). */
   pluginModules?: PluginModule[];
   activePluginId?: string;
   onSelectDataSource: (id: string) => void;
   onWindowsTabChange: (tab: AnalysisTabKey) => void;
   onLinuxTabChange: (tab: LinuxAnalysisTabKey) => void;
+  onAndroidTabChange: (tab: AndroidAnalysisTabKey) => void;
   onSelectPluginModule?: (pluginId: string) => void;
 }
 
@@ -91,11 +102,13 @@ export function AnalysisSourceSidebar({
   linuxNodeCounts,
   activeWindowsTab,
   activeLinuxTab,
+  activeAndroidTab,
   pluginModules,
   activePluginId,
   onSelectDataSource,
   onWindowsTabChange,
   onLinuxTabChange,
+  onAndroidTabChange,
   onSelectPluginModule,
 }: AnalysisSourceSidebarProps) {
   const { t } = useTranslation();
@@ -126,10 +139,10 @@ export function AnalysisSourceSidebar({
   }
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-forensics-border bg-forensics-panel" aria-label="数据源树">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-forensics-border bg-forensics-panel" aria-label={t('analysis.sidebar.treeLabel')}>
       <div className="border-b border-forensics-border px-3 py-3">
-        <div className="text-[13px] font-light text-forensics-text">数据源</div>
-        <div className="mt-1 text-[11px] text-forensics-muted">按来源展开提取结果</div>
+        <div className="text-[13px] font-light text-forensics-text">{t('analysis.sidebar.title')}</div>
+        <div className="mt-1 text-[11px] text-forensics-muted">{t('analysis.sidebar.description')}</div>
       </div>
 
       <ScrollArea className="min-h-0 flex-1" viewportClassName="p-2">
@@ -139,7 +152,9 @@ export function AnalysisSourceSidebar({
             const expanded = !collapsedSourceIds.has(source.id);
             const nodes = source.platform === 'windows'
               ? [...WINDOWS_NODES, WINDOWS_DELETED_RECOVERY_NODE]
-              : LINUX_NODES;
+              : source.platform === 'linux'
+                ? LINUX_NODES
+                : ANDROID_NODES;
             const SourceIcon = sourceKindIconLarge(source.kind);
             // Plugin modules are fetched for the selected source only; the
             // platform filter keeps e.g. windows-only plugins off linux sources.
@@ -157,7 +172,7 @@ export function AnalysisSourceSidebar({
                   aria-label={source.name}
                   aria-current={selected ? 'true' : undefined}
                   aria-expanded={expanded}
-                  title={expanded ? '收起数据源' : '展开数据源'}
+                  title={expanded ? t('analysis.sidebar.collapseSource') : t('analysis.sidebar.expandSource')}
                   onClick={() => selectOrToggleSource(source.id, selected, expanded)}
                   className={cn(
                     'h-8 w-full min-w-0 justify-start gap-2 border border-transparent px-2 text-left text-[12px] hover:border-forensics-border',
@@ -182,7 +197,9 @@ export function AnalysisSourceSidebar({
                       const active = selected
                         && (source.platform === 'windows'
                           ? node.windowsTab === activeWindowsTab
-                          : node.linuxTab === activeLinuxTab);
+                          : source.platform === 'linux'
+                            ? node.linuxTab === activeLinuxTab
+                            : node.androidTab === activeAndroidTab);
                       const nodeProgress = selected && node.category ? progress[node.category] : undefined;
                       const summaryCount = selected && source.platform === 'linux' && node.linuxTab
                         ? linuxNodeCounts?.[node.linuxTab]
@@ -192,15 +209,16 @@ export function AnalysisSourceSidebar({
                           ? nodeProgress.artifactCount
                           : undefined);
                       const Icon = node.icon;
+                      const nodeLabel = t(node.labelKey);
 
                       return (
                         <Button
-                          key={node.label}
+                          key={node.labelKey}
                           type="button"
                           variant="forensicsGhost"
                           size="inline"
                           disabled={disabled}
-                          aria-label={`${source.name} / ${node.label}`}
+                          aria-label={source.name + ' / ' + nodeLabel}
                           aria-current={active ? 'true' : undefined}
                           onClick={() => {
                             if (source.id !== selectedDataSourceId) {
@@ -212,6 +230,9 @@ export function AnalysisSourceSidebar({
                             if (source.platform === 'linux' && node.linuxTab) {
                               onLinuxTabChange(node.linuxTab);
                             }
+                            if (source.platform === 'android' && node.androidTab) {
+                              onAndroidTabChange(node.androidTab);
+                            }
                           }}
                           className={cn(
                             'h-7 w-full min-w-0 justify-start gap-1 px-1 text-left text-[11px] text-forensics-muted hover:text-forensics-text',
@@ -221,7 +242,7 @@ export function AnalysisSourceSidebar({
                           <TreeConnector depth={1} isLast={index === nodes.length - 1 && pluginNodes.length === 0} />
                           <Icon size={12} className="shrink-0 text-forensics-muted-light" />
                           <span className="min-w-0 flex-1 truncate">
-                            {resultCount === undefined ? node.label : `${node.label}(${resultCount})`}
+                            {resultCount === undefined ? nodeLabel : nodeLabel + '(' + resultCount + ')'}
                           </span>
                         </Button>
                       );

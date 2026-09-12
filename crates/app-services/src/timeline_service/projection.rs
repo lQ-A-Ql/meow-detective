@@ -282,6 +282,7 @@ fn file_policy_sql(
     };
     match platform {
         DataSourcePlatform::Linux => Ok(read_only_policy.to_string()),
+        DataSourcePlatform::Android => Ok(read_only_policy.to_string()),
         DataSourcePlatform::Windows => Ok("COALESCE(fe.system, 0) = 0
              AND fe.name NOT LIKE '$%'
              AND LOWER(REPLACE(fe.path, '\\', '/')) NOT LIKE 'windows/%'

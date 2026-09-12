@@ -29,6 +29,16 @@ const linuxSource: DataSourceSummary = {
   partitions: [],
 };
 
+const androidSource: DataSourceSummary = {
+  id: 'ds-android',
+  name: 'Android-Data',
+  kind: 'android_sparse',
+  sourcePath: 'E:\\cases\\android.img',
+  importedAt: '2026-06-03T10:00:00Z',
+  platform: 'android',
+  partitions: [],
+};
+
 function pluginModule(overrides: Partial<PluginModule> = {}): PluginModule {
   return {
     pluginId: 'plugin-wechat',
@@ -63,9 +73,11 @@ function renderSidebar(overrides: Partial<Parameters<typeof AnalysisSourceSideba
     progress: idleProgress(),
     activeWindowsTab: 'system',
     activeLinuxTab: 'overview',
+    activeAndroidTab: 'device',
     onSelectDataSource: vi.fn(),
     onWindowsTabChange: vi.fn(),
     onLinuxTabChange: vi.fn(),
+    onAndroidTabChange: vi.fn(),
     onSelectPluginModule: vi.fn(),
     ...overrides,
   };
@@ -125,5 +137,16 @@ describe('AnalysisSourceSidebar plugin group', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Win10-C盘 / 微信' }));
 
     expect(props.onSelectPluginModule).toHaveBeenCalledWith('plugin-wechat');
+  });
+
+  it('renders separate Android device and package nodes', () => {
+    const props = renderSidebar({
+      dataSources: [androidSource],
+      selectedDataSourceId: androidSource.id,
+    });
+
+    expect(screen.getByText('手机信息')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Android-Data / 已安装包' }));
+    expect(props.onAndroidTabChange).toHaveBeenCalledWith('packages');
   });
 });

@@ -81,9 +81,7 @@ where
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
 
     if kind == "logical_directory" {
-        let root = PathBuf::from(&source_path).canonicalize()?;
-        let relative_path = safe_relative_path(&entry.path)?;
-        Ok(root.join(relative_path))
+        resolve_logical_file_path(&source_path, &entry)
     } else {
         Err(FileServiceError::other(
             "File path only available for logical directories",
@@ -103,10 +101,9 @@ fn resolve_logical_file_path(
     for component in full_path.components() {
         check_path.push(component);
         if check_path.is_symlink() {
-            return Err(FileServiceError::other(format!(
-                "Symlink detected in path at '{}' - rejected for security",
-                check_path.display()
-            )));
+            return Err(FileServiceError::other(
+                "Symlink detected in logical source path - rejected for security",
+            ));
         }
     }
 

@@ -1,3 +1,7 @@
+pub use crate::dto::analysis_android::{
+    AndroidAnalysisRunDto, AndroidDeviceFactDto, AndroidDeviceInfoDto, AndroidPackageDto,
+    AndroidPackageSummaryDto,
+};
 pub use crate::dto::analysis_base::{
     AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto, AnalysisExtractionRunDto,
     AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,

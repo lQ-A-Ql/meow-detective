@@ -21,7 +21,7 @@ pub(super) fn merge_enumeration_results(
     persist_merging_phase(ctx.case_root, manifest)?;
 
     let started = Instant::now();
-    let merged = staging::merge_all_staging_to_main(
+    let merged = staging::merge_all_staging_to_main_with_cancel(
         ctx.source_connection()?,
         ctx.case_root,
         &data_source.id.0,
@@ -35,7 +35,9 @@ pub(super) fn merge_enumeration_results(
                 &format!("Merged {completed}/{total} partitions"),
             );
         }),
+        Some(ctx.options.cancel_token),
     )
+    .map(|stats| stats.merged_rows)
     .map_err(CommandError::from_service_error)?;
     report_merge_complete(ctx, data_source, merged, started.elapsed());
 

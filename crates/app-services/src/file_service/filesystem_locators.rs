@@ -224,6 +224,8 @@ pub(crate) fn preview_candidate_for_locator(
         ImageFilesystemKind::Fat => "FAT",
         ImageFilesystemKind::Iso9660 => "ISO9660",
         ImageFilesystemKind::Ext4 => "Ext4",
+        ImageFilesystemKind::F2fs => "F2FS",
+        ImageFilesystemKind::Erofs => "EROFS",
         ImageFilesystemKind::Xfs => "XFS",
         ImageFilesystemKind::Btrfs => "Btrfs",
         ImageFilesystemKind::BitLocker | ImageFilesystemKind::LvmPool => {

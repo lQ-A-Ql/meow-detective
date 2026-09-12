@@ -136,4 +136,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_035_file_entry_unix_mode",
         include_str!("scripts/source_035_file_entry_unix_mode.sql"),
     ),
+    (
+        "source_036_android_analysis",
+        include_str!("scripts/source_036_android_analysis.sql"),
+    ),
 ];

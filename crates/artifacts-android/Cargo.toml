@@ -1,0 +1,13 @@
+[package]
+name = "artifacts-android"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+android-abx.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true
+zip.workspace = true

@@ -270,12 +270,14 @@ impl<'a> SourceReadContext<'a> {
                 &entry,
                 Some(partition_index),
             )?,
-            "raw" | "local_disk" => crate::file_service::viewer::block_partition_candidates(
-                source_path,
-                Some(partition_index),
-                source_kind,
-            )?,
-            "logical_directory" => Vec::new(),
+            "raw" | "local_disk" | "android_sparse" => {
+                crate::file_service::viewer::block_partition_candidates(
+                    source_path,
+                    Some(partition_index),
+                    source_kind,
+                )?
+            }
+            "logical_directory" | "logical_archive" => Vec::new(),
             other => {
                 return Err(FileServiceError::other(format!(
                     "Range reading is not yet wired for data source kind '{other}'"

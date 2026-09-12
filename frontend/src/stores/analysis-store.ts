@@ -4,6 +4,7 @@ import type {
   AnalysisExtractionProgressState,
 } from '@/features/analysis/types';
 import type {
+  AndroidAnalysisTabKey,
   AnalysisTabKey,
   ExtractionCategory,
   LinuxAnalysisTabKey,
@@ -59,6 +60,7 @@ type AnalysisState = {
   progressExpanded: boolean;
   activeTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
+  activeAndroidTab: AndroidAnalysisTabKey;
   selectedDataSourceId?: string;
   activePluginId?: string;
 
@@ -74,6 +76,7 @@ type AnalysisState = {
   setProgressExpanded: (expanded: boolean) => void;
   setActiveTab: (tab: AnalysisTabKey) => void;
   setActiveLinuxTab: (tab: LinuxAnalysisTabKey) => void;
+  setActiveAndroidTab: (tab: AndroidAnalysisTabKey) => void;
   setActivePluginId: (id?: string) => void;
   setSelectedDataSourceId: (id?: string) => void;
   reset: () => void;
@@ -88,6 +91,7 @@ const initialState: Omit<
   | 'setProgressExpanded'
   | 'setActiveTab'
   | 'setActiveLinuxTab'
+  | 'setActiveAndroidTab'
   | 'setActivePluginId'
   | 'setSelectedDataSourceId'
   | 'reset'
@@ -97,6 +101,7 @@ const initialState: Omit<
   progressExpanded: true,
   activeTab: 'system',
   activeLinuxTab: 'overview',
+  activeAndroidTab: 'device',
   selectedDataSourceId: undefined,
   activePluginId: undefined,
 };
@@ -124,6 +129,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveLinuxTab: (tab) => set({ activeLinuxTab: tab }),
+
+  setActiveAndroidTab: (tab) => set({ activeAndroidTab: tab }),
 
   setActivePluginId: (id) => set({ activePluginId: id }),
 

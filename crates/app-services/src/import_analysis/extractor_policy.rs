@@ -22,6 +22,7 @@ impl PlatformExtractorPolicy {
                 registry: Some(artifact_service::create_registry()),
             }),
             DataSourcePlatform::Linux => Ok(Self { registry: None }),
+            DataSourcePlatform::Android => Ok(Self { registry: None }),
             DataSourcePlatform::Unknown => Err(unsupported_platform(platform)),
         }
     }
@@ -52,7 +53,9 @@ pub(super) fn validate_analysis_platform(
     platform: DataSourcePlatform,
 ) -> Result<(), ImportAnalysisError> {
     match platform {
-        DataSourcePlatform::Windows | DataSourcePlatform::Linux => Ok(()),
+        DataSourcePlatform::Windows | DataSourcePlatform::Linux | DataSourcePlatform::Android => {
+            Ok(())
+        }
         DataSourcePlatform::Unknown => Err(unsupported_platform(platform)),
     }
 }

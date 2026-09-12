@@ -213,7 +213,7 @@ foreach ($pattern in @(
 # direct dependency on Tauri runtime handles.
 Assert-NotMatchesCaseSensitive `
   -Content $importPipelineProduction `
-  -Pattern '\btauri::|AppHandle|Window|Emitter|emit_all|emit_to|\.emit\(' `
+  -Pattern '\btauri::|\bAppHandle\b|\bWindow\b|\bEmitter\b|emit_all|emit_to|\.emit\(' `
   -Message "import_pipeline production code must stay Tauri-free; use ImportEventSink adapters at the command boundary"
 
 Assert-Matches `

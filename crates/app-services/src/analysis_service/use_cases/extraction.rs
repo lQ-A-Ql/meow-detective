@@ -160,6 +160,11 @@ fn run_source_analysis_extraction_execution_with_progress(
     control: AnalysisExecutionControl<'_>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    if source.platform == domain::DataSourcePlatform::Android {
+        return Err(AnalysisServiceError::Unsupported(
+            "use the Android analysis command for Android sources".to_string(),
+        ));
+    }
     // If a WeChat key recovery previously produced keys for this case, point
     // the plugin's injection channel at them for this run; no keys file means
     // behavior is unchanged (see WeChatKeysEnvGuard for the process-level env

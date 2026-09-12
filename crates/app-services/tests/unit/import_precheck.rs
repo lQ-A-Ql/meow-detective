@@ -31,7 +31,7 @@ fn test_estimate_files() {
 #[test]
 fn test_pre_check_nonexistent() {
     let result = pre_import_check(Path::new("/nonexistent"), &DataSourceKind::LogicalDirectory);
-    assert!(!result.errors.is_empty());
+    assert_eq!(result.errors, vec!["Evidence source does not exist"]);
 }
 
 #[test]
@@ -218,6 +218,116 @@ fn import_source_config_classifies_e01_by_magic() {
     assert_eq!(config.source_name, "capture.bin");
     assert_eq!(config.kind, DataSourceKind::E01);
     assert_eq!(config.staging_kind(), Some("E01"));
+}
+
+#[test]
+fn import_source_config_classifies_tar_by_extension() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source = tmp.path().join("collection.tar");
+    std::fs::write(&source, b"not a complete tar archive").unwrap();
+
+    let config = prepare_import_source_config(
+        &source.display().to_string(),
+        DataSourcePlatform::Windows,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(config.kind, DataSourceKind::LogicalArchive);
+    assert_eq!(config.mode, ImportSourceMode::LogicalArchive);
+    assert!(!config.is_image_backed());
+    assert_eq!(config.staging_kind(), None);
+}
+
+#[test]
+fn import_source_config_classifies_gzip_by_magic_without_extension() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source = tmp.path().join("collection.bin");
+    std::fs::write(&source, [0x1f, 0x8b, 0x08, 0x00]).unwrap();
+
+    let config = prepare_import_source_config(
+        &source.display().to_string(),
+        DataSourcePlatform::Windows,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(config.kind, DataSourceKind::LogicalArchive);
+    assert_eq!(config.mode, ImportSourceMode::LogicalArchive);
+}
+
+#[test]
+fn import_source_config_classifies_android_sparse_by_magic() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source = tmp.path().join("system.img");
+    std::fs::write(&source, image_android::SPARSE_MAGIC.to_le_bytes()).unwrap();
+
+    let config = prepare_import_source_config(
+        &source.display().to_string(),
+        DataSourcePlatform::Android,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(config.kind, DataSourceKind::AndroidSparse);
+    assert!(config.is_image_backed());
+    assert_eq!(config.staging_kind(), Some("AndroidSparse"));
+}
+
+#[test]
+fn android_sparse_requires_the_android_platform() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source = tmp.path().join("system.img");
+    std::fs::write(&source, image_android::SPARSE_MAGIC.to_le_bytes()).unwrap();
+
+    let error = prepare_import_source_config(
+        &source.display().to_string(),
+        DataSourcePlatform::Windows,
+        None,
+    )
+    .expect_err("Android sparse source must not enter the Windows workflow");
+
+    assert!(matches!(
+        error,
+        ImportSourceConfigError::AndroidSparsePlatformMismatch
+    ));
+    assert!(error.is_invalid_input());
+}
+
+#[test]
+fn import_source_config_classifies_tar_magic_without_extension() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source = tmp.path().join("collection.bin");
+    let mut header = [0u8; 512];
+    header[257..262].copy_from_slice(b"ustar");
+    std::fs::write(&source, header).unwrap();
+
+    let config = prepare_import_source_config(
+        &source.display().to_string(),
+        DataSourcePlatform::Windows,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(config.kind, DataSourceKind::LogicalArchive);
+    assert_eq!(config.mode, ImportSourceMode::LogicalArchive);
+}
+
+#[test]
+fn import_source_config_classifies_common_archive_extensions() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    for extension in ["tar.gz", "tgz", "gz"] {
+        let source = tmp.path().join(format!("collection.{extension}"));
+        std::fs::write(&source, b"archive payload").unwrap();
+        let config = prepare_import_source_config(
+            &source.display().to_string(),
+            DataSourcePlatform::Windows,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.kind, DataSourceKind::LogicalArchive);
+        assert_eq!(config.mode, ImportSourceMode::LogicalArchive);
+    }
 }
 
 #[test]
