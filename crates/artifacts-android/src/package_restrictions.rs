@@ -39,15 +39,39 @@ fn parse_plain_restrictions(
     reader.config_mut().trim_text(true);
     let mut buffer = Vec::new();
     let mut restrictions = Vec::new();
+    let mut stack = Vec::<Vec<u8>>::new();
     loop {
         match reader
             .read_event_into(&mut buffer)
             .map_err(|error| PackageRestrictionsError::InvalidXml(error.to_string()))?
         {
-            Event::Start(element) | Event::Empty(element) if element.name().as_ref() == b"pkg" => {
-                append_plain_restriction(&reader, &element, &mut restrictions)?;
+            Event::Start(element) => {
+                if element.name().as_ref() == b"pkg" {
+                    append_plain_restriction(&reader, &element, &mut restrictions)?;
+                }
+                stack.push(element.name().as_ref().to_vec());
             }
-            Event::Eof => return Ok(restrictions),
+            Event::Empty(element) => {
+                if element.name().as_ref() == b"pkg" {
+                    append_plain_restriction(&reader, &element, &mut restrictions)?;
+                }
+            }
+            Event::End(element) => {
+                let expected = stack.pop().ok_or_else(|| {
+                    PackageRestrictionsError::InvalidXml("unexpected end element".to_string())
+                })?;
+                if expected.as_slice() != element.name().as_ref() {
+                    return Err(PackageRestrictionsError::InvalidXml(
+                        "mismatched end element".to_string(),
+                    ));
+                }
+            }
+            Event::Eof if stack.is_empty() => return Ok(restrictions),
+            Event::Eof => {
+                return Err(PackageRestrictionsError::InvalidXml(
+                    "document ended before closing all elements".to_string(),
+                ));
+            }
             _ => {}
         }
         buffer.clear();

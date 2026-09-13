@@ -199,10 +199,14 @@ fn is_ready(
     ))
 }
 
-fn is_hash_candidate(source: &DataSource) -> bool {
+pub(crate) fn is_hash_candidate(source: &DataSource) -> bool {
     matches!(
         source.kind,
-        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::LocalDisk
+        DataSourceKind::E01
+            | DataSourceKind::Raw
+            | DataSourceKind::LocalDisk
+            | DataSourceKind::AndroidSparse
+            | DataSourceKind::LogicalArchive
     ) && matches!(
         source.provenance.hash_status,
         DataSourceHashStatus::Pending | DataSourceHashStatus::Failed

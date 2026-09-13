@@ -1,4 +1,4 @@
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -66,7 +66,7 @@ pub(super) struct GzipTarEntryReader {
     tar_offset: u64,
     position: u64,
     length: u64,
-    decoder: GzDecoder<File>,
+    decoder: MultiGzDecoder<File>,
 }
 
 impl GzipTarEntryReader {
@@ -76,14 +76,14 @@ impl GzipTarEntryReader {
             tar_offset,
             position: 0,
             length,
-            decoder: GzDecoder::new(File::open(path)?),
+            decoder: MultiGzDecoder::new(File::open(path)?),
         };
         reader.reset_and_skip(0)?;
         Ok(reader)
     }
 
     fn reset_and_skip(&mut self, position: u64) -> io::Result<()> {
-        self.decoder = GzDecoder::new(File::open(&self.source_path)?);
+        self.decoder = MultiGzDecoder::new(File::open(&self.source_path)?);
         skip_exact(&mut self.decoder, self.tar_offset.saturating_add(position))?;
         self.position = position;
         Ok(())
@@ -98,6 +98,12 @@ impl Read for GzipTarEntryReader {
         }
         let requested = remaining.min(buffer.len() as u64) as usize;
         let read = self.decoder.read(&mut buffer[..requested])?;
+        if read == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "gzip tar entry ended before its declared size",
+            ));
+        }
         self.position = self.position.saturating_add(read as u64);
         Ok(read)
     }
@@ -115,7 +121,7 @@ pub(super) struct GzipSingleEntryReader {
     source_path: PathBuf,
     position: u64,
     length: u64,
-    decoder: GzDecoder<File>,
+    decoder: MultiGzDecoder<File>,
 }
 
 impl GzipSingleEntryReader {
@@ -124,12 +130,12 @@ impl GzipSingleEntryReader {
             source_path: path.to_path_buf(),
             position: 0,
             length,
-            decoder: GzDecoder::new(File::open(path)?),
+            decoder: MultiGzDecoder::new(File::open(path)?),
         })
     }
 
     fn reset_and_skip(&mut self, position: u64) -> io::Result<()> {
-        self.decoder = GzDecoder::new(File::open(&self.source_path)?);
+        self.decoder = MultiGzDecoder::new(File::open(&self.source_path)?);
         skip_exact(&mut self.decoder, position)?;
         self.position = position;
         Ok(())
@@ -154,6 +160,12 @@ impl Read for GzipSingleEntryReader {
         }
         let requested = remaining.min(buffer.len() as u64) as usize;
         let read = self.decoder.read(&mut buffer[..requested])?;
+        if read == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "gzip payload ended before its declared size",
+            ));
+        }
         self.position = self.position.saturating_add(read as u64);
         Ok(read)
     }

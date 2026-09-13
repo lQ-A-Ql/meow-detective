@@ -26,19 +26,40 @@ pub fn find_setting_value(
     let mut reader = Reader::from_reader(input);
     reader.config_mut().trim_text(true);
     let mut buffer = Vec::new();
+    let mut stack = Vec::<Vec<u8>>::new();
+    let mut found = None;
     loop {
         match reader
             .read_event_into(&mut buffer)
             .map_err(|error| SettingsXmlError::InvalidXml(error.to_string()))?
         {
-            Event::Start(element) | Event::Empty(element)
-                if element.name().as_ref() == b"setting" =>
-            {
-                if let Some(value) = setting_value(&reader, &element, expected_name)? {
-                    return Ok(Some(value));
+            Event::Start(element) => {
+                if element.name().as_ref() == b"setting" && found.is_none() {
+                    found = setting_value(&reader, &element, expected_name)?;
+                }
+                stack.push(element.name().as_ref().to_vec());
+            }
+            Event::Empty(element) => {
+                if element.name().as_ref() == b"setting" && found.is_none() {
+                    found = setting_value(&reader, &element, expected_name)?;
                 }
             }
-            Event::Eof => return Ok(None),
+            Event::End(element) => {
+                let expected = stack.pop().ok_or_else(|| {
+                    SettingsXmlError::InvalidXml("unexpected end element".to_string())
+                })?;
+                if expected.as_slice() != element.name().as_ref() {
+                    return Err(SettingsXmlError::InvalidXml(
+                        "mismatched end element".to_string(),
+                    ));
+                }
+            }
+            Event::Eof if stack.is_empty() => return Ok(found),
+            Event::Eof => {
+                return Err(SettingsXmlError::InvalidXml(
+                    "document ended before closing all elements".to_string(),
+                ));
+            }
             _ => {}
         }
         buffer.clear();

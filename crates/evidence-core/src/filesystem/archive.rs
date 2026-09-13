@@ -1,10 +1,11 @@
 use crate::filesystem::{FileSystemDiagnostic, FileSystemReader, FsNode, ReadSeek};
-use flate2::read::GzDecoder;
-use std::collections::BTreeMap;
+use flate2::read::MultiGzDecoder;
+use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::UNIX_EPOCH;
 use tar::Archive;
 
 use super::archive_helpers::{
@@ -19,6 +20,19 @@ use super::archive_readers::{
 };
 
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+const MAX_ARCHIVE_CACHE_ENTRIES: usize = 4;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ArchiveCacheKey {
+    path: PathBuf,
+    size: u64,
+    modified_nanos: u128,
+}
+
+type ArchiveCacheEntry = (ArchiveCacheKey, Arc<ArchiveFsReader>);
+type ArchiveCache = VecDeque<ArchiveCacheEntry>;
+
+static ARCHIVE_CACHE: LazyLock<Mutex<ArchiveCache>> = LazyLock::new(|| Mutex::new(VecDeque::new()));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ArchiveKind {
@@ -53,6 +67,40 @@ impl ArchiveFsReader {
         }
     }
 
+    pub fn open_cached(path: &Path, data_source_name: &str) -> io::Result<Arc<Self>> {
+        let canonical = path.canonicalize()?;
+        let metadata = std::fs::metadata(&canonical)?;
+        let modified_nanos = metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_nanos())
+            .unwrap_or_default();
+        let key = ArchiveCacheKey {
+            path: canonical.clone(),
+            size: metadata.len(),
+            modified_nanos,
+        };
+        if let Ok(mut cache) = ARCHIVE_CACHE.lock() {
+            if let Some(position) = cache.iter().position(|(cached, _)| *cached == key) {
+                let cached = cache
+                    .remove(position)
+                    .map(|(_, reader)| reader)
+                    .ok_or_else(|| invalid_data("archive cache entry disappeared"))?;
+                cache.push_front((key, Arc::clone(&cached)));
+                return Ok(cached);
+            }
+        }
+
+        let reader = Arc::new(Self::open(&canonical, data_source_name)?);
+        if let Ok(mut cache) = ARCHIVE_CACHE.lock() {
+            cache.retain(|(cached, _)| *cached != key);
+            cache.push_front((key, Arc::clone(&reader)));
+            cache.truncate(MAX_ARCHIVE_CACHE_ENTRIES);
+        }
+        Ok(reader)
+    }
+
     fn open_tar(path: &Path, data_source_name: &str) -> io::Result<Self> {
         let file = File::open(path)?;
         let mut archive = Archive::new(file);
@@ -79,7 +127,7 @@ impl ArchiveFsReader {
         if gzip_stream_looks_like_tar(path)? {
             let file = File::open(path)?;
             let mut archive = Archive::new(InflatedLimit::new(
-                GzDecoder::new(file),
+                MultiGzDecoder::new(file),
                 MAX_ARCHIVE_INFLATED_SIZE,
             ));
             let mut entries = BTreeMap::new();

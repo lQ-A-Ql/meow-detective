@@ -134,3 +134,25 @@ fn hash_evidence_honors_cancellation_before_reading() {
             .unwrap_err();
     assert!(matches!(error, EvidenceHashError::Cancelled));
 }
+
+#[test]
+fn hash_jobs_include_logical_archives_and_android_sparse_sources() {
+    let kinds = [
+        domain::DataSourceKind::LogicalArchive,
+        domain::DataSourceKind::AndroidSparse,
+    ];
+    for kind in kinds {
+        let source = domain::DataSource {
+            id: domain::DataSourceId("source".to_string()),
+            name: "source".to_string(),
+            kind,
+            source_path: std::path::PathBuf::from("source"),
+            imported_at: chrono::Utc::now(),
+            provenance: domain::DataSourceProvenance {
+                hash_status: domain::DataSourceHashStatus::Pending,
+                ..domain::DataSourceProvenance::default()
+            },
+        };
+        assert!(super::evidence_jobs::is_hash_candidate(&source));
+    }
+}

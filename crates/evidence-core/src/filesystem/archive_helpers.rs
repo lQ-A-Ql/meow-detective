@@ -1,11 +1,13 @@
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, Read};
 use std::path::Path;
+
+use super::archive_index::MAX_ENTRY_SIZE;
 
 pub(super) fn gzip_stream_looks_like_tar(path: &Path) -> io::Result<bool> {
     let file = File::open(path)?;
-    let mut decoder = GzDecoder::new(file);
+    let mut decoder = MultiGzDecoder::new(file);
     let mut header = [0u8; 512];
     let count = decoder.read(&mut header)?;
     if count < 265 {
@@ -35,15 +37,19 @@ fn tar_checksum_valid(header: &[u8; 512]) -> bool {
 }
 
 pub(super) fn gzip_size(path: &Path) -> io::Result<u64> {
-    let mut file = File::open(path)?;
-    let length = file.seek(SeekFrom::End(0))?;
-    if length < 4 {
-        return Err(invalid_data("gzip stream is truncated"));
+    let file = File::open(path)?;
+    let mut decoder = InflatedLimit::new(MultiGzDecoder::new(file), MAX_ENTRY_SIZE);
+    let mut buffer = [0u8; 32 * 1024];
+    let mut total = 0u64;
+    loop {
+        let read = decoder
+            .read(&mut buffer)
+            .map_err(|error| invalid_data(format!("invalid gzip payload: {error}")))?;
+        if read == 0 {
+            return Ok(total);
+        }
+        total = total.saturating_add(read as u64);
     }
-    file.seek(SeekFrom::End(-4))?;
-    let mut footer = [0u8; 4];
-    file.read_exact(&mut footer)?;
-    Ok(u32::from_le_bytes(footer) as u64)
 }
 
 pub(super) struct InflatedLimit<R> {

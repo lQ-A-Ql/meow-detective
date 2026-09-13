@@ -27,6 +27,12 @@ pub(super) fn index_tar_entry<R: Read>(
     let entry_type = entry.header().entry_type();
     let is_dir = entry_type.is_dir();
     let readable = entry_type.is_file();
+    if path.is_empty() {
+        if is_dir {
+            return Ok(false);
+        }
+        return Err(invalid_data("archive root marker is not a directory"));
+    }
     if !readable && !is_dir && !entry_type.is_symlink() && !entry_type.is_hard_link() {
         return Ok(true);
     }
@@ -58,6 +64,7 @@ pub(super) fn index_tar_entry<R: Read>(
         if existing.is_dir != is_dir {
             return Err(invalid_data(format!("archive path changes type: {path}")));
         }
+        return Err(invalid_data(format!("archive path is duplicated: {path}")));
     }
     entries.insert(
         path.clone(),
@@ -172,7 +179,7 @@ fn normalize_archive_path(raw: &[u8]) -> io::Result<String> {
         components.push(component);
     }
     if components.is_empty() {
-        return Err(invalid_data("archive path has no usable components"));
+        return Ok(String::new());
     }
     Ok(components.join("/"))
 }

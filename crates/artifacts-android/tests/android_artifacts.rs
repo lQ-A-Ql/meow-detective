@@ -165,6 +165,13 @@ fn rejects_malformed_package_xml() {
 }
 
 #[test]
+fn rejects_truncated_package_restrictions_xml() {
+    assert!(
+        parse_package_restrictions(b"<package-restrictions><pkg name=\"org.example\">").is_err()
+    );
+}
+
+#[test]
 fn finds_a_named_setting_value() {
     let value = find_setting_value(
         br#"<settings><setting name="android_id" value="abcdef0123456789"/></settings>"#,
@@ -173,6 +180,15 @@ fn finds_a_named_setting_value() {
     .expect("settings XML parses");
 
     assert_eq!(value.as_deref(), Some("abcdef0123456789"));
+}
+
+#[test]
+fn rejects_truncated_settings_xml() {
+    assert!(find_setting_value(
+        br#"<settings><setting name="android_id" value="abc">"#,
+        "android_id",
+    )
+    .is_err());
 }
 
 #[test]

@@ -266,13 +266,13 @@ fn open_archive_file_seekable(
 
 fn open_archive_reader(
     source_path: &str,
-) -> Result<evidence_core::ArchiveFsReader, FileServiceError> {
+) -> Result<std::sync::Arc<evidence_core::ArchiveFsReader>, FileServiceError> {
     let path = Path::new(source_path);
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("archive");
-    Ok(evidence_core::ArchiveFsReader::open(path, name)?)
+    Ok(evidence_core::ArchiveFsReader::open_cached(path, name)?)
 }
 
 fn resolve_logical_file_path(
