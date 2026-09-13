@@ -6,10 +6,11 @@ use artifacts_android::{
 };
 use chrono::{DateTime, Utc};
 use domain::{DataSourceId, FileEntry};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use transport::dto::{AnalysisParseStatusDto, AndroidAnalysisRunDto};
-use uuid::Uuid;
 
+use super::model::{AndroidFact, AndroidPackage};
+use super::persistence::persist_android_analysis;
 use crate::analysis_service::candidates::find_candidate_by_path_suffix;
 use crate::analysis_service::AnalysisServiceError;
 use crate::file_service::SourceReadContext;
@@ -17,7 +18,6 @@ use crate::file_service::SourceReadContext;
 const MAX_BUILD_PROP_BYTES: usize = 1024 * 1024;
 const MAX_PACKAGES_XML_BYTES: usize = 32 * 1024 * 1024;
 const MAX_SETTINGS_XML_BYTES: usize = 8 * 1024 * 1024;
-const PARSER: &str = "android.system-packages.v1";
 
 const BUILD_PROPERTY_SOURCES: &[(&str, i64)] = &[
     ("system/build.prop", 0),
@@ -50,31 +50,6 @@ const DEVICE_FIELDS: &[(&str, &[&str])] = &[
     ("buildFingerprint", &["ro.build.fingerprint"]),
     ("serialNumber", &["ro.serialno", "ro.boot.serialno"]),
 ];
-
-#[derive(Debug)]
-struct AndroidFact {
-    field: &'static str,
-    value: String,
-    source_file_id: String,
-    source_path: String,
-    source_rank: i64,
-    confidence: &'static str,
-    warning: Option<String>,
-}
-
-#[derive(Debug)]
-struct AndroidPackage {
-    package_name: String,
-    version_code: Option<String>,
-    install_time: Option<String>,
-    update_time: Option<String>,
-    installer: Option<String>,
-    uid: Option<u32>,
-    code_path: Option<String>,
-    source_file_id: String,
-    source_path: String,
-    warning: Option<String>,
-}
 
 pub(crate) fn run_android_source_analysis(
     source_conn: &Connection,
@@ -435,64 +410,4 @@ fn format_package_time(value: Option<i64>) -> (Option<String>, Option<String>) {
             ),
         },
     }
-}
-
-fn persist_android_analysis(
-    connection: &Connection,
-    data_source_id: &DataSourceId,
-    facts: &[AndroidFact],
-    packages: &[AndroidPackage],
-) -> Result<(), AnalysisServiceError> {
-    let transaction = connection.unchecked_transaction()?;
-    transaction.execute(
-        "DELETE FROM android_system_facts WHERE data_source_id = ?1",
-        [data_source_id.0.as_str()],
-    )?;
-    transaction.execute(
-        "DELETE FROM android_packages WHERE data_source_id = ?1",
-        [data_source_id.0.as_str()],
-    )?;
-    for fact in facts {
-        transaction.execute(
-            "INSERT INTO android_system_facts
-             (id, data_source_id, field_key, field_value, confidence, source_file_id, source_path, parser, source_rank, warning)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                Uuid::new_v4().to_string(),
-                &data_source_id.0,
-                fact.field,
-                &fact.value,
-                fact.confidence,
-                &fact.source_file_id,
-                &fact.source_path,
-                PARSER,
-                fact.source_rank,
-                &fact.warning,
-            ],
-        )?;
-    }
-    for package in packages {
-        transaction.execute(
-            "INSERT INTO android_packages
-             (id, data_source_id, package_name, app_name, version_code, install_time, update_time, installer, uid, code_path, source_file_id, source_path, parser, warning)
-             VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            params![
-                Uuid::new_v4().to_string(),
-                &data_source_id.0,
-                &package.package_name,
-                &package.version_code,
-                &package.install_time,
-                &package.update_time,
-                &package.installer,
-                package.uid,
-                &package.code_path,
-                &package.source_file_id,
-                &package.source_path,
-                PARSER,
-                &package.warning,
-            ],
-        )?;
-    }
-    transaction.commit()?;
-    Ok(())
 }
