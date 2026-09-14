@@ -2,14 +2,11 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 import {
   generateAnalysisSummary,
   getBrowserHistorySummary,
-  getAndroidDeviceInfo,
-  getAndroidPackageSummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvtxEventSummary,
   getEvidenceClassificationSummary,
   getFileClassificationBoard,
-  getLinuxArtifactSummary,
   getPluginFamilyEntries,
   listPluginModules,
   getRegistryExtractionSummary,
@@ -19,96 +16,17 @@ import {
   getV3GovernanceSnapshot,
   getCaseOverviewSnapshot,
   runAnalysisExtraction,
-  runAndroidAnalysis,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
-import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
-import type { DataSourceSummary } from '@/types/models';
+import { AnalysisExtractionRequest } from '@/types/models';
 import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
-import type { LinuxArtifactSummary } from '@/types/models';
-import type { AndroidPackageSummary } from '@/types/models';
 import type { PluginFamilyEntries } from '@/types/models';
-
-type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
-type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 'dataSourceId'> & {
-  source?: AnalysisSource;
-};
-
-const ANALYSIS_QUERY_OPTIONS = {
-  staleTime: Infinity,
-  // Keep analysis projections cached indefinitely: they are expensive to
-  // rebuild from evidence and must survive long idle periods without the
-  // UI dropping into a loading state on the next render.
-  gcTime: Infinity,
-  refetchOnMount: false,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
-} as const;
+import type { AnalysisSource, OptionalAnalysisPageRequest } from './hooks/types';
+import { ANALYSIS_QUERY_OPTIONS } from './query-options';
 
 const EVTX_PAGE_SIZE = 500;
-const ANDROID_PACKAGE_PAGE_SIZE = 100;
-const LINUX_PAGE_SIZE = 200;
 const PLUGIN_PAGE_SIZE = 200;
-
-/**
- * Entry-array ↔ count-field pairing used by the Linux summary pager. The
- * journal family combines journald rows and text-log fallback lines, so its
- * total is journalCount + textLogCount.
- */
-const LINUX_ENTRY_FAMILIES: ReadonlyArray<{
-  entries: (page: LinuxArtifactSummary) => readonly unknown[];
-  count: (page: LinuxArtifactSummary) => number;
-}> = [
-  { entries: (page) => page.journalEntries, count: (page) => page.journalCount + page.textLogCount },
-  { entries: (page) => page.loginRecords, count: (page) => page.loginCount },
-  { entries: (page) => page.bashCommands, count: (page) => page.bashCommandCount },
-  { entries: (page) => page.aptEvents, count: (page) => page.aptEventCount },
-  { entries: (page) => page.cronJobs, count: (page) => page.cronJobCount },
-  { entries: (page) => page.sudoEvents, count: (page) => page.sudoEventCount },
-  { entries: (page) => page.systemConfigs, count: (page) => page.systemConfigCount },
-  { entries: (page) => page.webSites, count: (page) => page.webSiteCount },
-  { entries: (page) => page.webAccessLogs, count: (page) => page.webAccessLogCount },
-  { entries: (page) => page.webErrorLogs, count: (page) => page.webErrorLogCount },
-  { entries: (page) => page.webFindings, count: (page) => page.webFindingCount },
-  { entries: (page) => page.mysqlConfigs, count: (page) => page.mysqlConfigCount },
-  { entries: (page) => page.mysqlLogs, count: (page) => page.mysqlLogCount },
-  { entries: (page) => page.mysqlFindings, count: (page) => page.mysqlFindingCount },
-];
-
-function mergeLinuxPages(pages: LinuxArtifactSummary[]): LinuxArtifactSummary | undefined {
-  const first = pages[0];
-  if (!first) return undefined;
-  return {
-    ...first,
-    journalEntries: pages.flatMap((page) => page.journalEntries),
-    loginRecords: pages.flatMap((page) => page.loginRecords),
-    bashCommands: pages.flatMap((page) => page.bashCommands),
-    aptEvents: pages.flatMap((page) => page.aptEvents),
-    cronJobs: pages.flatMap((page) => page.cronJobs),
-    sudoEvents: pages.flatMap((page) => page.sudoEvents),
-    systemConfigs: pages.flatMap((page) => page.systemConfigs),
-    webSites: pages.flatMap((page) => page.webSites),
-    webAccessLogs: pages.flatMap((page) => page.webAccessLogs),
-    webErrorLogs: pages.flatMap((page) => page.webErrorLogs),
-    webFindings: pages.flatMap((page) => page.webFindings),
-    mysqlConfigs: pages.flatMap((page) => page.mysqlConfigs),
-    mysqlLogs: pages.flatMap((page) => page.mysqlLogs),
-    mysqlFindings: pages.flatMap((page) => page.mysqlFindings),
-    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
-    coverageNotes: [...new Set(pages.flatMap((page) => page.coverageNotes ?? []))],
-  };
-}
-
-/** True while at least one family still has unloaded rows beyond the merged pages. */
-function linuxSummaryHasUnloadedEntries(pages: LinuxArtifactSummary[]): boolean {
-  const last = pages[pages.length - 1];
-  if (!last) return false;
-  return LINUX_ENTRY_FAMILIES.some((family) => {
-    const loaded = pages.reduce((total, page) => total + family.entries(page).length, 0);
-    return loaded < family.count(last);
-  });
-}
 
 function caseOverviewQueryKey(caseId: string | null) {
   return ['analysis', 'case-overview', caseId] as const;
@@ -356,41 +274,6 @@ export function useEvtxEventSummary(
   };
 }
 
-export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {}) {
-  const currentCase = useCurrentCase();
-  const dataSourceId = request.source?.id;
-  const limit = Math.min(request.limit ?? LINUX_PAGE_SIZE, LINUX_PAGE_SIZE);
-  const query = useInfiniteQuery({
-    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, limit],
-    queryFn: ({ pageParam }) => getLinuxArtifactSummary({
-      dataSourceId: dataSourceId ?? '',
-      offset: pageParam,
-      limit,
-    }),
-    initialPageParam: request.offset ?? 0,
-    getNextPageParam: (lastPage, pages) => {
-      const lastPageItemCount = LINUX_ENTRY_FAMILIES.reduce(
-        (total, family) => total + family.entries(lastPage).length,
-        0,
-      );
-      if (lastPageItemCount === 0) return undefined;
-      return linuxSummaryHasUnloadedEntries(pages)
-        ? (request.offset ?? 0) + pages.length * limit
-        : undefined;
-    },
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'linux',
-    retry: false,
-    ...ANALYSIS_QUERY_OPTIONS,
-  });
-  return {
-    ...query,
-    data: mergeLinuxPages(query.data?.pages ?? []),
-  };
-}
-
 function mergePluginFamilyPages(pages: PluginFamilyEntries[]): PluginFamilyEntries | undefined {
   const first = pages[0];
   const last = pages[pages.length - 1];
@@ -488,61 +371,6 @@ export function useV3GovernanceSnapshot() {
   });
 }
 
-function mergeAndroidPackagePages(pages: AndroidPackageSummary[]): AndroidPackageSummary | undefined {
-  const first = pages[0];
-  if (!first) return undefined;
-  return {
-    ...first,
-    packages: pages.flatMap((page) => page.packages),
-    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
-  };
-}
-
-export function useAndroidDeviceInfo(source?: AnalysisSource) {
-  const currentCase = useCurrentCase();
-  const dataSourceId = source?.id;
-  return useQuery({
-    queryKey: ['analysis', 'android-device', currentCase.data?.id ?? null, dataSourceId ?? null],
-    queryFn: () => getAndroidDeviceInfo(dataSourceId ?? ''),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && source?.platform === 'android',
-    retry: false,
-    ...ANALYSIS_QUERY_OPTIONS,
-  });
-}
-
-export function useAndroidPackageSummary(request: OptionalAnalysisPageRequest = {}) {
-  const currentCase = useCurrentCase();
-  const dataSourceId = request.source?.id;
-  const limit = Math.min(request.limit ?? ANDROID_PACKAGE_PAGE_SIZE, ANDROID_PACKAGE_PAGE_SIZE);
-  const query = useInfiniteQuery({
-    queryKey: ['analysis', 'android-packages', currentCase.data?.id ?? null, dataSourceId ?? null, limit],
-    queryFn: ({ pageParam }) => getAndroidPackageSummary({
-      dataSourceId: dataSourceId ?? '',
-      offset: pageParam,
-      limit,
-    }),
-    initialPageParam: request.offset ?? 0,
-    getNextPageParam: (lastPage, pages) => {
-      if (lastPage.packages.length === 0) return undefined;
-      const loaded = pages.reduce((total, page) => total + page.packages.length, 0);
-      return loaded < lastPage.totalCount ? (request.offset ?? 0) + loaded : undefined;
-    },
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'android',
-    retry: false,
-    ...ANALYSIS_QUERY_OPTIONS,
-  });
-  return {
-    ...query,
-    data: mergeAndroidPackagePages(query.data?.pages ?? []),
-  };
-}
-
 export function useCaseOverviewSnapshot() {
   const currentCase = useCurrentCase();
   return useQuery({
@@ -589,28 +417,16 @@ export function useRunAnalysisExtraction() {
   });
 }
 
-export function useRunAndroidAnalysis() {
-  const qc = useQueryClient();
-  const currentCase = useCurrentCase();
-  return useMutation({
-    mutationFn: (dataSourceId: string) => runAndroidAnalysis(dataSourceId),
-    onSuccess: async (_data, dataSourceId) => {
-      await Promise.all([
-        qc.invalidateQueries({
-          queryKey: ['analysis', 'android-device', currentCase.data?.id ?? null, dataSourceId],
-          refetchType: 'active',
-        }),
-        qc.invalidateQueries({
-          queryKey: ['analysis', 'android-packages', currentCase.data?.id ?? null, dataSourceId],
-          refetchType: 'active',
-        }),
-      ]);
-    },
-  });
-}
-
 export function useGenerateAnalysisSummary(dataSourceId?: string) {
   return useMutation({
     mutationFn: () => generateAnalysisSummary(dataSourceId ?? ''),
   });
 }
+
+export {
+  useAndroidDeviceInfo,
+  useAndroidPackageSummary,
+  useRunAndroidAnalysis,
+} from './hooks/android';
+
+export { useLinuxArtifactSummary } from './hooks/linux';
