@@ -5,6 +5,7 @@
 //! the application-service layer.
 
 mod apk;
+mod apk_resources;
 mod apk_strings;
 mod package_list;
 mod package_restrictions;
