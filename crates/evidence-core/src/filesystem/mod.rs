@@ -1,4 +1,5 @@
 pub mod archive;
+mod archive_cache;
 mod archive_helpers;
 mod archive_index;
 mod archive_readers;
