@@ -1,18 +1,16 @@
 use std::io::Read;
-use std::path::Path;
 
 use domain::FileEntry;
-use evidence_core::FileSystemReader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
+use super::{archive, logical};
 use crate::file_service::{
     viewer::{
-        descriptor_file_entry, exact_partition_candidate, open_android_sparse_file,
-        open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
-        open_e01_reader_cached, open_local_disk_file, open_raw_file,
-        resolve_partition_index_for_entry, validate_readable_file_entry, PreviewDescriptor,
-        PreviewReadContext, RangeContentReader,
+        exact_partition_candidate, open_android_sparse_file, open_descriptor_image_file,
+        open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
+        open_local_disk_file, open_raw_file, resolve_partition_index_for_entry,
+        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -21,8 +19,8 @@ pub(crate) fn open_file_content_for_descriptor(
     descriptor: &PreviewDescriptor,
 ) -> Result<Box<dyn Read>, FileServiceError> {
     let reader = match descriptor.source_kind.as_str() {
-        "logical_directory" => open_logical_descriptor_file(descriptor),
-        "logical_archive" => open_archive_descriptor_file(descriptor),
+        "logical_directory" => logical::open_descriptor_file(descriptor),
+        "logical_archive" => archive::open_descriptor_file(descriptor),
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
         other => unsupported_source(other),
@@ -63,41 +61,15 @@ where
     )
 }
 
-fn open_logical_descriptor_file(
-    descriptor: &PreviewDescriptor,
-) -> Result<RangeContentReader, FileServiceError> {
-    let entry = descriptor_file_entry(descriptor);
-    open_logical_file_seekable(&descriptor.source_path, &entry).map(RangeContentReader::Seekable)
-}
-
-fn open_logical_descriptor_seekable(
-    descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    open_logical_file_seekable(&descriptor.source_path, &descriptor_file_entry(descriptor))
-}
-
-fn open_archive_descriptor_file(
-    descriptor: &PreviewDescriptor,
-) -> Result<RangeContentReader, FileServiceError> {
-    open_archive_file_seekable(&descriptor.source_path, &descriptor_file_entry(descriptor))
-        .map(RangeContentReader::Seekable)
-}
-
-fn open_archive_descriptor_seekable(
-    descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    open_archive_file_seekable(&descriptor.source_path, &descriptor_file_entry(descriptor))
-}
-
 pub(crate) fn open_range_content_for_descriptor(
     descriptor: &PreviewDescriptor,
 ) -> Result<RangeContentReader, FileServiceError> {
     match descriptor.source_kind.as_str() {
         "logical_directory" => {
-            open_logical_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
+            logical::open_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
         }
         "logical_archive" => {
-            open_archive_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
+            archive::open_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
         }
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
@@ -164,8 +136,8 @@ pub(crate) fn open_file_content_for_entry(
     validate_readable_file_entry(conn, entry)?;
     let (kind, source_path) = source_location(repo, entry)?;
     match kind.as_str() {
-        "logical_directory" => open_logical_file(&source_path, entry),
-        "logical_archive" => open_archive_file(&source_path, entry),
+        "logical_directory" => logical::open_file(&source_path, entry),
+        "logical_archive" => archive::open_file(&source_path, entry),
         "e01" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
             open_e01_file(conn, &source_path, entry, partition_index)
@@ -193,10 +165,10 @@ pub(crate) fn open_range_content_for_entry(
     let (kind, source_path) = source_location(repo, entry)?;
     match kind.as_str() {
         "logical_directory" => {
-            open_logical_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
+            logical::open_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
         }
         "logical_archive" => {
-            open_archive_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
+            archive::open_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
         }
         "e01" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
@@ -226,88 +198,6 @@ fn source_location(
 ) -> Result<(String, String), FileServiceError> {
     repo.find_data_source_location(&entry.data_source_id)?
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))
-}
-
-fn open_logical_file(
-    source_path: &str,
-    entry: &FileEntry,
-) -> Result<Box<dyn Read>, FileServiceError> {
-    Ok(Box::new(std::fs::File::open(resolve_logical_file_path(
-        source_path,
-        entry,
-    )?)?))
-}
-
-fn open_logical_file_seekable(
-    source_path: &str,
-    entry: &FileEntry,
-) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    Ok(Box::new(std::fs::File::open(resolve_logical_file_path(
-        source_path,
-        entry,
-    )?)?))
-}
-
-fn open_archive_file(
-    source_path: &str,
-    entry: &FileEntry,
-) -> Result<Box<dyn Read>, FileServiceError> {
-    let reader = open_archive_reader(source_path)?;
-    Ok(reader.open_file(&entry.path)?)
-}
-
-fn open_archive_file_seekable(
-    source_path: &str,
-    entry: &FileEntry,
-) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    let reader = open_archive_reader(source_path)?;
-    Ok(reader.open_file_seekable(&entry.path)?)
-}
-
-fn open_archive_reader(
-    source_path: &str,
-) -> Result<std::sync::Arc<evidence_core::ArchiveFsReader>, FileServiceError> {
-    let path = Path::new(source_path);
-    let name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("archive");
-    Ok(evidence_core::ArchiveFsReader::open_cached(path, name)?)
-}
-
-fn resolve_logical_file_path(
-    source_path: &str,
-    entry: &FileEntry,
-) -> Result<std::path::PathBuf, FileServiceError> {
-    let root = std::path::PathBuf::from(source_path).canonicalize()?;
-    let relative_path = crate::file_service::viewer::safe_relative_path(&entry.path)?;
-    let full_path = root.join(relative_path);
-    reject_symlink_components(&full_path)?;
-    let canonical = full_path.canonicalize()?;
-    if !canonical.starts_with(&root) {
-        return Err(FileServiceError::path_traversal(
-            "File path escapes data source root",
-        ));
-    }
-    if !canonical.is_file() {
-        return Err(FileServiceError::other(
-            "File entry does not point to a regular file",
-        ));
-    }
-    Ok(canonical)
-}
-
-fn reject_symlink_components(path: &std::path::Path) -> Result<(), FileServiceError> {
-    let mut current = std::path::PathBuf::new();
-    for component in path.components() {
-        current.push(component);
-        if current.is_symlink() {
-            return Err(FileServiceError::other(
-                "Symlink detected in logical source path - rejected for security",
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn unsupported_source<T>(kind: &str) -> Result<T, FileServiceError> {
