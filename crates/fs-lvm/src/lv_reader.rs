@@ -155,7 +155,9 @@ impl LvReader {
                     ),
                 )
             })?;
-            let mut reader = device_reader.lock().unwrap();
+            let mut reader = device_reader
+                .lock()
+                .map_err(|_| std::io::Error::other("LVM physical volume reader lock poisoned"))?;
             reader.seek(SeekFrom::Start(physical_offset))?;
             reader.read_exact(&mut buf[..to_read])?;
             drop(reader);

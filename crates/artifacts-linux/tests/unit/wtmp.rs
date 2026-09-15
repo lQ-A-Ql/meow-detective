@@ -270,3 +270,135 @@ fn divisible_tie_breaks_on_plausible_record_count() {
         "every record must decode under the 384-byte layout"
     );
 }
+
+#[test]
+fn truncated_384_file_prefers_biarch_layout() {
+    // One complete 384-byte record plus a partial tail: no layout divides the
+    // length, so the fallback decides. x86_64 glibc uses the 384-byte biarch
+    // layout, so the 384 candidate must win over the 400 one.
+    let mut data = build_wtmp_record_32(
+        USER_PROCESS,
+        4711,
+        "eve",
+        "pts/5",
+        "10.2.3.4",
+        1_700_000_500,
+    );
+    data.extend_from_slice(&[0xBBu8; 100]); // partial trailing record
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_32));
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_64));
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_MUSL));
+
+    let records = parse_wtmp(&data).expect("should parse truncated 384-byte wtmp");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "eve");
+    assert_eq!(records[0].terminal, "pts/5");
+    assert_eq!(
+        records[0].login_time.expect("login timestamp").timestamp(),
+        1_700_000_500,
+        "the 384-byte layout must decode the timestamp at offset 340"
+    );
+}
+
+#[test]
+fn truncated_400_file_still_prefers_400_layout() {
+    // The reverse case: a truncated aarch64-style 400-byte record must not be
+    // mis-sliced at 384 — a USER_PROCESS sampled at 384 yields tv_sec == 0
+    // and fails plausibility, so the 400-byte candidate still wins.
+    let mut data = build_wtmp_record_64(USER_PROCESS, 888, "frank", "pts/6", "", 1_700_000_600, 0);
+    data.extend_from_slice(&[0xCCu8; 100]); // partial trailing record
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_32));
+    assert!(!data.len().is_multiple_of(WTMP_SIZE_64));
+
+    let records = parse_wtmp(&data).expect("should parse truncated 400-byte wtmp");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "frank");
+    assert_eq!(
+        records[0].login_time.expect("login timestamp").timestamp(),
+        1_700_000_600,
+        "the 400-byte layout must decode the timestamp at offset 344"
+    );
+}
+
+#[test]
+fn logout_matches_pid_and_terminal_on_pid_reuse() {
+    // After PID reuse the tty (ut_line) is the reliable pairing key, as in
+    // last(1): the DEAD_PROCESS on pts/0 must close bob's session, not the
+    // earlier alice session that happened to hold the same pid.
+    let mut data = Vec::new();
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        4242,
+        "alice",
+        "tty1",
+        "",
+        1_700_010_000,
+    ));
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        4242,
+        "bob",
+        "pts/0",
+        "10.9.8.7",
+        1_700_020_000,
+    ));
+    data.extend(build_wtmp_record_32(
+        DEAD_PROCESS,
+        4242,
+        "",
+        "pts/0",
+        "",
+        1_700_030_000,
+    ));
+
+    let records = parse_wtmp(&data).expect("should parse wtmp with pid reuse");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].user, "alice");
+    assert!(
+        records[0].logout_time.is_none(),
+        "alice's session on tty1 must stay open: the DEAD_PROCESS was on pts/0"
+    );
+    assert_eq!(records[1].user, "bob");
+    assert_eq!(
+        records[1].logout_time.expect("bob logout").timestamp(),
+        1_700_030_000
+    );
+}
+
+#[test]
+fn logout_with_unmatched_terminal_becomes_standalone_record() {
+    // Same pid but a terminal that no pending login owns: the DEAD_PROCESS
+    // must not be attached to the tty2 session and stays its own record.
+    let mut data = Vec::new();
+    data.extend(build_wtmp_record_32(
+        USER_PROCESS,
+        555,
+        "carol",
+        "tty2",
+        "",
+        1_700_010_000,
+    ));
+    data.extend(build_wtmp_record_32(
+        DEAD_PROCESS,
+        555,
+        "",
+        "pts/9",
+        "",
+        1_700_020_000,
+    ));
+
+    let records = parse_wtmp(&data).expect("should parse wtmp");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].user, "carol");
+    assert!(records[0].logout_time.is_none());
+    assert_eq!(records[1].record_type, DEAD_PROCESS);
+    assert_eq!(records[1].terminal, "pts/9");
+    assert!(records[1].login_time.is_none());
+    assert_eq!(
+        records[1]
+            .logout_time
+            .expect("standalone logout")
+            .timestamp(),
+        1_700_020_000
+    );
+}

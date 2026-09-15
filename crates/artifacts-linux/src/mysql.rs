@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 // MySQL configuration and log parsing stay side-effect free and read-only.
@@ -12,7 +12,13 @@ pub struct MysqlConfigEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MysqlLogEntry {
-    pub timestamp: Option<DateTime<Utc>>,
+    /// Timestamp token verbatim from the log line. MySQL 8 writes ISO 8601
+    /// (`log_timestamps=UTC` suffixes `Z`, `SYSTEM` writes the local offset);
+    /// MySQL <=5.7 and MariaDB write server-local naive time
+    /// (`YYYY-MM-DD HH:MM:SS`, or legacy `yymmdd HH:MM:SS`). Local-to-UTC
+    /// conversion with the host zone is left to the caller, mirroring
+    /// `WebErrorLogEntry`.
+    pub timestamp: Option<String>,
     pub severity: Option<String>,
     pub message: String,
     pub thread_id: Option<String>,
@@ -63,17 +69,25 @@ pub fn parse_mysql_config(
 }
 
 pub fn parse_mysql_log(content: &str) -> Result<Vec<MysqlLogEntry>, crate::LinuxArtifactError> {
-    Ok(content
-        .lines()
-        .enumerate()
-        .filter_map(|(index, raw_line)| {
-            let trimmed = raw_line.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            Some(parse_mysql_log_line(trimmed, index as u64 + 1))
-        })
-        .collect())
+    let (entries, _) = parse_mysql_log_with_stats(content)?;
+    Ok(entries)
+}
+
+pub fn parse_mysql_log_with_stats(
+    content: &str,
+) -> Result<(Vec<MysqlLogEntry>, crate::stats::LogLineStats), crate::LinuxArtifactError> {
+    let mut entries = Vec::new();
+    let mut stats = crate::stats::LogLineStats::default();
+    for (index, raw_line) in content.lines().enumerate() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        stats.total_lines += 1;
+        stats.parsed_lines += 1;
+        entries.push(parse_mysql_log_line(trimmed, index as u64 + 1));
+    }
+    Ok((entries, stats))
 }
 
 pub fn detect_mysql_config_findings(entries: &[MysqlConfigEntry]) -> Vec<MysqlFinding> {
@@ -163,8 +177,8 @@ pub fn detect_mysql_log_findings(entries: &[MysqlLogEntry]) -> Vec<MysqlFinding>
 }
 
 fn parse_mysql_log_line(line: &str, line_number: u64) -> MysqlLogEntry {
-    let (timestamp, rest) = parse_mysql_timestamp(line)
-        .map(|(ts, tail)| (Some(ts), tail.trim()))
+    let (timestamp, rest) = split_mysql_timestamp(line)
+        .map(|(token, tail)| (Some(token.to_string()), tail.trim()))
         .unwrap_or((None, line));
     let (thread_id, rest) = parse_thread_id(rest);
     let (severity, message) = parse_bracketed_severity(rest)
@@ -179,43 +193,33 @@ fn parse_mysql_log_line(line: &str, line_number: u64) -> MysqlLogEntry {
     }
 }
 
-fn parse_mysql_timestamp(line: &str) -> Option<(DateTime<Utc>, &str)> {
+/// Locate the leading timestamp token without interpreting it. Each branch
+/// validates the shape the same way the corresponding value parser would, so
+/// the token boundary never splits inside a message.
+fn split_mysql_timestamp(line: &str) -> Option<(&str, &str)> {
     if let Some((candidate, tail)) = line.split_once(' ') {
-        if let Ok(ts) = DateTime::parse_from_rfc3339(candidate) {
-            return Some((ts.with_timezone(&Utc), tail));
-        }
-        if let Ok(ts) = DateTime::parse_from_str(candidate, "%Y-%m-%dT%H:%M:%S%.fZ") {
-            return Some((ts.with_timezone(&Utc), tail));
+        if DateTime::parse_from_rfc3339(candidate).is_ok() {
+            return Some((candidate, tail));
         }
     }
     if line.len() >= 19 {
         let candidate = &line[..19];
-        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(candidate, "%Y-%m-%d %H:%M:%S") {
-            return Some((
-                DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc),
-                &line[19..],
-            ));
+        if NaiveDateTime::parse_from_str(candidate, "%Y-%m-%d %H:%M:%S").is_ok() {
+            return Some((candidate, &line[19..]));
         }
     }
     if line.len() >= 15 {
         // Legacy MySQL/MariaDB error log format: "yymmdd HH:MM:SS"
         // (e.g. "240815 10:30:00"). The candidate contains ':' and a space,
-        // so the pre-check must allow both.
+        // so the pre-check must allow both. Validation uses the format's
+        // 21st-century boundary (see the caller-side conversion).
         let candidate = &line[..15];
         if candidate
             .chars()
             .all(|c| c.is_ascii_digit() || c == ' ' || c == ':')
+            && NaiveDateTime::parse_from_str(&format!("20{candidate}"), "%Y%m%d %H:%M:%S").is_ok()
         {
-            // Limitation: the "20" prefix hardcodes the 21st century —
-            // two-digit years before 2000 cannot be represented here.
-            if let Ok(naive) =
-                chrono::NaiveDateTime::parse_from_str(&format!("20{candidate}"), "%Y%m%d %H:%M:%S")
-            {
-                return Some((
-                    DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc),
-                    &line[15..],
-                ));
-            }
+            return Some((candidate, &line[15..]));
         }
     }
     None

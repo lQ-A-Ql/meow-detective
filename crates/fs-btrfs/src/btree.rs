@@ -1,6 +1,6 @@
 use crate::format::{
     BTRFS_HEADER_SIZE, CHUNK_ITEM_KEY, INTERNAL_ITEM_SIZE, KEY_SIZE, LEAF_ITEM_SIZE,
-    ROOT_BACKREF_KEY, ROOT_ITEM_KEY,
+    MAX_TREE_LEVEL, ROOT_BACKREF_KEY, ROOT_ITEM_KEY,
 };
 use crate::types::{BtrfsHeader, BtrfsKey, InternalItem, LeafItem};
 use crate::BtrfsReader;
@@ -140,11 +140,11 @@ impl BtrfsReader {
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
             ),
             nritems: u32::from_le_bytes(
-                data[0x5D..0x61]
+                data[0x60..0x64]
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
             ),
-            level: data[0x61],
+            level: data[0x64],
         })
     }
 
@@ -194,8 +194,13 @@ impl BtrfsReader {
     }
 
     pub(crate) fn get_item_data<'a>(node_data: &'a [u8], item: &LeafItem) -> &'a [u8] {
-        let start = item.data_offset as usize;
-        let end = (start + item.data_size as usize).min(node_data.len());
+        // Item data offset is relative to the end of the 101-byte node header.
+        let start = BTRFS_HEADER_SIZE
+            .saturating_add(item.data_offset as usize)
+            .min(node_data.len());
+        let end = start
+            .saturating_add(item.data_size as usize)
+            .min(node_data.len());
         &node_data[start..end]
     }
 
@@ -217,21 +222,24 @@ impl BtrfsReader {
         root_bytenr: u64,
         search_key: &BtrfsKey,
     ) -> io::Result<(Vec<u8>, Vec<LeafItem>)> {
-        let node_data = self.read_logical_block(root_bytenr)?;
-        let header = Self::parse_header(&node_data)?;
-        if header.level == 0 {
-            let items = Self::parse_leaf_items(&node_data, header.nritems)?;
-            return Ok((node_data, items));
+        let mut node_bytenr = root_bytenr;
+        for _ in 0..=MAX_TREE_LEVEL {
+            let node_data = self.read_logical_block(node_bytenr)?;
+            let header = Self::parse_header(&node_data)?;
+            if header.level == 0 {
+                let items = Self::parse_leaf_items(&node_data, header.nritems)?;
+                return Ok((node_data, items));
+            }
+            let internal = Self::parse_internal_items(&node_data, header.nritems)?;
+            let index = internal
+                .binary_search_by(|item| item.key.cmp(search_key))
+                .unwrap_or_else(|index| index.saturating_sub(1));
+            match internal.get(index.min(internal.len().saturating_sub(1))) {
+                Some(item) => node_bytenr = item.blockptr,
+                None => return Err(invalid_fs_data("empty btrfs internal node")),
+            }
         }
-        let internal = Self::parse_internal_items(&node_data, header.nritems)?;
-        let index = internal
-            .binary_search_by(|item| item.key.cmp(search_key))
-            .unwrap_or_else(|index| index.saturating_sub(1));
-        if let Some(item) = internal.get(index.min(internal.len().saturating_sub(1))) {
-            self.walk_to_leaf(item.blockptr, search_key)
-        } else {
-            Err(invalid_fs_data("empty btrfs internal node"))
-        }
+        Err(invalid_fs_data("btrfs tree depth exceeds maximum level"))
     }
 
     pub(crate) fn collect_candidate_leaves(
@@ -246,6 +254,7 @@ impl BtrfsReader {
             lower_bound,
             upper_bound,
             &mut leaves,
+            0,
         )?;
         leaves.sort_by(|(_, left), (_, right)| {
             left.first()
@@ -261,7 +270,11 @@ impl BtrfsReader {
         lower_bound: &BtrfsKey,
         upper_bound: &BtrfsKey,
         leaves: &mut Vec<(Vec<u8>, Vec<LeafItem>)>,
+        depth: u8,
     ) -> io::Result<()> {
+        if depth > MAX_TREE_LEVEL {
+            return Err(invalid_fs_data("btrfs tree depth exceeds maximum level"));
+        }
         let node_data = self.read_logical_block(node_bytenr)?;
         let header = Self::parse_header(&node_data)?;
         if header.level == 0 {
@@ -294,6 +307,7 @@ impl BtrfsReader {
                 lower_bound,
                 upper_bound,
                 leaves,
+                depth + 1,
             )?;
         }
         Ok(())

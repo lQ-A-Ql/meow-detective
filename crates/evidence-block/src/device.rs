@@ -1,14 +1,15 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use iscsi_target::{IscsiError, ScsiBlockDevice, ScsiResult};
+use iscsi_target::{scsi::MAX_TRANSFER_BYTES, IscsiError, ScsiBlockDevice, ScsiResult};
 
 use crate::{
     open_block_provider, BlockDeviceError, BlockGeometry, BlockProvider, EvidenceImageKind,
 };
 
 const DEFAULT_BLOCK_SIZE: u32 = 512;
-const MAX_SCSI_READ_BYTES: usize = 16 * 1024 * 1024;
+// Single source of truth: the iSCSI layer advertises the same ceiling in VPD 0xB0.
+const MAX_SCSI_READ_BYTES: usize = MAX_TRANSFER_BYTES as usize;
 
 pub struct ReadOnlyScsiDevice {
     provider: Arc<dyn BlockProvider>,

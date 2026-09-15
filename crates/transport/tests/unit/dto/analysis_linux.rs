@@ -74,6 +74,7 @@ fn linux_artifact_summary_serializes_camel_case() {
             file_id: "file-access".to_string(),
             source_path: "/var/log/nginx/access.log".to_string(),
             client_ip: "192.0.2.10".to_string(),
+            vhost: None,
             timestamp: Some("2026-01-01T00:00:00Z".to_string()),
             method: "GET".to_string(),
             uri: "/".to_string(),

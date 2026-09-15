@@ -2,9 +2,11 @@
 //!
 //! The service replaces one `/etc/shadow` password hash and applies a bounded
 //! in-place rewrite exclusively through the session COW. ext4 and XFS roots
-//! are supported directly or through persisted LVM mappings. XFS edits are
-//! accepted only after the internal log is clean and `fs-xfs` has proved the
-//! existing allocation safe for an in-place rewrite.
+//! are supported directly or through persisted LVM mappings. ext4 edits are
+//! rejected when the jbd2 journal still holds transactions the guest kernel
+//! would replay. XFS edits are accepted only after the internal log is clean
+//! and `fs-xfs` has proved the existing allocation safe for an in-place
+//! rewrite.
 
 mod rewrite;
 mod volume;

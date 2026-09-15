@@ -34,6 +34,7 @@ pub struct LvmPool {
     pub(crate) pv_start_offsets: Vec<(String, u64)>,
     pub(crate) pv_data_offsets: Vec<(String, u64)>,
     pub(crate) logical_volumes: Vec<LvMeta>,
+    pub(crate) warnings: Vec<String>,
 }
 
 pub(crate) use info::lv_info_from_meta;

@@ -586,15 +586,22 @@ fn linux_web_vhost_logs_route_to_access_and_error_parsers() {
         .iter()
         .find(|artifact| artifact.family == "LinuxWebErrorLog")
         .expect("vhost error log artifact");
+    // No host zone available through this entry point: the raw local time
+    // stays verbatim with an explicit unverified-timezone marker instead of
+    // entering the timeline as fake UTC.
     assert_eq!(
         artifact_attr(artifact, "timestamp").and_then(|value| value.as_str()),
-        Some("2024-01-15T10:30:00+00:00")
+        Some("2024/01/15 10:30:00")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "tzAssumed").and_then(|value| value.as_str()),
+        Some("unverified-timezone")
     );
     assert_eq!(
         artifact_attr(artifact, "severity").and_then(|value| value.as_str()),
         Some("error")
     );
-    assert_eq!(outcome.timeline_events.len(), 1);
+    assert!(outcome.timeline_events.is_empty());
 }
 
 #[test]
@@ -607,16 +614,22 @@ fn linux_apache_error_log_parses_timestamp_and_second_bracket_severity() {
         .iter()
         .find(|artifact| artifact.family == "LinuxWebErrorLog")
         .expect("apache error log artifact");
+    // No host zone available through this entry point: the raw local time
+    // stays verbatim with an explicit unverified-timezone marker.
     assert_eq!(
         artifact_attr(artifact, "timestamp").and_then(|value| value.as_str()),
-        Some("2024-01-15T10:30:00.123456+00:00")
+        Some("Mon Jan 15 10:30:00.123456 2024")
+    );
+    assert_eq!(
+        artifact_attr(artifact, "tzAssumed").and_then(|value| value.as_str()),
+        Some("unverified-timezone")
     );
     assert_eq!(
         artifact_attr(artifact, "severity").and_then(|value| value.as_str()),
         Some("core:error"),
         "Apache severity comes from the module:level bracket, not the timestamp bracket"
     );
-    assert_eq!(outcome.timeline_events.len(), 1);
+    assert!(outcome.timeline_events.is_empty());
 }
 
 #[test]
@@ -976,4 +989,180 @@ fn linux_docker_overlay_candidate_is_annotated_and_warned() {
             .all(|warning| !warning.contains("Docker overlay2")),
         "host candidates must not surface the overlay warning"
     );
+}
+
+fn build_utmp_record_384(
+    ut_type: i32,
+    pid: i32,
+    user: &str,
+    line: &str,
+    host: &str,
+    tv_sec: i32,
+) -> Vec<u8> {
+    let mut buf = vec![0u8; 384];
+    buf[0..4].copy_from_slice(&ut_type.to_le_bytes());
+    buf[4..8].copy_from_slice(&pid.to_le_bytes());
+    let line_bytes = line.as_bytes();
+    let copy_len = line_bytes.len().min(32);
+    buf[8..8 + copy_len].copy_from_slice(&line_bytes[..copy_len]);
+    let user_bytes = user.as_bytes();
+    let copy_len = user_bytes.len().min(32);
+    buf[44..44 + copy_len].copy_from_slice(&user_bytes[..copy_len]);
+    let host_bytes = host.as_bytes();
+    let copy_len = host_bytes.len().min(256);
+    buf[76..76 + copy_len].copy_from_slice(&host_bytes[..copy_len]);
+    buf[340..344].copy_from_slice(&tv_sec.to_le_bytes());
+    buf
+}
+
+#[test]
+fn linux_btmp_extraction_marks_failed_logins() {
+    let candidate = candidate("/var/log/btmp");
+    let mut buf = Vec::new();
+    buf.extend(build_utmp_record_384(
+        7,
+        4101,
+        "root",
+        "pts/0",
+        "10.66.0.9",
+        1_700_000_100,
+    ));
+    buf.extend(build_utmp_record_384(
+        7,
+        4102,
+        "root",
+        "pts/0",
+        "10.66.0.9",
+        1_700_000_200,
+    ));
+    buf.extend(build_utmp_record_384(
+        7,
+        4103,
+        "alice",
+        "pts/1",
+        "",
+        1_700_000_300,
+    ));
+
+    let outcome = extract_linux_candidate(&candidate, &buf);
+    assert_has_outputs(&outcome, &candidate.file_id);
+
+    assert_eq!(outcome.artifacts.len(), 3);
+    for artifact in &outcome.artifacts {
+        assert_eq!(artifact.family, "LinuxWtmp");
+        assert!(
+            artifact.title.starts_with("Failed login "),
+            "btmp record must be titled as a failed login, got: {}",
+            artifact.title
+        );
+        assert_eq!(
+            artifact_attr(artifact, "recordKind").and_then(|value| value.as_str()),
+            Some("btmp")
+        );
+    }
+    let root_counts: Vec<_> = outcome
+        .artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact_attr(artifact, "user").and_then(|value| value.as_str()) == Some("root")
+        })
+        .map(|artifact| {
+            artifact_attr(artifact, "userFailureCount").and_then(|value| value.as_u64())
+        })
+        .collect();
+    assert_eq!(
+        root_counts,
+        vec![Some(2), Some(2)],
+        "every root btmp artifact carries the per-user attempt total"
+    );
+    let alice_count = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| {
+            artifact_attr(artifact, "user").and_then(|value| value.as_str()) == Some("alice")
+        })
+        .and_then(|artifact| artifact_attr(artifact, "userFailureCount"))
+        .and_then(|value| value.as_u64());
+    assert_eq!(alice_count, Some(1));
+
+    assert_eq!(outcome.timeline_events.len(), 3);
+    for event in &outcome.timeline_events {
+        assert_eq!(
+            event.event_type, "login_failed",
+            "btmp must not emit successful-login events"
+        );
+        assert!(event.title.starts_with("Failed login "));
+    }
+}
+
+#[test]
+fn linux_btmp_extraction_suppresses_logout_events() {
+    let candidate = candidate("/var/log/btmp");
+    let mut buf = Vec::new();
+    buf.extend(build_utmp_record_384(
+        7,
+        4201,
+        "root",
+        "pts/2",
+        "",
+        1_700_010_000,
+    ));
+    buf.extend(build_utmp_record_384(
+        8,
+        4201,
+        "",
+        "pts/2",
+        "",
+        1_700_020_000,
+    ));
+
+    let outcome = extract_linux_candidate(&candidate, &buf);
+    assert_eq!(outcome.artifacts.len(), 1);
+    assert!(
+        artifact_attr(&outcome.artifacts[0], "logoutTime").is_some(),
+        "the paired DEAD_PROCESS timestamp stays on the artifact attrs"
+    );
+    assert_eq!(
+        outcome.timeline_events.len(),
+        1,
+        "a failed attempt has no session to close: only the failed-login event is emitted"
+    );
+    assert_eq!(outcome.timeline_events[0].event_type, "login_failed");
+}
+
+#[test]
+fn linux_wtmp_extraction_keeps_login_and_logout_semantics() {
+    let candidate = candidate("/var/log/wtmp");
+    let mut buf = Vec::new();
+    buf.extend(build_utmp_record_384(
+        7,
+        4301,
+        "alice",
+        "pts/3",
+        "10.0.0.5",
+        1_700_010_000,
+    ));
+    buf.extend(build_utmp_record_384(
+        8,
+        4301,
+        "",
+        "pts/3",
+        "",
+        1_700_020_000,
+    ));
+
+    let outcome = extract_linux_candidate(&candidate, &buf);
+    assert_eq!(outcome.artifacts.len(), 1);
+    assert!(
+        outcome.artifacts[0].title.starts_with("Login "),
+        "wtmp sessions keep the successful-login title"
+    );
+    assert!(artifact_attr(&outcome.artifacts[0], "recordKind").is_none());
+    assert!(artifact_attr(&outcome.artifacts[0], "userFailureCount").is_none());
+    let event_types: Vec<_> = outcome
+        .timeline_events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect();
+    assert_eq!(event_types, ["login", "logout"]);
 }

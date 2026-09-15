@@ -37,6 +37,7 @@ fn discover_parses_volume_group() {
     assert!(volumes[0].directly_mappable);
     assert!(volumes[0].unsupported_reason.is_none());
     assert_eq!(pool.list_direct_volumes()[0].1.name, "root");
+    assert!(pool.warnings().is_empty());
     assert_eq!(pool.physical_volume_offsets(), &[("pv0".to_string(), 0)]);
     assert_eq!(
         pool.physical_volume_data_offsets(),
@@ -189,6 +190,97 @@ segment1 { start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["
 }
 
 #[test]
+fn thin_snapshot_with_external_origin_is_not_readable_and_fails_typed() {
+    let mut disk = synthetic_disk();
+    let logical_volumes = r#"
+pool_tmeta { id="lv-pool-tmeta" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] } }
+pool_tdata { id="lv-pool-tdata" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=4 type="linear" stripe_count=1 stripes=["pv0",1] } }
+thin_pool { id="lv-thin-pool" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=4 type="thin-pool" metadata="pool_tmeta" pool="pool_tdata" transaction_id=1 chunk_size=128 } }
+origin_lv { id="lv-origin" status=["READ","WRITE","VISIBLE"] segment_count=1
+segment1 { start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",10] } }
+thin_snap { id="lv-thin-snap" status=["READ","WRITE","VISIBLE"] segment_count=1
+segment1 { start_extent=0 extent_count=2 type="thin" thin_pool="thin_pool" transaction_id=2 device_id=7 external_origin="origin_lv" } }
+"#;
+    write_metadata(
+        &mut disk,
+        &metadata_with(DEFAULT_PV_UUID, 9, logical_volumes),
+    );
+    let pool = discover(disk).unwrap();
+    assert_eq!(
+        volume_names(pool.list_readable_volumes()),
+        vec!["origin_lv"]
+    );
+    let volumes = pool.list_volumes();
+    let reason = find_volume(&volumes, "thin_snap")
+        .unsupported_reason
+        .as_deref()
+        .unwrap();
+    assert!(reason.contains("origin_lv"), "{reason:?}");
+    let snap_index = volumes
+        .iter()
+        .position(|volume| volume.name == "thin_snap")
+        .unwrap();
+    let error = match pool.open_volume_reader(snap_index) {
+        Ok(_) => panic!("thin snapshot with external origin must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        LvmError::UnsupportedThinSnapshotOrigin {
+            ref lv_name,
+            origin_kind: "external_origin",
+            ref origin,
+        } if lv_name == "thin_snap" && origin == "origin_lv"
+    ));
+}
+
+#[test]
+fn thin_snapshot_with_thin_origin_is_not_readable_and_fails_typed() {
+    let mut disk = synthetic_disk();
+    let logical_volumes = r#"
+pool_tmeta { id="lv-pool-tmeta" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] } }
+pool_tdata { id="lv-pool-tdata" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=4 type="linear" stripe_count=1 stripes=["pv0",1] } }
+thin_pool { id="lv-thin-pool" status=["READ","WRITE"] segment_count=1
+segment1 { start_extent=0 extent_count=4 type="thin-pool" metadata="pool_tmeta" pool="pool_tdata" transaction_id=1 chunk_size=128 } }
+thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1
+segment1 { start_extent=0 extent_count=2 type="thin" thin_pool="thin_pool" transaction_id=1 device_id=7 } }
+thin_snap { id="lv-thin-snap" status=["READ","WRITE","VISIBLE"] segment_count=1
+segment1 { start_extent=0 extent_count=2 type="thin" thin_pool="thin_pool" transaction_id=2 device_id=8 origin="thin_root" } }
+"#;
+    write_metadata(
+        &mut disk,
+        &metadata_with(DEFAULT_PV_UUID, 10, logical_volumes),
+    );
+    let pool = discover(disk).unwrap();
+    assert_eq!(
+        volume_names(pool.list_readable_volumes()),
+        vec!["thin_root"]
+    );
+    let volumes = pool.list_volumes();
+    let snap_index = volumes
+        .iter()
+        .position(|volume| volume.name == "thin_snap")
+        .unwrap();
+    let error = match pool.open_volume_reader(snap_index) {
+        Ok(_) => panic!("thin snapshot with origin must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        LvmError::UnsupportedThinSnapshotOrigin {
+            ref lv_name,
+            origin_kind: "origin",
+            ref origin,
+        } if lv_name == "thin_snap" && origin == "thin_root"
+    ));
+}
+
+#[test]
 fn discover_resolves_component_lv_area_backed_by_physical_volume() {
     let mut disk = synthetic_disk();
     let logical_volumes = r#"
@@ -289,6 +381,7 @@ fn discover_binds_readers_in_metadata_pv_order() {
     pv0[DATA_START as usize..DATA_START as usize + 512].fill(b'A');
     pv1[DATA_START as usize..DATA_START as usize + 512].fill(b'B');
     let pool = LvmPool::discover(vec![boxed_reader(pv1), boxed_reader(pv0)], vec![0, 0]).unwrap();
+    assert!(pool.warnings().is_empty());
     assert_eq!(
         pool.physical_volume_offsets(),
         &[("pv0".to_string(), 0), ("pv1".to_string(), 0)]
@@ -328,6 +421,29 @@ fn discover_uses_complete_lower_seqno_copy_when_higher_copy_is_incomplete() {
     let pool = LvmPool::discover(vec![boxed_reader(pv0), boxed_reader(pv1)], vec![0, 0]).unwrap();
     assert_eq!(pool.volume_group().seqno, 10);
     assert_eq!(pool.list_direct_volumes().len(), 1);
+}
+
+#[test]
+fn discover_warns_when_supplied_pvs_carry_distinct_volume_groups() {
+    let root_lv = r#"root { id="lv-root" status=["READ","WRITE","VISIBLE"] segment_count=1
+segment1 { start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",0] } }"#;
+    let mut pv0 = empty_pv(PV0_UUID);
+    write_metadata(
+        &mut pv0,
+        &named_vg_metadata("vg_alpha", "vg-alpha-id", PV0_UUID, 1, root_lv),
+    );
+    let mut pv1 = empty_pv(PV1_UUID);
+    write_metadata(
+        &mut pv1,
+        &named_vg_metadata("vg_beta", "vg-beta-id", PV1_UUID, 2, root_lv),
+    );
+    let pool = LvmPool::discover(vec![boxed_reader(pv0), boxed_reader(pv1)], vec![0, 0]).unwrap();
+    assert_eq!(pool.volume_group().name, "vg_beta");
+    let warnings = pool.warnings();
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("multiple volume groups"));
+    assert!(warnings[0].contains("vg_alpha"));
+    assert!(warnings[0].contains("vg_beta"));
 }
 
 const DEFAULT_PV_UUID: &str = "abcdef1234567890abcdef1234567890";
@@ -394,6 +510,25 @@ fn metadata_with(pv_uuid: &str, seqno: u64, logical_volumes: &str) -> String {
     format!(
         r#"test_vg {{
 id="vg-test"
+seqno={seqno}
+extent_size=1
+physical_volumes {{ pv0 {{ id="{pv_uuid}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{ {logical_volumes} }}
+}}
+"#
+    )
+}
+
+fn named_vg_metadata(
+    vg_name: &str,
+    vg_id: &str,
+    pv_uuid: &str,
+    seqno: u64,
+    logical_volumes: &str,
+) -> String {
+    format!(
+        r#"{vg_name} {{
+id="{vg_id}"
 seqno={seqno}
 extent_size=1
 physical_volumes {{ pv0 {{ id="{pv_uuid}" pe_start=5 pe_count=4096 }} }}

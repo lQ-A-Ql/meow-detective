@@ -132,8 +132,7 @@ pub fn decode_cephfs_dentry_value(
         }
         b'i' => {
             let (envelope, mut payload) = decode_dentry_envelope(&mut cursor)?;
-            let alternate_name =
-                decode_string(&mut payload, MAX_DENTRY_NAME_BYTES, "CephFS alternate name")?;
+            let alternate_name = decode_alternate_name(&mut payload, envelope.version)?;
             let inode = decode_cephfs_inode_store_cursor(&mut payload)?;
             if envelope.version <= 2 && !payload.is_empty() {
                 return Err(CephWireError::CephFsTrailingBytes {
@@ -162,8 +161,7 @@ pub fn decode_cephfs_dentry_value(
             let (envelope, mut payload) = decode_dentry_envelope(&mut cursor)?;
             let child_inode = u64::decode(&mut payload)?;
             let d_type = u8::decode(&mut payload)?;
-            let alternate_name =
-                decode_string(&mut payload, MAX_DENTRY_NAME_BYTES, "CephFS alternate name")?;
+            let alternate_name = decode_alternate_name(&mut payload, envelope.version)?;
             if envelope.version <= 2 && !payload.is_empty() {
                 return Err(CephWireError::CephFsTrailingBytes {
                     map: "dentry_remote",
@@ -222,6 +220,15 @@ fn decode_dentry_envelope<'a>(
     }
     let payload = cursor.take(envelope.payload_length as usize)?;
     Ok((envelope, payload))
+}
+
+// alternate_name is encoded only in struct_v >= 2 (CDir::_decode_dentry, CDentry::decode_remote).
+fn decode_alternate_name(payload: &mut CephCursor<'_>, version: u8) -> Result<String> {
+    if version >= 2 {
+        decode_string(payload, MAX_DENTRY_NAME_BYTES, "CephFS alternate name")
+    } else {
+        Ok(String::new())
+    }
 }
 
 fn parse_hex_u64(value: Option<&str>, allow_zero: bool) -> Result<u64> {

@@ -14,7 +14,7 @@ use persistence_sqlite::repositories::{
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
-use transport::dto::CorrelationNodeKindDto;
+use transport::dto::{ArtifactRowDto, CorrelationCoverageStatusDto, CorrelationNodeKindDto};
 
 fn setup_case_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
@@ -944,27 +944,83 @@ fn second_call_under_200ms() {
     );
 }
 
+fn artifact_dto(artifact_type: &str, attrs: BTreeMap<String, Value>) -> ArtifactRowDto {
+    ArtifactRowDto {
+        id: format!("dto-{artifact_type}"),
+        artifact_type: artifact_type.to_string(),
+        title: format!("{artifact_type} dto"),
+        summary: "fixture".to_string(),
+        source_object_id: None,
+        extractor_id: None,
+        extractor_version: None,
+        confidence: None,
+        source_attribution: None,
+        created_at: String::new(),
+        attrs,
+    }
+}
+
 #[test]
 fn artifact_family_maps_all_registry_families_to_registry() {
+    let dto = |artifact_type: &str| artifact_dto(artifact_type, BTreeMap::new());
     assert_eq!(
-        artifact_family("RegistrySamUser"),
+        artifact_family(&dto("RegistrySamUser")),
         Some("Registry".to_string())
     );
     assert_eq!(
-        artifact_family("RegistryUserAssist"),
+        artifact_family(&dto("RegistryUserAssist")),
         Some("Registry".to_string())
     );
     assert_eq!(
-        artifact_family("RegistryShutdownTime"),
+        artifact_family(&dto("RegistryShutdownTime")),
         Some("Registry".to_string())
     );
     assert_eq!(
-        artifact_family("RegistryValue"),
+        artifact_family(&dto("RegistryValue")),
         Some("Registry".to_string())
     );
     // Non-registry families stay unchanged.
-    assert_eq!(artifact_family("Prefetch"), Some("Prefetch".to_string()));
-    assert_eq!(artifact_family("LNK"), Some("LNK".to_string()));
+    assert_eq!(
+        artifact_family(&dto("Prefetch")),
+        Some("Prefetch".to_string())
+    );
+    assert_eq!(artifact_family(&dto("LNK")), Some("LNK".to_string()));
+}
+
+#[test]
+fn artifact_family_maps_linux_types_to_linux_families() {
+    let dto = |artifact_type: &str| artifact_dto(artifact_type, BTreeMap::new());
+    let cases = [
+        ("LinuxJournal", "LinuxJournal"),
+        ("LinuxWtmp", "LinuxWtmp"),
+        ("LinuxSudoEvent", "LinuxSudo"),
+        ("LinuxCronJob", "LinuxCron"),
+        ("LinuxBashCommand", "LinuxShellCommand"),
+        ("LinuxAptEvent", "LinuxPackage"),
+        ("LinuxSystemConfig", "LinuxSystemConfig"),
+        ("LinuxWebSite", "LinuxWeb"),
+        ("LinuxWebAccessLog", "LinuxWeb"),
+        ("LinuxWebErrorLog", "LinuxWeb"),
+        ("LinuxWebFinding", "LinuxWeb"),
+        ("LinuxMysqlConfig", "LinuxMysql"),
+        ("LinuxMysqlLogEntry", "LinuxMysql"),
+        ("LinuxMysqlFinding", "LinuxMysql"),
+    ];
+    for (artifact_type, expected) in cases {
+        assert_eq!(
+            artifact_family(&dto(artifact_type)),
+            Some(expected.to_string()),
+            "artifact type {artifact_type} should derive family {expected}"
+        );
+    }
+    // Text-log fallback lines share the LinuxJournal type but carry `logKind`;
+    // they derive the separate LinuxTextLog family instead.
+    let mut attrs = BTreeMap::new();
+    attrs.insert("logKind".to_string(), Value::String("auth".to_string()));
+    assert_eq!(
+        artifact_family(&artifact_dto("LinuxJournal", attrs)),
+        Some("LinuxTextLog".to_string())
+    );
 }
 
 #[test]
@@ -1016,4 +1072,231 @@ fn correlation_groups_registry_sam_and_timeline_into_registry_family() {
         .unwrap();
     assert!(lead.families.iter().any(|f| f == "Registry"));
     assert!(lead.summary.contains("痕迹记录"));
+}
+
+#[test]
+fn correlation_snapshot_matches_linux_journal_executable_to_file() {
+    let conn = setup_case_db();
+    insert_file(
+        &conn,
+        "file-journal",
+        "[P1]/var/log/journal/9f2/system.journal",
+        false,
+    );
+    insert_file(&conn, "file-sshd", "[P1]/usr/sbin/sshd", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "executable".to_string(),
+        Value::String("/usr/sbin/sshd".to_string()),
+    );
+    attrs.insert(
+        "timestamp".to_string(),
+        Value::String("2026-09-10T08:00:00Z".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-journal",
+        "LinuxJournal",
+        Some("file-journal"),
+        attrs,
+    );
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-journal"
+            && edge.to_node_id == "file:file-sshd"
+    }));
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-sshd")
+        .unwrap();
+    assert_eq!(lead.confidence, CorrelationConfidenceDto::Direct);
+    assert!(lead.families.iter().any(|family| family == "LinuxJournal"));
+    let coverage = snapshot
+        .family_coverage
+        .iter()
+        .find(|item| item.family == "LinuxJournal")
+        .unwrap();
+    assert_eq!(coverage.status, CorrelationCoverageStatusDto::Covered);
+    // Unobserved Linux families stay out of the coverage view.
+    assert!(snapshot
+        .family_coverage
+        .iter()
+        .all(|item| item.family == "LinuxJournal" || !item.family.starts_with("Linux")));
+}
+
+#[test]
+fn correlation_snapshot_matches_linux_cron_absolute_command_to_file() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-crontab", "[P1]/etc/crontab", false);
+    insert_file(&conn, "file-backup", "[P1]/usr/local/bin/backup.sh", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "command".to_string(),
+        Value::String("/usr/local/bin/backup.sh --full".to_string()),
+    );
+    attrs.insert(
+        "schedule".to_string(),
+        Value::String("0 3 * * *".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-cron",
+        "LinuxCronJob",
+        Some("file-crontab"),
+        attrs,
+    );
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let edge = snapshot
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_node_id == "artifact:artifact-cron" && edge.to_node_id == "file:file-backup"
+        })
+        .unwrap();
+
+    assert_eq!(edge.kind, CorrelationEdgeKindDto::PathMatch);
+    assert_eq!(edge.confidence, CorrelationConfidenceDto::Strong);
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-backup")
+        .unwrap();
+    assert!(lead.families.iter().any(|family| family == "LinuxCron"));
+}
+
+#[test]
+fn correlation_snapshot_matches_linux_sudo_bare_command_to_file_name() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-authlog", "[P1]/var/log/auth.log", false);
+    insert_file(&conn, "file-vim", "[P1]/usr/bin/vim", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "command".to_string(),
+        Value::String("vim /etc/shadow".to_string()),
+    );
+    attrs.insert("user".to_string(), Value::String("alice".to_string()));
+    attrs.insert(
+        "timestamp".to_string(),
+        Value::String("2026-09-10T09:00:00Z".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-sudo",
+        "LinuxSudoEvent",
+        Some("file-authlog"),
+        attrs,
+    );
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let edge = snapshot
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_node_id == "artifact:artifact-sudo"
+                && edge.kind == CorrelationEdgeKindDto::NameMatch
+        })
+        .unwrap();
+
+    assert_eq!(edge.to_node_id, "file:file-vim");
+    assert_eq!(edge.confidence, CorrelationConfidenceDto::Weak);
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-vim")
+        .unwrap();
+    assert!(lead.families.iter().any(|family| family == "LinuxSudo"));
+}
+
+#[test]
+fn correlation_snapshot_splits_text_log_fallback_into_text_log_family() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-syslog", "[P1]/var/log/syslog", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert("logKind".to_string(), Value::String("log".to_string()));
+    attrs.insert(
+        "message".to_string(),
+        Value::String("sshd[812]: Accepted password for alice".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-textlog",
+        "LinuxJournal",
+        Some("file-syslog"),
+        attrs,
+    );
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-textlog".to_string()),
+                source_object_id: "file-syslog".to_string(),
+                event_type: "linux.text_log".to_string(),
+                timestamp: Utc::now(),
+                title: "syslog line".to_string(),
+                description: "Accepted password for alice".to_string(),
+                parser_id: Some("linux.text_log".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.8),
+                source_attribution: None,
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    // The sourceObjectId bridge links artifact and timeline on the same file.
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::SharedSourceObject
+            && edge.from_node_id == "artifact:artifact-textlog"
+            && edge.to_node_id == "timeline:timeline-textlog"
+    }));
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.primary_file_id == "file-syslog")
+        .unwrap();
+    assert!(lead.families.iter().any(|family| family == "LinuxTextLog"));
+    assert!(!lead.families.iter().any(|family| family == "LinuxJournal"));
+    let coverage = snapshot
+        .family_coverage
+        .iter()
+        .find(|item| item.family == "LinuxTextLog")
+        .unwrap();
+    assert_eq!(coverage.status, CorrelationCoverageStatusDto::Covered);
+    assert!(snapshot
+        .family_coverage
+        .iter()
+        .all(|item| item.family != "LinuxJournal"));
+}
+
+#[test]
+fn correlation_family_coverage_keeps_windows_baseline_without_linux_artifacts() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-lnk", "C:/Users/Admin/Desktop/cmd.lnk", false);
+    insert_file(&conn, "file-cmd", "C:/Windows/System32/cmd.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/cmd.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert_eq!(snapshot.family_coverage.len(), 8);
+    assert!(snapshot
+        .family_coverage
+        .iter()
+        .all(|item| !item.family.starts_with("Linux")));
 }

@@ -3,7 +3,6 @@ use evidence_core::filesystem::FileSystemReader;
 use evidence_core::EvidenceReader;
 use std::io;
 
-const CHUNK_TREE_OBJECTID: u64 = 3;
 const EXTENT_REGULAR: u8 = 1;
 const FT_REG_FILE: u8 = 1;
 const S_IFDIR: u32 = 0o040000;
@@ -83,37 +82,38 @@ mod cases {
         let sb = &mut img[block(16)..block(17)];
         sb[0x40..0x48].copy_from_slice(BTRFS_MAGIC);
         let root_tree_bytenr: u64 = 0x11000;
-        sb[0x78..0x80].copy_from_slice(&root_tree_bytenr.to_le_bytes());
-        sb[0x80..0x88].copy_from_slice(&root_tree_bytenr.to_le_bytes());
-        sb[0xB8..0xBC].copy_from_slice(&4096u32.to_le_bytes());
-        sb[0xBC..0xC0].copy_from_slice(&4096u32.to_le_bytes());
-        sb[0xC0..0xC4].copy_from_slice(&4096u32.to_le_bytes());
-        sb[0xC4..0xC8].copy_from_slice(&4096u32.to_le_bytes());
+        // root (0x50) and chunk_root (0x58) per struct btrfs_super_block.
+        sb[0x50..0x58].copy_from_slice(&root_tree_bytenr.to_le_bytes());
+        sb[0x58..0x60].copy_from_slice(&root_tree_bytenr.to_le_bytes());
+        sb[0x90..0x94].copy_from_slice(&4096u32.to_le_bytes()); // sectorsize
+        sb[0x94..0x98].copy_from_slice(&4096u32.to_le_bytes()); // nodesize
+        sb[0x98..0x9C].copy_from_slice(&4096u32.to_le_bytes()); // leafsize (legacy)
+        sb[0x9C..0xA0].copy_from_slice(&4096u32.to_le_bytes()); // stripesize
 
-        // Sys chunk array: identity mapping for the entire image.
+        // Sys chunk array at 0x32B: identity mapping for the entire image.
         let ca = &mut sb[0x32B..0x32B + 256];
-        ca[0x00..0x08].copy_from_slice(&CHUNK_TREE_OBJECTID.to_le_bytes());
+        ca[0x00..0x08].copy_from_slice(&256u64.to_le_bytes()); // FIRST_CHUNK_TREE objectid
         ca[0x08] = CHUNK_ITEM_KEY;
-        ca[0x09..0x11].copy_from_slice(&0u64.to_le_bytes());
-        ca[0x11..0x19].copy_from_slice(&(total_blocks * nodesize).to_le_bytes());
-        ca[0x19..0x21].copy_from_slice(&CHUNK_TREE_OBJECTID.to_le_bytes());
-        ca[0x21..0x29].copy_from_slice(&nodesize.to_le_bytes());
-        ca[0x29..0x31].copy_from_slice(&(1u64 | (1 << 2)).to_le_bytes());
-        ca[0x31..0x35].copy_from_slice(&4096u32.to_le_bytes());
-        ca[0x35..0x39].copy_from_slice(&4096u32.to_le_bytes());
-        ca[0x39..0x3D].copy_from_slice(&4096u32.to_le_bytes());
-        ca[0x3D..0x3F].copy_from_slice(&1u16.to_le_bytes());
-        ca[0x3F..0x41].copy_from_slice(&1u16.to_le_bytes());
-        ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes());
-        ca[0x49..0x51].copy_from_slice(&0u64.to_le_bytes());
-        let array_size: u32 = 0x51 + (4 - (0x51 % 4));
-        sb[0xC8..0xCC].copy_from_slice(&array_size.to_le_bytes());
+        ca[0x09..0x11].copy_from_slice(&0u64.to_le_bytes()); // logical
+        ca[0x11..0x19].copy_from_slice(&(total_blocks * nodesize).to_le_bytes()); // length
+        ca[0x19..0x21].copy_from_slice(&2u64.to_le_bytes()); // owner (EXTENT_TREE)
+        ca[0x21..0x29].copy_from_slice(&nodesize.to_le_bytes()); // stripe_len
+        ca[0x29..0x31].copy_from_slice(&2u64.to_le_bytes()); // type: SYSTEM
+        ca[0x31..0x35].copy_from_slice(&4096u32.to_le_bytes()); // io_align
+        ca[0x35..0x39].copy_from_slice(&4096u32.to_le_bytes()); // io_width
+        ca[0x39..0x3D].copy_from_slice(&4096u32.to_le_bytes()); // sector_size
+        ca[0x3D..0x3F].copy_from_slice(&1u16.to_le_bytes()); // num_stripes
+        ca[0x3F..0x41].copy_from_slice(&0u16.to_le_bytes()); // sub_stripes
+        ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes()); // stripe devid
+        ca[0x49..0x51].copy_from_slice(&0u64.to_le_bytes()); // stripe offset
+        let array_size: u32 = 0x61; // key(0x11) + chunk_item(0x30) + stripe(0x20)
+        sb[0xA0..0xA4].copy_from_slice(&array_size.to_le_bytes()); // sys_chunk_array_size
 
         // ---- Root tree internal node at block 17 (0x11000) ----
         let rt = &mut img[block(17)..block(18)];
         rt[0x30..0x38].copy_from_slice(&0x11000u64.to_le_bytes());
-        rt[0x5D..0x61].copy_from_slice(&1u32.to_le_bytes());
-        rt[0x61] = 1;
+        rt[0x60..0x64].copy_from_slice(&1u32.to_le_bytes()); // nritems
+        rt[0x64] = 1; // level
         let io = BTRFS_HEADER_SIZE;
         rt[io..io + 8].copy_from_slice(&FS_TREE_OBJECTID.to_le_bytes());
         rt[io + 8] = ROOT_ITEM_KEY;
@@ -124,8 +124,8 @@ mod cases {
         // ---- Root tree leaf at block 18 (0x12000) ----
         let rtl = &mut img[block(18)..block(19)];
         rtl[0x30..0x38].copy_from_slice(&0x12000u64.to_le_bytes());
-        rtl[0x5D..0x61].copy_from_slice(&2u32.to_le_bytes());
-        rtl[0x61] = 0;
+        rtl[0x60..0x64].copy_from_slice(&2u32.to_le_bytes()); // nritems
+        rtl[0x64] = 0; // level (leaf)
 
         let data_end = nodesize as usize;
         let mut doff = data_end;
@@ -137,7 +137,8 @@ mod cases {
         rtl[k0..k0 + 8].copy_from_slice(&FS_TREE_OBJECTID.to_le_bytes());
         rtl[k0 + 8] = ROOT_ITEM_KEY;
         rtl[k0 + 9..k0 + 17].copy_from_slice(&0u64.to_le_bytes());
-        rtl[k0 + 17..k0 + 21].copy_from_slice(&(doff as u32).to_le_bytes());
+        // Item data offsets are relative to the end of the 101-byte header.
+        rtl[k0 + 17..k0 + 21].copy_from_slice(&((doff - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
         rtl[k0 + 21..k0 + 25].copy_from_slice(&(ri_size as u32).to_le_bytes());
         let rid = &mut rtl[doff..doff + ri_size];
         rid[0..8].copy_from_slice(&1u64.to_le_bytes());
@@ -158,7 +159,7 @@ mod cases {
         rtl[k1..k1 + 8].copy_from_slice(&FS_TREE_OBJECTID.to_le_bytes());
         rtl[k1 + 8] = ROOT_BACKREF_KEY;
         rtl[k1 + 9..k1 + 17].copy_from_slice(&0u64.to_le_bytes());
-        rtl[k1 + 17..k1 + 21].copy_from_slice(&(doff as u32).to_le_bytes());
+        rtl[k1 + 17..k1 + 21].copy_from_slice(&((doff - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
         rtl[k1 + 21..k1 + 25].copy_from_slice(&(rb_size as u32).to_le_bytes());
         let rbd = &mut rtl[doff..doff + rb_size];
         rbd[0..8].copy_from_slice(&FIRST_FREE_OBJECTID.to_le_bytes());
@@ -169,7 +170,7 @@ mod cases {
         // ---- FS tree leaf at block 19 (0x13000) ----
         let fs = &mut img[block(19)..block(20)];
         fs[0x30..0x38].copy_from_slice(&0x13000u64.to_le_bytes());
-        fs[0x61] = 0;
+        fs[0x64] = 0; // level (leaf)
         let fs_data_end = nodesize as usize;
         let mut fs_doff = fs_data_end;
 
@@ -190,7 +191,8 @@ mod cases {
             leaf[kbase + 8] = key_type;
             leaf[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
             *data_off -= data_bytes.len();
-            leaf[kbase + 17..kbase + 21].copy_from_slice(&(*data_off as u32).to_le_bytes());
+            leaf[kbase + 17..kbase + 21]
+                .copy_from_slice(&((*data_off - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
             leaf[kbase + 21..kbase + 25].copy_from_slice(&(data_bytes.len() as u32).to_le_bytes());
             leaf[*data_off..*data_off + data_bytes.len()].copy_from_slice(data_bytes);
         }
@@ -329,7 +331,7 @@ mod cases {
         inline_ext[21..21 + nested_content.len()].copy_from_slice(nested_content);
         put_item(fs, 8, 259, EXTENT_DATA_KEY, 0, &inline_ext, &mut fs_doff);
 
-        fs[0x5D..0x61].copy_from_slice(&9u32.to_le_bytes());
+        fs[0x60..0x64].copy_from_slice(&9u32.to_le_bytes()); // nritems
 
         // ---- Block 20: file.txt data ----
         img[block(20)..block(20) + file_content.len()].copy_from_slice(file_content);
@@ -350,7 +352,7 @@ mod cases {
                 .iter()
                 .find(|item| item.key.objectid == 257 && item.key.ty == INODE_ITEM_KEY)
                 .unwrap();
-            let inode_start = inode.data_offset as usize;
+            let inode_start = BTRFS_HEADER_SIZE + inode.data_offset as usize;
             fs[inode_start + 16..inode_start + 24].copy_from_slice(&file_size.to_le_bytes());
 
             let extent_index = items
@@ -361,7 +363,7 @@ mod cases {
             fs[key_offset..key_offset + 8].copy_from_slice(&LOGICAL_OFFSET.to_le_bytes());
 
             let extent = &items[extent_index];
-            let extent_start = extent.data_offset as usize;
+            let extent_start = BTRFS_HEADER_SIZE + extent.data_offset as usize;
             fs[extent_start + 45..extent_start + 53]
                 .copy_from_slice(&(marker.len() as u64).to_le_bytes());
         }
@@ -376,8 +378,8 @@ mod cases {
 
         {
             let fs = &mut img[block(19)..block(20)];
-            fs[0x61] = 1;
-            fs[0x5D..0x61].copy_from_slice(&2u32.to_le_bytes());
+            fs[0x64] = 1; // level (internal)
+            fs[0x60..0x64].copy_from_slice(&2u32.to_le_bytes()); // nritems
             let first = BTRFS_HEADER_SIZE;
             fs[first..first + 8].copy_from_slice(&256u64.to_le_bytes());
             fs[first + 8] = INODE_ITEM_KEY;
@@ -406,7 +408,8 @@ mod cases {
             leaf[kbase + 8] = key_type;
             leaf[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
             *data_off -= data_bytes.len();
-            leaf[kbase + 17..kbase + 21].copy_from_slice(&(*data_off as u32).to_le_bytes());
+            leaf[kbase + 17..kbase + 21]
+                .copy_from_slice(&((*data_off - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
             leaf[kbase + 21..kbase + 25].copy_from_slice(&(data_bytes.len() as u32).to_le_bytes());
             leaf[*data_off..*data_off + data_bytes.len()].copy_from_slice(data_bytes);
         }
@@ -423,8 +426,8 @@ mod cases {
         {
             let leaf = &mut img[block(21)..block(22)];
             leaf[0x30..0x38].copy_from_slice(&0x15000u64.to_le_bytes());
-            leaf[0x5D..0x61].copy_from_slice(&1u32.to_le_bytes());
-            leaf[0x61] = 0;
+            leaf[0x60..0x64].copy_from_slice(&1u32.to_le_bytes()); // nritems
+            leaf[0x64] = 0; // level (leaf)
             let mut data_off = 4096usize;
             put_item(
                 leaf,
@@ -439,8 +442,8 @@ mod cases {
         {
             let leaf = &mut img[block(22)..block(23)];
             leaf[0x30..0x38].copy_from_slice(&0x16000u64.to_le_bytes());
-            leaf[0x5D..0x61].copy_from_slice(&1u32.to_le_bytes());
-            leaf[0x61] = 0;
+            leaf[0x60..0x64].copy_from_slice(&1u32.to_le_bytes()); // nritems
+            leaf[0x64] = 0; // level (leaf)
             let mut data_off = 4096usize;
             put_item(
                 leaf,
@@ -452,6 +455,240 @@ mod cases {
                 &mut data_off,
             );
         }
+
+        img
+    }
+
+    // -------------------------------------------------------------------
+    // Three-level FS tree fixture with a non-identity chunk mapping
+    // -------------------------------------------------------------------
+    //
+    // The logical chunk [0, 0x10000) maps to physical 0x40000. Every on-disk
+    // reference below is a logical address, so all metadata and file-data
+    // reads must go through chunk translation.
+    //
+    //  Logical   Physical  Content
+    //  --------  --------  ------------------------------------------
+    //   --        0x10000   Superblock (fixed physical location)
+    //   0x01000  0x41000   Root tree leaf: ROOT_ITEM(5) + ROOT_BACKREF
+    //   0x02000  0x42000   FS tree root: internal node, level 2
+    //   0x03000  0x43000   Internal node, level 1
+    //   0x04000  0x44000   Leaf A: dir inode + "deep.txt" + file inode
+    //   0x05000  0x45000   Leaf B: EXTENT_DATA for deep.txt
+    //   0x06000  0x46000   File data "deep tree payload"
+
+    fn build_deep_tree_btrfs_fixture() -> Vec<u8> {
+        let nodesize: u64 = 4096;
+        let phys_base: u64 = 0x40000;
+        let mut img = vec![0u8; (phys_base + 0x10000) as usize];
+        let logical = |addr: u64| -> usize { (phys_base + addr) as usize };
+
+        // ---- Superblock at 0x10000 (physical, not translated) ----
+        let sb = &mut img[0x10000..0x11000];
+        sb[0x40..0x48].copy_from_slice(BTRFS_MAGIC);
+        sb[0x50..0x58].copy_from_slice(&0x1000u64.to_le_bytes()); // root
+        sb[0x58..0x60].copy_from_slice(&0x1000u64.to_le_bytes()); // chunk_root
+        sb[0x90..0x94].copy_from_slice(&4096u32.to_le_bytes()); // sectorsize
+        sb[0x94..0x98].copy_from_slice(&4096u32.to_le_bytes()); // nodesize
+        sb[0x98..0x9C].copy_from_slice(&4096u32.to_le_bytes()); // leafsize
+        sb[0x9C..0xA0].copy_from_slice(&4096u32.to_le_bytes()); // stripesize
+
+        // Sys chunk array: logical [0, 0x10000) -> physical 0x40000.
+        let ca = &mut sb[0x32B..0x32B + 256];
+        ca[0x00..0x08].copy_from_slice(&256u64.to_le_bytes());
+        ca[0x08] = CHUNK_ITEM_KEY;
+        ca[0x09..0x11].copy_from_slice(&0u64.to_le_bytes());
+        ca[0x11..0x19].copy_from_slice(&0x10000u64.to_le_bytes());
+        ca[0x19..0x21].copy_from_slice(&2u64.to_le_bytes());
+        ca[0x21..0x29].copy_from_slice(&nodesize.to_le_bytes());
+        ca[0x29..0x31].copy_from_slice(&2u64.to_le_bytes());
+        ca[0x31..0x35].copy_from_slice(&4096u32.to_le_bytes());
+        ca[0x35..0x39].copy_from_slice(&4096u32.to_le_bytes());
+        ca[0x39..0x3D].copy_from_slice(&4096u32.to_le_bytes());
+        ca[0x3D..0x3F].copy_from_slice(&1u16.to_le_bytes());
+        ca[0x3F..0x41].copy_from_slice(&0u16.to_le_bytes());
+        ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes());
+        ca[0x49..0x51].copy_from_slice(&phys_base.to_le_bytes());
+        sb[0xA0..0xA4].copy_from_slice(&0x61u32.to_le_bytes());
+
+        fn put_item(
+            leaf: &mut [u8],
+            idx: usize,
+            key_obj: u64,
+            key_type: u8,
+            key_off: u64,
+            data_bytes: &[u8],
+            data_off: &mut usize,
+        ) {
+            let kbase = BTRFS_HEADER_SIZE + idx * LEAF_ITEM_SIZE;
+            leaf[kbase..kbase + 8].copy_from_slice(&key_obj.to_le_bytes());
+            leaf[kbase + 8] = key_type;
+            leaf[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
+            *data_off -= data_bytes.len();
+            leaf[kbase + 17..kbase + 21]
+                .copy_from_slice(&((*data_off - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
+            leaf[kbase + 21..kbase + 25].copy_from_slice(&(data_bytes.len() as u32).to_le_bytes());
+            leaf[*data_off..*data_off + data_bytes.len()].copy_from_slice(data_bytes);
+        }
+
+        fn put_key_pointer(
+            node: &mut [u8],
+            idx: usize,
+            key_obj: u64,
+            key_type: u8,
+            key_off: u64,
+            blockptr: u64,
+        ) {
+            let kbase = BTRFS_HEADER_SIZE + idx * INTERNAL_ITEM_SIZE;
+            node[kbase..kbase + 8].copy_from_slice(&key_obj.to_le_bytes());
+            node[kbase + 8] = key_type;
+            node[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
+            node[kbase + 17..kbase + 25].copy_from_slice(&blockptr.to_le_bytes());
+            node[kbase + 25..kbase + 33].copy_from_slice(&1u64.to_le_bytes());
+        }
+
+        fn make_root_item(bytenr: u64, root_dirid: u64) -> Vec<u8> {
+            let mut d = vec![0u8; 244];
+            d[0..8].copy_from_slice(&1u64.to_le_bytes());
+            d[168..176].copy_from_slice(&root_dirid.to_le_bytes());
+            d[176..184].copy_from_slice(&bytenr.to_le_bytes());
+            d[192..200].copy_from_slice(&4096u64.to_le_bytes());
+            d
+        }
+
+        fn make_root_backref(name: &[u8]) -> Vec<u8> {
+            let mut d = vec![0u8; 18 + name.len()];
+            d[0..8].copy_from_slice(&FIRST_FREE_OBJECTID.to_le_bytes());
+            d[16..18].copy_from_slice(&(name.len() as u16).to_le_bytes());
+            d[18..18 + name.len()].copy_from_slice(name);
+            d
+        }
+
+        fn make_inode(mode: u32, size: u64, nlink: u32) -> Vec<u8> {
+            let mut d = vec![0u8; 160];
+            d[0..8].copy_from_slice(&1u64.to_le_bytes());
+            d[16..24].copy_from_slice(&size.to_le_bytes());
+            d[40..44].copy_from_slice(&nlink.to_le_bytes());
+            d[52..56].copy_from_slice(&mode.to_le_bytes());
+            d
+        }
+
+        fn make_dir_entry(name: &[u8], child_obj: u64, file_type: u8) -> Vec<u8> {
+            let mut d = vec![0u8; 30 + name.len()];
+            d[0..8].copy_from_slice(&child_obj.to_le_bytes());
+            d[17..25].copy_from_slice(&1u64.to_le_bytes());
+            d[27..29].copy_from_slice(&(name.len() as u16).to_le_bytes());
+            d[29] = file_type;
+            d[30..30 + name.len()].copy_from_slice(name);
+            d
+        }
+
+        fn make_regular_extent(disk_bytenr: u64, num_bytes: u64) -> Vec<u8> {
+            let mut d = vec![0u8; 53];
+            d[0..8].copy_from_slice(&1u64.to_le_bytes());
+            d[8..16].copy_from_slice(&num_bytes.to_le_bytes());
+            d[20] = EXTENT_REGULAR;
+            d[21..29].copy_from_slice(&disk_bytenr.to_le_bytes());
+            d[29..37].copy_from_slice(&4096u64.to_le_bytes());
+            d[37..45].copy_from_slice(&0u64.to_le_bytes());
+            d[45..53].copy_from_slice(&num_bytes.to_le_bytes());
+            d
+        }
+
+        // ---- Root tree leaf at logical 0x1000 ----
+        let root_leaf = &mut img[logical(0x1000)..logical(0x2000)];
+        root_leaf[0x30..0x38].copy_from_slice(&0x1000u64.to_le_bytes());
+        root_leaf[0x60..0x64].copy_from_slice(&2u32.to_le_bytes()); // nritems
+        root_leaf[0x64] = 0; // level (leaf)
+        let mut root_doff = nodesize as usize;
+        put_item(
+            root_leaf,
+            0,
+            FS_TREE_OBJECTID,
+            ROOT_ITEM_KEY,
+            0,
+            &make_root_item(0x2000, FIRST_FREE_OBJECTID),
+            &mut root_doff,
+        );
+        put_item(
+            root_leaf,
+            1,
+            FS_TREE_OBJECTID,
+            ROOT_BACKREF_KEY,
+            0,
+            &make_root_backref(b"default"),
+            &mut root_doff,
+        );
+
+        // ---- FS tree root: internal level 2 at logical 0x2000 ----
+        let root_node = &mut img[logical(0x2000)..logical(0x3000)];
+        root_node[0x30..0x38].copy_from_slice(&0x2000u64.to_le_bytes());
+        root_node[0x60..0x64].copy_from_slice(&1u32.to_le_bytes());
+        root_node[0x64] = 2;
+        put_key_pointer(root_node, 0, 256, INODE_ITEM_KEY, 0, 0x3000);
+
+        // ---- Internal level 1 at logical 0x3000 ----
+        let mid_node = &mut img[logical(0x3000)..logical(0x4000)];
+        mid_node[0x30..0x38].copy_from_slice(&0x3000u64.to_le_bytes());
+        mid_node[0x60..0x64].copy_from_slice(&2u32.to_le_bytes());
+        mid_node[0x64] = 1;
+        put_key_pointer(mid_node, 0, 256, INODE_ITEM_KEY, 0, 0x4000);
+        put_key_pointer(mid_node, 1, 257, EXTENT_DATA_KEY, 0, 0x5000);
+
+        let file_content = b"deep tree payload";
+
+        // ---- Leaf A at logical 0x4000 ----
+        let leaf_a = &mut img[logical(0x4000)..logical(0x5000)];
+        leaf_a[0x30..0x38].copy_from_slice(&0x4000u64.to_le_bytes());
+        leaf_a[0x60..0x64].copy_from_slice(&3u32.to_le_bytes());
+        leaf_a[0x64] = 0;
+        let mut a_doff = nodesize as usize;
+        put_item(
+            leaf_a,
+            0,
+            256,
+            INODE_ITEM_KEY,
+            0,
+            &make_inode(S_IFDIR | 0o755, 0, 2),
+            &mut a_doff,
+        );
+        put_item(
+            leaf_a,
+            1,
+            256,
+            DIR_INDEX_KEY,
+            2,
+            &make_dir_entry(b"deep.txt", 257, FT_REG_FILE),
+            &mut a_doff,
+        );
+        put_item(
+            leaf_a,
+            2,
+            257,
+            INODE_ITEM_KEY,
+            0,
+            &make_inode(S_IFREG | 0o644, file_content.len() as u64, 1),
+            &mut a_doff,
+        );
+
+        // ---- Leaf B at logical 0x5000 ----
+        let leaf_b = &mut img[logical(0x5000)..logical(0x6000)];
+        leaf_b[0x30..0x38].copy_from_slice(&0x5000u64.to_le_bytes());
+        leaf_b[0x60..0x64].copy_from_slice(&1u32.to_le_bytes());
+        leaf_b[0x64] = 0;
+        let mut b_doff = nodesize as usize;
+        put_item(
+            leaf_b,
+            0,
+            257,
+            EXTENT_DATA_KEY,
+            0,
+            &make_regular_extent(0x6000, file_content.len() as u64),
+            &mut b_doff,
+        );
+
+        // ---- File data at logical 0x6000 ----
+        img[logical(0x6000)..logical(0x6000) + file_content.len()].copy_from_slice(file_content);
 
         img
     }
@@ -675,19 +912,23 @@ mod cases {
     }
 
     // -------------------------------------------------------------------
-    // test_chunk_identity_mapping
+    // test_translate_logical_rejects_unmapped_address
     // -------------------------------------------------------------------
 
     #[test]
-    fn test_chunk_identity_mapping() {
+    fn test_translate_logical_rejects_unmapped_address() {
         let img = build_btrfs_fixture();
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let btrfs = BtrfsReader::open(reader, 0).unwrap();
 
-        // An address outside the single chunk (0..0x18000) triggers the
-        // fallback identity mapping.
-        let phys = btrfs.translate_logical(0x20000).unwrap();
-        assert_eq!(phys, 0x20000);
+        // An address outside the single chunk (0..0x18000) must fail rather
+        // than silently fall back to an identity mapping.
+        let result = btrfs.translate_logical(0x20000);
+        assert_eq!(
+            result.unwrap_err().kind(),
+            io::ErrorKind::InvalidData,
+            "unmapped logical address must be rejected"
+        );
     }
 
     // -------------------------------------------------------------------
@@ -719,5 +960,98 @@ mod cases {
         let btrfs = BtrfsReader::open(reader, 0).unwrap();
         assert!(btrfs._sectorsize > 0, "sectorsize must be > 0");
         assert!(btrfs.nodesize > 0, "nodesize must be > 0");
+    }
+
+    // -------------------------------------------------------------------
+    // test_multi_level_tree_with_chunk_translation
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_multi_level_tree_with_chunk_translation() {
+        let img = build_deep_tree_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        // Non-identity mapping: logical 0x4000 -> physical 0x44000.
+        assert_eq!(btrfs.translate_logical(0x4000).unwrap(), 0x44000);
+
+        // Directory resolution must descend level 2 -> level 1 -> leaf.
+        let children = btrfs.list_children("default").unwrap();
+        assert!(
+            children.iter().any(|n| n.name == "deep.txt"),
+            "deep tree should contain deep.txt"
+        );
+
+        // Whole-file reads must resolve the data extent through chunk
+        // translation just like range reads do.
+        let mut f = btrfs.open_file("default/deep.txt").unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "deep tree payload");
+
+        let bytes = btrfs.read_file_range("default/deep.txt", 5, 3).unwrap();
+        assert_eq!(bytes, b"tre");
+    }
+
+    // -------------------------------------------------------------------
+    // test_sparse_hole_extent_returns_zeroes
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_sparse_hole_extent_returns_zeroes() {
+        let mut img = build_btrfs_fixture();
+        // Garbage at physical 0: a hole (disk_bytenr == 0) must never be
+        // mistaken for a read of physical address 0.
+        img[0..17].copy_from_slice(&[0xAAu8; 17]);
+        {
+            let fs = &mut img[19 * 4096..20 * 4096];
+            let items = BtrfsReader::parse_leaf_items(fs, 9).unwrap();
+            let extent = items
+                .iter()
+                .find(|item| item.key.objectid == 257 && item.key.ty == EXTENT_DATA_KEY)
+                .unwrap();
+            let start = BTRFS_HEADER_SIZE + extent.data_offset as usize;
+            fs[start + 21..start + 29].copy_from_slice(&0u64.to_le_bytes());
+        }
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        let mut f = btrfs.open_file("default/file.txt").unwrap();
+        let mut content = Vec::new();
+        f.read_to_end(&mut content).unwrap();
+        assert_eq!(content, vec![0u8; 17]);
+
+        let bytes = btrfs.read_file_range("default/file.txt", 0, 17).unwrap();
+        assert_eq!(bytes, vec![0u8; 17]);
+    }
+
+    // -------------------------------------------------------------------
+    // test_compressed_extent_returns_typed_unsupported
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_compressed_extent_returns_typed_unsupported() {
+        let mut img = build_btrfs_fixture();
+        {
+            let fs = &mut img[19 * 4096..20 * 4096];
+            let items = BtrfsReader::parse_leaf_items(fs, 9).unwrap();
+            let extent = items
+                .iter()
+                .find(|item| item.key.objectid == 257 && item.key.ty == EXTENT_DATA_KEY)
+                .unwrap();
+            let start = BTRFS_HEADER_SIZE + extent.data_offset as usize;
+            fs[start + EXTENT_COMPRESSION_OFFSET] = 1; // zlib
+        }
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        let err = match btrfs.open_file("default/file.txt") {
+            Ok(_) => panic!("compressed extents must be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+
+        let err = btrfs.read_file_range("default/file.txt", 0, 4).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
     }
 }

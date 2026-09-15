@@ -13,6 +13,8 @@ type SharedReader = Arc<Mutex<Box<dyn EvidenceReader>>>;
 /// The reader resolves `(device_id, thin_block)` through the thin-pool
 /// metadata btree on demand. Unmapped thin blocks read as zeroes, matching
 /// dm-thin semantics without materializing the full mapping table in memory.
+/// Snapshots whose unmapped blocks must fall back to an origin volume are
+/// rejected by the pool admission layer before this reader is constructed.
 pub struct ThinLvReader {
     metadata: ThinMetadata,
     data_reader: SharedReader,

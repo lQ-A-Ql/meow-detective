@@ -9,6 +9,7 @@ pub(crate) fn rule_match_timestamps(
         "BrowserHistory" => &["visitTime"][..],
         "BrowserDownload" => &["startTime"][..],
         "EmailMessage" => &["sentAt"][..],
+        "LinuxJournal" | "LinuxSudoEvent" | "LinuxBashCommand" => &["timestamp"][..],
         _ => return Vec::new(),
     };
     first_string_attr(&rule.artifact.attrs, keys)
@@ -22,6 +23,7 @@ pub(crate) fn rule_match_paths(rule: &CorrelationRuleMatch) -> Vec<String> {
         "BrowserDownload" => &["targetPath"][..],
         "JumpList" | "LNK" => &["target_path", "targetPath"][..],
         "RecycleBin" => &["original_path", "originalPath"][..],
+        "LinuxJournal" => &["executable"][..],
         _ => return Vec::new(),
     };
     first_string_attr(&rule.artifact.attrs, keys)

@@ -45,6 +45,7 @@ artifacts-linux.workspace = true
 flate2.workspace = true
 xz2.workspace = true
 zstd.workspace = true
+lz4_flex.workspace = true
 timeline.workspace = true
 reports.workspace = true
 rusqlite.workspace = true

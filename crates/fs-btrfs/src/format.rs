@@ -20,3 +20,8 @@ pub(crate) const FT_DIR: u8 = 2;
 pub(crate) const _FT_SYMLINK: u8 = 7;
 
 pub(crate) const EXTENT_INLINE: u8 = 0;
+pub(crate) const EXTENT_COMPRESSION_OFFSET: usize = 16;
+pub(crate) const EXTENT_COMPRESSION_NONE: u8 = 0;
+
+// BTRFS_MAX_LEVEL from btrfs_tree.h.
+pub(crate) const MAX_TREE_LEVEL: u8 = 8;

@@ -253,6 +253,11 @@ pub struct LinuxWebAccessLogDto {
     pub file_id: String,
     pub source_path: String,
     pub client_ip: String,
+    /// Virtual-host name when the source line used a `%v`/`$host`-prefixed
+    /// access log format; the client address was recovered from the second
+    /// field instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vhost: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     pub method: String,

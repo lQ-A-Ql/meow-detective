@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 
 use domain::{CaseId, DataSourceId};
 use evidence_core::FileSystemReader;
@@ -8,7 +9,11 @@ use persistence_sqlite::repositories::{
 use rusqlite::Connection;
 use transport::dto::{EmulationBootRouteDto, EmulationInstallDto, EmulationPreflightDto};
 
-use super::{prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind};
+use super::{
+    prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind,
+    PreparedPhysicalMountSource,
+};
+use crate::hash_service::HashService;
 use crate::source_db::{self, ReadySourceError};
 
 /// Upper bound for the partition scan; real images have a handful of
@@ -28,11 +33,42 @@ pub fn prepare_emulation_source(
 ) -> Result<PreparedEmulationSource, MountServiceError> {
     let prepared = prepare_physical_mount_source(case_conn, data_source_id)?;
     let parent_sha256 = parse_source_sha256(&prepared.source_binding)?;
+    verify_parent_hash(case_conn, data_source_id, &prepared)?;
     Ok(PreparedEmulationSource {
         source_path: prepared.source_path,
         image_kind: prepared.image_kind,
         parent_sha256,
     })
+}
+
+/// Session start is fail-closed on evidence integrity: the container bytes
+/// are re-hashed with the exact import-time algorithm and compared against
+/// the fingerprint persisted at import. A same-length modification is the
+/// case this catches — the size probe in `validate_source_identity` cannot.
+/// Any mismatch or recompute failure aborts before a COW workspace exists.
+fn verify_parent_hash(
+    case_conn: &Connection,
+    data_source_id: &DataSourceId,
+    prepared: &PreparedPhysicalMountSource,
+) -> Result<(), MountServiceError> {
+    let kind = DataSourceRepo::new(case_conn).source_kind(data_source_id)?;
+    let recomputed = HashService::hash_evidence(
+        &prepared.source_path,
+        &kind,
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )
+    .map_err(|error| MountServiceError::SourceHashVerify(error.to_string()))?;
+    if !recomputed
+        .digest
+        .eq_ignore_ascii_case(&prepared.source_binding)
+    {
+        return Err(MountServiceError::SourceHashMismatch {
+            expected: prepared.source_binding.clone(),
+            actual: recomputed.digest,
+        });
+    }
+    Ok(())
 }
 
 /// Read-only pre-flight: locates the operating system installations and

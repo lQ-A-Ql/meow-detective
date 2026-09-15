@@ -43,6 +43,17 @@ pub enum LvmError {
     #[error("logical volume index {index} out of range (0..{count})")]
     LvIndexOutOfRange { index: usize, count: usize },
 
+    /// Thin snapshot whose unmapped blocks must fall back to an origin
+    /// volume; that fallback is not implemented, so opening is refused.
+    #[error(
+        "thin logical volume '{lv_name}' references {origin_kind} '{origin}'; origin fallback reads are not supported"
+    )]
+    UnsupportedThinSnapshotOrigin {
+        lv_name: String,
+        origin_kind: &'static str,
+        origin: String,
+    },
+
     /// Volume group metadata references a PV that does not have a supplied reader.
     #[error("missing reader for physical volume '{pv_name}' ({pv_uuid})")]
     MissingPhysicalVolumeReader { pv_name: String, pv_uuid: String },

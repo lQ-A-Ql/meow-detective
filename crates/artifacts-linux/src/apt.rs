@@ -54,9 +54,11 @@ pub struct AptEvent {
 
 /// dpkg.log actions that produce events. `status` progress lines carry no
 /// forensic value (their first token is a dpkg state such as
-/// `half-installed`, not a package action) and are skipped.
+/// `half-installed`, not a package action) and are skipped. `startup` lines
+/// are skipped for the same reason: they mark dpkg run phases
+/// (`startup archives unpack`, `startup packages configure`) whose first
+/// token is a database subsystem, not a package.
 const DPKG_ACTIONS: &[&str] = &[
-    "startup",
     "install",
     "upgrade",
     "configure",

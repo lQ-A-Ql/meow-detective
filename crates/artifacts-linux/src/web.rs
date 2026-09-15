@@ -8,7 +8,10 @@ mod util;
 
 pub use config::{parse_apache_config, parse_nginx_config};
 pub use findings::{detect_web_findings, detect_web_shell};
-pub use logs::{parse_web_access_log, parse_web_error_log};
+pub use logs::{
+    parse_web_access_log, parse_web_access_log_with_stats, parse_web_error_log,
+    parse_web_error_log_with_stats,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WebSite {
@@ -25,6 +28,10 @@ pub struct WebSite {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WebAccessLogEntry {
     pub client_ip: String,
+    /// Virtual-host name when the line uses a `%v`/`$host`-prefixed format;
+    /// `None` for the standard combined format.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vhost: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,
     pub method: String,
     pub uri: String,

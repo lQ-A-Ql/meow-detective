@@ -121,6 +121,18 @@ fn rejects_checkpoint_payload_beyond_segment_capacity() {
 }
 
 #[test]
+fn rejects_checkpoint_tail_corruption_when_crc_sits_at_bitmap_offset() {
+    let mut image = with_checkpoint_payload(minimal_f2fs_image(), true);
+    for block in [512usize, 1024] {
+        image[block * BLOCK_SIZE + 500] ^= 0xff;
+    }
+    let error = F2fsReader::open(Box::new(MemoryReader::new(image)), 0)
+        .err()
+        .expect("checkpoint tail corruption must fail the two-segment CRC");
+    assert!(matches!(error, F2fsError::Invalid(_)));
+}
+
+#[test]
 fn reads_files_when_packed_ssa_is_enabled_on_four_kib_blocks() {
     let mut image = minimal_f2fs_image();
     for offset in [1024usize, BLOCK_SIZE + 1024] {
@@ -177,7 +189,13 @@ fn configure_checkpoint_block(image: &mut [u8], block: usize, large_nat: bool) {
         offset + CHECKPOINT_CHECKSUM_FIELD_OFFSET,
         checksum_offset as u32,
     );
-    let checksum = f2fs_crc32(F2FS_MAGIC, &image[offset..offset + checksum_offset]);
+    let mut checksum = f2fs_crc32(F2FS_MAGIC, &image[offset..offset + checksum_offset]);
+    if checksum_offset < CHECKPOINT_CHECKSUM_OFFSET {
+        checksum = f2fs_crc32(
+            checksum,
+            &image[offset + checksum_offset + 4..offset + BLOCK_SIZE],
+        );
+    }
     write_u32(image, offset + checksum_offset, checksum);
 }
 

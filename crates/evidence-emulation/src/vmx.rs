@@ -222,17 +222,21 @@ fn validate_display_settings(
     Ok(())
 }
 
-fn base_security_settings() -> [(&'static str, &'static str); 13] {
+fn base_security_settings() -> [(&'static str, &'static str); 17] {
     [
         ("floppy0.present", "FALSE"),
         ("isolation.device.connectable.disable", "TRUE"),
         ("isolation.device.edit.disable", "TRUE"),
+        ("isolation.tools.diskShrink.disable", "TRUE"),
+        ("isolation.tools.diskWiper.disable", "TRUE"),
         ("isolation.tools.getCreds.disable", "TRUE"),
         ("isolation.tools.ghi.autologon.disable", "TRUE"),
         ("isolation.tools.hgfs.disable", "TRUE"),
         ("isolation.tools.hgfsServerSet.disable", "TRUE"),
         ("isolation.tools.memSchedFakeSampleStats.disable", "TRUE"),
         ("isolation.tools.setGUIOptions.enable", "FALSE"),
+        ("isolation.tools.setInfo.disable", "TRUE"),
+        ("isolation.tools.setOption.disable", "TRUE"),
         ("isolation.tools.unity.push.update.disable", "TRUE"),
         ("sharedFolder.maxNum", "0"),
         ("sound.present", "FALSE"),

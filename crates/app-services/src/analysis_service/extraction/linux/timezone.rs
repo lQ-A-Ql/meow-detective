@@ -17,6 +17,8 @@
 //!
 //! When no candidate yields a valid zone, UTC is assumed and a warning is
 //! recorded ("timezone not determined, timestamps interpreted as UTC").
+//! Parsers whose formats provably carry no zone (web/MySQL error logs)
+//! instead keep the raw text with an `unverified-timezone` marker.
 
 use super::super::reader::{read_candidate_source_with_progress, CandidateSource};
 use crate::analysis_service::candidates::{find_candidate_by_path_suffix, EvidenceCandidate};
@@ -33,6 +35,10 @@ const TIMEZONE_READ_LIMIT: usize = 4096;
 /// Warning recorded when no timezone source yields a valid zone.
 pub(super) const UTC_FALLBACK_WARNING: &str =
     "timezone not determined, timestamps interpreted as UTC";
+
+/// Attr value for timestamps kept as raw local text because the host zone
+/// could not be determined; they must not enter the timeline as fake UTC.
+pub(super) const UNVERIFIED_TIMEZONE_LABEL: &str = "unverified-timezone";
 
 /// Resolved host timezone backing naive-to-UTC log timestamp conversion.
 pub(in crate::analysis_service::extraction) struct LinuxLogTimeContext {
@@ -51,13 +57,20 @@ impl LinuxLogTimeContext {
         }
     }
 
-    fn for_zone(tz: Tz) -> Self {
+    pub(super) fn for_zone(tz: Tz) -> Self {
         Self {
             zone: HostTimeZone {
                 tz,
                 assumed_utc: false,
             },
         }
+    }
+
+    /// Whether this context is the UTC fallback (no host zone could be
+    /// determined). Zone-less timestamps must then stay raw with an
+    /// [`UNVERIFIED_TIMEZONE_LABEL`] marker instead of a fake-UTC conversion.
+    pub fn assumed_utc(&self) -> bool {
+        self.zone.assumed_utc
     }
 
     /// Clock view passed to the artifacts-linux parsers.

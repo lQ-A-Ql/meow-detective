@@ -493,6 +493,50 @@ mod cases {
     }
 
     #[test]
+    fn journal_replay_required_reflects_the_start_block() {
+        assert!(!build_ext4_reader(false, None)
+            .journal_replay_required()
+            .unwrap());
+
+        let clean = journal_image(SuperblockSpec {
+            start: 0,
+            ..SuperblockSpec::default()
+        });
+        let clean_filesystem = build_ext4_reader(true, Some(&clean));
+        assert!(!clean_filesystem.journal_replay_required().unwrap());
+        assert_eq!(
+            clean_filesystem
+                .read_internal_journal_superblock()
+                .unwrap()
+                .start,
+            0
+        );
+
+        let dirty = journal_image(SuperblockSpec {
+            start: 1,
+            ..SuperblockSpec::default()
+        });
+        let dirty_filesystem = build_ext4_reader(true, Some(&dirty));
+        assert!(dirty_filesystem.journal_replay_required().unwrap());
+        assert_eq!(
+            dirty_filesystem
+                .read_internal_journal_superblock()
+                .unwrap()
+                .start,
+            1
+        );
+    }
+
+    #[test]
+    fn journal_replay_required_fails_closed_on_a_missing_journal_inode() {
+        let filesystem = build_ext4_reader(true, None);
+        assert!(matches!(
+            filesystem.journal_replay_required(),
+            Err(JournalError::Invalid(_))
+        ));
+    }
+
+    #[test]
     fn history_scan_bounds_total_scanned_blocks_across_candidates() {
         let spec = SuperblockSpec::default();
         let superblock = parsed_superblock(spec);

@@ -50,6 +50,32 @@ fn rejects_write_commands_with_data_protect() {
 }
 
 #[test]
+fn rejects_all_mutating_commands() {
+    let (_file, device) = raw_device();
+    // WRITE(6), WRITE(10), WRITE(16), UNMAP, WRITE SAME(10), WRITE SAME(16), FORMAT UNIT
+    for opcode in [0x0au8, 0x2a, 0x8a, 0x42, 0x41, 0x93, 0x04] {
+        let mut cdb = [0u8; 16];
+        cdb[0] = opcode;
+        let response = ScsiHandler::handle_command(&cdb, &device, None).expect("SCSI response");
+        assert_eq!(
+            response.status,
+            scsi_status::CHECK_CONDITION,
+            "opcode 0x{opcode:02x} must be rejected"
+        );
+        let expected_asc = if matches!(opcode, 0x2a | 0x8a) {
+            asc::WRITE_PROTECTED
+        } else {
+            asc::INVALID_COMMAND_OPERATION_CODE
+        };
+        assert_eq!(
+            response.sense.expect("sense").asc,
+            expected_asc,
+            "opcode 0x{opcode:02x}"
+        );
+    }
+}
+
+#[test]
 fn mode_sense_reports_write_protection() {
     let (_file, device) = raw_device();
     let response =

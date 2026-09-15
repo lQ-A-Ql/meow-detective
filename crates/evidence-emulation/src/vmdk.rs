@@ -6,9 +6,11 @@ use sha2::{Digest, Sha256};
 use crate::identity::LOGICAL_SECTOR_SIZE;
 use crate::{EmulationError, ParentIdentity};
 
-const HEADS: u64 = 255;
+// Geometry follows QEMU block/vmdk.c: 16 heads for IDE, 255 heads for
+// non-IDE adapters, 63 sectors per track.
+const IDE_HEADS: u64 = 16;
+const SCSI_HEADS: u64 = 255;
 const SECTORS_PER_TRACK: u64 = 63;
-const MAX_CYLINDERS: u64 = 16_383;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmdkAdapter {
@@ -73,10 +75,13 @@ impl VmdkDescriptor {
     }
 
     pub fn render(&self) -> String {
-        let cylinders = self
-            .sector_count
-            .div_ceil(HEADS * SECTORS_PER_TRACK)
-            .clamp(1, MAX_CYLINDERS);
+        // QEMU block/vmdk.c: cylinders = size / (63 * heads * sector size),
+        // integer floor division with no clamping.
+        let heads = match self.adapter {
+            VmdkAdapter::Ide => IDE_HEADS,
+            VmdkAdapter::LsiLogic => SCSI_HEADS,
+        };
+        let cylinders = self.sector_count / (heads * SECTORS_PER_TRACK);
         let mut output = String::new();
         writeln!(output, "# Disk DescriptorFile").expect("writing to a string cannot fail");
         writeln!(output, "version=1").expect("writing to a string cannot fail");
@@ -97,7 +102,7 @@ impl VmdkDescriptor {
             .expect("writing to a string cannot fail");
         writeln!(output, "ddb.geometry.cylinders = \"{cylinders}\"")
             .expect("writing to a string cannot fail");
-        writeln!(output, "ddb.geometry.heads = \"{HEADS}\"")
+        writeln!(output, "ddb.geometry.heads = \"{heads}\"")
             .expect("writing to a string cannot fail");
         writeln!(output, "ddb.geometry.sectors = \"{SECTORS_PER_TRACK}\"")
             .expect("writing to a string cannot fail");

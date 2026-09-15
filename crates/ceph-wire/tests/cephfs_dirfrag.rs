@@ -41,6 +41,89 @@ fn rejects_unsafe_keys_and_unknown_types() {
     ));
 }
 
+#[test]
+fn decodes_enveloped_dentries_by_struct_version() {
+    let primary_v1 = decode_cephfs_dentry_value(
+        decode_cephfs_dentry_key(b"old_head").unwrap(),
+        &enveloped_value(b'i', 1, &inode_store(42, 0o100000 | 0o640, 99)),
+    )
+    .unwrap();
+    assert!(matches!(primary_v1.kind, CephFsDentryKind::Primary));
+    assert_eq!(primary_v1.child_inode, 42);
+    assert!(primary_v1.alternate_name.is_empty());
+    assert_eq!(primary_v1.inode.unwrap().size, 99);
+
+    let primary_v2 = decode_cephfs_dentry_value(
+        decode_cephfs_dentry_key(b"new_head").unwrap(),
+        &enveloped_value(
+            b'i',
+            2,
+            &with_alternate_name("alt", &inode_store(43, 0o100000 | 0o640, 100)),
+        ),
+    )
+    .unwrap();
+    assert!(matches!(primary_v2.kind, CephFsDentryKind::Primary));
+    assert_eq!(primary_v2.child_inode, 43);
+    assert_eq!(primary_v2.alternate_name, "alt");
+    assert_eq!(primary_v2.inode.unwrap().size, 100);
+
+    let remote_v1 = decode_cephfs_dentry_value(
+        decode_cephfs_dentry_key(b"link_head").unwrap(),
+        &enveloped_value(b'l', 1, &remote_payload(77, 4, None)),
+    )
+    .unwrap();
+    assert!(remote_v1.kind.is_directory_hint());
+    assert_eq!(remote_v1.child_inode, 77);
+    assert!(remote_v1.alternate_name.is_empty());
+
+    let remote_v2 = decode_cephfs_dentry_value(
+        decode_cephfs_dentry_key(b"link_head").unwrap(),
+        &enveloped_value(b'l', 2, &remote_payload(78, 8, Some("alt-link"))),
+    )
+    .unwrap();
+    assert!(matches!(
+        remote_v2.kind,
+        CephFsDentryKind::Remote { d_type: 8 }
+    ));
+    assert_eq!(remote_v2.child_inode, 78);
+    assert_eq!(remote_v2.alternate_name, "alt-link");
+}
+
+fn enveloped_value(kind: u8, version: u8, payload: &[u8]) -> Vec<u8> {
+    let mut output = 5u64.to_le_bytes().to_vec();
+    output.push(kind);
+    output.push(version);
+    output.push(1);
+    output.extend((payload.len() as u32).to_le_bytes());
+    output.extend(payload);
+    output
+}
+
+fn inode_store(ino: u64, mode: u32, size: u64) -> Vec<u8> {
+    let inner = inode_envelope(&inode_payload(ino, mode, size));
+    let mut output = vec![6, 4];
+    output.extend((inner.len() as u32).to_le_bytes());
+    output.extend(inner);
+    output
+}
+
+fn with_alternate_name(name: &str, rest: &[u8]) -> Vec<u8> {
+    let mut output = (name.len() as u32).to_le_bytes().to_vec();
+    output.extend(name.as_bytes());
+    output.extend(rest);
+    output
+}
+
+fn remote_payload(ino: u64, d_type: u8, alternate_name: Option<&str>) -> Vec<u8> {
+    let mut output = ino.to_le_bytes().to_vec();
+    output.push(d_type);
+    if let Some(name) = alternate_name {
+        output.extend((name.len() as u32).to_le_bytes());
+        output.extend(name.as_bytes());
+    }
+    output
+}
+
 fn primary_value(ino: u64) -> Vec<u8> {
     let mut output = 5u64.to_le_bytes().to_vec();
     output.push(b'I');

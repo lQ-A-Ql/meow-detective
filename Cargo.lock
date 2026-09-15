@@ -162,6 +162,7 @@ dependencies = [
  "infrastructure",
  "libloading",
  "lopdf",
+ "lz4_flex",
  "mailparse",
  "md-5 0.10.6",
  "memory-windows",

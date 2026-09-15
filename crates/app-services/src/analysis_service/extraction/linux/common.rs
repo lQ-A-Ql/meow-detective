@@ -83,6 +83,31 @@ pub(super) fn cap_source_events<T>(
     events.into_iter().take(limit).collect()
 }
 
+/// Surface an explicit warning when a log source shows signs of a format the
+/// parser does not understand: no records at all from non-blank content, or
+/// more than a quarter of the lines (and at least five) left unparsed. Both
+/// cases previously failed silently — zero records, zero warnings.
+pub(super) fn warn_on_parse_gap(
+    candidate: &EvidenceCandidate,
+    label: &str,
+    total_lines: u64,
+    parsed_lines: u64,
+    warnings: &mut Vec<String>,
+) {
+    let unparsed = total_lines.saturating_sub(parsed_lines);
+    if total_lines > 0 && parsed_lines == 0 {
+        warnings.push(format!(
+            "{} {} produced no records from {} non-blank lines; the file likely uses a custom or unsupported log format",
+            candidate.path, label, total_lines
+        ));
+    } else if unparsed >= 5 && unparsed > total_lines / 4 {
+        warnings.push(format!(
+            "{} {} parsed {} of {} non-blank lines; the remaining {} lines did not match the expected format (custom log_format?)",
+            candidate.path, label, parsed_lines, total_lines, unparsed
+        ));
+    }
+}
+
 pub(super) fn insert_opt(attrs: &mut BTreeMap<String, Value>, key: &str, value: Option<String>) {
     if let Some(value) = value {
         if !value.is_empty() {
@@ -111,3 +136,7 @@ pub(super) fn truncate(value: &str, max_len: usize) -> String {
         format!("{}…", value.chars().take(max_len).collect::<String>())
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/analysis_service/extraction/linux/common.rs"]
+mod tests;

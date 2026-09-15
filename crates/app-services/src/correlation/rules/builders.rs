@@ -1,7 +1,7 @@
 use super::super::{first_string_attr, string_array_attr, CorrelationRuleMatch};
 use super::{
-    basename, dedup_rule_matches, extract_file_name_candidates, extract_path_candidates,
-    find_best_file_by_name, find_best_file_by_path,
+    basename, dedup_rule_matches, extract_file_name_candidates, extract_linux_path_candidates,
+    extract_path_candidates, find_best_file_by_name, find_best_file_by_path,
 };
 use domain::FileEntry;
 use transport::dto::{ArtifactRowDto, CorrelationConfidenceDto, CorrelationEdgeKindDto};
@@ -79,6 +79,62 @@ pub(crate) fn build_artifact_rule_matches(
             "JumpList 命中依赖嵌入式 LNK 提取结果，需结合原始 JumpList 复核。",
             None,
         ),
+        _ => build_linux_rule_matches(files, artifact),
+    }
+}
+
+fn build_linux_rule_matches(
+    files: &[FileEntry],
+    artifact: &ArtifactRowDto,
+) -> Vec<CorrelationRuleMatch> {
+    match artifact.artifact_type.as_str() {
+        "LinuxJournal" => build_single_path_rule(
+            files,
+            artifact,
+            first_string_attr(&artifact.attrs, &["executable"]),
+            "Journal 可执行路径命中文件路径",
+            CorrelationEdgeKindDto::PathMatch,
+            CorrelationConfidenceDto::Direct,
+            "journald _EXE 为结构化绝对路径字段，命中后仍需结合原始日志与时间线复核。",
+            None,
+        ),
+        "LinuxSudoEvent" => build_command_rules(
+            files,
+            artifact,
+            "sudo 命令",
+            "sudo COMMAND 来自 auth.log 记录，可能为裸命令名或相对路径，需回跳原始日志行复核。",
+        ),
+        "LinuxCronJob" => build_command_rules(
+            files,
+            artifact,
+            "Cron 命令",
+            "crontab 命令按首词提取，参数与环境变量替换需结合原始 crontab 复核。",
+        ),
+        "LinuxBashCommand" => build_command_rules(
+            files,
+            artifact,
+            "Shell 命令",
+            "交互式 shell 历史为自由文本，首词匹配只提供线索，需结合时间与上下文复核。",
+        ),
+        "LinuxSystemConfig" => build_single_path_rule(
+            files,
+            artifact,
+            first_string_attr(&artifact.attrs, &["shell"]),
+            "账户登录 shell 命中文件路径",
+            CorrelationEdgeKindDto::PathMatch,
+            CorrelationConfidenceDto::Strong,
+            "shell 字段来自 passwd 声明而非执行记录，需结合登录证据复核。",
+            None,
+        ),
+        "LinuxWebSite" => build_multi_path_rules(
+            files,
+            artifact,
+            &["accessLogs", "errorLogs"],
+            "站点声明日志路径命中文件路径",
+            CorrelationConfidenceDto::Strong,
+            "站点配置声明的日志路径反映部署声明，需结合配置原文复核。",
+        ),
+        "LinuxWebErrorLog" => build_linux_message_path_rules(files, artifact),
         _ => Vec::new(),
     }
 }
@@ -108,6 +164,95 @@ pub(crate) fn build_single_path_rule(
         summary: summary.to_string(),
         caveat: caveat.to_string(),
     }]
+}
+
+/// First-token rules for Linux command-line attributes (sudo/cron/shell):
+/// an absolute first token is a path lead, a bare name degrades to a weak
+/// name lead.
+fn build_command_rules(
+    files: &[FileEntry],
+    artifact: &ArtifactRowDto,
+    label: &str,
+    caveat: &str,
+) -> Vec<CorrelationRuleMatch> {
+    let Some(command) = first_string_attr(&artifact.attrs, &["command"]) else {
+        return Vec::new();
+    };
+    let Some(first_token) = command.split_whitespace().next() else {
+        return Vec::new();
+    };
+    if first_token.starts_with('/') {
+        return build_single_path_rule(
+            files,
+            artifact,
+            Some(first_token.to_string()),
+            &format!("{label}路径命中文件路径"),
+            CorrelationEdgeKindDto::PathMatch,
+            CorrelationConfidenceDto::Strong,
+            caveat,
+            None,
+        );
+    }
+    build_name_rules(
+        files,
+        artifact,
+        vec![basename(first_token)],
+        &format!("{label}名命中文件名"),
+        CorrelationConfidenceDto::Weak,
+        caveat,
+    )
+}
+
+fn build_multi_path_rules(
+    files: &[FileEntry],
+    artifact: &ArtifactRowDto,
+    keys: &[&str],
+    summary: &str,
+    confidence: CorrelationConfidenceDto,
+    caveat: &str,
+) -> Vec<CorrelationRuleMatch> {
+    let mut matches = Vec::new();
+    for key in keys {
+        for path in string_array_attr(&artifact.attrs, key) {
+            matches.extend(build_single_path_rule(
+                files,
+                artifact,
+                Some(path),
+                summary,
+                CorrelationEdgeKindDto::PathMatch,
+                confidence.clone(),
+                caveat,
+                None,
+            ));
+        }
+    }
+    dedup_rule_matches(&mut matches);
+    matches
+}
+
+fn build_linux_message_path_rules(
+    files: &[FileEntry],
+    artifact: &ArtifactRowDto,
+) -> Vec<CorrelationRuleMatch> {
+    let Some(message) = first_string_attr(&artifact.attrs, &["message"]) else {
+        return Vec::new();
+    };
+    let mut matches = Vec::new();
+    for path in extract_linux_path_candidates(&message).into_iter().take(2) {
+        if let Some(file) = find_best_file_by_path(files, &path, None) {
+            matches.push(CorrelationRuleMatch {
+                artifact: artifact.clone(),
+                file: file.clone(),
+                kind: CorrelationEdgeKindDto::PathMatch,
+                confidence: CorrelationConfidenceDto::Weak,
+                summary: "Web 错误日志路径命中文件路径".to_string(),
+                caveat: "错误日志路径从自由文本提取，可能为 URL 或截断路径，需回跳原始日志行复核。"
+                    .to_string(),
+            });
+        }
+    }
+    dedup_rule_matches(&mut matches);
+    matches
 }
 
 pub(crate) fn build_registry_rules(

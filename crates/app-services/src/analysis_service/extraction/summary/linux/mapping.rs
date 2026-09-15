@@ -294,6 +294,7 @@ fn map_web_access_logs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebAccessLogD
             file_id: row.source_object_id.unwrap_or_default(),
             source_path: string_attr(&row.attrs, "sourcePath"),
             client_ip: string_attr(&row.attrs, "clientIp"),
+            vhost: optional_string_attr(&row.attrs, "vhost"),
             timestamp: optional_string_attr(&row.attrs, "timestamp"),
             method: string_attr(&row.attrs, "method"),
             uri: string_attr(&row.attrs, "uri"),

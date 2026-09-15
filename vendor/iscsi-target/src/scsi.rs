@@ -114,6 +114,10 @@ impl ScsiOpcode {
 // Keep the old enum name for backwards compatibility
 pub type ScsiCommand = ScsiOpcode;
 
+/// Maximum bytes in a single transfer. VPD page 0xB0 advertises this ceiling
+/// in blocks; backends enforcing a read cap must use the same value.
+pub const MAX_TRANSFER_BYTES: u64 = 16 * 1024 * 1024;
+
 /// SCSI status codes
 pub mod scsi_status {
     pub const GOOD: u8 = 0x00;
@@ -402,7 +406,7 @@ impl ScsiHandler {
     }
 
     /// Handle INQUIRY VPD pages
-    fn handle_inquiry_vpd(page_code: u8, alloc_len: usize, _device: &dyn ScsiBlockDevice, target_name: Option<&str>) -> ScsiResult<ScsiResponse> {
+    fn handle_inquiry_vpd(page_code: u8, alloc_len: usize, device: &dyn ScsiBlockDevice, target_name: Option<&str>) -> ScsiResult<ScsiResponse> {
         match page_code {
             0x00 => {
                 // Supported VPD pages
@@ -460,8 +464,9 @@ impl ScsiHandler {
                 data[1] = 0xB0; // Page code
                 BigEndian::write_u16(&mut data[2..4], 60); // Page length
 
-                // Maximum transfer length (in blocks)
-                let max_xfer = 65535u32; // Max blocks per transfer
+                // Maximum transfer length (in blocks), aligned with MAX_TRANSFER_BYTES
+                let block_size = u64::from(device.block_size()).max(1);
+                let max_xfer = (MAX_TRANSFER_BYTES / block_size) as u32;
                 BigEndian::write_u32(&mut data[8..12], max_xfer);
 
                 // Optimal transfer length
@@ -571,9 +576,12 @@ impl ScsiHandler {
             return Ok(ScsiResponse::good_no_data());
         }
 
-        // Validate LBA range
+        // Validate LBA range; a wrapping end LBA is out of range
         let capacity = device.capacity();
-        if lba + transfer_length as u64 > capacity {
+        let in_range = lba
+            .checked_add(u64::from(transfer_length))
+            .is_some_and(|end| end <= capacity);
+        if !in_range {
             return Ok(ScsiResponse::check_condition(
                 SenseData::lba_out_of_range((lba & 0xFFFF_FFFF) as u32)
             ));
@@ -630,11 +638,8 @@ impl ScsiHandler {
             )));
         }
 
-        // This is a read-only trait reference, so we can't actually write
-        // In a real implementation, we'd need &mut dyn ScsiBlockDevice
-        // For now, we just validate and return success
-        // The actual write happens in the target server which has mutable access
-
+        // Validation only: the target server intercepts WRITE commands and
+        // performs the write itself; this handler has no write side effect.
         Ok(ScsiResponse::good_no_data())
     }
 
@@ -660,9 +665,12 @@ impl ScsiHandler {
             return Ok(ScsiResponse::good_no_data());
         }
 
-        // Validate LBA range
+        // Validate LBA range; a wrapping end LBA is out of range
         let capacity = device.capacity();
-        if lba + transfer_length as u64 > capacity {
+        let in_range = lba
+            .checked_add(u64::from(transfer_length))
+            .is_some_and(|end| end <= capacity);
+        if !in_range {
             return Ok(ScsiResponse::check_condition(
                 SenseData::lba_out_of_range((lba & 0xFFFF_FFFF) as u32)
             ));
@@ -822,6 +830,7 @@ mod tests {
         capacity: u64,
         block_size: u32,
         data: Vec<u8>,
+        read_only: bool,
     }
 
     impl MockDevice {
@@ -831,7 +840,14 @@ mod tests {
                 capacity,
                 block_size,
                 data: vec![0u8; size],
+                read_only: false,
             }
+        }
+
+        fn new_read_only(capacity: u64, block_size: u32) -> Self {
+            let mut device = Self::new(capacity, block_size);
+            device.read_only = true;
+            device
         }
     }
 
@@ -854,6 +870,10 @@ mod tests {
 
         fn block_size(&self) -> u32 {
             self.block_size
+        }
+
+        fn is_read_only(&self) -> bool {
+            self.read_only
         }
     }
 
@@ -1034,5 +1054,70 @@ mod tests {
         let cdb = [0x2F, 0, 0, 0, 0, 0, 0, 0, 0, 0]; // VERIFY(10)
         let response = ScsiHandler::handle_command(&cdb, &device, None).unwrap();
         assert_eq!(response.status, scsi_status::GOOD);
+    }
+
+    #[test]
+    fn test_read_16_lba_overflow_rejected() {
+        let device = MockDevice::new(1000, 512);
+        // READ(16): LBA near u64::MAX so lba + transfer_length would wrap
+        let mut cdb = [0u8; 16];
+        cdb[0] = 0x88;
+        BigEndian::write_u64(&mut cdb[2..10], u64::MAX - 1);
+        BigEndian::write_u32(&mut cdb[10..14], 4);
+        let response = ScsiHandler::handle_command(&cdb, &device, None).unwrap();
+        assert_eq!(response.status, scsi_status::CHECK_CONDITION);
+        let sense = response.sense.unwrap();
+        assert_eq!(sense.sense_key, sense_key::ILLEGAL_REQUEST);
+        assert_eq!(sense.asc, asc::LBA_OUT_OF_RANGE);
+    }
+
+    #[test]
+    fn test_write_16_lba_overflow_rejected() {
+        let device = MockDevice::new(1000, 512);
+        // WRITE(16): LBA near u64::MAX so lba + transfer_length would wrap
+        let mut cdb = [0u8; 16];
+        cdb[0] = 0x8A;
+        BigEndian::write_u64(&mut cdb[2..10], u64::MAX - 1);
+        BigEndian::write_u32(&mut cdb[10..14], 4);
+        let data = vec![0u8; 4 * 512];
+        let response = ScsiHandler::handle_command(&cdb, &device, Some(&data)).unwrap();
+        assert_eq!(response.status, scsi_status::CHECK_CONDITION);
+        let sense = response.sense.unwrap();
+        assert_eq!(sense.sense_key, sense_key::ILLEGAL_REQUEST);
+        assert_eq!(sense.asc, asc::LBA_OUT_OF_RANGE);
+    }
+
+    #[test]
+    fn test_inquiry_vpd_block_limits_max_transfer() {
+        let device = MockDevice::new(1000, 512);
+        let cdb = [0x12, 0x01, 0xB0, 0, 64, 0]; // INQUIRY VPD page 0xB0
+        let response = ScsiHandler::handle_command(&cdb, &device, None).unwrap();
+        assert_eq!(response.status, scsi_status::GOOD);
+        assert_eq!(response.data[1], 0xB0);
+        let max_xfer = BigEndian::read_u32(&response.data[8..12]);
+        assert_eq!(max_xfer, (MAX_TRANSFER_BYTES / 512) as u32);
+    }
+
+    #[test]
+    fn test_mutating_opcodes_rejected_for_read_only_device() {
+        let device = MockDevice::new_read_only(1000, 512);
+        // WRITE(6), WRITE(10), WRITE(16), UNMAP, WRITE SAME(10), WRITE SAME(16), FORMAT UNIT
+        for opcode in [0x0Au8, 0x2A, 0x8A, 0x42, 0x41, 0x93, 0x04] {
+            let mut cdb = [0u8; 16];
+            cdb[0] = opcode;
+            let response = ScsiHandler::handle_command(&cdb, &device, None).unwrap();
+            assert_eq!(
+                response.status,
+                scsi_status::CHECK_CONDITION,
+                "opcode 0x{opcode:02X} must be rejected"
+            );
+            let sense = response.sense.unwrap();
+            let expected_asc = if matches!(opcode, 0x2A | 0x8A) {
+                asc::WRITE_PROTECTED
+            } else {
+                asc::INVALID_COMMAND_OPERATION_CODE
+            };
+            assert_eq!(sense.asc, expected_asc, "opcode 0x{opcode:02X}");
+        }
     }
 }

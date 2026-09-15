@@ -40,6 +40,46 @@
     {
       "family": "JumpList",
       "displayName": "JumpList"
+    },
+    {
+      "family": "LinuxJournal",
+      "displayName": "Linux Journal"
+    },
+    {
+      "family": "LinuxTextLog",
+      "displayName": "Linux Text Log"
+    },
+    {
+      "family": "LinuxWtmp",
+      "displayName": "Linux Login"
+    },
+    {
+      "family": "LinuxSudo",
+      "displayName": "Linux Sudo"
+    },
+    {
+      "family": "LinuxCron",
+      "displayName": "Linux Cron"
+    },
+    {
+      "family": "LinuxShellCommand",
+      "displayName": "Linux Shell Command"
+    },
+    {
+      "family": "LinuxPackage",
+      "displayName": "Linux Package"
+    },
+    {
+      "family": "LinuxSystemConfig",
+      "displayName": "Linux System Config"
+    },
+    {
+      "family": "LinuxWeb",
+      "displayName": "Linux Web"
+    },
+    {
+      "family": "LinuxMysql",
+      "displayName": "Linux MySQL"
     }
   ],
   "baselineResidualRisks": [

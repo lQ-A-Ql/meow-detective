@@ -1,10 +1,12 @@
-use crate::format::{EXTENT_DATA_KEY, EXTENT_INLINE};
+use crate::format::{
+    EXTENT_COMPRESSION_NONE, EXTENT_COMPRESSION_OFFSET, EXTENT_DATA_KEY, EXTENT_INLINE,
+};
 use crate::types::BtrfsKey;
 use crate::BtrfsReader;
-use evidence_core::filesystem::{
-    fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size,
-};
-use std::io::{self, Read, Seek, SeekFrom};
+use evidence_core::filesystem::{fs_out_of_memory, invalid_fs_data, unsupported_fs};
+use std::io;
+
+const MAX_RESERVE_BYTES: usize = 8 * 1024 * 1024;
 
 impl BtrfsReader {
     pub(crate) fn read_file_extents(
@@ -13,35 +15,9 @@ impl BtrfsReader {
         inode_objectid: u64,
         declared_size: u64,
     ) -> io::Result<Vec<u8>> {
-        let lower_bound = extent_key(inode_objectid, 0);
-        let upper_bound = extent_key(inode_objectid, u64::MAX);
-        let mut data = Vec::new();
-
-        for (leaf_data, items) in
-            self.collect_candidate_leaves(tree_root_bytenr, &lower_bound, &upper_bound)?
-        {
-            for index in
-                Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY)
-            {
-                let item_data = Self::get_item_data(&leaf_data, &items[index]);
-                if item_data.len() < 21 {
-                    continue;
-                }
-                if item_data[20] == EXTENT_INLINE {
-                    data.extend_from_slice(&item_data[21..]);
-                    continue;
-                }
-                let Some((disk_bytenr, _, num_bytes)) = parse_regular_extent(item_data)? else {
-                    continue;
-                };
-                let mut buf = vec![0u8; num_bytes as usize];
-                let mut reader = self.reader.borrow_mut();
-                reader.seek(SeekFrom::Start(self.volume_offset + disk_bytenr))?;
-                reader.read_exact(&mut buf)?;
-                data.extend_from_slice(&buf);
-            }
-        }
-        Ok(truncate_data_to_declared_size(data, declared_size))
+        let length = usize::try_from(declared_size)
+            .map_err(|_| fs_out_of_memory("btrfs file size exceeds addressable memory"))?;
+        self.read_file_extents_range(tree_root_bytenr, inode_objectid, declared_size, 0, length)
     }
 
     pub(crate) fn read_file_extents_range(
@@ -59,7 +35,7 @@ impl BtrfsReader {
         let range_end = offset.saturating_add(length as u64).min(declared_size);
         let capacity = usize::try_from(range_end.saturating_sub(offset))
             .map_err(|_| fs_out_of_memory("btrfs range exceeds addressable memory"))?;
-        let mut data = Vec::with_capacity(capacity);
+        let mut data = Vec::with_capacity(capacity.min(MAX_RESERVE_BYTES));
         let mut next_offset = offset;
         let lower_bound = extent_key(inode_objectid, 0);
         let upper_bound = extent_key(inode_objectid, range_end);
@@ -74,6 +50,9 @@ impl BtrfsReader {
                 let item_data = Self::get_item_data(&leaf_data, item);
                 if item_data.len() < 21 {
                     continue;
+                }
+                if item_data[EXTENT_COMPRESSION_OFFSET] != EXTENT_COMPRESSION_NONE {
+                    return Err(unsupported_fs("btrfs compressed extents are not supported"));
                 }
                 if item_data[20] == EXTENT_INLINE {
                     append_inline_overlap(
@@ -129,7 +108,16 @@ impl BtrfsReader {
         if *next_offset < overlap_start {
             append_zeroes(data, overlap_start - *next_offset)?;
         }
-        let logical = disk_bytenr + extent_offset + overlap_start.saturating_sub(extent_start);
+        // A regular extent with disk_bytenr == 0 is a sparse hole (all zeroes).
+        if disk_bytenr == 0 {
+            append_zeroes(data, overlap_end - overlap_start)?;
+            *next_offset = overlap_end;
+            return Ok(());
+        }
+        let logical = disk_bytenr
+            .checked_add(extent_offset)
+            .and_then(|base| base.checked_add(overlap_start.saturating_sub(extent_start)))
+            .ok_or_else(|| invalid_fs_data("btrfs extent address overflow"))?;
         let read_len = usize::try_from(overlap_end - overlap_start)
             .map_err(|_| fs_out_of_memory("btrfs extent range exceeds addressable memory"))?;
         data.extend_from_slice(&self.read_logical_range(logical, read_len)?);

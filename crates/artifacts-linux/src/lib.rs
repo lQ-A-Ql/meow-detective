@@ -8,6 +8,7 @@ pub mod journal;
 mod lastlog;
 mod mysql;
 mod shadow_edit;
+mod stats;
 mod sudo;
 mod system;
 mod web;
@@ -23,16 +24,17 @@ pub use journal::{parse_journal, parse_journal_full, JournalEntry, JournalParseO
 pub use lastlog::{parse_lastlog, LastlogRecord};
 pub use mysql::{
     detect_mysql_config_findings, detect_mysql_log_findings, parse_mysql_config, parse_mysql_log,
-    MysqlConfigEntry, MysqlFinding, MysqlLogEntry,
+    parse_mysql_log_with_stats, MysqlConfigEntry, MysqlFinding, MysqlLogEntry,
 };
 pub use shadow_edit::{
     parse_shadow_accounts, set_shadow_login_password, set_shadow_password_hash, ShadowAccount,
 };
+pub use stats::{LogLineStats, WebAccessLogStats};
 pub use sudo::{parse_auth_log_sudo, SudoEvent};
 pub use system::{parse_os_release, parse_passwd, OsReleaseInfo, PasswdAccount};
 pub use web::{
     detect_web_findings, detect_web_shell, parse_apache_config, parse_nginx_config,
-    parse_web_access_log, parse_web_error_log, WebAccessLogEntry, WebErrorLogEntry, WebFinding,
-    WebSite,
+    parse_web_access_log, parse_web_access_log_with_stats, parse_web_error_log,
+    parse_web_error_log_with_stats, WebAccessLogEntry, WebErrorLogEntry, WebFinding, WebSite,
 };
 pub use wtmp::{parse_wtmp, LoginRecord};

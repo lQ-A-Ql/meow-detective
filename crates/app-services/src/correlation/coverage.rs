@@ -6,7 +6,7 @@
 
 use super::{
     artifact_family, dedup_vec, has_family, CorrelationRuleGroup, CorrelationSourceGroup,
-    CORRELATION_RULE_FAMILIES,
+    CORRELATION_RULE_FAMILIES, LINUX_RULE_FAMILIES,
 };
 use transport::dto::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationCoverageStatusDto,
@@ -17,7 +17,7 @@ pub(crate) fn build_family_coverage(
     leads: &[CorrelationLeadDto],
     clusters: &[CorrelationClusterDto],
 ) -> Vec<CorrelationFamilyCoverageDto> {
-    CORRELATION_RULE_FAMILIES
+    declared_families(leads, clusters)
         .iter()
         .map(|(family, display_name)| {
             let family_token = family.to_ascii_lowercase();
@@ -41,6 +41,26 @@ pub(crate) fn build_family_coverage(
             }
         })
         .collect()
+}
+
+/// The 8 Windows baseline families are always tracked; Linux families enter
+/// the coverage view only when a lead or cluster actually observed them, so
+/// platform families without any case data never dilute the baseline gate.
+fn declared_families(
+    leads: &[CorrelationLeadDto],
+    clusters: &[CorrelationClusterDto],
+) -> Vec<(&'static str, &'static str)> {
+    let mut families = CORRELATION_RULE_FAMILIES.to_vec();
+    for &(family, display_name) in &LINUX_RULE_FAMILIES {
+        let observed = leads.iter().any(|lead| has_family(&lead.families, family))
+            || clusters
+                .iter()
+                .any(|cluster| has_family(&cluster.families, family));
+        if observed {
+            families.push((family, display_name));
+        }
+    }
+    families
 }
 
 fn family_leads_for<'a>(
@@ -151,7 +171,7 @@ pub(crate) fn derive_source_group_families(group: &CorrelationSourceGroup) -> Ve
     let mut families = group
         .artifacts
         .iter()
-        .filter_map(|artifact| artifact_family(&artifact.artifact_type))
+        .filter_map(artifact_family)
         .collect::<Vec<_>>();
     dedup_vec(&mut families);
     families
@@ -161,7 +181,7 @@ pub(crate) fn derive_rule_group_families(group: &CorrelationRuleGroup) -> Vec<St
     let mut families = group
         .matches
         .iter()
-        .filter_map(|item| artifact_family(&item.artifact.artifact_type))
+        .filter_map(|item| artifact_family(&item.artifact))
         .collect::<Vec<_>>();
     dedup_vec(&mut families);
     families

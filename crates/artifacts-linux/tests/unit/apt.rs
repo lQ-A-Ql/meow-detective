@@ -101,9 +101,10 @@ fn parse_dpkg_log_entries() {
 }
 
 #[test]
-fn dpkg_status_lines_are_skipped() {
+fn dpkg_startup_and_status_lines_produce_no_events() {
     let input = "\
 2024-01-15 10:30:00 startup archives unpack
+2024-01-15 10:30:01 startup packages configure
 2024-01-15 10:30:05 status half-installed curl:amd64 7.88.1-9
 2024-01-15 10:30:06 status unpacked curl:amd64 7.88.1-10+deb12u5
 2024-01-15 10:30:07 install curl:amd64 <none> 7.88.1-10+deb12u5
@@ -111,8 +112,11 @@ fn dpkg_status_lines_are_skipped() {
 
     let events = parse_dpkg_log(input, &UtcClock).expect("should parse dpkg log");
     let actions: Vec<&str> = events.iter().map(|e| e.action.as_str()).collect();
-    assert_eq!(actions, ["startup", "install", "trigproc"]);
-    // No garbage event with action="status" / package="half-installed".
+    assert_eq!(actions, ["install", "trigproc"]);
+    // No garbage events: startup phase tokens (archives/packages) and dpkg
+    // states (half-installed) are database subsystems, not packages.
+    assert!(events.iter().all(|e| e.package != "archives"));
+    assert!(events.iter().all(|e| e.package != "packages"));
     assert!(events.iter().all(|e| e.package != "half-installed"));
 }
 

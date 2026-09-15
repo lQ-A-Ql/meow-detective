@@ -13,6 +13,10 @@ use evidence_emulation::VmdkAdapter;
 const MAX_INITRAMFS_BYTES: usize = 128 * 1024 * 1024;
 const MAX_CPIO_ENTRIES: usize = 1_000_000;
 const CPIO_HEADER_SIZE: usize = 110;
+/// Bound on nested compressed segments. Real images nest a single compressed
+/// archive after the optional microcode cpio; deeper nesting only appears in
+/// crafted inputs and would multiply the decompression work unboundedly.
+const MAX_DECODE_DEPTH: usize = 4;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct LinuxControllerEvidence {
@@ -137,6 +141,13 @@ fn read_bounded(reader: &mut dyn Read) -> Option<Vec<u8>> {
     (bytes.len() <= MAX_INITRAMFS_BYTES).then_some(bytes)
 }
 
+fn is_compression_magic(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x1f, 0x8b])
+        || bytes.starts_with(&[0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00])
+        || bytes.starts_with(&[0x28, 0xb5, 0x2f, 0xfd])
+        || bytes.starts_with(&[0x04, 0x22, 0x4d, 0x18])
+}
+
 fn decode_compressed_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
     let decoded = if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut decoder = flate2::read::MultiGzDecoder::new(Cursor::new(bytes));
@@ -147,6 +158,9 @@ fn decode_compressed_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
     } else if bytes.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
         let mut decoder = zstd::stream::read::Decoder::new(Cursor::new(bytes)).ok()?;
         read_bounded(&mut decoder)?
+    } else if bytes.starts_with(&[0x04, 0x22, 0x4d, 0x18]) {
+        let mut decoder = lz4_flex::frame::FrameDecoder::new(Cursor::new(bytes));
+        read_bounded(&mut decoder)?
     } else {
         return None;
     };
@@ -155,8 +169,13 @@ fn decode_compressed_initramfs(bytes: &[u8]) -> Option<Vec<u8>> {
 
 /// Linux initramfs images may prepend an uncompressed microcode cpio before
 /// the compressed main archive. Walk each segment so that an early trailer
-/// cannot hide the storage modules in the main archive.
+/// cannot hide the storage modules in the main archive. A corrupt segment is
+/// skipped rather than discarding the evidence collected from earlier ones.
 fn inspect_initramfs_driver_names(bytes: &[u8]) -> Option<(bool, bool)> {
+    inspect_segments(bytes, 0)
+}
+
+fn inspect_segments(bytes: &[u8], depth: usize) -> Option<(bool, bool)> {
     let mut offset = 0usize;
     let mut found_archive = false;
     let mut ide = false;
@@ -169,47 +188,92 @@ fn inspect_initramfs_driver_names(bytes: &[u8]) -> Option<(bool, bool)> {
             break;
         }
         if is_cpio_magic(&bytes[offset..]) {
-            let ((archive_ide, archive_lsi), consumed) = parse_cpio_archive(&bytes[offset..])?;
+            let Some(((archive_ide, archive_lsi), consumed)) = parse_cpio_archive(&bytes[offset..])
+            else {
+                let Some(next) = find_next_segment(bytes, offset + 1) else {
+                    break;
+                };
+                offset = next;
+                continue;
+            };
             ide |= archive_ide;
             lsi |= archive_lsi;
             found_archive = true;
-            offset = offset.checked_add(consumed)?;
+            let Some(next) = offset.checked_add(consumed) else {
+                break;
+            };
+            offset = next;
             continue;
         }
-        let decoded = decode_compressed_initramfs(&bytes[offset..])?;
-        let (archive_ide, archive_lsi) = inspect_initramfs_driver_names(&decoded)?;
-        ide |= archive_ide;
-        lsi |= archive_lsi;
-        found_archive = true;
+        let nested = if depth < MAX_DECODE_DEPTH {
+            decode_compressed_initramfs(&bytes[offset..])
+                .and_then(|decoded| inspect_segments(&decoded, depth + 1))
+        } else {
+            None
+        };
+        if let Some((archive_ide, archive_lsi)) = nested {
+            ide |= archive_ide;
+            lsi |= archive_lsi;
+            found_archive = true;
+        }
+        // A compressed stream spans the rest of the buffer, so no successor
+        // segment boundary can be located after it.
         break;
     }
     found_archive.then_some((ide, lsi))
+}
+
+/// Resynchronize after a corrupt segment. Candidate magics are still fully
+/// validated by the parsers, so a false positive costs one bounded parse.
+fn find_next_segment(bytes: &[u8], from: usize) -> Option<usize> {
+    (from..bytes.len()).find(|&index| {
+        let rest = &bytes[index..];
+        is_cpio_magic(rest) || is_compression_magic(rest)
+    })
 }
 
 fn is_cpio_magic(bytes: &[u8]) -> bool {
     bytes.len() >= 6 && (&bytes[..6] == b"070701" || &bytes[..6] == b"070702")
 }
 
+/// Decode newc entries until the trailer, the buffer end, or the first
+/// corrupt entry, whichever comes first. Like the kernel unpacker, the
+/// entries decoded so far are kept; `None` means not a single entry could be
+/// decoded. The returned offset is where decoding stopped.
 fn parse_cpio_archive(bytes: &[u8]) -> Option<((bool, bool), usize)> {
     let mut offset = 0usize;
     let mut ide = false;
     let mut lsi = false;
     for _ in 0..MAX_CPIO_ENTRIES {
-        let end = offset.checked_add(CPIO_HEADER_SIZE)?;
+        let Some(end) = offset.checked_add(CPIO_HEADER_SIZE) else {
+            break;
+        };
         if end > bytes.len() || !is_cpio_magic(&bytes[offset..]) {
-            return None;
+            break;
         }
-        let namesize = parse_hex_field(&bytes[offset + 94..offset + 102])?;
-        let filesize = parse_hex_field(&bytes[offset + 54..offset + 62])?;
+        let (Some(namesize), Some(filesize)) = (
+            parse_hex_field(&bytes[offset + 94..offset + 102]),
+            parse_hex_field(&bytes[offset + 54..offset + 62]),
+        ) else {
+            break;
+        };
         let name_start = end;
-        let name_end = name_start.checked_add(namesize)?;
+        let Some(name_end) = name_start.checked_add(namesize) else {
+            break;
+        };
         if namesize == 0 || name_end > bytes.len() || bytes[name_end - 1] != 0 {
-            return None;
+            break;
         }
         let name = &bytes[name_start..name_end.saturating_sub(1)];
         if name == b"TRAILER!!!" {
-            let consumed = align4(name_end)?;
-            return (filesize == 0 && consumed <= bytes.len()).then_some(((ide, lsi), consumed));
+            if filesize != 0 {
+                break;
+            }
+            // Padding after the trailer may be cut off with the stream.
+            let Some(consumed) = align4(name_end) else {
+                break;
+            };
+            return Some(((ide, lsi), consumed.min(bytes.len())));
         }
         if is_kernel_module_entry(name, b"ata_piix.ko") {
             ide = true;
@@ -220,14 +284,18 @@ fn parse_cpio_archive(bytes: &[u8]) -> Option<((bool, bool), usize)> {
         if is_kernel_module_entry(name, b"mptspi.ko") {
             lsi = true;
         }
-        let data_start = align4(name_end)?;
-        let data_end = data_start.checked_add(filesize)?;
-        offset = align4(data_end)?;
-        if offset > bytes.len() {
-            return None;
+        let Some(data_end) = align4(name_end).and_then(|start| start.checked_add(filesize)) else {
+            break;
+        };
+        let Some(next) = align4(data_end) else {
+            break;
+        };
+        if next > bytes.len() {
+            break;
         }
+        offset = next;
     }
-    None
+    (offset > 0).then_some(((ide, lsi), offset))
 }
 
 fn is_kernel_module_entry(path: &[u8], module: &[u8]) -> bool {

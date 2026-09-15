@@ -22,7 +22,10 @@ impl LvmPool {
     /// Open a logical volume as a boxed evidence reader.
     ///
     /// Unlike [`Self::open_volume`], this can return alternate reader
-    /// implementations such as dm-thin virtual volumes.
+    /// implementations such as dm-thin virtual volumes. Thin snapshots that
+    /// reference an `origin`/`external_origin` are rejected with
+    /// [`LvmError::UnsupportedThinSnapshotOrigin`]; the reader resolves
+    /// unmapped blocks as zeroes and cannot fall back to an origin volume.
     pub fn open_volume_reader(&self, index: usize) -> Result<Box<dyn EvidenceReader>> {
         if index >= self.logical_volumes.len() {
             return Err(LvmError::LvIndexOutOfRange {
@@ -46,6 +49,13 @@ impl LvmPool {
                 count: self.logical_volumes.len(),
             })?;
         let thin_deps = thin_volume_dependencies(lv)?;
+        if let Some((origin_kind, origin)) = thin_snapshot_origin(thin_deps) {
+            return Err(LvmError::UnsupportedThinSnapshotOrigin {
+                lv_name: lv.name.clone(),
+                origin_kind,
+                origin: origin.to_string(),
+            });
+        }
         let device_id = thin_deps.device_id.ok_or_else(|| {
             metadata_error(format!(
                 "thin logical volume '{}' is missing device_id",
@@ -121,6 +131,9 @@ impl LvmPool {
         let Ok(thin_deps) = thin_volume_dependencies(lv) else {
             return false;
         };
+        if thin_snapshot_origin(thin_deps).is_some() {
+            return false;
+        }
         let Some(pool_name) = thin_deps.thin_pool.as_deref() else {
             return false;
         };
@@ -148,6 +161,16 @@ impl LvmPool {
     fn find_lv_index_by_name(&self, name: &str) -> Option<usize> {
         self.logical_volumes.iter().position(|lv| lv.name == name)
     }
+}
+
+fn thin_snapshot_origin(dependencies: &SegmentDependencies) -> Option<(&'static str, &str)> {
+    if let Some(origin) = dependencies.external_origin.as_deref() {
+        return Some(("external_origin", origin));
+    }
+    dependencies
+        .origin
+        .as_deref()
+        .map(|origin| ("origin", origin))
 }
 
 fn thin_volume_dependencies(lv: &LvMeta) -> Result<&SegmentDependencies> {

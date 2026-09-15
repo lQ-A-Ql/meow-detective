@@ -273,7 +273,12 @@ fn read_checkpoint_block(source: &SharedReader, volume_offset: u64, block: u32) 
         )));
     }
     let expected = read_u32(&bytes, checksum_offset, "checkpoint checksum")?;
-    let actual = f2fs_crc32(F2FS_MAGIC, &bytes[..checksum_offset]);
+    // Kernel f2fs_checkpoint_chksum: when the checksum is not at the block end,
+    // the CRC continues over the tail beyond the stored checksum field.
+    let mut actual = f2fs_crc32(F2FS_MAGIC, &bytes[..checksum_offset]);
+    if checksum_offset < MAX_CHECKSUM_OFFSET {
+        actual = f2fs_crc32(actual, &bytes[checksum_offset + 4..]);
+    }
     if actual != expected {
         return Err(F2fsError::Invalid(format!(
             "checkpoint checksum mismatch: expected {expected:#010x}, computed {actual:#010x}"

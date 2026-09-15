@@ -1,8 +1,9 @@
 //! /var/log/wtmp binary format parser.
 //!
 //! The wtmp file records logins, logouts, and system events in a binary format.
-//! It shares the utmp(5) structure layout. On 32-bit systems the struct is
-//! typically 384 bytes; on 64-bit glibc systems it is 400 bytes.
+//! It shares the utmp(5) structure layout: glibc keeps the record at 384
+//! bytes with 32-bit time fields on 32-bit and biarch 64-bit platforms
+//! (x86_64); the 400-byte layout belongs to 64-bit-only targets like aarch64.
 //!
 //! This parser auto-detects the struct size by preferring candidate layouts
 //! that divide the file length exactly, then validating sampled records
@@ -35,21 +36,23 @@ const WTMP_SIZE_64: usize = 400;
 const WTMP_SIZE_MUSL: usize = 388;
 
 /// Offsets within the utmp struct differ by architecture.
-/// For glibc 64-bit (x86_64):
-///   ut_type: offset 0, 4 bytes (i32)
-///   ut_pid:  offset 4, 4 bytes (i32) [actually pid_t which is i32 on Linux]
+/// For 64-bit-only glibc targets (e.g. aarch64), where long and time_t are
+/// 64-bit:
+///   ut_type: offset 0, 4 bytes
+///   ut_pid:  offset 4, 4 bytes (pid_t)
 ///   ut_line: offset 8, 32 bytes
 ///   ut_id:   offset 40, 4 bytes
 ///   ut_user: offset 44, 32 bytes
 ///   ut_host: offset 76, 256 bytes
-///   ut_exit: offset 332, 4+4 bytes (struct exit_status)
-///   ut_session: offset 340, 4 bytes (actually 8 on 64-bit? no - it's i32)
-///   ut_tv:   offset 344, 8+8 bytes (timeval: tv_sec + tv_usec as 64-bit each on 64-bit Linux)
+///   ut_exit: offset 332, 2+2 bytes (struct exit_status)
+///   ut_session: offset 336, 8 bytes
+///   ut_tv:   offset 344, 8+8 bytes (timeval)
 ///   ut_addr_v6: offset 360, 16 bytes
 ///   __unused: offset 376, 20 bytes
-/// Total: 396 bytes (but libc rounds to 400)
+/// Total: 396 bytes, padded to 400.
 ///
-/// For glibc 32-bit (i386/i686):
+/// For 32-bit glibc (i386/i686) and biarch x86_64 glibc alike — utmp(5)
+/// keeps every field 32-bit so both architectures share one layout:
 ///   ut_type: offset 0
 ///   ut_pid:  offset 4
 ///   ut_line: offset 8, 32 bytes
@@ -58,7 +61,7 @@ const WTMP_SIZE_MUSL: usize = 388;
 ///   ut_host: offset 76, 256 bytes
 ///   ut_exit: offset 332, 2+2 bytes
 ///   ut_session: offset 336, 4 bytes
-///   ut_tv:   offset 340, 4+4 bytes (timeval: tv_sec + tv_usec as 32-bit)
+///   ut_tv:   offset 340, 4+4 bytes (timeval)
 ///   ut_addr_v6: offset 348, 16 bytes
 ///   __unused: offset 364, 20 bytes
 /// Total: 384 bytes
@@ -124,7 +127,9 @@ struct Layout {
 }
 
 fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
-    let candidates = [layout_64(), layout_32(), layout_musl()];
+    // Declaration order is the tiebreak in both passes; the 384-byte layout
+    // leads because biarch glibc (x86_64) uses it — see the layout notes.
+    let candidates = [layout_32(), layout_64(), layout_musl()];
 
     // utmp has no magic bytes, so layout detection combines two signals:
     // divisibility (a real wtmp holds a whole number of records) and content
@@ -147,9 +152,10 @@ fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
         return Ok(layout.clone());
     }
 
-    // Fallback: a truncated trailing record (len % size != 0) is tolerated,
-    // so non-dividing candidates still get a content-validation pass in
-    // declaration order.
+    // Fallback: a truncated trailing record (len % size != 0) is tolerated.
+    // Mis-slicing keeps ut_type/ut_user plausible (same offsets in every
+    // layout), so the declaration-order preference for the biarch layout
+    // decides such ties.
     for layout in &candidates {
         if data.len() >= layout.record_size && content_score(data, layout).accepts() {
             return Ok(layout.clone());
@@ -223,10 +229,16 @@ fn record_is_plausible(record: &UtmpRecord) -> bool {
     if !record.ut_user.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
         return false;
     }
+    let sane_timestamp = (631_152_000..=4_102_444_800).contains(&record.ut_tv_sec);
+    // A login record is always stamped by the writing daemon; a zero tv_sec
+    // on USER_PROCESS means the layout mis-sliced the record.
+    if record.ut_type == USER_PROCESS && !sane_timestamp {
+        return false;
+    }
     // A plausible record carries a printable non-empty user (login records)
     // or a sane 1990..2100 timestamp (boot/logout records leave ut_user
     // empty but always stamp the event).
-    !record.ut_user.is_empty() || (631_152_000..=4_102_444_800).contains(&record.ut_tv_sec)
+    !record.ut_user.is_empty() || sane_timestamp
 }
 
 fn layout_64() -> Layout {
@@ -356,10 +368,17 @@ fn runlevel_label(pid: i32) -> String {
     }
 }
 
+/// A DEAD_PROCESS closes the pending login with the same pid AND terminal
+/// (ut_line), pairing by tty like last(1); pid-only pairing misattributes
+/// logouts once the kernel reuses a pid.
+fn matches_pending_login(records: &[LoginRecord], idx: usize, dead: &UtmpRecord) -> bool {
+    idx < records.len() && records[idx].pid == dead.ut_pid && records[idx].terminal == dead.ut_line
+}
+
 /// Parse a wtmp binary file and extract login/logout records.
 ///
 /// Returns a list of `LoginRecord` entries. Each USER_PROCESS record creates a login,
-/// and matching DEAD_PROCESS records (by pid) set the logout time.
+/// and matching DEAD_PROCESS records (by pid and terminal) set the logout time.
 pub fn parse_wtmp(data: &[u8]) -> Result<Vec<LoginRecord>, crate::LinuxArtifactError> {
     if data.is_empty() {
         return Err(crate::LinuxArtifactError::ParseError {
@@ -403,10 +422,9 @@ pub fn parse_wtmp(data: &[u8]) -> Result<Vec<LoginRecord>, crate::LinuxArtifactE
             }
             DEAD_PROCESS => {
                 let ts = timestamp_from_utmp(ut.ut_tv_sec, ut.ut_tv_usec);
-                // Find the matching login record by pid
                 if let Some(pos) = pending_logins
                     .iter()
-                    .position(|&idx| idx < records.len() && records[idx].pid == ut.ut_pid)
+                    .position(|&idx| matches_pending_login(&records, idx, &ut))
                 {
                     let idx = pending_logins.remove(pos);
                     if idx < records.len() {

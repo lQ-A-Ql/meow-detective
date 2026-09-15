@@ -165,16 +165,85 @@ fn malformed_or_unknown_archive_defaults_to_ide() {
 }
 
 #[test]
-fn rejects_truncated_cpio_without_guessing_a_driver() {
+fn truncated_cpio_keeps_evidence_from_parsed_entries() {
     let mut archive = cpio_archive(&["kernel/drivers/ata/ata_piix.ko"]);
     let trailer_len = cpio_archive(&[]).len();
     archive.truncate(archive.len() - trailer_len);
-    assert!(inspect_initramfs_driver_names(&archive).is_none());
+    let (ide, lsi) = inspect_initramfs_driver_names(&archive)
+        .expect("fully parsed entries survive a missing trailer");
+    assert!(ide);
+    assert!(!lsi);
 }
 
 #[test]
-fn rejects_truncated_trailer_padding() {
+fn truncated_trailer_padding_still_decodes_the_archive() {
     let mut archive = cpio_archive(&["kernel/drivers/ata/ata_piix.ko"]);
     archive.pop();
-    assert!(inspect_initramfs_driver_names(&archive).is_none());
+    let (ide, _) =
+        inspect_initramfs_driver_names(&archive).expect("trailer padding may be cut off");
+    assert!(ide);
+}
+
+#[test]
+fn decodes_lz4_cpio() {
+    let archive = cpio_archive(&["kernel/drivers/scsi/mptspi.ko.lz4"]);
+    let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
+    encoder.write_all(&archive).unwrap();
+    let lz4 = encoder.finish().unwrap();
+    assert!(inspect_initramfs_driver_names(&lz4).unwrap().1);
+}
+
+#[test]
+fn skips_a_corrupt_segment_and_keeps_evidence_from_the_others() {
+    let mut image = cpio_archive(&["kernel/drivers/ata/ata_piix.ko"]);
+    image.extend_from_slice(b"070701");
+    image.extend_from_slice(&[b'Z'; 200]);
+    let mut main = cpio_archive(&["kernel/drivers/scsi/mptspi.ko"]);
+    image.append(&mut main);
+
+    let (ide, lsi) = inspect_initramfs_driver_names(&image)
+        .expect("a corrupt segment must not poison the others");
+    assert!(ide);
+    assert!(lsi);
+}
+
+#[test]
+fn keeps_earlier_segment_evidence_when_the_compressed_part_is_undecodable() {
+    let mut image = cpio_archive(&["kernel/drivers/ata/ata_piix.ko"]);
+    image.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+
+    let (ide, lsi) = inspect_initramfs_driver_names(&image)
+        .expect("an undecodable tail must not discard earlier evidence");
+    assert!(ide);
+    assert!(!lsi);
+}
+
+fn gzip_segment_wrapping(payload: &[u8]) -> Vec<u8> {
+    let mut segment = cpio_archive(&[]);
+    segment.extend_from_slice(payload);
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder.write_all(&segment).unwrap();
+    encoder.finish().unwrap()
+}
+
+#[test]
+fn decodes_nested_compressed_segments_up_to_the_depth_bound() {
+    let mut nested = cpio_archive(&["kernel/drivers/scsi/mptspi.ko"]);
+    for _ in 0..4 {
+        nested = gzip_segment_wrapping(&nested);
+    }
+    let (_, lsi) = inspect_initramfs_driver_names(&nested).expect("within the depth bound");
+    assert!(lsi);
+}
+
+#[test]
+fn ignores_segments_nested_beyond_the_depth_bound() {
+    let mut nested = cpio_archive(&["kernel/drivers/scsi/mptspi.ko"]);
+    for _ in 0..5 {
+        nested = gzip_segment_wrapping(&nested);
+    }
+    let (ide, lsi) =
+        inspect_initramfs_driver_names(&nested).expect("the outer archives still decode");
+    assert!(!ide);
+    assert!(!lsi);
 }

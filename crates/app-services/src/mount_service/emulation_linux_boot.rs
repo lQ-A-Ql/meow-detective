@@ -88,7 +88,10 @@ fn add_boot_risk(installs: &mut [EmulationInstallDto], risk: &str) {
 /// the ESP fallback loader `\EFI\BOOT\BOOTX64.EFI`; when neither exists the
 /// firmware drops into its boot manager, which the `no-efi-fallback` note
 /// surfaces to the investigator (the session-level EFI fallback installation
-/// remediates it). MBR disks boot legacy and need no annotation.
+/// remediates it). An ESP that cannot be opened or parsed leaves the fallback
+/// loader unverified, which the `esp-unverified` note surfaces so the launch
+/// decision can fail closed like the XFS path. MBR disks boot legacy and need
+/// no annotation.
 pub(crate) fn annotate_boot_path_risk(
     source_path: &std::path::Path,
     source_kind: &domain::DataSourceKind,
@@ -97,28 +100,48 @@ pub(crate) fn annotate_boot_path_risk(
     if installs.is_empty() {
         return;
     }
-    let missing = gpt_disk_missing_boot_paths(source_path, source_kind);
-    if missing != Some(true) {
-        return;
-    }
-    for install in installs.iter_mut() {
-        if !install
-            .boot_risk_notes
-            .iter()
-            .any(|note| note == "no-efi-fallback")
-        {
-            install.boot_risk_notes.push("no-efi-fallback".to_string());
-        }
+    annotate_boot_path_assessment(
+        installs,
+        gpt_disk_boot_path_assessment(source_path, source_kind),
+    );
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BootPathAssessment {
+    /// Not a readable GPT disk; without evidence no annotation is added.
+    Undetermined,
+    /// A BIOS boot partition or the ESP fallback loader exists.
+    BootPathPresent,
+    /// Neither a BIOS boot partition nor an ESP fallback loader exists.
+    NoEfiFallback,
+    /// The ESP exists but could not be opened or parsed.
+    EspUnverified,
+}
+
+fn annotate_boot_path_assessment(
+    installs: &mut [EmulationInstallDto],
+    assessment: BootPathAssessment,
+) {
+    match assessment {
+        BootPathAssessment::NoEfiFallback => add_boot_risk(installs, "no-efi-fallback"),
+        BootPathAssessment::EspUnverified => add_boot_risk(installs, "esp-unverified"),
+        BootPathAssessment::BootPathPresent | BootPathAssessment::Undetermined => {}
     }
 }
 
-/// `Some(true)` when the disk is GPT and neither a BIOS boot partition nor an
-/// ESP fallback loader exists; `None` when the disk layout could not be
-/// determined (no annotation without evidence).
-fn gpt_disk_missing_boot_paths(
+fn gpt_disk_boot_path_assessment(
     source_path: &std::path::Path,
     source_kind: &domain::DataSourceKind,
-) -> Option<bool> {
+) -> BootPathAssessment {
+    assess_gpt_disk_boot_path(source_path, source_kind).unwrap_or(BootPathAssessment::Undetermined)
+}
+
+/// `None` when the disk layout could not be determined (no annotation
+/// without evidence).
+fn assess_gpt_disk_boot_path(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) -> Option<BootPathAssessment> {
     use evidence_core::volume::gpt::{
         classify_partition_type, parse_gpt_entries, parse_gpt_header, GptPartitionType,
     };
@@ -145,11 +168,27 @@ fn gpt_disk_missing_boot_paths(
         .iter()
         .any(|partition| partition.type_guid == BIOS_BOOT_PARTITION)
     {
-        return Some(false);
+        return Some(BootPathAssessment::BootPathPresent);
     }
     let esp = partitions.iter().find(|partition| {
         classify_partition_type(&partition.type_guid) == GptPartitionType::EfiSystem
-    })?;
+    });
+    let Some(esp) = esp else {
+        return Some(BootPathAssessment::NoEfiFallback);
+    };
+    Some(match esp_fallback_loader_present(reader, esp) {
+        Some(true) => BootPathAssessment::BootPathPresent,
+        Some(false) => BootPathAssessment::NoEfiFallback,
+        None => BootPathAssessment::EspUnverified,
+    })
+}
+
+/// `None` when the ESP could not be opened or parsed, leaving the fallback
+/// loader unverified.
+fn esp_fallback_loader_present(
+    reader: Box<dyn evidence_core::EvidenceReader>,
+    esp: &evidence_core::volume::gpt::GptPartition,
+) -> Option<bool> {
     let esp_offset = esp.start_lba.checked_mul(512)?;
     let esp_length = esp
         .end_lba
@@ -159,7 +198,7 @@ fn gpt_disk_missing_boot_paths(
     let window =
         evidence_core::PartitionWindowReader::new(reader, esp_offset, Some(esp_length)).ok()?;
     let fs = fs_fat::FatReader::open(Box::new(window), 0).ok()?;
-    Some(fs.open_file("EFI/BOOT/BOOTX64.EFI").is_err())
+    Some(fs.open_file("EFI/BOOT/BOOTX64.EFI").is_ok())
 }
 
 #[cfg(test)]

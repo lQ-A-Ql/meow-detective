@@ -419,3 +419,90 @@ fn gpt_without_bios_boot_partition_keeps_efi_firmware() {
         evidence_emulation::VmwareFirmware::Efi
     );
 }
+
+#[test]
+fn prepare_session_fails_closed_when_the_evidence_hash_changed() {
+    let (_temporary, active, connection, source_id) =
+        ready_case_with_source(Some(&"ab".repeat(32)));
+
+    let error = EmulationRegistry::default()
+        .prepare_session(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &source_id,
+            None,
+            evidence_emulation::VmOptions::default(),
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EmulationRegistryError::Source(
+            app_services::mount_service::MountServiceError::SourceHashMismatch { .. }
+        )
+    ));
+    assert!(matches!(
+        transport::ServiceErrorCategory::category(&error),
+        transport::ErrorCategory::Security
+    ));
+}
+
+#[test]
+fn prepare_session_fails_closed_without_a_persisted_evidence_hash() {
+    let (_temporary, active, connection, source_id) = ready_case_with_source(None);
+
+    let error = EmulationRegistry::default()
+        .prepare_session(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &source_id,
+            None,
+            evidence_emulation::VmOptions::default(),
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EmulationRegistryError::Source(
+            app_services::mount_service::MountServiceError::InvalidSourceFingerprint
+        )
+    ));
+}
+
+fn ready_case_with_source(
+    stored_hash: Option<&str>,
+) -> (
+    tempfile::TempDir,
+    app_services::active_case::ActiveCase,
+    rusqlite::Connection,
+    domain::DataSourceId,
+) {
+    let temporary = tempfile::tempdir().unwrap();
+    let active =
+        app_services::case_service::create_case(temporary.path(), "emu-hash", Some("tester"))
+            .unwrap();
+    let evidence = temporary.path().join("evidence.raw");
+    std::fs::write(&evidence, b"emulation evidence bytes").unwrap();
+    let connection = app_services::connection::open_case_db(&active.db_path()).unwrap();
+    let source = app_services::datasource_service::attach_data_source(
+        &connection,
+        &active.meta.id,
+        "evidence.raw",
+        &evidence,
+        domain::DataSourceKind::Raw,
+        domain::DataSourcePlatform::Windows,
+    )
+    .unwrap();
+    let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection);
+    repo.update_import_state(&source.id, "ready", None).unwrap();
+    let status = if stored_hash.is_some() {
+        domain::DataSourceHashStatus::Hashed
+    } else {
+        domain::DataSourceHashStatus::Pending
+    };
+    repo.update_source_hash(&source.id, stored_hash, status)
+        .unwrap();
+    (temporary, active, connection, source.id)
+}

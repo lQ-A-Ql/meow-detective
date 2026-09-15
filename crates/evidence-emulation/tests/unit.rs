@@ -322,6 +322,26 @@ fn vmdk_descriptor_round_trips_the_ide_adapter() {
 }
 
 #[test]
+fn vmdk_geometry_matches_the_adapter_with_qemu_floor_cylinders() {
+    // 100 * 255 * 63 sectors: exact SCSI cylinders, fractional IDE cylinders.
+    let identity = ParentIdentity::new(100 * 255 * 63 * 512, [0x42; 32]).unwrap();
+
+    let scsi = VmdkDescriptor::new(&identity, "mount/disk.raw", VmdkAdapter::LsiLogic)
+        .unwrap()
+        .render();
+    assert!(scsi.contains("ddb.geometry.cylinders = \"100\""));
+    assert!(scsi.contains("ddb.geometry.heads = \"255\""));
+    assert!(scsi.contains("ddb.geometry.sectors = \"63\""));
+
+    let ide = VmdkDescriptor::new(&identity, "mount/disk.raw", VmdkAdapter::Ide)
+        .unwrap()
+        .render();
+    assert!(ide.contains("ddb.geometry.heads = \"16\""));
+    // 100 * 255 * 63 / (16 * 63) = 1593.75: floor, not ceil.
+    assert!(ide.contains("ddb.geometry.cylinders = \"1593\""));
+}
+
+#[test]
 fn vmx_disables_host_integrations_and_networking() {
     let config = VmxConfig::new("disk.vmdk", VmwareFirmware::Efi).unwrap();
     let rendered = config.render();
@@ -336,6 +356,10 @@ fn vmx_disables_host_integrations_and_networking() {
     assert!(rendered.contains("isolation.tools.ghi.autologon.disable = \"TRUE\""));
     assert!(rendered.contains("isolation.tools.hgfsServerSet.disable = \"TRUE\""));
     assert!(rendered.contains("isolation.tools.memSchedFakeSampleStats.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.setInfo.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.setOption.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.diskShrink.disable = \"TRUE\""));
+    assert!(rendered.contains("isolation.tools.diskWiper.disable = \"TRUE\""));
     assert!(rendered.contains("isolation.device.connectable.disable = \"TRUE\""));
     assert!(rendered.contains("isolation.device.edit.disable = \"TRUE\""));
     assert!(rendered.contains("firmware = \"efi\""));
@@ -640,6 +664,10 @@ fn vmx_validator_detects_missing_broadcom_hardening_keys() {
         "isolation.tools.ghi.autologon.disable",
         "isolation.tools.hgfsServerSet.disable",
         "isolation.tools.memSchedFakeSampleStats.disable",
+        "isolation.tools.setInfo.disable",
+        "isolation.tools.setOption.disable",
+        "isolation.tools.diskShrink.disable",
+        "isolation.tools.diskWiper.disable",
         "isolation.device.connectable.disable",
         "isolation.device.edit.disable",
     ] {

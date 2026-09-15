@@ -191,14 +191,17 @@ impl SparseImage {
     }
 }
 
-fn crc32(mut checksum: u32, bytes: &[u8]) -> u32 {
+// AOSP libsparse sparse_crc32 uses standard zlib CRC-32 semantics:
+// pre-condition crc_in ^ ~0U, post-condition ^ ~0U.
+fn crc32(checksum: u32, bytes: &[u8]) -> u32 {
+    let mut checksum = !checksum;
     for byte in bytes {
         checksum ^= u32::from(*byte);
         for _ in 0..8 {
             checksum = (checksum >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(checksum & 1));
         }
     }
-    checksum
+    !checksum
 }
 
 fn fill_pattern(buffer: &mut [u8], pattern: &[u8; 4], offset: u64) {

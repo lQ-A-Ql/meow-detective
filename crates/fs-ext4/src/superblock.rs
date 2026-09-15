@@ -2,10 +2,10 @@ use crate::format::{
     EXT4_64BIT_GROUP_DESCRIPTOR_SIZE, EXT4_FEATURE_COMPAT_HAS_JOURNAL, EXT4_FEATURE_INCOMPAT_64BIT,
     EXT4_FEATURE_INCOMPAT_CSUM_SEED, EXT4_FEATURE_INCOMPAT_ENCRYPT,
     EXT4_FEATURE_RO_COMPAT_BIGALLOC, EXT4_FEATURE_RO_COMPAT_GDT_CSUM,
-    EXT4_FEATURE_RO_COMPAT_METADATA_CSUM, EXT4_MAGIC, EXT4_MIN_GROUP_DESCRIPTOR_SIZE,
-    EXT4_SUPERBLOCK_OFFSET,
+    EXT4_FEATURE_RO_COMPAT_METADATA_CSUM, EXT4_KNOWN_INCOMPAT_FEATURES, EXT4_MAGIC,
+    EXT4_MIN_GROUP_DESCRIPTOR_SIZE, EXT4_SUPERBLOCK_OFFSET,
 };
-use evidence_core::filesystem::invalid_fs_data;
+use evidence_core::filesystem::{invalid_fs_data, unsupported_fs};
 use evidence_core::EvidenceReader;
 use std::io::{self, SeekFrom};
 
@@ -63,6 +63,7 @@ impl Ext4Superblock {
         let feature_compat = read_u32(&data, 0x5C)?;
         let feature_incompat = read_u32(&data, 0x60)?;
         let feature_ro_compat = read_u32(&data, 0x64)?;
+        validate_incompat_features(feature_incompat)?;
         let mut filesystem_uuid = [0u8; 16];
         filesystem_uuid.copy_from_slice(&data[0x68..0x78]);
         let has_journal = feature_compat & EXT4_FEATURE_COMPAT_HAS_JOURNAL != 0;
@@ -131,6 +132,19 @@ fn validate_magic(data: &[u8]) -> io::Result<()> {
     if magic != EXT4_MAGIC {
         return Err(invalid_fs_data(format!(
             "not a valid ext4 filesystem (magic 0x{magic:04X})"
+        )));
+    }
+    Ok(())
+}
+
+/// Unknown incompat bits change the on-disk interpretation (META_BG, for
+/// example, relocates group descriptors), so they fail closed instead of
+/// being parsed under the wrong layout.
+fn validate_incompat_features(feature_incompat: u32) -> io::Result<()> {
+    let unknown = feature_incompat & !EXT4_KNOWN_INCOMPAT_FEATURES;
+    if unknown != 0 {
+        return Err(unsupported_fs(format!(
+            "ext4 incompat feature bits 0x{unknown:08X} are unsupported"
         )));
     }
     Ok(())

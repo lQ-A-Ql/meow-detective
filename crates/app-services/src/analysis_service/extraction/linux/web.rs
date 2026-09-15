@@ -1,11 +1,12 @@
 use super::common::{
-    insert_opt, insert_string_array, truncate, MAX_TEXT_LOG_EVENTS_PER_SOURCE,
+    insert_opt, insert_string_array, truncate, warn_on_parse_gap, MAX_TEXT_LOG_EVENTS_PER_SOURCE,
     MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE,
 };
+use super::timezone::{LinuxLogTimeContext, UNVERIFIED_TIMEZONE_LABEL};
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::NaiveDateTime;
 use serde_json::Value;
 
 pub(in crate::analysis_service::extraction) fn is_nginx_config_path(normalized: &str) -> bool {
@@ -115,8 +116,21 @@ pub(super) fn extract_access_log(
     outcome: &mut ExtractionOutcome,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_web_access_log(&text) {
-        Ok(entries) => {
+    match artifacts_linux::parse_web_access_log_with_stats(&text) {
+        Ok((entries, stats)) => {
+            warn_on_parse_gap(
+                candidate,
+                "web access log",
+                stats.total_lines,
+                stats.parsed_lines,
+                &mut outcome.warnings,
+            );
+            if stats.vhost_prefixed_lines > 0 {
+                outcome.warnings.push(format!(
+                    "{} uses a vhost-prefixed access log format (%v/$host); clientIp for {} line(s) was recovered from the second field and the vhost name is annotated on the records",
+                    candidate.path, stats.vhost_prefixed_lines
+                ));
+            }
             if entries.len() > MAX_TEXT_LOG_EVENTS_PER_SOURCE {
                 outcome.warnings.push(format!(
                     "{} web access log emitted first {} records only",
@@ -142,21 +156,38 @@ pub(super) fn extract_error_log(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
+    log_time: &LinuxLogTimeContext,
 ) {
     let text = String::from_utf8_lossy(bytes);
-    match artifacts_linux::parse_web_error_log(&text) {
-        Ok(entries) => {
+    match artifacts_linux::parse_web_error_log_with_stats(&text) {
+        Ok((entries, stats)) => {
+            warn_on_parse_gap(
+                candidate,
+                "web error log",
+                stats.total_lines,
+                stats.parsed_lines,
+                &mut outcome.warnings,
+            );
             if entries.len() > MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE {
                 outcome.warnings.push(format!(
                     "{} web error log emitted first {} records only",
                     candidate.path, MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE
                 ));
             }
+            let mut unverified = 0usize;
             for entry in entries
                 .into_iter()
                 .take(MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE)
             {
-                emit_error_log_entry(candidate, entry, outcome);
+                if emit_error_log_entry(candidate, entry, outcome, log_time) {
+                    unverified += 1;
+                }
+            }
+            if unverified > 0 {
+                outcome.warnings.push(format!(
+                    "{} timezone not determined; {unverified} web error timestamps kept as raw text ({UNVERIFIED_TIMEZONE_LABEL})",
+                    candidate.path
+                ));
             }
         }
         Err(error) => outcome.warnings.push(format!(
@@ -239,6 +270,7 @@ fn emit_access_log_entry(
         "clientIp".to_string(),
         Value::String(entry.client_ip.clone()),
     );
+    insert_opt(&mut attrs, "vhost", entry.vhost.clone());
     attrs.insert("method".to_string(), Value::String(entry.method.clone()));
     attrs.insert("uri".to_string(), Value::String(entry.uri.clone()));
     attrs.insert(
@@ -279,28 +311,47 @@ fn emit_error_log_entry(
     candidate: &EvidenceCandidate,
     entry: artifacts_linux::WebErrorLogEntry,
     outcome: &mut ExtractionOutcome,
-) {
+    log_time: &LinuxLogTimeContext,
+) -> bool {
     let mut attrs = base_attrs(candidate);
     attrs.insert("message".to_string(), Value::String(entry.message.clone()));
     attrs.insert(
         "lineNumber".to_string(),
         Value::Number(entry.line_number.into()),
     );
-    // artifacts-linux keeps the error-log timestamp as a raw string; parse it
-    // here so entries join the timeline. Unparseable values stay in attrs as
-    // the original text.
-    let timestamp = entry
+    // artifacts-linux keeps the error-log timestamp as a raw string; Apache
+    // and nginx write it in the server's local zone, so joining the timeline
+    // needs the inferred host zone. When no zone could be determined the raw
+    // text stays in attrs with an unverified-timezone marker instead of
+    // entering the timeline as fake UTC.
+    let naive = entry
         .timestamp
         .as_deref()
         .and_then(parse_web_error_timestamp);
+    let timestamp = match naive {
+        Some(naive) if !log_time.assumed_utc() => log_time.clock().local_to_utc(naive),
+        _ => None,
+    };
     match timestamp {
         Some(timestamp) => {
             attrs.insert(
                 "timestamp".to_string(),
                 Value::String(timestamp.to_rfc3339()),
             );
+            attrs.insert(
+                "tzAssumed".to_string(),
+                Value::String(log_time.tz_label().to_string()),
+            );
         }
-        None => insert_opt(&mut attrs, "timestamp", entry.timestamp.clone()),
+        None => {
+            insert_opt(&mut attrs, "timestamp", entry.timestamp.clone());
+            if naive.is_some() {
+                attrs.insert(
+                    "tzAssumed".to_string(),
+                    Value::String(UNVERIFIED_TIMEZONE_LABEL.to_string()),
+                );
+            }
+        }
     }
     // artifacts-linux reads severity from the first bracket, which on Apache
     // error lines is the timestamp — severity would always be None. Recover
@@ -329,18 +380,16 @@ fn emit_error_log_entry(
             "linux.web_error_log",
         ));
     }
+    naive.is_some() && timestamp.is_none()
 }
 
 /// Apache `[Mon Jan 15 10:30:00.123456 2024]` (brackets already stripped) and
-/// nginx `2024/01/15 10:30:00` error-log timestamps.
-fn parse_web_error_timestamp(raw: &str) -> Option<DateTime<Utc>> {
-    if let Ok(naive) = NaiveDateTime::parse_from_str(raw, "%a %b %d %H:%M:%S%.f %Y") {
-        return Some(Utc.from_utc_datetime(&naive));
-    }
-    if let Ok(naive) = NaiveDateTime::parse_from_str(raw, "%Y/%m/%d %H:%M:%S") {
-        return Some(Utc.from_utc_datetime(&naive));
-    }
-    None
+/// nginx `2024/01/15 10:30:00` error-log timestamps — both server-local wall
+/// clock without a zone.
+fn parse_web_error_timestamp(raw: &str) -> Option<NaiveDateTime> {
+    NaiveDateTime::parse_from_str(raw, "%a %b %d %H:%M:%S%.f %Y")
+        .ok()
+        .or_else(|| NaiveDateTime::parse_from_str(raw, "%Y/%m/%d %H:%M:%S").ok())
 }
 
 /// The `[module:level]` bracket following the Apache error-log timestamp.
@@ -417,3 +466,7 @@ fn emit_finding(
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/analysis_service/extraction/linux/web.rs"]
+mod tests;

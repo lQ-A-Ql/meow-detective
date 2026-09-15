@@ -50,4 +50,10 @@ impl LvmPool {
     pub fn physical_volume_offsets(&self) -> &[(String, u64)] {
         &self.pv_start_offsets
     }
+
+    /// Diagnostics recorded during discovery, e.g. additional volume groups
+    /// present on the supplied readers that were not selected.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
+    }
 }

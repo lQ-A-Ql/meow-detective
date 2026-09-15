@@ -1,10 +1,10 @@
 use super::mapping::{resolve_pv_mapping, validate_extent_map};
-use super::{DiscoveredPv, LvmPool};
+use super::{DiscoveredPv, LvmPool, SharedReader};
 use crate::error::{LvmError, Result};
 use crate::metadata::VolumeGroup;
 use crate::{label, metadata, segment};
 use evidence_core::EvidenceReader;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 impl LvmPool {
     pub fn discover(readers: Vec<Box<dyn EvidenceReader>>, pv_offsets: Vec<u64>) -> Result<Self> {
@@ -16,7 +16,7 @@ impl LvmPool {
         }
 
         let pv_entries = discover_physical_volumes(readers, pv_offsets)?;
-        let volume_group = select_volume_group(&pv_entries)?;
+        let (volume_group, warnings) = select_volume_group(&pv_entries)?;
         let mut device_readers = Vec::with_capacity(volume_group.physical_volumes.len());
         let mut mappings = Vec::with_capacity(volume_group.physical_volumes.len());
 
@@ -67,6 +67,7 @@ impl LvmPool {
             pv_start_offsets,
             pv_data_offsets,
             logical_volumes,
+            warnings,
         })
     }
 }
@@ -81,7 +82,7 @@ fn discover_physical_volumes(
         .map(|(reader, pv_offset)| {
             let reader = Arc::new(Mutex::new(reader));
             let label = {
-                let mut guard = reader.lock().unwrap();
+                let mut guard = lock_pv_reader(&reader)?;
                 label::parse_pv_label(&mut **guard, pv_offset)?
             };
             Ok(DiscoveredPv {
@@ -93,14 +94,15 @@ fn discover_physical_volumes(
         .collect()
 }
 
-fn select_volume_group(entries: &[DiscoveredPv]) -> Result<VolumeGroup> {
+fn select_volume_group(entries: &[DiscoveredPv]) -> Result<(VolumeGroup, Vec<String>)> {
     let mut selected: Option<VolumeGroup> = None;
+    let mut candidates: Vec<VolumeGroupIdentity> = Vec::new();
     let mut first_fatal_error = None;
     for entry in entries {
         if entry.label.metadata_areas.is_empty() {
             continue;
         }
-        let mut reader = entry.reader.lock().unwrap();
+        let mut reader = lock_pv_reader(&entry.reader)?;
         let candidate = match metadata::parse_metadata_from_regions(
             &mut *reader,
             &entry.label.metadata_areas,
@@ -118,6 +120,7 @@ fn select_volume_group(entries: &[DiscoveredPv]) -> Result<VolumeGroup> {
             }
             Err(error) => return Err(error),
         };
+        remember_identity(&mut candidates, &candidate);
         if selected
             .as_ref()
             .is_none_or(|current| candidate.seqno > current.seqno)
@@ -126,7 +129,10 @@ fn select_volume_group(entries: &[DiscoveredPv]) -> Result<VolumeGroup> {
         }
     }
     match selected {
-        Some(volume_group) => Ok(volume_group),
+        Some(volume_group) => {
+            let warnings = multi_vg_warnings(&candidates, &volume_group);
+            Ok((volume_group, warnings))
+        }
         None => match first_fatal_error {
             Some(error) => Err(error),
             None => Err(LvmError::MetadataParseError {
@@ -135,6 +141,57 @@ fn select_volume_group(entries: &[DiscoveredPv]) -> Result<VolumeGroup> {
             }),
         },
     }
+}
+
+struct VolumeGroupIdentity {
+    name: String,
+    id: String,
+    seqno: u64,
+}
+
+fn remember_identity(candidates: &mut Vec<VolumeGroupIdentity>, volume_group: &VolumeGroup) {
+    if let Some(known) = candidates
+        .iter_mut()
+        .find(|known| known.name == volume_group.name && known.id == volume_group.id)
+    {
+        known.seqno = known.seqno.max(volume_group.seqno);
+        return;
+    }
+    candidates.push(VolumeGroupIdentity {
+        name: volume_group.name.clone(),
+        id: volume_group.id.clone(),
+        seqno: volume_group.seqno,
+    });
+}
+
+fn multi_vg_warnings(candidates: &[VolumeGroupIdentity], selected: &VolumeGroup) -> Vec<String> {
+    if candidates.len() <= 1 {
+        return Vec::new();
+    }
+    let ignored = candidates
+        .iter()
+        .filter(|candidate| candidate.name != selected.name || candidate.id != selected.id)
+        .map(|candidate| {
+            format!(
+                "'{}' (id={}, seqno={})",
+                candidate.name, candidate.id, candidate.seqno
+            )
+        })
+        .collect::<Vec<_>>();
+    vec![format!(
+        "multiple volume groups found on supplied physical volumes; selected '{}' (id={}, seqno={}); ignored: {}",
+        selected.name,
+        selected.id,
+        selected.seqno,
+        ignored.join(", ")
+    )]
+}
+
+fn lock_pv_reader(reader: &SharedReader) -> Result<MutexGuard<'_, Box<dyn EvidenceReader>>> {
+    reader.lock().map_err(|_| LvmError::MetadataParseError {
+        line: 0,
+        message: "physical volume reader lock poisoned".to_string(),
+    })
 }
 
 fn lvm_uuid_matches(label_uuid: &str, metadata_uuid: &str) -> bool {

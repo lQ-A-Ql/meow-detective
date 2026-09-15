@@ -1,6 +1,7 @@
 use crate::format::{Ext4Extent, Ext4ExtentHeader};
 use crate::Ext4Reader;
 use evidence_core::filesystem::{fs_out_of_memory, invalid_fs_data};
+use std::collections::HashSet;
 use std::io;
 
 impl Ext4Reader {
@@ -13,7 +14,8 @@ impl Ext4Reader {
         if header.eh_depth == 0 {
             self.read_extent_leaves(i_block, file_size, 0)
         } else {
-            self.walk_extent_tree(i_block, file_size, 0, header.eh_depth)
+            let mut visited = HashSet::new();
+            self.walk_extent_tree(i_block, file_size, 0, header.eh_depth, &mut visited)
         }
     }
 
@@ -37,13 +39,17 @@ impl Ext4Reader {
         if header.eh_depth == 0 {
             self.read_extent_leaves_range(i_block, offset, range_end, &mut next_offset, &mut data)?;
         } else {
+            let mut visited = HashSet::new();
             self.walk_extent_tree_range(
                 i_block,
                 header.eh_depth,
-                offset,
-                range_end,
+                ExtentRange {
+                    start: offset,
+                    end: range_end,
+                },
                 &mut next_offset,
                 &mut data,
+                &mut visited,
             )?;
         }
         append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
@@ -61,6 +67,12 @@ impl Ext4Reader {
         collected: u64,
     ) -> io::Result<Vec<u8>> {
         let header = Ext4ExtentHeader::parse(node_data)?;
+        if header.eh_depth != 0 {
+            return Err(invalid_fs_data(format!(
+                "extent leaf node has depth {}",
+                header.eh_depth
+            )));
+        }
         let mut data = Vec::new();
         for extent in parse_extents(node_data, header.eh_entries)? {
             let gathered = collected.saturating_add(data.len() as u64);
@@ -113,6 +125,12 @@ impl Ext4Reader {
         data: &mut Vec<u8>,
     ) -> io::Result<()> {
         let header = Ext4ExtentHeader::parse(node_data)?;
+        if header.eh_depth != 0 {
+            return Err(invalid_fs_data(format!(
+                "extent leaf node has depth {}",
+                header.eh_depth
+            )));
+        }
         for extent in parse_extents(node_data, header.eh_entries)? {
             self.read_extent_range(extent, range_start, range_end, next_offset, data)?;
         }
@@ -153,16 +171,32 @@ impl Ext4Reader {
         Ok(())
     }
 
+    /// Walks an interior extent-tree level. `depth` is threaded down from the
+    /// inode's header so a child block cannot lie about its level, and every
+    /// block referenced from an index node is tracked in `visited` so cyclic
+    /// or duplicated references are rejected, matching `write_map` strictness.
     fn walk_extent_tree(
         &self,
         node_data: &[u8],
         file_size: u64,
         collected: u64,
         depth: u16,
+        visited: &mut HashSet<u64>,
     ) -> io::Result<Vec<u8>> {
         let header = Ext4ExtentHeader::parse(node_data)?;
+        if header.eh_depth != depth {
+            return Err(invalid_fs_data(format!(
+                "extent tree depth {} does not match expected depth {}",
+                header.eh_depth, depth
+            )));
+        }
         let mut data = Vec::new();
         for child_block in parse_index_blocks(node_data, header.eh_entries)? {
+            if !visited.insert(child_block) {
+                return Err(invalid_fs_data(format!(
+                    "extent index block {child_block} is referenced more than once"
+                )));
+            }
             let gathered = collected.saturating_add(data.len() as u64);
             if gathered >= file_size {
                 break;
@@ -171,7 +205,7 @@ impl Ext4Reader {
             let mut chunk = if depth == 1 {
                 self.read_extent_leaves(&child_data, file_size, gathered)?
             } else {
-                self.walk_extent_tree(&child_data, file_size, gathered, depth - 1)?
+                self.walk_extent_tree(&child_data, file_size, gathered, depth - 1, visited)?
             };
             data.append(&mut chunk);
         }
@@ -182,19 +216,30 @@ impl Ext4Reader {
         &self,
         node_data: &[u8],
         depth: u16,
-        range_start: u64,
-        range_end: u64,
+        range: ExtentRange,
         next_offset: &mut u64,
         data: &mut Vec<u8>,
+        visited: &mut HashSet<u64>,
     ) -> io::Result<()> {
         let header = Ext4ExtentHeader::parse(node_data)?;
+        if header.eh_depth != depth {
+            return Err(invalid_fs_data(format!(
+                "extent tree depth {} does not match expected depth {}",
+                header.eh_depth, depth
+            )));
+        }
         for child_block in parse_index_blocks(node_data, header.eh_entries)? {
+            if !visited.insert(child_block) {
+                return Err(invalid_fs_data(format!(
+                    "extent index block {child_block} is referenced more than once"
+                )));
+            }
             let child_data = self.read_block(child_block)?;
             if depth == 1 {
                 self.read_extent_leaves_range(
                     &child_data,
-                    range_start,
-                    range_end,
+                    range.start,
+                    range.end,
                     next_offset,
                     data,
                 )?;
@@ -202,15 +247,21 @@ impl Ext4Reader {
                 self.walk_extent_tree_range(
                     &child_data,
                     depth - 1,
-                    range_start,
-                    range_end,
+                    range,
                     next_offset,
                     data,
+                    visited,
                 )?;
             }
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Copy)]
+struct ExtentRange {
+    start: u64,
+    end: u64,
 }
 
 fn parse_extents(data: &[u8], entries: u16) -> io::Result<Vec<Ext4Extent>> {

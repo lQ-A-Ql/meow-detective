@@ -58,3 +58,50 @@ fn detects_web_shell_lines() {
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].finding_kind, "webShellCandidate");
 }
+
+#[test]
+fn vhost_prefixed_line_recovers_client_ip_and_annotates_vhost() {
+    let log = "shop.example.com 198.51.100.23 - - [15/Jan/2024:10:30:45 +0000] \"GET /cart HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"\n";
+    let (entries, stats) = parse_web_access_log_with_stats(log).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].client_ip, "198.51.100.23");
+    assert_eq!(entries[0].vhost.as_deref(), Some("shop.example.com"));
+    assert_eq!(stats.total_lines, 1);
+    assert_eq!(stats.parsed_lines, 1);
+    assert_eq!(stats.vhost_prefixed_lines, 1);
+}
+
+#[test]
+fn hostname_client_keeps_first_token_without_vhost_annotation() {
+    // Apache with HostnameLookups logs a resolved host name as the client;
+    // the following `- %u` tokens are not IPs, so nothing is re-interpreted.
+    let log = "proxy.example.com - - [15/Jan/2024:10:30:45 +0000] \"GET / HTTP/1.1\" 200 1\n";
+    let entries = parse_web_access_log(log).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].client_ip, "proxy.example.com");
+    assert_eq!(entries[0].vhost, None);
+}
+
+#[test]
+fn access_log_stats_count_unparseable_lines() {
+    let log = "192.0.2.10 - - [15/Jan/2024:10:30:45 +0000] \"GET /a HTTP/1.1\" 200 100\n\
+               not a log line at all\n\
+               \n\
+               {\"json\":\"access\",\"line\":1}\n";
+    let (entries, stats) = parse_web_access_log_with_stats(log).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(stats.total_lines, 3);
+    assert_eq!(stats.parsed_lines, 1);
+    assert_eq!(stats.unparsed_lines(), 2);
+    assert_eq!(stats.vhost_prefixed_lines, 0);
+}
+
+#[test]
+fn error_log_stats_count_non_blank_lines() {
+    let log = "[Mon Jan 15 10:30:00.123456 2024] [core:error] something broke\n\n2024/01/15 10:30:01 [warn] 9#9: nginx warning\n";
+    let (entries, stats) = parse_web_error_log_with_stats(log).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(stats.total_lines, 2);
+    assert_eq!(stats.parsed_lines, 2);
+    assert_eq!(stats.unparsed_lines(), 0);
+}

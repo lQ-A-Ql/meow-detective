@@ -19,7 +19,7 @@ pub use self::graph::{
 pub(crate) use helpers::{
     artifact_family, confidence_rank, dedup_vec, deleted_preference_score, edge_kind_token,
     first_string_attr, has_family, insert_node, parse_rfc3339_utc, path_suffix_key,
-    string_array_attr, CORRELATION_RULE_FAMILIES,
+    string_array_attr, CORRELATION_RULE_FAMILIES, LINUX_RULE_FAMILIES,
 };
 
 pub(crate) const MAX_CORRELATION_ARTIFACTS: usize = 250;

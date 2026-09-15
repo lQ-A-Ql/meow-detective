@@ -6,6 +6,10 @@ use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
 
+// Real format caps nodesize at 64 KiB; accept generously above that while
+// keeping per-block allocations bounded on untrusted images.
+const MAX_NODESIZE: u32 = 1024 * 1024;
+
 impl BtrfsReader {
     pub fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
         reader.seek(SeekFrom::Start(offset + BTRFS_SUPERBLOCK_OFFSET))?;
@@ -19,32 +23,36 @@ impl BtrfsReader {
             )));
         }
 
+        // Field offsets follow struct btrfs_super_block (btrfs_tree.h).
         let sectorsize = u32::from_le_bytes(
-            sb[0xB8..0xBC]
+            sb[0x90..0x94]
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
         let nodesize = u32::from_le_bytes(
-            sb[0xBC..0xC0]
+            sb[0x94..0x98]
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
         let root_tree_logical = u64::from_le_bytes(
-            sb[0x78..0x80]
+            sb[0x50..0x58]
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
         let chunk_tree_logical = u64::from_le_bytes(
-            sb[0x80..0x88]
+            sb[0x58..0x60]
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
         if sectorsize == 0 || nodesize == 0 {
             return Err(invalid_fs_data("invalid btrfs geometry"));
         }
+        if nodesize > MAX_NODESIZE {
+            return Err(invalid_fs_data("btrfs nodesize exceeds supported maximum"));
+        }
 
         let sys_chunk_array_size = u32::from_le_bytes(
-            sb[0xC8..0xCC]
+            sb[0xA0..0xA4]
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         ) as usize;
@@ -68,7 +76,7 @@ impl BtrfsReader {
         if reader_obj.chunk_tree_logical != 0
             && reader_obj.chunk_tree_logical != reader_obj.root_tree_logical
         {
-            let _ = reader_obj.read_chunk_tree();
+            reader_obj.read_chunk_tree()?;
         }
         reader_obj.discover_subvolumes()?;
 
@@ -90,11 +98,19 @@ impl BtrfsReader {
 
     pub(crate) fn translate_logical(&self, logical: u64) -> io::Result<u64> {
         for chunk in &self.chunk_map {
-            if logical >= chunk.logical && logical < chunk.logical + chunk.length {
-                return Ok((logical - chunk.logical) + chunk.physical);
+            let Some(delta) = logical.checked_sub(chunk.logical) else {
+                continue;
+            };
+            if delta < chunk.length {
+                return chunk
+                    .physical
+                    .checked_add(delta)
+                    .ok_or_else(|| invalid_fs_data("btrfs chunk translation overflow"));
             }
         }
-        Ok(logical)
+        Err(invalid_fs_data(format!(
+            "btrfs logical address {logical:#x} is not covered by any chunk"
+        )))
     }
 
     pub(crate) fn parse_chunks(&mut self, data: &[u8]) -> io::Result<()> {
@@ -142,7 +158,10 @@ impl BtrfsReader {
 
     pub(crate) fn read_logical_range(&self, logical: u64, length: usize) -> io::Result<Vec<u8>> {
         let physical = self.translate_logical(logical)?;
-        let absolute = self.volume_offset + physical;
+        let absolute = self
+            .volume_offset
+            .checked_add(physical)
+            .ok_or_else(|| invalid_fs_data("btrfs physical address overflow"))?;
         let mut buf = vec![0u8; length];
         if length == 0 {
             return Ok(buf);

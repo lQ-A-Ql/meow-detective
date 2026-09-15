@@ -6,7 +6,6 @@ use crate::{
 };
 use evidence_core::{filesystem::FileSystemReader, EvidenceReader};
 
-const CHUNK_TREE_OBJECTID: u64 = 3;
 const EXTENT_REGULAR: u8 = 1;
 const FT_REG_FILE: u8 = 1;
 const S_IFDIR: u32 = 0o040000;
@@ -44,37 +43,38 @@ fn build_snapshot_fixture() -> Vec<u8> {
     let sb = &mut img[block(16)..block(17)];
     sb[0x40..0x48].copy_from_slice(BTRFS_MAGIC);
     let root_tree_bytenr: u64 = 0x11000;
-    sb[0x78..0x80].copy_from_slice(&root_tree_bytenr.to_le_bytes());
-    sb[0x80..0x88].copy_from_slice(&root_tree_bytenr.to_le_bytes());
-    sb[0xB8..0xBC].copy_from_slice(&4096u32.to_le_bytes());
-    sb[0xBC..0xC0].copy_from_slice(&4096u32.to_le_bytes());
-    sb[0xC0..0xC4].copy_from_slice(&4096u32.to_le_bytes());
-    sb[0xC4..0xC8].copy_from_slice(&4096u32.to_le_bytes());
+    // root (0x50) and chunk_root (0x58) per struct btrfs_super_block.
+    sb[0x50..0x58].copy_from_slice(&root_tree_bytenr.to_le_bytes());
+    sb[0x58..0x60].copy_from_slice(&root_tree_bytenr.to_le_bytes());
+    sb[0x90..0x94].copy_from_slice(&4096u32.to_le_bytes()); // sectorsize
+    sb[0x94..0x98].copy_from_slice(&4096u32.to_le_bytes()); // nodesize
+    sb[0x98..0x9C].copy_from_slice(&4096u32.to_le_bytes()); // leafsize (legacy)
+    sb[0x9C..0xA0].copy_from_slice(&4096u32.to_le_bytes()); // stripesize
 
-    // Sys chunk array: identity mapping for the entire image.
+    // Sys chunk array at 0x32B: identity mapping for the entire image.
     let ca = &mut sb[0x32B..0x32B + 256];
-    ca[0x00..0x08].copy_from_slice(&CHUNK_TREE_OBJECTID.to_le_bytes());
+    ca[0x00..0x08].copy_from_slice(&256u64.to_le_bytes()); // FIRST_CHUNK_TREE objectid
     ca[0x08] = CHUNK_ITEM_KEY;
-    ca[0x09..0x11].copy_from_slice(&0u64.to_le_bytes());
-    ca[0x11..0x19].copy_from_slice(&(total_blocks * nodesize).to_le_bytes());
-    ca[0x19..0x21].copy_from_slice(&CHUNK_TREE_OBJECTID.to_le_bytes());
-    ca[0x21..0x29].copy_from_slice(&nodesize.to_le_bytes());
-    ca[0x29..0x31].copy_from_slice(&(1u64 | (1 << 2)).to_le_bytes());
-    ca[0x31..0x35].copy_from_slice(&4096u32.to_le_bytes());
-    ca[0x35..0x39].copy_from_slice(&4096u32.to_le_bytes());
-    ca[0x39..0x3D].copy_from_slice(&4096u32.to_le_bytes());
-    ca[0x3D..0x3F].copy_from_slice(&1u16.to_le_bytes());
-    ca[0x3F..0x41].copy_from_slice(&1u16.to_le_bytes());
-    ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes());
-    ca[0x49..0x51].copy_from_slice(&0u64.to_le_bytes());
-    let array_size: u32 = 0x51 + (4 - (0x51 % 4));
-    sb[0xC8..0xCC].copy_from_slice(&array_size.to_le_bytes());
+    ca[0x09..0x11].copy_from_slice(&0u64.to_le_bytes()); // logical
+    ca[0x11..0x19].copy_from_slice(&(total_blocks * nodesize).to_le_bytes()); // length
+    ca[0x19..0x21].copy_from_slice(&2u64.to_le_bytes()); // owner (EXTENT_TREE)
+    ca[0x21..0x29].copy_from_slice(&nodesize.to_le_bytes()); // stripe_len
+    ca[0x29..0x31].copy_from_slice(&2u64.to_le_bytes()); // type: SYSTEM
+    ca[0x31..0x35].copy_from_slice(&4096u32.to_le_bytes()); // io_align
+    ca[0x35..0x39].copy_from_slice(&4096u32.to_le_bytes()); // io_width
+    ca[0x39..0x3D].copy_from_slice(&4096u32.to_le_bytes()); // sector_size
+    ca[0x3D..0x3F].copy_from_slice(&1u16.to_le_bytes()); // num_stripes
+    ca[0x3F..0x41].copy_from_slice(&0u16.to_le_bytes()); // sub_stripes
+    ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes()); // stripe devid
+    ca[0x49..0x51].copy_from_slice(&0u64.to_le_bytes()); // stripe offset
+    let array_size: u32 = 0x61; // key(0x11) + chunk_item(0x30) + stripe(0x20)
+    sb[0xA0..0xA4].copy_from_slice(&array_size.to_le_bytes()); // sys_chunk_array_size
 
     // ---- Root tree internal node at block 17 (0x11000) ----
     let rt = &mut img[block(17)..block(18)];
     rt[0x30..0x38].copy_from_slice(&0x11000u64.to_le_bytes());
-    rt[0x5D..0x61].copy_from_slice(&2u32.to_le_bytes()); // 2 internal pointers
-    rt[0x61] = 1;
+    rt[0x60..0x64].copy_from_slice(&2u32.to_le_bytes()); // nritems: 2 internal pointers
+    rt[0x64] = 1; // level
     let io = BTRFS_HEADER_SIZE;
     // Key-pointer 0: FS_TREE (5) → block 18
     rt[io..io + 8].copy_from_slice(&FS_TREE_OBJECTID.to_le_bytes());
@@ -93,7 +93,7 @@ fn build_snapshot_fixture() -> Vec<u8> {
     // ---- Root tree leaf at block 18 (0x12000) ----
     let rtl = &mut img[block(18)..block(19)];
     rtl[0x30..0x38].copy_from_slice(&0x12000u64.to_le_bytes());
-    rtl[0x61] = 0;
+    rtl[0x64] = 0; // level (leaf)
 
     let data_end = nodesize as usize;
     let mut doff = data_end;
@@ -113,7 +113,8 @@ fn build_snapshot_fixture() -> Vec<u8> {
         leaf[kbase + 8] = key_type;
         leaf[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
         *data_off -= data_bytes.len();
-        leaf[kbase + 17..kbase + 21].copy_from_slice(&(*data_off as u32).to_le_bytes());
+        leaf[kbase + 17..kbase + 21]
+            .copy_from_slice(&((*data_off - BTRFS_HEADER_SIZE) as u32).to_le_bytes());
         leaf[kbase + 21..kbase + 25].copy_from_slice(&(data_bytes.len() as u32).to_le_bytes());
         leaf[*data_off..*data_off + data_bytes.len()].copy_from_slice(data_bytes);
     }
@@ -181,12 +182,12 @@ fn build_snapshot_fixture() -> Vec<u8> {
         &make_root_backref(b"snapshot1"),
         &mut doff,
     );
-    rtl[0x5D..0x61].copy_from_slice(&4u32.to_le_bytes());
+    rtl[0x60..0x64].copy_from_slice(&4u32.to_le_bytes()); // nritems
 
     // ---- Default subvol FS tree leaf at block 19 (0x13000) ----
     let fs = &mut img[block(19)..block(20)];
     fs[0x30..0x38].copy_from_slice(&0x13000u64.to_le_bytes());
-    fs[0x61] = 0;
+    fs[0x64] = 0; // level (leaf)
     let fs_data_end = nodesize as usize;
     let mut fs_doff = fs_data_end;
 
@@ -261,7 +262,7 @@ fn build_snapshot_fixture() -> Vec<u8> {
         &make_regular_extent(0x14000, file_len, file_len),
         &mut fs_doff,
     );
-    fs[0x5D..0x61].copy_from_slice(&4u32.to_le_bytes());
+    fs[0x60..0x64].copy_from_slice(&4u32.to_le_bytes()); // nritems
 
     // ---- Block 20: default subvol file data ----
     img[block(20)..block(20) + file_content.len()].copy_from_slice(file_content);
@@ -269,7 +270,7 @@ fn build_snapshot_fixture() -> Vec<u8> {
     // ---- Snapshot1 FS tree leaf at block 21 (0x15000) ----
     let snap = &mut img[block(21)..block(22)];
     snap[0x30..0x38].copy_from_slice(&0x15000u64.to_le_bytes());
-    snap[0x61] = 0;
+    snap[0x64] = 0; // level (leaf)
     let snap_data_end = nodesize as usize;
     let mut snap_doff = snap_data_end;
 
@@ -352,7 +353,7 @@ fn build_snapshot_fixture() -> Vec<u8> {
         &make_inline_extent(extra_content),
         &mut snap_doff,
     );
-    snap[0x5D..0x61].copy_from_slice(&7u32.to_le_bytes());
+    snap[0x60..0x64].copy_from_slice(&7u32.to_le_bytes()); // nritems
 
     img
 }

@@ -1,7 +1,9 @@
 use chrono::Utc;
 use serde_json::Value;
 use std::collections::BTreeMap;
-use transport::dto::{CorrelationConfidenceDto, CorrelationEdgeKindDto, CorrelationNodeDto};
+use transport::dto::{
+    ArtifactRowDto, CorrelationConfidenceDto, CorrelationEdgeKindDto, CorrelationNodeDto,
+};
 
 use super::rules;
 
@@ -14,6 +16,22 @@ pub(crate) const CORRELATION_RULE_FAMILIES: [(&str, &str); 8] = [
     ("BrowserHistory", "Browser History"),
     ("EmailMessage", "Email"),
     ("JumpList", "JumpList"),
+];
+
+// Linux families are derived per artifact but only enter familyCoverage when
+// observed in the snapshot, so a Windows-only case keeps the 8-family
+// baseline the release scorecard gates on.
+pub(crate) const LINUX_RULE_FAMILIES: [(&str, &str); 10] = [
+    ("LinuxJournal", "Linux Journal"),
+    ("LinuxTextLog", "Linux Text Log"),
+    ("LinuxWtmp", "Linux Login"),
+    ("LinuxSudo", "Linux Sudo"),
+    ("LinuxCron", "Linux Cron"),
+    ("LinuxShellCommand", "Linux Shell Command"),
+    ("LinuxPackage", "Linux Package"),
+    ("LinuxSystemConfig", "Linux System Config"),
+    ("LinuxWeb", "Linux Web"),
+    ("LinuxMysql", "Linux MySQL"),
 ];
 
 // ── Helpers used across modules ──
@@ -57,15 +75,38 @@ pub(crate) fn has_family(families: &[String], family: &str) -> bool {
         .any(|item| item.eq_ignore_ascii_case(family))
 }
 
-pub(crate) fn artifact_family(artifact_type: &str) -> Option<String> {
+pub(crate) fn artifact_family(artifact: &ArtifactRowDto) -> Option<String> {
+    let artifact_type = artifact.artifact_type.as_str();
     if artifact_type.eq_ignore_ascii_case("RegistryValue") || artifact_type.starts_with("Registry")
     {
         return Some("Registry".to_string());
+    }
+    if let Some(family) = linux_artifact_family(artifact) {
+        return Some(family);
     }
     CORRELATION_RULE_FAMILIES
         .iter()
         .find(|(family, _)| family.eq_ignore_ascii_case(artifact_type))
         .map(|(family, _)| (*family).to_string())
+}
+
+fn linux_artifact_family(artifact: &ArtifactRowDto) -> Option<String> {
+    let family = match artifact.artifact_type.as_str() {
+        // Text-log fallback lines share the LinuxJournal type but are not
+        // journald records; the extractor marks them with `logKind`.
+        "LinuxJournal" if artifact.attrs.contains_key("logKind") => "LinuxTextLog",
+        "LinuxJournal" => "LinuxJournal",
+        "LinuxWtmp" => "LinuxWtmp",
+        "LinuxSudoEvent" => "LinuxSudo",
+        "LinuxCronJob" => "LinuxCron",
+        "LinuxBashCommand" => "LinuxShellCommand",
+        "LinuxAptEvent" => "LinuxPackage",
+        "LinuxSystemConfig" => "LinuxSystemConfig",
+        value if value.starts_with("LinuxWeb") => "LinuxWeb",
+        value if value.starts_with("LinuxMysql") => "LinuxMysql",
+        _ => return None,
+    };
+    Some(family.to_string())
 }
 
 pub(crate) fn insert_node(

@@ -36,6 +36,32 @@ pub(crate) fn extract_file_name_candidates(value: &str) -> Vec<String> {
     normalize_candidates(names)
 }
 
+/// Absolute POSIX path candidates (`/var/www/x.php`) inside free text such as
+/// Linux web error-log messages. Kept separate from `looks_like_path` so
+/// Windows rules never treat `/flag`-style tokens as paths.
+pub(crate) fn extract_linux_path_candidates(value: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    let trimmed = value.trim();
+    if looks_like_linux_path(trimmed) {
+        candidates.push(trimmed.to_string());
+    }
+    for segment in extract_quoted_segments(trimmed) {
+        if looks_like_linux_path(&segment) {
+            candidates.push(segment);
+        }
+    }
+    for token in split_candidates(trimmed) {
+        if looks_like_linux_path(token) {
+            candidates.push(token.to_string());
+        }
+    }
+    normalize_candidates(candidates)
+}
+
+fn looks_like_linux_path(token: &str) -> bool {
+    token.starts_with('/') && !token.starts_with("//") && token[1..].contains('/')
+}
+
 fn split_candidates(value: &str) -> impl Iterator<Item = &str> {
     value.split(|ch: char| {
         ch.is_whitespace() || matches!(ch, ',' | ';' | '|' | '(' | ')' | '[' | ']')

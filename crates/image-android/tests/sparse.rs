@@ -91,8 +91,8 @@ fn rejects_chunks_that_exceed_declared_logical_blocks() {
 
 #[test]
 fn verifies_logical_crc32_and_header_checksum() {
-    let logical = b"ABCDXYZ!XYZ!";
-    let checksum = crc32(0, logical);
+    // zlib CRC-32 of the expanded logical image b"ABCDXYZ!XYZ!" (AOSP sparse_crc32 vector).
+    let checksum = 0xa817_8db6;
     let bytes = sparse_image_with_checksum(
         &[raw_chunk(b"ABCD"), fill_chunk(2, [b'X', b'Y', b'Z', b'!'])],
         3,
@@ -102,6 +102,13 @@ fn verifies_logical_crc32_and_header_checksum() {
     let file = write_temp(&bytes);
     let mut reader = AndroidSparseReader::open(file.path()).expect("open sparse image");
     reader.verify_integrity().expect("integrity check");
+}
+
+#[test]
+fn crc32_matches_aosp_sparse_crc32_known_vectors() {
+    assert_eq!(crc32(0, b""), 0);
+    assert_eq!(crc32(0, b"123456789"), 0xcbf4_3926);
+    assert_eq!(crc32(crc32(0, b"1234"), b"56789"), 0xcbf4_3926);
 }
 
 #[test]
@@ -195,14 +202,16 @@ fn sparse_image_with_checksum(
     output
 }
 
-fn crc32(mut checksum: u32, bytes: &[u8]) -> u32 {
+// Mirrors AOSP libsparse sparse_crc32 (zlib CRC-32: init crc_in ^ ~0U, finalize ^ ~0U).
+fn crc32(checksum: u32, bytes: &[u8]) -> u32 {
+    let mut checksum = !checksum;
     for byte in bytes {
         checksum ^= u32::from(*byte);
         for _ in 0..8 {
             checksum = (checksum >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(checksum & 1));
         }
     }
-    checksum
+    !checksum
 }
 
 fn write_temp(bytes: &[u8]) -> NamedTempFile {

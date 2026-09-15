@@ -78,6 +78,12 @@ pub struct BdevLabelSelection {
     pub epoch: Option<i64>,
 }
 
+struct EpochSelection {
+    label: BdevLabel,
+    epoch: i64,
+    position: u64,
+}
+
 pub fn decode_bdev_label_block(block: &[u8]) -> Result<BdevLabel> {
     if block.len() < BDEV_LABEL_BLOCK_SIZE {
         return Err(CephWireError::UnexpectedEof {
@@ -160,9 +166,7 @@ pub fn select_bdev_label(
     labels.sort_by_key(|(position, _)| *position);
 
     let mut locked_uuid = requested_uuid;
-    let mut selected: Option<BdevLabel> = None;
-    let mut selected_epoch = None;
-    let mut selected_position = None;
+    let mut selected: Option<EpochSelection> = None;
     let mut valid_positions = Vec::new();
 
     for (position, label) in labels {
@@ -191,29 +195,31 @@ pub fn select_bdev_label(
             continue;
         }
 
-        match selected_epoch {
+        match selected.as_mut() {
             None => {
-                selected_epoch = Some(epoch);
-                selected = Some(label);
-                selected_position = Some(position);
+                selected = Some(EpochSelection {
+                    label,
+                    epoch,
+                    position,
+                });
                 valid_positions.clear();
                 valid_positions.push(position);
             }
-            Some(current) if epoch > current => {
-                selected_epoch = Some(epoch);
-                selected = Some(label);
-                selected_position = Some(position);
+            Some(current) if epoch > current.epoch => {
+                *current = EpochSelection {
+                    label,
+                    epoch,
+                    position,
+                };
                 valid_positions.clear();
                 valid_positions.push(position);
             }
-            Some(current) if epoch == current => {
-                let current_label = selected.as_ref().expect("selected label for current epoch");
-                if current_label != &label {
+            Some(current) if epoch == current.epoch => {
+                if current.label != label {
                     return Err(CephWireError::ConflictingLabelCopies {
                         osd_uuid: label.osd_uuid,
                         epoch,
-                        first_position: selected_position
-                            .expect("selected position for current epoch"),
+                        first_position: current.position,
                         conflicting_position: position,
                     });
                 }
@@ -223,12 +229,14 @@ pub fn select_bdev_label(
         }
     }
 
-    let label = selected.ok_or(CephWireError::NoValidLabel)?;
+    let Some(selected) = selected else {
+        return Err(CephWireError::NoValidLabel);
+    };
     Ok(BdevLabelSelection {
-        label,
+        label: selected.label,
         valid_positions,
         is_multi: true,
-        epoch: selected_epoch,
+        epoch: Some(selected.epoch),
     })
 }
 

@@ -38,6 +38,7 @@ fn plan_ext4_rewrite(
     fs: &fs_ext4::Ext4Reader,
     content: &[u8],
 ) -> Result<Vec<(u64, Vec<u8>)>, EmulationBypassError> {
+    require_clean_journal(fs)?;
     let old_len = fs
         .file_size_by_path(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
@@ -51,6 +52,31 @@ fn plan_ext4_rewrite(
         .file_extent_map(SHADOW_PATH)
         .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
     extent_range_patches(&extents, 0, content.len() as u64, Some(content))
+}
+
+// The guest kernel replays a dirty jbd2 journal on mount and can restore the
+// original shadow content behind the overlay's back, so a journal that is not
+// provably clean fails closed. Unlike XFS there is no ext4 log-clearing
+// repair path to offer instead.
+fn require_clean_journal(fs: &fs_ext4::Ext4Reader) -> Result<(), EmulationBypassError> {
+    match fs.journal_replay_required() {
+        Ok(false) => Ok(()),
+        Ok(true) => Err(EmulationBypassError::Unsupported(
+            "the ext4 journal holds transactions the guest kernel would replay, which can restore the original /etc/shadow".to_string(),
+        )),
+        Err(error) => Err(map_journal_assessment_error(error)),
+    }
+}
+
+fn map_journal_assessment_error(error: fs_ext4::journal::JournalError) -> EmulationBypassError {
+    match error {
+        fs_ext4::journal::JournalError::Io(io) => {
+            EmulationBypassError::EvidenceRead(io.to_string())
+        }
+        other => EmulationBypassError::Unsupported(format!(
+            "cannot prove the ext4 journal is clean: {other}"
+        )),
+    }
 }
 
 fn extent_range_patches(

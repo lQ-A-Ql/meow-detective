@@ -28,7 +28,7 @@ pub(super) fn dispatch_candidate(
             super::web::extract_access_log(candidate, bytes, outcome)
         }
         LinuxArtifactRouteKind::WebErrorLog => {
-            super::web::extract_error_log(candidate, bytes, outcome)
+            super::web::extract_error_log(candidate, bytes, outcome, log_time)
         }
         LinuxArtifactRouteKind::WebRootScript => {
             super::web::extract_root_script(candidate, bytes, outcome)
@@ -36,7 +36,9 @@ pub(super) fn dispatch_candidate(
         LinuxArtifactRouteKind::MysqlConfig => {
             super::mysql::extract_config(candidate, bytes, outcome)
         }
-        LinuxArtifactRouteKind::MysqlLog => super::mysql::extract_log(candidate, bytes, outcome),
+        LinuxArtifactRouteKind::MysqlLog => {
+            super::mysql::extract_log(candidate, bytes, outcome, log_time)
+        }
         LinuxArtifactRouteKind::Login => super::login::extract(candidate, bytes, outcome),
         LinuxArtifactRouteKind::Lastlog => super::login::extract_lastlog(candidate, bytes, outcome),
         LinuxArtifactRouteKind::Faillog => super::login::extract_faillog(candidate, bytes, outcome),

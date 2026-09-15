@@ -115,6 +115,8 @@ export interface LinuxWebAccessLog {
   fileId: string;
   sourcePath: string;
   clientIp: string;
+  /** Virtual-host name when the line used a `%v`/`$host`-prefixed format. */
+  vhost?: string;
   timestamp?: string;
   method: string;
   uri: string;

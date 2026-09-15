@@ -798,4 +798,324 @@ mod cases {
         assert!(Ext4Reader::inode_mode(&[0xA4]).is_err());
         assert_eq!(Ext4Reader::inode_mode(&[0xA4, 0x81]).unwrap(), 0x81A4);
     }
+
+    // -----------------------------------------------------------------------
+    // Unknown incompat feature admission control
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_superblock_rejects_unknown_incompat_features() {
+        for bit in [0x0010u32, 0x0008] {
+            // META_BG relocates group descriptors; JOURNAL_DEV moves the
+            // journal to an external device. Both must fail closed.
+            let mut img = build_ext4_fixture();
+            img[1024 + 0x60..1024 + 0x64].copy_from_slice(&bit.to_le_bytes());
+
+            let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+            let error = Ext4Reader::open(reader, 0).err().unwrap();
+            assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+            assert!(
+                error.to_string().contains("incompat feature bits"),
+                "unexpected error for incompat bit 0x{bit:04X}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_superblock_accepts_known_incompat_features() {
+        let mut img = build_ext4_fixture();
+        let known = EXT4_FEATURE_INCOMPAT_FILETYPE
+            | EXT4_FEATURE_INCOMPAT_EXTENTS
+            | EXT4_FEATURE_INCOMPAT_FLEX_BG
+            | EXT4_FEATURE_INCOMPAT_LARGEDIR
+            | EXT4_FEATURE_INCOMPAT_INLINE_DATA
+            | EXT4_FEATURE_INCOMPAT_CASEFOLD;
+        img[1024 + 0x60..1024 + 0x64].copy_from_slice(&known.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let children = ext4.list_children("").unwrap();
+        assert_eq!(children.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Inline-data symlink targets
+    // -----------------------------------------------------------------------
+
+    fn build_inline_symlink_fixture() -> Vec<u8> {
+        let mut img = build_ext4_fixture();
+        // Inode 6: convert the fast symlink to inline-data xattr layout.
+        let offset = 8192 + 5 * 256;
+        let inode = &mut img[offset..offset + 256];
+        inode[0x20..0x24].copy_from_slice(&EXT4_INLINE_DATA_FL.to_le_bytes());
+        inode[0x28..0x2C].copy_from_slice(&EXT4_XATTR_MAGIC.to_le_bytes());
+        // xattr entry at i_block+4: name "data", value at i_block offset 24.
+        inode[0x2C] = 4; // e_name_len
+        inode[0x2D] = EXT4_XATTR_INDEX_SYSTEM;
+        inode[0x2E..0x30].copy_from_slice(&24u16.to_le_bytes()); // e_value_offs
+        inode[0x30..0x34].copy_from_slice(&0u32.to_le_bytes()); // e_value_inum
+        inode[0x34..0x38].copy_from_slice(&13u32.to_le_bytes()); // e_value_size
+        inode[0x38..0x3C].copy_from_slice(&0u32.to_le_bytes()); // e_hash
+        inode[0x3C..0x40].copy_from_slice(b"data");
+        inode[0x40..0x4D].copy_from_slice(b"/usr/bin/perl");
+        img
+    }
+
+    #[test]
+    fn test_inline_data_symlink_target() {
+        let img = build_inline_symlink_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+
+        let sym_inode = ext4.read_inode(6).unwrap();
+        let target = ext4.read_symlink_target(&sym_inode).unwrap();
+        assert_eq!(target, "/usr/bin/perl");
+    }
+
+    #[test]
+    fn test_inline_data_symlink_rejects_bad_xattr_magic() {
+        let mut img = build_inline_symlink_fixture();
+        let offset = 8192 + 5 * 256;
+        img[offset + 0x28..offset + 0x2C].copy_from_slice(&0u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let sym_inode = ext4.read_inode(6).unwrap();
+        let error = ext4.read_symlink_target(&sym_inode).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("xattr magic"));
+    }
+
+    #[test]
+    fn test_inline_data_symlink_rejects_value_outside_i_block() {
+        let mut img = build_inline_symlink_fixture();
+        let offset = 8192 + 5 * 256;
+        // Claim the value lives past the 60-byte i_block area.
+        img[offset + 0x34..offset + 0x38].copy_from_slice(&128u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let sym_inode = ext4.read_inode(6).unwrap();
+        let error = ext4.read_symlink_target(&sym_inode).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("exceeds i_block"));
+    }
+
+    #[test]
+    fn test_inline_data_symlink_rejects_external_value_inode() {
+        let mut img = build_inline_symlink_fixture();
+        let offset = 8192 + 5 * 256;
+        // e_value_inum != 0 means the payload lives in another inode.
+        img[offset + 0x30..offset + 0x34].copy_from_slice(&9u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let sym_inode = ext4.read_inode(6).unwrap();
+        let error = ext4.read_symlink_target(&sym_inode).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    }
+
+    // -----------------------------------------------------------------------
+    // Extent tree traversal: child depth validation and cycle detection
+    // -----------------------------------------------------------------------
+
+    /// Root directory (inode 2) uses a depth-2 tree: index block 5 -> leaf
+    /// block 6 -> directory data block 3. `f.txt` (inode 3) uses a depth-1
+    /// tree: leaf block 7 -> data block 4.
+    fn build_depth_two_tree_image() -> Vec<u8> {
+        let mut img = vec![0u8; 10 * 4096];
+        let sb = &mut img[1024..2048];
+        sb[0x00..0x04].copy_from_slice(&16u32.to_le_bytes());
+        sb[0x04..0x08].copy_from_slice(&10u32.to_le_bytes());
+        sb[0x14..0x18].copy_from_slice(&0u32.to_le_bytes());
+        sb[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
+        sb[0x20..0x24].copy_from_slice(&32768u32.to_le_bytes());
+        sb[0x28..0x2C].copy_from_slice(&16u32.to_le_bytes());
+        sb[0x38..0x3A].copy_from_slice(&EXT4_MAGIC.to_le_bytes());
+        sb[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes());
+        img[4096 + 0x08..4096 + 0x0C].copy_from_slice(&2u32.to_le_bytes());
+
+        let ri = &mut img[8192 + 256..8192 + 512];
+        ri[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes()); // dir
+        ri[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes()); // i_size
+        ri[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes()); // i_blocks
+        ri[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes()); // EXT4_EXTENTS_FL
+        ri[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        ri[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
+        ri[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
+        ri[0x2E..0x30].copy_from_slice(&2u16.to_le_bytes()); // eh_depth=2
+        ri[0x38..0x3C].copy_from_slice(&5u32.to_le_bytes()); // index -> block 5
+
+        let idx = &mut img[5 * 4096..6 * 4096];
+        idx[0x00..0x02].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        idx[0x02..0x04].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
+        idx[0x04..0x06].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
+        idx[0x06..0x08].copy_from_slice(&1u16.to_le_bytes()); // eh_depth=1
+        idx[0x10..0x14].copy_from_slice(&6u32.to_le_bytes()); // ei_leaf -> block 6
+
+        let leaf = &mut img[6 * 4096..7 * 4096];
+        leaf[0x00..0x02].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        leaf[0x02..0x04].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
+        leaf[0x04..0x06].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
+        leaf[0x10..0x12].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
+        leaf[0x14..0x18].copy_from_slice(&3u32.to_le_bytes()); // ee_start_lo=3
+
+        let rd = &mut img[3 * 4096..4 * 4096];
+        rd[0x00..0x04].copy_from_slice(&2u32.to_le_bytes());
+        rd[0x04..0x06].copy_from_slice(&12u16.to_le_bytes());
+        rd[0x06] = 1;
+        rd[0x07] = 2;
+        rd[0x08] = b'.';
+        rd[12..16].copy_from_slice(&2u32.to_le_bytes());
+        rd[16..18].copy_from_slice(&12u16.to_le_bytes());
+        rd[18] = 2;
+        rd[19] = 2;
+        rd[20..22].copy_from_slice(b"..");
+        rd[24..28].copy_from_slice(&3u32.to_le_bytes());
+        rd[28..30].copy_from_slice(&24u16.to_le_bytes());
+        rd[30] = 5;
+        rd[31] = 1;
+        rd[32..37].copy_from_slice(b"f.txt");
+
+        let fi = &mut img[8192 + 512..8192 + 768];
+        fi[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes());
+        fi[0x04..0x08].copy_from_slice(&11u32.to_le_bytes());
+        fi[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
+        fi[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes());
+        fi[0x28..0x2A].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        fi[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
+        fi[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
+        fi[0x2E..0x30].copy_from_slice(&1u16.to_le_bytes()); // eh_depth=1
+        fi[0x38..0x3C].copy_from_slice(&7u32.to_le_bytes()); // index -> block 7
+
+        let fleaf = &mut img[7 * 4096..8 * 4096];
+        fleaf[0x00..0x02].copy_from_slice(&EXT4_EXTENT_MAGIC.to_le_bytes());
+        fleaf[0x02..0x04].copy_from_slice(&1u16.to_le_bytes()); // eh_entries=1
+        fleaf[0x04..0x06].copy_from_slice(&4u16.to_le_bytes()); // eh_max=4
+        fleaf[0x10..0x12].copy_from_slice(&1u16.to_le_bytes()); // ee_len=1
+        fleaf[0x14..0x18].copy_from_slice(&4u32.to_le_bytes()); // ee_start_lo=4
+
+        img[4 * 4096..4 * 4096 + 11].copy_from_slice(b"depth2 test");
+        img
+    }
+
+    #[test]
+    fn test_extent_tree_depth_two_reads_through_index_levels() {
+        let img = build_depth_two_tree_image();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+
+        let children = ext4.list_children("").unwrap();
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "f.txt");
+
+        let mut file = ext4.open_file("f.txt").unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "depth2 test");
+        assert_eq!(ext4.read_file_range("f.txt", 2, 4).unwrap(), b"pth2");
+    }
+
+    #[test]
+    fn test_extent_tree_rejects_child_depth_mismatch() {
+        // Interior index node claims depth 0 while the parent expects 1.
+        let mut img = build_depth_two_tree_image();
+        img[5 * 4096 + 0x06..5 * 4096 + 0x08].copy_from_slice(&0u16.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.list_children("").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("does not match expected depth"));
+
+        // Leaf node claims depth 1 while the parent expects 0.
+        let mut img = build_depth_two_tree_image();
+        img[6 * 4096 + 0x06..6 * 4096 + 0x08].copy_from_slice(&1u16.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.list_children("").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("extent leaf node has depth"));
+    }
+
+    #[test]
+    fn test_extent_tree_rejects_cyclic_index_reference() {
+        // The depth-1 index node references itself, forming a cycle.
+        let mut img = build_depth_two_tree_image();
+        img[5 * 4096 + 0x10..5 * 4096 + 0x14].copy_from_slice(&5u32.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.list_children("").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("referenced more than once"));
+    }
+
+    #[test]
+    fn test_extent_tree_rejects_duplicate_index_reference() {
+        // Both of f.txt's index entries point at the same leaf block.
+        let mut img = build_depth_two_tree_image();
+        let fi = 8192 + 512;
+        img[fi + 0x2A..fi + 0x2C].copy_from_slice(&2u16.to_le_bytes()); // eh_entries=2
+        img[fi + 0x40..fi + 0x44].copy_from_slice(&1u32.to_le_bytes()); // ei_block=1
+        img[fi + 0x44..fi + 0x48].copy_from_slice(&7u32.to_le_bytes()); // -> block 7
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let error = ext4.open_file("f.txt").err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("referenced more than once"));
+        let error = ext4.read_file_range("f.txt", 0, 4).err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("referenced more than once"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Directory entry filtering
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_directory_entry_with_zero_inode_is_filtered() {
+        let mut img = build_ext4_fixture();
+        // test.txt entry in the root directory block: inode field -> 0.
+        img[3 * 4096 + 24..3 * 4096 + 28].copy_from_slice(&0u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let names: Vec<String> = ext4
+            .list_children("")
+            .unwrap()
+            .into_iter()
+            .map(|node| node.name)
+            .collect();
+        assert_eq!(names, vec!["subdir".to_string()]);
+    }
+
+    #[test]
+    fn test_directory_entry_with_unaligned_rec_len_stops_parsing() {
+        let mut img = build_ext4_fixture();
+        // ext4 record lengths are always 4-byte aligned; 13 is corrupt and
+        // the remaining entries (subdir) can no longer be trusted.
+        img[3 * 4096 + 28..3 * 4096 + 30].copy_from_slice(&13u16.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        assert!(ext4.list_children("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_directory_entry_name_beyond_record_is_skipped() {
+        let mut img = build_ext4_fixture();
+        // test.txt's record is 24 bytes, but a name of 32 would spill into
+        // the next entry; the entry is skipped while subdir still parses.
+        img[3 * 4096 + 30] = 32;
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        let names: Vec<String> = ext4
+            .list_children("")
+            .unwrap()
+            .into_iter()
+            .map(|node| node.name)
+            .collect();
+        assert_eq!(names, vec!["subdir".to_string()]);
+    }
 }
