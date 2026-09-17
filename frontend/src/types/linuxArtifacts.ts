@@ -27,6 +27,12 @@ export interface LinuxLoginRecord {
   host: string;
   pid: number;
   recordType: number;
+  recordKind?: 'wtmp' | 'btmp' | 'lastlog' | 'faillog' | string;
+  uid?: number;
+  failures?: number;
+  failMax?: number;
+  locktimeSeconds?: number;
+  lockout?: boolean;
   loginTime?: string;
   logoutTime?: string;
 }

@@ -89,6 +89,47 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('暂无 systemd 日志')).toBeDefined();
   });
 
+  it('keeps login source and failure fields distinct', () => {
+    const summary = baseSummary({
+      loginCount: 2,
+      totalCount: 2,
+      loginRecords: [
+        {
+          artifactId: 'lastlog-1',
+          fileId: 'file-1',
+          sourcePath: '/var/log/lastlog',
+          user: '',
+          terminal: 'pts/0',
+          host: '192.0.2.10',
+          pid: 0,
+          recordType: 0,
+          recordKind: 'lastlog',
+          uid: 1000,
+          loginTime: '2026-07-01T10:00:00Z',
+        },
+        {
+          artifactId: 'faillog-1',
+          fileId: 'file-2',
+          sourcePath: '/var/log/faillog',
+          user: '',
+          terminal: 'tty1',
+          host: '',
+          pid: 0,
+          recordType: 0,
+          recordKind: 'faillog',
+          uid: 1000,
+          failures: 5,
+          lockout: true,
+        },
+      ],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'login' }));
+    expect(screen.getAllByText('lastlog').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('faillog').length).toBeGreaterThan(1);
+    expect(screen.getByText('5')).toBeDefined();
+    expect(screen.getByText('已锁定')).toBeDefined();
+  });
+
   it('renders sudo content when activeTab is sudo', () => {
     render(createElement(LinuxArtifactsPanel, { activeTab: 'sudo' }));
     expect(screen.getByText('暂无 sudo/提权事件')).toBeDefined();
