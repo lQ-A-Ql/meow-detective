@@ -142,6 +142,21 @@ pub struct LinuxLoginRecordDto {
     pub host: String,
     pub pid: i32,
     pub record_type: i32,
+    /// Source discriminator: `wtmp`, `btmp`, `lastlog`, or `faillog`.
+    /// Missing on legacy rows created before the discriminator was persisted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record_kind: Option<String>,
+    /// UID is authoritative for lastlog/faillog records; wtmp rows may omit it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failures: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fail_max: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locktime_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lockout: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub login_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

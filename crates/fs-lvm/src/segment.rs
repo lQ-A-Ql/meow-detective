@@ -25,6 +25,11 @@ pub(super) struct MapContext<'a> {
     pub(super) extent_size_bytes: u64,
 }
 
+/// Maximum number of nested logical-volume dependencies accepted while
+/// resolving a mapping. LVM metadata is evidence input; a malformed or
+/// adversarial dependency chain must not consume the host call stack.
+const MAX_LOGICAL_VOLUME_MAPPING_DEPTH: usize = 64;
+
 /// Build the complete extent map for a logical volume.
 pub fn build_extent_map(
     volume_group: &VolumeGroup,

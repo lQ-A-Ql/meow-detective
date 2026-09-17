@@ -84,6 +84,15 @@ fn linux_wtmp_extraction_produces_events() {
 
     let outcome = extract_linux_candidate(&candidate, &buf);
     assert_has_outputs(&outcome, &candidate.file_id);
+    let artifact = outcome
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.family == "LinuxWtmp")
+        .expect("wtmp record artifact");
+    assert_eq!(
+        artifact_attr(artifact, "recordKind").and_then(|value| value.as_str()),
+        Some("wtmp")
+    );
 }
 
 #[test]
@@ -1157,7 +1166,10 @@ fn linux_wtmp_extraction_keeps_login_and_logout_semantics() {
         outcome.artifacts[0].title.starts_with("Login "),
         "wtmp sessions keep the successful-login title"
     );
-    assert!(artifact_attr(&outcome.artifacts[0], "recordKind").is_none());
+    assert_eq!(
+        artifact_attr(&outcome.artifacts[0], "recordKind").and_then(|value| value.as_str()),
+        Some("wtmp")
+    );
     assert!(artifact_attr(&outcome.artifacts[0], "userFailureCount").is_none());
     let event_types: Vec<_> = outcome
         .timeline_events

@@ -191,7 +191,12 @@ impl Ext4Reader {
             )));
         }
         let mut data = Vec::new();
-        for child_block in parse_index_blocks(node_data, header.eh_entries)? {
+        let mut pending = parse_index_blocks(node_data, header.eh_entries)?
+            .into_iter()
+            .rev()
+            .map(|child_block| (child_block, depth - 1))
+            .collect::<Vec<_>>();
+        while let Some((child_block, expected_depth)) = pending.pop() {
             if !visited.insert(child_block) {
                 return Err(invalid_fs_data(format!(
                     "extent index block {child_block} is referenced more than once"
@@ -202,12 +207,24 @@ impl Ext4Reader {
                 break;
             }
             let child_data = self.read_block(child_block)?;
-            let mut chunk = if depth == 1 {
-                self.read_extent_leaves(&child_data, file_size, gathered)?
-            } else {
-                self.walk_extent_tree(&child_data, file_size, gathered, depth - 1, visited)?
-            };
-            data.append(&mut chunk);
+            if expected_depth == 0 {
+                let mut chunk = self.read_extent_leaves(&child_data, file_size, gathered)?;
+                data.append(&mut chunk);
+                continue;
+            }
+            let child_header = Ext4ExtentHeader::parse(&child_data)?;
+            if child_header.eh_depth != expected_depth {
+                return Err(invalid_fs_data(format!(
+                    "extent tree depth {} does not match expected depth {}",
+                    child_header.eh_depth, expected_depth
+                )));
+            }
+            pending.extend(
+                parse_index_blocks(&child_data, child_header.eh_entries)?
+                    .into_iter()
+                    .rev()
+                    .map(|grandchild| (grandchild, expected_depth - 1)),
+            );
         }
         Ok(data)
     }
@@ -228,14 +245,19 @@ impl Ext4Reader {
                 header.eh_depth, depth
             )));
         }
-        for child_block in parse_index_blocks(node_data, header.eh_entries)? {
+        let mut pending = parse_index_blocks(node_data, header.eh_entries)?
+            .into_iter()
+            .rev()
+            .map(|child_block| (child_block, depth - 1))
+            .collect::<Vec<_>>();
+        while let Some((child_block, expected_depth)) = pending.pop() {
             if !visited.insert(child_block) {
                 return Err(invalid_fs_data(format!(
                     "extent index block {child_block} is referenced more than once"
                 )));
             }
             let child_data = self.read_block(child_block)?;
-            if depth == 1 {
+            if expected_depth == 0 {
                 self.read_extent_leaves_range(
                     &child_data,
                     range.start,
@@ -243,16 +265,21 @@ impl Ext4Reader {
                     next_offset,
                     data,
                 )?;
-            } else {
-                self.walk_extent_tree_range(
-                    &child_data,
-                    depth - 1,
-                    range,
-                    next_offset,
-                    data,
-                    visited,
-                )?;
+                continue;
             }
+            let child_header = Ext4ExtentHeader::parse(&child_data)?;
+            if child_header.eh_depth != expected_depth {
+                return Err(invalid_fs_data(format!(
+                    "extent tree depth {} does not match expected depth {}",
+                    child_header.eh_depth, expected_depth
+                )));
+            }
+            pending.extend(
+                parse_index_blocks(&child_data, child_header.eh_entries)?
+                    .into_iter()
+                    .rev()
+                    .map(|grandchild| (grandchild, expected_depth - 1)),
+            );
         }
         Ok(())
     }

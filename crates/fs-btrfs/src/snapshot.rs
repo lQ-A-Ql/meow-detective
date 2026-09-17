@@ -11,8 +11,12 @@
 
 use crate::{BtrfsReader, BtrfsSubvol, FS_TREE_OBJECTID, FT_DIR, ROOT_BACKREF_KEY, ROOT_ITEM_KEY};
 use evidence_core::filesystem::{fs_node, invalid_fs_data, FsNode};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
+
+const MAX_SNAPSHOT_NODES: usize = 1_000_000;
+const MAX_SNAPSHOT_DIRECTORY_DEPTH: usize = 256;
+const MAX_SNAPSHOT_PATH_BYTES: usize = 64 * 1024;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -228,63 +232,116 @@ impl BtrfsReader {
         )))
     }
 
-    /// Recursively list all files and directories under a given tree root
-    /// directory, producing a flat list of `FsNode` values.
+    /// List all files and directories under a given tree root directory,
+    /// producing a flat list without consuming the host call stack.
     fn list_all_files_in_tree(
         &self,
         tree_root_bytenr: u64,
         dir_objectid: u64,
         parent_path: &str,
     ) -> io::Result<Vec<FsNode>> {
-        let entries = self.list_dir_entries(tree_root_bytenr, dir_objectid)?;
         let mut nodes = Vec::new();
+        let mut visited_directories = HashSet::new();
+        let mut pending = vec![SnapshotTask::Directory {
+            inode: dir_objectid,
+            path: parent_path.to_string(),
+            depth: 0,
+        }];
 
-        for (name, inode_obj, file_type) in entries {
-            if evidence_core::filesystem::is_special_directory_name(&name) {
-                continue;
-            }
-            let child_path = if parent_path.is_empty() {
-                name.clone()
-            } else {
-                format!("{}/{}", parent_path, name)
-            };
+        while let Some(task) = pending.pop() {
+            match task {
+                SnapshotTask::Directory { inode, path, depth } => {
+                    if depth > MAX_SNAPSHOT_DIRECTORY_DEPTH || path.len() > MAX_SNAPSHOT_PATH_BYTES
+                    {
+                        return Err(invalid_fs_data(
+                            "Btrfs snapshot directory exceeds safety limits",
+                        ));
+                    }
+                    if !visited_directories.insert(inode) {
+                        return Err(invalid_fs_data(format!(
+                            "Btrfs snapshot directory inode {inode} is referenced more than once"
+                        )));
+                    }
+                    let entries = self.list_dir_entries(tree_root_bytenr, inode)?;
+                    for entry in entries.into_iter().rev() {
+                        pending.push(SnapshotTask::Entry {
+                            parent_path: path.clone(),
+                            entry,
+                            depth,
+                        });
+                    }
+                }
+                SnapshotTask::Entry {
+                    parent_path,
+                    entry: (name, inode, file_type),
+                    depth,
+                } => {
+                    if evidence_core::filesystem::is_special_directory_name(&name) {
+                        continue;
+                    }
+                    let child_path = if parent_path.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{parent_path}/{name}")
+                    };
+                    if child_path.len() > MAX_SNAPSHOT_PATH_BYTES {
+                        return Err(invalid_fs_data("Btrfs snapshot path exceeds safety limits"));
+                    }
+                    if nodes.len() >= MAX_SNAPSHOT_NODES {
+                        return Err(invalid_fs_data("Btrfs snapshot contains too many nodes"));
+                    }
 
-            let is_dir = file_type == FT_DIR;
-            let metadata = self
-                .get_inode_metadata(tree_root_bytenr, inode_obj)
-                .ok()
-                .flatten();
-            let size = if !is_dir {
-                metadata.map(|value| value.size).unwrap_or_default()
-            } else {
-                0
-            };
-
-            let mut node = fs_node(
-                name.clone(),
-                is_dir,
-                size,
-                metadata.and_then(|value| value.created_at),
-                metadata.and_then(|value| value.modified_at),
-                metadata.and_then(|value| value.accessed_at),
-            );
-            if let Some(metadata) = metadata {
-                node.read_only = metadata.read_only;
-                node.unix_mode = Some(metadata.unix_mode);
-                node.changed_at = metadata.changed_at;
-            }
-            node.path = child_path.clone();
-            nodes.push(node);
-
-            if is_dir {
-                let children =
-                    self.list_all_files_in_tree(tree_root_bytenr, inode_obj, &child_path)?;
-                nodes.extend(children);
+                    let is_dir = file_type == FT_DIR;
+                    let metadata = self
+                        .get_inode_metadata(tree_root_bytenr, inode)
+                        .ok()
+                        .flatten();
+                    let size = if !is_dir {
+                        metadata.map(|value| value.size).unwrap_or_default()
+                    } else {
+                        0
+                    };
+                    let mut node = fs_node(
+                        name,
+                        is_dir,
+                        size,
+                        metadata.and_then(|value| value.created_at),
+                        metadata.and_then(|value| value.modified_at),
+                        metadata.and_then(|value| value.accessed_at),
+                    );
+                    if let Some(metadata) = metadata {
+                        node.read_only = metadata.read_only;
+                        node.unix_mode = Some(metadata.unix_mode);
+                        node.changed_at = metadata.changed_at;
+                    }
+                    node.path = child_path.clone();
+                    nodes.push(node);
+                    if is_dir {
+                        pending.push(SnapshotTask::Directory {
+                            inode,
+                            path: child_path,
+                            depth: depth + 1,
+                        });
+                    }
+                }
             }
         }
 
         Ok(nodes)
     }
+}
+
+enum SnapshotTask {
+    Directory {
+        inode: u64,
+        path: String,
+        depth: usize,
+    },
+    Entry {
+        parent_path: String,
+        entry: (String, u64, u8),
+        depth: usize,
+    },
 }
 
 // ---------------------------------------------------------------------------

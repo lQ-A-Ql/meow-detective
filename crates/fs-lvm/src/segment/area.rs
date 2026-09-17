@@ -2,7 +2,7 @@ use crate::error::{LvmError, Result};
 use crate::metadata::SegmentArea;
 
 use super::math::{checked_add, checked_mul};
-use super::{build_extent_map_inner, LvExtent, MapContext};
+use super::{build_extent_map_inner, LvExtent, MapContext, MAX_LOGICAL_VOLUME_MAPPING_DEPTH};
 
 pub(super) fn map_area_range(
     context: &MapContext<'_>,
@@ -73,6 +73,14 @@ fn map_logical_volume_area(
     length: u64,
     stack: &mut Vec<String>,
 ) -> Result<Vec<LvExtent>> {
+    if stack.len() >= MAX_LOGICAL_VOLUME_MAPPING_DEPTH {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "logical-volume dependency chain exceeds maximum depth {MAX_LOGICAL_VOLUME_MAPPING_DEPTH}"
+            ),
+        });
+    }
     reject_cycle(stack, name)?;
     let target = context
         .vg

@@ -1627,6 +1627,24 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
                 "cl/root/boot/vmlinuz-5.14.0-100.el9.x86_64",
                 10,
             ),
+            file_with_ds(
+                "node-package",
+                &ds_id,
+                "cl/root/opt/node_modules/example/lib/modules/package.json",
+                10,
+            ),
+            file_with_ds(
+                "node-index",
+                &ds_id,
+                "cl/root/opt/node_modules/example/lib/modules/index.js",
+                10,
+            ),
+            file_with_ds(
+                "node-types",
+                &ds_id,
+                "cl/root/opt/node_modules/example/lib/modules/index.d.ts",
+                10,
+            ),
         ])
         .unwrap();
 
@@ -1696,7 +1714,7 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
 }
 
 #[test]
-fn get_linux_artifact_summary_falls_back_to_lib_modules_kernel_versions() {
+fn get_linux_artifact_summary_does_not_fabricate_info_from_kernel_paths() {
     let (conn, _tmp, ds_id) = setup_case_db();
     FileRepo::new(&conn)
         .insert_batch(&[
@@ -1722,19 +1740,61 @@ fn get_linux_artifact_summary_falls_back_to_lib_modules_kernel_versions() {
         .unwrap();
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    assert!(
+        summary.system_info.is_none(),
+        "kernel paths alone must not produce a Linux host overview"
+    );
+}
+
+#[test]
+fn get_linux_artifact_summary_extracts_valid_module_versions_without_nested_files() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    FileRepo::new(&conn)
+        .insert_batch(&[
+            file_with_ds(
+                "module-xfs",
+                &ds_id,
+                "[P2]/cl/root/lib/modules/6.8.0-107-generic/kernel/fs/xfs/xfs.ko",
+                10,
+            ),
+            file_with_ds("boot-kernel", &ds_id, "vmlinuz-6.8.0-107-generic", 10),
+            file_with_ds(
+                "node-package",
+                &ds_id,
+                "[P2]/cl/root/opt/node_modules/example/lib/modules/package.json",
+                10,
+            ),
+        ])
+        .unwrap();
+    let os_release = Artifact {
+        id: ArtifactId("os-release-module-test".to_string()),
+        family: "LinuxSystemConfig".to_string(),
+        title: "Linux os-release".to_string(),
+        summary: "host identity".to_string(),
+        source_object_id: None,
+        extractor_id: Some("linux.os_release".to_string()),
+        extractor_version: Some("test".to_string()),
+        confidence: Some(1.0),
+        source_attribution: Some("[P2]/cl/root/etc/os-release".to_string()),
+        created_at: Utc::now(),
+        attrs: serde_json::from_value(serde_json::json!({
+            "configKind": "osRelease",
+            "sourcePath": "[P2]/cl/root/etc/os-release",
+            "prettyName": "Ubuntu 24.04",
+            "osId": "ubuntu",
+            "versionId": "24.04"
+        }))
+        .unwrap(),
+    };
+    ArtifactRepo::new(&conn)
+        .insert_batch(&[os_release], "case-analysis", &ds_id.0)
+        .unwrap();
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     let system_info = summary
         .system_info
-        .expect("kernel versions alone should produce a system info block");
-
-    assert_eq!(
-        system_info.kernel_versions,
-        vec![
-            "5.14.0-427.el9.x86_64".to_string(),
-            "5.14.0-100.el9.x86_64".to_string(),
-        ],
-        "duplicate module directories must collapse to one version entry"
-    );
-    assert!(system_info.accounts.is_empty());
+        .expect("host identity should allow module version display");
+    assert_eq!(system_info.kernel_versions, vec!["6.8.0-107-generic"]);
 }
 
 #[test]

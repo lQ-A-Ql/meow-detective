@@ -20,10 +20,12 @@ use transport::dto::{LinuxAccountDto, LinuxSystemInfoDto};
 pub(super) fn load_linux_system_info(
     conn: &Connection,
 ) -> Result<Option<LinuxSystemInfoDto>, AnalysisServiceError> {
-    // Each source emits at most one os-release record; the first one wins.
-    let os_release = query_linux_system_config_by_kind(conn, "osRelease", 1)?
-        .into_iter()
-        .next();
+    // `/etc/os-release` is authoritative; `/usr/lib/os-release` is its
+    // distribution-provided fallback. Artifact IDs are random UUIDs, so
+    // ordering by ID cannot express that filesystem precedence.
+    let mut os_release_rows = query_linux_system_config_by_kind(conn, "osRelease", 64)?;
+    os_release_rows.sort_by_key(os_release_source_rank);
+    let os_release = os_release_rows.into_iter().next();
     let (os_pretty_name, os_id, os_version_id) = match os_release {
         Some(row) => (
             optional_string_attr(&row.attrs, "prettyName"),
@@ -51,7 +53,10 @@ pub(super) fn load_linux_system_info(
         || os_id.is_some()
         || os_version_id.is_some()
         || hostname.is_some();
-    if !has_identity && account_count == 0 && accounts.is_empty() && kernel_versions.is_empty() {
+    // Kernel paths are only supporting evidence. A random nested `lib/modules`
+    // directory must not fabricate a host overview when no Linux host artifact
+    // (os-release, hostname, passwd, or shadow) was extracted.
+    if !has_identity && account_count == 0 && accounts.is_empty() {
         return Ok(None);
     }
 
@@ -66,6 +71,19 @@ pub(super) fn load_linux_system_info(
         kernel_versions,
         accounts,
     }))
+}
+
+fn os_release_source_rank(row: &AnalysisArtifactRow) -> (u8, String) {
+    let path = optional_string_attr(&row.attrs, "sourcePath").unwrap_or_default();
+    let normalized = path.trim_start_matches('/');
+    let rank = if normalized == "etc/os-release" || normalized.ends_with("/etc/os-release") {
+        0
+    } else if normalized == "usr/lib/os-release" || normalized.ends_with("/usr/lib/os-release") {
+        1
+    } else {
+        2
+    };
+    (rank, path)
 }
 
 /// Kernel versions from `boot/vmlinuz-*` file names, falling back to

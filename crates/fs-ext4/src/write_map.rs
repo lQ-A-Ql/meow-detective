@@ -100,42 +100,75 @@ impl crate::Ext4Reader {
             )));
         }
         if header.eh_depth == 0 {
-            let mut previous_end = 0u64;
-            for extent in parse_leaf_extents(node_data, header.eh_entries)? {
-                if extent.is_unwritten() {
-                    return Err(invalid_fs_data(
-                        "file has unwritten extents; refusing to edit in place",
-                    ));
-                }
-                let logical_block = u64::from(extent.ee_block);
-                let logical_end = logical_block
-                    .checked_add(u64::from(extent.block_count()))
-                    .ok_or_else(|| invalid_fs_data("ext4 extent logical end overflows"))?;
-                if logical_block < previous_end {
-                    return Err(invalid_fs_data("ext4 extents overlap or are not ordered"));
-                }
-                previous_end = logical_end;
-                let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
-                output.push(Ext4FileExtent {
-                    logical_offset: logical_block
-                        .checked_mul(self.block_size)
-                        .ok_or_else(|| invalid_fs_data("ext4 extent logical offset overflows"))?,
-                    volume_offset: self.block_to_offset(start_block)?,
-                    length: u64::from(extent.block_count())
-                        .checked_mul(self.block_size)
-                        .ok_or_else(|| invalid_fs_data("ext4 extent length overflows"))?,
-                });
-            }
-            return Ok(());
+            return self.append_mapped_leaf_extents(node_data, header.eh_entries, output);
         }
-        for child_block in index_child_blocks(node_data, header.eh_entries)? {
+        let mut pending = index_child_blocks(node_data, header.eh_entries)?
+            .into_iter()
+            .rev()
+            .map(|child_block| (child_block, expected_depth - 1))
+            .collect::<Vec<_>>();
+        while let Some((child_block, child_depth)) = pending.pop() {
             if !visited.insert(child_block) {
                 return Err(invalid_fs_data(format!(
                     "extent index block {child_block} is referenced more than once"
                 )));
             }
             let child_data = self.read_block(child_block)?;
-            self.collect_extents(&child_data, expected_depth - 1, visited, output)?;
+            let child_header = Ext4ExtentHeader::parse(&child_data)?;
+            if child_header.eh_depth != child_depth {
+                return Err(invalid_fs_data(format!(
+                    "extent tree depth {} does not match expected depth {}",
+                    child_header.eh_depth, child_depth
+                )));
+            }
+            if child_header.eh_depth == 0 {
+                self.append_mapped_leaf_extents(&child_data, child_header.eh_entries, output)?;
+            } else {
+                pending.extend(
+                    index_child_blocks(&child_data, child_header.eh_entries)?
+                        .into_iter()
+                        .rev()
+                        .map(|grandchild| (grandchild, child_depth - 1)),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn append_mapped_leaf_extents(
+        &self,
+        node_data: &[u8],
+        entries: u16,
+        output: &mut Vec<Ext4FileExtent>,
+    ) -> io::Result<()> {
+        let mut previous_end = output
+            .last()
+            .map(|extent| extent.logical_offset.saturating_add(extent.length) / self.block_size)
+            .unwrap_or_default();
+        for extent in parse_leaf_extents(node_data, entries)? {
+            if extent.is_unwritten() {
+                return Err(invalid_fs_data(
+                    "file has unwritten extents; refusing to edit in place",
+                ));
+            }
+            let logical_block = u64::from(extent.ee_block);
+            let logical_end = logical_block
+                .checked_add(u64::from(extent.block_count()))
+                .ok_or_else(|| invalid_fs_data("ext4 extent logical end overflows"))?;
+            if logical_block < previous_end {
+                return Err(invalid_fs_data("ext4 extents overlap or are not ordered"));
+            }
+            previous_end = logical_end;
+            let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
+            output.push(Ext4FileExtent {
+                logical_offset: logical_block
+                    .checked_mul(self.block_size)
+                    .ok_or_else(|| invalid_fs_data("ext4 extent logical offset overflows"))?,
+                volume_offset: self.block_to_offset(start_block)?,
+                length: u64::from(extent.block_count())
+                    .checked_mul(self.block_size)
+                    .ok_or_else(|| invalid_fs_data("ext4 extent length overflows"))?,
+            });
         }
         Ok(())
     }

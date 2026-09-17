@@ -74,8 +74,78 @@ impl XfsReader {
 
     pub(crate) fn collect_btree_extents(&self, inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
         let data_fork = Self::data_fork(inode)?;
+        if data_fork.len() < BMBT_SHORT_ROOT_HDR_SIZE {
+            return Ok(Vec::new());
+        }
+        let root_level = be_u16(data_fork, 0);
+        if root_level > MAX_BMBT_TREE_DEPTH {
+            return Err(invalid_fs_data(format!(
+                "bmbt root level {root_level} exceeds the supported depth {MAX_BMBT_TREE_DEPTH}"
+            )));
+        }
+        let root_numrecs = usize::from(be_u16(data_fork, 2));
         let mut extents = Vec::new();
-        self.walk_bmdr_root_extents(data_fork, &mut extents)?;
+        if root_level == 0 {
+            append_leaf_extents(
+                data_fork,
+                root_numrecs,
+                BMBT_SHORT_ROOT_HDR_SIZE,
+                &mut extents,
+            );
+            return Ok(extents);
+        }
+
+        let root_maxrecs = Self::bmdr_maxrecs(data_fork.len(), false);
+        let root_pointers_start = BMBT_SHORT_ROOT_HDR_SIZE + root_maxrecs * 8;
+        let mut pending = Vec::new();
+        let mut visited = HashSet::new();
+        for index in (0..root_numrecs).rev() {
+            let offset = root_pointers_start + index * 8;
+            if offset + 8 > data_fork.len() {
+                continue;
+            }
+            let child_ptr = be_u64(data_fork, offset);
+            if !visited.insert(child_ptr) {
+                return Err(invalid_fs_data(format!(
+                    "bmbt block cycle: FSB {child_ptr} is referenced more than once"
+                )));
+            }
+            pending.push((child_ptr, root_level - 1));
+        }
+
+        while let Some((fsb, expected_level)) = pending.pop() {
+            let node = self.read_block(fsb)?;
+            let (header_size, level, numrecs) = Self::parse_btree_block_header(&node, fsb)?;
+            if level != expected_level {
+                return Err(invalid_fs_data(format!(
+                    "bmbt child block at FSB {fsb} has level {level}, expected {expected_level}"
+                )));
+            }
+            if level == 0 {
+                append_leaf_extents(&node, numrecs, header_size, &mut extents);
+                continue;
+            }
+            let maxrecs = Self::bmbt_block_maxrecs(node.len(), header_size, false);
+            let pointers_start = header_size + maxrecs * 8;
+            for index in (0..numrecs).rev() {
+                let offset = pointers_start + index * 8;
+                if offset + 8 > node.len() {
+                    continue;
+                }
+                let child_ptr = be_u64(&node, offset);
+                if !visited.insert(child_ptr) {
+                    return Err(invalid_fs_data(format!(
+                        "bmbt block cycle: FSB {child_ptr} is referenced more than once"
+                    )));
+                }
+                if expected_level == 0 {
+                    return Err(invalid_fs_data(format!(
+                        "bmbt block at FSB {fsb} has an interior level without a parent level"
+                    )));
+                }
+                pending.push((child_ptr, expected_level - 1));
+            }
+        }
         Ok(extents)
     }
 
@@ -97,103 +167,6 @@ impl XfsReader {
         let extents = self.collect_btree_extents(inode)?;
         self.read_extents_data_range(&extents, offset, range_end, &mut next_offset, &mut data)?;
         Ok(data)
-    }
-
-    fn walk_bmdr_root_extents(&self, node: &[u8], extents: &mut Vec<XfsExtent>) -> io::Result<()> {
-        if node.len() < BMBT_SHORT_ROOT_HDR_SIZE {
-            return Ok(());
-        }
-        let level = be_u16(node, 0);
-        let numrecs = usize::from(be_u16(node, 2));
-        if numrecs == 0 {
-            return Ok(());
-        }
-
-        if level == 0 {
-            for index in 0..numrecs {
-                let offset = BMBT_SHORT_ROOT_HDR_SIZE + index * BMBT_REC_SIZE;
-                if offset + BMBT_REC_SIZE > node.len() {
-                    break;
-                }
-                extents.push(Self::decode_extent(&node[offset..offset + BMBT_REC_SIZE]));
-            }
-            return Ok(());
-        }
-        if level > MAX_BMBT_TREE_DEPTH {
-            return Err(invalid_fs_data(format!(
-                "bmbt root level {level} exceeds the supported depth {MAX_BMBT_TREE_DEPTH}"
-            )));
-        }
-
-        let mut visited = HashSet::new();
-        let maxrecs = Self::bmdr_maxrecs(node.len(), false);
-        let pointers_start = BMBT_SHORT_ROOT_HDR_SIZE + maxrecs * 8;
-        for index in 0..numrecs {
-            let offset = pointers_start + index * 8;
-            if offset + 8 > node.len() {
-                break;
-            }
-            let child_ptr = be_u64(node, offset);
-            let child_block = self.read_block(child_ptr)?;
-            self.walk_btree_child_extents(
-                child_ptr,
-                &child_block,
-                level - 1,
-                extents,
-                &mut visited,
-            )?;
-        }
-        Ok(())
-    }
-
-    fn walk_btree_child_extents(
-        &self,
-        fsb: u64,
-        node: &[u8],
-        expected_level: u16,
-        extents: &mut Vec<XfsExtent>,
-        visited: &mut HashSet<u64>,
-    ) -> io::Result<()> {
-        if !visited.insert(fsb) {
-            return Err(invalid_fs_data(format!(
-                "bmbt block cycle: FSB {fsb} is referenced more than once"
-            )));
-        }
-        let (header_size, level, numrecs) = Self::parse_btree_block_header(node, fsb)?;
-        if level != expected_level {
-            return Err(invalid_fs_data(format!(
-                "bmbt child block at FSB {fsb} has level {level}, expected {expected_level}"
-            )));
-        }
-        if level == 0 {
-            for index in 0..numrecs {
-                let offset = header_size + index * BMBT_REC_SIZE;
-                if offset + BMBT_REC_SIZE > node.len() {
-                    break;
-                }
-                extents.push(Self::decode_extent(&node[offset..offset + BMBT_REC_SIZE]));
-            }
-            return Ok(());
-        }
-
-        let maxrecs = Self::bmbt_block_maxrecs(node.len(), header_size, false);
-        let pointers_start = header_size + maxrecs * 8;
-        for index in 0..numrecs {
-            let offset = pointers_start + index * 8;
-            if offset + 8 > node.len() {
-                break;
-            }
-            let child_ptr = be_u64(node, offset);
-            let child_block = self.read_block(child_ptr)?;
-            self.walk_btree_child_extents(
-                child_ptr,
-                &child_block,
-                expected_level - 1,
-                extents,
-                visited,
-            )?;
-        }
-        Ok(())
     }
 
     fn bmdr_maxrecs(block_len: usize, leaf: bool) -> usize {
@@ -370,6 +343,23 @@ impl XfsReader {
             FORMAT_BTREE => self.read_btree_data_range(inode, size, offset, length),
             other => Err(invalid_fs_data(format!("unsupported di_format {other}"))),
         }
+    }
+}
+
+fn append_leaf_extents(
+    node: &[u8],
+    numrecs: usize,
+    header_size: usize,
+    extents: &mut Vec<XfsExtent>,
+) {
+    for index in 0..numrecs {
+        let offset = header_size + index * BMBT_REC_SIZE;
+        if offset + BMBT_REC_SIZE > node.len() {
+            break;
+        }
+        extents.push(XfsReader::decode_extent(
+            &node[offset..offset + BMBT_REC_SIZE],
+        ));
     }
 }
 

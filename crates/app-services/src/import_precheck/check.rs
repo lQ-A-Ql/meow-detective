@@ -123,19 +123,25 @@ fn analyze_directory(path: &Path, warnings: &mut Vec<String>) -> (u64, u64) {
     (total_files, total_size)
 }
 
-/// Recursively count files in directory
+/// Count files in a directory tree without consuming the host call stack.
 fn count_directory_recursive(path: &Path) -> (u64, u64) {
     let mut files = 0u64;
     let mut size = 0u64;
-
-    if let Ok(entries) = std::fs::read_dir(path) {
+    let mut pending = vec![path.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
         for entry in entries.flatten() {
-            if let Ok(meta) = entry.metadata() {
-                if meta.is_dir() {
-                    let (f, s) = count_directory_recursive(&entry.path());
-                    files += f;
-                    size += s;
-                } else {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                pending.push(entry.path());
+                continue;
+            }
+            if file_type.is_file() {
+                if let Ok(meta) = entry.metadata() {
                     files += 1;
                     size += meta.len();
                 }

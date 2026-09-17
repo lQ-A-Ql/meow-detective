@@ -4,7 +4,8 @@ use crate::analysis_service::extraction::artifact_query::{
     count_artifacts_by_type_excluding_extractor, query_artifact_rows, AnalysisArtifactRow,
 };
 use crate::analysis_service::extraction::attr_mapping::{
-    bool_attr, i32_attr, optional_string_attr, optional_u32_attr, string_attr, u64_attr,
+    bool_attr, i32_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
+    u64_attr,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -185,10 +186,31 @@ fn map_logins(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxLoginRecordDto> {
             host: string_attr(&row.attrs, "host"),
             pid: i32_attr(&row.attrs, "pid"),
             record_type: i32_attr(&row.attrs, "recordType"),
+            record_kind: login_record_kind(&row.attrs),
+            uid: optional_u32_attr(&row.attrs, "uid"),
+            failures: optional_u32_attr(&row.attrs, "failures"),
+            fail_max: optional_u32_attr(&row.attrs, "failMax"),
+            locktime_seconds: optional_u64_attr(&row.attrs, "locktimeSeconds"),
+            lockout: optional_bool_attr(&row.attrs, "lockout"),
             login_time: optional_string_attr(&row.attrs, "loginTime"),
             logout_time: optional_string_attr(&row.attrs, "logoutTime"),
         })
         .collect()
+}
+
+fn login_record_kind(attrs: &BTreeMap<String, Value>) -> Option<String> {
+    if let Some(kind) = optional_string_attr(attrs, "recordKind") {
+        return Some(kind);
+    }
+    let path = optional_string_attr(attrs, "sourcePath")?;
+    let normalized = path.trim_start_matches('/');
+    if normalized.ends_with("var/log/lastlog") {
+        Some("lastlog".to_string())
+    } else if normalized.ends_with("var/log/faillog") {
+        Some("faillog".to_string())
+    } else {
+        None
+    }
 }
 
 fn map_bash_commands(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxBashCommandDto> {

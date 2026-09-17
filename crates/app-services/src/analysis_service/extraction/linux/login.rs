@@ -106,9 +106,10 @@ fn push_record_outputs(
         "recordType".to_string(),
         Value::Number(record.record_type.into()),
     );
-    if is_btmp {
-        attrs.insert("recordKind".to_string(), Value::String("btmp".to_string()));
-    }
+    attrs.insert(
+        "recordKind".to_string(),
+        Value::String(if is_btmp { "btmp" } else { "wtmp" }.to_string()),
+    );
     if let Some(total) = user_failure_total {
         attrs.insert("userFailureCount".to_string(), Value::Number(total.into()));
     }

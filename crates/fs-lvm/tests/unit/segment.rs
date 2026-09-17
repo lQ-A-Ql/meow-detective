@@ -319,6 +319,46 @@ fn component_lv_chain_reports_unsupported_dependency_path() {
     ));
 }
 
+#[test]
+fn nested_logical_volume_mapping_is_bounded() {
+    let depth = super::MAX_LOGICAL_VOLUME_MAPPING_DEPTH + 2;
+    let mut vg = make_test_vg();
+    let mut volumes = Vec::with_capacity(depth);
+    for index in 0..depth {
+        let name = format!("lv{index}");
+        let area = if index + 1 < depth {
+            SegmentArea::LogicalVolume {
+                name: format!("lv{}", index + 1),
+                start_extent: 0,
+            }
+        } else {
+            pv_area("pv0", 0)
+        };
+        volumes.push(LvMeta {
+            name,
+            uuid: format!("lv-{index}-uuid"),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 1,
+                seg_type: SegmentType::Linear,
+                stripes: Vec::new(),
+                areas: vec![area],
+                dependencies: SegmentDependencies::default(),
+            }],
+            size_bytes: 0,
+        });
+    }
+    let root = volumes[0].clone();
+    vg.logical_volumes = volumes;
+
+    let error = build_extent_map(&vg, &root, &[("pv0".into(), 0)]).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("logical-volume dependency chain exceeds maximum depth"));
+}
+
 fn two_pv_vg(name: &str, extent_size: u64) -> VolumeGroup {
     VolumeGroup {
         name: name.into(),
