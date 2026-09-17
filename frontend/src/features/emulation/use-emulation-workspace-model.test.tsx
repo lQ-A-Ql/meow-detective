@@ -309,6 +309,21 @@ describe('useEmulationWorkspaceModel', () => {
       .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
   });
 
+  it('repairs dirty ext4 journals after prepare and before launch', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    useLinuxEfiSource(['ext4-journal-dirty']);
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
+
+    await act(async () => result.current.start());
+
+    expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
+      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+  });
+
   it('rechecks an unverified XFS log before launch', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['xfs-log-unverified']);

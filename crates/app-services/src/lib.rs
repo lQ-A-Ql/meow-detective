@@ -28,6 +28,7 @@ mod e01_reader_cache;
 pub mod emulation_bypass;
 pub mod emulation_cow_reader;
 pub mod emulation_efi_fallback;
+pub mod emulation_ext4_repair;
 pub mod emulation_fs_repair;
 pub mod emulation_linux_bypass;
 pub mod emulation_osdata;

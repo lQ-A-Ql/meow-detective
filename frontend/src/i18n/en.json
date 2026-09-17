@@ -613,8 +613,8 @@
       "optionTimeSync": "Guest time synchronization",
       "installEfiFallback": "Install EFI fallback bootloader before launch (overlay only)",
       "installEfiFallbackHint": "The GPT disk has no ESP fallback loader, so the VM would land in the firmware boot manager; when enabled, BOOTX64.EFI is installed into the ESP through the COW overlay and original evidence is never written.",
-      "repairFilesystems": "Clear XFS log state before launch (overlay only)",
-      "repairFilesystemsHint": "Unflushed XFS state was detected. The host discards log transactions, clears AGI orphan lists, and writes a clean log only to this emulation session's COW overlay."
+      "repairFilesystems": "Clear Linux filesystem journals before launch (overlay only)",
+      "repairFilesystemsHint": "Uncheckpointed XFS or ext4 journal state was detected. The host repairs it only in this emulation session's COW overlay before any password bypass."
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO first",
@@ -637,6 +637,10 @@
       "xfsLogDirtyHint": "An unreplayed XFS log was detected. Keep the pre-launch host repair enabled; disabling it may send the installed system into rescue mode.",
       "xfsLogUnverified": "XFS log unverified",
       "xfsLogUnverifiedHint": "At least one XFS log could not be verified. Pre-launch repair will assess it again and block launch when it cannot be handled safely.",
+      "ext4JournalDirty": "ext4 journal dirty",
+      "ext4JournalDirtyHint": "An ext4 journal still contains transactions the guest would replay. Pre-launch repair replays committed records and checkpoints the journal in the COW overlay before the password bypass.",
+      "ext4JournalUnverified": "ext4 journal unverified",
+      "ext4JournalUnverifiedHint": "At least one ext4 journal could not be verified. Pre-launch repair will assess it again and block launch when it cannot be handled safely.",
       "customServiceRestart": "Custom service keeps restarting",
       "customServiceRestartHint": "An enabled locally defined systemd service is configured to restart continuously. Missing dependencies or guest-incompatible scripts can make the console repeat stop/start messages; this is not evidence of XFS corruption.",
       "remoteSessionGuard": "Remote-session guard",
@@ -843,6 +847,9 @@
       "terminal": "Terminal",
       "host": "Host",
       "recordType": "Type",
+      "recordKind": "Record Kind",
+      "failures": "Failures",
+      "lockout": "Locked",
       "loginTime": "Login Time",
       "logoutTime": "Logout Time",
       "command": "Command",

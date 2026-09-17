@@ -229,6 +229,13 @@ fn linux_preflight(
         data_source_id,
         &mut installs,
     )?;
+    super::emulation_linux_boot::annotate_ext4_journal_risk(
+        std::path::Path::new(&path),
+        &kind,
+        &partitions,
+        data_source_id,
+        &mut installs,
+    )?;
     Ok(EmulationPreflightDto {
         data_source_id: data_source_id.0.clone(),
         installs,

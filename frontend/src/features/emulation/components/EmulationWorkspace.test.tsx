@@ -457,7 +457,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByText(/未在该分区找到可设置密码的 Linux 账户/)).toBeInTheDocument();
   });
 
-  it('offers host-side XFS repair for dirty or unverified logs', () => {
+  it('offers host-side Linux filesystem repair for dirty or unverified logs', () => {
     const toggleRepairFilesystems = vi.fn();
     const linuxModel = (bootRiskNotes?: string[]) => createModel({
       selectedSource: {
@@ -480,23 +480,54 @@ describe('EmulationWorkspace', () => {
         recommendedBootRoute: 'directSystem',
       },
       needsFsRepair: (bootRiskNotes ?? [])
-        .some((note) => note === 'xfs-log-dirty' || note === 'xfs-log-unverified'),
+        .some((note) => note === 'xfs-log-dirty'
+          || note === 'xfs-log-unverified'
+          || note === 'ext4-journal-dirty'
+          || note === 'ext4-journal-unverified'),
       toggleRepairFilesystems,
     });
 
     const { rerender } = render(<EmulationWorkspace model={linuxModel(['xfs-log-dirty'])} />);
     expect(screen.getByText('XFS 日志脏')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' }));
     expect(toggleRepairFilesystems).toHaveBeenCalledOnce();
 
     rerender(<EmulationWorkspace model={linuxModel(undefined)} />);
     expect(screen.queryByText('XFS 日志脏')).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' })).not.toBeInTheDocument();
 
     rerender(<EmulationWorkspace model={linuxModel(['xfs-log-unverified'])} />);
     expect(screen.getByText('XFS 日志未验证')).toBeInTheDocument();
     expect(screen.getByText(/无法安全处理时阻止启动/)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '启动前清理 XFS 日志状态（仅写入覆盖层）' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' })).toBeInTheDocument();
+  });
+
+  it('shows ext4 journal risk and the shared repair control', () => {
+    render(<EmulationWorkspace model={createModel({
+      selectedSource: {
+        id: 'source-1',
+        name: 'Ubuntu 镜像',
+        kind: 'E01',
+        platform: 'LINUX',
+        partitionCount: 3,
+      },
+      preflight: {
+        dataSourceId: 'source-1',
+        installs: [{
+          partitionIndex: 5,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          bootRiskNotes: ['ext4-journal-dirty'],
+        }],
+        recommendedBootRoute: 'directSystem',
+      },
+      needsFsRepair: true,
+    })} />);
+    expect(screen.getByText('ext4 日志脏')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' }))
+      .toBeInTheDocument();
   });
 
   it('identifies image-side service loops without calling them XFS damage', () => {

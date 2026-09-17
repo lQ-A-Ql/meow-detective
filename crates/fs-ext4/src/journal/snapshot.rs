@@ -2,6 +2,7 @@ use super::error::{JournalError, JournalResult};
 use super::recovery::{recover_deleted_inodes, DeletedInodeCandidate};
 use super::ring::{parse_journal, parse_journal_history};
 use super::types::{JournalHistoryScan, JournalScan, JournalSuperblock, JOURNAL_SUPERBLOCK_SIZE};
+use crate::Ext4FileExtent;
 use crate::Ext4Reader;
 
 const EXT4_S_IFMT: u16 = 0xF000;
@@ -48,6 +49,15 @@ impl Ext4Reader {
             JOURNAL_SUPERBLOCK_SIZE,
         )?;
         JournalSuperblock::parse(&data)
+    }
+
+    /// Maps the internal journal inode to filesystem-relative byte ranges.
+    /// The map is used by offline recovery to update the journal superblock
+    /// through a caller-owned copy-on-write layer.
+    pub fn internal_journal_extent_map(&self) -> JournalResult<Vec<Ext4FileExtent>> {
+        let inode = self.read_journal_inode()?;
+        self.extent_map_for_inode(&inode, "internal journal")
+            .map_err(JournalError::Io)
     }
 
     /// Returns whether the internal journal still holds transactions a

@@ -613,8 +613,8 @@
       "optionTimeSync": "客机时间同步",
       "installEfiFallback": "启动前安装 EFI fallback 引导（仅写入覆盖层）",
       "installEfiFallbackHint": "GPT 磁盘缺少 ESP 回退引导器，虚拟机会落入固件启动菜单；勾选后将在 ESP 安装 BOOTX64.EFI，仅写入 COW 覆盖层，不改动原始证据。",
-      "repairFilesystems": "启动前清理 XFS 日志状态（仅写入覆盖层）",
-      "repairFilesystemsHint": "检测到采集时未落盘的 XFS 状态；勾选后将丢弃日志事务、清理 AGI 孤立链并生成干净日志，所有修改仅进入当前仿真 COW 覆盖层。"
+      "repairFilesystems": "启动前清理 Linux 文件系统日志（仅写入覆盖层）",
+      "repairFilesystemsHint": "检测到未 checkpoint 的 XFS 或 ext4 日志状态；启动前会在密码绕密前，仅通过当前仿真 COW 覆盖层完成修复。"
     },
     "bootRoutes": {
       "recoveryMedia": "PE ISO 优先",
@@ -637,6 +637,10 @@
       "xfsLogDirtyHint": "检测到未回放的 XFS 日志；建议保留启动前主机侧修复选项。若关闭该选项，原系统可能进入救援模式。",
       "xfsLogUnverified": "XFS 日志未验证",
       "xfsLogUnverifiedHint": "至少一个 XFS 卷的日志状态无法验证；启动前修复将重新检查并在无法安全处理时阻止启动。",
+      "ext4JournalDirty": "ext4 日志脏",
+      "ext4JournalDirtyHint": "检测到仍会被客户机回放的 ext4 日志事务；启动前会先回放已提交事务并在 COW 覆盖层 checkpoint，随后再执行密码绕密。",
+      "ext4JournalUnverified": "ext4 日志未验证",
+      "ext4JournalUnverifiedHint": "至少一个 ext4 日志无法验证；启动前修复会重新检查，无法安全处理时阻止启动。",
       "customServiceRestart": "自定义服务持续重启",
       "customServiceRestartHint": "镜像启用的本地 systemd 服务配置为持续重启；若其依赖或脚本不适配仿真环境，控制台可能反复显示停止/启动。该告警不是 XFS 损坏证据。",
       "remoteSessionGuard": "远程会话防护",
@@ -843,6 +847,9 @@
       "terminal": "终端",
       "host": "主机",
       "recordType": "类型",
+      "recordKind": "记录来源",
+      "failures": "失败次数",
+      "lockout": "已锁定",
       "loginTime": "登录时间",
       "logoutTime": "登出时间",
       "command": "命令",

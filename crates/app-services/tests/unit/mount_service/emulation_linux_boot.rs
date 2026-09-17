@@ -33,6 +33,33 @@ fn clean_or_absent_xfs_assessments_add_no_risk() {
 }
 
 #[test]
+fn ext4_journal_assessment_annotations_are_fail_closed_and_deduplicated() {
+    let mut installs = vec![install()];
+    annotate_ext4_assessments(
+        &mut installs,
+        &[
+            Ext4JournalAssessment::Clean,
+            Ext4JournalAssessment::Dirty,
+            Ext4JournalAssessment::Unverified,
+            Ext4JournalAssessment::Unverified,
+        ],
+    );
+    assert_eq!(
+        installs[0].boot_risk_notes,
+        vec!["ext4-journal-dirty", "ext4-journal-unverified"]
+    );
+}
+
+#[test]
+fn clean_or_absent_ext4_journal_assessments_add_no_risk() {
+    for assessments in [Vec::new(), vec![Ext4JournalAssessment::Clean]] {
+        let mut installs = vec![install()];
+        annotate_ext4_assessments(&mut installs, &assessments);
+        assert!(installs[0].boot_risk_notes.is_empty());
+    }
+}
+
+#[test]
 fn boot_path_annotations_are_fail_closed_and_deduplicated() {
     let mut installs = vec![install()];
     annotate_boot_path_assessment(&mut installs, BootPathAssessment::EspUnverified);

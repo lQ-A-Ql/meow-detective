@@ -178,7 +178,7 @@ impl EmulationRegistry {
         Ok(result)
     }
 
-    /// Assess and repair dirty XFS logs through the session overlay. Needs
+    /// Assess and repair dirty Linux filesystem journals through the session overlay. Needs
     /// the case context because the volume layout comes from the source
     /// catalog.
     pub fn repair_fs_journals(
@@ -192,7 +192,7 @@ impl EmulationRegistry {
         )?;
         let _op_guard = session.op_lock.lock().map_err(|_| Self::lock_error())?;
         self.require_state(session_id, EmulationState::DescriptorReady)?;
-        let mut result = app_services::emulation_fs_repair::repair_xfs_logs(
+        let mut result = app_services::emulation_fs_repair::repair_linux_fs_journals(
             &session.disk,
             &app_services::emulation_bypass::BypassCaseContext {
                 case_conn: case.case_conn,

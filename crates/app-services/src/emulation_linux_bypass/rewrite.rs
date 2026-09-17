@@ -11,6 +11,38 @@ pub(super) struct VolumePatch {
     pub(super) bytes: Vec<u8>,
 }
 
+/// Ext4 shadow edits are deliberately size-preserving: changing the inode
+/// size would require an additional metadata transaction and block-allocation
+/// update.  A shorter replacement is padded with blank lines, which the
+/// shadow grammar ignores.  Growing content remains unsupported.
+pub(super) fn fit_shadow_content(
+    partition: &LinuxPartition,
+    content: String,
+) -> Result<String, EmulationBypassError> {
+    let LinuxFilesystem::Ext4(fs) = &partition.fs else {
+        return Ok(content);
+    };
+    let old_len = fs
+        .file_size_by_path(SHADOW_PATH)
+        .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
+    let new_len = content.len() as u64;
+    if new_len > old_len {
+        return Err(EmulationBypassError::Unsupported(format!(
+            "the ext4 shadow rewrite must preserve its size to avoid unjournaled inode metadata edits (old={old_len}, new={new_len})"
+        )));
+    }
+    let padding = usize::try_from(old_len - new_len).map_err(|_| {
+        EmulationBypassError::Unsupported("ext4 shadow padding is too large".into())
+    })?;
+    if padding == 0 {
+        return Ok(content);
+    }
+    let mut fitted = String::with_capacity(content.len() + padding);
+    fitted.push_str(&content);
+    fitted.extend(std::iter::repeat_n('\n', padding));
+    Ok(fitted)
+}
+
 pub(super) fn plan_shadow_rewrite(
     partition: &LinuxPartition,
     content: &[u8],
@@ -44,8 +76,10 @@ fn plan_ext4_rewrite(
         .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
     if content.len() as u64 != old_len {
         return Err(EmulationBypassError::Unsupported(
-            "the ext4 shadow rewrite must preserve its size to avoid unjournaled inode metadata edits"
-                .to_string(),
+            format!(
+                "the ext4 shadow rewrite must preserve its size to avoid unjournaled inode metadata edits (old={old_len}, new={})",
+                content.len()
+            ),
         ));
     }
     let extents = fs

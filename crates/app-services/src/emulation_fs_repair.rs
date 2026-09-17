@@ -1,4 +1,4 @@
-//! Host-side XFS log-clear repair for emulation sessions.
+//! Host-side Linux filesystem journal repair for emulation sessions.
 //!
 //! A forensic image captured from a running system carries a dirty XFS
 //! log. The guest kernel can replay it, but crash-truncated user-space
@@ -27,6 +27,37 @@ use transport::dto::{
 
 use crate::emulation_bypass::{BypassCaseContext, EmulationBypassError};
 use crate::emulation_cow_reader::CowDiskReader;
+
+/// Assess and repair Linux filesystem journals through one session operation.
+/// Ext4 is checkpointed first because a later XFS failure must invalidate the
+/// entire COW rather than leave a partially prepared session usable.
+pub fn repair_linux_fs_journals(
+    disk: &Arc<CowDisk>,
+    case_context: &BypassCaseContext<'_>,
+) -> Result<EmulationFsRepairResultDto, EmulationBypassError> {
+    let ext4 = match crate::emulation_ext4_repair::repair_ext4_journals(disk, case_context) {
+        Ok(result) => result,
+        Err(error) => {
+            disk.invalidate();
+            return Err(error);
+        }
+    };
+    let xfs = match repair_xfs_logs(disk, case_context) {
+        Ok(result) => result,
+        Err(error) => {
+            disk.invalidate();
+            return Err(error);
+        }
+    };
+    let mut items = ext4.items;
+    items.extend(xfs.items);
+    items.sort_by_key(|item| item.partition_index);
+    Ok(EmulationFsRepairResultDto {
+        session_id: String::new(),
+        data_source_id: case_context.data_source_id.0.clone(),
+        items,
+    })
+}
 
 const REPAIR_WRITE_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 

@@ -27,9 +27,16 @@ pub fn parse_commit_block(
     let checksum_type = data[12];
     let checksum_size = data[13];
     let checksum = if superblock.uses_v2_or_v3_checksums() {
-        if checksum_type != JBD2_CRC32C_CHKSUM || checksum_size != 4 {
+        // With checksum v2/v3 Linux stores the transaction checksum in the
+        // common commit header but deliberately leaves the legacy descriptor
+        // bytes at zero.  Older checksum-v1/async records may populate them;
+        // both encodings are valid and the full-block CRC is authoritative.
+        if (checksum_type != 0 || checksum_size != 0)
+            && (checksum_type != JBD2_CRC32C_CHKSUM || checksum_size != 4)
+        {
             return Err(JournalError::Invalid(format!(
-                "invalid commit checksum descriptor type={checksum_type} size={checksum_size}"
+                "invalid commit checksum descriptor type={checksum_type} size={checksum_size} bytes={:02X?}",
+                &data[12..24]
             )));
         }
         let stored = read_be_u32(data, COMMIT_CHECKSUM_OFFSET, "commit checksum")?;

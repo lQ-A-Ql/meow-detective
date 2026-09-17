@@ -102,6 +102,10 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
     .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty'));
   const hasUnverifiedXfsLog = model.preflight.installs
     .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-unverified'));
+  const hasDirtyExt4Journal = model.preflight.installs
+    .some((install) => (install.bootRiskNotes ?? []).includes('ext4-journal-dirty'));
+  const hasUnverifiedExt4Journal = model.preflight.installs
+    .some((install) => (install.bootRiskNotes ?? []).includes('ext4-journal-unverified'));
   return (
     <div className="space-y-1.5 border-y border-forensics-border py-3">
       <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
@@ -130,6 +134,12 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
           {(install.bootRiskNotes ?? []).includes('xfs-log-unverified') ? (
             <Badge variant="secondary">{t('emulationPage.preflight.xfsLogUnverified')}</Badge>
           ) : null}
+          {(install.bootRiskNotes ?? []).includes('ext4-journal-dirty') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.ext4JournalDirty')}</Badge>
+          ) : null}
+          {(install.bootRiskNotes ?? []).includes('ext4-journal-unverified') ? (
+            <Badge variant="secondary">{t('emulationPage.preflight.ext4JournalUnverified')}</Badge>
+          ) : null}
           {(install.bootRiskNotes ?? []).includes('custom-service-always-restart') ? (
             <Badge variant="secondary">{t('emulationPage.preflight.customServiceRestart')}</Badge>
           ) : null}
@@ -146,6 +156,16 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
       {hasUnverifiedXfsLog ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {t('emulationPage.preflight.xfsLogUnverifiedHint')}
+        </div>
+      ) : null}
+      {hasDirtyExt4Journal ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.ext4JournalDirtyHint')}
+        </div>
+      ) : null}
+      {hasUnverifiedExt4Journal ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
+          {t('emulationPage.preflight.ext4JournalUnverifiedHint')}
         </div>
       ) : null}
       {model.preflight.installs.some((install) => (install.bootRiskNotes ?? []).includes('custom-service-always-restart')) ? (

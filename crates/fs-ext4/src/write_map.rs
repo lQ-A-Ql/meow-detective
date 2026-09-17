@@ -34,19 +34,27 @@ impl crate::Ext4Reader {
     pub fn file_extent_map(&self, path: &str) -> io::Result<Vec<Ext4FileExtent>> {
         let inode_number = self.regular_file_inode(path)?;
         let inode = self.read_inode(inode_number)?;
-        let flags = read_u32(&inode, I_FLAGS_OFFSET)?;
+        self.extent_map_for_inode(&inode, path)
+    }
+
+    pub(crate) fn extent_map_for_inode(
+        &self,
+        inode: &[u8],
+        label: &str,
+    ) -> io::Result<Vec<Ext4FileExtent>> {
+        let flags = read_u32(inode, I_FLAGS_OFFSET)?;
         if flags & EXT4_EXTENTS_FL == 0 {
             return Err(invalid_fs_data(format!(
-                "{path} does not use extents; refusing to map it"
+                "{label} does not use extents; refusing to map it"
             )));
         }
         if flags & (EXT4_INLINE_DATA_FL | EXT4_ENCRYPT_FL | EXT4_VERITY_FL) != 0 {
             return Err(invalid_fs_data(format!(
-                "{path} is inline/encrypted/verity; refusing to edit it in place"
+                "{label} is inline/encrypted/verity; refusing to edit it in place"
             )));
         }
         let mut extents = Vec::new();
-        let i_block = Self::inode_i_block(&inode);
+        let i_block = Self::inode_i_block(inode);
         let depth = Ext4ExtentHeader::parse(i_block)?.eh_depth;
         let mut visited = HashSet::new();
         self.collect_extents(i_block, depth, &mut visited, &mut extents)?;

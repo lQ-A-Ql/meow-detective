@@ -156,7 +156,8 @@ pub struct EmulationInstallDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fstab_present: Option<bool>,
     /// Linux: structured boot-risk annotations (e.g. `no-kernel`, `no-fstab`,
-    /// `btrfs-root`, `xfs-log-dirty`, `xfs-log-unverified`); empty when none apply.
+    /// `btrfs-root`, `xfs-log-dirty`, `xfs-log-unverified`,
+    /// `ext4-journal-dirty`, `ext4-journal-unverified`); empty when none apply.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub boot_risk_notes: Vec<String>,
 }

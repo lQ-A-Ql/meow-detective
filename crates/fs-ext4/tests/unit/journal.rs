@@ -576,6 +576,131 @@ mod cases {
             history.rejected_candidates.len()
         );
     }
+
+    #[test]
+    fn repair_plan_replays_committed_blocks_and_checkpoints_superblock() {
+        let spec = SuperblockSpec {
+            start: 1,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let mut journal = journal_image(spec);
+        let payload = payload(0xA5);
+        put_block(
+            &mut journal,
+            1,
+            &build_descriptor(
+                &superblock,
+                7,
+                &[TagSpec::new(5, JBD2_FLAG_LAST_TAG)],
+                std::slice::from_ref(&payload),
+            ),
+        );
+        put_block(&mut journal, 2, &payload);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
+
+        let filesystem = build_ext4_reader(true, Some(&journal));
+        let plan = filesystem
+            .plan_journal_repair(64 * 1024)
+            .unwrap()
+            .expect("dirty journal produces a repair plan");
+
+        assert_eq!(plan.transactions_replayed, 1);
+        assert!(plan
+            .patches
+            .iter()
+            .any(|patch| patch.volume_offset == 5 * BLOCK_SIZE as u64 && patch.bytes == payload));
+        let checkpoint = plan
+            .patches
+            .iter()
+            .find(|patch| {
+                patch.volume_offset == 20 * BLOCK_SIZE as u64
+                    && patch.bytes.len() == JOURNAL_SUPERBLOCK_SIZE
+            })
+            .expect("the plan includes a journal superblock patch");
+        let checkpointed = JournalSuperblock::parse(&checkpoint.bytes).unwrap();
+        assert_eq!(checkpointed.start, 0);
+    }
+
+    #[test]
+    fn repair_plan_preserves_modern_superblock_checksum() {
+        let spec = SuperblockSpec {
+            start: 1,
+            incompat: JBD2_FEATURE_INCOMPAT_CSUM_V3,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let mut journal = journal_image(spec);
+        let payload = payload(0x5A);
+        put_block(
+            &mut journal,
+            1,
+            &build_descriptor(
+                &superblock,
+                7,
+                &[TagSpec::new(5, JBD2_FLAG_LAST_TAG)],
+                std::slice::from_ref(&payload),
+            ),
+        );
+        put_block(&mut journal, 2, &payload);
+        put_block(&mut journal, 3, &build_commit(&superblock, 7));
+
+        let filesystem = build_ext4_reader(true, Some(&journal));
+        let plan = filesystem
+            .plan_journal_repair(64 * 1024)
+            .unwrap()
+            .expect("dirty journal produces a repair plan");
+        let checkpoint = plan
+            .patches
+            .iter()
+            .find(|patch| {
+                patch.volume_offset == 20 * BLOCK_SIZE as u64
+                    && patch.bytes.len() == JOURNAL_SUPERBLOCK_SIZE
+            })
+            .expect("the plan includes a journal superblock patch");
+        let checkpointed = JournalSuperblock::parse(&checkpoint.bytes).unwrap();
+        assert_eq!(checkpointed.start, 0);
+        assert!(checkpointed.checksum.is_some());
+    }
+
+    #[test]
+    fn repair_plan_skips_revoked_metadata_blocks() {
+        let spec = SuperblockSpec {
+            start: 1,
+            incompat: JBD2_FEATURE_INCOMPAT_REVOKE,
+            ..SuperblockSpec::default()
+        };
+        let superblock = parsed_superblock(spec);
+        let mut journal = journal_image(spec);
+        let payload = payload(0x3C);
+        put_block(
+            &mut journal,
+            1,
+            &build_descriptor(
+                &superblock,
+                7,
+                &[TagSpec::new(5, JBD2_FLAG_LAST_TAG)],
+                std::slice::from_ref(&payload),
+            ),
+        );
+        put_block(&mut journal, 2, &payload);
+        put_block(&mut journal, 3, &build_revoke(&superblock, 7, &[5]));
+        put_block(&mut journal, 4, &build_commit(&superblock, 7));
+
+        let filesystem = build_ext4_reader(true, Some(&journal));
+        let plan = filesystem
+            .plan_journal_repair(64 * 1024)
+            .unwrap()
+            .expect("dirty journal produces a repair plan");
+        assert!(!plan
+            .patches
+            .iter()
+            .any(|patch| patch.volume_offset == 5 * BLOCK_SIZE as u64));
+        assert!(plan
+            .patches
+            .iter()
+            .any(|patch| patch.bytes.len() == JOURNAL_SUPERBLOCK_SIZE));
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -829,6 +954,7 @@ fn build_ext4_reader_with_mutation(
         let inode = &mut image[inode_offset..inode_offset + 256];
         inode[0..2].copy_from_slice(&0x8180u16.to_le_bytes());
         inode[4..8].copy_from_slice(&(journal.len() as u32).to_le_bytes());
+        inode[0x20..0x24].copy_from_slice(&0x0008_0000u32.to_le_bytes());
         inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());
         inode[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes());
         inode[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes());

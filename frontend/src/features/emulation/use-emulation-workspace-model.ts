@@ -215,7 +215,10 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const needsFsRepair = useMemo(
     () => (preflightQuery.data?.installs ?? [])
       .some((install) => (install.bootRiskNotes ?? [])
-        .some((note) => note === 'xfs-log-dirty' || note === 'xfs-log-unverified')),
+        .some((note) => note === 'xfs-log-dirty'
+          || note === 'xfs-log-unverified'
+          || note === 'ext4-journal-dirty'
+          || note === 'ext4-journal-unverified')),
     [preflightQuery.data],
   );
   const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);

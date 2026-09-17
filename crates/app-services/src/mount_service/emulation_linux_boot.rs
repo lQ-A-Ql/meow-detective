@@ -56,6 +56,67 @@ pub(crate) fn annotate_xfs_log_risk(
     Ok(())
 }
 
+/// Ext4 journal annotation for the boot path.  A dirty jbd2 journal is not a
+/// generic warning: the guest will replay it during mount and can overwrite
+/// a host-side password bypass.  The bypass service checkpoints it in the COW
+/// before editing `/etc/shadow`; preflight surfaces the state so that the
+/// investigator can see why that preparation is required.
+pub(crate) fn annotate_ext4_journal_risk(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partitions: &PartitionRepo<'_>,
+    data_source_id: &DataSourceId,
+    installs: &mut [EmulationInstallDto],
+) -> Result<(), super::MountServiceError> {
+    if installs.is_empty() {
+        return Ok(());
+    }
+    let context = EvidenceContext {
+        source_path: source_path.to_path_buf(),
+        kind: source_kind.clone(),
+    };
+    let records = partitions.find_by_data_source(&data_source_id.0)?;
+    let mut assessments = Vec::new();
+    for record in records
+        .iter()
+        .filter(|record| record.filesystem.as_deref() == Some("Ext4"))
+    {
+        let Some(reader) = open_linux_volume_reader(&context, record) else {
+            assessments.push(Ext4JournalAssessment::Unverified);
+            continue;
+        };
+        match fs_ext4::Ext4Reader::open(reader, 0) {
+            Ok(fs) => match fs.journal_replay_required() {
+                Ok(true) => assessments.push(Ext4JournalAssessment::Dirty),
+                Ok(false) => assessments.push(Ext4JournalAssessment::Clean),
+                Err(_) => assessments.push(Ext4JournalAssessment::Unverified),
+            },
+            Err(_) => assessments.push(Ext4JournalAssessment::Unverified),
+        }
+    }
+    annotate_ext4_assessments(installs, &assessments);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ext4JournalAssessment {
+    Clean,
+    Dirty,
+    Unverified,
+}
+
+fn annotate_ext4_assessments(
+    installs: &mut [EmulationInstallDto],
+    assessments: &[Ext4JournalAssessment],
+) {
+    if assessments.contains(&Ext4JournalAssessment::Dirty) {
+        add_boot_risk(installs, "ext4-journal-dirty");
+    }
+    if assessments.contains(&Ext4JournalAssessment::Unverified) {
+        add_boot_risk(installs, "ext4-journal-unverified");
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum XfsLogAssessment {
     Clean,

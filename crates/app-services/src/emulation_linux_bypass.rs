@@ -78,6 +78,10 @@ pub fn apply_linux_bypass(
     partition_index: u32,
     username: &str,
 ) -> Result<EmulationLinuxBypassResultDto, EmulationBypassError> {
+    if let Err(error) = crate::emulation_ext4_repair::repair_ext4_journals(disk, case_context) {
+        disk.invalidate();
+        return Err(error);
+    }
     let partition = open_linux_partition(case_context, partition_index, Some(disk))?;
     let shadow = read_shadow(&partition)?;
     artifacts_linux::parse_shadow_accounts(&shadow)
@@ -112,6 +116,7 @@ pub fn apply_linux_bypass(
     let Some(edited) = edited else {
         return Ok(result(false, true));
     };
+    let edited = rewrite::fit_shadow_content(&partition, edited)?;
     let plan = plan_shadow_rewrite(&partition, edited.as_bytes())?;
     validate_rewrite_plan(&partition.mapping, &plan)?;
     if let Err(error) = apply_rewrite_plan(disk, &partition.mapping, &plan) {

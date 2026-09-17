@@ -7,6 +7,7 @@ mod descriptor;
 mod error;
 mod inode_checksum;
 mod recovery;
+mod repair;
 mod revoke;
 mod ring;
 mod snapshot;
@@ -22,6 +23,7 @@ pub use error::{JournalError, JournalResult};
 pub use recovery::{
     recover_deleted_inodes, DeletedInodeCandidate, DeletedInodeKind, RecoveryCompleteness,
 };
+pub use repair::{Ext4JournalRepairPatch, Ext4JournalRepairPlan};
 pub use revoke::parse_revoke_block;
 pub use ring::{parse_journal, parse_journal_history};
 pub use types::{
