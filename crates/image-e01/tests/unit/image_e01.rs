@@ -232,6 +232,40 @@ fn cloned_reader_reads_same_data() {
 }
 
 #[test]
+fn cloned_readers_are_safe_for_concurrent_reads() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let dir = std::env::temp_dir().join(format!("image-e01-concurrent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("concurrent.E01");
+    write_multichunk_e01(&path, 8).unwrap();
+    let reader = Arc::new(E01Reader::open(&path).unwrap());
+    let chunk_bytes = reader.chunk_size_bytes();
+    let workers = (0..8u64)
+        .map(|index| {
+            let reader = Arc::clone(&reader);
+            thread::spawn(move || {
+                let mut clone = reader.try_clone().unwrap();
+                let mut buffer = vec![0u8; chunk_bytes as usize];
+                clone
+                    .read_exact_at(index * chunk_bytes, &mut buffer)
+                    .unwrap();
+                (index, buffer)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for worker in workers {
+        let (index, buffer) = worker.join().unwrap();
+        assert_eq!(&buffer[..4], &(index as u32).to_le_bytes());
+        assert!(buffer[4..].iter().all(|byte| *byte == index as u8));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn compressed_chunk_length_error_contains_forensic_context() {
     let path = temporary_chunk_path("short-deflate");
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());

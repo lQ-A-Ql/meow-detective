@@ -55,24 +55,14 @@ impl E01Reader {
     }
 
     /// Clone immutable parsing state while resetting cursor and cache state.
+    ///
+    /// Re-open every segment instead of duplicating the handles. On Windows,
+    /// `File::try_clone` duplicates the OS handle to the same file object, so
+    /// the file position is shared by concurrent `seek`/`read` pairs. The
+    /// block provider relies on clones for parallel reads; independent file
+    /// objects are required to keep those reads from corrupting each other.
     pub fn try_clone(&self) -> io::Result<Self> {
-        let segment_files: io::Result<Vec<_>> = self
-            .segment_files
-            .iter()
-            .map(|file| file.try_clone())
-            .collect();
-        Ok(Self {
-            info: self.info.clone(),
-            total_bytes: self.total_bytes,
-            chunk_size_sectors: self.chunk_size_sectors,
-            bytes_per_sector: self.bytes_per_sector,
-            chunk_table: Arc::clone(&self.chunk_table),
-            segment_files: segment_files?,
-            cursor: 0,
-            chunk_cache: VecDeque::new(),
-            chunk_cache_bytes: 0,
-            last_chunk_read: None,
-        })
+        self.re_open(&self.info.path)
     }
 
     /// Open independent segment handles while reusing the parsed chunk table.

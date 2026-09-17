@@ -61,6 +61,32 @@ fn read_mid_image_block() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 tests"]
+fn read_vmware_boot_offsets_concurrently() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let reader = Arc::new(E01Reader::open(&real_e01_path()).unwrap());
+    let offsets = [1_572_864u64, 2_151_677_952, 19_334_430_720];
+    let workers = offsets
+        .into_iter()
+        .map(|offset| {
+            let reader = Arc::clone(&reader);
+            thread::spawn(move || {
+                let mut handle = reader.try_clone().unwrap();
+                let mut buffer = vec![0u8; 64 * 1024];
+                handle.read_exact_at(offset, &mut buffer).unwrap();
+                (offset, buffer)
+            })
+        })
+        .collect::<Vec<_>>();
+    for worker in workers {
+        let (offset, buffer) = worker.join().unwrap();
+        assert_eq!(buffer.len(), 64 * 1024, "offset {offset}");
+    }
+}
+
+#[test]
 fn opens_committed_tiny_e01_fixture() {
     let mut reader = E01Reader::open(&testing::fixtures::tiny_e01_image()).unwrap();
     assert_eq!(reader.info().kind, "e01");
