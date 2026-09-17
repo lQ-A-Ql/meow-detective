@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use domain::DataSourceId;
 use evidence_emulation::CowDisk;
 
+use super::stack::{isolated_worker_thread, run_on_large_stack};
 use super::vmware::{self, VmwareControl};
 use super::{
     refresh_backend, BypassCaseRef, EmulationGuestPhase, EmulationRegistry, EmulationRegistryError,
@@ -260,6 +261,18 @@ impl EmulationRegistry {
     }
 
     pub fn release(
+        &self,
+        session_id: &str,
+    ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
+        if !isolated_worker_thread() {
+            let registry = self.clone();
+            let session_id = session_id.to_owned();
+            return run_on_large_stack("release", move || registry.release_inner(&session_id));
+        }
+        self.release_inner(session_id)
+    }
+
+    fn release_inner(
         &self,
         session_id: &str,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {

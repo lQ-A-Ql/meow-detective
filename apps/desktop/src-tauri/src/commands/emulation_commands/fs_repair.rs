@@ -4,6 +4,7 @@ use transport::CommandError;
 use crate::commands::command_support::{
     get_case_connection, require_active_case, write_emulation_edit_audit_log, EmulationAuditEvent,
 };
+use crate::commands::emulation_commands::worker::run_emulation_blocking;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -15,7 +16,7 @@ pub async fn repair_emulation_fs_journals(
         return Err(CommandError::invalid_input("session id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("filesystem-repair", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let result = app_state
@@ -47,5 +48,4 @@ pub async fn repair_emulation_fs_journals(
         Ok(result)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }

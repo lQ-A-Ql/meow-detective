@@ -38,9 +38,14 @@ impl TaskManager {
     {
         let cancel_token = Arc::new(AtomicBool::new(false));
         let worker_token = Arc::clone(&cancel_token);
-        self.spawn_internal(task_id, None, Arc::clone(&cancel_token), false, move || {
-            task(worker_token)
-        })?;
+        self.spawn_internal(
+            task_id,
+            None,
+            Arc::clone(&cancel_token),
+            false,
+            None,
+            move || task(worker_token),
+        )?;
         Ok(cancel_token)
     }
 
@@ -54,7 +59,31 @@ impl TaskManager {
     where
         F: FnOnce() -> TaskResult + Send + 'static,
     {
-        self.spawn_internal(task_id, Some(scope), cancel_token, false, task)
+        self.spawn_internal(task_id, Some(scope), cancel_token, false, None, task)
+    }
+
+    /// Spawns a scoped task with an explicit stack budget for parsers that
+    /// compose nested worker runtimes. The larger stack is opt-in so ordinary
+    /// tasks keep the platform default.
+    pub fn spawn_scoped_with_stack_size<F>(
+        &self,
+        task_id: String,
+        scope: TaskScope,
+        cancel_token: Arc<AtomicBool>,
+        stack_size: usize,
+        task: F,
+    ) -> Result<(), TaskRegistrationError>
+    where
+        F: FnOnce() -> TaskResult + Send + 'static,
+    {
+        self.spawn_internal(
+            task_id,
+            Some(scope),
+            cancel_token,
+            false,
+            Some(stack_size),
+            task,
+        )
     }
 
     pub fn spawn_scoped_heavy<F>(
@@ -67,7 +96,7 @@ impl TaskManager {
     where
         F: FnOnce() -> TaskResult + Send + 'static,
     {
-        self.spawn_internal(task_id, Some(scope), cancel_token, true, task)
+        self.spawn_internal(task_id, Some(scope), cancel_token, true, None, task)
     }
 
     fn spawn_internal<F>(
@@ -76,6 +105,7 @@ impl TaskManager {
         scope: Option<TaskScope>,
         cancel_token: Arc<AtomicBool>,
         heavy: bool,
+        stack_size: Option<usize>,
         task: F,
     ) -> Result<(), TaskRegistrationError>
     where
@@ -121,14 +151,15 @@ impl TaskManager {
 
         let registry = Arc::clone(&self.registry);
         let worker_task_id = task_id.clone();
-        if let Err(error) = std::thread::Builder::new()
-            .name(thread_name(&task_id))
-            .spawn(move || {
-                let result = catch_unwind(AssertUnwindSafe(task))
-                    .unwrap_or_else(|_| Err("Task panicked".to_string()));
-                registry.complete(worker_task_id, result);
-            })
-        {
+        let mut builder = std::thread::Builder::new().name(thread_name(&task_id));
+        if let Some(stack_size) = stack_size {
+            builder = builder.stack_size(stack_size);
+        }
+        if let Err(error) = builder.spawn(move || {
+            let result = catch_unwind(AssertUnwindSafe(task))
+                .unwrap_or_else(|_| Err("Task panicked".to_string()));
+            registry.complete(worker_task_id, result);
+        }) {
             let mut state = self
                 .registry
                 .state

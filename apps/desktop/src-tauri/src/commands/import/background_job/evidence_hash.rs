@@ -22,6 +22,8 @@ mod status;
 use progress::{finish_progress_reporter, spawn_progress_reporter};
 use status::{cancel_hash, complete_hash, fail_hash, fail_hash_setup};
 
+const HASH_TASK_STACK_BYTES: usize = 16 * 1024 * 1024;
+
 pub(crate) fn schedule_pending_evidence_hashes(
     case_root: &Path,
     case_id: &str,
@@ -82,10 +84,22 @@ fn spawn_hash_task(
     let cancel_token = Arc::new(AtomicBool::new(false));
     let worker_cancel = Arc::clone(&cancel_token);
     let scope = TaskScope::data_source(&case_id.0, &data_source_id.0, &job_id.0);
-    task_manager.spawn_scoped(task_id, scope, cancel_token, move || {
-        run_background_evidence_hash(db_path, data_source_id, job_id, app.as_ref(), worker_cancel)
+    task_manager.spawn_scoped_with_stack_size(
+        task_id,
+        scope,
+        cancel_token,
+        HASH_TASK_STACK_BYTES,
+        move || {
+            run_background_evidence_hash(
+                db_path,
+                data_source_id,
+                job_id,
+                app.as_ref(),
+                worker_cancel,
+            )
             .map_err(|error| error.message)
-    })
+        },
+    )
 }
 
 pub(crate) fn run_background_evidence_hash(

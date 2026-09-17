@@ -2,6 +2,7 @@ use tauri::State;
 use transport::CommandError;
 
 use crate::commands::command_support::{get_case_connection, require_active_case};
+use crate::commands::emulation_commands::worker::run_emulation_blocking;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -13,7 +14,7 @@ pub async fn get_emulation_preflight(
         return Err(CommandError::invalid_input("data source id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("preflight", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let mut preflight = app_services::mount_service::emulation_preflight(
@@ -28,5 +29,4 @@ pub async fn get_emulation_preflight(
         Ok(preflight)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }

@@ -16,6 +16,7 @@ mod efi_fallback;
 mod fs_repair;
 mod preflight;
 mod status_dto;
+mod worker;
 
 use status_dto::to_dto;
 
@@ -34,7 +35,7 @@ pub async fn prepare_emulation(
 ) -> Result<EmulationSessionStatusDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    worker::run_emulation_blocking("prepare", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let recovery_iso = request.recovery_iso_path.map(PathBuf::from);
@@ -70,7 +71,6 @@ pub async fn prepare_emulation(
         Ok(to_dto(status))
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -80,7 +80,7 @@ pub async fn launch_emulation(
 ) -> Result<EmulationSessionStatusDto, CommandError> {
     validate_session_id(&session_id)?;
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    worker::run_emulation_blocking("launch", move || {
         require_active_case(&app_state)?;
         let status = app_state
             .emulation_registry
@@ -90,7 +90,6 @@ pub async fn launch_emulation(
         Ok(to_dto(status))
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -100,7 +99,7 @@ pub async fn get_emulation_status(
 ) -> Result<EmulationSessionStatusDto, CommandError> {
     validate_session_id(&session_id)?;
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    worker::run_emulation_blocking("status", move || {
         require_active_case(&app_state)?;
         app_state
             .emulation_registry
@@ -109,7 +108,6 @@ pub async fn get_emulation_status(
             .map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -117,7 +115,7 @@ pub async fn list_emulation_sessions(
     state: State<'_, AppState>,
 ) -> Result<Vec<EmulationSessionStatusDto>, CommandError> {
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    worker::run_emulation_blocking("list", move || {
         require_active_case(&app_state)?;
         app_state
             .emulation_registry
@@ -126,7 +124,6 @@ pub async fn list_emulation_sessions(
             .map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -136,7 +133,7 @@ pub async fn release_emulation(
 ) -> Result<EmulationSessionStatusDto, CommandError> {
     validate_session_id(&session_id)?;
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    worker::run_emulation_blocking("release", move || {
         require_active_case(&app_state)?;
         let status = app_state
             .emulation_registry
@@ -146,7 +143,6 @@ pub async fn release_emulation(
         Ok(to_dto(status))
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 fn validate_session_id(session_id: &str) -> Result<(), CommandError> {

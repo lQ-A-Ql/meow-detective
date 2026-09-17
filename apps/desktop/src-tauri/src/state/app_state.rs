@@ -239,7 +239,7 @@ impl AppState {
             .map_err(|error| format!("Failed to clean up physical image mounts: {error}"));
         let emulation = self
             .emulation_registry
-            .cleanup_case(case_id)
+            .cleanup_case_on_large_stack(case_id)
             .map_err(|error| format!("Failed to clean up emulation sessions: {error}"));
         logical.and(physical).and(emulation)
     }
@@ -259,7 +259,7 @@ impl AppState {
             .map_err(|error| format!("Failed to clean up physical data-source mounts: {error}"));
         let emulation = self
             .emulation_registry
-            .cleanup_source(case_id, data_source_id)
+            .cleanup_source_on_large_stack(case_id, data_source_id)
             .map_err(|error| format!("Failed to clean up data-source emulation sessions: {error}"));
         logical.and(physical).and(emulation)
     }

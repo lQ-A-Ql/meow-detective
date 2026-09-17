@@ -18,6 +18,7 @@ mod materials;
 mod recovery_media;
 mod session_discovery;
 mod session_ops;
+mod stack;
 mod vmware;
 mod workspace;
 
@@ -248,10 +249,22 @@ impl EmulationRegistry {
     }
 
     pub fn cleanup_case(&self, case_id: &str) -> Result<(), EmulationRegistryError> {
-        self.cleanup_matching(|entry| entry.case_id == case_id)
+        self.cleanup_case_on_large_stack(case_id)
     }
 
     pub fn cleanup_source(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> Result<(), EmulationRegistryError> {
+        self.cleanup_source_on_large_stack(case_id, data_source_id)
+    }
+
+    pub(crate) fn cleanup_case_inner(&self, case_id: &str) -> Result<(), EmulationRegistryError> {
+        self.cleanup_matching(|entry| entry.case_id == case_id)
+    }
+
+    pub(crate) fn cleanup_source_inner(
         &self,
         case_id: &str,
         data_source_id: &str,

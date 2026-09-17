@@ -4,6 +4,7 @@ use transport::CommandError;
 use crate::commands::command_support::{
     get_case_connection, require_active_case, write_emulation_edit_audit_log, EmulationAuditEvent,
 };
+use crate::commands::emulation_commands::worker::run_emulation_blocking;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -16,7 +17,7 @@ pub async fn get_emulation_bypass_accounts(
         return Err(CommandError::invalid_input("data source id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("list-windows-accounts", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         app_services::emulation_bypass::list_bypass_accounts(
@@ -31,7 +32,6 @@ pub async fn get_emulation_bypass_accounts(
         .map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -43,7 +43,7 @@ pub async fn apply_emulation_bypass(
         return Err(CommandError::invalid_input("session id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("windows-bypass", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let result = app_state
@@ -78,7 +78,6 @@ pub async fn apply_emulation_bypass(
         Ok(result)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -90,7 +89,7 @@ pub async fn cleanup_emulation_osdata(
         return Err(CommandError::invalid_input("session id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("cleanup-osdata", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let result = app_state
@@ -119,7 +118,6 @@ pub async fn cleanup_emulation_osdata(
         Ok(result)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -132,7 +130,7 @@ pub async fn get_emulation_linux_accounts(
         return Err(CommandError::invalid_input("data source id is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("list-linux-accounts", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         app_services::emulation_linux_bypass::list_linux_accounts(
@@ -147,7 +145,6 @@ pub async fn get_emulation_linux_accounts(
         .map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]
@@ -162,7 +159,7 @@ pub async fn apply_emulation_linux_bypass(
         return Err(CommandError::invalid_input("username is required"));
     }
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_emulation_blocking("linux-bypass", move || {
         let active = require_active_case(&app_state)?;
         let connection = get_case_connection(&app_state)?;
         let result = app_state
@@ -193,5 +190,4 @@ pub async fn apply_emulation_linux_bypass(
         Ok(result)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }

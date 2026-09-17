@@ -9,6 +9,17 @@ use super::{
     EmulationRegistryError, EmulationSessionStatus, EmulationState,
 };
 
+#[test]
+fn empty_cleanup_and_release_entrypoints_are_stack_safe() {
+    let registry = EmulationRegistry::default();
+    registry.cleanup_case("case").unwrap();
+    registry.cleanup_source("case", "source").unwrap();
+    assert!(matches!(
+        registry.release("session"),
+        Err(EmulationRegistryError::NotFound(_))
+    ));
+}
+
 struct MemoryProvider(Vec<u8>);
 
 impl BlockProvider for MemoryProvider {
