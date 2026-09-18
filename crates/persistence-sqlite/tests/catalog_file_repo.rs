@@ -31,6 +31,14 @@ fn entry(id: &str, parent_id: Option<&str>, path: &str, entry_type: EntryType) -
 fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
     let connection = persistence_sqlite::open_in_memory().expect("open database");
     persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    connection
+        .execute(
+            "INSERT INTO data_sources
+                (id, case_id, name, kind, source_path, imported_at)
+             VALUES ('source-1', 'case-1', 'source', 'e01', 'image.E01', datetime('now'))",
+            [],
+        )
+        .expect("insert source metadata");
     let transaction = connection
         .unchecked_transaction()
         .expect("begin catalog batch");
@@ -80,4 +88,12 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         )
         .expect("read encrypted flag");
     assert!(encrypted);
+    let fingerprint_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM forensic_fingerprints WHERE source_id = 'source-1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count file fingerprints");
+    assert_eq!(fingerprint_count, 2);
 }

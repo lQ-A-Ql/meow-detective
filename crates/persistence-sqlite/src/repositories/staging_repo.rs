@@ -349,7 +349,6 @@ impl StagingRepo {
         let escaped = staging_path.replace('\'', "''");
         main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS staging", escaped))?;
         main_conn.execute_batch("BEGIN IMMEDIATE")?;
-
         let result = (|| {
             let existing = Self::find_partition_placeholder_root_id_by_index(
                 main_conn,
@@ -418,7 +417,6 @@ impl StagingRepo {
             main_conn.execute_batch("COMMIT")?;
             Ok(inserted as u64)
         })();
-
         if result.is_err() {
             let _ = main_conn.execute_batch("ROLLBACK");
         }
@@ -426,7 +424,6 @@ impl StagingRepo {
         result
     }
 }
-
 fn staging_db_file_path(conn: &Connection) -> rusqlite::Result<String> {
     conn.query_row(
         "SELECT COALESCE(file, '') FROM pragma_database_list WHERE name = 'main'",
@@ -460,6 +457,11 @@ impl StagingRepo {
                  FROM analysis_stage.artifact_rows",
                 params![case_id, data_source_id],
             )?;
+            super::staging_fingerprint_repo::persist_analysis_fingerprints_for_merge(
+                main_conn,
+                case_id,
+                data_source_id,
+            )?;
             let timeline_count = main_conn.execute(
                 "INSERT INTO main.timeline_events
                  (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
@@ -477,7 +479,6 @@ impl StagingRepo {
         let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
         result
     }
-
     pub fn read_analysis_index_docs_page(
         conn: &Connection,
         limit: i64,

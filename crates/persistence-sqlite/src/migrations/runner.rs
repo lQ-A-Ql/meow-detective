@@ -162,6 +162,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0046_file_entry_unix_mode",
         include_str!("scripts/0046_file_entry_unix_mode.sql"),
     ),
+    (
+        "0047_forensic_fingerprints",
+        include_str!("scripts/0047_forensic_fingerprints.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

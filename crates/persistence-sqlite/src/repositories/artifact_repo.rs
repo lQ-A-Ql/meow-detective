@@ -1,4 +1,5 @@
 use crate::connection::DbResult;
+use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
 use crate::repositories::source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVISION_KEY};
 use crate::sql_builder::ClauseBuilder;
 use domain::{Artifact, ArtifactId};
@@ -49,6 +50,8 @@ impl<'a> ArtifactRepo<'a> {
             "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         )?;
+        let fingerprint_repo = ForensicFingerprintRepo::new(self.conn);
+        let fingerprints_available = fingerprint_repo.is_available()?;
         for artifact in artifacts {
             stmt.execute(params![
                 artifact.id.0,
@@ -65,6 +68,11 @@ impl<'a> ArtifactRepo<'a> {
                 serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
                 artifact.created_at.to_rfc3339(),
             ])?;
+            if fingerprints_available {
+                fingerprint_repo.upsert_in_transaction(
+                    &domain::ForensicFingerprint::for_artifact(artifact, case_id, data_source_id),
+                )?;
+            }
         }
         Ok(())
     }

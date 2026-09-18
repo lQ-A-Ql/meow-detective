@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_036_android_analysis"
+        "source_037_forensic_fingerprints"
     );
     for table in [
         "ceph_bluefs_superblocks",

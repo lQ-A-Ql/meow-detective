@@ -1,5 +1,6 @@
 use crate::connection::DbResult;
 use crate::repositories::audit_repo::{AuditAction, AuditRepo};
+use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
 use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
     DataSourceProvenanceStatus,
@@ -93,6 +94,9 @@ impl<'a> DataSourceRepo<'a> {
                 storage.last_error,
             ],
         )?;
+        ForensicFingerprintRepo::new(self.conn).upsert_if_available(
+            &domain::ForensicFingerprint::for_data_source(&case_id.0, ds),
+        )?;
         Ok(())
     }
 
@@ -121,6 +125,9 @@ impl<'a> DataSourceRepo<'a> {
                 provenance_status_to_str(&ds.provenance.provenance_status),
                 serde_json::to_string(&ds.provenance.warnings).unwrap_or_else(|_| "[]".to_string()),
             ],
+        )?;
+        ForensicFingerprintRepo::new(self.conn).upsert_if_available(
+            &domain::ForensicFingerprint::for_data_source(&case_id.0, ds),
         )?;
         Ok(())
     }
@@ -292,6 +299,12 @@ impl<'a> DataSourceRepo<'a> {
                 data_source_id.0
             )));
         }
+        ForensicFingerprintRepo::new(self.conn).update_content_sha256(
+            domain::ForensicObjectType::DataSource,
+            Some(&data_source_id.0),
+            &data_source_id.0,
+            source_hash,
+        )?;
         Ok(())
     }
 

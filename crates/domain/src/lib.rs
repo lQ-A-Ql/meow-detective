@@ -4,6 +4,7 @@ pub mod case;
 pub mod datasource;
 pub mod error;
 pub mod file_entry;
+pub mod fingerprint;
 pub mod graph;
 pub mod job;
 pub mod notebook;
@@ -19,6 +20,10 @@ pub use datasource::{
 pub use error::{ForensicsError, ForensicsResult};
 pub use file_entry::{
     EntryType, FileEncryptionStatus, FileEntry, FileEntryId, InvalidEncryptionStatus,
+};
+pub use fingerprint::{
+    normalize_content_sha256, ForensicFingerprint, ForensicMetadata, ForensicObjectType,
+    FMD_SCHEMA_VERSION,
 };
 pub use graph::{EdgeType, GraphEdge, GraphNode, NodeType};
 pub use job::JobId;

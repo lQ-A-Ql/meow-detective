@@ -1,6 +1,7 @@
 use crate::connection::{DbError, DbResult};
+use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
 use domain::{EntryType, FileEntry};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 pub struct CatalogFileRepo<'a> {
     conn: &'a Connection,
@@ -31,6 +32,13 @@ impl<'a> CatalogFileRepo<'a> {
                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
              )",
         )?;
+        let fingerprint_repo = ForensicFingerprintRepo::new(self.conn);
+        let fingerprints_available = fingerprint_repo.is_available()?;
+        let case_id = if fingerprints_available {
+            case_id_for_source(self.conn, entries[0].data_source_id.0.as_str())?
+        } else {
+            None
+        };
         for entry in entries {
             statement.execute(params![
                 entry.id.0,
@@ -58,6 +66,11 @@ impl<'a> CatalogFileRepo<'a> {
                 entry.hash_sha256,
                 partition_index,
             ])?;
+            if fingerprints_available {
+                fingerprint_repo.upsert_in_transaction(
+                    &domain::ForensicFingerprint::for_file_entry(entry, case_id.as_deref()),
+                )?;
+            }
         }
         Ok(())
     }
@@ -88,6 +101,22 @@ impl<'a> CatalogFileRepo<'a> {
                 entry.id.0,
             ],
         )?;
+        ForensicFingerprintRepo::new(self.conn).upsert_if_available(
+            &domain::ForensicFingerprint::for_file_entry(
+                entry,
+                case_id_for_source(self.conn, entry.data_source_id.0.as_str())?.as_deref(),
+            ),
+        )?;
         Ok(())
     }
+}
+
+fn case_id_for_source(conn: &Connection, source_id: &str) -> DbResult<Option<String>> {
+    conn.query_row(
+        "SELECT case_id FROM data_sources WHERE id = ?1",
+        [source_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
 }

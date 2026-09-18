@@ -1,4 +1,6 @@
 use crate::connection::DbResult;
+use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
+use domain::ForensicFingerprint;
 use rusqlite::{params, Connection};
 
 pub struct ReportRecord {
@@ -35,6 +37,14 @@ impl<'a> ReportRepo<'a> {
                 record.progress,
                 record.created_at,
             ],
+        )?;
+        ForensicFingerprintRepo::new(self.conn).upsert_if_available(
+            &ForensicFingerprint::for_report(
+                &record.id,
+                &record.case_id,
+                &record.file_name,
+                &record.template_id,
+            ),
         )?;
         Ok(())
     }

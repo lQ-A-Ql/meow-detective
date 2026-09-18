@@ -20,6 +20,6 @@ fn source_schema_creates_android_analysis_tables() {
     assert_eq!(table_names, ["android_packages", "android_system_facts"]);
     assert_eq!(
         runner::latest_source_version(),
-        "source_036_android_analysis"
+        "source_037_forensic_fingerprints"
     );
 }

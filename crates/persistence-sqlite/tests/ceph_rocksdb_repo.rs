@@ -333,7 +333,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_036_android_analysis"
+        "source_037_forensic_fingerprints"
     );
     for table in [
         "ceph_rocksdb_manifests",
