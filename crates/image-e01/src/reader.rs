@@ -395,6 +395,10 @@ impl EvidenceReader for E01Reader {
     fn info(&self) -> &ReaderInfo {
         &self.info
     }
+
+    fn preferred_read_granularity(&self) -> usize {
+        usize::try_from(self.chunk_size_bytes()).unwrap_or(usize::MAX)
+    }
 }
 
 fn chunk_entry(table: &[(usize, u64, bool, u64)], idx: u64) -> io::Result<(usize, u64, bool, u64)> {

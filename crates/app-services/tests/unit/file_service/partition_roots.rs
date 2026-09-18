@@ -2,6 +2,7 @@ use super::*;
 use crate::datasource_service::{
     ImageFilesystemKind, LvmLogicalVolumeIdentity, PartitionRecord, PartitionStatus,
 };
+use crate::file_service::get_file_tree_real_with_visibility;
 use evidence_core::{filesystem::root_node, FileSystemReader, FsNode};
 use std::io::{self, Cursor, Read};
 
@@ -209,4 +210,76 @@ fn replace_placeholder_materializes_partition_index_for_entire_subtree() {
         )
         .unwrap();
     assert_eq!(mismatched, 0);
+}
+
+#[test]
+fn unsupported_placeholder_stays_persisted_and_is_labeled_in_tree() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let data_source_id = DataSourceId("ds-unsupported-placeholder".to_string());
+
+    let unsupported = insert_partition_placeholder_root(
+        &conn,
+        &data_source_id,
+        1,
+        "Partition 1 (Unknown)",
+        "unsupported",
+    )
+    .unwrap();
+    let supported = insert_partition_placeholder_root(
+        &conn,
+        &data_source_id,
+        2,
+        "Partition 2 (Ext4)",
+        "queued",
+    )
+    .unwrap();
+    replace_placeholder_root_with_real(
+        &conn,
+        &supported,
+        &TwoFileFs,
+        Some("Partition 2 (Ext4)"),
+        None,
+    )
+    .unwrap();
+
+    let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+    assert_eq!(tree.len(), 2);
+    let unsupported_node = tree
+        .iter()
+        .find(|node| node.name == "Partition 1 (Unknown)")
+        .expect("unsupported partition should remain visible for diagnostics");
+    assert_eq!(unsupported_node.node_type.as_deref(), Some("partition"));
+    assert_eq!(unsupported_node.status.as_deref(), Some("unsupported"));
+    let supported_node = tree
+        .iter()
+        .find(|node| node.name == "Partition 2 (Ext4)")
+        .expect("supported partition should remain visible after enumeration");
+    assert_eq!(supported_node.status.as_deref(), Some("ready"));
+    assert!(
+        FileRepo::new(&conn)
+            .find_by_id(&unsupported)
+            .unwrap()
+            .is_some(),
+        "unsupported partition metadata must remain available for diagnostics"
+    );
+
+    let visible_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE data_source_id = ?1 AND path NOT LIKE '__partition_placeholder__/%'",
+            rusqlite::params![data_source_id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let placeholder_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries
+             WHERE data_source_id = ?1 AND path LIKE '__partition_placeholder__/%'",
+            rusqlite::params![data_source_id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(visible_rows, 3);
+    assert_eq!(placeholder_rows, 1);
 }

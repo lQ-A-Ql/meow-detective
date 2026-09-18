@@ -23,6 +23,10 @@ pub(crate) fn detect_boot_filesystem(sector: &[u8; 512]) -> Option<ImageFilesyst
         return Some(ImageFilesystemKind::Ntfs);
     }
 
+    if is_exfat_boot_sector(sector) {
+        return Some(ImageFilesystemKind::Fat);
+    }
+
     if looks_like_bitlocker_boot_sector(sector) {
         return Some(ImageFilesystemKind::BitLocker);
     }
@@ -32,6 +36,10 @@ pub(crate) fn detect_boot_filesystem(sector: &[u8; 512]) -> Option<ImageFilesyst
     }
 
     None
+}
+
+pub(crate) fn is_exfat_boot_sector(sector: &[u8; 512]) -> bool {
+    &sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA]
 }
 
 pub(crate) fn read_boot_filesystem<R>(
@@ -130,14 +138,6 @@ where
     reader.seek(SeekFrom::Start(offset))?;
     reader.read_exact(&mut sector)?;
     Ok(sector)
-}
-
-pub(crate) fn read_exfat_boot<R>(reader: &mut R, offset: u64) -> Result<bool>
-where
-    R: Read + Seek + ?Sized,
-{
-    let sector = read_sector(reader, offset)?;
-    Ok(&sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA])
 }
 
 fn looks_like_bitlocker_boot_sector(sector: &[u8; 512]) -> bool {

@@ -84,6 +84,9 @@ pub(super) fn is_bitlocker_candidate(
 pub(super) fn detect_plaintext_filesystem(
     reader: &mut dyn evidence_core::EvidenceReader,
 ) -> Result<String, FileServiceError> {
+    if crate::file_service::viewer::looks_like_exfat_boot_sector(reader, 0)? {
+        return Ok("EXFAT".to_string());
+    }
     match crate::datasource_service::read_boot_filesystem(reader, 0).map_err(|error| {
         FileServiceError::other(format!("BitLocker plaintext probe failed: {error}"))
     })? {
@@ -97,9 +100,6 @@ pub(super) fn detect_plaintext_filesystem(
         Some(kind) => Err(FileServiceError::Unsupported(format!(
             "BitLocker plaintext filesystem '{kind:?}' is not supported"
         ))),
-        None if crate::file_service::viewer::looks_like_exfat_boot_sector(reader, 0)? => {
-            Ok("EXFAT".to_string())
-        }
         None => Err(FileServiceError::Unsupported(
             "BitLocker plaintext filesystem could not be identified".to_string(),
         )),

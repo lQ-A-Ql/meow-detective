@@ -130,5 +130,5 @@ where
     let mut sector = [0u8; 512];
     reader.seek(SeekFrom::Start(offset))?;
     reader.read_exact(&mut sector)?;
-    Ok(&sector[3..11] == b"EXFAT   " && sector[510] == 0x55 && sector[511] == 0xAA)
+    Ok(crate::datasource_service::is_exfat_boot_sector(&sector))
 }

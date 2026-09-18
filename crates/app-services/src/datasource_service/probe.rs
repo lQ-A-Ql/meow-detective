@@ -1,9 +1,7 @@
 mod gpt;
 
 use self::gpt::detect_gpt_filesystems;
-use super::fs_magic::{
-    kind_label, read_boot_filesystem, read_exfat_boot, read_iso9660, SECTOR_SIZE,
-};
+use super::fs_magic::{kind_label, read_boot_filesystem, read_iso9660, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
     ImageFilesystemSource, PartitionRecord, PartitionStatus, Result, UnsupportedImageKind,
@@ -149,10 +147,8 @@ fn detect_direct_volume<R>(reader: &mut R) -> Result<Option<ImageFilesystemProbe
 where
     R: Read + Seek,
 {
-    let kind = match read_boot_filesystem(reader, 0)? {
-        Some(kind) => kind,
-        None if read_exfat_boot(reader, 0)? => ImageFilesystemKind::Fat,
-        None => return Ok(None),
+    let Some(kind) = read_boot_filesystem(reader, 0)? else {
+        return Ok(None);
     };
     let candidate = ImageFilesystemCandidate {
         partition_index: Some(1),
@@ -226,16 +222,6 @@ where
                 Some(entry.sector_count as u64 * SECTOR_SIZE),
                 ImageFilesystemSource::MbrPartition,
             );
-        } else if read_exfat_boot(reader, offset)? {
-            push_candidate(
-                candidates,
-                Some(entry.partition_number),
-                name,
-                ImageFilesystemKind::Fat,
-                offset,
-                Some(entry.sector_count as u64 * SECTOR_SIZE),
-                ImageFilesystemSource::MbrPartition,
-            );
         }
     }
     Ok(())
@@ -272,11 +258,7 @@ where
 {
     let offset = entry.lba_start as u64 * SECTOR_SIZE;
     let class = evidence_core::volume::mbr::classify_mbr_partition_type(entry.partition_type);
-    let fs_kind = match read_boot_filesystem(reader, offset)? {
-        Some(kind) => Some(kind),
-        None if read_exfat_boot(reader, offset)? => Some(ImageFilesystemKind::Fat),
-        None => None,
-    };
+    let fs_kind = read_boot_filesystem(reader, offset)?;
     let kind_label = fs_kind
         .map(kind_label)
         .unwrap_or_else(|| class.name.to_string());

@@ -138,7 +138,7 @@ pub(crate) fn probe_plaintext_filesystem(
     reader
         .read_exact(&mut sector)
         .map_err(BitLockerServiceError::InvalidWindow)?;
-    if &sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA] {
+    if crate::datasource_service::is_exfat_boot_sector(&sector) {
         return Ok(Some("EXFAT".to_string()));
     }
     reader

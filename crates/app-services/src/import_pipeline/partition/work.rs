@@ -99,7 +99,7 @@ fn is_exfat_boot(reader: &mut dyn EvidenceReader, offset: u64) -> std::io::Resul
     reader.seek(SeekFrom::Start(offset))?;
     let mut sector = [0u8; 512];
     reader.read_exact(&mut sector)?;
-    Ok(&sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA])
+    Ok(datasource_service::is_exfat_boot_sector(&sector))
 }
 
 pub(crate) fn open_candidate_reader(

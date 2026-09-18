@@ -1,6 +1,6 @@
 use super::{partition_display_name, partition_status_for_filesystem};
 use crate::datasource_service::fs_magic::{
-    kind_label, read_boot_filesystem, read_exfat_boot, read_sector, SECTOR_SIZE,
+    kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE,
 };
 use crate::datasource_service::{
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
@@ -76,11 +76,7 @@ where
     let offset = partition.start_lba * SECTOR_SIZE;
     let partition_type = evidence_core::volume::gpt::classify_partition_type(&partition.type_guid);
     let type_name = evidence_core::volume::gpt::partition_type_name(partition_type);
-    let fs_kind = match read_boot_filesystem(reader, offset)? {
-        Some(kind) => Some(kind),
-        None if read_exfat_boot(reader, offset)? => Some(ImageFilesystemKind::Fat),
-        None => None,
-    };
+    let fs_kind = read_boot_filesystem(reader, offset)?;
     let kind_label = fs_kind
         .map(kind_label)
         .unwrap_or_else(|| type_name.to_string());

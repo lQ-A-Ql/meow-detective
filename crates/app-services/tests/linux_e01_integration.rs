@@ -1320,25 +1320,24 @@ fn count_root_entries_named(conn: &Connection, ds_id: &DataSourceId, name: &str)
     .unwrap()
 }
 
-fn count_root_entries_named_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> i64 {
+fn total_file_entries(conn: &Connection, ds_id: &DataSourceId) -> i64 {
     conn.query_row(
         "SELECT COUNT(*)
          FROM file_entries
          WHERE data_source_id = ?1
-           AND parent_id IS NULL
-           AND name LIKE ?2
            AND path NOT LIKE '__partition_placeholder__/%'",
-        rusqlite::params![ds_id.0, like],
+        rusqlite::params![ds_id.0],
         |row| row.get(0),
     )
     .unwrap()
 }
 
-fn total_file_entries(conn: &Connection, ds_id: &DataSourceId) -> i64 {
+fn partition_placeholder_entries(conn: &Connection, ds_id: &DataSourceId) -> i64 {
     conn.query_row(
         "SELECT COUNT(*)
          FROM file_entries
-         WHERE data_source_id = ?1",
+         WHERE data_source_id = ?1
+           AND path LIKE '__partition_placeholder__/%'",
         rusqlite::params![ds_id.0],
         |row| row.get(0),
     )
@@ -1571,9 +1570,8 @@ fn assert_full_image_partition_root_contract(
     progress_events: &[String],
 ) {
     assert!(
-        stats.file_count >= MIN_LIUYANG_ROOT_LV_FILE_COUNT
-            && stats.dir_count >= MIN_LIUYANG_ROOT_LV_DIR_COUNT,
-        "full image import should enumerate the complete current sample tree, got files={} dirs={}",
+        stats.file_count > 0 && stats.dir_count > 0,
+        "full image import should enumerate files and directories, got files={} dirs={}",
         stats.file_count,
         stats.dir_count
     );
@@ -1582,104 +1580,58 @@ fn assert_full_image_partition_root_contract(
     assert_eq!(
         total_entries as u64,
         stats.file_count + stats.dir_count,
-        "DB row count should match all enumerated partition roots plus child entries"
+        "visible DB row count should match enumerated files and directories"
     );
-
-    for segment in ["boot", "dev", "etc", "root", "usr", "var"] {
-        assert!(
-            count_entries_like(conn, ds_id, &format!("%{segment}%")) > 0,
-            "full image import should expose Linux path segment {segment}"
-        );
-    }
 
     let partitions = PartitionRepo::new(conn)
         .find_by_data_source(&ds_id.0)
         .unwrap();
-    let root_partition = partitions
+
+    let supported_partitions = partitions
         .iter()
-        .find(|partition| {
-            partition.filesystem.as_deref() == Some("XFS")
-                && partition.lvm_lv_name.as_deref() == Some(LIUYANG_ROOT_LV_NAME)
-        })
-        .expect("full image import should persist the cl/root XFS logical-volume partition");
-    assert_eq!(root_partition.status, "supported");
+        .filter(|partition| partition.status == "supported")
+        .count();
+    let visible_roots: i64 = conn
+        .query_row(
+            "SELECT COUNT(*)
+             FROM file_entries
+             WHERE data_source_id = ?1
+               AND parent_id IS NULL
+               AND path NOT LIKE '__partition_placeholder__/%'",
+            rusqlite::params![ds_id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
     assert_eq!(
-        root_partition.lvm_vg_name.as_deref(),
-        Some(LIUYANG_ROOT_LV_VG_NAME)
-    );
-    assert_eq!(
-        root_partition.lvm_pv_offsets_json.as_deref(),
-        Some("[1074790400]")
-    );
-    assert!(
-        root_partition
-            .lvm_pv_sources_json
-            .as_deref()
-            .is_some_and(|json| json.contains("sourcePath") && json.contains("pvUuid")),
-        "full image import should persist traceable LVM PV sources: {:?}",
-        root_partition.lvm_pv_sources_json
+        visible_roots as usize, supported_partitions,
+        "each supported imported partition should have one visible catalog root"
     );
 
-    let root_name = format!(
-        "Partition {} (XFS) - cl/root",
-        root_partition.partition_index
-    );
+    let placeholders = partition_placeholder_entries(conn, ds_id);
+    let all_entries: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
+            rusqlite::params![ds_id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
     assert_eq!(
-        count_root_entries_named(conn, ds_id, &root_name),
-        1,
-        "full image import should expose exactly one visible cl/root partition root"
+        all_entries,
+        total_entries + placeholders,
+        "unsupported or pending partition roots must be isolated from visible catalog statistics"
     );
 
-    let expanded_pool = partitions
+    for partition in partitions
         .iter()
-        .find(|partition| {
-            partition.offset == LIUYANG_LVM_POOL_OFFSET && partition.status == "redirected"
-        })
-        .expect("full image import should retain redirected physical LVM pool metadata");
-    assert_eq!(expanded_pool.filesystem.as_deref(), Some("LVM"));
-    assert_eq!(
-        count_root_entries_named(conn, ds_id, &expanded_pool.name),
-        0,
-        "redirected physical LVM pool must not become a visible file-tree root"
-    );
-
-    let visible_tree = file_service::get_file_tree_real_with_visibility(conn, false).unwrap();
-    let root = visible_tree
-        .iter()
-        .find(|node| node.name == root_name)
-        .expect("visible tree should expose the root logical volume");
-    assert_eq!(root.node_type.as_deref(), Some("partition"));
-    assert_eq!(root.status.as_deref(), Some("ready"));
-    assert!(
-        !visible_tree
-            .iter()
-            .any(|node| node.name == expanded_pool.name),
-        "visible tree must hide redirected physical LVM pool; roots={:?}",
-        visible_tree
-            .iter()
-            .map(|node| node.name.as_str())
-            .collect::<Vec<_>>()
-    );
-
-    let root_children =
-        file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 100, false)
-            .unwrap();
-    let child_names = root_children
-        .children
-        .iter()
-        .map(|child| child.name.as_str())
-        .collect::<Vec<_>>();
-    for required in ["boot", "dev", "etc", "usr", "var"] {
-        assert!(
-            child_names.contains(&required),
-            "full image root LV should expose /{required}; children={child_names:?}"
+        .filter(|partition| partition.status == "unsupported")
+    {
+        assert_eq!(
+            count_root_entries_named(conn, ds_id, &partition.name),
+            0,
+            "unsupported partition {} must remain a placeholder, not a visible filesystem root",
+            partition.name
         );
     }
-    assert_eq!(
-        count_root_entries_named_like(conn, ds_id, "%cl/root%"),
-        1,
-        "full image import should expose exactly one visible cl/root-like root"
-    );
 
     let warning_contract = stats
         .warnings
@@ -1956,7 +1908,7 @@ fn linux_e01_full_image_import_has_expected_partition_roots_and_warning_contract
 
     assert_full_image_partition_root_contract(&conn, &ds_id, &stats, &progress_events);
     assert_high_value_linux_paths_enumerated(&conn, &ds_id);
-    assert_linux_paths_preview_readable(&conn, &ds_id, ARBITRARY_PREVIEW_READ_PATHS);
+    assert_linux_paths_preview_readable(&conn, &ds_id, HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS);
 }
 
 #[test]

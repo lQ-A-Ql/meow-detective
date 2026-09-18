@@ -141,6 +141,17 @@ fn detect_image_filesystem_detects_exfat_as_a_fat_family_candidate() {
 }
 
 #[test]
+fn read_boot_filesystem_detects_exfat_without_a_second_probe() {
+    let mut image = vec![0u8; 512];
+    image[3..11].copy_from_slice(b"EXFAT   ");
+    image[510..512].copy_from_slice(&[0x55, 0xAA]);
+
+    let detected = read_boot_filesystem(&mut std::io::Cursor::new(image), 0).unwrap();
+
+    assert_eq!(detected, Some(ImageFilesystemKind::Fat));
+}
+
+#[test]
 fn read_boot_filesystem_detects_btrfs_magic_inside_superblock() {
     let mut image = vec![0u8; 0x11000];
     image[0x10000 + 0x40..0x10000 + 0x48].copy_from_slice(b"_BHRfS_M");
