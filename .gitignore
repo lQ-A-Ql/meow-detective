@@ -102,3 +102,9 @@ apps/desktop/src-tauri/resources/tools/
 # Pilot plugin workspace byproducts (plugins-src/, built on demand by
 # crates/app-services/tests/plugin_fixture_util.rs into /target/plugins-src/)
 /plugins-src/
+
+# JFS 4.9 experiment logs, hashes, and derived copies are workstation-local.
+/experiments/jfs-4-9/results/
+/论文/
+/软著申请资料/
+
