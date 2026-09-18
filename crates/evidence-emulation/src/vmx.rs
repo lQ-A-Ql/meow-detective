@@ -3,7 +3,8 @@ use std::fmt::Write;
 use std::path::{Component, Path};
 
 use crate::vm_options::{
-    conditional_security_settings, validate_isolation_exceptions, VmOptions, GUEST_OS_WHITELIST,
+    conditional_network_settings, conditional_security_settings, validate_isolation_exceptions,
+    VmOptions, GUEST_OS_WHITELIST,
 };
 use crate::vmdk::VmdkAdapter;
 use crate::EmulationError;
@@ -122,6 +123,7 @@ impl VmxConfig {
             Some(id) if GUEST_OS_WHITELIST.contains(&id) => id,
             _ => return Err(invalid_vmx("guestOS is not in the supported whitelist")),
         };
+        validate_network_settings(&settings, options, guest_os)?;
         validate_display_settings(&settings, guest_os)?;
         validate_recovery_media_settings(&settings)?;
         validate_maintenance_media_settings(&settings, has_maintenance_media)?;
@@ -133,6 +135,10 @@ impl VmxConfig {
         for (key, value) in base_security_settings()
             .into_iter()
             .chain(conditional_security_settings(self.options))
+            .chain(conditional_network_settings(
+                self.options,
+                self.linux_console_compat,
+            ))
         {
             values.insert(key, value.to_string());
         }
@@ -197,6 +203,31 @@ impl VmxConfig {
             "hdd"
         }
     }
+}
+
+fn validate_network_settings(
+    settings: &BTreeMap<String, String>,
+    options: VmOptions,
+    guest_os: &str,
+) -> Result<(), EmulationError> {
+    let expected = conditional_network_settings(options, guest_os != "windows9-64");
+    for (key, value) in expected {
+        if settings.get(key).map(String::as_str) != Some(value) {
+            return Err(invalid_vmx(format!(
+                "network setting {key} is missing or invalid"
+            )));
+        }
+    }
+    if options.network_mode == crate::VmNetworkMode::Off
+        && settings
+            .keys()
+            .any(|key| key.starts_with("ethernet0.") && key != "ethernet0.present")
+    {
+        return Err(invalid_vmx(
+            "disabled network mode must not retain virtual NIC settings",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_display_settings(

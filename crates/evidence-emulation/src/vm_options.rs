@@ -100,15 +100,6 @@ pub(crate) fn conditional_security_settings(
     options: VmOptions,
 ) -> Vec<(&'static str, &'static str)> {
     let mut settings = Vec::new();
-    match options.network_mode.connection_type() {
-        Some(connection_type) => {
-            settings.push(("ethernet0.present", "TRUE"));
-            settings.push(("ethernet0.connectionType", connection_type));
-        }
-        None => {
-            settings.push(("ethernet0.present", "FALSE"));
-        }
-    }
     if !options.clipboard {
         settings.push(("isolation.tools.copy.disable", "TRUE"));
         settings.push(("isolation.tools.dnd.disable", "TRUE"));
@@ -122,6 +113,55 @@ pub(crate) fn conditional_security_settings(
         settings.push(("time.synchronize.resume.disk", "FALSE"));
         settings.push(("time.synchronize.shrink", "FALSE"));
         settings.push(("tools.syncTime", "FALSE"));
+    }
+    settings
+}
+
+/// Render the complete virtual NIC profile. Linux images commonly carry a
+/// netplan file matching `ens33`; pinning the adapter to PCI slot 33 keeps the
+/// guest's predictable interface name stable across emulation sessions.
+pub(crate) fn conditional_network_settings(
+    options: VmOptions,
+    linux_guest: bool,
+) -> Vec<(&'static str, &'static str)> {
+    let mut settings = Vec::new();
+    match options.network_mode.connection_type() {
+        Some(connection_type) => {
+            let ethernet_slot = if linux_guest { "33" } else { "160" };
+            settings.extend([
+                ("ethernet0.present", "TRUE"),
+                ("ethernet0.connectionType", connection_type),
+                ("ethernet0.startConnected", "TRUE"),
+                ("ethernet0.addressType", "generated"),
+                (
+                    "ethernet0.virtualDev",
+                    if linux_guest { "e1000" } else { "e1000e" },
+                ),
+                ("ethernet0.pciSlotNumber", ethernet_slot),
+                // VMware only honors secondary PCI slots when the standard
+                // root-port bridge topology is present. Without these
+                // entries it silently rewrites the NIC slot to 16.
+                ("pciBridge0.present", "TRUE"),
+                ("pciBridge0.pciSlotNumber", "17"),
+                ("pciBridge4.present", "TRUE"),
+                ("pciBridge4.virtualDev", "pcieRootPort"),
+                ("pciBridge4.functions", "8"),
+                ("pciBridge4.pciSlotNumber", "21"),
+                ("pciBridge5.present", "TRUE"),
+                ("pciBridge5.virtualDev", "pcieRootPort"),
+                ("pciBridge5.functions", "8"),
+                ("pciBridge5.pciSlotNumber", "22"),
+                ("pciBridge6.present", "TRUE"),
+                ("pciBridge6.virtualDev", "pcieRootPort"),
+                ("pciBridge6.functions", "8"),
+                ("pciBridge6.pciSlotNumber", "23"),
+                ("pciBridge7.present", "TRUE"),
+                ("pciBridge7.virtualDev", "pcieRootPort"),
+                ("pciBridge7.functions", "8"),
+                ("pciBridge7.pciSlotNumber", "24"),
+            ]);
+        }
+        None => settings.push(("ethernet0.present", "FALSE")),
     }
     settings
 }

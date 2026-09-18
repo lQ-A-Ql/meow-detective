@@ -570,7 +570,72 @@ fn vmx_renders_nat_and_bridged_network_modes() {
         VmxConfig::validate_rendered(&rendered, options, false).unwrap();
         assert!(rendered.contains("ethernet0.present = \"TRUE\""));
         assert!(rendered.contains(&format!("ethernet0.connectionType = \"{connection_type}\"")));
+        assert!(rendered.contains("ethernet0.startConnected = \"TRUE\""));
+        assert!(rendered.contains("ethernet0.addressType = \"generated\""));
+        assert!(rendered.contains("ethernet0.virtualDev = \"e1000e\""));
+        assert!(rendered.contains("ethernet0.pciSlotNumber = \"160\""));
+        assert!(rendered.contains("pciBridge0.pciSlotNumber = \"17\""));
+        assert!(rendered.contains("pciBridge4.pciSlotNumber = \"21\""));
+        assert!(rendered.contains("pciBridge7.pciSlotNumber = \"24\""));
     }
+}
+
+#[test]
+fn vmx_pins_linux_network_to_ens33_compatible_hardware() {
+    let options = VmOptions {
+        network_mode: VmNetworkMode::Nat,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_guest_os("ubuntu-64")
+        .unwrap()
+        .with_options(options)
+        .unwrap()
+        .render();
+
+    VmxConfig::validate_rendered(&rendered, options, false).unwrap();
+    assert!(rendered.contains("ethernet0.startConnected = \"TRUE\""));
+    assert!(rendered.contains("ethernet0.virtualDev = \"e1000\""));
+    assert!(rendered.contains("ethernet0.pciSlotNumber = \"33\""));
+    assert!(!rendered.contains("ethernet0.virtualDev = \"e1000e\""));
+    assert!(rendered.contains("pciBridge0.pciSlotNumber = \"17\""));
+}
+
+#[test]
+fn vmx_validator_rejects_linux_network_without_predictable_name_pin() {
+    let options = VmOptions {
+        network_mode: VmNetworkMode::Nat,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_guest_os("ubuntu-64")
+        .unwrap()
+        .with_options(options)
+        .unwrap()
+        .render()
+        .replace("ethernet0.pciSlotNumber = \"33\"\n", "");
+
+    assert!(VmxConfig::validate_rendered(&rendered, options, false).is_err());
+}
+
+#[test]
+fn vmx_validator_rejects_network_without_secondary_pci_bridge_topology() {
+    let options = VmOptions {
+        network_mode: VmNetworkMode::Nat,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_guest_os("ubuntu-64")
+        .unwrap()
+        .with_options(options)
+        .unwrap()
+        .render()
+        .replace("pciBridge0.pciSlotNumber = \"17\"\n", "");
+
+    assert!(VmxConfig::validate_rendered(&rendered, options, false).is_err());
 }
 
 #[test]
