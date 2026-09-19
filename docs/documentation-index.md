@@ -25,6 +25,12 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式与 fail-closed 边界。
 `DataSourceKind::Raw` 是历史兼容的存储类型，不代表所有虚拟磁盘容器都按裸字节读取。
 
+制品查询使用后端不透明游标分页。游标绑定案件、family、当前数据源集合、每个 source
+的 revision/high-water/count 以及已消费排序键；跨源合并的顺序固定为创建时间、数据源
+ID、制品 ID。数据源集合、revision 或快照计数变化会使游标失效，服务返回 typed
+invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请求由同一游标算法分段消费，
+不再保留独立的 offset 合并实现；新列表页面应优先使用 `nextCursor`。
+
 ## 3. 验证、安全与依赖治理
 
 | 主题 | 文档 |
@@ -43,17 +49,17 @@ ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 40 |
-| Tauri commands | 136 |
-| app-services source modules | 35 |
-| SQLite repositories | 43 logical repositories |
-| SQLite migration scripts | 84 |
+| Tauri commands | 139 |
+| app-services source modules | 36 |
+| SQLite repositories | 47 logical repositories |
+| SQLite migration scripts | 88 |
 | frontend test files | 121 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 11 |
 | `frontend/src/**/*.test.ts(x)` | 121 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 136 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 139 |
 
 治理事实源：
 

@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 40 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：11 frontend pages、136 Tauri commands、35 source modules、migration scripts (84)、121 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：11 frontend pages、139 Tauri commands、36 source modules、migration scripts (88)、121 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -74,6 +74,16 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 全文检索、时间线、实体归并、关联图、Notebook 调查记录、规则包与批处理任务。
 - HTML、CSV、JSON 与证据包报告导出；报告和错误信息遵循脱敏规则。
 - MCP 扩展通道使用受控权限模型，默认最小权限和审计记录。
+
+### 制品查询与分页
+
+- 制品列表以数据源独立的快照游标为事实边界；游标绑定案件、family、数据源集合、
+  source revision、rowid high-water 和已消费排序键，跨源结果按创建时间、数据源 ID、
+  制品 ID 确定性合并。
+- 游标 API 返回不透明 `nextCursor`。数据源 revision、记录数量或数据源集合变化时，
+  已发出的游标会失效并返回 typed invalid-input 错误，不会把新旧快照混合展示。
+- 旧客户端仍可提交 offset 请求；该兼容入口只把 offset 分段转换为游标消费，不再维护
+  独立的 offset 合并算法。前端无限列表直接使用游标接口，避免按固定页码重复扫描跨源数据。
 
 ## 支持边界
 
