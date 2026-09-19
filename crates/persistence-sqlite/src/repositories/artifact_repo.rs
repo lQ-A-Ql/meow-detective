@@ -268,15 +268,6 @@ impl<'a> ArtifactRepo<'a> {
         Ok(artifacts)
     }
 
-    pub fn list_by_family_after(
-        &self,
-        family: Option<&str>,
-        after: Option<&ArtifactSortKey>,
-        limit: u32,
-    ) -> DbResult<Vec<ArtifactCursorRow>> {
-        self.list_by_family_after_with_snapshot(family, after, None, limit)
-    }
-
     pub fn list_by_family_after_at_snapshot(
         &self,
         family: Option<&str>,
@@ -333,10 +324,6 @@ impl<'a> ArtifactRepo<'a> {
 
     pub fn cursor_revision(&self) -> DbResult<u64> {
         SourceMetaRepo::new(self.conn).read_revision(ARTIFACT_CURSOR_REVISION_KEY)
-    }
-
-    pub fn count_for_family(&self, family: Option<&str>) -> DbResult<u64> {
-        self.count_for_family_with_snapshot(family, None)
     }
 
     pub fn count_for_family_at_snapshot(

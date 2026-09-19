@@ -150,13 +150,28 @@ fn list_by_family_keyset_is_stable_and_count_matches_filter() {
     ];
     repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
 
-    let first_page = repo.list_by_family_after(Some("evtx"), None, 2).unwrap();
+    let high_water = repo.snapshot_high_water().unwrap();
+    let first_page = repo
+        .list_by_family_after_at_snapshot(Some("evtx"), None, high_water, 2)
+        .unwrap();
     let second_page = repo
-        .list_by_family_after(Some("evtx"), Some(&first_page.last().unwrap().sort_key), 2)
+        .list_by_family_after_at_snapshot(
+            Some("evtx"),
+            Some(&first_page.last().unwrap().sort_key),
+            high_water,
+            2,
+        )
         .unwrap();
 
-    assert_eq!(repo.count_for_family(Some("evtx")).unwrap(), 4);
-    assert_eq!(repo.count_for_family(None).unwrap(), 5);
+    assert_eq!(
+        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        repo.count_for_family_at_snapshot(None, high_water).unwrap(),
+        5
+    );
     assert_eq!(
         first_page
             .iter()

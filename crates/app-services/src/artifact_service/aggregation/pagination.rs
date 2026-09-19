@@ -14,7 +14,7 @@ use transport::{
 use super::super::{source_routing::artifact_to_source_dto, ArtifactServiceError};
 use crate::source_db;
 
-mod legacy;
+mod offset;
 
 const CURSOR_PAYLOAD_VERSION: u8 = 2;
 const CURSOR_KIND: &str = "artifact";
@@ -148,7 +148,7 @@ pub fn get_artifact_rows_page_with_cursor_for_case(
     if cursor.is_some() || offset == 0 {
         return query_cursor_page(case_conn, case_root, case_id, family, limit, cursor);
     }
-    legacy::query_offset_page(case_conn, case_root, case_id, family, offset, limit)
+    offset::query_page(case_conn, case_root, case_id, family, offset, limit)
 }
 
 fn query_cursor_page(
