@@ -1,6 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use chrono::Utc;
-use domain::{ForensicLedgerEvent, LedgerScope, LEDGER_GENESIS_HASH};
+use domain::{ForensicLedgerEvent, LedgerScope, MerkleProof, LEDGER_GENESIS_HASH};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 use uuid::Uuid;
 
@@ -29,6 +29,34 @@ pub struct LedgerVerification {
     pub first_error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LedgerBatch {
+    pub id: String,
+    pub scope_key: String,
+    pub case_id: Option<String>,
+    pub start_sequence: u64,
+    pub end_sequence: u64,
+    pub entry_count: u64,
+    pub merkle_root: String,
+    pub head_hash: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LedgerBatchVerification {
+    pub valid: bool,
+    pub batch_count: u64,
+    pub first_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LedgerProof {
+    pub batch: LedgerBatch,
+    pub sequence: u64,
+    pub entry_hash: String,
+    pub proof: MerkleProof,
+}
+
 pub struct LedgerEventInput<'a> {
     pub case_id: Option<&'a str>,
     pub audit_id: &'a str,
@@ -40,7 +68,7 @@ pub struct LedgerEventInput<'a> {
 }
 
 pub struct LedgerRepo<'a> {
-    conn: &'a Connection,
+    pub(crate) conn: &'a Connection,
 }
 
 impl<'a> LedgerRepo<'a> {
@@ -236,7 +264,7 @@ fn invalid_verification(
     }
 }
 
-fn row_to_entry(row: &Row<'_>) -> rusqlite::Result<LedgerEntry> {
+pub(crate) fn row_to_entry(row: &Row<'_>) -> rusqlite::Result<LedgerEntry> {
     let sequence = row.get::<_, i64>(4)?;
     let sequence = u64::try_from(sequence)
         .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(4, sequence))?;

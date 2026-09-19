@@ -20,6 +20,7 @@ mod governance;
 pub mod graph;
 pub mod import;
 pub mod jobs;
+pub mod ledger;
 pub mod mcp;
 pub mod mount;
 pub mod notebook;
@@ -109,6 +110,10 @@ pub use import::{
     PerformanceReportSummaryDto, ResultFreshnessDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
+pub use ledger::{
+    GetLedgerProofRequest, GetLedgerRequest, LedgerBatchDto, LedgerBatchVerificationDto,
+    LedgerEntryDto, LedgerProofDto, LedgerProofStepDto, LedgerSnapshotDto, LedgerVerificationDto,
+};
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,

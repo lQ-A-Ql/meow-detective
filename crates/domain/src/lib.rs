@@ -28,6 +28,9 @@ pub use fingerprint::{
 };
 pub use graph::{EdgeType, GraphEdge, GraphNode, NodeType};
 pub use job::JobId;
-pub use ledger::{ForensicLedgerEvent, LedgerScope, LEDGER_GENESIS_HASH, LEDGER_SCHEMA_VERSION};
+pub use ledger::{
+    merkle_proof, merkle_root, verify_merkle_proof, ForensicLedgerEvent, LedgerScope, MerkleError,
+    MerkleProof, MerkleProofStep, LEDGER_GENESIS_HASH, LEDGER_SCHEMA_VERSION,
+};
 pub use notebook::{EntryStatus, EntryType as NotebookEntryType, EvidenceCitation, NotebookEntry};
 pub use timeline::{TimelineEvent, TimelineEventId};

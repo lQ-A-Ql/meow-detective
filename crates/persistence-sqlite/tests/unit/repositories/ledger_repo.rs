@@ -104,3 +104,83 @@ fn audit_and_ledger_write_roll_back_together() {
         .unwrap();
     assert_eq!(ledger_count, 0);
 }
+
+#[test]
+fn batch_sealing_is_bounded_and_incremental() {
+    let conn = setup_conn();
+    let repo = LedgerRepo::new(&conn);
+    for sequence in 0..1_001 {
+        repo.append_audit_event(LedgerEventInput {
+            case_id: Some("case-1"),
+            audit_id: &format!("audit-{sequence}"),
+            actor_id: "tester",
+            action: "append",
+            resource_type: "test",
+            resource_id: None,
+            details: "{}",
+        })
+        .unwrap();
+    }
+
+    let first = repo.seal_next_batch(Some("case-1")).unwrap().unwrap();
+    assert_eq!(first.entry_count, 1_000);
+    let second = repo.seal_next_batch(Some("case-1")).unwrap().unwrap();
+    assert_eq!(second.start_sequence, 1_001);
+    assert_eq!(second.entry_count, 1);
+    assert!(repo.seal_next_batch(Some("case-1")).unwrap().is_none());
+    assert!(repo.verify_batches(Some("case-1")).unwrap().valid);
+}
+
+#[test]
+fn tampered_chain_cannot_be_sealed() {
+    let conn = setup_conn();
+    let repo = LedgerRepo::new(&conn);
+    repo.append_audit_event(LedgerEventInput {
+        case_id: Some("case-1"),
+        audit_id: "audit-1",
+        actor_id: "tester",
+        action: "append",
+        resource_type: "test",
+        resource_id: None,
+        details: "{}",
+    })
+    .unwrap();
+    conn.execute(
+        "UPDATE forensic_ledger SET details = 'tampered' WHERE scope_key = 'case-1'",
+        [],
+    )
+    .unwrap();
+
+    let error = repo.seal_next_batch(Some("case-1")).unwrap_err();
+    assert!(error.to_string().contains("invalid ledger"));
+    assert!(repo.list_batches(Some("case-1")).unwrap().is_empty());
+}
+
+#[test]
+fn batch_verification_detects_root_tampering() {
+    let conn = setup_conn();
+    let repo = LedgerRepo::new(&conn);
+    repo.append_audit_event(LedgerEventInput {
+        case_id: Some("case-1"),
+        audit_id: "audit-1",
+        actor_id: "tester",
+        action: "append",
+        resource_type: "test",
+        resource_id: None,
+        details: "{}",
+    })
+    .unwrap();
+    let batch = repo.seal_next_batch(Some("case-1")).unwrap().unwrap();
+    conn.execute(
+        "UPDATE forensic_ledger_batches SET merkle_root = ?1 WHERE id = ?2",
+        rusqlite::params!["0".repeat(64), batch.id],
+    )
+    .unwrap();
+
+    let verification = repo.verify_batches(Some("case-1")).unwrap();
+    assert!(!verification.valid);
+    assert!(verification
+        .first_error
+        .as_deref()
+        .is_some_and(|error| error.contains("merkle root mismatch")));
+}

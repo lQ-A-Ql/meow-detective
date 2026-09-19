@@ -173,6 +173,11 @@ export const COMMANDS = {
     ADD_EVIDENCE_CITATION: 'add_evidence_citation',
     LIST_INVESTIGATION_STEPS: 'list_investigation_steps',
   },
+  ledger: {
+    GET_LEDGER_SNAPSHOT: 'get_ledger_snapshot',
+    SEAL_LEDGER_BATCH: 'seal_ledger_batch',
+    GET_LEDGER_PROOF: 'get_ledger_proof',
+  },
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS][keyof (typeof COMMANDS)[keyof typeof COMMANDS]];

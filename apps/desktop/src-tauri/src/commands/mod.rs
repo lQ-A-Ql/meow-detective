@@ -8,6 +8,7 @@ pub mod file_commands;
 pub mod graph_commands;
 pub mod import;
 pub mod job_commands;
+pub mod ledger_commands;
 pub mod mcp_commands;
 pub mod mount_commands;
 pub mod notebook_commands;
