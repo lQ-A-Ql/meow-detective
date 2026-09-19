@@ -397,3 +397,68 @@ fn update_cluster_membership_requires_existing_data_source() {
         repo.update_cluster_membership(&DataSourceId("missing".to_string()), "cluster-1", 0, 3);
     assert!(error.is_err());
 }
+
+#[test]
+fn delete_cascade_with_audit_uses_the_outer_transaction() {
+    let conn = setup_db();
+    conn.execute_batch(
+        "CREATE TABLE audit_log (
+            id TEXT PRIMARY KEY,
+            case_id TEXT,
+            user_id TEXT,
+            action TEXT,
+            resource_type TEXT,
+            resource_id TEXT,
+            details TEXT,
+            ip_address TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE forensic_ledger (
+            id TEXT PRIMARY KEY NOT NULL,
+            scope_key TEXT NOT NULL,
+            case_id TEXT,
+            audit_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL CHECK (sequence > 0),
+            actor_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id TEXT,
+            details TEXT NOT NULL,
+            previous_hash TEXT NOT NULL,
+            entry_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(scope_key, sequence),
+            UNIQUE(scope_key, entry_hash)
+        );",
+    )
+    .unwrap();
+
+    let repo = DataSourceRepo::new(&conn);
+    repo.insert(
+        &CaseId("case-1".to_string()),
+        &make_ds("ds-1", "Disk Image"),
+    )
+    .unwrap();
+    repo.delete_cascade_with_audit(&DataSourceId("ds-1".to_string()), "{}")
+        .unwrap();
+
+    let remaining: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM data_sources WHERE id = 'ds-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(remaining, 0);
+    assert_eq!(
+        crate::repositories::audit_repo::AuditRepo::new(&conn)
+            .count(Some("case-1"))
+            .unwrap(),
+        1
+    );
+    let verification = crate::repositories::ledger_repo::LedgerRepo::new(&conn)
+        .verify(Some("case-1"))
+        .unwrap();
+    assert!(verification.valid, "verification failed: {verification:?}");
+    assert_eq!(verification.entry_count, 1);
+}

@@ -107,7 +107,7 @@ fn aggregate() -> CephFsDerivedLineageAggregate {
 #[test]
 fn lineage_round_trips_and_cascades_with_derived_source() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0047_forensic_fingerprints");
+    assert_eq!(runner::latest_version(), "0048_forensic_ledger");
     let expected = aggregate();
     let repo = CephFsDerivedLineageRepo::new(&conn);
     repo.insert(&expected).expect("insert lineage");

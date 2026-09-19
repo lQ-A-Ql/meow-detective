@@ -362,7 +362,8 @@ impl<'a> DataSourceRepo<'a> {
     ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
         let case_id = delete_registered_data_source(&tx, data_source_id)?;
-        AuditRepo::new(&tx).log(
+        AuditRepo::new(self.conn).log_in_transaction(
+            &tx,
             Some(&case_id),
             "system",
             &AuditAction::DataSourceDelete,

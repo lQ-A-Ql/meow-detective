@@ -34,6 +34,7 @@ pub mod filesystem_locator_repo;
 pub mod fingerprint_repo;
 pub mod graph_repo;
 pub mod job_repo;
+pub mod ledger_repo;
 pub mod notebook_repo;
 pub mod partition_repo;
 pub mod processing_phase_repo;

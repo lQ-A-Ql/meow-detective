@@ -4,8 +4,9 @@
 //! MCP 调用留痕、导出留痕与问题追溯。
 
 use crate::connection::DbResult;
+use crate::repositories::ledger_repo::{append_in_transaction, LedgerEventInput};
 use crate::sql_builder::ClauseBuilder;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Transaction};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -174,8 +175,31 @@ impl<'a> AuditRepo<'a> {
         resource_id: Option<&str>,
         details: &str,
     ) -> DbResult<()> {
+        let tx = rusqlite::Transaction::new_unchecked(
+            self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        self.log_in_transaction(&tx, case_id, user_id, action, resource_id, details)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Write an audit event using an already-open transaction.
+    ///
+    /// Callers that are composing the audit write with other repository
+    /// mutations must use this entry point so SQLite does not receive a
+    /// nested `BEGIN`.
+    pub fn log_in_transaction(
+        &self,
+        tx: &Transaction<'_>,
+        case_id: Option<&str>,
+        user_id: &str,
+        action: &AuditAction,
+        resource_id: Option<&str>,
+        details: &str,
+    ) -> DbResult<()> {
         let id = Uuid::new_v4().to_string();
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO audit_log (id, case_id, user_id, action, resource_type, resource_id, details)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -188,6 +212,20 @@ impl<'a> AuditRepo<'a> {
                 details,
             ],
         )?;
+        if ledger_table_exists(tx)? {
+            append_in_transaction(
+                tx,
+                LedgerEventInput {
+                    case_id,
+                    audit_id: &id,
+                    actor_id: user_id,
+                    action: action.as_str(),
+                    resource_type: action.resource_type(),
+                    resource_id,
+                    details,
+                },
+            )?;
+        }
         Ok(())
     }
 
@@ -286,6 +324,14 @@ impl<'a> AuditRepo<'a> {
         )?;
         Ok(count)
     }
+}
+
+fn ledger_table_exists(conn: &Transaction<'_>) -> DbResult<bool> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'forensic_ledger'",
+        [],
+        |row| row.get(0),
+    )?)
 }
 
 #[cfg(test)]
