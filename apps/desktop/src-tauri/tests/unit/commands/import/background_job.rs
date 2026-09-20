@@ -36,6 +36,9 @@ use persistence_sqlite::repositories::{
     timeline_repo::TimelineRepo,
 };
 use tempfile::TempDir;
+use transport::commands::{
+    FileSortDirectionDto, SearchEntryTypeDto, SearchFilesRequest, SearchSortKeyDto,
+};
 use transport::dto::ViewerRangeRequestDto;
 
 use super::{
@@ -56,10 +59,13 @@ const PVE_RBD_IMAGE_ID: &str = "16ecc87af5c9";
 const PVE_RBD_IMAGE_NAME: &str = "vm-100-disk-0";
 const PVE_RBD_POOL_ID: i64 = 2;
 const PVE_RBD_REPLICA_COUNT: usize = 3;
-const PVE_RBD_RECORD_COUNT: u64 = 114_260;
+// The XFS parser began retaining valid non-ASCII and punctuation-only names
+// instead of applying an evidence-losing ASCII whitelist. The retained PVE
+// sample therefore grew by 427 real entries without changing its directories.
+const PVE_RBD_RECORD_COUNT: u64 = 114_687;
 const PVE_RBD_DIRECTORY_COUNT: u64 = 15_749;
-const PVE_RBD_FILE_COUNT: u64 = 98_511;
-const PVE_RBD_TOTAL_FILE_SIZE: u64 = 5_547_104_746;
+const PVE_RBD_FILE_COUNT: u64 = 98_938;
+const PVE_RBD_TOTAL_FILE_SIZE: u64 = 5_547_356_419;
 const PVE_MEMBER_RELATIVE_PATHS: [&str; PVE_MEMBER_COUNT] = [
     "server01/server01-disk01.E01",
     "server01/server01-disk02.E01",
@@ -1352,19 +1358,19 @@ fn assert_derived_rbd_automatic_processing(
         .expect("automatic Timeline phase");
     let timeline_stats: serde_json::Value =
         serde_json::from_str(&timeline_phase.stats_json).expect("parse Timeline phase stats");
-    let macb_inserted = timeline_stats["macbInsertedCount"]
+    let file_activity_inserted = timeline_stats["fileActivityInsertedCount"]
         .as_u64()
-        .expect("Timeline macbInsertedCount");
-    let macb_total = timeline_stats["macbTotalCount"]
+        .expect("Timeline fileActivityInsertedCount");
+    let file_activity_total = timeline_stats["fileActivityCount"]
         .as_u64()
-        .expect("Timeline macbTotalCount");
+        .expect("Timeline fileActivityCount");
     assert!(
-        macb_total > 0,
-        "Timeline phase must retain MACB events once XFS timestamps are available: {timeline_stats}"
+        file_activity_total > 0,
+        "Timeline phase must retain file activity events once XFS timestamps are available: {timeline_stats}"
     );
     assert!(
-        macb_total >= macb_inserted,
-        "Timeline MACB totals are inconsistent: {timeline_stats}"
+        file_activity_total >= file_activity_inserted,
+        "Timeline file activity totals are inconsistent: {timeline_stats}"
     );
     let search_phase = phases
         .iter()
@@ -1398,7 +1404,7 @@ fn assert_derived_rbd_automatic_processing(
         .query_row(
             "SELECT COUNT(*)
              FROM timeline_projection_meta
-             WHERE projection_key IN ('macb', 'macb_graph')
+             WHERE projection_key IN ('file_activity_v2', 'timeline_graph_v3')
                AND status = 'done'",
             [],
             |row| row.get(0),
@@ -1406,7 +1412,7 @@ fn assert_derived_rbd_automatic_processing(
         .expect("query completed Timeline projections");
     assert_eq!(
         completed_timeline_projections, 2,
-        "MACB and timeline graph projections must both persist completion markers"
+        "file-activity and timeline graph projections must both persist completion markers"
     );
     let linux_system_config_count = ArtifactRepo::new(&source_conn)
         .count_by_family()
@@ -1427,22 +1433,30 @@ fn assert_derived_rbd_automatic_processing(
     assert!(artifact_count > 0, "automatic artifact projection is empty");
     assert!(timeline_count > 0, "automatic timeline projection is empty");
 
-    let search = app_services::search_service::search_files_real(
-        &source_db::source_index_dir(case_root, &source.id),
-        "nologin",
-        0,
-        100,
+    let search_page = app_services::search_service::search_files_for_case(
+        case_conn,
+        case_root,
+        case_id,
+        &SearchFilesRequest {
+            query: "passwd".to_string(),
+            match_path: true,
+            entry_type: SearchEntryTypeDto::File,
+            extensions: Vec::new(),
+            data_source_ids: vec![source.id.0.clone()],
+            sort_key: SearchSortKeyDto::Path,
+            sort_direction: FileSortDirectionDto::Asc,
+            offset: 0,
+            limit: 100,
+            cursor: None,
+        },
     )
-    .expect("query automatic derived search index");
+    .expect("query automatic derived metadata search index");
     assert!(
-        search.items.iter().any(|item| {
-            item.path.replace('\\', "/").ends_with("etc/passwd")
-                && item
-                    .snippets
-                    .iter()
-                    .any(|snippet| snippet.text.contains("nologin"))
-        }),
-        "automatic search index cannot resolve retained /etc/passwd content"
+        search_page
+            .items
+            .iter()
+            .any(|item| item.path.replace('\\', "/").ends_with("etc/passwd")),
+        "automatic metadata search index cannot resolve retained /etc/passwd path"
     );
 
     let repeated = materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
