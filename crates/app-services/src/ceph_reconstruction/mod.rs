@@ -7,6 +7,7 @@ mod cephfs_source;
 mod cluster_evidence;
 mod derived_reader;
 mod derived_runtime;
+mod osdmap_evidence;
 mod pool_evidence;
 mod rados_provider;
 mod rados_reader;

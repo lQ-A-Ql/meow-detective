@@ -3,6 +3,7 @@ use std::{collections::BTreeSet, path::Path};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::osdmap_evidence::{self, OsdMapEvidenceError};
 use super::{RbdReplicaPolicy, ReplicaPolicyError};
 
 const POOL_EVIDENCE_SCHEMA_VERSION: u32 = 1;
@@ -37,6 +38,8 @@ pub enum PoolEvidenceError {
     ReplicaCountMismatch,
     #[error("trusted pool evidence is invalid: {0}")]
     Policy(#[from] ReplicaPolicyError),
+    #[error("OSDMap/PoolMap evidence is invalid: {0}")]
+    OsdMap(#[from] OsdMapEvidenceError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +81,18 @@ pub(crate) fn resolve_rbd_replica_policy(
         .join("clusters")
         .join(cluster_id)
         .join(POOL_EVIDENCE_FILE);
+    if let Some(resolution) = osdmap_evidence::resolve_policy(case_root, cluster_id, pool_id)? {
+        if resolution.policy.expected_count() != observed_replica_count {
+            return Err(PoolEvidenceError::ReplicaCountMismatch);
+        }
+        return Ok(ReplicaPolicyResolution {
+            policy: resolution.policy,
+            diagnostics: vec![format!(
+                "OSDMap epoch-bound policy validated with {} OSD identities",
+                resolution.osd_count
+            )],
+        });
+    }
     let payload = match std::fs::read(&path) {
         Ok(payload) => payload,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
