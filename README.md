@@ -59,7 +59,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 - Linux 取证能力：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth、系统配置、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
 - Linux 数据源自动进入独立分析视图；Windows 与 Linux 提取能力不会交叉调度。
-- PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。RBD 只有在 OSD inventory 覆盖报告为完整、报告摘要和副本策略指纹均匹配时才会物化或复用；覆盖不足仅保留元数据并失败关闭。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
+- PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。RBD 只有在 OSD inventory 覆盖报告为完整、报告摘要和副本策略指纹均匹配时才会物化或复用；覆盖不足或显式多池证据无法绑定到数据池时仅保留元数据并失败关闭。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
 
 ### 仿真取证
 

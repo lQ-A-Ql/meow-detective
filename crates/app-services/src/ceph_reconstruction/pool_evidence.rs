@@ -29,6 +29,10 @@ pub enum PoolEvidenceError {
     Invalid(&'static str),
     #[error("pool replication evidence contains duplicate pool IDs")]
     DuplicatePool,
+    #[error("multiple trusted pool records require an RBD data-pool binding")]
+    PoolBindingRequired,
+    #[error("requested RBD pool {pool_id} is absent from trusted replication evidence")]
+    PoolNotFound { pool_id: i64 },
     #[error("trusted pool evidence is inconsistent with the imported OSD set")]
     ReplicaCountMismatch,
     #[error("trusted pool evidence is invalid: {0}")]
@@ -58,10 +62,11 @@ struct PoolEvidenceRecord {
 /// Resolve an explicit pool evidence document for a cluster.
 ///
 /// A missing document is a supported legacy state and falls back to the
-/// strict three-replica policy. A present but malformed document is rejected;
-/// silently falling back would turn tampered evidence into a valid-looking
-/// reconstruction. When no pool is known yet, a single-record document is
-/// unambiguous; multiple records remain strict until a descriptor binds one.
+/// strict three-replica policy. A present but malformed or ambiguous document
+/// is rejected; silently falling back would turn an explicit evidence-binding
+/// failure into a valid-looking reconstruction. When no pool is known yet, a
+/// single-record document is unambiguous; multiple records require a
+/// descriptor-bound pool.
 pub(crate) fn resolve_rbd_replica_policy(
     case_root: &Path,
     cluster_id: &str,
@@ -83,12 +88,14 @@ pub(crate) fn resolve_rbd_replica_policy(
     let document: PoolEvidenceDocument =
         serde_json::from_slice(&payload).map_err(|_| PoolEvidenceError::Json)?;
     validate_document(&document, cluster_id)?;
-    let selected = select_record(&document.pools, pool_id);
-    let Some(record) = selected else {
-        return Ok(strict_fallback(match pool_id {
-            Some(pool) => return_missing_pool_diagnostic(pool),
-            None => "multiple pool evidence records require an RBD pool binding",
-        }));
+    let record = match pool_id {
+        Some(pool_id) => document
+            .pools
+            .iter()
+            .find(|record| record.pool_id == pool_id)
+            .ok_or(PoolEvidenceError::PoolNotFound { pool_id })?,
+        None if document.pools.len() == 1 => &document.pools[0],
+        None => return Err(PoolEvidenceError::PoolBindingRequired),
     };
     if record.size as usize != observed_replica_count {
         return Err(PoolEvidenceError::ReplicaCountMismatch);
@@ -151,31 +158,12 @@ fn validate_document(
     Ok(())
 }
 
-fn select_record(
-    records: &[PoolEvidenceRecord],
-    pool_id: Option<i64>,
-) -> Option<&PoolEvidenceRecord> {
-    match pool_id {
-        Some(pool_id) => records.iter().find(|record| record.pool_id == pool_id),
-        None if records.len() == 1 => records.first(),
-        None => None,
-    }
-}
-
 fn strict_fallback(reason: &str) -> ReplicaPolicyResolution {
     ReplicaPolicyResolution {
         policy: RbdReplicaPolicy::strict_legacy(),
         diagnostics: vec![format!(
             "{reason}; fallback to strict legacy replica policy"
         )],
-    }
-}
-
-fn return_missing_pool_diagnostic(pool_id: i64) -> &'static str {
-    if pool_id < 0 {
-        "requested RBD pool has no trusted replication evidence"
-    } else {
-        "requested RBD pool is absent from trusted replication evidence"
     }
 }
 

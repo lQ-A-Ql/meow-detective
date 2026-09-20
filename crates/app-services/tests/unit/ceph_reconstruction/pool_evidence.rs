@@ -45,7 +45,7 @@ fn single_pool_document_produces_trusted_policy() {
 }
 
 #[test]
-fn pool_binding_selects_matching_record_and_missing_binding_falls_back() {
+fn pool_binding_selects_matching_record_and_ambiguous_binding_fails_closed() {
     let root = tempfile::TempDir::new().expect("root");
     write_document(
         root.path(),
@@ -57,15 +57,16 @@ fn pool_binding_selects_matching_record_and_missing_binding_falls_back() {
         resolve_rbd_replica_policy(root.path(), "cluster-1", Some(8), 3).expect("selected policy");
     assert_eq!(selected.policy.pool_evidence().unwrap().pool_id(), 8);
 
-    let fallback =
-        resolve_rbd_replica_policy(root.path(), "cluster-1", None, 3).expect("ambiguous fallback");
-    assert_eq!(fallback.policy, RbdReplicaPolicy::strict_legacy());
-    assert!(fallback.diagnostics[0].contains("multiple"));
+    let error = resolve_rbd_replica_policy(root.path(), "cluster-1", None, 3)
+        .expect_err("ambiguous pool evidence must fail closed");
+    assert!(matches!(error, PoolEvidenceError::PoolBindingRequired));
 
     let missing = resolve_rbd_replica_policy(root.path(), "cluster-1", Some(9), 3)
-        .expect("missing pool fallback");
-    assert_eq!(missing.policy, RbdReplicaPolicy::strict_legacy());
-    assert!(missing.diagnostics[0].contains("absent"));
+        .expect_err("missing pool evidence must fail closed");
+    assert!(matches!(
+        missing,
+        PoolEvidenceError::PoolNotFound { pool_id: 9 }
+    ));
 }
 
 #[test]
