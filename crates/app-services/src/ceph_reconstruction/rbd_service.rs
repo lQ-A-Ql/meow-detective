@@ -49,11 +49,24 @@ pub fn discover_rbd_images_from_source_dbs(
     discover_rbd_images_from_source_dbs_with_policy(replicas, &RbdReplicaPolicy::strict_legacy())
 }
 
+pub fn discover_rbd_images_from_source_dbs_unbound(
+    replicas: &[RadosReplicaSource],
+) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
+    validate_replica_bindings(replicas, None)?;
+    discover_rbd_descriptors(replicas)
+}
+
 pub fn discover_rbd_images_from_source_dbs_with_policy(
     replicas: &[RadosReplicaSource],
     policy: &RbdReplicaPolicy,
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
     validate_replica_set(replicas, policy)?;
+    discover_rbd_descriptors(replicas)
+}
+
+fn discover_rbd_descriptors(
+    replicas: &[RadosReplicaSource],
+) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
     let mut images = BTreeMap::new();
     for replica in replicas {
         let connection = persistence_sqlite::open_existing_source_read_only(
@@ -147,8 +160,20 @@ fn validate_replica_set(
             provided: replicas.len(),
         });
     }
+    validate_replica_bindings(replicas, Some(policy))
+}
+
+fn validate_replica_bindings(
+    replicas: &[RadosReplicaSource],
+    policy: Option<&RbdReplicaPolicy>,
+) -> Result<(), RbdReconstructionError> {
     let mut inventories = HashSet::with_capacity(replicas.len());
     let mut data_sources = HashSet::with_capacity(replicas.len());
+    if replicas.is_empty() {
+        return Err(RbdReconstructionError::CoverageNotProven {
+            detail: "no RBD replica bindings were supplied".to_string(),
+        });
+    }
     for replica in replicas {
         if !inventories.insert(replica.inventory_id.as_str()) {
             return Err(RbdReconstructionError::DuplicateReplicaInventory {
@@ -161,24 +186,49 @@ fn validate_replica_set(
             });
         }
     }
-    let evidence = replicas
-        .iter()
-        .map(|replica| super::InventoryEvidence {
-            source_id: replica.data_source_id.0.clone(),
-            inventory_id: replica.inventory_id.clone(),
-            identity: replica.identity.clone(),
-        })
-        .collect::<Vec<_>>();
-    let coverage = assess_inventory_coverage(&evidence, policy);
-    if coverage.is_conflicted() {
-        return Err(RbdReconstructionError::IdentityConflict {
-            detail: coverage.diagnostics.join("; "),
-        });
-    }
-    if !coverage.is_complete() {
-        return Err(RbdReconstructionError::CoverageNotProven {
-            detail: coverage.diagnostics.join("; "),
-        });
+    if let Some(policy) = policy {
+        let evidence = replicas
+            .iter()
+            .map(|replica| super::InventoryEvidence {
+                source_id: replica.data_source_id.0.clone(),
+                inventory_id: replica.inventory_id.clone(),
+                identity: replica.identity.clone(),
+            })
+            .collect::<Vec<_>>();
+        let coverage = assess_inventory_coverage(&evidence, policy);
+        if coverage.is_conflicted() {
+            return Err(RbdReconstructionError::IdentityConflict {
+                detail: coverage.diagnostics.join("; "),
+            });
+        }
+        if !coverage.is_complete() {
+            return Err(RbdReconstructionError::CoverageNotProven {
+                detail: coverage.diagnostics.join("; "),
+            });
+        }
+    } else {
+        let mut osd_ids = HashSet::with_capacity(replicas.len());
+        let mut fsids = HashSet::with_capacity(replicas.len());
+        for replica in replicas {
+            if !replica.identity.is_complete() {
+                return Err(RbdReconstructionError::CoverageNotProven {
+                    detail: "one or more inventory entries lack complete OSD identity".to_string(),
+                });
+            }
+            if !osd_ids.insert(replica.identity.osd_id) {
+                return Err(RbdReconstructionError::IdentityConflict {
+                    detail: "OSD identities are duplicated".to_string(),
+                });
+            }
+            if let Some(fsid) = replica.identity.ceph_fsid.as_deref() {
+                fsids.insert(fsid);
+            }
+        }
+        if fsids.len() > 1 {
+            return Err(RbdReconstructionError::IdentityConflict {
+                detail: "Ceph FSIDs conflict across inventory entries".to_string(),
+            });
+        }
     }
     Ok(())
 }

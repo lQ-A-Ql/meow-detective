@@ -13,7 +13,7 @@ use persistence_sqlite::repositories::{
 
 use crate::{
     ceph_reconstruction::{
-        assess_inventory_coverage, discover_rbd_images_from_source_dbs_with_policy,
+        assess_inventory_coverage, discover_rbd_images_from_source_dbs_unbound,
         resolve_rbd_replica_policy, InventoryEvidence, RadosReplicaSource, RbdReplicaPolicy,
         ReplicaIdentity,
     },
@@ -91,20 +91,24 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &reconstruction_parent_ids,
         &cancel_token,
     )?;
-    let policy_resolution = resolve_rbd_replica_policy(case_root, cluster_id, None, replicas.len())
+    let descriptors = discover_rbd_images_from_source_dbs_unbound(&replicas)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let policy = policy_resolution.policy;
+    if descriptors.is_empty() {
+        return Err(DerivedSourceError::ImageNotFound(
+            "no RBD image catalog entries".to_string(),
+        ));
+    }
+    let (policy, policy_diagnostics) =
+        resolve_descriptor_policy(case_root, cluster_id, &descriptors, replicas.len())?;
     let coverage = assess_and_write_coverage(
         case_root,
         cluster_id,
         &replicas,
         &policy,
-        &policy_resolution.diagnostics,
+        &policy_diagnostics,
     )?;
     ensure_complete_coverage(&coverage)?;
     ensure_not_cancelled(&cancel_token)?;
-    let descriptors = discover_rbd_images_from_source_dbs_with_policy(&replicas, &policy)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     for descriptor in &descriptors {
         policy
             .validate_for_pool(descriptor.metadata.data_pool_id)
@@ -129,12 +133,45 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
             descriptor,
         )?);
     }
-    if materialized.is_empty() {
-        return Err(DerivedSourceError::ImageNotFound(
-            "no RBD image catalog entries".to_string(),
-        ));
-    }
     Ok(materialized)
+}
+
+fn resolve_descriptor_policy(
+    case_root: &Path,
+    cluster_id: &str,
+    descriptors: &[crate::ceph_reconstruction::RbdImageDescriptor],
+    observed_replica_count: usize,
+) -> DerivedSourceResult<(RbdReplicaPolicy, Vec<String>)> {
+    let mut selected_policy = None;
+    let mut diagnostics = Vec::new();
+    for descriptor in descriptors {
+        let resolution = resolve_rbd_replica_policy(
+            case_root,
+            cluster_id,
+            Some(descriptor.metadata.data_pool_id),
+            observed_replica_count,
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+        if let Some(policy) = &selected_policy {
+            if policy != &resolution.policy {
+                return Err(DerivedSourceError::InconsistentState(
+                    "RBD descriptors require different replica policies".to_string(),
+                ));
+            }
+        } else {
+            selected_policy = Some(resolution.policy.clone());
+        }
+        for diagnostic in resolution.diagnostics {
+            if !diagnostics.contains(&diagnostic) {
+                diagnostics.push(diagnostic);
+            }
+        }
+    }
+    selected_policy
+        .map(|policy| (policy, diagnostics))
+        .ok_or_else(|| {
+            DerivedSourceError::ImageNotFound("no RBD image catalog entries".to_string())
+        })
 }
 
 fn ensure_complete_coverage(
@@ -250,9 +287,13 @@ fn load_ready_rbd_sources(
         if lineage.lineage.parent_cluster_id != cluster_id {
             continue;
         }
-        let current_policy =
-            resolve_rbd_replica_policy(case_root, cluster_id, None, lineage.replicas.len())
-                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+        let current_policy = resolve_rbd_replica_policy(
+            case_root,
+            cluster_id,
+            Some(lineage.lineage.data_pool_id),
+            lineage.replicas.len(),
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
         let Some(coverage) =
             cluster_service::read_linux_cluster_coverage_report(case_root, cluster_id)
                 .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?

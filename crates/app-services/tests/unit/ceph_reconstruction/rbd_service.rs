@@ -57,6 +57,17 @@ fn rejects_empty_replica_set_before_opening_source_databases() {
 }
 
 #[test]
+fn unbound_discovery_rejects_empty_replica_set_before_source_access() {
+    let error = discover_rbd_images_from_source_dbs_unbound(&[])
+        .expect_err("empty unbound set must fail closed");
+
+    assert!(matches!(
+        error,
+        RbdReconstructionError::CoverageNotProven { .. }
+    ));
+}
+
+#[test]
 fn rejects_incomplete_replica_count_before_source_access() {
     let error = detect_rbd_image_from_source_dbs(vec![replica("inventory-a")], "image-1")
         .expect_err("incomplete set must fail");
