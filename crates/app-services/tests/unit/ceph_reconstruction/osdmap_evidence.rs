@@ -152,6 +152,34 @@ fn epoch_history_must_be_strictly_increasing() {
 }
 
 #[test]
+fn historical_epoch_binding_uses_the_historical_epoch() {
+    let root = tempfile::TempDir::new().expect("root");
+    let mut parsed: EvidenceDocument = serde_json::from_str(&with_digest(document(
+        r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
+        "placeholder",
+    )))
+    .expect("fixture JSON");
+    let mut historical = parsed.epoch_history[0].clone();
+    historical.epoch = 16;
+    historical.osdmap_payload_digest =
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+    historical.poolmap_payload_digest =
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string();
+    historical.map_binding_digest = binding_digest_for(
+        &parsed,
+        historical.epoch,
+        &historical.osdmap_payload_digest,
+        &historical.poolmap_payload_digest,
+    );
+    parsed.epoch_history.insert(0, historical);
+    parsed.evidence_digest.clear();
+    parsed.evidence_digest = canonical_digest(&mut parsed).expect("canonical digest");
+    let payload = serde_json::to_string(&parsed).expect("fixture serialization");
+    write_document(root.path(), &payload);
+    assert!(resolve_policy(root.path(), "cluster-1", Some(8)).is_ok());
+}
+
+#[test]
 fn map_binding_digest_binds_fsid_revision_and_payloads() {
     let root = tempfile::TempDir::new().expect("root");
     let mut parsed: EvidenceDocument = serde_json::from_str(&with_digest(document(
