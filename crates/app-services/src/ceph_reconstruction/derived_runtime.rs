@@ -7,8 +7,8 @@ use sha2::{Digest, Sha256};
 use super::{
     derived_reader::{build_replica_bindings, descriptor_from_lineage, load_lineage},
     open_rbd_head_image, BluestoreDeviceOpener, DerivedRbdReaderError, RbdEvidenceReader,
-    RbdImageDescriptor, SharedRadosObjectProvider, SourceBoundLvmError,
-    SourceDbRadosObjectProvider, STRICT_RBD_REPLICA_COUNT,
+    RbdImageDescriptor, RbdReplicaPolicy, SharedRadosObjectProvider, SourceBoundLvmError,
+    SourceDbRadosObjectProvider,
 };
 
 #[derive(Clone)]
@@ -74,20 +74,28 @@ pub fn build_derived_rbd_runtime(
     derived_data_source_id: &DataSourceId,
 ) -> Result<DerivedRbdRuntime, DerivedRbdReaderError> {
     let aggregate = load_lineage(case_conn, derived_data_source_id)?;
-    if aggregate.lineage.expected_replica_count as usize != STRICT_RBD_REPLICA_COUNT
-        || aggregate.replicas.len() != STRICT_RBD_REPLICA_COUNT
+    let policy = crate::cluster_service::read_linux_cluster_coverage_report(
+        case_root,
+        &aggregate.lineage.parent_cluster_id,
+    )
+    .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?
+    .map(|report| report.policy)
+    .unwrap_or_else(RbdReplicaPolicy::strict_legacy);
+    let expected_replica_count = policy.expected_count();
+    if aggregate.lineage.expected_replica_count as usize != expected_replica_count
+        || aggregate.replicas.len() != expected_replica_count
     {
         return Err(DerivedRbdReaderError::Provider(format!(
-            "RBD lineage requires exactly {STRICT_RBD_REPLICA_COUNT} replicas"
+            "RBD lineage replica policy requires {expected_replica_count} replicas"
         )));
     }
     let replicas = build_replica_bindings(case_conn, case_root, case_id, &aggregate)?;
     let descriptor = descriptor_from_lineage(&aggregate);
-    let provider = SourceDbRadosObjectProvider::with_device_opener(
+    let provider = SourceDbRadosObjectProvider::with_device_opener_with_policy(
         replicas,
         descriptor.metadata.data_pool_id,
         Vec::new(),
-        aggregate.lineage.expected_replica_count as usize,
+        policy,
         Box::new(PreviewBluestoreDeviceOpener {
             case_id: case_id.0.clone(),
         }),

@@ -7,7 +7,10 @@ use persistence_sqlite::repositories::{
 };
 use thiserror::Error;
 
-use super::{build_derived_rbd_runtime, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor};
+use super::{
+    build_derived_rbd_runtime, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor,
+    ReplicaIdentity,
+};
 
 #[derive(Debug, Error)]
 pub enum DerivedRbdReaderError {
@@ -66,17 +69,27 @@ pub(super) fn build_replica_bindings(
             let inventories = CephOsdRepo::new(&source.connection)
                 .find_by_data_source(&source_id.0)
                 .map_err(DerivedRbdReaderError::Lineage)?;
-            if !inventories.iter().any(|inventory| {
+            let inventory = inventories.iter().find(|inventory| {
                 inventory.id == replica.inventory_id && inventory.whoami == Some(replica.osd_id)
-            }) {
+            });
+            let Some(inventory) = inventory else {
                 return Err(DerivedRbdReaderError::InventoryMismatch {
                     data_source_id: replica.source_data_source_id.clone(),
                     inventory_id: replica.inventory_id.clone(),
                 });
-            }
+            };
 
-            RadosReplicaSource::new(source_id, replica.inventory_id.clone(), source_db_path)
-                .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))
+            RadosReplicaSource::with_identity(
+                source_id,
+                replica.inventory_id.clone(),
+                source_db_path,
+                ReplicaIdentity::from_inventory(
+                    inventory.whoami,
+                    inventory.osd_uuid.clone(),
+                    inventory.ceph_fsid.clone(),
+                ),
+            )
+            .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))
         })
         .collect()
 }

@@ -175,3 +175,139 @@ fn linux_cluster_manifest_write_is_atomic_and_readable() {
     assert!(manifest.contains(&plan.cluster_id));
     assert!(manifest.contains("\"memberCount\": 2"));
 }
+
+#[test]
+fn linux_cluster_coverage_report_is_atomic_and_redacts_host_paths() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let report = crate::ceph_reconstruction::InventoryCoverageReport {
+        policy: crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
+        expected_count: 3,
+        observed_count: 2,
+        state: crate::ceph_reconstruction::InventoryCoverageState::Incomplete,
+        duplicate_inventory_ids: Vec::new(),
+        duplicate_source_ids: Vec::new(),
+        duplicate_osd_ids: Vec::new(),
+        ceph_fsids: vec!["fsid".to_string()],
+        diagnostics: vec!["inventory coverage is not closed".to_string()],
+    };
+
+    let path = write_linux_cluster_coverage_report(case_root.path(), "cluster-1", &report)
+        .expect("write coverage report");
+    let payload = std::fs::read_to_string(path).expect("coverage report");
+
+    assert!(payload.contains("strict_rbd_replica_count"));
+    assert!(payload.contains("inventory coverage is not closed"));
+    assert!(!payload.contains("source.db"));
+    assert!(!case_root
+        .path()
+        .join("clusters/cluster-1/coverage-report.json.tmp")
+        .exists());
+}
+
+#[test]
+fn linux_cluster_coverage_report_rejects_path_components() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let report = crate::ceph_reconstruction::InventoryCoverageReport {
+        policy: crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
+        expected_count: 0,
+        observed_count: 0,
+        state: crate::ceph_reconstruction::InventoryCoverageState::Indeterminate,
+        duplicate_inventory_ids: Vec::new(),
+        duplicate_source_ids: Vec::new(),
+        duplicate_osd_ids: Vec::new(),
+        ceph_fsids: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+
+    let error = write_linux_cluster_coverage_report(case_root.path(), "../escape", &report)
+        .expect_err("path traversal must be rejected");
+    assert!(matches!(error, ClusterServiceError::InvalidClusterId));
+}
+
+#[test]
+fn linux_cluster_coverage_report_round_trips_and_missing_is_empty() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    assert!(
+        read_linux_cluster_coverage_report(case_root.path(), "cluster-1")
+            .expect("missing report")
+            .is_none()
+    );
+    let report = crate::ceph_reconstruction::InventoryCoverageReport {
+        policy: crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
+        expected_count: 3,
+        observed_count: 3,
+        state: crate::ceph_reconstruction::InventoryCoverageState::Complete,
+        duplicate_inventory_ids: Vec::new(),
+        duplicate_source_ids: Vec::new(),
+        duplicate_osd_ids: Vec::new(),
+        ceph_fsids: vec!["fsid".to_string()],
+        diagnostics: Vec::new(),
+    };
+    write_linux_cluster_coverage_report(case_root.path(), "cluster-1", &report)
+        .expect("write report");
+    assert_eq!(
+        read_linux_cluster_coverage_report(case_root.path(), "cluster-1").expect("read report"),
+        Some(report)
+    );
+}
+
+#[test]
+fn linux_cluster_coverage_report_round_trips_trusted_pool_policy() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let policy = crate::ceph_reconstruction::RbdReplicaPolicy::trusted_pool(
+        8,
+        2,
+        1,
+        "osdmap:epoch-17",
+        Some(17),
+        None,
+    )
+    .expect("policy");
+    let report = crate::ceph_reconstruction::assess_inventory_coverage(&[], &policy);
+    write_linux_cluster_coverage_report(case_root.path(), "cluster-1", &report)
+        .expect("write report");
+
+    let restored = read_linux_cluster_coverage_report(case_root.path(), "cluster-1")
+        .expect("read report")
+        .expect("report exists");
+    assert_eq!(restored, report);
+    assert_eq!(restored.policy.storage_key(), "trusted_pool_size");
+}
+
+#[test]
+fn linux_cluster_coverage_report_accepts_schema_one_strict_legacy_payload() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let path = case_root
+        .path()
+        .join("clusters/cluster-1/coverage-report.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        path,
+        r#"{"schemaVersion":1,"clusterId":"cluster-1","evidenceKind":"rbd_osd_inventory","coveragePolicy":"strict_rbd_replica_count","report":{"expectedCount":3,"observedCount":0,"state":"incomplete","duplicateInventoryIds":[],"duplicateSourceIds":[],"duplicateOsdIds":[],"cephFsids":[],"diagnostics":[]}}"#,
+    )
+    .unwrap();
+
+    let report = read_linux_cluster_coverage_report(case_root.path(), "cluster-1")
+        .expect("read legacy report")
+        .expect("legacy report exists");
+    assert_eq!(report.policy.storage_key(), "strict_rbd_replica_count");
+    assert_eq!(report.expected_count, 3);
+}
+
+#[test]
+fn linux_cluster_coverage_report_rejects_tampering() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let path = case_root
+        .path()
+        .join("clusters/cluster-1/coverage-report.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        path,
+        r#"{"schemaVersion":1,"clusterId":"cluster-2","evidenceKind":"rbd_osd_inventory","coveragePolicy":"strict_rbd_replica_count","report":{"expectedCount":1,"observedCount":1,"state":"complete","duplicateInventoryIds":[],"duplicateSourceIds":[],"duplicateOsdIds":[],"cephFsids":[],"diagnostics":[]}}"#,
+    )
+    .unwrap();
+
+    let error = read_linux_cluster_coverage_report(case_root.path(), "cluster-1")
+        .expect_err("tampered cluster identity must fail");
+    assert!(matches!(error, ClusterServiceError::InvalidCoverageReport));
+}

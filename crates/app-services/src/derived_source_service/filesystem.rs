@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use domain::{DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 
@@ -15,11 +15,12 @@ use crate::{
     file_service,
 };
 
+use super::catalog_build::RbdCatalogBuildContext;
 use super::catalog_manifest::summarize_source_connection;
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
 use crate::ceph_reconstruction::{
-    open_rbd_head_image, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor,
-    SharedRadosObjectProvider, SourceDbRadosObjectProvider, STRICT_RBD_REPLICA_COUNT,
+    open_rbd_head_image, RbdEvidenceReader, RbdImageDescriptor, SharedRadosObjectProvider,
+    SourceDbRadosObjectProvider,
 };
 
 struct RbdEnumerationContext<'a> {
@@ -45,75 +46,86 @@ struct RbdCandidateContext<'a> {
 }
 
 pub(super) fn build_catalog_on_connection(
-    source_conn: &rusqlite::Connection,
-    case_id: &CaseId,
-    data_source: &DataSource,
-    replicas: &[RadosReplicaSource],
-    descriptor: &RbdImageDescriptor,
-    lineage_fingerprint: &str,
-    cancel_token: &AtomicBool,
+    context: RbdCatalogBuildContext<'_>,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
-    DataSourceRepo::new(source_conn).upsert_source_local_metadata(case_id, data_source)?;
+    DataSourceRepo::new(context.source_conn)
+        .upsert_source_local_metadata(context.case_id, context.data_source)?;
     let catalog_fingerprint =
-        crate::derived_source_catalog::catalog_fingerprint(lineage_fingerprint);
-
+        crate::derived_source_catalog::catalog_fingerprint(context.lineage_fingerprint);
     let provider = SharedRadosObjectProvider::new(
-        SourceDbRadosObjectProvider::new(
-            replicas.to_vec(),
-            descriptor.metadata.data_pool_id,
+        SourceDbRadosObjectProvider::new_with_policy(
+            context.replicas.to_vec(),
+            context.descriptor.metadata.data_pool_id,
             Vec::new(),
-            STRICT_RBD_REPLICA_COUNT,
+            context.policy.clone(),
         )
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
     );
-    ensure_not_cancelled(cancel_token)?;
+    ensure_not_cancelled(context.cancel_token)?;
     let probe_started = Instant::now();
-    let mut probe = detect_rbd_probe(&provider, descriptor, cancel_token)?;
+    let mut probe = detect_rbd_probe(&provider, context.descriptor, context.cancel_token)?;
     tracing::info!(
-        data_source_id = %data_source.id.0,
+        data_source_id = %context.data_source.id.0,
         elapsed_ms = probe_started.elapsed().as_millis(),
         "Ceph RBD filesystem probe completed"
     );
     let lvm_started = Instant::now();
-    expand_rbd_lvm_candidates(&mut probe, &provider, descriptor, cancel_token)?;
+    expand_rbd_lvm_candidates(
+        &mut probe,
+        &provider,
+        context.descriptor,
+        context.cancel_token,
+    )?;
     tracing::info!(
-        data_source_id = %data_source.id.0,
+        data_source_id = %context.data_source.id.0,
         elapsed_ms = lvm_started.elapsed().as_millis(),
         candidates = probe.candidates.len(),
         "Ceph RBD LVM expansion completed"
     );
     if probe.candidates.is_empty() {
         return Err(DerivedSourceError::NoFilesystem(
-            descriptor.metadata.id.clone(),
+            context.descriptor.metadata.id.clone(),
         ));
     }
-    file_service::store_data_source_partitions(source_conn, &data_source.id, &probe.partitions)
-        .map_err(|error| {
+    store_rbd_partitions(
+        context.source_conn,
+        &context.data_source.id,
+        &probe.partitions,
+    )?;
+    ensure_not_cancelled(context.cancel_token)?;
+    let placeholders = seed_placeholders(
+        context.source_conn,
+        &context.data_source.id,
+        &probe.partitions,
+        context.cancel_token,
+    )?;
+    enumerate_rbd_candidates(RbdEnumerationContext {
+        source_conn: context.source_conn,
+        data_source: context.data_source,
+        provider: &provider,
+        descriptor: context.descriptor,
+        candidates: &probe.candidates,
+        placeholders: &placeholders,
+        catalog_fingerprint: &catalog_fingerprint,
+        cancel_token: context.cancel_token,
+    })?;
+    ensure_not_cancelled(context.cancel_token)?;
+    summarize_source_connection(context.source_conn, context.data_source.clone())
+}
+
+fn store_rbd_partitions(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    partitions: &[PartitionRecord],
+) -> DerivedSourceResult<()> {
+    file_service::store_data_source_partitions(source_conn, data_source_id, partitions).map_err(
+        |error| {
             DerivedSourceError::Database(match error {
                 file_service::FileServiceError::Db(error) => error,
                 other => persistence_sqlite::DbError::System(other.to_string()),
             })
-        })?;
-
-    ensure_not_cancelled(cancel_token)?;
-    let placeholders = seed_placeholders(
-        source_conn,
-        &data_source.id,
-        &probe.partitions,
-        cancel_token,
-    )?;
-    enumerate_rbd_candidates(RbdEnumerationContext {
-        source_conn,
-        data_source,
-        provider: &provider,
-        descriptor,
-        candidates: &probe.candidates,
-        placeholders: &placeholders,
-        catalog_fingerprint: &catalog_fingerprint,
-        cancel_token,
-    })?;
-    ensure_not_cancelled(cancel_token)?;
-    summarize_source_connection(source_conn, data_source.clone())
+        },
+    )
 }
 
 fn enumerate_rbd_candidates(context: RbdEnumerationContext<'_>) -> DerivedSourceResult<()> {

@@ -11,9 +11,7 @@ use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
 
-use crate::ceph_reconstruction::{
-    load_lineage_fingerprint, RbdImageDescriptor, STRICT_RBD_REPLICA_COUNT,
-};
+use crate::ceph_reconstruction::{load_lineage_fingerprint, RbdImageDescriptor, RbdReplicaPolicy};
 
 use super::{DerivedSourceError, DerivedSourceResult};
 
@@ -24,6 +22,7 @@ pub(super) fn validate_existing_registration(
     desired_source: &DataSource,
     descriptor: &RbdImageDescriptor,
     replica_records: &[CephRbdReplicaRecord],
+    policy: &RbdReplicaPolicy,
 ) -> DerivedSourceResult<String> {
     if existing_source.kind != DataSourceKind::CephRbd
         || existing_source.source_path != desired_source.source_path
@@ -33,7 +32,13 @@ pub(super) fn validate_existing_registration(
             existing_source.id.0
         )));
     }
-    let expected = lineage_aggregate(&existing_source.id, cluster_id, descriptor, replica_records);
+    let expected = lineage_aggregate(
+        &existing_source.id,
+        cluster_id,
+        descriptor,
+        replica_records,
+        policy,
+    );
     let stored = CephRbdLineageRepo::new(case_conn)
         .find_by_data_source(&existing_source.id.0)?
         .ok_or_else(|| {
@@ -85,13 +90,20 @@ pub(super) fn register_derived_source(
     data_source: &DataSource,
     descriptor: &RbdImageDescriptor,
     replica_records: &[CephRbdReplicaRecord],
+    policy: &RbdReplicaPolicy,
 ) -> DerivedSourceResult<String> {
     let storage = DataSourceStorage::source_db(
         &data_source.id.0,
         Some(DataSourcePlatform::Linux.as_storage_str()),
         Some("vm_disk".to_string()),
     );
-    let lineage = lineage_aggregate(&data_source.id, cluster_id, descriptor, replica_records);
+    let lineage = lineage_aggregate(
+        &data_source.id,
+        cluster_id,
+        descriptor,
+        replica_records,
+        policy,
+    );
     persistence_sqlite::repositories::ceph_rbd_lineage_repo::validate_aggregate(&lineage)?;
     let transaction = case_conn
         .unchecked_transaction()
@@ -113,6 +125,7 @@ pub(super) fn lineage_aggregate(
     cluster_id: &str,
     descriptor: &RbdImageDescriptor,
     replicas: &[CephRbdReplicaRecord],
+    policy: &RbdReplicaPolicy,
 ) -> CephRbdLineageAggregate {
     let metadata = &descriptor.metadata;
     CephRbdLineageAggregate {
@@ -133,7 +146,7 @@ pub(super) fn lineage_aggregate(
             has_parent: descriptor.context.has_parent,
             snapshot_id: descriptor.context.snapshot_id,
             encrypted: descriptor.context.encrypted,
-            expected_replica_count: STRICT_RBD_REPLICA_COUNT as u32,
+            expected_replica_count: policy.expected_count() as u32,
         },
         replicas: replicas.to_vec(),
     }

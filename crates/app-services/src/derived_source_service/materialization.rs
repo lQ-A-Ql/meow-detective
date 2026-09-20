@@ -18,7 +18,7 @@ use super::{
     derived_data_source_id, DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
 };
 use crate::ceph_reconstruction::{
-    load_lineage_fingerprint, RadosReplicaSource, RbdImageDescriptor,
+    load_lineage_fingerprint, RadosReplicaSource, RbdImageDescriptor, RbdReplicaPolicy,
 };
 use crate::derived_source_service::finalizer::{
     begin_catalog_phase, catalog_phase_is_current, complete_catalog_phase, defer_catalog_phase,
@@ -43,6 +43,7 @@ pub(super) struct RbdMaterializationContext<'a> {
     pub(super) cluster_id: &'a str,
     pub(super) replicas: &'a [RadosReplicaSource],
     pub(super) replica_records: &'a [CephRbdReplicaRecord],
+    pub(super) policy: &'a RbdReplicaPolicy,
     pub(super) cancel_token: &'a AtomicBool,
 }
 
@@ -103,6 +104,7 @@ fn prepare_derived_source(
                 &desired_source,
                 descriptor,
                 context.replica_records,
+                context.policy,
             )?;
             (existing_source, fingerprint)
         }
@@ -115,6 +117,7 @@ fn prepare_derived_source(
                 &desired_source,
                 descriptor,
                 context.replica_records,
+                context.policy,
             )?;
             (desired_source, fingerprint)
         }
@@ -158,6 +161,7 @@ fn run_catalog_materialization(
         case_id: context.case_id,
         data_source: &data_source,
         replicas: context.replicas,
+        policy: context.policy,
         descriptor: &descriptor,
         lineage_fingerprint: &fingerprint,
         catalog_attempt: &catalog_attempt,

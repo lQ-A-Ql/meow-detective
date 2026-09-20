@@ -162,6 +162,7 @@ fn setup_recoverable_catalog(
             CLUSTER_ID,
             &descriptor(),
             &replicas,
+            &crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
         ))
         .expect("insert derived lineage");
     let fingerprint =

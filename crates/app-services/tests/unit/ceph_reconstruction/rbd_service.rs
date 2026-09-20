@@ -4,6 +4,7 @@ use ceph_wire::RbdImageMetadata;
 use domain::DataSourceId;
 
 use super::*;
+use crate::ceph_reconstruction::ReplicaIdentity;
 
 fn replica(inventory_id: &str) -> RadosReplicaSource {
     RadosReplicaSource::new(
@@ -149,4 +150,35 @@ fn source_local_scope_identity_does_not_create_a_metadata_conflict() {
     merge_descriptor(&mut images, replica_descriptor).expect("matching replica metadata");
 
     assert_eq!(images.len(), 1);
+}
+
+#[test]
+fn conflicting_replica_identity_fails_before_source_database_access() {
+    let mut replicas = vec![
+        replica("inventory-a"),
+        replica("inventory-b"),
+        replica("inventory-c"),
+    ];
+    for (index, item) in replicas.iter_mut().enumerate() {
+        item.identity = ReplicaIdentity::from_inventory(
+            Some(index as u32),
+            format!("osd-{index}"),
+            Some(
+                if index == 2 {
+                    "different-fsid"
+                } else {
+                    "shared-fsid"
+                }
+                .to_string(),
+            ),
+        );
+    }
+
+    let error = discover_rbd_images_from_source_dbs(&replicas)
+        .expect_err("conflicting FSIDs must fail before opening source databases");
+    assert!(matches!(
+        error,
+        RbdReconstructionError::IdentityConflict { detail }
+            if detail.contains("FSIDs conflict")
+    ));
 }

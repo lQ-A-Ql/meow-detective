@@ -132,6 +132,71 @@ fn rejects_a_self_certified_single_replica_policy() {
     assert!(matches!(error, RadosProviderError::CoverageNotClosed));
 }
 
+#[test]
+fn rejects_conflicting_replica_identity() {
+    let mut replicas = vec![
+        replica("source-a", "inventory-a"),
+        replica("source-b", "inventory-b"),
+        replica("source-c", "inventory-c"),
+    ];
+    for (index, item) in replicas.iter_mut().enumerate() {
+        item.identity = ReplicaIdentity::from_inventory(
+            Some(index as u32),
+            format!("osd-{index}"),
+            Some(if index == 1 { "fsid-b" } else { "fsid-a" }.to_string()),
+        );
+    }
+
+    let error = match SourceDbRadosObjectProvider::new(replicas, 8, Vec::new(), 3) {
+        Ok(_) => panic!("conflicting identity must fail closed"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, RadosProviderError::IdentityConflict { .. }));
+}
+
+#[test]
+fn trusted_pool_policy_allows_only_the_proven_pool_size() {
+    let policy = RbdReplicaPolicy::trusted_pool(8, 2, 1, "osdmap", Some(11), None)
+        .expect("valid pool policy");
+    let provider = SourceDbRadosObjectProvider::new_with_policy(
+        vec![
+            replica("source-a", "inventory-a"),
+            replica("source-b", "inventory-b"),
+        ],
+        8,
+        Vec::new(),
+        policy,
+    )
+    .expect("two replicas match the trusted pool size");
+    assert_eq!(provider.expected_replica_count, 2);
+
+    let error = SourceDbRadosObjectProvider::new_with_policy(
+        vec![replica("source-a", "inventory-a")],
+        8,
+        Vec::new(),
+        RbdReplicaPolicy::trusted_pool(8, 2, 1, "osdmap", Some(11), None).unwrap(),
+    )
+    .err()
+    .expect("missing a proven replica must fail closed");
+    assert!(matches!(error, RadosProviderError::CoverageNotClosed));
+}
+
+#[test]
+fn trusted_pool_policy_cannot_be_reused_for_another_data_pool() {
+    let error = SourceDbRadosObjectProvider::new_with_policy(
+        vec![
+            replica("source-a", "inventory-a"),
+            replica("source-b", "inventory-b"),
+        ],
+        9,
+        Vec::new(),
+        RbdReplicaPolicy::trusted_pool(8, 2, 1, "osdmap", Some(11), None).unwrap(),
+    )
+    .err()
+    .expect("pool mismatch must fail closed");
+    assert!(matches!(error, RadosProviderError::InvalidReplicaPolicy));
+}
+
 fn replica(data_source_id: &str, inventory_id: &str) -> RadosReplicaSource {
     RadosReplicaSource::new(
         DataSourceId(data_source_id.to_string()),

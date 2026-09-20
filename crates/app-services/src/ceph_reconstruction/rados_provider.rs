@@ -12,8 +12,9 @@ use thiserror::Error;
 
 use super::rados_reader::{RadosObjectLayout, RadosObjectReader};
 use super::{
+    cluster_evidence::{assess_inventory_coverage, InventoryEvidence, ReplicaIdentity},
     open_source_bound_bluestore_lvm, RbdObjectProvider, RbdObjectProviderError,
-    RbdObjectReadOutcome, RbdObjectReadRequest, SourceBoundLvmError, STRICT_RBD_REPLICA_COUNT,
+    RbdObjectReadOutcome, RbdObjectReadRequest, RbdReplicaPolicy, SourceBoundLvmError,
 };
 
 mod cache;
@@ -47,6 +48,7 @@ pub struct RadosReplicaSource {
     pub data_source_id: DataSourceId,
     pub inventory_id: String,
     pub source_db_path: PathBuf,
+    pub identity: ReplicaIdentity,
 }
 
 impl RadosReplicaSource {
@@ -67,7 +69,27 @@ impl RadosReplicaSource {
             data_source_id,
             inventory_id,
             source_db_path,
+            identity: ReplicaIdentity::default(),
         })
+    }
+
+    pub fn with_identity(
+        data_source_id: DataSourceId,
+        inventory_id: impl Into<String>,
+        source_db_path: impl Into<PathBuf>,
+        identity: ReplicaIdentity,
+    ) -> Result<Self, RadosProviderError> {
+        let mut source = Self::new(data_source_id, inventory_id, source_db_path)?;
+        source.identity = identity;
+        Ok(source)
+    }
+
+    fn evidence(&self) -> InventoryEvidence {
+        InventoryEvidence {
+            source_id: self.data_source_id.0.clone(),
+            inventory_id: self.inventory_id.clone(),
+            identity: self.identity.clone(),
+        }
     }
 }
 
@@ -100,11 +122,23 @@ impl SourceDbRadosObjectProvider {
         namespace: Vec<u8>,
         expected_replica_count: usize,
     ) -> Result<Self, RadosProviderError> {
-        Self::with_device_opener(
+        if expected_replica_count != super::STRICT_RBD_REPLICA_COUNT {
+            return Err(RadosProviderError::CoverageNotClosed);
+        }
+        Self::new_with_policy(replicas, pool, namespace, RbdReplicaPolicy::strict_legacy())
+    }
+
+    pub fn new_with_policy(
+        replicas: Vec<RadosReplicaSource>,
+        pool: i64,
+        namespace: Vec<u8>,
+        policy: RbdReplicaPolicy,
+    ) -> Result<Self, RadosProviderError> {
+        Self::with_device_opener_with_policy(
             replicas,
             pool,
             namespace,
-            expected_replica_count,
+            policy,
             Box::new(FilesystemBluestoreDeviceOpener),
         )
     }
@@ -116,9 +150,30 @@ impl SourceDbRadosObjectProvider {
         expected_replica_count: usize,
         device_opener: Box<dyn BluestoreDeviceOpener>,
     ) -> Result<Self, RadosProviderError> {
-        if expected_replica_count != STRICT_RBD_REPLICA_COUNT
-            || replicas.len() != STRICT_RBD_REPLICA_COUNT
-        {
+        if expected_replica_count != super::STRICT_RBD_REPLICA_COUNT {
+            return Err(RadosProviderError::CoverageNotClosed);
+        }
+        Self::with_device_opener_with_policy(
+            replicas,
+            pool,
+            namespace,
+            RbdReplicaPolicy::strict_legacy(),
+            device_opener,
+        )
+    }
+
+    pub fn with_device_opener_with_policy(
+        replicas: Vec<RadosReplicaSource>,
+        pool: i64,
+        namespace: Vec<u8>,
+        policy: RbdReplicaPolicy,
+        device_opener: Box<dyn BluestoreDeviceOpener>,
+    ) -> Result<Self, RadosProviderError> {
+        if policy.validate_for_pool(pool).is_err() {
+            return Err(RadosProviderError::InvalidReplicaPolicy);
+        }
+        let expected_replica_count = policy.expected_count();
+        if replicas.len() != expected_replica_count {
             return Err(RadosProviderError::CoverageNotClosed);
         }
         let mut identities = std::collections::HashSet::new();
@@ -134,6 +189,16 @@ impl SourceDbRadosObjectProvider {
                     data_source_id: replica.data_source_id.0.clone(),
                 });
             }
+        }
+        let evidence = replicas
+            .iter()
+            .map(RadosReplicaSource::evidence)
+            .collect::<Vec<_>>();
+        let coverage = assess_inventory_coverage(&evidence, &policy);
+        if coverage.is_conflicted() {
+            return Err(RadosProviderError::IdentityConflict {
+                detail: coverage.diagnostics.join("; "),
+            });
         }
         Ok(Self {
             replicas: replicas
@@ -328,10 +393,14 @@ pub enum RadosProviderError {
     InvalidReplicaBinding,
     #[error("RBD replica coverage is not closed")]
     CoverageNotClosed,
+    #[error("RBD replica policy is invalid for the selected pool")]
+    InvalidReplicaPolicy,
     #[error("duplicate RBD inventory binding: {inventory_id}")]
     DuplicateInventory { inventory_id: String },
     #[error("duplicate RBD data source binding: {data_source_id}")]
     DuplicateSource { data_source_id: String },
+    #[error("RBD inventory identity conflict: {detail}")]
+    IdentityConflict { detail: String },
     #[error("source database unavailable for inventory {inventory_id}: {detail}")]
     SourceDb {
         inventory_id: String,

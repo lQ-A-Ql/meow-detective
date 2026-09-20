@@ -6,6 +6,8 @@ use persistence_sqlite::repositories::datasource_cluster_repo::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::ceph_reconstruction::InventoryCoverageReport;
+use crate::ceph_reconstruction::RbdReplicaPolicy;
 use crate::datasource_service;
 use crate::import_precheck::{ImportClusterMemberConfig, ImportSourceConfig, ImportSourceMode};
 
@@ -40,6 +42,20 @@ struct LinuxClusterManifest {
     profile: Option<String>,
     member_count: u32,
     members: Vec<LinuxClusterMemberPlan>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinuxClusterCoverageArtifact {
+    schema_version: u32,
+    cluster_id: String,
+    evidence_kind: String,
+    coverage_policy: String,
+    #[serde(default = "legacy_policy_source")]
+    policy_source: String,
+    #[serde(default = "RbdReplicaPolicy::strict_legacy")]
+    policy: RbdReplicaPolicy,
+    report: InventoryCoverageReport,
 }
 
 impl LinuxClusterImportPlan {
@@ -238,6 +254,84 @@ pub fn write_linux_cluster_manifest(
         return Err(error.into());
     }
     Ok(manifest_path)
+}
+
+pub fn write_linux_cluster_coverage_report(
+    case_root: &Path,
+    cluster_id: &str,
+    report: &InventoryCoverageReport,
+) -> Result<PathBuf> {
+    validate_cluster_id(cluster_id)?;
+    if report.policy.validate().is_err() || report.expected_count != report.policy.expected_count()
+    {
+        return Err(ClusterServiceError::InvalidCoverageReport);
+    }
+    let report_path = case_root.join(format!("clusters/{cluster_id}/coverage-report.json"));
+    if let Some(parent) = report_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let artifact = LinuxClusterCoverageArtifact {
+        schema_version: 2,
+        cluster_id: cluster_id.to_string(),
+        evidence_kind: "rbd_osd_inventory".to_string(),
+        coverage_policy: report.policy.storage_key().to_string(),
+        policy_source: report.policy_source().to_string(),
+        policy: report.policy.clone(),
+        report: report.clone(),
+    };
+    let temp_path = report_path.with_extension("json.tmp");
+    let payload = serde_json::to_vec_pretty(&artifact)?;
+    if let Err(error) = std::fs::write(&temp_path, payload) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(error.into());
+    }
+    if let Err(error) = std::fs::rename(&temp_path, &report_path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(error.into());
+    }
+    Ok(report_path)
+}
+
+pub fn read_linux_cluster_coverage_report(
+    case_root: &Path,
+    cluster_id: &str,
+) -> Result<Option<InventoryCoverageReport>> {
+    validate_cluster_id(cluster_id)?;
+    let report_path = case_root.join(format!("clusters/{cluster_id}/coverage-report.json"));
+    let payload = match std::fs::read_to_string(&report_path) {
+        Ok(payload) => payload,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let artifact: LinuxClusterCoverageArtifact = serde_json::from_str(&payload)?;
+    if !(1..=2).contains(&artifact.schema_version)
+        || artifact.cluster_id != cluster_id
+        || artifact.evidence_kind != "rbd_osd_inventory"
+        || artifact.coverage_policy != artifact.report.policy.storage_key()
+        || artifact.policy_source != artifact.report.policy_source()
+        || artifact.policy != artifact.report.policy
+        || artifact.report.policy.validate().is_err()
+        || artifact.report.observed_count > artifact.report.expected_count
+        || artifact.report.expected_count != artifact.report.policy.expected_count()
+    {
+        return Err(ClusterServiceError::InvalidCoverageReport);
+    }
+    Ok(Some(artifact.report))
+}
+
+fn legacy_policy_source() -> String {
+    RbdReplicaPolicy::strict_legacy().source().to_string()
+}
+
+fn validate_cluster_id(cluster_id: &str) -> Result<()> {
+    if cluster_id.is_empty()
+        || cluster_id == "."
+        || cluster_id == ".."
+        || cluster_id.contains(['/', '\\'])
+    {
+        return Err(ClusterServiceError::InvalidClusterId);
+    }
+    Ok(())
 }
 
 fn normalize_cluster_profile(profile: Option<String>) -> Option<String> {

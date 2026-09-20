@@ -5,8 +5,8 @@ use persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreOma
 use thiserror::Error;
 
 use super::{
-    detect_rbd_image_filesystem, discover_rbd_images, RadosReplicaSource, RbdImageDescriptor,
-    SourceDbRadosObjectProvider, STRICT_RBD_REPLICA_COUNT,
+    assess_inventory_coverage, detect_rbd_image_filesystem, discover_rbd_images,
+    RadosReplicaSource, RbdImageDescriptor, RbdReplicaPolicy, SourceDbRadosObjectProvider,
 };
 
 #[derive(Debug, Error)]
@@ -17,6 +17,8 @@ pub enum RbdReconstructionError {
     DuplicateReplicaInventory { inventory_id: String },
     #[error("duplicate RBD replica data source binding: {data_source_id}")]
     DuplicateReplicaSource { data_source_id: String },
+    #[error("RBD inventory identity conflict: {detail}")]
+    IdentityConflict { detail: String },
     #[error("source database could not be opened for inventory {inventory_id}: {detail}")]
     SourceDb {
         inventory_id: String,
@@ -42,7 +44,14 @@ pub enum RbdReconstructionError {
 pub fn discover_rbd_images_from_source_dbs(
     replicas: &[RadosReplicaSource],
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
-    validate_replica_set(replicas)?;
+    discover_rbd_images_from_source_dbs_with_policy(replicas, &RbdReplicaPolicy::strict_legacy())
+}
+
+pub fn discover_rbd_images_from_source_dbs_with_policy(
+    replicas: &[RadosReplicaSource],
+    policy: &RbdReplicaPolicy,
+) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
+    validate_replica_set(replicas, policy)?;
     let mut images = BTreeMap::new();
     for replica in replicas {
         let connection = persistence_sqlite::open_existing_source_read_only(
@@ -88,19 +97,31 @@ pub fn detect_rbd_image_from_source_dbs(
     replicas: Vec<RadosReplicaSource>,
     image_id: &str,
 ) -> Result<crate::datasource_service::ImageFilesystemProbe, RbdReconstructionError> {
-    validate_replica_set(&replicas)?;
-    let descriptors = discover_rbd_images_from_source_dbs(&replicas)?;
+    detect_rbd_image_from_source_dbs_with_policy(
+        replicas,
+        image_id,
+        &RbdReplicaPolicy::strict_legacy(),
+    )
+}
+
+pub fn detect_rbd_image_from_source_dbs_with_policy(
+    replicas: Vec<RadosReplicaSource>,
+    image_id: &str,
+    policy: &RbdReplicaPolicy,
+) -> Result<crate::datasource_service::ImageFilesystemProbe, RbdReconstructionError> {
+    validate_replica_set(&replicas, policy)?;
+    let descriptors = discover_rbd_images_from_source_dbs_with_policy(&replicas, policy)?;
     let descriptor = descriptors
         .into_iter()
         .find(|descriptor| descriptor.metadata.id == image_id)
         .ok_or_else(|| RbdReconstructionError::ImageNotFound {
             image_id: image_id.to_string(),
         })?;
-    let provider = SourceDbRadosObjectProvider::new(
+    let provider = SourceDbRadosObjectProvider::new_with_policy(
         replicas,
         descriptor.metadata.data_pool_id,
         Vec::new(),
-        STRICT_RBD_REPLICA_COUNT,
+        policy.clone(),
     )
     .map_err(|error| RbdReconstructionError::Provider {
         detail: error.to_string(),
@@ -113,10 +134,14 @@ pub fn detect_rbd_image_from_source_dbs(
     })
 }
 
-fn validate_replica_set(replicas: &[RadosReplicaSource]) -> Result<(), RbdReconstructionError> {
-    if replicas.len() != STRICT_RBD_REPLICA_COUNT {
+fn validate_replica_set(
+    replicas: &[RadosReplicaSource],
+    policy: &RbdReplicaPolicy,
+) -> Result<(), RbdReconstructionError> {
+    let expected_count = policy.expected_count();
+    if replicas.len() != expected_count {
         return Err(RbdReconstructionError::ReplicaCoverageNotClosed {
-            expected: STRICT_RBD_REPLICA_COUNT,
+            expected: expected_count,
             provided: replicas.len(),
         });
     }
@@ -133,6 +158,20 @@ fn validate_replica_set(replicas: &[RadosReplicaSource]) -> Result<(), RbdRecons
                 data_source_id: replica.data_source_id.0.clone(),
             });
         }
+    }
+    let evidence = replicas
+        .iter()
+        .map(|replica| super::InventoryEvidence {
+            source_id: replica.data_source_id.0.clone(),
+            inventory_id: replica.inventory_id.clone(),
+            identity: replica.identity.clone(),
+        })
+        .collect::<Vec<_>>();
+    let coverage = assess_inventory_coverage(&evidence, policy);
+    if coverage.is_conflicted() {
+        return Err(RbdReconstructionError::IdentityConflict {
+            detail: coverage.diagnostics.join("; "),
+        });
     }
     Ok(())
 }

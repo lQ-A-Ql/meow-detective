@@ -4,8 +4,10 @@ mod cephfs_presence_bindings;
 mod cephfs_presence_storage;
 mod cephfs_presence_validation;
 mod cephfs_source;
+mod cluster_evidence;
 mod derived_reader;
 mod derived_runtime;
+mod pool_evidence;
 mod rados_provider;
 mod rados_reader;
 mod rbd_catalog;
@@ -48,8 +50,13 @@ pub use cephfs_source::{
 pub(crate) use cephfs_source::{
     open_cephfs_file_reader, CephFsFileReadRequest, PreparedCephFsFileReader,
 };
+pub use cluster_evidence::{
+    assess_inventory_coverage, InventoryCoverageReport, InventoryCoverageState, InventoryEvidence,
+    PoolReplicaEvidence, RbdReplicaPolicy, ReplicaIdentity, ReplicaPolicyError,
+};
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
+pub(crate) use pool_evidence::resolve_rbd_replica_policy;
 pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{
     BluestoreDeviceOpener, FilesystemBluestoreDeviceOpener, RadosProviderError,
@@ -72,7 +79,9 @@ pub use rbd_reader::{
     RBD_OPERATION_FEATURE_GROUP, RBD_OPERATION_FEATURE_SNAP_TRASH,
 };
 pub use rbd_service::{
-    detect_rbd_image_from_source_dbs, discover_rbd_images_from_source_dbs, RbdReconstructionError,
+    detect_rbd_image_from_source_dbs, detect_rbd_image_from_source_dbs_with_policy,
+    discover_rbd_images_from_source_dbs, discover_rbd_images_from_source_dbs_with_policy,
+    RbdReconstructionError,
 };
 pub use source_bound_lvm::{
     open_source_bound_bluestore_lvm, BoundEvidenceOpenError, FilesystemEvidenceOpener,

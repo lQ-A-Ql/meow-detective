@@ -12,8 +12,12 @@ use persistence_sqlite::repositories::{
 };
 
 use crate::{
-    ceph_reconstruction::{discover_rbd_images_from_source_dbs, RadosReplicaSource},
-    source_db,
+    ceph_reconstruction::{
+        assess_inventory_coverage, discover_rbd_images_from_source_dbs_with_policy,
+        resolve_rbd_replica_policy, InventoryEvidence, RadosReplicaSource, RbdReplicaPolicy,
+        ReplicaIdentity,
+    },
+    cluster_service, source_db,
 };
 
 use super::materialization::{
@@ -77,6 +81,7 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &reconstruction_parent_ids,
         &cancel_token,
     )? {
+        write_empty_coverage_report(case_root, cluster_id)?;
         return Ok(Vec::new());
     }
     let (replicas, replica_records) = load_cluster_replicas(
@@ -86,9 +91,32 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &reconstruction_parent_ids,
         &cancel_token,
     )?;
-    ensure_not_cancelled(&cancel_token)?;
-    let descriptors = discover_rbd_images_from_source_dbs(&replicas)
+    let policy_resolution = resolve_rbd_replica_policy(case_root, cluster_id, None, replicas.len())
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let policy = policy_resolution.policy;
+    let coverage = assess_and_write_coverage(
+        case_root,
+        cluster_id,
+        &replicas,
+        &policy,
+        &policy_resolution.diagnostics,
+    )?;
+    if coverage.state != crate::ceph_reconstruction::InventoryCoverageState::Complete {
+        tracing::warn!(
+            cluster_id,
+            state = ?coverage.state,
+            diagnostics = ?coverage.diagnostics,
+            "RBD inventory coverage is not fully proven; retaining strict reconstruction policy"
+        );
+    }
+    ensure_not_cancelled(&cancel_token)?;
+    let descriptors = discover_rbd_images_from_source_dbs_with_policy(&replicas, &policy)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    for descriptor in &descriptors {
+        policy
+            .validate_for_pool(descriptor.metadata.data_pool_id)
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    }
     ensure_not_cancelled(&cancel_token)?;
 
     let mut materialized = Vec::new();
@@ -102,6 +130,7 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
                 cluster_id,
                 replicas: &replicas,
                 replica_records: &replica_records,
+                policy: &policy,
                 cancel_token: &cancel_token,
             },
             descriptor,
@@ -113,6 +142,49 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         ));
     }
     Ok(materialized)
+}
+
+fn write_empty_coverage_report(case_root: &Path, cluster_id: &str) -> DerivedSourceResult<()> {
+    let report = crate::ceph_reconstruction::InventoryCoverageReport {
+        policy: RbdReplicaPolicy::strict_legacy(),
+        expected_count: RbdReplicaPolicy::strict_legacy().expected_count(),
+        observed_count: 0,
+        state: crate::ceph_reconstruction::InventoryCoverageState::Incomplete,
+        duplicate_inventory_ids: Vec::new(),
+        duplicate_source_ids: Vec::new(),
+        duplicate_osd_ids: Vec::new(),
+        ceph_fsids: Vec::new(),
+        diagnostics: vec!["no usable OSD inventory was found".to_string()],
+    };
+    cluster_service::write_linux_cluster_coverage_report(case_root, cluster_id, &report)
+        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
+    Ok(())
+}
+
+fn assess_and_write_coverage(
+    case_root: &Path,
+    cluster_id: &str,
+    replicas: &[RadosReplicaSource],
+    policy: &RbdReplicaPolicy,
+    policy_diagnostics: &[String],
+) -> DerivedSourceResult<crate::ceph_reconstruction::InventoryCoverageReport> {
+    let evidence = replicas
+        .iter()
+        .map(|replica| InventoryEvidence {
+            source_id: replica.data_source_id.0.clone(),
+            inventory_id: replica.inventory_id.clone(),
+            identity: replica.identity.clone(),
+        })
+        .collect::<Vec<_>>();
+    let mut coverage = assess_inventory_coverage(&evidence, policy);
+    for diagnostic in policy_diagnostics {
+        if !coverage.diagnostics.contains(diagnostic) {
+            coverage.diagnostics.push(diagnostic.clone());
+        }
+    }
+    cluster_service::write_linux_cluster_coverage_report(case_root, cluster_id, &coverage)
+        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
+    Ok(coverage)
 }
 
 pub fn finalize_rbd_source_processing(
@@ -168,6 +240,18 @@ fn load_ready_rbd_sources(
         };
         if lineage.lineage.parent_cluster_id != cluster_id {
             continue;
+        }
+        let current_policy =
+            resolve_rbd_replica_policy(case_root, cluster_id, None, lineage.replicas.len())
+                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+        let Some(coverage) =
+            cluster_service::read_linux_cluster_coverage_report(case_root, cluster_id)
+                .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?
+        else {
+            return Ok(None);
+        };
+        if coverage.policy != current_policy.policy {
+            return Ok(None);
         }
         let Some(storage) = DataSourceRepo::new(case_conn).find_storage(&source.id)? else {
             return Err(DerivedSourceError::Database(
@@ -278,8 +362,17 @@ fn load_cluster_replicas(
                 data_source_id: source_id.0.clone(),
             })?;
         replicas.push(
-            RadosReplicaSource::new(source_id.clone(), inventory.id.clone(), source_db_path)
-                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
+            RadosReplicaSource::with_identity(
+                source_id.clone(),
+                inventory.id.clone(),
+                source_db_path,
+                ReplicaIdentity::from_inventory(
+                    inventory.whoami,
+                    inventory.osd_uuid.clone(),
+                    inventory.ceph_fsid.clone(),
+                ),
+            )
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
         );
         records.push(CephRbdReplicaRecord {
             ordinal: records.len() as u32,

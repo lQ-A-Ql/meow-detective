@@ -10,7 +10,7 @@ use crate::source_db;
 use super::catalog_manifest::persist_current_source_manifest;
 use super::filesystem::build_catalog_on_connection;
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
-use crate::ceph_reconstruction::{RadosReplicaSource, RbdImageDescriptor};
+use crate::ceph_reconstruction::{RadosReplicaSource, RbdImageDescriptor, RbdReplicaPolicy};
 use crate::derived_source_service::finalizer::{refresh_catalog_claim, ProcessingPhaseAttempt};
 
 pub(super) struct CatalogBuildRequest<'a> {
@@ -19,9 +19,21 @@ pub(super) struct CatalogBuildRequest<'a> {
     pub(super) case_id: &'a CaseId,
     pub(super) data_source: &'a DataSource,
     pub(super) replicas: &'a [RadosReplicaSource],
+    pub(super) policy: &'a RbdReplicaPolicy,
     pub(super) descriptor: &'a RbdImageDescriptor,
     pub(super) lineage_fingerprint: &'a str,
     pub(super) catalog_attempt: &'a ProcessingPhaseAttempt,
+    pub(super) cancel_token: &'a AtomicBool,
+}
+
+pub(super) struct RbdCatalogBuildContext<'a> {
+    pub(super) source_conn: &'a rusqlite::Connection,
+    pub(super) case_id: &'a CaseId,
+    pub(super) data_source: &'a DataSource,
+    pub(super) replicas: &'a [RadosReplicaSource],
+    pub(super) policy: &'a RbdReplicaPolicy,
+    pub(super) descriptor: &'a RbdImageDescriptor,
+    pub(super) lineage_fingerprint: &'a str,
     pub(super) cancel_token: &'a AtomicBool,
 }
 
@@ -37,15 +49,16 @@ pub(super) fn build_and_enumerate_source(
         attempt_id,
     )?;
     let build_result = (|| {
-        let summary = build_catalog_on_connection(
-            &source_conn,
-            request.case_id,
-            request.data_source,
-            request.replicas,
-            request.descriptor,
-            request.lineage_fingerprint,
-            request.cancel_token,
-        )?;
+        let summary = build_catalog_on_connection(RbdCatalogBuildContext {
+            source_conn: &source_conn,
+            case_id: request.case_id,
+            data_source: request.data_source,
+            replicas: request.replicas,
+            policy: request.policy,
+            descriptor: request.descriptor,
+            lineage_fingerprint: request.lineage_fingerprint,
+            cancel_token: request.cancel_token,
+        })?;
         persist_current_source_manifest(&source_conn, request.lineage_fingerprint, &summary)?;
         super::ensure_not_cancelled(request.cancel_token)?;
         source_db::finalize_source_build_db(&source_conn)?;
