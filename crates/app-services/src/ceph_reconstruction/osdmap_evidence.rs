@@ -9,8 +9,9 @@ use super::{RbdReplicaPolicy, ReplicaIdentity};
 
 const EVIDENCE_FILE: &str = "osdmap-evidence.json";
 const EVIDENCE_KIND: &str = "ceph_osdmap_poolmap";
-const SCHEMA_VERSION: u32 = 1;
-const DIGEST_DOMAIN: &[u8] = b"meow-detective-ceph-osdmap-poolmap-v1\0";
+const SCHEMA_VERSION: u32 = 2;
+const DIGEST_DOMAIN: &[u8] = b"meow-detective-ceph-osdmap-poolmap-v2\0";
+const BINDING_DIGEST_DOMAIN: &[u8] = b"meow-detective-ceph-map-binding-v1\0";
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum OsdMapEvidenceError {
@@ -52,6 +53,27 @@ struct EvidenceDocument {
     pools: Vec<PoolRecord>,
     osds: Vec<OsdRecord>,
     evidence_digest: String,
+    source: EvidenceSource,
+    osdmap_payload_digest: String,
+    poolmap_payload_digest: String,
+    map_binding_digest: String,
+    epoch_history: Vec<EpochBinding>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EvidenceSource {
+    source_kind: String,
+    source_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EpochBinding {
+    epoch: u64,
+    osdmap_payload_digest: String,
+    poolmap_payload_digest: String,
+    map_binding_digest: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -211,13 +233,82 @@ fn validate_document(
     }
     validate_pools(&document.pools)?;
     validate_osds(&document.osds, &document.ceph_fsid)?;
-    if document.evidence_digest.len() != 64
-        || !document
-            .evidence_digest
+    validate_digest(&document.evidence_digest, "evidence digest")?;
+    validate_v2_contract(document)?;
+    Ok(())
+}
+
+fn validate_v2_contract(document: &EvidenceDocument) -> Result<(), OsdMapEvidenceError> {
+    validate_source(&document.source)?;
+    let osdmap_digest = &document.osdmap_payload_digest;
+    let poolmap_digest = &document.poolmap_payload_digest;
+    let binding_digest = &document.map_binding_digest;
+    validate_digest(osdmap_digest, "OSDMap payload digest")?;
+    validate_digest(poolmap_digest, "PoolMap payload digest")?;
+    validate_digest(binding_digest, "map binding digest")?;
+    if binding_digest_for(document, document.epoch, osdmap_digest, poolmap_digest)
+        != *binding_digest
+    {
+        return Err(OsdMapEvidenceError::Invalid("map binding digest"));
+    }
+    let history = &document.epoch_history;
+    let mut previous_epoch = None;
+    for entry in history {
+        if entry.epoch == 0 || previous_epoch.is_some_and(|previous| entry.epoch <= previous) {
+            return Err(OsdMapEvidenceError::Invalid("epoch monotonicity"));
+        }
+        validate_digest(&entry.osdmap_payload_digest, "OSDMap payload digest")?;
+        validate_digest(&entry.poolmap_payload_digest, "PoolMap payload digest")?;
+        validate_digest(&entry.map_binding_digest, "map binding digest")?;
+        if binding_digest_for(
+            document,
+            entry.epoch,
+            &entry.osdmap_payload_digest,
+            &entry.poolmap_payload_digest,
+        ) != entry.map_binding_digest
+        {
+            return Err(OsdMapEvidenceError::Invalid("map binding digest"));
+        }
+        previous_epoch = Some(entry.epoch);
+    }
+    let current = history
+        .last()
+        .ok_or(OsdMapEvidenceError::Invalid("epoch history"))?;
+    if current.epoch != document.epoch
+        || current.osdmap_payload_digest != *osdmap_digest
+        || current.poolmap_payload_digest != *poolmap_digest
+        || current.map_binding_digest != *binding_digest
+    {
+        return Err(OsdMapEvidenceError::Invalid("epoch binding"));
+    }
+    Ok(())
+}
+
+fn validate_source(source: &EvidenceSource) -> Result<(), OsdMapEvidenceError> {
+    if source.source_kind.is_empty()
+        || source.source_kind.len() > 64
+        || !source.source_kind.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+        })
+        || source.source_id.is_empty()
+        || source.source_id.len() > 256
+        || source
+            .source_id
+            .chars()
+            .any(|character| character.is_control())
+    {
+        return Err(OsdMapEvidenceError::Invalid("source provenance"));
+    }
+    Ok(())
+}
+
+fn validate_digest(value: &str, field: &'static str) -> Result<(), OsdMapEvidenceError> {
+    if value.len() != 64
+        || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
-        return Err(OsdMapEvidenceError::Invalid("evidence digest"));
+        return Err(OsdMapEvidenceError::Invalid(field));
     }
     Ok(())
 }
@@ -293,6 +384,26 @@ fn canonical_digest(document: &mut EvidenceDocument) -> Result<String, OsdMapEvi
     digest.update(DIGEST_DOMAIN);
     digest.update(bytes);
     Ok(hex::encode(digest.finalize()))
+}
+
+fn binding_digest_for(
+    document: &EvidenceDocument,
+    epoch: u64,
+    osdmap_digest: &str,
+    poolmap_digest: &str,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(BINDING_DIGEST_DOMAIN);
+    digest.update(document.ceph_fsid.as_bytes());
+    digest.update([0]);
+    digest.update(document.ceph_revision.as_bytes());
+    digest.update([0]);
+    digest.update(epoch.to_le_bytes());
+    digest.update([0]);
+    digest.update(osdmap_digest.as_bytes());
+    digest.update([0]);
+    digest.update(poolmap_digest.as_bytes());
+    hex::encode(digest.finalize())
 }
 
 #[cfg(test)]
