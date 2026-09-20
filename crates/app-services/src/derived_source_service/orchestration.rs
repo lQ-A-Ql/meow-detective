@@ -14,8 +14,8 @@ use persistence_sqlite::repositories::{
 use crate::{
     ceph_reconstruction::{
         assess_inventory_coverage, discover_rbd_images_from_source_dbs_unbound,
-        resolve_rbd_replica_policy, InventoryEvidence, RadosReplicaSource, RbdReplicaPolicy,
-        ReplicaIdentity,
+        evidence_is_present, resolve_rbd_replica_policy, validate_inventory_membership,
+        InventoryEvidence, RadosReplicaSource, RbdReplicaPolicy, ReplicaIdentity,
     },
     cluster_service, source_db,
 };
@@ -91,6 +91,7 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &reconstruction_parent_ids,
         &cancel_token,
     )?;
+    validate_map_inventory_membership(case_root, cluster_id, &replicas)?;
     let descriptors = discover_rbd_images_from_source_dbs_unbound(&replicas)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     if descriptors.is_empty() {
@@ -134,6 +135,20 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         )?);
     }
     Ok(materialized)
+}
+
+fn validate_map_inventory_membership(
+    case_root: &Path,
+    cluster_id: &str,
+    replicas: &[RadosReplicaSource],
+) -> DerivedSourceResult<()> {
+    let identities = replicas
+        .iter()
+        .map(|replica| replica.identity.clone())
+        .collect::<Vec<_>>();
+    validate_inventory_membership(case_root, cluster_id, &identities)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    Ok(())
 }
 
 fn resolve_descriptor_policy(
@@ -275,6 +290,21 @@ fn load_ready_rbd_sources(
     cluster_id: &str,
 ) -> DerivedSourceResult<Option<Vec<MaterializedRbdSource>>> {
     let mut materialized = Vec::new();
+    if evidence_is_present(case_root, cluster_id)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?
+    {
+        let parent_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
+        let reconstruction_parent_ids =
+            reconstruction_parent_ids(case_conn, &parent_ids, &AtomicBool::new(false))?;
+        let (ready_replicas, _) = load_cluster_replicas(
+            case_conn,
+            case_root,
+            case_id,
+            &reconstruction_parent_ids,
+            &AtomicBool::new(false),
+        )?;
+        validate_map_inventory_membership(case_root, cluster_id, &ready_replicas)?;
+    }
     for source in DataSourceRepo::new(case_conn)
         .find_by_case(case_id)?
         .into_iter()

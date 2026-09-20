@@ -77,3 +77,41 @@ fn unsupported_pool_type_is_rejected() {
     let error = resolve_policy(root.path(), "cluster-1", Some(8)).expect_err("EC unsupported");
     assert_eq!(error, OsdMapEvidenceError::UnsupportedPoolType);
 }
+
+#[test]
+fn inventory_identity_must_match_the_epoch_bound_map() {
+    let root = tempfile::TempDir::new().expect("root");
+    let payload = with_digest(document(
+        r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
+        "placeholder",
+    ));
+    write_document(root.path(), &payload);
+    let identity = ReplicaIdentity::from_inventory(
+        Some(1),
+        "22222222-2222-2222-2222-222222222222",
+        Some("11111111-1111-1111-1111-111111111111".to_string()),
+    );
+    assert_eq!(
+        validate_inventory_membership(root.path(), "cluster-1", &[identity])
+            .expect("matching identity"),
+        Some(1)
+    );
+}
+
+#[test]
+fn inventory_identity_mismatch_fails_closed() {
+    let root = tempfile::TempDir::new().expect("root");
+    let payload = with_digest(document(
+        r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
+        "placeholder",
+    ));
+    write_document(root.path(), &payload);
+    let identity = ReplicaIdentity::from_inventory(
+        Some(2),
+        "22222222-2222-2222-2222-222222222222",
+        Some("11111111-1111-1111-1111-111111111111".to_string()),
+    );
+    let error = validate_inventory_membership(root.path(), "cluster-1", &[identity])
+        .expect_err("unknown OSD must fail closed");
+    assert_eq!(error, OsdMapEvidenceError::ReplicaNotInMap);
+}

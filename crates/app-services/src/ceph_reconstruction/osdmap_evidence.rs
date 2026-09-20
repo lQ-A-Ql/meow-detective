@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::RbdReplicaPolicy;
+use super::{RbdReplicaPolicy, ReplicaIdentity};
 
 const EVIDENCE_FILE: &str = "osdmap-evidence.json";
 const EVIDENCE_KIND: &str = "ceph_osdmap_poolmap";
@@ -28,6 +28,10 @@ pub(crate) enum OsdMapEvidenceError {
     UnsupportedPoolType,
     #[error("OSDMap evidence does not contain the requested pool")]
     PoolNotFound,
+    #[error("imported OSD identity is not present in the OSDMap")]
+    ReplicaNotInMap,
+    #[error("imported OSD identity conflicts with the OSDMap")]
+    ReplicaIdentityMismatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,6 +124,69 @@ pub(crate) fn resolve_policy(
         policy,
         osd_count: document.osds.len(),
     }))
+}
+
+pub(crate) fn validate_inventory_membership(
+    case_root: &Path,
+    cluster_id: &str,
+    identities: &[ReplicaIdentity],
+) -> Result<Option<usize>, OsdMapEvidenceError> {
+    validate_cluster_id(cluster_id)?;
+    let path = case_root
+        .join("clusters")
+        .join(cluster_id)
+        .join(EVIDENCE_FILE);
+    let payload = match std::fs::read(path) {
+        Ok(payload) => payload,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(OsdMapEvidenceError::Read),
+    };
+    let mut document: EvidenceDocument =
+        serde_json::from_slice(&payload).map_err(|_| OsdMapEvidenceError::Json)?;
+    validate_document(&document, cluster_id)?;
+    let provided_digest = document.evidence_digest.clone();
+    if canonical_digest(&mut document)? != provided_digest {
+        return Err(OsdMapEvidenceError::DigestMismatch);
+    }
+    for identity in identities {
+        let osd_id = identity
+            .osd_id
+            .ok_or(OsdMapEvidenceError::ReplicaIdentityMismatch)?;
+        let expected = document
+            .osds
+            .iter()
+            .find(|osd| osd.osd_id == osd_id)
+            .ok_or(OsdMapEvidenceError::ReplicaNotInMap)?;
+        let Some(osd_uuid) = identity.osd_uuid.as_deref() else {
+            return Err(OsdMapEvidenceError::ReplicaIdentityMismatch);
+        };
+        let Some(ceph_fsid) = identity.ceph_fsid.as_deref() else {
+            return Err(OsdMapEvidenceError::ReplicaIdentityMismatch);
+        };
+        if Uuid::parse_str(osd_uuid).ok() != Uuid::parse_str(&expected.osd_uuid).ok()
+            || ceph_fsid != document.ceph_fsid
+            || ceph_fsid != expected.ceph_fsid
+        {
+            return Err(OsdMapEvidenceError::ReplicaIdentityMismatch);
+        }
+    }
+    Ok(Some(document.osds.len()))
+}
+
+pub(crate) fn evidence_is_present(
+    case_root: &Path,
+    cluster_id: &str,
+) -> Result<bool, OsdMapEvidenceError> {
+    validate_cluster_id(cluster_id)?;
+    let path = case_root
+        .join("clusters")
+        .join(cluster_id)
+        .join(EVIDENCE_FILE);
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(OsdMapEvidenceError::Read),
+    }
 }
 
 fn validate_document(

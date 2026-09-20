@@ -57,6 +57,7 @@ pub use cluster_evidence::{
 };
 pub use derived_reader::{open_derived_rbd_reader, DerivedRbdReaderError};
 pub use derived_runtime::{build_derived_rbd_runtime, load_lineage_fingerprint, DerivedRbdRuntime};
+pub(crate) use osdmap_evidence::{evidence_is_present, validate_inventory_membership};
 pub(crate) use pool_evidence::resolve_rbd_replica_policy;
 pub(super) use rados_provider::SharedRadosObjectProvider;
 pub use rados_provider::{
