@@ -104,7 +104,6 @@ apps/desktop/src-tauri/resources/tools/
 /plugins-src/
 
 # JFS 4.9 experiment logs, hashes, and derived copies are workstation-local.
-/experiments/jfs-4-9/results/
+/experiments/jfs-4-9/
 /论文/
 /软著申请资料/
-
