@@ -147,6 +147,7 @@ pub(super) fn lineage_aggregate(
             snapshot_id: descriptor.context.snapshot_id,
             encrypted: descriptor.context.encrypted,
             expected_replica_count: policy.expected_count() as u32,
+            replica_policy_fingerprint: policy.fingerprint(),
         },
         replicas: replicas.to_vec(),
     }

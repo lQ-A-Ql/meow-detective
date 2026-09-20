@@ -101,14 +101,7 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &policy,
         &policy_resolution.diagnostics,
     )?;
-    if coverage.state != crate::ceph_reconstruction::InventoryCoverageState::Complete {
-        tracing::warn!(
-            cluster_id,
-            state = ?coverage.state,
-            diagnostics = ?coverage.diagnostics,
-            "RBD inventory coverage is not fully proven; retaining strict reconstruction policy"
-        );
-    }
+    ensure_complete_coverage(&coverage)?;
     ensure_not_cancelled(&cancel_token)?;
     let descriptors = discover_rbd_images_from_source_dbs_with_policy(&replicas, &policy)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
@@ -142,6 +135,22 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         ));
     }
     Ok(materialized)
+}
+
+fn ensure_complete_coverage(
+    coverage: &crate::ceph_reconstruction::InventoryCoverageReport,
+) -> DerivedSourceResult<()> {
+    if coverage.is_complete() {
+        return Ok(());
+    }
+    tracing::warn!(
+        state = coverage.state.as_str(),
+        diagnostics = ?coverage.diagnostics,
+        "RBD inventory coverage is not fully proven; refusing materialization"
+    );
+    Err(DerivedSourceError::ReplicaCoverageNotProven {
+        state: coverage.state.as_str().to_string(),
+    })
 }
 
 fn write_empty_coverage_report(case_root: &Path, cluster_id: &str) -> DerivedSourceResult<()> {
@@ -250,7 +259,15 @@ fn load_ready_rbd_sources(
         else {
             return Ok(None);
         };
+        if !coverage.is_complete() {
+            return Ok(None);
+        }
         if coverage.policy != current_policy.policy {
+            return Ok(None);
+        }
+        if lineage.lineage.replica_policy_fingerprint.is_empty()
+            || lineage.lineage.replica_policy_fingerprint != current_policy.policy.fingerprint()
+        {
             return Ok(None);
         }
         let Some(storage) = DataSourceRepo::new(case_conn).find_storage(&source.id)? else {

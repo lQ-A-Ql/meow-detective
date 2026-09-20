@@ -27,6 +27,8 @@ pub enum DerivedRbdReaderError {
     },
     #[error("RBD replica provider failed: {0}")]
     Provider(String),
+    #[error("RBD replica coverage is not proven: {state}")]
+    CoverageNotProven { state: String },
     #[error("RBD image could not be opened: {0}")]
     Open(String),
 }

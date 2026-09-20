@@ -28,6 +28,8 @@ pub enum DerivedSourceError {
     MissingInventory { data_source_id: String },
     #[error("Ceph source {data_source_id} has conflicting OSD inventory")]
     ConflictingInventory { data_source_id: String },
+    #[error("RBD replica coverage is not proven: {state}")]
+    ReplicaCoverageNotProven { state: String },
     #[error("RBD reconstruction failed: {0}")]
     Reconstruction(String),
     #[error("RBD image {0} was not found")]

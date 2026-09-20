@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::STRICT_RBD_REPLICA_COUNT;
 
@@ -94,6 +95,46 @@ impl RbdReplicaPolicy {
             Self::TrustedPool(evidence) => Some(evidence),
         }
     }
+
+    /// Return a canonical, content-addressed identity for the policy that was
+    /// used to build an RBD derived source.  This is provenance, not proof that
+    /// the policy came from an OSDMap; callers still need to validate the
+    /// policy's source and coverage separately.
+    pub fn fingerprint(&self) -> String {
+        let mut hasher = Sha256::new();
+        update_fingerprint_field(&mut hasher, b"meow-detective-rbd-policy-v1");
+        match self {
+            Self::StrictLegacy => {
+                update_fingerprint_field(&mut hasher, b"strict_legacy");
+                update_fingerprint_field(&mut hasher, &STRICT_RBD_REPLICA_COUNT.to_le_bytes());
+            }
+            Self::TrustedPool(evidence) => {
+                update_fingerprint_field(&mut hasher, b"trusted_pool");
+                update_fingerprint_field(&mut hasher, &evidence.pool_id.to_le_bytes());
+                update_fingerprint_field(&mut hasher, &evidence.size.to_le_bytes());
+                update_fingerprint_field(&mut hasher, &evidence.min_size.to_le_bytes());
+                update_fingerprint_field(&mut hasher, evidence.source.as_bytes());
+                update_fingerprint_field(
+                    &mut hasher,
+                    &evidence.epoch.unwrap_or(u64::MAX).to_le_bytes(),
+                );
+                update_fingerprint_field(
+                    &mut hasher,
+                    evidence
+                        .evidence_digest
+                        .as_deref()
+                        .unwrap_or_default()
+                        .as_bytes(),
+                );
+            }
+        }
+        hex::encode(hasher.finalize())
+    }
+}
+
+fn update_fingerprint_field(hasher: &mut Sha256, value: &[u8]) {
+    hasher.update((value.len() as u64).to_le_bytes());
+    hasher.update(value);
 }
 
 impl PoolReplicaEvidence {
@@ -208,6 +249,17 @@ pub enum InventoryCoverageState {
     Indeterminate,
 }
 
+impl InventoryCoverageState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Incomplete => "incomplete",
+            Self::Conflicted => "conflicted",
+            Self::Indeterminate => "indeterminate",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryEvidence {
@@ -232,6 +284,10 @@ pub struct InventoryCoverageReport {
 }
 
 impl InventoryCoverageReport {
+    pub fn is_complete(&self) -> bool {
+        self.state == InventoryCoverageState::Complete
+    }
+
     pub fn is_conflicted(&self) -> bool {
         self.state == InventoryCoverageState::Conflicted
     }

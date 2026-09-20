@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 40 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：11 frontend pages、139 Tauri commands、36 source modules、migration scripts (88)、121 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：11 frontend pages、139 Tauri commands、36 source modules、migration scripts (89)、121 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -59,7 +59,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 - Linux 取证能力：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth、系统配置、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
 - Linux 数据源自动进入独立分析视图；Windows 与 Linux 提取能力不会交叉调度。
-- PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
+- PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。RBD 只有在 OSD inventory 覆盖报告为完整、报告摘要和副本策略指纹均匹配时才会物化或复用；覆盖不足仅保留元数据并失败关闭。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
 
 ### 仿真取证
 

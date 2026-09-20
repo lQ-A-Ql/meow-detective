@@ -74,14 +74,16 @@ pub fn build_derived_rbd_runtime(
     derived_data_source_id: &DataSourceId,
 ) -> Result<DerivedRbdRuntime, DerivedRbdReaderError> {
     let aggregate = load_lineage(case_conn, derived_data_source_id)?;
-    let policy = crate::cluster_service::read_linux_cluster_coverage_report(
-        case_root,
-        &aggregate.lineage.parent_cluster_id,
-    )
-    .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?
-    .map(|report| report.policy)
-    .unwrap_or_else(RbdReplicaPolicy::strict_legacy);
+    let policy = load_proven_rbd_policy(case_root, &aggregate.lineage.parent_cluster_id)?;
     let expected_replica_count = policy.expected_count();
+    let policy_fingerprint = policy.fingerprint();
+    if aggregate.lineage.replica_policy_fingerprint.is_empty()
+        || aggregate.lineage.replica_policy_fingerprint != policy_fingerprint
+    {
+        return Err(DerivedRbdReaderError::Provider(
+            "RBD lineage replica policy provenance is missing or stale".to_string(),
+        ));
+    }
     if aggregate.lineage.expected_replica_count as usize != expected_replica_count
         || aggregate.replicas.len() != expected_replica_count
     {
@@ -110,6 +112,23 @@ pub fn build_derived_rbd_runtime(
         provider: SharedRadosObjectProvider::new(provider),
         cache_capacity_bytes,
     })
+}
+
+fn load_proven_rbd_policy(
+    case_root: &Path,
+    cluster_id: &str,
+) -> Result<RbdReplicaPolicy, DerivedRbdReaderError> {
+    let report = crate::cluster_service::read_linux_cluster_coverage_report(case_root, cluster_id)
+        .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?
+        .ok_or_else(|| DerivedRbdReaderError::CoverageNotProven {
+            state: "missing".to_string(),
+        })?;
+    if !report.is_complete() {
+        return Err(DerivedRbdReaderError::CoverageNotProven {
+            state: report.state.as_str().to_string(),
+        });
+    }
+    Ok(report.policy)
 }
 
 pub fn load_lineage_fingerprint(
@@ -147,6 +166,7 @@ fn lineage_fingerprint(aggregate: &CephRbdLineageAggregate) -> String {
     }
     update_fingerprint_field(&mut hasher, &[u8::from(lineage.has_parent)]);
     update_fingerprint_field(&mut hasher, &[u8::from(lineage.encrypted)]);
+    update_fingerprint_field(&mut hasher, lineage.replica_policy_fingerprint.as_bytes());
 
     for replica in &aggregate.replicas {
         update_fingerprint_field(&mut hasher, &replica.ordinal.to_le_bytes());

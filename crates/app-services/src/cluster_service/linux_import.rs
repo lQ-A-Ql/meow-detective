@@ -5,6 +5,7 @@ use persistence_sqlite::repositories::datasource_cluster_repo::{
     DataSourceClusterRecord, DataSourceClusterRepo,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::ceph_reconstruction::InventoryCoverageReport;
 use crate::ceph_reconstruction::RbdReplicaPolicy;
@@ -56,6 +57,20 @@ struct LinuxClusterCoverageArtifact {
     #[serde(default = "RbdReplicaPolicy::strict_legacy")]
     policy: RbdReplicaPolicy,
     report: InventoryCoverageReport,
+    #[serde(default)]
+    report_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnsignedLinuxClusterCoverageArtifact<'a> {
+    schema_version: u32,
+    cluster_id: &'a str,
+    evidence_kind: &'a str,
+    coverage_policy: &'a str,
+    policy_source: &'a str,
+    policy: &'a RbdReplicaPolicy,
+    report: &'a InventoryCoverageReport,
 }
 
 impl LinuxClusterImportPlan {
@@ -271,14 +286,17 @@ pub fn write_linux_cluster_coverage_report(
         std::fs::create_dir_all(parent)?;
     }
     let artifact = LinuxClusterCoverageArtifact {
-        schema_version: 2,
+        schema_version: 3,
         cluster_id: cluster_id.to_string(),
         evidence_kind: "rbd_osd_inventory".to_string(),
         coverage_policy: report.policy.storage_key().to_string(),
         policy_source: report.policy_source().to_string(),
         policy: report.policy.clone(),
         report: report.clone(),
+        report_digest: None,
     };
+    let mut artifact = artifact;
+    artifact.report_digest = Some(coverage_artifact_digest(&artifact)?);
     let temp_path = report_path.with_extension("json.tmp");
     let payload = serde_json::to_vec_pretty(&artifact)?;
     if let Err(error) = std::fs::write(&temp_path, payload) {
@@ -304,7 +322,20 @@ pub fn read_linux_cluster_coverage_report(
         Err(error) => return Err(error.into()),
     };
     let artifact: LinuxClusterCoverageArtifact = serde_json::from_str(&payload)?;
-    if !(1..=2).contains(&artifact.schema_version)
+    let digest_valid = if artifact.schema_version >= 3 {
+        artifact
+            .report_digest
+            .as_deref()
+            .and_then(|stored| {
+                coverage_artifact_digest(&artifact)
+                    .ok()
+                    .map(|actual| actual == stored)
+            })
+            .unwrap_or(false)
+    } else {
+        true
+    };
+    if !(1..=3).contains(&artifact.schema_version)
         || artifact.cluster_id != cluster_id
         || artifact.evidence_kind != "rbd_osd_inventory"
         || artifact.coverage_policy != artifact.report.policy.storage_key()
@@ -313,10 +344,25 @@ pub fn read_linux_cluster_coverage_report(
         || artifact.report.policy.validate().is_err()
         || artifact.report.observed_count > artifact.report.expected_count
         || artifact.report.expected_count != artifact.report.policy.expected_count()
+        || !digest_valid
     {
         return Err(ClusterServiceError::InvalidCoverageReport);
     }
     Ok(Some(artifact.report))
+}
+
+fn coverage_artifact_digest(artifact: &LinuxClusterCoverageArtifact) -> Result<String> {
+    let unsigned = UnsignedLinuxClusterCoverageArtifact {
+        schema_version: artifact.schema_version,
+        cluster_id: &artifact.cluster_id,
+        evidence_kind: &artifact.evidence_kind,
+        coverage_policy: &artifact.coverage_policy,
+        policy_source: &artifact.policy_source,
+        policy: &artifact.policy,
+        report: &artifact.report,
+    };
+    let payload = serde_json::to_vec(&unsigned)?;
+    Ok(hex::encode(Sha256::digest(payload)))
 }
 
 fn legacy_policy_source() -> String {

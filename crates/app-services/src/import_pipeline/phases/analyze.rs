@@ -22,7 +22,7 @@ pub(crate) fn run_analyze_phase(
     {
         ctx.report_job_progress(94, "Ceph BlueStore metadata inventory completed")?;
         return Ok(
-            "Ceph BlueStore label metadata inventoried; RADOS/PG/object reconstruction remains unsupported"
+            "Ceph BlueStore metadata inventoried; limited RADOS/RBD reconstruction is available with verified inventory, while general PG/CRUSH/EC placement remains unsupported"
                 .to_string(),
         );
     }

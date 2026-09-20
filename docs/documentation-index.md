@@ -52,7 +52,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | Tauri commands | 139 |
 | app-services source modules | 36 |
 | SQLite repositories | 47 logical repositories |
-| SQLite migration scripts | 88 |
+| SQLite migration scripts | 89 |
 | frontend test files | 121 |
 
 | 路径 | 数量 |

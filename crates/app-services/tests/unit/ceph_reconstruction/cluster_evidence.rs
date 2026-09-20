@@ -37,6 +37,7 @@ fn complete_identity_set_is_verified() {
         &policy(3),
     );
     assert_eq!(report.state, InventoryCoverageState::Complete);
+    assert!(report.is_complete());
     assert!(report.diagnostics.is_empty());
 }
 
@@ -50,6 +51,7 @@ fn missing_identity_is_indeterminate_not_complete() {
         &policy(2),
     );
     assert_eq!(report.state, InventoryCoverageState::Indeterminate);
+    assert!(!report.is_complete());
     assert!(report
         .diagnostics
         .iter()

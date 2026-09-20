@@ -26,6 +26,10 @@ pub struct CephRbdLineageRecord {
     pub snapshot_id: Option<u64>,
     pub encrypted: bool,
     pub expected_replica_count: u32,
+    /// Empty for lineage written before policy provenance was introduced.
+    /// Such records are retained for inspection but must not be reused as a
+    /// ready derived source.
+    pub replica_policy_fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,7 +88,8 @@ impl<'a> CephRbdLineageRepo<'a> {
                 "SELECT derived_data_source_id, parent_cluster_id, image_name, image_id,
                         object_prefix, image_size, object_order, features, stripe_unit,
                         stripe_count, data_pool_id, scope_identity, operation_features,
-                        has_parent, snapshot_id, encrypted, expected_replica_count
+                         has_parent, snapshot_id, encrypted, expected_replica_count,
+                         replica_policy_fingerprint
                  FROM ceph_rbd_derived_lineage
                  WHERE derived_data_source_id = ?1",
                 [derived_data_source_id],
@@ -169,6 +174,11 @@ pub fn validate_aggregate(aggregate: &CephRbdLineageAggregate) -> DbResult<()> {
     }
     if lineage.expected_replica_count == 0 {
         return invalid("RBD expected replica count must be positive");
+    }
+    if !lineage.replica_policy_fingerprint.is_empty()
+        && !is_sha256(&lineage.replica_policy_fingerprint)
+    {
+        return invalid("RBD replica policy fingerprint is not canonical SHA-256");
     }
     if aggregate.replicas.len() != lineage.expected_replica_count as usize {
         return invalid("RBD replica count does not match the expected replica count");
@@ -267,10 +277,11 @@ fn insert_aggregate_on(conn: &Connection, aggregate: &CephRbdLineageAggregate) -
             derived_data_source_id, parent_cluster_id, image_name, image_id,
             object_prefix, image_size, object_order, features, stripe_unit,
             stripe_count, data_pool_id, scope_identity, operation_features,
-            has_parent, snapshot_id, encrypted, expected_replica_count
+            has_parent, snapshot_id, encrypted, expected_replica_count,
+            replica_policy_fingerprint
          ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-            ?15, ?16, ?17
+             ?15, ?16, ?17, ?18
          )",
         params![
             lineage.derived_data_source_id,
@@ -290,6 +301,7 @@ fn insert_aggregate_on(conn: &Connection, aggregate: &CephRbdLineageAggregate) -
             lineage.snapshot_id.map(encode_u64),
             lineage.encrypted,
             lineage.expected_replica_count,
+            lineage.replica_policy_fingerprint,
         ],
     )?;
 
@@ -328,6 +340,7 @@ struct StoredLineage {
     snapshot_id: Option<String>,
     encrypted: bool,
     expected_replica_count: i64,
+    replica_policy_fingerprint: String,
 }
 
 fn read_stored_lineage(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLineage> {
@@ -349,6 +362,7 @@ fn read_stored_lineage(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLineag
         snapshot_id: row.get(14)?,
         encrypted: row.get(15)?,
         expected_replica_count: row.get(16)?,
+        replica_policy_fingerprint: row.get(17)?,
     })
 }
 
@@ -378,6 +392,7 @@ fn decode_lineage(stored: StoredLineage) -> DbResult<CephRbdLineageRecord> {
             "expected replica count",
             stored.expected_replica_count,
         )?,
+        replica_policy_fingerprint: stored.replica_policy_fingerprint,
     })
 }
 
@@ -399,6 +414,13 @@ fn decode_replica(stored: StoredReplica) -> DbResult<CephRbdReplicaRecord> {
 
 fn encode_u64(value: u64) -> String {
     format!("{value:016x}")
+}
+
+fn is_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn decode_u64(label: &str, value: &str) -> DbResult<u64> {

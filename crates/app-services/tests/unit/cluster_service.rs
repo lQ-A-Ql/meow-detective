@@ -311,3 +311,35 @@ fn linux_cluster_coverage_report_rejects_tampering() {
         .expect_err("tampered cluster identity must fail");
     assert!(matches!(error, ClusterServiceError::InvalidCoverageReport));
 }
+
+#[test]
+fn linux_cluster_coverage_report_rejects_schema_three_payload_tampering() {
+    let case_root = tempfile::TempDir::new().unwrap();
+    let report = crate::ceph_reconstruction::InventoryCoverageReport {
+        policy: crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
+        expected_count: 3,
+        observed_count: 0,
+        state: crate::ceph_reconstruction::InventoryCoverageState::Incomplete,
+        duplicate_inventory_ids: Vec::new(),
+        duplicate_source_ids: Vec::new(),
+        duplicate_osd_ids: Vec::new(),
+        ceph_fsids: Vec::new(),
+        diagnostics: vec!["inventory coverage is not closed".to_string()],
+    };
+    let path = write_linux_cluster_coverage_report(case_root.path(), "cluster-1", &report)
+        .expect("write report");
+    let mut payload: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    payload["report"]["diagnostics"] = serde_json::json!(["tampered"]);
+    std::fs::write(
+        case_root
+            .path()
+            .join("clusters/cluster-1/coverage-report.json"),
+        serde_json::to_vec(&payload).unwrap(),
+    )
+    .unwrap();
+
+    let error = read_linux_cluster_coverage_report(case_root.path(), "cluster-1")
+        .expect_err("digest must detect report tampering");
+    assert!(matches!(error, ClusterServiceError::InvalidCoverageReport));
+}

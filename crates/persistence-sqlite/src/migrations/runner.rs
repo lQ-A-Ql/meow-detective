@@ -174,6 +174,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0049_forensic_ledger_batches",
         include_str!("scripts/0049_forensic_ledger_batches.sql"),
     ),
+    (
+        "0050_ceph_rbd_policy_provenance",
+        include_str!("scripts/0050_ceph_rbd_policy_provenance.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
