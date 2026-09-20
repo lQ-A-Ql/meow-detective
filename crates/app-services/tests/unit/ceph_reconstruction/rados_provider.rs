@@ -83,11 +83,41 @@ fn rejects_non_closed_replica_count() {
 }
 
 #[test]
+fn rejects_indeterminate_replica_identity_even_when_count_is_closed() {
+    let incomplete = RadosReplicaSource::new(
+        DataSourceId("source-a".to_string()),
+        "inventory-a",
+        PathBuf::from("sources/a/source.db"),
+    )
+    .unwrap();
+    let result = SourceDbRadosObjectProvider::new(
+        vec![
+            incomplete,
+            replica("source-b", "inventory-b"),
+            replica("source-c", "inventory-c"),
+        ],
+        8,
+        Vec::new(),
+        3,
+    );
+    let error = match result {
+        Ok(_) => panic!("incomplete identity must fail closed"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        RadosProviderError::CoverageNotProven { .. }
+    ));
+}
+
+#[test]
 fn source_db_open_failure_does_not_return_the_host_path() {
-    let source = RadosReplicaSource::new(
+    let source = RadosReplicaSource::with_identity(
         DataSourceId("source-a".to_string()),
         "inventory-a",
         PathBuf::from(r"D:\private\evidence\source.db"),
+        ReplicaIdentity::from_inventory(Some(1), "uuid-inventory-a", Some("fsid-test".into())),
     )
     .unwrap();
     let mut provider = SourceDbRadosObjectProvider::new(
@@ -198,10 +228,15 @@ fn trusted_pool_policy_cannot_be_reused_for_another_data_pool() {
 }
 
 fn replica(data_source_id: &str, inventory_id: &str) -> RadosReplicaSource {
-    RadosReplicaSource::new(
+    RadosReplicaSource::with_identity(
         DataSourceId(data_source_id.to_string()),
         inventory_id,
         PathBuf::from(format!("sources/{data_source_id}/source.db")),
+        ReplicaIdentity::from_inventory(
+            Some(data_source_id.bytes().map(u32::from).sum()),
+            format!("uuid-{inventory_id}"),
+            Some("fsid-test".to_string()),
+        ),
     )
     .unwrap()
 }

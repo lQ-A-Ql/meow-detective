@@ -7,10 +7,15 @@ use super::*;
 use crate::ceph_reconstruction::ReplicaIdentity;
 
 fn replica(inventory_id: &str) -> RadosReplicaSource {
-    RadosReplicaSource::new(
+    RadosReplicaSource::with_identity(
         DataSourceId(format!("source-{inventory_id}")),
         inventory_id,
         PathBuf::from(format!("sources/{inventory_id}/source.db")),
+        ReplicaIdentity::from_inventory(
+            Some(inventory_id.bytes().map(u32::from).sum()),
+            format!("uuid-{inventory_id}"),
+            Some("fsid-test".to_string()),
+        ),
     )
     .expect("valid replica")
 }
@@ -66,6 +71,27 @@ fn rejects_incomplete_replica_count_before_source_access() {
 }
 
 #[test]
+fn rejects_indeterminate_replica_identity_before_source_access() {
+    let incomplete = RadosReplicaSource::new(
+        DataSourceId("source-incomplete".to_string()),
+        "inventory-incomplete",
+        PathBuf::from("sources/incomplete/source.db"),
+    )
+    .expect("valid replica binding");
+    let error = discover_rbd_images_from_source_dbs(&[
+        incomplete,
+        replica("inventory-b"),
+        replica("inventory-c"),
+    ])
+    .expect_err("incomplete identity must fail before source access");
+
+    assert!(matches!(
+        error,
+        RbdReconstructionError::CoverageNotProven { .. }
+    ));
+}
+
+#[test]
 fn rejects_duplicate_replica_inventory_before_source_access() {
     let replicas = vec![
         replica("inventory-a"),
@@ -106,10 +132,11 @@ fn rejects_duplicate_replica_source_before_source_access() {
 
 #[test]
 fn source_database_errors_are_inventory_scoped_and_do_not_expose_paths() {
-    let source = RadosReplicaSource::new(
+    let source = RadosReplicaSource::with_identity(
         DataSourceId("source-a".to_string()),
         "inventory-a",
         PathBuf::from(r"D:\private\evidence\source.db"),
+        ReplicaIdentity::from_inventory(Some(1), "uuid-inventory-a", Some("fsid-test".into())),
     )
     .expect("valid replica");
     let replicas = vec![source, replica("inventory-b"), replica("inventory-c")];

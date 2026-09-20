@@ -19,6 +19,8 @@ pub enum RbdReconstructionError {
     DuplicateReplicaSource { data_source_id: String },
     #[error("RBD inventory identity conflict: {detail}")]
     IdentityConflict { detail: String },
+    #[error("RBD replica coverage is not proven: {detail}")]
+    CoverageNotProven { detail: String },
     #[error("source database could not be opened for inventory {inventory_id}: {detail}")]
     SourceDb {
         inventory_id: String,
@@ -170,6 +172,11 @@ fn validate_replica_set(
     let coverage = assess_inventory_coverage(&evidence, policy);
     if coverage.is_conflicted() {
         return Err(RbdReconstructionError::IdentityConflict {
+            detail: coverage.diagnostics.join("; "),
+        });
+    }
+    if !coverage.is_complete() {
+        return Err(RbdReconstructionError::CoverageNotProven {
             detail: coverage.diagnostics.join("; "),
         });
     }

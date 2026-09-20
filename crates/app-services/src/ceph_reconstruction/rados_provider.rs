@@ -200,6 +200,11 @@ impl SourceDbRadosObjectProvider {
                 detail: coverage.diagnostics.join("; "),
             });
         }
+        if !coverage.is_complete() {
+            return Err(RadosProviderError::CoverageNotProven {
+                detail: coverage.diagnostics.join("; "),
+            });
+        }
         Ok(Self {
             replicas: replicas
                 .into_iter()
@@ -401,6 +406,8 @@ pub enum RadosProviderError {
     DuplicateSource { data_source_id: String },
     #[error("RBD inventory identity conflict: {detail}")]
     IdentityConflict { detail: String },
+    #[error("RBD replica coverage is not proven: {detail}")]
+    CoverageNotProven { detail: String },
     #[error("source database unavailable for inventory {inventory_id}: {detail}")]
     SourceDb {
         inventory_id: String,
