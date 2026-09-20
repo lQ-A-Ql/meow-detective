@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, io::Read, path::Path};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,6 +12,10 @@ const EVIDENCE_KIND: &str = "ceph_osdmap_poolmap";
 const SCHEMA_VERSION: u32 = 2;
 const DIGEST_DOMAIN: &[u8] = b"meow-detective-ceph-osdmap-poolmap-v2\0";
 const BINDING_DIGEST_DOMAIN: &[u8] = b"meow-detective-ceph-map-binding-v1\0";
+const MAX_EVIDENCE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_POOL_RECORDS: usize = 16_384;
+const MAX_OSD_RECORDS: usize = 131_072;
+const MAX_EPOCH_HISTORY: usize = 4_096;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum OsdMapEvidenceError {
@@ -27,6 +31,8 @@ pub(crate) enum OsdMapEvidenceError {
     DigestMismatch,
     #[error("OSDMap evidence contains an unsupported pool type")]
     UnsupportedPoolType,
+    #[error("OSDMap evidence does not prove target-pool PG acting sets")]
+    PlacementNotProven,
     #[error("OSDMap evidence does not contain the requested pool")]
     PoolNotFound,
     #[error("imported OSD identity is not present in the OSDMap")]
@@ -110,10 +116,9 @@ pub(crate) fn resolve_policy(
         .join("clusters")
         .join(cluster_id)
         .join(EVIDENCE_FILE);
-    let payload = match std::fs::read(path) {
-        Ok(payload) => payload,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(OsdMapEvidenceError::Read),
+    let payload = match read_evidence_payload(&path)? {
+        Some(payload) => payload,
+        None => return Ok(None),
     };
     let mut document: EvidenceDocument =
         serde_json::from_slice(&payload).map_err(|_| OsdMapEvidenceError::Json)?;
@@ -123,7 +128,7 @@ pub(crate) fn resolve_policy(
     if provided_digest != expected_digest {
         return Err(OsdMapEvidenceError::DigestMismatch);
     }
-    let pool = match pool_id {
+    let _pool = match pool_id {
         Some(pool_id) => document
             .pools
             .iter()
@@ -132,20 +137,7 @@ pub(crate) fn resolve_policy(
         None if document.pools.len() == 1 => &document.pools[0],
         None => return Err(OsdMapEvidenceError::Invalid("pool binding")),
     };
-    let source = format!("osdmap:{}:epoch-{}", document.ceph_revision, document.epoch);
-    let policy = RbdReplicaPolicy::trusted_pool(
-        pool.pool_id,
-        pool.size,
-        pool.min_size,
-        source,
-        Some(document.epoch),
-        Some(document.evidence_digest.clone()),
-    )
-    .map_err(|_| OsdMapEvidenceError::Invalid("replica policy"))?;
-    Ok(Some(OsdMapPolicyResolution {
-        policy,
-        osd_count: document.osds.len(),
-    }))
+    Err(OsdMapEvidenceError::PlacementNotProven)
 }
 
 pub(crate) fn validate_inventory_membership(
@@ -158,10 +150,9 @@ pub(crate) fn validate_inventory_membership(
         .join("clusters")
         .join(cluster_id)
         .join(EVIDENCE_FILE);
-    let payload = match std::fs::read(path) {
-        Ok(payload) => payload,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(OsdMapEvidenceError::Read),
+    let payload = match read_evidence_payload(&path)? {
+        Some(payload) => payload,
+        None => return Ok(None),
     };
     let mut document: EvidenceDocument =
         serde_json::from_slice(&payload).map_err(|_| OsdMapEvidenceError::Json)?;
@@ -228,7 +219,12 @@ fn validate_document(
         return Err(OsdMapEvidenceError::Invalid("Ceph FSID"));
     }
     validate_revision(&document.ceph_revision)?;
-    if document.epoch == 0 || document.pools.is_empty() || document.osds.is_empty() {
+    if document.epoch == 0
+        || document.pools.is_empty()
+        || document.pools.len() > MAX_POOL_RECORDS
+        || document.osds.is_empty()
+        || document.osds.len() > MAX_OSD_RECORDS
+    {
         return Err(OsdMapEvidenceError::Invalid("map completeness"));
     }
     validate_pools(&document.pools)?;
@@ -252,6 +248,9 @@ fn validate_v2_contract(document: &EvidenceDocument) -> Result<(), OsdMapEvidenc
         return Err(OsdMapEvidenceError::Invalid("map binding digest"));
     }
     let history = &document.epoch_history;
+    if history.is_empty() || history.len() > MAX_EPOCH_HISTORY {
+        return Err(OsdMapEvidenceError::Invalid("epoch history"));
+    }
     let mut previous_epoch = None;
     for entry in history {
         if entry.epoch == 0 || previous_epoch.is_some_and(|previous| entry.epoch <= previous) {
@@ -342,7 +341,10 @@ fn validate_osds(osds: &[OsdRecord], ceph_fsid: &str) -> Result<(), OsdMapEviden
         if !ids.insert(osd.osd_id) {
             return Err(OsdMapEvidenceError::Duplicate("OSD IDs"));
         }
-        if Uuid::parse_str(&osd.osd_uuid).is_err() || !uuids.insert(osd.osd_uuid.as_str()) {
+        let Ok(osd_uuid) = Uuid::parse_str(&osd.osd_uuid) else {
+            return Err(OsdMapEvidenceError::Invalid("OSD identity"));
+        };
+        if !uuids.insert(osd_uuid) {
             return Err(OsdMapEvidenceError::Duplicate("OSD UUIDs"));
         }
         if osd.ceph_fsid != ceph_fsid || osd.address.trim().is_empty() {
@@ -373,6 +375,32 @@ fn validate_cluster_id(cluster_id: &str) -> Result<(), OsdMapEvidenceError> {
         return Err(OsdMapEvidenceError::Invalid("cluster ID"));
     }
     Ok(())
+}
+
+fn read_evidence_payload(path: &Path) -> Result<Option<Vec<u8>>, OsdMapEvidenceError> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(OsdMapEvidenceError::Read),
+    };
+    if !metadata.is_file() {
+        return Err(OsdMapEvidenceError::Read);
+    }
+    if metadata.len() > MAX_EVIDENCE_BYTES {
+        return Err(OsdMapEvidenceError::Invalid("evidence size"));
+    }
+    let file = std::fs::File::open(path).map_err(|_| OsdMapEvidenceError::Read)?;
+    let mut payload = Vec::new();
+    let read_limit = MAX_EVIDENCE_BYTES
+        .checked_add(1)
+        .ok_or(OsdMapEvidenceError::Invalid("evidence size"))?;
+    file.take(read_limit)
+        .read_to_end(&mut payload)
+        .map_err(|_| OsdMapEvidenceError::Read)?;
+    if payload.len() as u64 > MAX_EVIDENCE_BYTES {
+        return Err(OsdMapEvidenceError::Invalid("evidence size"));
+    }
+    Ok(Some(payload))
 }
 
 fn canonical_digest(document: &mut EvidenceDocument) -> Result<String, OsdMapEvidenceError> {

@@ -30,18 +30,15 @@ fn with_digest(payload: String) -> String {
 }
 
 #[test]
-fn single_pool_evidence_binds_without_descriptor_pool() {
+fn single_pool_evidence_requires_placement_proof() {
     let root = tempfile::TempDir::new().expect("root");
     let payload = with_digest(document(
         r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
         "placeholder",
     ));
     write_document(root.path(), &payload);
-    let resolution = resolve_policy(root.path(), "cluster-1", None)
-        .expect("valid evidence")
-        .expect("OSDMap evidence");
-    assert_eq!(resolution.policy.pool_evidence().unwrap().pool_id(), 8);
-    assert_eq!(resolution.osd_count, 1);
+    let error = resolve_policy(root.path(), "cluster-1", None).expect_err("placement proof");
+    assert_eq!(error, OsdMapEvidenceError::PlacementNotProven);
 }
 
 #[test]
@@ -176,7 +173,19 @@ fn historical_epoch_binding_uses_the_historical_epoch() {
     parsed.evidence_digest = canonical_digest(&mut parsed).expect("canonical digest");
     let payload = serde_json::to_string(&parsed).expect("fixture serialization");
     write_document(root.path(), &payload);
-    assert!(resolve_policy(root.path(), "cluster-1", Some(8)).is_ok());
+    assert_eq!(
+        validate_inventory_membership(
+            root.path(),
+            "cluster-1",
+            &[ReplicaIdentity::from_inventory(
+                Some(1),
+                "22222222-2222-2222-2222-222222222222",
+                Some("11111111-1111-1111-1111-111111111111".to_string()),
+            )],
+        )
+        .expect("historical map validation"),
+        Some(1)
+    );
 }
 
 #[test]
@@ -195,4 +204,61 @@ fn map_binding_digest_binds_fsid_revision_and_payloads() {
     write_document(root.path(), &payload);
     let error = resolve_policy(root.path(), "cluster-1", Some(8)).expect_err("binding mismatch");
     assert_eq!(error, OsdMapEvidenceError::Invalid("map binding digest"));
+}
+
+#[test]
+fn uuid_deduplication_is_canonical_and_case_insensitive() {
+    let root = tempfile::TempDir::new().expect("root");
+    let payload = document(
+        r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
+        "placeholder",
+    )
+    .replace(
+        "\"osdId\":1,\"osdUuid\":\"22222222-2222-2222-2222-222222222222\"",
+        "\"osdId\":1,\"osdUuid\":\"22222222-2222-2222-2222-222222222222\"",
+    );
+    let mut parsed: EvidenceDocument =
+        serde_json::from_str(&with_digest(payload)).expect("fixture JSON");
+    parsed.osds[0].osd_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string();
+    parsed.osds.push(OsdRecord {
+        osd_id: 2,
+        osd_uuid: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE".to_string(),
+        up: true,
+        in_cluster: true,
+        weight: 1_000_000,
+        address: "10.0.0.2:6800".to_string(),
+        ceph_fsid: parsed.ceph_fsid.clone(),
+    });
+    parsed.evidence_digest.clear();
+    parsed.evidence_digest = canonical_digest(&mut parsed).expect("canonical digest");
+    write_document(
+        root.path(),
+        &serde_json::to_string(&parsed).expect("fixture serialization"),
+    );
+    let error = validate_inventory_membership(
+        root.path(),
+        "cluster-1",
+        &[ReplicaIdentity::from_inventory(
+            Some(1),
+            "22222222-2222-2222-2222-222222222222",
+            Some("11111111-1111-1111-1111-111111111111".to_string()),
+        )],
+    )
+    .expect_err("duplicate UUID");
+    assert_eq!(error, OsdMapEvidenceError::Duplicate("OSD UUIDs"));
+}
+
+#[test]
+fn oversized_evidence_is_rejected_before_json_parsing() {
+    let root = tempfile::TempDir::new().expect("root");
+    let directory = root.path().join("clusters").join("cluster-1");
+    std::fs::create_dir_all(&directory).expect("evidence directory");
+    std::fs::write(
+        directory.join("osdmap-evidence.json"),
+        vec![b'{'; 8 * 1024 * 1024 + 1],
+    )
+    .expect("evidence document");
+    let error = validate_inventory_membership(root.path(), "cluster-1", &[])
+        .expect_err("oversized evidence");
+    assert_eq!(error, OsdMapEvidenceError::Invalid("evidence size"));
 }
