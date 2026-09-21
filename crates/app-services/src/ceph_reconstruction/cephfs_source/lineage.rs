@@ -130,6 +130,7 @@ pub(super) fn build_lineage(
         lineage: CephFsDerivedLineageRecord {
             derived_data_source_id: data_source_id.0.clone(),
             parent_ceph_scope_id: ceph_scope_id.to_string(),
+            parent_storage_object_id: format!("storage:cephfs:{}:{}", ceph_scope_id, descriptor.identity),
             cluster_identity: descriptor.cluster_identity.clone(),
             filesystem_identity: descriptor.identity.clone(),
             filesystem_id: descriptor.filesystem_id,

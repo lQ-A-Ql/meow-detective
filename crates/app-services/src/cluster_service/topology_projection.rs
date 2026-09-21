@@ -9,6 +9,7 @@ use persistence_sqlite::repositories::{
     linux_topology_edge_repo::{LinuxTopologyEdgeRecord, LinuxTopologyEdgeRepo},
     linux_topology_membership_repo::{LinuxTopologyMembershipRecord, LinuxTopologyMembershipRepo},
     linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
+    storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 
 use crate::source_db;
@@ -70,6 +71,7 @@ pub fn project_import_set_topology(
     let membership_repo = LinuxTopologyMembershipRepo::new(case_connection);
     let edge_repo = LinuxTopologyEdgeRepo::new(case_connection);
     let artifact_repo = LinuxTopologyArtifactRepo::new(case_connection);
+    let storage_repo = StorageObjectRepo::new(case_connection);
     let SourceObservations {
         pve_sources,
         pve_virtual_machines,
@@ -94,6 +96,7 @@ pub fn project_import_set_topology(
         &membership_repo,
         &edge_repo,
         &artifact_repo,
+        &storage_repo,
         &mut projection,
         pve_sources,
         pve_virtual_machines,
@@ -269,6 +272,7 @@ fn register_detected_scopes(
     membership_repo: &LinuxTopologyMembershipRepo<'_>,
     edge_repo: &LinuxTopologyEdgeRepo<'_>,
     artifact_repo: &LinuxTopologyArtifactRepo<'_>,
+    storage_repo: &StorageObjectRepo<'_>,
     projection: &mut ImportSetTopologyProjection,
     pve_sources: Vec<(u32, String)>,
     pve_virtual_machines: BTreeMap<String, Vec<(u32, String, String)>>,
@@ -286,24 +290,15 @@ fn register_detected_scopes(
         pve_sources,
         pve_virtual_machines,
     )?;
-    if !ceph_sources.is_empty() {
-        let scope_id = format!("scope:ceph:{import_set_id}");
-        replace_scope(&scope_repo, &scope_id)?;
-        scope_repo.insert(&scope_record(
-            &scope_id,
-            case_id,
-            TopologyScopeKind::Ceph,
-            "Ceph candidate scope".to_string(),
-            "complete",
-        ))?;
-        insert_memberships(
-            &membership_repo,
-            &scope_id,
-            &ceph_sources,
-            TopologyMemberRole::StorageNode,
-        )?;
-        projection.ceph_scope_id = Some(scope_id);
-    }
+    register_ceph_scope(
+        case_id,
+        import_set_id,
+        scope_repo,
+        membership_repo,
+        storage_repo,
+        projection,
+        ceph_sources,
+    )?;
     if !kubernetes_sources.is_empty() {
         let scope_id = format!("scope:kubernetes:{import_set_id}");
         replace_scope(&scope_repo, &scope_id)?;
@@ -355,6 +350,46 @@ fn register_detected_scopes(
             "co-located PVE and Ceph evidence in one import set",
         ))?;
     }
+    Ok(())
+}
+
+fn register_ceph_scope(
+    case_id: &CaseId,
+    import_set_id: &str,
+    scope_repo: &LinuxTopologyScopeRepo<'_>,
+    membership_repo: &LinuxTopologyMembershipRepo<'_>,
+    storage_repo: &StorageObjectRepo<'_>,
+    projection: &mut ImportSetTopologyProjection,
+    ceph_sources: Vec<(u32, String)>,
+) -> Result<()> {
+    if ceph_sources.is_empty() {
+        return Ok(());
+    }
+    let scope_id = format!("scope:ceph:{import_set_id}");
+    replace_scope(scope_repo, &scope_id)?;
+    scope_repo.insert(&scope_record(
+        &scope_id,
+        case_id,
+        TopologyScopeKind::Ceph,
+        "Ceph candidate scope".to_string(),
+        "complete",
+    ))?;
+    insert_memberships(
+        membership_repo,
+        &scope_id,
+        &ceph_sources,
+        TopologyMemberRole::StorageNode,
+    )?;
+    storage_repo.insert_if_absent(&StorageObjectRecord {
+        id: format!("storage:ceph:{import_set_id}"),
+        case_id: case_id.0.clone(),
+        object_kind: "ceph_cluster".to_string(),
+        name: "Ceph storage cluster".to_string(),
+        identity_state: "candidate".to_string(),
+        status: "ready".to_string(),
+        provenance_json: serde_json::json!({"scopeId": scope_id}).to_string(),
+    })?;
+    projection.ceph_scope_id = Some(scope_id);
     Ok(())
 }
 

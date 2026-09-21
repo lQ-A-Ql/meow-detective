@@ -113,6 +113,14 @@ fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
         projection.ceph_scope_id.as_deref(),
         Some("scope:ceph:evidence-set")
     );
+    let ceph_storage_kind: String = conn
+        .query_row(
+            "SELECT object_kind FROM storage_objects WHERE id = 'storage:ceph:evidence-set'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(ceph_storage_kind, "ceph_cluster");
     assert_eq!(
         projection.kubernetes_scope_id.as_deref(),
         Some("scope:kubernetes:evidence-set")

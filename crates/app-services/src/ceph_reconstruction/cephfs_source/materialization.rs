@@ -2,6 +2,7 @@ use persistence_sqlite::repositories::{
     catalog_publication_repo::CatalogPublicationRepo,
     datasource_repo::DataSourceRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
+    storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 use rusqlite::OptionalExtension;
 
@@ -58,6 +59,7 @@ pub fn materialize_cephfs_source(
             expected_replica_count: request.expected_replica_count,
         },
     )?;
+    register_cephfs_storage_object(&request, &lineage)?;
     let source = ensure_registration(
         request.case_conn,
         request.case_id,
@@ -65,17 +67,7 @@ pub fn materialize_cephfs_source(
         &storage,
         &lineage,
     )?;
-    LinuxTopologyArtifactRepo::new(request.case_conn).insert(&LinuxTopologyArtifactRecord {
-        scope_id: request.ceph_scope_id.0.clone(),
-        data_source_id: source.id.0.clone(),
-        file_id: Some(request.descriptor.identity.clone()),
-        layer: "storage".to_string(),
-        artifact_kind: "ceph_fs".to_string(),
-        parser: "cephfs-namespace-v1".to_string(),
-        status: "candidate_found".to_string(),
-        diagnostics_json: "[]".to_string(),
-        content_digest: Some(request.namespace_input_sha256.to_string()),
-    })?;
+    register_cephfs_artifact(&request, &source)?;
     if import_state(request.case_conn, &data_source_id)? == "ready" {
         return load_ready_summary(
             request.case_conn,
@@ -120,6 +112,40 @@ pub fn materialize_cephfs_source(
         record_catalog_failure(&request, &data_source_id, &attempt, error);
     }
     result
+}
+
+fn register_cephfs_storage_object(
+    request: &CephFsSourceMaterializationRequest<'_>,
+    lineage: &persistence_sqlite::repositories::ceph_fs_lineage_repo::CephFsDerivedLineageAggregate,
+) -> CephFsSourceResult<()> {
+    StorageObjectRepo::new(request.case_conn).insert_if_absent(&StorageObjectRecord {
+        id: lineage.lineage.parent_storage_object_id.clone(),
+        case_id: request.case_id.0.clone(),
+        object_kind: "ceph_fs".to_string(),
+        name: request.descriptor.name.clone(),
+        identity_state: "candidate".to_string(),
+        status: "ready".to_string(),
+        provenance_json: serde_json::json!({"cephScopeId": request.ceph_scope_id.0}).to_string(),
+    })?;
+    Ok(())
+}
+
+fn register_cephfs_artifact(
+    request: &CephFsSourceMaterializationRequest<'_>,
+    source: &domain::DataSource,
+) -> CephFsSourceResult<()> {
+    LinuxTopologyArtifactRepo::new(request.case_conn).insert(&LinuxTopologyArtifactRecord {
+        scope_id: request.ceph_scope_id.0.clone(),
+        data_source_id: source.id.0.clone(),
+        file_id: Some(request.descriptor.identity.clone()),
+        layer: "storage".to_string(),
+        artifact_kind: "ceph_fs".to_string(),
+        parser: "cephfs-namespace-v1".to_string(),
+        status: "candidate_found".to_string(),
+        diagnostics_json: "[]".to_string(),
+        content_digest: Some(request.namespace_input_sha256.to_string()),
+    })?;
+    Ok(())
 }
 
 struct CatalogRun<'a> {

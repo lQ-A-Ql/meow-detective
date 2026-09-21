@@ -52,6 +52,11 @@ fn setup_case_db() -> Connection {
         )
         .expect("insert Ceph scope membership");
     }
+    conn.execute(
+        "INSERT INTO storage_objects (id, case_id, object_kind, name, identity_state, status)
+         VALUES ('storage:rbd:derived-vm-100', 'case-1', 'ceph_rbd', 'vm-100-disk-0', 'candidate', 'ready')",
+        [],
+    ).expect("insert RBD storage object");
     conn
 }
 
@@ -60,6 +65,7 @@ fn aggregate() -> CephRbdLineageAggregate {
         lineage: CephRbdLineageRecord {
             derived_data_source_id: DERIVED_SOURCE_ID.to_string(),
             parent_ceph_scope_id: CEPH_SCOPE_ID.to_string(),
+            parent_storage_object_id: "storage:rbd:derived-vm-100".to_string(),
             image_name: "vm-100-disk-0".to_string(),
             image_id: "16ecc87af5c9".to_string(),
             object_prefix: "rbd_data.16ecc87af5c9".to_string(),
@@ -91,7 +97,7 @@ fn aggregate() -> CephRbdLineageAggregate {
 #[test]
 fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0053_cephfs_scope_lineage");
+    assert_eq!(runner::latest_version(), "0054_storage_objects");
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();
     repo.insert_aggregate(&original).expect("insert lineage");

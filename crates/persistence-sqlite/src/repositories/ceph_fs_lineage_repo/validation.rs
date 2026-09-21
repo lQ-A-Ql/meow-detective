@@ -12,6 +12,7 @@ pub(super) fn validate_aggregate(aggregate: &CephFsDerivedLineageAggregate) -> D
     for value in [
         lineage.derived_data_source_id.as_str(),
         lineage.parent_ceph_scope_id.as_str(),
+        lineage.parent_storage_object_id.as_str(),
         lineage.cluster_identity.as_str(),
         lineage.filesystem_identity.as_str(),
         lineage.filesystem_name.as_str(),
@@ -132,6 +133,19 @@ pub(super) fn validate_ownership(
     )?;
     if !derived_matches {
         return invalid("CephFS derived source and cluster do not share a case");
+    }
+    let storage_matches: bool = conn.query_row(
+        "SELECT COUNT(*) = 1 FROM storage_objects AS object
+         JOIN data_sources AS derived ON derived.case_id = object.case_id
+         WHERE object.id = ?1 AND object.object_kind = 'ceph_fs' AND derived.id = ?2",
+        params![
+            lineage.parent_storage_object_id,
+            lineage.derived_data_source_id
+        ],
+        |row| row.get(0),
+    )?;
+    if !storage_matches {
+        return invalid("CephFS lineage parent storage object is invalid");
     }
     for source_id in aggregate
         .pools

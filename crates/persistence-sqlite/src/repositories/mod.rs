@@ -48,6 +48,7 @@ pub mod source_meta_repo;
 pub mod staging_fingerprint_repo;
 mod staging_merge_validation;
 pub mod staging_repo;
+pub mod storage_object_repo;
 pub mod timeline_facets_repo;
 pub mod timeline_repo;
 

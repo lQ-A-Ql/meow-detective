@@ -9,6 +9,7 @@ use persistence_sqlite::repositories::{
         CephRbdLineageAggregate, CephRbdLineageRecord, CephRbdLineageRepo, CephRbdReplicaRecord,
     },
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 
 use crate::ceph_reconstruction::{load_lineage_fingerprint, RbdImageDescriptor, RbdReplicaPolicy};
@@ -104,11 +105,21 @@ pub(super) fn register_derived_source(
         replica_records,
         policy,
     );
+    let storage_object_id = lineage.lineage.parent_storage_object_id.clone();
     persistence_sqlite::repositories::ceph_rbd_lineage_repo::validate_aggregate(&lineage)?;
     let transaction = case_conn
         .unchecked_transaction()
         .map_err(persistence_sqlite::DbError::from)?;
     DataSourceRepo::new(&transaction).insert_with_storage(case_id, data_source, &storage)?;
+    StorageObjectRepo::new(&transaction).insert_if_absent(&StorageObjectRecord {
+        id: storage_object_id,
+        case_id: case_id.0.clone(),
+        object_kind: "ceph_rbd".to_string(),
+        name: descriptor.metadata.name.clone(),
+        identity_state: "candidate".to_string(),
+        status: "ready".to_string(),
+        provenance_json: serde_json::json!({"cephScopeId": ceph_scope_id}).to_string(),
+    })?;
     persistence_sqlite::repositories::ceph_rbd_lineage_repo::insert_aggregate_in_transaction(
         &transaction,
         &lineage,
@@ -132,6 +143,7 @@ pub(super) fn lineage_aggregate(
         lineage: CephRbdLineageRecord {
             derived_data_source_id: data_source_id.0.clone(),
             parent_ceph_scope_id: ceph_scope_id.to_string(),
+            parent_storage_object_id: format!("storage:rbd:{}", data_source_id.0),
             image_name: metadata.name.clone(),
             image_id: metadata.id.clone(),
             object_prefix: metadata.object_prefix.clone(),

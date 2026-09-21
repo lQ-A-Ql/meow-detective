@@ -2,6 +2,7 @@
 pub struct CephFsDerivedLineageRecord {
     pub derived_data_source_id: String,
     pub parent_ceph_scope_id: String,
+    pub parent_storage_object_id: String,
     pub cluster_identity: String,
     pub filesystem_identity: String,
     pub filesystem_id: i64,

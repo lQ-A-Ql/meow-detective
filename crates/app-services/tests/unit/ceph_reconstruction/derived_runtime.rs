@@ -9,6 +9,7 @@ fn aggregate() -> CephRbdLineageAggregate {
         lineage: CephRbdLineageRecord {
             derived_data_source_id: "derived".to_string(),
             parent_ceph_scope_id: "ceph-scope".to_string(),
+            parent_storage_object_id: "storage:rbd:derived".to_string(),
             image_name: "vm-100-disk-0".to_string(),
             image_id: "image-id".to_string(),
             object_prefix: "rbd_data.prefix".to_string(),

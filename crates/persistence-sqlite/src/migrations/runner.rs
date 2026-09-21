@@ -190,6 +190,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0053_cephfs_scope_lineage",
         include_str!("scripts/0053_cephfs_scope_lineage.sql"),
     ),
+    (
+        "0054_storage_objects",
+        include_str!("scripts/0054_storage_objects.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
@@ -215,7 +219,7 @@ pub fn source_version_is_at_least(actual: &str, minimum: &str) -> bool {
 }
 
 pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
-pub use super::run_case::run_all;
+pub use super::run_case::{current_version, run_all};
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
     let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;
@@ -491,8 +495,4 @@ fn repair_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()>
     }
     conn.execute_batch("RELEASE source_030_analysis_feed_repair;")?;
     Ok(())
-}
-
-pub fn current_version(conn: &Connection) -> DbResult<Option<String>> {
-    super::version::current_version(conn, MIGRATIONS, SOURCE_MIGRATIONS)
 }

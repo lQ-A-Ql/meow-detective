@@ -151,6 +151,11 @@ fn setup_recoverable_catalog(
     DataSourceRepo::new(&connection)
         .insert_with_storage(&CaseId("case-1".to_string()), &source, &storage)
         .expect("insert derived source");
+    connection.execute(
+        "INSERT INTO storage_objects (id, case_id, object_kind, name, identity_state, status)
+         VALUES ('storage:rbd:rbd-atomic-publish', 'case-1', 'ceph_rbd', 'VM disk', 'candidate', 'ready')",
+        [],
+    ).expect("insert derived storage object");
     let replicas = PARENT_SOURCE_IDS
         .iter()
         .enumerate()

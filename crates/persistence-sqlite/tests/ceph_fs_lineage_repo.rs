@@ -44,6 +44,11 @@ fn setup_case_db() -> Connection {
             .expect("bind source to Ceph scope");
         }
     }
+    conn.execute(
+        "INSERT INTO storage_objects (id, case_id, object_kind, name, identity_state, status)
+         VALUES ('storage:cephfs:lineage:ceph-fs:cluster:1:42:7', 'case-1', 'ceph_fs', 'cephfs', 'candidate', 'ready')",
+        [],
+    ).expect("insert CephFS storage object");
     conn
 }
 
@@ -61,6 +66,7 @@ fn aggregate() -> CephFsDerivedLineageAggregate {
         lineage: CephFsDerivedLineageRecord {
             derived_data_source_id: DERIVED_SOURCE_ID.to_string(),
             parent_ceph_scope_id: CEPH_SCOPE_ID.to_string(),
+            parent_storage_object_id: "storage:cephfs:lineage:ceph-fs:cluster:1:42:7".to_string(),
             cluster_identity: "cluster".to_string(),
             filesystem_identity: "ceph-fs:cluster:1:42:7".to_string(),
             filesystem_id: 1,
@@ -111,7 +117,7 @@ fn aggregate() -> CephFsDerivedLineageAggregate {
 #[test]
 fn lineage_round_trips_and_cascades_with_derived_source() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0053_cephfs_scope_lineage");
+    assert_eq!(runner::latest_version(), "0054_storage_objects");
     let expected = aggregate();
     let repo = CephFsDerivedLineageRepo::new(&conn);
     repo.insert(&expected).expect("insert lineage");
