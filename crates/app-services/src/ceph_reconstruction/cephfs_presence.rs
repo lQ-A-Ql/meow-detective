@@ -229,6 +229,9 @@ pub fn assess_cephfs_presence_for_cluster(
             case_id: case_id.0.clone(),
         });
     }
+    crate::cluster_service::LinuxClusterKind::from_profile(cluster.profile.as_deref())
+        .require_pve_ceph()
+        .map_err(|_| CephFsPresenceError::ClusterNotFound(cluster_id.to_string()))?;
 
     let source_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
     let mut evidence = Vec::with_capacity(source_ids.len());

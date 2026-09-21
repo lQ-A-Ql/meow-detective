@@ -54,6 +54,9 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
     let cluster = DataSourceClusterRepo::new(case_conn)
         .find_by_id(cluster_id)?
         .ok_or_else(|| DerivedSourceError::ClusterNotFound(cluster_id.to_string()))?;
+    crate::cluster_service::LinuxClusterKind::from_profile(cluster.profile.as_deref())
+        .require_pve_ceph()
+        .map_err(|_| DerivedSourceError::IncompleteCluster)?;
     if cluster.import_state != "ready" {
         return Err(DerivedSourceError::ClusterNotReady {
             cluster_id: cluster_id.to_string(),

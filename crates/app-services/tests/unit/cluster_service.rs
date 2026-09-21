@@ -3,6 +3,23 @@ use domain::{DataSourceKind, DataSourcePlatform};
 use std::path::PathBuf;
 
 #[test]
+fn linux_cluster_kind_gates_platform_specific_capabilities() {
+    assert_eq!(
+        LinuxClusterKind::from_profile(Some("kubernetes")),
+        LinuxClusterKind::Kubernetes
+    );
+    assert!(LinuxClusterKind::Kubernetes.require_pve_ceph().is_err());
+    assert!(LinuxClusterKind::PveCeph.require_pve_ceph().is_ok());
+    assert!(LinuxClusterKind::Unknown.require_kubernetes().is_err());
+}
+
+#[path = "cluster_service/kubernetes.rs"]
+mod kubernetes;
+
+#[path = "cluster_service/kubernetes_parsers.rs"]
+mod kubernetes_parsers;
+
+#[test]
 fn cluster_parse_plan_is_explicitly_non_executing() {
     let plan = plan_cluster_parse(ClusterParseRequest {
         sources: vec![
