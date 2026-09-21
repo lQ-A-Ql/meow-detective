@@ -6,7 +6,9 @@ import {
   LinuxArtifactsPanel,
   PluginModulePanel,
 } from '@/features/analysis/components/AnalysisPanels';
+import { KubernetesClusterPanel } from '@/features/analysis/components/KubernetesClusterPanel';
 import type { LinuxArtifactSummary, PluginModule } from '@/types/models';
+import type { KubernetesClusterSummary } from '@/types/models';
 import type { LinuxAnalysisTabKey } from '@/features/analysis/types';
 import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
 import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
@@ -31,6 +33,8 @@ export interface LinuxAnalysisViewProps {
   pluginModules?: PluginModule[];
   activePluginId?: string;
   dataSourceId?: string;
+  kubernetesClusterSummary?: KubernetesClusterSummary;
+  kubernetesClusterLoading: boolean;
 }
 
 export function LinuxAnalysisView({
@@ -52,6 +56,8 @@ export function LinuxAnalysisView({
   pluginModules,
   activePluginId,
   dataSourceId,
+  kubernetesClusterSummary,
+  kubernetesClusterLoading,
 }: LinuxAnalysisViewProps) {
   const { t } = useTranslation();
   const activePluginModule = activeTab === 'plugin'
@@ -62,7 +68,9 @@ export function LinuxAnalysisView({
     <div className="flex h-full min-h-0 flex-1 flex-col gap-0">
       <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
-        {activeTab === 'deletedRecovery' ? (
+        {activeTab === 'cluster' ? (
+          kubernetesClusterLoading ? <AnalysisLoadingPanel text={t('analysis.kubernetes.loading')} /> : <KubernetesClusterPanel summary={kubernetesClusterSummary} />
+        ) : activeTab === 'deletedRecovery' ? (
           <DeletedRecoveryPanel model={recoveryModel} />
         ) : activeTab === 'plugin' ? (
           activePluginModule && dataSourceId ? (

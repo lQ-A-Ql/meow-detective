@@ -86,6 +86,7 @@ macro_rules! desktop_command_handler {
             export_json_report,
             get_jobs_snapshot,
             get_system_info,
+            get_kubernetes_cluster_summary,
             run_android_analysis,
             get_android_device_info,
             get_android_package_summary,

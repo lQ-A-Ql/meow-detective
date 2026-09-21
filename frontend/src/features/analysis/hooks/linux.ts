@@ -1,5 +1,5 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { getLinuxArtifactSummary } from '@/lib/api/analysis';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { getKubernetesClusterSummary, getLinuxArtifactSummary } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
 import type { LinuxArtifactSummary } from '@/types/models';
 import { ANALYSIS_QUERY_OPTIONS } from '../query-options';
@@ -100,4 +100,17 @@ export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {
     ...query,
     data: mergeLinuxPages(query.data?.pages ?? []),
   };
+}
+
+export function useKubernetesClusterSummary(request: OptionalAnalysisPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const dataSourceId = request.source?.id;
+  return useQuery({
+    queryKey: ['analysis', 'kubernetes-cluster', currentCase.data?.id ?? null, dataSourceId ?? null],
+    queryFn: () => getKubernetesClusterSummary(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId)
+      && request.source?.platform === 'linux',
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
 }

@@ -17,8 +17,8 @@ pub use governance::{
 };
 pub use queries::{
     classify_files, get_android_device_info, get_android_package_summary,
-    get_evidence_classification_summary, get_file_classification_board, get_system_info,
-    run_android_analysis,
+    get_evidence_classification_summary, get_file_classification_board,
+    get_kubernetes_cluster_summary, get_system_info, run_android_analysis,
 };
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ mod analysis_browser;
 mod analysis_classification;
 mod analysis_email;
 mod analysis_evtx;
+mod analysis_kubernetes;
 mod analysis_linux;
 mod analysis_plugin;
 mod analysis_registry;
@@ -51,7 +52,8 @@ pub use analysis::{
     EvtxEventViewDto, EvtxSecurityEventDto, FileClassificationBoardDto, GovernanceFactSourceDto,
     GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
     GovernanceRuntimeSubcheckDto, InstalledSoftwareDto, KnownLimitationDto,
-    KnownLimitationStatusDto, LastVisitedMruEntryDto, LinuxAccountDto, LinuxAptEventDto,
+    KnownLimitationStatusDto, KubernetesClusterArtifactDto, KubernetesClusterNodeDto,
+    KubernetesClusterSummaryDto, LastVisitedMruEntryDto, LinuxAccountDto, LinuxAptEventDto,
     LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto, LinuxJournalEntryDto,
     LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto, LinuxMysqlLogEntryDto,
     LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto, LinuxWebAccessLogDto,

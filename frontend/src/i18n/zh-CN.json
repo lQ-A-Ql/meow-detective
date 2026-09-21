@@ -477,6 +477,7 @@
       "expandSource": "展开数据源",
       "deletedRecovery": "删除恢复",
       "linuxOverview": "概览",
+      "linuxCluster": "Linux 集群",
       "linuxJournal": "系统日志",
       "linuxLogin": "登录记录",
       "linuxCommands": "命令历史",
@@ -487,6 +488,17 @@
       "linuxWebServices": "Web 服务",
       "linuxMysqlServices": "MySQL 服务",
       "androidOverview": "Android 分析"
+    },
+    "kubernetes": {
+      "loading": "正在读取 Kubernetes 集群证据...",
+      "empty": "当前数据源未发现 Kubernetes 集群证据。",
+      "nodesTitle": "集群成员",
+      "artifactsTitle": "集群证据",
+      "cards": { "cluster": "集群", "members": "成员就绪", "controlPlane": "控制面成员", "artifacts": "证据文件" },
+      "columns": { "source": "数据源", "node": "节点", "role": "角色", "artifacts": "证据数", "status": "状态", "kind": "类型", "path": "路径", "size": "大小" },
+      "roles": { "controlPlane": "控制面证据", "node": "节点" },
+      "values": { "unproven": "未证明" },
+      "status": { "candidateFound": "已发现", "notFound": "未发现", "parsed": "已解析", "partial": "部分解析", "failed": "失败", "notParsed": "未解析", "unavailable": "不可用" }
     },
     "header": {
       "title": "数据源分析",

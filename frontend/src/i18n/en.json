@@ -477,6 +477,7 @@
       "expandSource": "Expand data source",
       "deletedRecovery": "Deleted recovery",
       "linuxOverview": "Overview",
+      "linuxCluster": "Linux cluster",
       "linuxJournal": "System logs",
       "linuxLogin": "Login records",
       "linuxCommands": "Command history",
@@ -487,6 +488,17 @@
       "linuxWebServices": "Web services",
       "linuxMysqlServices": "MySQL services",
       "androidOverview": "Android analysis"
+    },
+    "kubernetes": {
+      "loading": "Reading Kubernetes cluster evidence...",
+      "empty": "No Kubernetes cluster evidence was found for this data source.",
+      "nodesTitle": "Cluster members",
+      "artifactsTitle": "Cluster evidence",
+      "cards": { "cluster": "Cluster", "members": "Members ready", "controlPlane": "Control-plane members", "artifacts": "Evidence files" },
+      "columns": { "source": "Source", "node": "Node", "role": "Role", "artifacts": "Artifacts", "status": "Status", "kind": "Kind", "path": "Path", "size": "Size" },
+      "roles": { "controlPlane": "Control-plane evidence", "node": "Node" },
+      "values": { "unproven": "Unproven" },
+      "status": { "candidateFound": "Found", "notFound": "Not found", "parsed": "Parsed", "partial": "Partial", "failed": "Failed", "notParsed": "Not parsed", "unavailable": "Unavailable" }
     },
     "header": {
       "title": "Data source analysis",

@@ -113,6 +113,7 @@ export const COMMANDS = {
   },
   analysis: {
     GET_SYSTEM_INFO: 'get_system_info',
+    GET_KUBERNETES_CLUSTER_SUMMARY: 'get_kubernetes_cluster_summary',
     RUN_ANDROID_ANALYSIS: 'run_android_analysis',
     GET_ANDROID_DEVICE_INFO: 'get_android_device_info',
     GET_ANDROID_PACKAGE_SUMMARY: 'get_android_package_summary',

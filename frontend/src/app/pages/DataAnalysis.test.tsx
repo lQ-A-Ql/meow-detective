@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   emailSummary: vi.fn(),
   eventLogSummary: vi.fn(),
   linuxSummary: vi.fn(),
+  kubernetesCluster: vi.fn(),
   androidDeviceInfo: vi.fn(),
   androidPackageSummary: vi.fn(),
   androidAnalysisRun: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useEmailExtractionSummary: mocks.emailSummary,
   useEvtxEventSummary: mocks.eventLogSummary,
   useLinuxArtifactSummary: mocks.linuxSummary,
+  useKubernetesClusterSummary: mocks.kubernetesCluster,
   useAndroidDeviceInfo: mocks.androidDeviceInfo,
   useAndroidPackageSummary: mocks.androidPackageSummary,
   useRunAndroidAnalysis: mocks.androidAnalysisRun,
@@ -514,6 +516,7 @@ describe('DataAnalysis page', () => {
         generatedAt: '2026-06-01T10:14:00Z',
       },
     }));
+    mocks.kubernetesCluster.mockReturnValue(queryState({ data: undefined }));
     mocks.androidDeviceInfo.mockReturnValue(queryState({
       data: {
         status: 'notParsed',

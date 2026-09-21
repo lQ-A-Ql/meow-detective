@@ -38,6 +38,7 @@ export type AnalysisPlatformView = DataSourceSummary['platform'];
 
 export type LinuxAnalysisTabKey =
   | 'overview'
+  | 'cluster'
   | 'journal'
   | 'login'
   | 'commands'

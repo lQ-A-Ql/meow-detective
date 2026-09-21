@@ -187,6 +187,21 @@ impl<'a> DataSourceRepo<'a> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    pub fn find_cluster_id_by_source(
+        &self,
+        case_id: &CaseId,
+        data_source_id: &DataSourceId,
+    ) -> DbResult<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT cluster_id FROM data_sources WHERE case_id = ?1 AND id = ?2",
+                params![case_id.0, data_source_id.0],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     pub fn rename(&self, data_source_id: &DataSourceId, name: &str) -> DbResult<()> {
         self.conn.execute(
             "UPDATE data_sources SET name = ?1 WHERE id = ?2",

@@ -6,7 +6,7 @@ use transport::{
     dto::{
         AnalysisFileClassificationDto, AnalysisSystemInfoDto, AndroidAnalysisRunDto,
         AndroidDeviceInfoDto, AndroidPackageSummaryDto, EvidenceClassificationSummaryDto,
-        FileClassificationBoardDto,
+        FileClassificationBoardDto, KubernetesClusterSummaryDto,
     },
     CommandError,
 };
@@ -33,6 +33,27 @@ pub async fn get_system_info(
             &active.meta.id,
             &data_source_id,
             &source_runtime,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_kubernetes_cluster_summary(
+    state: State<'_, AppState>,
+    request: GetAnalysisSourceRequest,
+) -> Result<KubernetesClusterSummaryDto, CommandError> {
+    validate_source_request(&request)?;
+    let app_state = state.inner().clone();
+    let data_source_id = DataSourceId(request.data_source_id);
+
+    run_active_case_command(app_state, move |case_conn, active| {
+        app_services::cluster_service::get_source_kubernetes_cluster_summary(
+            case_conn,
+            &active.case_root,
+            &active.meta.id,
+            &data_source_id,
         )
         .map_err(CommandError::from_typed_service_error)
     })
