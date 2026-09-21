@@ -21,6 +21,8 @@ use super::{
 
 mod pve;
 use pve::register_pve_scope;
+mod environment;
+use environment::project_environment_objects;
 
 struct SourceObservations {
     pve_sources: Vec<(u32, String)>,
@@ -104,6 +106,7 @@ pub fn project_import_set_topology(
         kubernetes_sources,
         kubernetes_artifacts,
     )?;
+    project_environment_objects(case_connection, case_id, import_set_id, &projection)?;
     Ok(projection)
 }
 

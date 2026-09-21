@@ -194,32 +194,22 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0054_storage_objects",
         include_str!("scripts/0054_storage_objects.sql"),
     ),
+    (
+        "0055_environment_objects",
+        include_str!("scripts/0055_environment_objects.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
     latest_version as latest_case_graph_version, run_all as run_case_graph_all,
 };
 
-pub fn latest_version() -> &'static str {
-    MIGRATIONS
-        .last()
-        .map(|(name, _)| *name)
-        .expect("migration registry must not be empty")
-}
-
-pub fn latest_source_version() -> &'static str {
-    SOURCE_MIGRATIONS
-        .last()
-        .map(|(name, _)| *name)
-        .expect("source migration registry must not be empty")
-}
-
 pub fn source_version_is_at_least(actual: &str, minimum: &str) -> bool {
     super::source_registry::version_is_at_least(actual, minimum)
 }
 
 pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
-pub use super::run_case::{current_version, run_all};
+pub use super::run_case::{current_version, latest_source_version, latest_version, run_all};
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
     let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;

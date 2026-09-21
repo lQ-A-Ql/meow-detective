@@ -28,6 +28,7 @@ pub mod correlation_repo;
 pub mod datasource_repo;
 pub mod deleted_recovery_repo;
 pub mod entity_repo;
+pub mod environment_object_repo;
 pub mod file_repo;
 pub mod filesystem_locator_repo;
 pub mod fingerprint_repo;
