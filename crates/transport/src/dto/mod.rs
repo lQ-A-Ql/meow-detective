@@ -150,7 +150,10 @@ pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineFacetCountDto,
     TimelineFacetsDto, TimelineHistogramBucketDto, TimelineStripeDto,
 };
-pub use topology::{TopologyEdgeKindDto, TopologyMemberRoleDto, TopologyScopeKindDto};
+pub use topology::{
+    AnalysisObjectKindDto, EnvironmentObjectKindDto, InfrastructureRelationKindDto,
+    StorageObjectKindDto, TopologyEdgeKindDto, TopologyMemberRoleDto, TopologyScopeKindDto,
+};
 pub use v3_governance::{
     BatchStatusDto, CaseOverviewSnapshotDto, CorrelationOverviewDto, GraphStatsDto,
     NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto, RulePackStatusDto,

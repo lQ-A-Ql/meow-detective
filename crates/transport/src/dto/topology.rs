@@ -34,3 +34,59 @@ pub enum TopologyEdgeKindDto {
     ConsumesStorage,
     DerivedFrom,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EnvironmentObjectKindDto {
+    PhysicalHost,
+    Pve,
+    VirtualMachine,
+    OsInstance,
+    Kubernetes,
+    KubernetesNode,
+    Namespace,
+    Pod,
+    Container,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageObjectKindDto {
+    Partition,
+    LvmPhysicalVolume,
+    VolumeGroup,
+    LogicalVolume,
+    VirtualDisk,
+    CephCluster,
+    CephOsd,
+    CephRbd,
+    CephFs,
+    FileSystem,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AnalysisObjectKindDto {
+    FileEntry,
+    Artifact,
+    TimelineEvent,
+    Finding,
+    Report,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InfrastructureRelationKindDto {
+    Hosts,
+    ProvidesStorage,
+    Boots,
+    Runs,
+    Manages,
+    ConsumesStorage,
+    Contains,
+    MaterializesAs,
+    MountedFrom,
+    DerivedFrom,
+    Produces,
+    SupportedBy,
+}

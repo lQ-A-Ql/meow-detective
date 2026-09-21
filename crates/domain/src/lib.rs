@@ -36,6 +36,8 @@ pub use ledger::{
 pub use notebook::{EntryStatus, EntryType as NotebookEntryType, EvidenceCitation, NotebookEntry};
 pub use timeline::{TimelineEvent, TimelineEventId};
 pub use topology::{
-    CephScopeId, KubernetesScopeId, OsInstanceId, PveScopeId, TopologyEdgeKind, TopologyMemberRole,
-    TopologyScopeId, TopologyScopeKind,
+    AnalysisObjectId, AnalysisObjectKind, CephScopeId, EnvironmentObjectKind,
+    InfrastructureRelationKind, KubernetesScopeId, OsInstanceId, PveScopeId, StorageObjectId,
+    StorageObjectKind, TopologyEdgeKind, TopologyMemberRole, TopologyObjectKind, TopologyScopeId,
+    TopologyScopeKind,
 };
