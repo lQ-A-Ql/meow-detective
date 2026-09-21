@@ -8,7 +8,7 @@ fn aggregate() -> CephRbdLineageAggregate {
     CephRbdLineageAggregate {
         lineage: CephRbdLineageRecord {
             derived_data_source_id: "derived".to_string(),
-            parent_cluster_id: "cluster".to_string(),
+            parent_ceph_scope_id: "ceph-scope".to_string(),
             image_name: "vm-100-disk-0".to_string(),
             image_id: "image-id".to_string(),
             object_prefix: "rbd_data.prefix".to_string(),
@@ -83,22 +83,28 @@ fn fingerprint_covers_replica_policy_provenance() {
 #[test]
 fn runtime_requires_a_complete_coverage_report() {
     let case_root = tempfile::tempdir().expect("case root");
-    let error = load_proven_rbd_policy(case_root.path(), "cluster-1")
-        .expect_err("missing coverage report must fail closed");
+    let error = load_proven_rbd_policy(
+        case_root.path(),
+        &domain::CephScopeId("cluster-1".to_string()),
+    )
+    .expect_err("missing coverage report must fail closed");
     assert!(matches!(
         error,
         super::DerivedRbdReaderError::CoverageNotProven { state } if state == "missing"
     ));
 
     let report = super::super::assess_inventory_coverage(&[], &RbdReplicaPolicy::strict_legacy());
-    crate::cluster_service::write_linux_cluster_coverage_report(
+    crate::cluster_service::write_ceph_scope_coverage_report(
         case_root.path(),
         "cluster-1",
         &report,
     )
     .expect("write incomplete coverage report");
-    let error = load_proven_rbd_policy(case_root.path(), "cluster-1")
-        .expect_err("incomplete coverage report must fail closed");
+    let error = load_proven_rbd_policy(
+        case_root.path(),
+        &domain::CephScopeId("cluster-1".to_string()),
+    )
+    .expect_err("incomplete coverage report must fail closed");
     assert!(matches!(
         error,
         super::DerivedRbdReaderError::CoverageNotProven { state } if state == "incomplete"

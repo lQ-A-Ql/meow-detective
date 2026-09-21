@@ -5,7 +5,7 @@ use app_services::{job_service, processing_phase_service};
 
 use crate::{
     commands::import::background_job::{
-        continue_cluster_rbd_processing, BackgroundDerivedSourceProcessingJob,
+        continue_ceph_rbd_processing, BackgroundDerivedSourceProcessingJob,
     },
     state::{AppState, TaskScope},
 };
@@ -70,7 +70,7 @@ fn schedule_derived_source_recovery(
         db_path: PathBuf::from(db_path),
         case_id: case_id.clone(),
         case_root: PathBuf::from(case_root),
-        cluster_id: "case-open-recovery".to_string(),
+        import_set_id: "case-open-recovery".to_string(),
         source_ids: vec![data_source_id.clone()],
     };
     let registration = state.task_manager.spawn_scoped_heavy(
@@ -78,8 +78,7 @@ fn schedule_derived_source_recovery(
         TaskScope::data_source(case_id.0.clone(), data_source_id.0, "case-open-recovery"),
         cancel_token,
         move || {
-            continue_cluster_rbd_processing(&job, &worker_cancel_token)
-                .map_err(|error| error.message)
+            continue_ceph_rbd_processing(&job, &worker_cancel_token).map_err(|error| error.message)
         },
     );
     match registration {

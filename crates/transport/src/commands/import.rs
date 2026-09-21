@@ -31,10 +31,10 @@ impl ImportDataSourceRequest {
                 return Err("profile contains a null byte".to_string());
             }
         }
-        if self.source_kind == ImportSourceKindDto::LinuxCluster
+        if self.source_kind == ImportSourceKindDto::LinuxEvidenceSet
             && self.platform != ImportTargetPlatformDto::Linux
         {
-            return Err("linuxCluster imports must use platform linux".to_string());
+            return Err("linuxEvidenceSet imports must use platform linux".to_string());
         }
         if self.source_kind == ImportSourceKindDto::LocalDisk
             && self.platform != ImportTargetPlatformDto::Windows
@@ -50,7 +50,7 @@ impl ImportDataSourceRequest {
 pub enum ImportSourceKindDto {
     #[default]
     Auto,
-    LinuxCluster,
+    LinuxEvidenceSet,
     LocalDisk,
 }
 

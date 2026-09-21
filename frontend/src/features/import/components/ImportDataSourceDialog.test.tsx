@@ -95,12 +95,12 @@ describe('ImportDataSourceDialog', () => {
     });
   });
 
-  it('calls onImport with linuxCluster source kind when cluster mode is selected', () => {
+  it('calls onImport with linuxEvidenceSet source kind when cluster mode is selected', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
     fireEvent.click(screen.getByLabelText('Linux'));
     advanceToForm();
-    fireEvent.click(screen.getByLabelText('Linux 集群'));
+    fireEvent.click(screen.getByLabelText('Linux 证据集合'));
     const [nameInput, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(nameInput, { target: { value: '  pve-cluster  ' } });
     fireEvent.change(pathInput, { target: { value: '  D:/pve/images  ' } });
@@ -108,7 +108,7 @@ describe('ImportDataSourceDialog', () => {
 
     expect(baseProps.onImport).toHaveBeenCalledWith({
       sourcePath: 'D:/pve/images',
-      sourceKind: 'linuxCluster',
+      sourceKind: 'linuxEvidenceSet',
       platform: 'linux',
       profile: 'pve-cluster',
     });

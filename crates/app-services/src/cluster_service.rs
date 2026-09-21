@@ -3,6 +3,7 @@ use thiserror::Error;
 use crate::datasource_service;
 
 mod audit_parser;
+mod ceph_scope_report;
 mod etcd_bolt;
 mod etcd_wal;
 mod kind;
@@ -11,21 +12,22 @@ mod kubernetes_analysis;
 mod kubernetes_dispatch;
 mod kubernetes_inventory;
 mod kubernetes_parser_error;
-mod kubernetes_plan;
 mod kubernetes_yaml;
 mod linux_import;
 mod manifest_parser;
-mod pve_plan;
+mod topology_projection;
 
 pub mod kubernetes_paths;
 
-pub use kind::LinuxClusterKind;
+pub use kind::{TopologyEdgeKind, TopologyMemberRole, TopologyScopeKind};
 pub use kubernetes_paths::KubernetesArtifactKind;
+pub use topology_projection::{project_import_set_topology, ImportSetTopologyProjection};
 
 pub use audit_parser::{
     parse_kubernetes_audit_log, KubernetesAuditEvent, KubernetesAuditIndicator,
     KubernetesAuditParseResult,
 };
+pub use ceph_scope_report::{read_ceph_scope_coverage_report, write_ceph_scope_coverage_report};
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};
 pub use kubeconfig_parser::{
@@ -39,21 +41,13 @@ pub use kubernetes_inventory::{
     KubernetesMemberArtifactInventory,
 };
 pub use kubernetes_parser_error::KubernetesParserError;
-pub use kubernetes_plan::{
-    plan_kubernetes_cluster_import, KubernetesClusterPlan, KUBERNETES_CLUSTER_PROFILE,
-};
 pub use linux_import::{
-    assess_linux_cluster_cephfs_presence, plan_linux_cluster_import,
-    read_linux_cluster_coverage_report, register_linux_cluster_import,
-    update_linux_cluster_import_state, write_linux_cluster_coverage_report,
-    write_linux_cluster_manifest, LinuxClusterImportPlan, LinuxClusterMemberPlan,
+    plan_linux_evidence_set_import, register_linux_evidence_set_import,
+    update_linux_evidence_set_import_state, write_linux_evidence_set_manifest,
+    LinuxEvidenceSetImportPlan, LinuxEvidenceSetMemberPlan,
 };
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
-};
-pub use pve_plan::{
-    parse_cluster, plan_cluster_parse, ClusterEvidenceSource, ClusterParseBoundary,
-    ClusterParsePlan, ClusterParseRequest,
 };
 
 #[derive(Debug, Error)]
@@ -62,6 +56,8 @@ pub enum ClusterServiceError {
     Unsupported,
     #[error("at least two evidence sources are required for cluster parsing")]
     InsufficientSources,
+    #[error("Linux evidence-set import is incomplete")]
+    IncompleteImportSet,
     #[error("cluster root must point to a readable directory")]
     InvalidClusterRoot,
     #[error("cluster id is invalid")]
@@ -87,6 +83,7 @@ impl transport::ServiceErrorCategory for ClusterServiceError {
         match self {
             Self::Unsupported => transport::ErrorCategory::Unsupported,
             Self::InsufficientSources
+            | Self::IncompleteImportSet
             | Self::InvalidClusterRoot
             | Self::InvalidClusterId
             | Self::InvalidCoverageReport

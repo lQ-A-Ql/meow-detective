@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use app_services::ceph_reconstruction::{
-    assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,
+    assess_cephfs_presence, assess_cephfs_presence_for_scope, CephFsFilesystemPresenceRecord,
     CephFsMapPresenceSnapshot, CephFsMdsFilesystemPresenceRecord, CephFsMdsMapPresenceSnapshot,
     CephFsPresenceAssessment, CephFsPresenceDiagnostic, CephFsPresenceEvidence,
     CephFsPresenceMapKind, CephFsPresenceState, FSMAP_PRESENCE_KEY, MDSMAP_PRESENCE_KEY,
@@ -10,8 +10,9 @@ use chrono::Utc;
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
-    datasource_cluster_repo::{DataSourceClusterRecord, DataSourceClusterRepo},
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    linux_topology_membership_repo::{LinuxTopologyMembershipRecord, LinuxTopologyMembershipRepo},
+    linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
 };
 use rusqlite::{params, OpenFlags};
 
@@ -369,23 +370,22 @@ fn cluster_assessment_reads_real_source_meta_and_stays_indeterminate_without_sna
         })
         .expect("create case");
 
-    let cluster_id = "cluster-cephfs-presence";
-    DataSourceClusterRepo::new(&case_conn)
-        .insert_pending(&DataSourceClusterRecord {
-            id: cluster_id.to_string(),
-            case_id: case_id.clone(),
-            name: "cluster".to_string(),
-            root_path: case_root.path().display().to_string(),
-            platform: "linux".to_string(),
-            profile: Some("pve_cluster".to_string()),
-            manifest_rel_path: "clusters/cluster/manifest.json".to_string(),
-            import_state: "ready".to_string(),
-            member_count: 1,
-            ready_count: 1,
-            failed_count: 0,
-            last_error: None,
+    let ceph_scope_id = "scope:ceph:presence";
+    let scope_repo = LinuxTopologyScopeRepo::new(&case_conn);
+    let membership_repo = LinuxTopologyMembershipRepo::new(&case_conn);
+    scope_repo
+        .insert(&LinuxTopologyScopeRecord {
+            id: ceph_scope_id.to_string(),
+            case_id: case_id.0.clone(),
+            scope_kind: "ceph".to_string(),
+            name: "Ceph".to_string(),
+            identity_state: "unproven".to_string(),
+            identity_fingerprint: None,
+            status: "ready".to_string(),
+            evidence_completeness: "complete".to_string(),
+            diagnostics_json: "[]".to_string(),
         })
-        .expect("register cluster");
+        .expect("register Ceph scope");
 
     let source_id = DataSourceId("source-cephfs-presence".to_string());
     let source = DataSource {
@@ -396,26 +396,34 @@ fn cluster_assessment_reads_real_source_meta_and_stays_indeterminate_without_sna
         imported_at: Utc::now(),
         provenance: DataSourceProvenance::unknown(),
     };
-    let mut storage = DataSourceStorage::source_db(
-        &source_id.0,
-        Some("linux"),
-        Some("cluster_member".to_string()),
-    );
+    let mut storage =
+        DataSourceStorage::source_db(&source_id.0, Some("linux"), Some("ceph_osd".to_string()));
     storage.import_state = "ready_metadata".to_string();
     DataSourceRepo::new(&case_conn)
         .insert_with_storage(&case_id, &source, &storage)
         .expect("register source");
-    DataSourceRepo::new(&case_conn)
-        .update_cluster_membership(&source_id, cluster_id, 0, 1)
-        .expect("bind source to cluster");
+    membership_repo
+        .insert(&LinuxTopologyMembershipRecord {
+            scope_id: ceph_scope_id.to_string(),
+            data_source_id: source_id.0.clone(),
+            role: "storage_node".to_string(),
+            member_index: Some(0),
+            confidence: "candidate".to_string(),
+            provenance_json: "{}".to_string(),
+        })
+        .expect("bind source to Ceph scope");
     drop(app_services::source_db::open_source_db(
         case_root.path(),
         &source_id,
     ));
 
-    let assessment =
-        assess_cephfs_presence_for_cluster(&case_conn, case_root.path(), &case_id, cluster_id)
-            .expect("assess CephFS presence");
+    let assessment = assess_cephfs_presence_for_scope(
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &domain::CephScopeId(ceph_scope_id.to_string()),
+    )
+    .expect("assess CephFS presence");
 
     assert_eq!(assessment.state, CephFsPresenceState::Indeterminate);
     assert!(assessment.diagnostics.iter().any(|diagnostic| {
@@ -474,9 +482,10 @@ fn retained_pve_cluster_has_no_cephfs_presence_proof() {
         .into_iter()
         .next()
         .expect("retained case");
-    let cluster_id: String = case_conn
+    let ceph_scope_id: String = case_conn
         .query_row(
-            "SELECT id FROM data_source_clusters WHERE case_id = ?1 ORDER BY id LIMIT 1",
+            "SELECT id FROM linux_topology_scopes
+             WHERE case_id = ?1 AND scope_kind = 'ceph' ORDER BY id LIMIT 1",
             params![case_id.id.0],
             |row| row.get(0),
         )
@@ -485,11 +494,11 @@ fn retained_pve_cluster_has_no_cephfs_presence_proof() {
         .query_row("SELECT COUNT(*) FROM data_sources", [], |row| row.get(0))
         .expect("count retained sources before assessment");
 
-    let assessment = assess_cephfs_presence_for_cluster(
+    let assessment = assess_cephfs_presence_for_scope(
         &case_conn,
         Path::new(&case_root),
         &case_id.id,
-        &cluster_id,
+        &domain::CephScopeId(ceph_scope_id),
     )
     .expect("assess retained cluster");
 

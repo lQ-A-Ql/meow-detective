@@ -15,12 +15,12 @@ pub struct ImportSourceConfig {
     pub platform: DataSourcePlatform,
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
-    pub cluster: Option<ImportClusterMemberConfig>,
+    pub import_set: Option<ImportSetMemberConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportClusterMemberConfig {
-    pub cluster_id: String,
+pub struct ImportSetMemberConfig {
+    pub import_set_id: String,
     pub member_index: u32,
     pub member_count: u32,
 }
@@ -108,7 +108,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         platform,
         profile: None,
         mode,
-        cluster: None,
+        import_set: None,
     })
 }
 

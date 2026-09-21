@@ -10,7 +10,7 @@ use super::{
         import_analysis_mode_from_settings, load_import_settings, prepare_import_config,
         validate_import_request,
     },
-    schedule_import_for_active_case, schedule_linux_cluster_import_for_active_case,
+    schedule_import_for_active_case, schedule_linux_evidence_set_import_for_active_case,
 };
 use crate::state::AppState;
 
@@ -33,13 +33,13 @@ pub async fn import_data_source(
         let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
         let analysis_mode = import_analysis_mode_from_settings(&settings.import_analysis_mode);
         let _job_id = match request.source_kind {
-            ImportSourceKindDto::LinuxCluster => {
-                let plan = cluster_service::plan_linux_cluster_import(
+            ImportSourceKindDto::LinuxEvidenceSet => {
+                let plan = cluster_service::plan_linux_evidence_set_import(
                     &request.source_path,
                     request.profile.clone(),
                 )
                 .map_err(CommandError::from_typed_service_error)?;
-                schedule_linux_cluster_import_for_active_case(
+                schedule_linux_evidence_set_import_for_active_case(
                     active,
                     plan,
                     Some(&app_clone),

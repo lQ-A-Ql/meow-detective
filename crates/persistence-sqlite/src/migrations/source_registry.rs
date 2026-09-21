@@ -145,3 +145,13 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_037_forensic_fingerprints.sql"),
     ),
 ];
+
+pub(super) fn version_is_at_least(actual: &str, minimum: &str) -> bool {
+    let actual_index = SOURCE_MIGRATIONS
+        .iter()
+        .position(|(name, _)| *name == actual);
+    let minimum_index = SOURCE_MIGRATIONS
+        .iter()
+        .position(|(name, _)| *name == minimum);
+    matches!((actual_index, minimum_index), (Some(actual_index), Some(minimum_index)) if actual_index >= minimum_index)
+}

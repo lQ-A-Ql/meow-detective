@@ -1,9 +1,8 @@
 use std::path::Path;
 
-use domain::CaseId;
-use persistence_sqlite::repositories::{
-    datasource_cluster_repo::DataSourceClusterRepo, datasource_repo::DataSourceRepo,
-};
+use domain::{CaseId, CephScopeId};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -197,43 +196,50 @@ pub struct CephFsMdsFilesystemPresenceRecord {
 pub enum CephFsPresenceError {
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
-    #[error("cluster '{0}' was not found")]
-    ClusterNotFound(String),
-    #[error("cluster '{cluster_id}' does not belong to case '{case_id}'")]
-    ClusterCaseMismatch { cluster_id: String, case_id: String },
+    #[error("Ceph scope '{0}' was not found")]
+    ScopeNotFound(String),
+    #[error("Ceph scope '{scope_id}' does not belong to case '{case_id}'")]
+    ScopeCaseMismatch { scope_id: String, case_id: String },
 }
 
 impl transport::ServiceErrorCategory for CephFsPresenceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::Db(error) => error.category(),
-            Self::ClusterNotFound(_) | Self::ClusterCaseMismatch { .. } => {
+            Self::ScopeNotFound(_) | Self::ScopeCaseMismatch { .. } => {
                 transport::ErrorCategory::Validation
             }
         }
     }
 }
 
-pub fn assess_cephfs_presence_for_cluster(
+pub fn assess_cephfs_presence_for_scope(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &CephScopeId,
 ) -> Result<CephFsPresenceAssessment, CephFsPresenceError> {
-    let cluster = DataSourceClusterRepo::new(case_conn)
-        .find_by_id(cluster_id)?
-        .ok_or_else(|| CephFsPresenceError::ClusterNotFound(cluster_id.to_string()))?;
-    if cluster.case_id != *case_id {
-        return Err(CephFsPresenceError::ClusterCaseMismatch {
-            cluster_id: cluster_id.to_string(),
+    let scope_case_id: Option<String> = case_conn
+        .query_row(
+            "SELECT case_id FROM linux_topology_scopes
+             WHERE id = ?1 AND scope_kind = 'ceph'",
+            [&ceph_scope_id.0],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(persistence_sqlite::DbError::from)
+        .map_err(CephFsPresenceError::Db)?;
+    let scope_case_id =
+        scope_case_id.ok_or_else(|| CephFsPresenceError::ScopeNotFound(ceph_scope_id.0.clone()))?;
+    if scope_case_id != case_id.0 {
+        return Err(CephFsPresenceError::ScopeCaseMismatch {
+            scope_id: ceph_scope_id.0.clone(),
             case_id: case_id.0.clone(),
         });
     }
-    crate::cluster_service::LinuxClusterKind::from_profile(cluster.profile.as_deref())
-        .require_pve_ceph()
-        .map_err(|_| CephFsPresenceError::ClusterNotFound(cluster_id.to_string()))?;
-
-    let source_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
+    let source_ids =
+        DataSourceRepo::new(case_conn).find_ids_by_topology_scope(case_id, &ceph_scope_id.0)?;
+    let observed_source_count = source_ids.len();
     let mut evidence = Vec::with_capacity(source_ids.len());
     let mut source_diagnostics = Vec::new();
     for data_source_id in source_ids {
@@ -250,11 +256,24 @@ pub fn assess_cephfs_presence_for_cluster(
         }
     }
 
-    let mut evaluated = assess_cephfs_presence(&evidence, cluster.member_count as usize);
-    if cluster.import_state != "ready" {
+    let (expected_count, scope_status): (i64, String) = case_conn
+        .query_row(
+            "SELECT COUNT(membership.data_source_id), scope.status
+             FROM linux_topology_scopes AS scope
+             LEFT JOIN linux_topology_memberships AS membership
+               ON membership.scope_id = scope.id
+             WHERE scope.id = ?1 AND scope.scope_kind = 'ceph'
+             GROUP BY scope.id, scope.status",
+            [&ceph_scope_id.0],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(persistence_sqlite::DbError::from)
+        .map_err(CephFsPresenceError::Db)?;
+    let mut evaluated = assess_cephfs_presence(&evidence, expected_count as usize);
+    if scope_status != "ready" {
         evaluated.force_indeterminate(CephFsPresenceDiagnostic::SourceSetIncomplete {
-            expected: cluster.member_count as usize,
-            observed: cluster.ready_count as usize,
+            expected: expected_count as usize,
+            observed: observed_source_count,
         });
     }
     evaluated.diagnostics.extend(source_diagnostics);

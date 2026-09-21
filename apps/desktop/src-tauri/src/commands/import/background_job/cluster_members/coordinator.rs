@@ -3,7 +3,7 @@ use std::sync::mpsc::Receiver;
 
 use super::super::super::cancellation::is_import_cancelled_message;
 use super::super::status::cancel_job;
-use super::super::types::ClusterImportSummary;
+use super::super::types::EvidenceSetImportSummary;
 use super::queue::cancel_member_job;
 use super::types::{update_cluster_progress, MemberCoordinator, MemberFailureAction, MemberResult};
 use crate::events::event_bridge;
@@ -12,7 +12,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
     pub(super) fn collect_member_results(
         &self,
         result_rx: Receiver<MemberResult>,
-        summary: &mut ClusterImportSummary,
+        summary: &mut EvidenceSetImportSummary,
     ) -> Result<(), super::CommandError> {
         let mut cancelled = false;
         let mut completed = 0u32;
@@ -28,7 +28,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
                         tracing::error!(
                             member_index = result.index,
                             error = %error.message,
-                            "Failed to record completed Linux cluster member"
+                            "Failed to record completed Linux evidence-set member"
                         );
                         first_error.get_or_insert(error);
                     } else if !cancelled {
@@ -65,7 +65,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
     ) -> Result<(), super::CommandError> {
         let progress = 10 + (completed.saturating_mul(80) / self.total_members.max(1));
         let detail = format!(
-            "Importing Linux cluster member {}/{}: {}",
+            "Importing Linux evidence-set member {}/{}: {}",
             completed, self.total_members, source_name
         );
         self.job_repo
@@ -79,7 +79,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
 
     fn record_member_success(
         &self,
-        summary: &mut ClusterImportSummary,
+        summary: &mut EvidenceSetImportSummary,
         member_index: usize,
         member_job_id: domain::JobId,
         message: String,
@@ -99,7 +99,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
 
     fn handle_member_failure(
         &self,
-        summary: &mut ClusterImportSummary,
+        summary: &mut EvidenceSetImportSummary,
         member_index: usize,
         member_job_id: domain::JobId,
         error: super::CommandError,
@@ -124,11 +124,11 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
             MemberFailureAction::StopCancelled
         } else {
             tracing::warn!(
-                cluster_id = %self.job.plan.cluster_id,
+                import_set_id = %self.job.plan.import_set_id,
                 ready_count = summary.ready_count,
                 failed_count = summary.failed_count,
                 error = %error.message,
-                "Linux cluster member import failed; continuing with remaining members"
+                "Linux evidence-set member import failed; continuing with remaining members"
             );
             MemberFailureAction::Continue
         }
@@ -137,12 +137,12 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
 
 fn update_cluster_progress_with_error(
     coordinator: &MemberCoordinator<'_, '_>,
-    summary: &ClusterImportSummary,
+    summary: &EvidenceSetImportSummary,
     error: &str,
 ) -> Result<(), super::CommandError> {
-    app_services::cluster_service::update_linux_cluster_import_state(
+    app_services::cluster_service::update_linux_evidence_set_import_state(
         coordinator.connection,
-        &coordinator.job.plan.cluster_id,
+        &coordinator.job.plan.import_set_id,
         "importing",
         summary.ready_count,
         summary.failed_count,
@@ -151,17 +151,17 @@ fn update_cluster_progress_with_error(
     .map_err(super::CommandError::from_typed_service_error)
 }
 
-pub(super) fn cancel_cluster_members(
+pub(super) fn cancel_evidence_set_members(
     connection: &rusqlite::Connection,
     job_repo: &super::JobRepo<'_>,
-    job: &super::super::types::BackgroundLinuxClusterImportJob,
+    job: &super::super::types::BackgroundLinuxEvidenceSetImportJob,
     app: Option<&super::AppHandle>,
-    summary: &ClusterImportSummary,
+    summary: &EvidenceSetImportSummary,
 ) {
-    let message = "Linux cluster import cancelled by user";
-    let _ = app_services::cluster_service::update_linux_cluster_import_state(
+    let message = "Linux evidence-set import cancelled by user";
+    let _ = app_services::cluster_service::update_linux_evidence_set_import_state(
         connection,
-        &job.plan.cluster_id,
+        &job.plan.import_set_id,
         "cancelled",
         summary.ready_count,
         summary.failed_count,

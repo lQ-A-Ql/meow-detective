@@ -1,7 +1,9 @@
 use persistence_sqlite::repositories::{
     catalog_publication_repo::CatalogPublicationRepo,
-    datasource_cluster_repo::DataSourceClusterRepo, datasource_repo::DataSourceRepo,
+    datasource_repo::DataSourceRepo,
+    linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
 };
+use rusqlite::OptionalExtension;
 
 use super::{
     capability::derive_source_capability,
@@ -24,10 +26,10 @@ use super::{
 pub fn materialize_cephfs_source(
     request: CephFsSourceMaterializationRequest<'_>,
 ) -> CephFsSourceResult<MaterializedCephFsSource> {
-    validate_cluster(&request)?;
+    validate_ceph_scope(&request)?;
     validate_presence(request.presence, request.descriptor)?;
     let namespace = ceph_wire::assemble_cephfs_namespace(request.namespace_assembly_input.clone())?;
-    let data_source_id = derived_source_id(request.cluster_id, &request.descriptor.identity)?;
+    let data_source_id = derived_source_id(&request.ceph_scope_id.0, &request.descriptor.identity)?;
     let projection = build_namespace_projection(
         &data_source_id,
         request.descriptor,
@@ -36,12 +38,16 @@ pub fn materialize_cephfs_source(
         request.inline_data_by_inode,
         request.sparse_extents_by_inode,
     )?;
-    let desired_source = build_data_source(request.cluster_id, &data_source_id, request.descriptor);
+    let desired_source = build_data_source(
+        &request.ceph_scope_id.0,
+        &data_source_id,
+        request.descriptor,
+    );
     let storage = source_storage(&data_source_id);
     let capability = derive_source_capability(&namespace, &projection);
     let lineage = build_lineage(
         &data_source_id,
-        request.cluster_id,
+        &request.ceph_scope_id.0,
         request.descriptor,
         CephFsLineageEvidence {
             namespace_input_sha256: request.namespace_input_sha256,
@@ -59,6 +65,17 @@ pub fn materialize_cephfs_source(
         &storage,
         &lineage,
     )?;
+    LinuxTopologyArtifactRepo::new(request.case_conn).insert(&LinuxTopologyArtifactRecord {
+        scope_id: request.ceph_scope_id.0.clone(),
+        data_source_id: source.id.0.clone(),
+        file_id: Some(request.descriptor.identity.clone()),
+        layer: "storage".to_string(),
+        artifact_kind: "ceph_fs".to_string(),
+        parser: "cephfs-namespace-v1".to_string(),
+        status: "candidate_found".to_string(),
+        diagnostics_json: "[]".to_string(),
+        content_digest: Some(request.namespace_input_sha256.to_string()),
+    })?;
     if import_state(request.case_conn, &data_source_id)? == "ready" {
         return load_ready_summary(
             request.case_conn,
@@ -355,13 +372,21 @@ pub(super) fn read_capability_record(
     })
 }
 
-fn validate_cluster(request: &CephFsSourceMaterializationRequest<'_>) -> CephFsSourceResult<()> {
-    let cluster = DataSourceClusterRepo::new(request.case_conn)
-        .find_by_id(request.cluster_id)?
-        .ok_or(CephFsSourceError::InvalidInput("parent cluster is missing"))?;
-    if cluster.case_id != *request.case_id || cluster.import_state != "ready" {
+fn validate_ceph_scope(request: &CephFsSourceMaterializationRequest<'_>) -> CephFsSourceResult<()> {
+    let scope: Option<(String, String)> = request
+        .case_conn
+        .query_row(
+            "SELECT case_id, status FROM linux_topology_scopes
+             WHERE id = ?1 AND scope_kind = 'ceph'",
+            [&request.ceph_scope_id.0],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(persistence_sqlite::DbError::from)?;
+    if !matches!(scope, Some((ref case_id, ref status)) if case_id == &request.case_id.0 && status == "ready")
+    {
         return Err(CephFsSourceError::InvalidInput(
-            "parent cluster does not belong to the case or is not ready",
+            "parent Ceph scope does not belong to the case or is not ready",
         ));
     }
     Ok(())

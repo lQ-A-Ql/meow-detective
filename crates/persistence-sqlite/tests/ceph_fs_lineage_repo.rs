@@ -10,7 +10,7 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 
 const DERIVED_SOURCE_ID: &str = "cephfs-source";
-const CLUSTER_ID: &str = "pve-cluster";
+const CEPH_SCOPE_ID: &str = "scope:ceph:lineage";
 
 fn setup_case_db() -> Connection {
     let conn = open_in_memory().expect("open case database");
@@ -18,27 +18,31 @@ fn setup_case_db() -> Connection {
     conn.execute("INSERT INTO cases (id, name) VALUES ('case-1', 'PVE')", [])
         .expect("insert case");
     conn.execute(
-        "INSERT INTO data_source_clusters (
-            id, case_id, name, root_path, platform, manifest_rel_path,
-            import_state, member_count, ready_count
-         ) VALUES (?1, 'case-1', 'PVE', 'E:/pve', 'linux', 'clusters/pve.json',
-                   'ready', 4, 4)",
-        [CLUSTER_ID],
+        "INSERT INTO linux_topology_scopes (
+            id, case_id, scope_kind, name, identity_state, status,
+            evidence_completeness, diagnostics_json
+         ) VALUES (?1, 'case-1', 'ceph', 'Ceph', 'unproven', 'ready', 'complete', '[]')",
+        [CEPH_SCOPE_ID],
     )
-    .expect("insert cluster");
+    .expect("insert Ceph scope");
     for source_id in [DERIVED_SOURCE_ID, "osd-0", "osd-1", "osd-2", "osd-3"] {
         let derived = source_id == DERIVED_SOURCE_ID;
         conn.execute(
             "INSERT INTO data_sources (
-                id, case_id, name, kind, source_path, platform, import_state, cluster_id
-             ) VALUES (?1, 'case-1', ?1, ?2, '', 'linux', 'ready', ?3)",
-            rusqlite::params![
-                source_id,
-                if derived { "ceph_fs" } else { "e01" },
-                if derived { None } else { Some(CLUSTER_ID) },
-            ],
+                id, case_id, name, kind, source_path, platform, import_state
+             ) VALUES (?1, 'case-1', ?1, ?2, '', 'linux', 'ready')",
+            rusqlite::params![source_id, if derived { "ceph_fs" } else { "e01" },],
         )
         .expect("insert source");
+        if !derived {
+            conn.execute(
+                "INSERT INTO linux_topology_memberships (
+                    scope_id, data_source_id, role, member_index, confidence, provenance_json
+                 ) VALUES (?1, ?2, 'storage_node', 0, 'candidate', '{}')",
+                rusqlite::params![CEPH_SCOPE_ID, source_id],
+            )
+            .expect("bind source to Ceph scope");
+        }
     }
     conn
 }
@@ -56,7 +60,7 @@ fn aggregate() -> CephFsDerivedLineageAggregate {
     let mut aggregate = CephFsDerivedLineageAggregate {
         lineage: CephFsDerivedLineageRecord {
             derived_data_source_id: DERIVED_SOURCE_ID.to_string(),
-            parent_cluster_id: CLUSTER_ID.to_string(),
+            parent_ceph_scope_id: CEPH_SCOPE_ID.to_string(),
             cluster_identity: "cluster".to_string(),
             filesystem_identity: "ceph-fs:cluster:1:42:7".to_string(),
             filesystem_id: 1,
@@ -107,7 +111,7 @@ fn aggregate() -> CephFsDerivedLineageAggregate {
 #[test]
 fn lineage_round_trips_and_cascades_with_derived_source() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0049_forensic_ledger_batches");
+    assert_eq!(runner::latest_version(), "0053_cephfs_scope_lineage");
     let expected = aggregate();
     let repo = CephFsDerivedLineageRepo::new(&conn);
     repo.insert(&expected).expect("insert lineage");

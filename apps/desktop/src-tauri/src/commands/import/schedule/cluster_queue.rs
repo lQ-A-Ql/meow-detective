@@ -7,17 +7,17 @@ use tauri::AppHandle;
 use transport::CommandError;
 
 use super::super::background_job::{
-    cancel_browseable_cluster_job, complete_browseable_cluster_job,
-    continue_cluster_rbd_processing, fail_browseable_cluster_job,
-    run_background_linux_cluster_import_until_browseable, BackgroundDerivedSourceProcessingJob,
-    BackgroundLinuxClusterImportJob,
+    cancel_browseable_evidence_set_job, complete_browseable_evidence_set_job,
+    continue_ceph_rbd_processing, fail_browseable_evidence_set_job,
+    run_background_linux_evidence_set_import_until_browseable,
+    BackgroundDerivedSourceProcessingJob, BackgroundLinuxEvidenceSetImportJob,
 };
 use crate::events::event_bridge;
 use crate::state::TaskScope;
 
-pub(super) fn schedule_linux_cluster_import_for_active_case(
+pub(super) fn schedule_linux_evidence_set_import_for_active_case(
     active: &active_case::ActiveCase,
-    plan: cluster_service::LinuxClusterImportPlan,
+    plan: cluster_service::LinuxEvidenceSetImportPlan,
     app: Option<&AppHandle>,
     task_manager: Arc<crate::state::TaskManager>,
     max_import_workers: Option<usize>,
@@ -27,23 +27,25 @@ pub(super) fn schedule_linux_cluster_import_for_active_case(
     let case_id = active.meta.id.clone();
     let case_root = active.case_root.clone();
     let db_path = active.db_path();
-    let cluster_name = plan.cluster_name.clone();
+    let import_set_name = plan.import_set_name.clone();
     let member_count = plan.members.len();
     let connection = app_services::connection::open_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo
-        .create(&case_id.0, "Import Linux cluster")
+        .create(&case_id.0, "Import Linux evidence set")
         .map_err(CommandError::from_typed_service_error)?;
     let job_id_string = job_id.0.clone();
     if let Some(app) = app {
-        event_bridge::emit_job_created(app, &job_id_string, "Import Linux cluster");
+        event_bridge::emit_job_created(app, &job_id_string, "Import Linux evidence set");
     }
     job_repo
         .update_progress(
             &job_id,
             1,
-            &format!("Queued Linux cluster import for {cluster_name} ({member_count} images)"),
+            &format!(
+                "Queued Linux evidence-set import for {import_set_name} ({member_count} images)"
+            ),
         )
         .map_err(CommandError::from_typed_service_error)?;
 
@@ -52,7 +54,7 @@ pub(super) fn schedule_linux_cluster_import_for_active_case(
     let background_cancel_token = cancel_token.clone();
     let processing_task_manager = task_manager.clone();
     let processing_group_id = job_id_string.clone();
-    let background_job = BackgroundLinuxClusterImportJob {
+    let background_job = BackgroundLinuxEvidenceSetImportJob {
         db_path,
         case_id,
         case_root,
@@ -67,53 +69,68 @@ pub(super) fn schedule_linux_cluster_import_for_active_case(
         TaskScope::case(active.meta.id.0.clone(), job_id_string.clone()),
         cancel_token,
         move || {
-            let processing = run_background_linux_cluster_import_until_browseable(
+            run_evidence_set_background(
                 background_job,
-                app_handle.as_ref(),
-                background_cancel_token.clone(),
+                app_handle,
+                background_cancel_token,
+                processing_task_manager,
+                processing_group_id,
             )
-            .map_err(|error| error.message)?;
-            if let Some(outcome) = processing {
-                if background_cancel_token.load(Ordering::Acquire) {
-                    cancel_browseable_cluster_job(
-                        &outcome,
-                        app_handle.as_ref(),
-                        "Linux cluster import cancelled before derived processing admission",
-                    );
-                    return Ok(());
-                }
-                for data_source_id in outcome.processing.source_ids.iter().cloned() {
-                    if background_cancel_token.load(Ordering::Acquire) {
-                        processing_task_manager.cancel(&processing_group_id);
-                        cancel_browseable_cluster_job(
-                            &outcome,
-                            app_handle.as_ref(),
-                            "Linux cluster import cancelled during derived processing admission",
-                        );
-                        return Ok(());
-                    }
-                    if let Err(error) = schedule_derived_processing(
-                        &processing_task_manager,
-                        &processing_group_id,
-                        &outcome.processing,
-                        data_source_id,
-                    ) {
-                        processing_task_manager.cancel(&processing_group_id);
-                        fail_browseable_cluster_job(&outcome, app_handle.as_ref(), &error.message);
-                        return Err(error.message);
-                    }
-                }
-                complete_browseable_cluster_job(&outcome, app_handle.as_ref())
-                    .map_err(|error| error.message)?;
-            }
-            Ok(())
         },
     ) {
-        let detail = format!("Cluster import task registration failed: {error}");
+        let detail = format!("Evidence-set import task registration failed: {error}");
         let _ = job_repo.fail(&domain::JobId(job_id_string.clone()), &detail);
         return Err(CommandError::internal(detail));
     }
     Ok(job_id_string)
+}
+
+fn run_evidence_set_background(
+    job: BackgroundLinuxEvidenceSetImportJob,
+    app: Option<AppHandle>,
+    cancel: Arc<AtomicBool>,
+    task_manager: Arc<crate::state::TaskManager>,
+    group_id: String,
+) -> Result<(), String> {
+    let Some(outcome) = run_background_linux_evidence_set_import_until_browseable(
+        job,
+        app.as_ref(),
+        cancel.clone(),
+    )
+    .map_err(|error| error.message)?
+    else {
+        return Ok(());
+    };
+    if cancel.load(Ordering::Acquire) {
+        cancel_browseable_evidence_set_job(
+            &outcome,
+            app.as_ref(),
+            "Linux evidence-set import cancelled before derived processing admission",
+        );
+        return Ok(());
+    }
+    for data_source_id in outcome.processing.source_ids.iter().cloned() {
+        if cancel.load(Ordering::Acquire) {
+            task_manager.cancel(&group_id);
+            cancel_browseable_evidence_set_job(
+                &outcome,
+                app.as_ref(),
+                "Linux evidence-set import cancelled during derived processing admission",
+            );
+            return Ok(());
+        }
+        if let Err(error) = schedule_derived_processing(
+            &task_manager,
+            &group_id,
+            &outcome.processing,
+            data_source_id,
+        ) {
+            task_manager.cancel(&group_id);
+            fail_browseable_evidence_set_job(&outcome, app.as_ref(), &error.message);
+            return Err(error.message);
+        }
+    }
+    complete_browseable_evidence_set_job(&outcome, app.as_ref()).map_err(|error| error.message)
 }
 
 fn schedule_derived_processing(
@@ -133,16 +150,16 @@ fn schedule_derived_processing(
         db_path: processing.db_path.clone(),
         case_id: processing.case_id.clone(),
         case_root: processing.case_root.clone(),
-        cluster_id: processing.cluster_id.clone(),
+        import_set_id: processing.import_set_id.clone(),
         source_ids: vec![data_source_id],
     };
     let cancel_token = Arc::new(AtomicBool::new(false));
     let worker_cancel = Arc::clone(&cancel_token);
     task_manager
         .spawn_scoped_heavy(task_id.clone(), scope, cancel_token, move || {
-            continue_cluster_rbd_processing(&job, &worker_cancel).map_err(|error| {
+            continue_ceph_rbd_processing(&job, &worker_cancel).map_err(|error| {
                 tracing::warn!(
-                    cluster_id = %job.cluster_id,
+                    import_set_id = %job.import_set_id,
                     data_source_id = data_source_id_value,
                     error = %error.message,
                     "Managed derived-source background processing stopped"

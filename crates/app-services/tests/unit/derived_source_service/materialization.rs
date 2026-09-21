@@ -18,7 +18,7 @@ use super::registration::lineage_aggregate;
 
 const SOURCE_ID: &str = "rbd-atomic-publish";
 const FINGERPRINT: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const CLUSTER_ID: &str = "cluster-atomic-publish";
+const CEPH_SCOPE_ID: &str = "scope:ceph:atomic-publish";
 const PARENT_SOURCE_IDS: [&str; 3] = ["source-osd-0", "source-osd-1", "source-osd-2"];
 
 fn setup_case_db() -> rusqlite::Connection {
@@ -114,27 +114,32 @@ fn setup_recoverable_catalog(
         .expect("insert case");
     connection
         .execute(
-            "INSERT INTO data_source_clusters (
-                id, case_id, name, root_path, platform, manifest_rel_path,
-                import_state, member_count, ready_count
-             ) VALUES (
-                ?1, 'case-1', 'PVE', 'E:/pve', 'linux', 'clusters/pve.json',
-                'ready', 3, 3
-             )",
-            [CLUSTER_ID],
+            "INSERT INTO linux_topology_scopes (
+            id, case_id, scope_kind, name, identity_state, status,
+            evidence_completeness, diagnostics_json
+         ) VALUES (?1, 'case-1', 'ceph', 'Ceph', 'unproven', 'ready', 'complete', '[]')",
+            [CEPH_SCOPE_ID],
         )
-        .expect("insert cluster");
+        .expect("insert Ceph scope");
     for source_id in PARENT_SOURCE_IDS {
         connection
             .execute(
                 "INSERT INTO data_sources (
-                    id, case_id, name, kind, source_path, platform, import_state, cluster_id
+                    id, case_id, name, kind, source_path, platform, import_state
                  ) VALUES (
-                    ?1, 'case-1', ?1, 'e01', '', 'linux', 'ready', ?2
+                    ?1, 'case-1', ?1, 'e01', '', 'linux', 'ready'
                  )",
-                [source_id, CLUSTER_ID],
+                [source_id],
             )
             .expect("insert parent source");
+        connection
+            .execute(
+                "INSERT INTO linux_topology_memberships (
+                scope_id, data_source_id, role, member_index, confidence, provenance_json
+             ) VALUES (?1, ?2, 'storage_node', 0, 'candidate', '{}')",
+                [CEPH_SCOPE_ID, source_id],
+            )
+            .expect("bind parent source to Ceph scope");
     }
 
     let source = data_source();
@@ -159,7 +164,7 @@ fn setup_recoverable_catalog(
     CephRbdLineageRepo::new(&connection)
         .insert_aggregate(&lineage_aggregate(
             &source.id,
-            CLUSTER_ID,
+            CEPH_SCOPE_ID,
             &descriptor(),
             &replicas,
             &crate::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),

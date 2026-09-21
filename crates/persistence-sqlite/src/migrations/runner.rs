@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use super::source_registry::SOURCE_MIGRATIONS;
 
-const MIGRATIONS: &[(&str, &str)] = &[
+pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
     (
         "0002_data_sources",
@@ -178,6 +178,18 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0050_ceph_rbd_policy_provenance",
         include_str!("scripts/0050_ceph_rbd_policy_provenance.sql"),
     ),
+    (
+        "0051_linux_topology_scopes",
+        include_str!("scripts/0051_linux_topology_scopes.sql"),
+    ),
+    (
+        "0052_linux_import_sets",
+        include_str!("scripts/0052_linux_import_sets.sql"),
+    ),
+    (
+        "0053_cephfs_scope_lineage",
+        include_str!("scripts/0053_cephfs_scope_lineage.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
@@ -199,25 +211,11 @@ pub fn latest_source_version() -> &'static str {
 }
 
 pub fn source_version_is_at_least(actual: &str, minimum: &str) -> bool {
-    let actual_index = SOURCE_MIGRATIONS
-        .iter()
-        .position(|(name, _)| *name == actual);
-    let minimum_index = SOURCE_MIGRATIONS
-        .iter()
-        .position(|(name, _)| *name == minimum);
-    matches!(
-        (actual_index, minimum_index),
-        (Some(actual_index), Some(minimum_index)) if actual_index >= minimum_index
-    )
+    super::source_registry::version_is_at_least(actual, minimum)
 }
 
-pub fn migration_count() -> usize {
-    MIGRATIONS.len()
-}
-
-pub fn run_all(conn: &Connection) -> DbResult<u32> {
-    run_migrations(conn, MIGRATIONS)
-}
+pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
+pub use super::run_case::run_all;
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
     let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;

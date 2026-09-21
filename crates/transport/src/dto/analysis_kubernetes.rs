@@ -7,9 +7,9 @@ use crate::dto::analysis_base::AnalysisParseStatusDto;
 pub struct KubernetesClusterSummaryDto {
     pub status: AnalysisParseStatusDto,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cluster_id: Option<String>,
+    pub scope_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cluster_name: Option<String>,
+    pub scope_name: Option<String>,
     pub selected_data_source_id: String,
     pub expected_member_count: u32,
     pub ready_member_count: u32,

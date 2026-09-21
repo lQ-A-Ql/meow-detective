@@ -8,15 +8,15 @@ use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::AppHandle;
 use transport::CommandError;
 
-use super::status::{cancel_job, fail_linux_cluster_job};
+use super::status::{cancel_job, fail_linux_evidence_set_job};
 use super::types::{
-    BackgroundDerivedSourceProcessingJob, BackgroundLinuxClusterImportJob, BrowseableClusterImport,
-    ClusterImportSummary,
+    BackgroundDerivedSourceProcessingJob, BackgroundLinuxEvidenceSetImportJob,
+    BrowseableEvidenceSetImport, EvidenceSetImportSummary,
 };
 use crate::events::event_bridge;
 
-pub(crate) fn complete_browseable_cluster_job(
-    outcome: &BrowseableClusterImport,
+pub(crate) fn complete_browseable_evidence_set_job(
+    outcome: &BrowseableEvidenceSetImport,
     app: Option<&AppHandle>,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_case_db(&outcome.processing.db_path)
@@ -26,7 +26,7 @@ pub(crate) fn complete_browseable_cluster_job(
         .map_err(CommandError::from_typed_service_error)?;
     if !completed {
         return Err(CommandError::conflict(
-            "Cluster import job became terminal before derived processing was admitted",
+            "Evidence-set import job became terminal before derived processing was admitted",
         ));
     }
     if let Some(app) = app {
@@ -35,8 +35,8 @@ pub(crate) fn complete_browseable_cluster_job(
     Ok(())
 }
 
-pub(crate) fn fail_browseable_cluster_job(
-    outcome: &BrowseableClusterImport,
+pub(crate) fn fail_browseable_evidence_set_job(
+    outcome: &BrowseableEvidenceSetImport,
     app: Option<&AppHandle>,
     detail: &str,
 ) {
@@ -61,8 +61,8 @@ pub(crate) fn fail_browseable_cluster_job(
     }
 }
 
-pub(crate) fn cancel_browseable_cluster_job(
-    outcome: &BrowseableClusterImport,
+pub(crate) fn cancel_browseable_evidence_set_job(
+    outcome: &BrowseableEvidenceSetImport,
     app: Option<&AppHandle>,
     detail: &str,
 ) {
@@ -81,19 +81,20 @@ pub(crate) fn cancel_browseable_cluster_job(
     }
 }
 
-pub(super) fn materialize_cluster_rbd_sources(
+pub(super) fn materialize_ceph_scope_rbd_sources(
     connection: &rusqlite::Connection,
     job_repo: &JobRepo<'_>,
-    job: &BackgroundLinuxClusterImportJob,
+    job: &BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
-    summary: &ClusterImportSummary,
+    summary: &EvidenceSetImportSummary,
+    ceph_scope_id: &domain::CephScopeId,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<Option<Vec<MaterializedRbdSource>>, CommandError> {
-    match app_services::derived_source_service::materialize_rbd_sources_for_cluster_with_cancel(
+    match app_services::derived_source_service::materialize_rbd_sources_for_scope_with_cancel(
         connection,
         &job.case_root,
         &job.case_id,
-        &job.plan.cluster_id,
+        ceph_scope_id,
         cancel_token,
     ) {
         Ok(sources) => Ok(Some(sources)),
@@ -102,22 +103,22 @@ pub(super) fn materialize_cluster_rbd_sources(
                 job_repo,
                 &job.job_id,
                 app,
-                "Linux cluster RBD materialization cancelled by user",
+                "Linux evidence set RBD materialization cancelled by user",
             );
             Ok(None)
         }
         Err(error) => {
             let message = format!(
-                "Linux cluster {} RBD materialization failed: {error}",
-                job.plan.cluster_name
+                "Linux evidence set {} RBD materialization failed: {error}",
+                job.plan.import_set_name
             );
-            fail_linux_cluster_job(
+            fail_linux_evidence_set_job(
                 job_repo,
                 &job.job_id,
                 app,
                 Some((
                     connection,
-                    &job.plan.cluster_id,
+                    &job.plan.import_set_id,
                     summary.ready_count,
                     summary.failed_count,
                 )),
@@ -128,7 +129,7 @@ pub(super) fn materialize_cluster_rbd_sources(
     }
 }
 
-pub(crate) fn continue_cluster_rbd_processing(
+pub(crate) fn continue_ceph_rbd_processing(
     job: &BackgroundDerivedSourceProcessingJob,
     cancel_token: &Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
@@ -137,7 +138,7 @@ pub(crate) fn continue_cluster_rbd_processing(
     for data_source_id in &job.source_ids {
         if cancel_token.load(Ordering::Relaxed) {
             tracing::info!(
-                cluster_id = %job.cluster_id,
+                import_set_id = %job.import_set_id,
                 data_source_id = %data_source_id.0,
                 "Stopped derived-source post-Catalog processing after cancellation"
             );
@@ -153,7 +154,7 @@ pub(crate) fn continue_cluster_rbd_processing(
             )
         {
             tracing::warn!(
-                cluster_id = %job.cluster_id,
+                import_set_id = %job.import_set_id,
                 data_source_id = %data_source_id.0,
                 error = %error,
                 "Browseable RBD source has incomplete background processing"

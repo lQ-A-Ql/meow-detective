@@ -11,7 +11,7 @@ pub use error::ImportSourceConfigError;
 pub use prepare::{
     prepare_import_source_config, prepare_import_source_config_from_path,
     prepare_import_source_config_from_path_with_kind, prepare_import_source_config_with_kind,
-    ImportClusterMemberConfig, ImportSourceConfig, ImportSourceMode,
+    ImportSetMemberConfig, ImportSourceConfig, ImportSourceMode,
 };
 
 #[cfg(test)]

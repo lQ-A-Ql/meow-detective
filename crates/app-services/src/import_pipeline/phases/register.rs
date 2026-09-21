@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetRepo;
 use transport::CommandError;
 
 use crate::datasource_service;
@@ -26,7 +26,7 @@ pub(crate) fn run_attach_phase(
     )
     .map_err(CommandError::from_service_error)?;
 
-    persist_cluster_membership(ctx, &data_source)?;
+    persist_import_set_membership(ctx, &data_source)?;
     emit_phase_profile(
         ctx.event_sink(),
         ctx.job_id,
@@ -43,19 +43,18 @@ pub(crate) fn run_attach_phase(
     Ok(data_source)
 }
 
-fn persist_cluster_membership(
+fn persist_import_set_membership(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<(), CommandError> {
-    let Some(cluster) = &ctx.import_config.cluster else {
+    let Some(import_set) = &ctx.import_config.import_set else {
         return Ok(());
     };
-    DataSourceRepo::new(ctx.conn)
-        .update_cluster_membership(
-            &data_source.id,
-            &cluster.cluster_id,
-            cluster.member_index,
-            cluster.member_count,
+    LinuxImportSetRepo::new(ctx.conn)
+        .bind_member_source(
+            &import_set.import_set_id,
+            import_set.member_index,
+            &data_source.id.0,
         )
         .map_err(CommandError::from_service_error)
 }

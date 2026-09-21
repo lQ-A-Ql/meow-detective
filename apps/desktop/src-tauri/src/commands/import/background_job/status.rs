@@ -50,27 +50,27 @@ pub(super) fn fail_job(
     Err(error)
 }
 
-pub(super) fn fail_linux_cluster_job(
+pub(super) fn fail_linux_evidence_set_job(
     job_repo: &JobRepo<'_>,
     job_id: &domain::JobId,
     app: Option<&AppHandle>,
-    cluster_state: Option<(&rusqlite::Connection, &str, u32, u32)>,
+    import_set_state: Option<(&rusqlite::Connection, &str, u32, u32)>,
     error: CommandError,
 ) -> Result<(), CommandError> {
     let detail = error.message.clone();
-    if let Some((connection, cluster_id, ready_count, failed_count)) = cluster_state {
-        if let Err(update_error) = cluster_service::update_linux_cluster_import_state(
+    if let Some((connection, import_set_id, ready_count, failed_count)) = import_set_state {
+        if let Err(update_error) = cluster_service::update_linux_evidence_set_import_state(
             connection,
-            cluster_id,
+            import_set_id,
             "failed",
             ready_count,
             failed_count,
             Some(&detail),
         ) {
             tracing::error!(
-                cluster_id,
+                import_set_id,
                 error = %update_error,
-                "Failed to mark Linux cluster import as failed"
+                "Failed to mark Linux evidence-set import as failed"
             );
         }
     }
@@ -78,7 +78,7 @@ pub(super) fn fail_linux_cluster_job(
         tracing::error!(
             job_id = %job_id.0,
             error = %update_error,
-            "Failed to mark Linux cluster job as failed"
+            "Failed to mark Linux evidence set job as failed"
         );
     }
     if let Some(app) = app {

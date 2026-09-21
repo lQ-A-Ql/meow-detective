@@ -9,7 +9,7 @@ fn create_new_db() {
     assert!(db_path.exists());
 
     let count = runner::run_all(&conn).unwrap();
-    assert_eq!(count as usize, runner::migration_count());
+    assert_eq!(count as usize, runner::MIGRATION_COUNT);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn open_existing_db() {
 fn run_all_migrations() {
     let conn = open_in_memory().unwrap();
     let count = runner::run_all(&conn).unwrap();
-    assert_eq!(count as usize, runner::migration_count());
+    assert_eq!(count as usize, runner::MIGRATION_COUNT);
 
     let tables = [
         "cases",
@@ -83,7 +83,7 @@ fn latest_marker_does_not_hide_missing_earlier_migrations() {
 
     let applied = runner::run_all(&conn).unwrap();
 
-    assert_eq!(applied as usize, runner::migration_count() - 1);
+    assert_eq!(applied as usize, runner::MIGRATION_COUNT - 1);
     let cases_exists: bool = conn
         .query_row(
             "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'cases'",

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use app_services::{cluster_service, import_analysis, import_precheck, import_scheduler};
 use domain::JobId;
 
-use super::super::types::{BackgroundLinuxClusterImportJob, ClusterImportSummary};
+use super::super::types::{BackgroundLinuxEvidenceSetImportJob, EvidenceSetImportSummary};
 use super::{AppHandle, CommandError, JobRepo};
 
 pub(super) enum MemberFailureAction {
@@ -38,7 +38,7 @@ pub(super) struct MemberExecutionContext {
 pub(super) struct MemberCoordinator<'a, 'db> {
     pub(super) connection: &'a rusqlite::Connection,
     pub(super) job_repo: &'a JobRepo<'db>,
-    pub(super) job: &'a BackgroundLinuxClusterImportJob,
+    pub(super) job: &'a BackgroundLinuxEvidenceSetImportJob,
     pub(super) app: Option<&'a AppHandle>,
     pub(super) cancel_token: &'a Arc<AtomicBool>,
     pub(super) total_members: u32,
@@ -46,12 +46,12 @@ pub(super) struct MemberCoordinator<'a, 'db> {
 
 pub(super) fn update_cluster_progress(
     connection: &rusqlite::Connection,
-    job: &BackgroundLinuxClusterImportJob,
-    summary: &ClusterImportSummary,
+    job: &BackgroundLinuxEvidenceSetImportJob,
+    summary: &EvidenceSetImportSummary,
 ) -> Result<(), CommandError> {
-    cluster_service::update_linux_cluster_import_state(
+    cluster_service::update_linux_evidence_set_import_state(
         connection,
-        &job.plan.cluster_id,
+        &job.plan.import_set_id,
         "importing",
         summary.ready_count,
         summary.failed_count,

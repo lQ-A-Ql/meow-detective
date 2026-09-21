@@ -72,6 +72,9 @@ fn preflight_case_workspace(db_path: &Path, case_id: &CaseId) -> Result<CaseMeta
         .map_err(persistence_sqlite::DbError::from)?;
     ensure_current_schema(&conn)?;
     let stored = load_case_record(&conn, case_id)?;
+    if has_retired_linux_cluster_relationships(&conn, case_id)? {
+        return Err(CaseServiceError::TopologyReimportRequired);
+    }
     ensure_supported_data_source_platforms_for_case(&conn, case_id)?;
     if has_legacy_single_db_payload(&conn)? {
         return Err(CaseServiceError::InvalidCaseDir(
@@ -107,4 +110,17 @@ fn has_legacy_single_db_payload(conn: &Connection) -> persistence_sqlite::DbResu
     let timeline_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
     Ok(file_count > 0 || artifact_count > 0 || timeline_count > 0)
+}
+
+fn has_retired_linux_cluster_relationships(
+    conn: &Connection,
+    case_id: &CaseId,
+) -> persistence_sqlite::DbResult<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM data_sources
+         WHERE case_id = ?1 AND cluster_id IS NOT NULL",
+        [&case_id.0],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }

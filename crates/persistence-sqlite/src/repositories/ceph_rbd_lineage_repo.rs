@@ -10,7 +10,7 @@ const RBD_MAX_OBJECT_ORDER: u8 = 25;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephRbdLineageRecord {
     pub derived_data_source_id: String,
-    pub parent_cluster_id: String,
+    pub parent_ceph_scope_id: String,
     pub image_name: String,
     pub image_id: String,
     pub object_prefix: String,
@@ -85,7 +85,7 @@ impl<'a> CephRbdLineageRepo<'a> {
         let transaction = self.conn.unchecked_transaction()?;
         let Some(stored) = transaction
             .query_row(
-                "SELECT derived_data_source_id, parent_cluster_id, image_name, image_id,
+                "SELECT derived_data_source_id, parent_ceph_scope_id, image_name, image_id,
                         object_prefix, image_size, object_order, features, stripe_unit,
                         stripe_count, data_pool_id, scope_identity, operation_features,
                          has_parent, snapshot_id, encrypted, expected_replica_count,
@@ -156,7 +156,10 @@ pub fn validate_aggregate(aggregate: &CephRbdLineageAggregate) -> DbResult<()> {
             "derived data-source ID",
             lineage.derived_data_source_id.as_str(),
         ),
-        ("parent cluster ID", lineage.parent_cluster_id.as_str()),
+        (
+            "parent Ceph scope ID",
+            lineage.parent_ceph_scope_id.as_str(),
+        ),
         ("image name", lineage.image_name.as_str()),
         ("image ID", lineage.image_id.as_str()),
         ("object prefix", lineage.object_prefix.as_str()),
@@ -214,10 +217,11 @@ fn validate_ownership(conn: &Connection, aggregate: &CephRbdLineageAggregate) ->
     let derived_matches: bool = conn.query_row(
         "SELECT COUNT(*) = 1
          FROM data_sources AS derived
-         JOIN data_source_clusters AS cluster
-           ON cluster.id = ?2 AND cluster.case_id = derived.case_id
+         JOIN linux_topology_scopes AS scope
+           ON scope.id = ?2 AND scope.case_id = derived.case_id
+          AND scope.scope_kind = 'ceph'
          WHERE derived.id = ?1 AND derived.kind = 'ceph_rbd'",
-        params![lineage.derived_data_source_id, lineage.parent_cluster_id],
+        params![lineage.derived_data_source_id, lineage.parent_ceph_scope_id],
         |row| row.get(0),
     )?;
     if !derived_matches {
@@ -227,14 +231,14 @@ fn validate_ownership(conn: &Connection, aggregate: &CephRbdLineageAggregate) ->
         let replica_matches: bool = conn.query_row(
             "SELECT COUNT(*) = 1
              FROM data_sources AS source
-             JOIN data_source_clusters AS cluster
-               ON cluster.id = ?2 AND cluster.case_id = source.case_id
-             WHERE source.id = ?1 AND source.cluster_id = cluster.id",
-            params![replica.source_data_source_id, lineage.parent_cluster_id],
+             JOIN linux_topology_memberships AS membership
+               ON membership.scope_id = ?2 AND membership.data_source_id = source.id
+             WHERE source.id = ?1",
+            params![replica.source_data_source_id, lineage.parent_ceph_scope_id],
             |row| row.get(0),
         )?;
         if !replica_matches {
-            return invalid("RBD replica source is not a member of the parent cluster");
+            return invalid("RBD replica source is not a member of the parent Ceph scope");
         }
     }
     Ok(())
@@ -274,7 +278,7 @@ fn insert_aggregate_on(conn: &Connection, aggregate: &CephRbdLineageAggregate) -
     let lineage = &aggregate.lineage;
     conn.execute(
         "INSERT INTO ceph_rbd_derived_lineage (
-            derived_data_source_id, parent_cluster_id, image_name, image_id,
+            derived_data_source_id, parent_ceph_scope_id, image_name, image_id,
             object_prefix, image_size, object_order, features, stripe_unit,
             stripe_count, data_pool_id, scope_identity, operation_features,
             has_parent, snapshot_id, encrypted, expected_replica_count,
@@ -285,7 +289,7 @@ fn insert_aggregate_on(conn: &Connection, aggregate: &CephRbdLineageAggregate) -
          )",
         params![
             lineage.derived_data_source_id,
-            lineage.parent_cluster_id,
+            lineage.parent_ceph_scope_id,
             lineage.image_name,
             lineage.image_id,
             lineage.object_prefix,
@@ -324,7 +328,7 @@ fn insert_aggregate_on(conn: &Connection, aggregate: &CephRbdLineageAggregate) -
 
 struct StoredLineage {
     derived_data_source_id: String,
-    parent_cluster_id: String,
+    parent_ceph_scope_id: String,
     image_name: String,
     image_id: String,
     object_prefix: String,
@@ -346,7 +350,7 @@ struct StoredLineage {
 fn read_stored_lineage(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLineage> {
     Ok(StoredLineage {
         derived_data_source_id: row.get(0)?,
-        parent_cluster_id: row.get(1)?,
+        parent_ceph_scope_id: row.get(1)?,
         image_name: row.get(2)?,
         image_id: row.get(3)?,
         object_prefix: row.get(4)?,
@@ -369,7 +373,7 @@ fn read_stored_lineage(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLineag
 fn decode_lineage(stored: StoredLineage) -> DbResult<CephRbdLineageRecord> {
     Ok(CephRbdLineageRecord {
         derived_data_source_id: stored.derived_data_source_id,
-        parent_cluster_id: stored.parent_cluster_id,
+        parent_ceph_scope_id: stored.parent_ceph_scope_id,
         image_name: stored.image_name,
         image_id: stored.image_id,
         object_prefix: stored.object_prefix,

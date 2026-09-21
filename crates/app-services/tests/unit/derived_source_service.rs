@@ -8,9 +8,9 @@ use std::sync::{
 
 #[test]
 fn derived_source_id_is_deterministic_and_path_safe() {
-    let id = derived_data_source_id("cluster-123", "16ecc87af5c9").unwrap();
+    let id = derived_data_source_id("scope:ceph:123", "16ecc87af5c9").unwrap();
 
-    assert_eq!(id.0, "rbd-cluster-123-16ecc87af5c9");
+    assert_eq!(id.0, "rbd-12d81d799fc8dc4820ec-16ecc87af5c9");
 }
 
 #[test]
@@ -40,16 +40,72 @@ fn pre_cancelled_materialization_stops_before_database_access() {
     cancel_token.store(true, Ordering::Relaxed);
     let connection = rusqlite::Connection::open_in_memory().expect("open empty database");
 
-    let error = materialize_rbd_sources_for_cluster_with_cancel(
+    let error = materialize_rbd_sources_for_scope_with_cancel(
         &connection,
         std::path::Path::new("."),
         &CaseId("case-cancelled".to_string()),
-        "cluster-cancelled",
+        &domain::CephScopeId("scope:ceph:cancelled".to_string()),
         cancel_token,
     )
     .expect_err("pre-cancelled materialization must stop before querying the database");
 
     assert!(matches!(error, DerivedSourceError::ProcessingCancelled));
+}
+
+#[test]
+fn rbd_materialization_rejects_a_non_ceph_scope() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&connection).unwrap();
+    connection
+        .execute(
+            "INSERT INTO cases (id, name) VALUES ('case-topology-kind', 'case')",
+            [],
+        )
+        .unwrap();
+    connection.execute(
+        "INSERT INTO linux_topology_scopes (
+            id, case_id, scope_kind, name, identity_state, status,
+            evidence_completeness, diagnostics_json
+         ) VALUES ('scope:pve:1', 'case-topology-kind', 'pve', 'PVE', 'candidate', 'ready', 'complete', '[]')",
+        [],
+    ).unwrap();
+    let error = materialize_rbd_sources_for_scope(
+        &connection,
+        std::path::Path::new("."),
+        &CaseId("case-topology-kind".to_string()),
+        &domain::CephScopeId("scope:pve:1".to_string()),
+    )
+    .unwrap_err();
+    assert!(matches!(error, DerivedSourceError::ScopeNotFound(ref id) if id == "scope:pve:1"));
+}
+
+#[test]
+fn rbd_materialization_rejects_a_kubernetes_scope() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&connection).unwrap();
+    connection
+        .execute(
+            "INSERT INTO cases (id, name) VALUES ('case-kubernetes-kind', 'case')",
+            [],
+        )
+        .unwrap();
+    connection.execute(
+        "INSERT INTO linux_topology_scopes (
+            id, case_id, scope_kind, name, identity_state, status,
+            evidence_completeness, diagnostics_json
+         ) VALUES ('scope:kubernetes:1', 'case-kubernetes-kind', 'kubernetes', 'Kubernetes', 'candidate', 'ready', 'complete', '[]')",
+        [],
+    ).unwrap();
+    let error = materialize_rbd_sources_for_scope(
+        &connection,
+        std::path::Path::new("."),
+        &CaseId("case-kubernetes-kind".to_string()),
+        &domain::CephScopeId("scope:kubernetes:1".to_string()),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, DerivedSourceError::ScopeNotFound(ref id) if id == "scope:kubernetes:1")
+    );
 }
 
 #[test]

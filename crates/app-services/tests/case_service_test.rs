@@ -451,6 +451,40 @@ fn open_case_rejects_stale_schema_without_running_migrations() {
 }
 
 #[test]
+fn open_case_rejects_retired_linux_cluster_relationships() {
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(tmp.path(), "retired-topology", None).unwrap();
+    let case_root = active.case_root.clone();
+    active
+        .with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO data_source_clusters (
+                    id, case_id, name, root_path, platform, manifest_rel_path
+                 ) VALUES ('legacy-cluster', ?1, 'legacy', 'legacy', 'linux', 'legacy.json')",
+                [&active.meta.id.0],
+            )?;
+            conn.execute(
+                "INSERT INTO data_sources (
+                    id, case_id, name, kind, source_path, imported_at, cluster_id
+                 ) VALUES ('legacy-source', ?1, 'legacy', 'raw', 'legacy.raw', datetime('now'), 'legacy-cluster')",
+                [&active.meta.id.0],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    drop(active);
+
+    let error = match case_service::open_case(&case_root) {
+        Ok(_) => panic!("retired Linux cluster case unexpectedly opened"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        case_service::CaseServiceError::TopologyReimportRequired
+    ));
+}
+
+#[test]
 fn create_duplicate_name_fails() {
     let tmp = TempDir::new().unwrap();
     case_service::create_case(tmp.path(), "dup", None).unwrap();

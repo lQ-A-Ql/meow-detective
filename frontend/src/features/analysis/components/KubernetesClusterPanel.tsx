@@ -30,7 +30,7 @@ export function KubernetesClusterPanel({ summary }: { summary?: KubernetesCluste
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <InfoCard label={t('analysis.kubernetes.cards.cluster')} value={summary.clusterName ?? t('analysis.kubernetes.values.unproven')} />
+        <InfoCard label={t('analysis.kubernetes.cards.cluster')} value={summary.scopeName ?? t('analysis.kubernetes.values.unproven')} />
         <InfoCard label={t('analysis.kubernetes.cards.members')} value={`${summary.readyMemberCount}/${summary.expectedMemberCount}`} />
         <InfoCard label={t('analysis.kubernetes.cards.controlPlane')} value={summary.controlPlaneMemberCount.toString()} />
         <InfoCard label={t('analysis.kubernetes.cards.artifacts')} value={summary.artifactCount.toString()} />

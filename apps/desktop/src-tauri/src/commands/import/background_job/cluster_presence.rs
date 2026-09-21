@@ -1,32 +1,26 @@
-use super::types::BackgroundLinuxClusterImportJob;
-use app_services::cluster_service;
+use super::types::BackgroundLinuxEvidenceSetImportJob;
 
 pub(super) fn assess_cephfs_presence(
     connection: &rusqlite::Connection,
-    job: &BackgroundLinuxClusterImportJob,
+    job: &BackgroundLinuxEvidenceSetImportJob,
+    ceph_scope_id: &domain::CephScopeId,
 ) {
-    match cluster_service::assess_linux_cluster_cephfs_presence(
+    match app_services::ceph_reconstruction::assess_cephfs_presence_for_scope(
         connection,
         &job.case_root,
         &job.case_id,
-        &job.plan.cluster_id,
+        ceph_scope_id,
     ) {
-        Ok(assessment) => {
-            tracing::info!(
-                cluster_id = %job.plan.cluster_id,
-                state = %assessment.state,
-                source_count = assessment.source_count,
-                filesystem_count = assessment.filesystem_count,
-                diagnostics = assessment.diagnostics.len(),
-                "Linux cluster CephFS presence assessed; namespace reconstruction remains gated"
-            );
-        }
-        Err(error) => {
-            tracing::warn!(
-                cluster_id = %job.plan.cluster_id,
-                error = %error,
-                "Linux cluster CephFS presence assessment was unavailable; no CephFS source was created"
-            );
-        }
+        Ok(assessment) => tracing::info!(
+            ceph_scope_id = %ceph_scope_id.0,
+            state = %assessment.state,
+            sources = assessment.source_count,
+            "CephFS presence assessed for typed Ceph scope"
+        ),
+        Err(error) => tracing::warn!(
+            ceph_scope_id = %ceph_scope_id.0,
+            %error,
+            "CephFS presence assessment failed"
+        ),
     }
 }

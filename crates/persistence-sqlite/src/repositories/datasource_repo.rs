@@ -170,36 +170,22 @@ impl<'a> DataSourceRepo<'a> {
         Ok(result)
     }
 
-    pub fn find_ids_by_cluster(
+    pub fn find_ids_by_topology_scope(
         &self,
         case_id: &CaseId,
-        cluster_id: &str,
+        scope_id: &str,
     ) -> DbResult<Vec<DataSourceId>> {
         let mut statement = self.conn.prepare(
-            "SELECT id
-             FROM data_sources
-             WHERE case_id = ?1 AND cluster_id = ?2
-             ORDER BY cluster_member_index ASC, id ASC",
+            "SELECT membership.data_source_id
+             FROM linux_topology_memberships AS membership
+             JOIN linux_topology_scopes AS scope ON scope.id = membership.scope_id
+             WHERE scope.id = ?1 AND scope.case_id = ?2
+             ORDER BY membership.member_index ASC, membership.data_source_id ASC",
         )?;
-        let rows = statement.query_map(params![case_id.0, cluster_id], |row| {
+        let rows = statement.query_map(params![scope_id, case_id.0], |row| {
             Ok(DataSourceId(row.get(0)?))
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn find_cluster_id_by_source(
-        &self,
-        case_id: &CaseId,
-        data_source_id: &DataSourceId,
-    ) -> DbResult<Option<String>> {
-        self.conn
-            .query_row(
-                "SELECT cluster_id FROM data_sources WHERE case_id = ?1 AND id = ?2",
-                params![case_id.0, data_source_id.0],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(Into::into)
     }
 
     pub fn rename(&self, data_source_id: &DataSourceId, name: &str) -> DbResult<()> {
@@ -332,41 +318,6 @@ impl<'a> DataSourceRepo<'a> {
             "UPDATE data_sources SET schema_version = ?1 WHERE id = ?2",
             params![schema_version, data_source_id.0],
         )?;
-        Ok(())
-    }
-
-    pub fn update_cluster_membership(
-        &self,
-        data_source_id: &DataSourceId,
-        cluster_id: &str,
-        member_index: u32,
-        member_count: u32,
-    ) -> DbResult<()> {
-        let affected = self.conn.execute(
-            "UPDATE data_sources
-             SET cluster_id = ?1,
-                 cluster_member_index = ?2,
-                 cluster_member_count = ?3
-             WHERE id = ?4
-               AND EXISTS (
-                   SELECT 1
-                   FROM data_source_clusters AS cluster
-                   WHERE cluster.id = ?1
-                     AND cluster.case_id = data_sources.case_id
-               )",
-            params![
-                cluster_id,
-                i64::from(member_index),
-                i64::from(member_count),
-                data_source_id.0,
-            ],
-        )?;
-        if affected != 1 {
-            return Err(crate::connection::DbError::System(format!(
-                "data source not found: {}",
-                data_source_id.0
-            )));
-        }
         Ok(())
     }
 

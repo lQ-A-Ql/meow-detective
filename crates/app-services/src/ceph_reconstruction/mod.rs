@@ -38,7 +38,7 @@ pub use cephfs::{
     CEPHFS_HEAD_SNAP_HEX, MAX_CEPHFS_INLINE_DATA_LENGTH, MAX_CEPHFS_OBJECT_RANGE_LENGTH,
 };
 pub use cephfs_presence::{
-    assess_cephfs_presence, assess_cephfs_presence_for_cluster, CephFsFilesystemPresenceRecord,
+    assess_cephfs_presence, assess_cephfs_presence_for_scope, CephFsFilesystemPresenceRecord,
     CephFsMapPresenceSnapshot, CephFsMdsFilesystemPresenceRecord, CephFsMdsMapPresenceSnapshot,
     CephFsPresenceAssessment, CephFsPresenceDiagnostic, CephFsPresenceError,
     CephFsPresenceEvidence, CephFsPresenceMapKind, CephFsPresenceState, FSMAP_PRESENCE_KEY,

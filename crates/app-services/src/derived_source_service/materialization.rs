@@ -40,7 +40,7 @@ pub(super) struct RbdMaterializationContext<'a> {
     pub(super) case_conn: &'a rusqlite::Connection,
     pub(super) case_root: &'a Path,
     pub(super) case_id: &'a CaseId,
-    pub(super) cluster_id: &'a str,
+    pub(super) ceph_scope_id: &'a str,
     pub(super) replicas: &'a [RadosReplicaSource],
     pub(super) replica_records: &'a [CephRbdReplicaRecord],
     pub(super) policy: &'a RbdReplicaPolicy,
@@ -60,7 +60,7 @@ pub(super) fn materialize_one_rbd_source(
     descriptor: RbdImageDescriptor,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
     ensure_not_cancelled(context.cancel_token)?;
-    let data_source_id = derived_data_source_id(context.cluster_id, &descriptor.metadata.id)?;
+    let data_source_id = derived_data_source_id(context.ceph_scope_id, &descriptor.metadata.id)?;
     match prepare_derived_source(&context, &data_source_id, &descriptor)? {
         PreparedDerivedSource::Ready(ready) => Ok(ready),
         PreparedDerivedSource::Pending {
@@ -81,7 +81,7 @@ fn prepare_derived_source(
     data_source_id: &DataSourceId,
     descriptor: &RbdImageDescriptor,
 ) -> DerivedSourceResult<PreparedDerivedSource> {
-    let desired_source = build_data_source(context.cluster_id, data_source_id, descriptor);
+    let desired_source = build_data_source(context.ceph_scope_id, data_source_id, descriptor);
     let existing_source = DataSourceRepo::new(context.case_conn)
         .find_by_case(context.case_id)?
         .into_iter()
@@ -99,7 +99,7 @@ fn prepare_derived_source(
             }
             let fingerprint = validate_existing_registration(
                 context.case_conn,
-                context.cluster_id,
+                context.ceph_scope_id,
                 &existing_source,
                 &desired_source,
                 descriptor,
@@ -113,7 +113,7 @@ fn prepare_derived_source(
             let fingerprint = register_derived_source(
                 context.case_conn,
                 context.case_id,
-                context.cluster_id,
+                context.ceph_scope_id,
                 &desired_source,
                 descriptor,
                 context.replica_records,

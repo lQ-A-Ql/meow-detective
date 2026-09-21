@@ -11,7 +11,7 @@ pub(super) fn validate_aggregate(aggregate: &CephFsDerivedLineageAggregate) -> D
     let lineage = &aggregate.lineage;
     for value in [
         lineage.derived_data_source_id.as_str(),
-        lineage.parent_cluster_id.as_str(),
+        lineage.parent_ceph_scope_id.as_str(),
         lineage.cluster_identity.as_str(),
         lineage.filesystem_identity.as_str(),
         lineage.filesystem_name.as_str(),
@@ -122,10 +122,12 @@ pub(super) fn validate_ownership(
     let derived_matches: bool = conn.query_row(
         "SELECT COUNT(*) = 1
          FROM data_sources AS derived
-         JOIN data_source_clusters AS cluster
-           ON cluster.id = ?2 AND cluster.case_id = derived.case_id
-         WHERE derived.id = ?1 AND derived.kind = 'ceph_fs'",
-        params![lineage.derived_data_source_id, lineage.parent_cluster_id],
+         JOIN linux_topology_scopes AS scope
+           ON scope.id = ?2 AND scope.case_id = derived.case_id
+         WHERE derived.id = ?1
+           AND derived.kind = 'ceph_fs'
+           AND scope.scope_kind = 'ceph'",
+        params![lineage.derived_data_source_id, lineage.parent_ceph_scope_id],
         |row| row.get(0),
     )?;
     if !derived_matches {
@@ -149,10 +151,15 @@ pub(super) fn validate_ownership(
         let source_matches: bool = conn.query_row(
             "SELECT COUNT(*) = 1
              FROM data_sources AS source
-             JOIN data_source_clusters AS cluster
-               ON cluster.id = ?2 AND cluster.case_id = source.case_id
-             WHERE source.id = ?1 AND source.cluster_id = cluster.id",
-            params![source_id, lineage.parent_cluster_id],
+             JOIN linux_topology_memberships AS membership
+               ON membership.data_source_id = source.id
+             JOIN linux_topology_scopes AS scope
+               ON scope.id = membership.scope_id
+             WHERE source.id = ?1
+               AND scope.id = ?2
+               AND scope.scope_kind = 'ceph'
+               AND scope.case_id = source.case_id",
+            params![source_id, lineage.parent_ceph_scope_id],
             |row| row.get(0),
         )?;
         if !source_matches {

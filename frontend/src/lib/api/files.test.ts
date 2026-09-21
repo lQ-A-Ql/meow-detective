@@ -128,14 +128,14 @@ describe('files API', () => {
     requestMock.mockResolvedValueOnce('job-cluster' as never);
     const result = await importDataSource({
       sourcePath: '/evidence/pve-cluster',
-      sourceKind: 'linuxCluster',
+      sourceKind: 'linuxEvidenceSet',
       platform: 'linux',
       profile: 'pve',
     });
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.IMPORT_DATA_SOURCE, {
       request: {
         sourcePath: '/evidence/pve-cluster',
-        sourceKind: 'linuxCluster',
+        sourceKind: 'linuxEvidenceSet',
         platform: 'linux',
         profile: 'pve',
       },

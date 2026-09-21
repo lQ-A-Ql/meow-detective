@@ -31,6 +31,7 @@ pub mod reports;
 pub mod rule_pack;
 pub mod search;
 pub mod timeline;
+pub mod topology;
 pub mod v3_governance;
 pub mod viewer;
 
@@ -149,6 +150,7 @@ pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineFacetCountDto,
     TimelineFacetsDto, TimelineHistogramBucketDto, TimelineStripeDto,
 };
+pub use topology::{TopologyEdgeKindDto, TopologyMemberRoleDto, TopologyScopeKindDto};
 pub use v3_governance::{
     BatchStatusDto, CaseOverviewSnapshotDto, CorrelationOverviewDto, GraphStatsDto,
     NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto, RulePackStatusDto,

@@ -7,7 +7,7 @@ use app_services::import_scheduler;
 
 use super::super::super::events::TauriImportEventSink;
 use super::super::super::pipeline::{execute_import_job, ImportJobOptions};
-use super::super::status::fail_linux_cluster_job;
+use super::super::status::fail_linux_evidence_set_job;
 use super::types::{MemberCoordinator, MemberExecutionContext, MemberResult, MemberWork};
 use super::{CommandError, JobRepo};
 use crate::events::event_bridge;
@@ -16,11 +16,11 @@ pub(super) fn run_member_workers(
     coordinator: &MemberCoordinator<'_, '_>,
     scheduling: import_scheduler::ImportSchedulingPolicy,
     work: Vec<MemberWork>,
-) -> Result<super::super::types::ClusterImportSummary, CommandError> {
+) -> Result<super::super::types::EvidenceSetImportSummary, CommandError> {
     let worker_count = scheduling.source_worker_count(work.len());
     let pending = Arc::new(Mutex::new(VecDeque::from(work)));
     let (result_tx, result_rx) = sync_channel(worker_count.max(1));
-    let mut summary = super::super::types::ClusterImportSummary::new();
+    let mut summary = super::super::types::EvidenceSetImportSummary::new();
     let collection_result = std::thread::scope(|scope| {
         for _ in 0..worker_count {
             let sender = result_tx.clone();
@@ -65,13 +65,13 @@ pub(super) fn run_member_workers(
         coordinator.collect_member_results(result_rx, &mut summary)
     });
     if let Err(error) = collection_result {
-        return fail_linux_cluster_job(
+        return fail_linux_evidence_set_job(
             coordinator.job_repo,
             &coordinator.job.job_id,
             coordinator.app,
             Some((
                 coordinator.connection,
-                &coordinator.job.plan.cluster_id,
+                &coordinator.job.plan.import_set_id,
                 summary.ready_count,
                 summary.failed_count,
             )),
@@ -117,10 +117,10 @@ fn run_member_import(
         peak_active_sources = snapshot.peak_active_sources,
         peak_cpu_in_use = snapshot.peak_cpu_in_use,
         peak_memory_in_use_mb = snapshot.peak_memory_in_use_mb,
-        "Linux cluster member admitted by import scheduler"
+        "Linux evidence-set member admitted by import scheduler"
     );
     if let Some(app) = execution.app.as_ref() {
-        event_bridge::emit_job_started(app, &job_id.0, "Linux cluster member import started");
+        event_bridge::emit_job_started(app, &job_id.0, "Linux evidence-set member import started");
         event_bridge::emit_job_progress(app, &job_id.0, 5, &started_detail);
     }
     let event_sink = execution.app.as_ref().map(TauriImportEventSink::new);

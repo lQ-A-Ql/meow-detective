@@ -12,22 +12,6 @@ fn setup_db() -> rusqlite::Connection {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE data_source_clusters (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-            name TEXT NOT NULL,
-            root_path TEXT NOT NULL,
-            platform TEXT NOT NULL DEFAULT 'linux',
-            profile TEXT,
-            manifest_rel_path TEXT NOT NULL,
-            import_state TEXT NOT NULL DEFAULT 'pending',
-            member_count INTEGER NOT NULL DEFAULT 0,
-            ready_count INTEGER NOT NULL DEFAULT 0,
-            failed_count INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
         CREATE TABLE data_sources (
             id TEXT PRIMARY KEY NOT NULL,
             case_id TEXT NOT NULL REFERENCES cases(id),
@@ -50,10 +34,7 @@ fn setup_db() -> rusqlite::Connection {
             profile TEXT,
             import_state TEXT NOT NULL DEFAULT 'pending',
             schema_version TEXT,
-            last_error TEXT,
-            cluster_id TEXT REFERENCES data_source_clusters(id) ON DELETE SET NULL,
-            cluster_member_index INTEGER,
-            cluster_member_count INTEGER
+            last_error TEXT
         );
         CREATE TABLE file_entries (
             id TEXT PRIMARY KEY NOT NULL,
@@ -364,38 +345,6 @@ fn rename_changes_the_name() {
         .unwrap();
     let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
     assert_eq!(results[0].name, "New Name");
-}
-
-#[test]
-fn update_cluster_membership_requires_existing_data_source() {
-    let conn = setup_db();
-    let repo = DataSourceRepo::new(&conn);
-    let ds = make_ds("ds-1", "Disk Image");
-    repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-    conn.execute(
-        "INSERT INTO data_source_clusters
-            (id, case_id, name, root_path, manifest_rel_path)
-         VALUES
-            ('cluster-1', 'case-1', 'PVE cluster', 'cluster-root', 'cluster.json')",
-        [],
-    )
-    .unwrap();
-    repo.update_cluster_membership(&DataSourceId("ds-1".to_string()), "cluster-1", 1, 3)
-        .unwrap();
-
-    let stored: (String, i64, i64) = conn
-        .query_row(
-            "SELECT cluster_id, cluster_member_index, cluster_member_count
-             FROM data_sources WHERE id = 'ds-1'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .unwrap();
-    assert_eq!(stored, ("cluster-1".to_string(), 1, 3));
-
-    let error =
-        repo.update_cluster_membership(&DataSourceId("missing".to_string()), "cluster-1", 0, 3);
-    assert!(error.is_err());
 }
 
 #[test]

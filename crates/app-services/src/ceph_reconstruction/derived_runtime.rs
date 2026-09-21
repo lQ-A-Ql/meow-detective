@@ -74,7 +74,10 @@ pub fn build_derived_rbd_runtime(
     derived_data_source_id: &DataSourceId,
 ) -> Result<DerivedRbdRuntime, DerivedRbdReaderError> {
     let aggregate = load_lineage(case_conn, derived_data_source_id)?;
-    let policy = load_proven_rbd_policy(case_root, &aggregate.lineage.parent_cluster_id)?;
+    let policy = load_proven_rbd_policy(
+        case_root,
+        &domain::CephScopeId(aggregate.lineage.parent_ceph_scope_id.clone()),
+    )?;
     let expected_replica_count = policy.expected_count();
     let policy_fingerprint = policy.fingerprint();
     if aggregate.lineage.replica_policy_fingerprint.is_empty()
@@ -116,13 +119,14 @@ pub fn build_derived_rbd_runtime(
 
 fn load_proven_rbd_policy(
     case_root: &Path,
-    cluster_id: &str,
+    ceph_scope_id: &domain::CephScopeId,
 ) -> Result<RbdReplicaPolicy, DerivedRbdReaderError> {
-    let report = crate::cluster_service::read_linux_cluster_coverage_report(case_root, cluster_id)
-        .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?
-        .ok_or_else(|| DerivedRbdReaderError::CoverageNotProven {
-            state: "missing".to_string(),
-        })?;
+    let report =
+        crate::cluster_service::read_ceph_scope_coverage_report(case_root, &ceph_scope_id.0)
+            .map_err(|error| DerivedRbdReaderError::Provider(error.to_string()))?
+            .ok_or_else(|| DerivedRbdReaderError::CoverageNotProven {
+                state: "missing".to_string(),
+            })?;
     if !report.is_complete() {
         return Err(DerivedRbdReaderError::CoverageNotProven {
             state: report.state.as_str().to_string(),
@@ -143,7 +147,7 @@ fn lineage_fingerprint(aggregate: &CephRbdLineageAggregate) -> String {
     let mut hasher = Sha256::new();
     for value in [
         lineage.derived_data_source_id.as_str(),
-        lineage.parent_cluster_id.as_str(),
+        lineage.parent_ceph_scope_id.as_str(),
         lineage.image_name.as_str(),
         lineage.image_id.as_str(),
         lineage.object_prefix.as_str(),

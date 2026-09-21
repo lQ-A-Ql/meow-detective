@@ -8,7 +8,7 @@ pub(super) fn insert(conn: &Connection, aggregate: &CephFsDerivedLineageAggregat
     let lineage = &aggregate.lineage;
     conn.execute(
         "INSERT INTO ceph_fs_derived_lineage (
-            derived_data_source_id, parent_cluster_id, cluster_identity,
+            derived_data_source_id, parent_ceph_scope_id, cluster_identity,
             filesystem_identity, filesystem_id, filesystem_name, fsmap_epoch, mdsmap_epoch,
             descriptor_state, metadata_pool_id, expected_replica_count,
             namespace_input_sha256, namespace_projection_sha256,
@@ -19,7 +19,7 @@ pub(super) fn insert(conn: &Connection, aggregate: &CephFsDerivedLineageAggregat
                    ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             lineage.derived_data_source_id,
-            lineage.parent_cluster_id,
+            lineage.parent_ceph_scope_id,
             lineage.cluster_identity,
             lineage.filesystem_identity,
             lineage.filesystem_id,

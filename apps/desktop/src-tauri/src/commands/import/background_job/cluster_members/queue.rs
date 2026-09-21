@@ -1,14 +1,14 @@
 use app_services::import_precheck;
 use domain::JobId;
 
-use super::super::types::BackgroundLinuxClusterImportJob;
+use super::super::types::BackgroundLinuxEvidenceSetImportJob;
 use super::types::MemberWork;
 use super::{AppHandle, CommandError, JobRepo};
 use crate::events::event_bridge;
 
 pub(super) fn create_member_jobs(
     job_repo: &JobRepo<'_>,
-    job: &BackgroundLinuxClusterImportJob,
+    job: &BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
     configs: Vec<import_precheck::ImportSourceConfig>,
 ) -> Result<Vec<MemberWork>, CommandError> {
@@ -17,7 +17,7 @@ pub(super) fn create_member_jobs(
     for (index, config) in configs.into_iter().enumerate() {
         let member_job = match job_repo.create(
             &job.case_id.0,
-            &format!("Import Linux cluster member {}/{}", index + 1, total),
+            &format!("Import Linux evidence-set member {}/{}", index + 1, total),
         ) {
             Ok(job_id) => job_id,
             Err(error) => {
@@ -25,7 +25,7 @@ pub(super) fn create_member_jobs(
                 return Err(CommandError::from_typed_service_error(error));
             }
         };
-        let detail = format!("Queued Linux cluster member: {}", config.source_name);
+        let detail = format!("Queued Linux evidence-set member: {}", config.source_name);
         if let Err(error) = job_repo.update_progress(&member_job, 1, &detail) {
             cancel_member_job(job_repo, app, &member_job, "Failed to queue cluster member");
             cancel_created_member_jobs(job_repo, app, &work);

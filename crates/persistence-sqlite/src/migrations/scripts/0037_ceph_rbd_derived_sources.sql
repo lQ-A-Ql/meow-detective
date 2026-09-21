@@ -5,11 +5,10 @@ CREATE TABLE IF NOT EXISTS ceph_rbd_derived_lineage (
             length(trim(derived_data_source_id)) > 0
             AND instr(derived_data_source_id, char(0)) = 0
         ),
-    parent_cluster_id TEXT NOT NULL
-        REFERENCES data_source_clusters(id) ON DELETE RESTRICT
+    parent_ceph_scope_id TEXT NOT NULL
         CHECK (
-            length(trim(parent_cluster_id)) > 0
-            AND instr(parent_cluster_id, char(0)) = 0
+            length(trim(parent_ceph_scope_id)) > 0
+            AND instr(parent_ceph_scope_id, char(0)) = 0
         ),
     image_name TEXT NOT NULL
         CHECK (length(trim(image_name)) > 0 AND instr(image_name, char(0)) = 0),
@@ -47,7 +46,7 @@ CREATE TABLE IF NOT EXISTS ceph_rbd_derived_lineage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ceph_rbd_derived_lineage_cluster
-ON ceph_rbd_derived_lineage(parent_cluster_id, derived_data_source_id);
+ON ceph_rbd_derived_lineage(parent_ceph_scope_id, derived_data_source_id);
 
 CREATE TABLE IF NOT EXISTS ceph_rbd_derived_replicas (
     derived_data_source_id TEXT NOT NULL

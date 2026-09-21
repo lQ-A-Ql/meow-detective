@@ -40,16 +40,16 @@ pub fn schedule_import_for_active_case(
     )
 }
 
-pub fn schedule_linux_cluster_import_for_active_case(
+pub fn schedule_linux_evidence_set_import_for_active_case(
     active: &active_case::ActiveCase,
-    plan: cluster_service::LinuxClusterImportPlan,
+    plan: cluster_service::LinuxEvidenceSetImportPlan,
     app: Option<&AppHandle>,
     task_manager: Arc<TaskManager>,
     max_import_workers: Option<usize>,
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,
 ) -> Result<String, CommandError> {
-    cluster_queue::schedule_linux_cluster_import_for_active_case(
+    cluster_queue::schedule_linux_evidence_set_import_for_active_case(
         active,
         plan,
         app,

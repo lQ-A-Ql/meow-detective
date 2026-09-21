@@ -3,12 +3,12 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
-use domain::{CaseId, DataSourceId, DataSourceKind};
+use domain::{CaseId, CephScopeId, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
     ceph_rbd_lineage_repo::{CephRbdLineageRepo, CephRbdReplicaRecord},
-    datasource_cluster_repo::DataSourceClusterRepo,
     datasource_repo::DataSourceRepo,
+    linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
 };
 
 use crate::{
@@ -28,63 +28,62 @@ use super::{
     DerivedSourceResult, MaterializedRbdSource,
 };
 
-pub fn materialize_rbd_sources_for_cluster(
+mod scope;
+use scope::{has_osd_inventory, load_ceph_scope, reconstruction_parent_ids};
+
+pub fn materialize_rbd_sources_for_scope(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &CephScopeId,
 ) -> DerivedSourceResult<Vec<MaterializedRbdSource>> {
-    materialize_rbd_sources_for_cluster_with_cancel(
+    materialize_rbd_sources_for_scope_with_cancel(
         case_conn,
         case_root,
         case_id,
-        cluster_id,
+        ceph_scope_id,
         Arc::new(AtomicBool::new(false)),
     )
 }
 
-pub fn materialize_rbd_sources_for_cluster_with_cancel(
+pub fn materialize_rbd_sources_for_scope_with_cancel(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &CephScopeId,
     cancel_token: Arc<AtomicBool>,
 ) -> DerivedSourceResult<Vec<MaterializedRbdSource>> {
     ensure_not_cancelled(&cancel_token)?;
-    let cluster = DataSourceClusterRepo::new(case_conn)
-        .find_by_id(cluster_id)?
-        .ok_or_else(|| DerivedSourceError::ClusterNotFound(cluster_id.to_string()))?;
-    crate::cluster_service::LinuxClusterKind::from_profile(cluster.profile.as_deref())
-        .require_pve_ceph()
-        .map_err(|_| DerivedSourceError::IncompleteCluster)?;
-    if cluster.import_state != "ready" {
-        return Err(DerivedSourceError::ClusterNotReady {
-            cluster_id: cluster_id.to_string(),
-            state: cluster.import_state,
+    let scope = load_ceph_scope(case_conn, case_id, ceph_scope_id)?;
+    if scope.status != "ready" {
+        return Err(DerivedSourceError::ScopeNotReady {
+            scope_id: ceph_scope_id.0.clone(),
+            state: scope.status,
         });
     }
-    if let Some(materialized) = load_ready_rbd_sources(case_conn, case_root, case_id, cluster_id)? {
+    if let Some(materialized) =
+        load_ready_rbd_sources(case_conn, case_root, case_id, ceph_scope_id)?
+    {
         ensure_not_cancelled(&cancel_token)?;
         return Ok(materialized);
     }
 
     ensure_not_cancelled(&cancel_token)?;
-    let parent_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
-    if parent_ids.len() != cluster.member_count as usize
-        || parent_ids.len() != cluster.ready_count as usize
-    {
-        return Err(DerivedSourceError::IncompleteCluster);
+    let parent_ids =
+        DataSourceRepo::new(case_conn).find_ids_by_topology_scope(case_id, &ceph_scope_id.0)?;
+    if parent_ids.len() != scope.member_count as usize {
+        return Err(DerivedSourceError::IncompleteScope);
     }
     let reconstruction_parent_ids =
         reconstruction_parent_ids(case_conn, &parent_ids, &cancel_token)?;
-    if !cluster_has_osd_inventory(
+    if !has_osd_inventory(
         case_conn,
         case_root,
         case_id,
         &reconstruction_parent_ids,
         &cancel_token,
     )? {
-        write_empty_coverage_report(case_root, cluster_id)?;
+        write_empty_coverage_report(case_root, &ceph_scope_id.0)?;
         return Ok(Vec::new());
     }
     let (replicas, replica_records) = load_cluster_replicas(
@@ -94,7 +93,7 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         &reconstruction_parent_ids,
         &cancel_token,
     )?;
-    validate_map_inventory_membership(case_root, cluster_id, &replicas)?;
+    validate_map_inventory_membership(case_root, &ceph_scope_id.0, &replicas)?;
     let descriptors = discover_rbd_images_from_source_dbs_unbound(&replicas)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     if descriptors.is_empty() {
@@ -103,10 +102,10 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
         ));
     }
     let (policy, policy_diagnostics) =
-        resolve_descriptor_policy(case_root, cluster_id, &descriptors, replicas.len())?;
+        resolve_descriptor_policy(case_root, &ceph_scope_id.0, &descriptors, replicas.len())?;
     let coverage = assess_and_write_coverage(
         case_root,
-        cluster_id,
+        &ceph_scope_id.0,
         &replicas,
         &policy,
         &policy_diagnostics,
@@ -122,41 +121,79 @@ pub fn materialize_rbd_sources_for_cluster_with_cancel(
 
     let mut materialized = Vec::new();
     for descriptor in descriptors {
-        ensure_not_cancelled(&cancel_token)?;
-        materialized.push(materialize_one_rbd_source(
-            RbdMaterializationContext {
-                case_conn,
-                case_root,
-                case_id,
-                cluster_id,
-                replicas: &replicas,
-                replica_records: &replica_records,
-                policy: &policy,
-                cancel_token: &cancel_token,
-            },
+        materialized.push(materialize_descriptor(
+            case_conn,
+            case_root,
+            case_id,
+            ceph_scope_id,
+            &replicas,
+            &replica_records,
+            &policy,
+            &cancel_token,
             descriptor,
         )?);
     }
     Ok(materialized)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn materialize_descriptor(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    ceph_scope_id: &CephScopeId,
+    replicas: &[RadosReplicaSource],
+    replica_records: &[CephRbdReplicaRecord],
+    policy: &RbdReplicaPolicy,
+    cancel_token: &AtomicBool,
+    descriptor: crate::ceph_reconstruction::RbdImageDescriptor,
+) -> DerivedSourceResult<MaterializedRbdSource> {
+    ensure_not_cancelled(cancel_token)?;
+    let image_id = descriptor.metadata.id.clone();
+    let source = materialize_one_rbd_source(
+        RbdMaterializationContext {
+            case_conn,
+            case_root,
+            case_id,
+            ceph_scope_id: &ceph_scope_id.0,
+            replicas,
+            replica_records,
+            policy,
+            cancel_token,
+        },
+        descriptor,
+    )?;
+    LinuxTopologyArtifactRepo::new(case_conn).insert(&LinuxTopologyArtifactRecord {
+        scope_id: ceph_scope_id.0.clone(),
+        data_source_id: source.data_source.id.0.clone(),
+        file_id: Some(format!("rbd:{image_id}")),
+        layer: "storage".to_string(),
+        artifact_kind: "ceph_rbd".to_string(),
+        parser: "ceph-rbd-materialization".to_string(),
+        status: "parsed".to_string(),
+        diagnostics_json: "[]".to_string(),
+        content_digest: Some(source.catalog_digest.clone()),
+    })?;
+    Ok(source)
+}
+
 fn validate_map_inventory_membership(
     case_root: &Path,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     replicas: &[RadosReplicaSource],
 ) -> DerivedSourceResult<()> {
     let identities = replicas
         .iter()
         .map(|replica| replica.identity.clone())
         .collect::<Vec<_>>();
-    validate_inventory_membership(case_root, cluster_id, &identities)
+    validate_inventory_membership(case_root, ceph_scope_id, &identities)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     Ok(())
 }
 
 fn resolve_descriptor_policy(
     case_root: &Path,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     descriptors: &[crate::ceph_reconstruction::RbdImageDescriptor],
     observed_replica_count: usize,
 ) -> DerivedSourceResult<(RbdReplicaPolicy, Vec<String>)> {
@@ -165,7 +202,7 @@ fn resolve_descriptor_policy(
     for descriptor in descriptors {
         let resolution = resolve_rbd_replica_policy(
             case_root,
-            cluster_id,
+            ceph_scope_id,
             Some(descriptor.metadata.data_pool_id),
             observed_replica_count,
         )
@@ -208,7 +245,7 @@ fn ensure_complete_coverage(
     })
 }
 
-fn write_empty_coverage_report(case_root: &Path, cluster_id: &str) -> DerivedSourceResult<()> {
+fn write_empty_coverage_report(case_root: &Path, ceph_scope_id: &str) -> DerivedSourceResult<()> {
     let report = crate::ceph_reconstruction::InventoryCoverageReport {
         policy: RbdReplicaPolicy::strict_legacy(),
         expected_count: RbdReplicaPolicy::strict_legacy().expected_count(),
@@ -220,14 +257,14 @@ fn write_empty_coverage_report(case_root: &Path, cluster_id: &str) -> DerivedSou
         ceph_fsids: Vec::new(),
         diagnostics: vec!["no usable OSD inventory was found".to_string()],
     };
-    cluster_service::write_linux_cluster_coverage_report(case_root, cluster_id, &report)
+    cluster_service::write_ceph_scope_coverage_report(case_root, ceph_scope_id, &report)
         .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
     Ok(())
 }
 
 fn assess_and_write_coverage(
     case_root: &Path,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     replicas: &[RadosReplicaSource],
     policy: &RbdReplicaPolicy,
     policy_diagnostics: &[String],
@@ -246,7 +283,7 @@ fn assess_and_write_coverage(
             coverage.diagnostics.push(diagnostic.clone());
         }
     }
-    cluster_service::write_linux_cluster_coverage_report(case_root, cluster_id, &coverage)
+    cluster_service::write_ceph_scope_coverage_report(case_root, ceph_scope_id, &coverage)
         .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
     Ok(coverage)
 }
@@ -290,13 +327,14 @@ fn load_ready_rbd_sources(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &CephScopeId,
 ) -> DerivedSourceResult<Option<Vec<MaterializedRbdSource>>> {
     let mut materialized = Vec::new();
-    if evidence_is_present(case_root, cluster_id)
+    if evidence_is_present(case_root, &ceph_scope_id.0)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?
     {
-        let parent_ids = DataSourceRepo::new(case_conn).find_ids_by_cluster(case_id, cluster_id)?;
+        let parent_ids =
+            DataSourceRepo::new(case_conn).find_ids_by_topology_scope(case_id, &ceph_scope_id.0)?;
         let reconstruction_parent_ids =
             reconstruction_parent_ids(case_conn, &parent_ids, &AtomicBool::new(false))?;
         let (ready_replicas, _) = load_cluster_replicas(
@@ -306,7 +344,7 @@ fn load_ready_rbd_sources(
             &reconstruction_parent_ids,
             &AtomicBool::new(false),
         )?;
-        validate_map_inventory_membership(case_root, cluster_id, &ready_replicas)?;
+        validate_map_inventory_membership(case_root, &ceph_scope_id.0, &ready_replicas)?;
     }
     for source in DataSourceRepo::new(case_conn)
         .find_by_case(case_id)?
@@ -317,18 +355,18 @@ fn load_ready_rbd_sources(
         else {
             continue;
         };
-        if lineage.lineage.parent_cluster_id != cluster_id {
+        if lineage.lineage.parent_ceph_scope_id != ceph_scope_id.0 {
             continue;
         }
         let current_policy = resolve_rbd_replica_policy(
             case_root,
-            cluster_id,
+            &ceph_scope_id.0,
             Some(lineage.lineage.data_pool_id),
             lineage.replicas.len(),
         )
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
         let Some(coverage) =
-            cluster_service::read_linux_cluster_coverage_report(case_root, cluster_id)
+            cluster_service::read_ceph_scope_coverage_report(case_root, &ceph_scope_id.0)
                 .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?
         else {
             return Ok(None);
@@ -367,53 +405,6 @@ fn load_ready_rbd_sources(
     } else {
         Ok(Some(materialized))
     }
-}
-
-fn reconstruction_parent_ids(
-    case_conn: &rusqlite::Connection,
-    parent_ids: &[DataSourceId],
-    cancel_token: &AtomicBool,
-) -> DerivedSourceResult<Vec<DataSourceId>> {
-    let repo = DataSourceRepo::new(case_conn);
-    let mut reconstruction_sources = Vec::new();
-    for data_source_id in parent_ids {
-        ensure_not_cancelled(cancel_token)?;
-        let storage = repo.find_storage(data_source_id)?.ok_or_else(|| {
-            DerivedSourceError::InconsistentState(format!(
-                "cluster member {} is missing storage metadata",
-                data_source_id.0
-            ))
-        })?;
-        if storage.import_state == "ready_metadata" {
-            reconstruction_sources.push(data_source_id.clone());
-        }
-    }
-    Ok(reconstruction_sources)
-}
-
-fn cluster_has_osd_inventory(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    parent_ids: &[DataSourceId],
-    cancel_token: &AtomicBool,
-) -> DerivedSourceResult<bool> {
-    for source_id in parent_ids {
-        ensure_not_cancelled(cancel_token)?;
-        let source =
-            source_db::open_reconstruction_source_by_id(case_conn, case_root, case_id, source_id)
-                .map_err(|error| {
-                DerivedSourceError::Database(persistence_sqlite::DbError::System(error.to_string()))
-            })?;
-        if CephOsdRepo::new(&source.connection)
-            .find_by_data_source(&source_id.0)?
-            .iter()
-            .any(|inventory| inventory.whoami.is_some())
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn load_cluster_replicas(

@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, path::Path};
 
-use domain::{CaseId, DataSource};
+use domain::{CaseId, CephScopeId, DataSource};
 
 use crate::ceph_reconstruction::{CephFsDescriptor, CephFsPresenceAssessment};
 
@@ -25,7 +25,7 @@ pub struct CephFsSourceMaterializationRequest<'a> {
     pub case_conn: &'a rusqlite::Connection,
     pub case_root: &'a Path,
     pub case_id: &'a CaseId,
-    pub cluster_id: &'a str,
+    pub ceph_scope_id: &'a CephScopeId,
     pub presence: &'a CephFsPresenceAssessment,
     pub descriptor: &'a CephFsDescriptor,
     pub namespace_assembly_input: &'a ceph_wire::CephFsNamespaceAssemblyInput,

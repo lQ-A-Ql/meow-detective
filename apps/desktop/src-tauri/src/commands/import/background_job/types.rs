@@ -13,11 +13,11 @@ pub(crate) struct BackgroundImportJob {
     pub(crate) analysis_mode: import_analysis::ImportAnalysisMode,
 }
 
-pub(crate) struct BackgroundLinuxClusterImportJob {
+pub(crate) struct BackgroundLinuxEvidenceSetImportJob {
     pub(crate) db_path: PathBuf,
     pub(crate) case_id: domain::CaseId,
     pub(crate) case_root: PathBuf,
-    pub(crate) plan: cluster_service::LinuxClusterImportPlan,
+    pub(crate) plan: cluster_service::LinuxEvidenceSetImportPlan,
     pub(crate) job_id: domain::JobId,
     pub(crate) max_import_workers: Option<usize>,
     pub(crate) max_analysis_workers: Option<usize>,
@@ -28,23 +28,23 @@ pub(crate) struct BackgroundDerivedSourceProcessingJob {
     pub(crate) db_path: PathBuf,
     pub(crate) case_id: domain::CaseId,
     pub(crate) case_root: PathBuf,
-    pub(crate) cluster_id: String,
+    pub(crate) import_set_id: String,
     pub(crate) source_ids: Vec<domain::DataSourceId>,
 }
 
-pub(crate) struct BrowseableClusterImport {
+pub(crate) struct BrowseableEvidenceSetImport {
     pub(crate) processing: BackgroundDerivedSourceProcessingJob,
     pub(crate) parent_job_id: domain::JobId,
     pub(crate) completion_detail: String,
 }
 
-pub(super) struct ClusterImportSummary {
+pub(super) struct EvidenceSetImportSummary {
     pub(super) ready_count: u32,
     pub(super) failed_count: u32,
     pub(super) member_messages: Vec<String>,
 }
 
-impl ClusterImportSummary {
+impl EvidenceSetImportSummary {
     pub(super) fn new() -> Self {
         Self {
             ready_count: 0,

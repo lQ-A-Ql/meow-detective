@@ -8,7 +8,7 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 
 const DERIVED_SOURCE_ID: &str = "derived-vm-100";
-const CLUSTER_ID: &str = "pve-cluster";
+const CEPH_SCOPE_ID: &str = "scope:ceph:pve-cluster";
 
 fn setup_case_db() -> Connection {
     let conn = open_in_memory().expect("open case database");
@@ -19,12 +19,10 @@ fn setup_case_db() -> Connection {
     )
     .expect("insert case");
     conn.execute(
-        "INSERT INTO data_source_clusters (
-            id, case_id, name, root_path, platform, manifest_rel_path,
-            import_state, member_count, ready_count
-         ) VALUES (?1, 'case-1', 'PVE', 'E:/pve', 'linux', 'clusters/pve.json',
-                   'ready', 3, 3)",
-        [CLUSTER_ID],
+        "INSERT INTO linux_topology_scopes (
+            id, case_id, scope_kind, name, status, evidence_completeness
+         ) VALUES (?1, 'case-1', 'ceph', 'Ceph', 'ready', 'complete')",
+        [CEPH_SCOPE_ID],
     )
     .expect("insert cluster");
     for source_id in [
@@ -36,15 +34,23 @@ fn setup_case_db() -> Connection {
         let is_derived = source_id == DERIVED_SOURCE_ID;
         conn.execute(
             "INSERT INTO data_sources (
-                id, case_id, name, kind, source_path, platform, import_state, cluster_id
-             ) VALUES (?1, 'case-1', ?1, ?2, '', 'linux', 'ready', ?3)",
-            rusqlite::params![
-                source_id,
-                if is_derived { "ceph_rbd" } else { "e01" },
-                if is_derived { None } else { Some(CLUSTER_ID) },
-            ],
+                id, case_id, name, kind, source_path, platform, import_state
+             ) VALUES (?1, 'case-1', ?1, ?2, '', 'linux', 'ready')",
+            rusqlite::params![source_id, if is_derived { "ceph_rbd" } else { "e01" },],
         )
         .expect("insert data source");
+    }
+    for (index, source_id) in ["source-osd-0", "source-osd-1", "source-osd-2"]
+        .into_iter()
+        .enumerate()
+    {
+        conn.execute(
+            "INSERT INTO linux_topology_memberships (
+                scope_id, data_source_id, role, member_index, confidence, provenance_json
+             ) VALUES (?1, ?2, 'storage_node', ?3, 'proven', '{}')",
+            rusqlite::params![CEPH_SCOPE_ID, source_id, index as i64],
+        )
+        .expect("insert Ceph scope membership");
     }
     conn
 }
@@ -53,7 +59,7 @@ fn aggregate() -> CephRbdLineageAggregate {
     CephRbdLineageAggregate {
         lineage: CephRbdLineageRecord {
             derived_data_source_id: DERIVED_SOURCE_ID.to_string(),
-            parent_cluster_id: CLUSTER_ID.to_string(),
+            parent_ceph_scope_id: CEPH_SCOPE_ID.to_string(),
             image_name: "vm-100-disk-0".to_string(),
             image_id: "16ecc87af5c9".to_string(),
             object_prefix: "rbd_data.16ecc87af5c9".to_string(),
@@ -85,7 +91,7 @@ fn aggregate() -> CephRbdLineageAggregate {
 #[test]
 fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0050_ceph_rbd_policy_provenance");
+    assert_eq!(runner::latest_version(), "0053_cephfs_scope_lineage");
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();
     repo.insert_aggregate(&original).expect("insert lineage");
@@ -165,7 +171,7 @@ fn lineage_foreign_keys_reject_missing_derived_cluster_and_replica_sources() {
     assert!(repo.insert_aggregate(&missing_derived).is_err());
 
     let mut missing_cluster = aggregate();
-    missing_cluster.lineage.parent_cluster_id = "missing-cluster".to_string();
+    missing_cluster.lineage.parent_ceph_scope_id = "missing-ceph-scope".to_string();
     assert!(repo.insert_aggregate(&missing_cluster).is_err());
 
     let original = aggregate();

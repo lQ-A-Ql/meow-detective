@@ -11,6 +11,7 @@ pub mod ledger;
 pub mod notebook;
 pub mod timeline;
 pub mod timestamp;
+pub mod topology;
 
 pub use artifact::{Artifact, ArtifactFamily, ArtifactId};
 pub use case::{CaseId, CaseMeta, CaseSession};
@@ -34,3 +35,7 @@ pub use ledger::{
 };
 pub use notebook::{EntryStatus, EntryType as NotebookEntryType, EvidenceCitation, NotebookEntry};
 pub use timeline::{TimelineEvent, TimelineEventId};
+pub use topology::{
+    CephScopeId, KubernetesScopeId, OsInstanceId, PveScopeId, TopologyEdgeKind, TopologyMemberRole,
+    TopologyScopeId, TopologyScopeKind,
+};

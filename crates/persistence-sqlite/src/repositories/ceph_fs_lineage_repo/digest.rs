@@ -8,7 +8,7 @@ pub fn cephfs_lineage_fingerprint(aggregate: &CephFsDerivedLineageAggregate) -> 
     let lineage = &aggregate.lineage;
     for value in [
         lineage.derived_data_source_id.as_bytes(),
-        lineage.parent_cluster_id.as_bytes(),
+        lineage.parent_ceph_scope_id.as_bytes(),
         lineage.cluster_identity.as_bytes(),
         lineage.filesystem_identity.as_bytes(),
         lineage.filesystem_name.as_bytes(),

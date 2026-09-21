@@ -13,7 +13,7 @@ pub(super) fn find(
 ) -> DbResult<Option<CephFsDerivedLineageAggregate>> {
     let Some(lineage) = conn
         .query_row(
-            "SELECT derived_data_source_id, parent_cluster_id, cluster_identity,
+            "SELECT derived_data_source_id, parent_ceph_scope_id, cluster_identity,
                     filesystem_identity, filesystem_id, filesystem_name, fsmap_epoch, mdsmap_epoch,
                     descriptor_state, metadata_pool_id, expected_replica_count,
                     namespace_input_sha256, namespace_projection_sha256,
@@ -111,7 +111,7 @@ fn load_map_provenance(
 fn map_lineage(row: &rusqlite::Row<'_>) -> rusqlite::Result<CephFsDerivedLineageRecord> {
     Ok(CephFsDerivedLineageRecord {
         derived_data_source_id: row.get(0)?,
-        parent_cluster_id: row.get(1)?,
+        parent_ceph_scope_id: row.get(1)?,
         cluster_identity: row.get(2)?,
         filesystem_identity: row.get(3)?,
         filesystem_id: row.get(4)?,

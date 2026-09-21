@@ -186,12 +186,12 @@
     },
     "modes": {
       "single": "单源镜像",
-      "linuxCluster": "Linux 集群",
+      "linuxEvidenceSet": "Linux 证据集合",
       "localDisk": "本地物理磁盘"
     },
     "hints": {
       "single": "按单个镜像或逻辑目录导入。",
-      "linuxCluster": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 集群整体登记并串行导入成员。",
+      "linuxEvidenceSet": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 证据集合整体登记并串行导入成员。",
       "localDisk": "以只读方式导入 Windows 主机物理磁盘。需要管理员权限，输入 \\\\.\\PhysicalDriveN。"
     },
     "errors": {
@@ -477,7 +477,7 @@
       "expandSource": "展开数据源",
       "deletedRecovery": "删除恢复",
       "linuxOverview": "概览",
-      "linuxCluster": "Linux 集群",
+      "linuxEvidenceSet": "Linux 证据集合",
       "linuxJournal": "系统日志",
       "linuxLogin": "登录记录",
       "linuxCommands": "命令历史",

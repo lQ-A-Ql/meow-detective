@@ -24,14 +24,14 @@ use crate::ceph_reconstruction::{
 };
 
 pub(super) fn derived_source_id(
-    cluster_id: &str,
+    ceph_scope_id: &str,
     filesystem_identity: &str,
 ) -> CephFsSourceResult<DataSourceId> {
-    validate_text(cluster_id)?;
+    validate_text(ceph_scope_id)?;
     validate_text(filesystem_identity)?;
     let mut hasher = Sha256::new();
     hasher.update(b"meow-detective-cephfs-source-id-v1");
-    for value in [cluster_id.as_bytes(), filesystem_identity.as_bytes()] {
+    for value in [ceph_scope_id.as_bytes(), filesystem_identity.as_bytes()] {
         hasher.update((value.len() as u64).to_le_bytes());
         hasher.update(value);
     }
@@ -40,7 +40,7 @@ pub(super) fn derived_source_id(
 }
 
 pub(super) fn build_data_source(
-    cluster_id: &str,
+    ceph_scope_id: &str,
     data_source_id: &DataSourceId,
     descriptor: &CephFsDescriptor,
 ) -> DataSource {
@@ -49,7 +49,7 @@ pub(super) fn build_data_source(
         name: format!("CephFS {}", descriptor.name),
         kind: DataSourceKind::CephFs,
         source_path: PathBuf::from(format!(
-            "cephfs://{cluster_id}/{}",
+            "cephfs://{ceph_scope_id}/{}",
             descriptor.filesystem_id
         )),
         imported_at: Utc::now(),
@@ -84,7 +84,7 @@ pub(super) struct CephFsLineageEvidence<'a> {
 
 pub(super) fn build_lineage(
     data_source_id: &DataSourceId,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     descriptor: &CephFsDescriptor,
     evidence: CephFsLineageEvidence<'_>,
 ) -> CephFsSourceResult<CephFsDerivedLineageAggregate> {
@@ -129,7 +129,7 @@ pub(super) fn build_lineage(
     let mut aggregate = CephFsDerivedLineageAggregate {
         lineage: CephFsDerivedLineageRecord {
             derived_data_source_id: data_source_id.0.clone(),
-            parent_cluster_id: cluster_id.to_string(),
+            parent_ceph_scope_id: ceph_scope_id.to_string(),
             cluster_identity: descriptor.cluster_identity.clone(),
             filesystem_identity: descriptor.identity.clone(),
             filesystem_id: descriptor.filesystem_id,

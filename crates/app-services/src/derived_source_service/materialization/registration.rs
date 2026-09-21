@@ -17,7 +17,7 @@ use super::{DerivedSourceError, DerivedSourceResult};
 
 pub(super) fn validate_existing_registration(
     case_conn: &rusqlite::Connection,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     existing_source: &DataSource,
     desired_source: &DataSource,
     descriptor: &RbdImageDescriptor,
@@ -34,7 +34,7 @@ pub(super) fn validate_existing_registration(
     }
     let expected = lineage_aggregate(
         &existing_source.id,
-        cluster_id,
+        ceph_scope_id,
         descriptor,
         replica_records,
         policy,
@@ -58,7 +58,7 @@ pub(super) fn validate_existing_registration(
 }
 
 pub(super) fn build_data_source(
-    cluster_id: &str,
+    ceph_scope_id: &str,
     data_source_id: &DataSourceId,
     descriptor: &RbdImageDescriptor,
 ) -> DataSource {
@@ -67,7 +67,7 @@ pub(super) fn build_data_source(
         name: descriptor.metadata.name.clone(),
         kind: DataSourceKind::CephRbd,
         source_path: PathBuf::from(format!(
-            "ceph-rbd://{cluster_id}/{}",
+            "ceph-rbd://{ceph_scope_id}/{}",
             descriptor.metadata.id
         )),
         imported_at: chrono::Utc::now(),
@@ -86,7 +86,7 @@ pub(super) fn build_data_source(
 pub(super) fn register_derived_source(
     case_conn: &rusqlite::Connection,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     data_source: &DataSource,
     descriptor: &RbdImageDescriptor,
     replica_records: &[CephRbdReplicaRecord],
@@ -99,7 +99,7 @@ pub(super) fn register_derived_source(
     );
     let lineage = lineage_aggregate(
         &data_source.id,
-        cluster_id,
+        ceph_scope_id,
         descriptor,
         replica_records,
         policy,
@@ -122,7 +122,7 @@ pub(super) fn register_derived_source(
 
 pub(super) fn lineage_aggregate(
     data_source_id: &DataSourceId,
-    cluster_id: &str,
+    ceph_scope_id: &str,
     descriptor: &RbdImageDescriptor,
     replicas: &[CephRbdReplicaRecord],
     policy: &RbdReplicaPolicy,
@@ -131,7 +131,7 @@ pub(super) fn lineage_aggregate(
     CephRbdLineageAggregate {
         lineage: CephRbdLineageRecord {
             derived_data_source_id: data_source_id.0.clone(),
-            parent_cluster_id: cluster_id.to_string(),
+            parent_ceph_scope_id: ceph_scope_id.to_string(),
             image_name: metadata.name.clone(),
             image_id: metadata.id.clone(),
             object_prefix: metadata.object_prefix.clone(),

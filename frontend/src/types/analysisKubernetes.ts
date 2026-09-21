@@ -27,8 +27,8 @@ export interface KubernetesClusterNode {
 
 export interface KubernetesClusterSummary {
   status: AnalysisParseStatus;
-  clusterId?: string;
-  clusterName?: string;
+  scopeId?: string;
+  scopeName?: string;
   selectedDataSourceId: string;
   expectedMemberCount: number;
   readyMemberCount: number;

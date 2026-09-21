@@ -4,6 +4,7 @@ pub mod runner;
 mod case_graph;
 mod mount_directory_index;
 mod ntfs_deleted_recovery;
+mod run_case;
 mod source_registry;
 mod timeline_projection_identity;
 mod version;

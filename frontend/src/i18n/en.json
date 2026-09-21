@@ -186,12 +186,12 @@
     },
     "modes": {
       "single": "Single Image",
-      "linuxCluster": "Linux Cluster",
+      "linuxEvidenceSet": "Linux Evidence Set",
       "localDisk": "Local Physical Disk"
     },
     "hints": {
       "single": "Import one image or logical directory.",
-      "linuxCluster": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux cluster and imports members serially.",
+      "linuxEvidenceSet": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux evidence set and imports members serially.",
       "localDisk": "Import a Windows host physical disk read-only. Administrator access is required; enter \\\\.\\PhysicalDriveN."
     },
     "errors": {
@@ -477,7 +477,7 @@
       "expandSource": "Expand data source",
       "deletedRecovery": "Deleted recovery",
       "linuxOverview": "Overview",
-      "linuxCluster": "Linux cluster",
+      "linuxEvidenceSet": "Linux evidence set",
       "linuxJournal": "System logs",
       "linuxLogin": "Login records",
       "linuxCommands": "Command history",

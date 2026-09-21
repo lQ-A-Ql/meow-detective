@@ -16,7 +16,7 @@ use app_services::{
         evidence_candidates_for_categories, get_linux_artifact_summary,
         run_analysis_extraction_with_reader_limits,
     },
-    cluster_service::plan_linux_cluster_import,
+    cluster_service::plan_linux_evidence_set_import,
     datasource_service::{
         detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemCandidate,
         ImageFilesystemKind, ImageFilesystemSource, PartitionRecord,
@@ -3111,7 +3111,7 @@ fn pve_cluster_import_plan_discovers_nested_server_images() {
         root.display()
     );
 
-    let plan = plan_linux_cluster_import(&root, Some("pve-cluster".to_string()))
+    let plan = plan_linux_evidence_set_import(&root, Some("pve-cluster".to_string()))
         .expect("PVE cluster import planner should discover nested server images");
 
     eprintln!(

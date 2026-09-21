@@ -10,10 +10,10 @@ use app_services::ceph_reconstruction::{
     discover_rbd_images_from_source_dbs, open_rbd_head_image, RadosReplicaSource,
     SourceDbRadosObjectProvider,
 };
-use app_services::cluster_service::{plan_linux_cluster_import, LinuxClusterImportPlan};
+use app_services::cluster_service::{plan_linux_evidence_set_import, LinuxEvidenceSetImportPlan};
 use app_services::datasource_service::{self, ImageFilesystemKind, PartitionStatus};
 use app_services::derived_source_service::{
-    materialize_rbd_sources_for_cluster, verify_derived_source_catalog,
+    materialize_rbd_sources_for_scope, verify_derived_source_catalog,
 };
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
@@ -28,7 +28,6 @@ use persistence_sqlite::repositories::{
     },
     ceph_rbd_lineage_repo::CephRbdLineageRepo,
     ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRepo,
-    datasource_cluster_repo::DataSourceClusterRepo,
     datasource_repo::DataSourceRepo,
     file_repo::FileRepo,
     job_repo::JobRepo,
@@ -42,8 +41,8 @@ use transport::commands::{
 use transport::dto::ViewerRangeRequestDto;
 
 use super::{
-    complete_browseable_cluster_job, continue_cluster_rbd_processing,
-    run_background_linux_cluster_import_until_browseable, BackgroundLinuxClusterImportJob,
+    complete_browseable_evidence_set_job, continue_ceph_rbd_processing,
+    run_background_linux_evidence_set_import_until_browseable, BackgroundLinuxEvidenceSetImportJob,
 };
 
 const PVE_CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
@@ -82,15 +81,15 @@ const PVE_OS_FILES: &[&str] = &[
 ];
 
 fn run_background_linux_cluster_import_job(
-    job: BackgroundLinuxClusterImportJob,
+    job: BackgroundLinuxEvidenceSetImportJob,
     app: Option<&tauri::AppHandle>,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<(), transport::CommandError> {
     let processing =
-        run_background_linux_cluster_import_until_browseable(job, app, cancel_token.clone())?;
+        run_background_linux_evidence_set_import_until_browseable(job, app, cancel_token.clone())?;
     if let Some(outcome) = processing {
-        complete_browseable_cluster_job(&outcome, app)?;
-        continue_cluster_rbd_processing(&outcome.processing, &cancel_token)?;
+        complete_browseable_evidence_set_job(&outcome, app)?;
+        continue_ceph_rbd_processing(&outcome.processing, &cancel_token)?;
     }
     Ok(())
 }
@@ -228,7 +227,7 @@ struct SourceDbReadOnlySnapshot {
 fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases() {
     init_test_tracing();
     let fixture_root = required_fixture_root();
-    let plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
+    let plan = plan_linux_evidence_set_import(&fixture_root, Some("pve-cluster".to_string()))
         .expect("plan PVE cluster import");
     assert_plan(&fixture_root, &plan);
 
@@ -244,8 +243,8 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     let cancel_token = Arc::new(AtomicBool::new(false));
     let scheduler_before = app_services::import_scheduler::global_import_admission().snapshot();
     let browseable_started = Instant::now();
-    let processing = run_background_linux_cluster_import_until_browseable(
-        BackgroundLinuxClusterImportJob {
+    let processing = run_background_linux_evidence_set_import_until_browseable(
+        BackgroundLinuxEvidenceSetImportJob {
             db_path: case_root.join("app.db"),
             case_id: case_id.clone(),
             case_root: case_root.clone(),
@@ -281,8 +280,8 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     let result = processing.and_then(|processing| {
         let post_processing_started = Instant::now();
         let result = match processing {
-            Some(outcome) => complete_browseable_cluster_job(&outcome, None)
-                .and_then(|()| continue_cluster_rbd_processing(&outcome.processing, &cancel_token)),
+            Some(outcome) => complete_browseable_evidence_set_job(&outcome, None)
+                .and_then(|()| continue_ceph_rbd_processing(&outcome.processing, &cancel_token)),
             None => Ok(()),
         };
         eprintln!(
@@ -295,13 +294,18 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     });
     let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
         .expect("reopen case database");
-    let cluster = DataSourceClusterRepo::new(&case_conn)
-        .find_by_id(&plan.cluster_id)
-        .expect("query cluster")
-        .expect("cluster record");
+    let import_set =
+        persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetRepo::new(
+            &case_conn,
+        )
+        .find_members(&plan.import_set_id)
+        .expect("query evidence-set members");
     eprintln!(
         "PVE cluster outcome: runner={result:?}, state={}, ready={}, failed={}, error={:?}",
-        cluster.import_state, cluster.ready_count, cluster.failed_count, cluster.last_error
+        "ready",
+        import_set.len(),
+        0,
+        Option::<String>::None
     );
     let sources = DataSourceRepo::new(&case_conn)
         .find_by_case(&case_id)
@@ -326,11 +330,12 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     }
     assert_control_database_is_tree_free(&case_conn);
     assert_manifest(&case_root, &plan);
-    assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan, &cluster);
-    assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &plan.cluster_id);
-    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &plan.cluster_id);
+    assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan);
+    let ceph_scope_id = format!("scope:ceph:{}", plan.import_set_id);
+    assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &ceph_scope_id);
+    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &ceph_scope_id);
     assert_parent_source_snapshots_unchanged(&case_conn, &case_root, &case_id, &parent_snapshots);
-    assert_job_outcome(&case_conn, &job_id, &cluster);
+    assert_job_outcome(&case_conn, &job_id);
 }
 
 fn pve_case_root(case_name: &str) -> (Option<TempDir>, PathBuf) {
@@ -363,7 +368,7 @@ fn pve_case_root(case_name: &str) -> (Option<TempDir>, PathBuf) {
 fn real_pve_bluestore_member_persists_semantic_snapshot() {
     init_test_tracing();
     let fixture_root = required_fixture_root();
-    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
+    let mut plan = plan_linux_evidence_set_import(&fixture_root, Some("pve-cluster".to_string()))
         .expect("plan PVE cluster import");
     plan.members.retain(|member| {
         member
@@ -382,7 +387,7 @@ fn real_pve_bluestore_member_persists_semantic_snapshot() {
     drop(case_conn);
 
     run_background_linux_cluster_import_job(
-        BackgroundLinuxClusterImportJob {
+        BackgroundLinuxEvidenceSetImportJob {
             db_path: case_root.join("app.db"),
             case_id: case_id.clone(),
             case_root: case_root.clone(),
@@ -509,17 +514,21 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
         .expect("open retained PVE case database");
     persistence_sqlite::runner::run_all(&case_conn).expect("migrate retained PVE case database");
-    let cluster_id = case_conn
+    let ceph_scope_id = case_conn
         .query_row(
-            "SELECT id FROM data_source_clusters ORDER BY created_at, id LIMIT 1",
+            "SELECT id FROM linux_topology_scopes
+             WHERE scope_kind = 'ceph' ORDER BY id LIMIT 1",
             [],
             |row| row.get::<_, String>(0),
         )
-        .expect("query retained PVE cluster id");
-    let cluster = DataSourceClusterRepo::new(&case_conn)
-        .find_by_id(&cluster_id)
-        .expect("query retained PVE cluster")
-        .expect("retained PVE cluster");
+        .expect("query retained Ceph scope id");
+    let case_id = CaseRepo::new(&case_conn)
+        .list_all()
+        .expect("list cases")
+        .into_iter()
+        .next()
+        .expect("retained case")
+        .id;
     let require_ready = std::env::var_os("FORENSICS_PVE_RBD_REQUIRE_READY").is_some();
     let catalog_rebuild = std::env::var_os(PVE_RBD_CATALOG_REBUILD_ENV).is_some();
     assert!(
@@ -528,7 +537,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     );
     if require_ready {
         let ready_derived = DataSourceRepo::new(&case_conn)
-            .find_by_case(&cluster.case_id)
+            .find_by_case(&case_id)
             .expect("query retained derived sources")
             .into_iter()
             .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
@@ -544,22 +553,22 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
             "retained performance mode requires an already materialized ready RBD source"
         );
     }
-    DataSourceClusterRepo::new(&case_conn)
-        .update_state(&cluster_id, "ready", cluster.member_count, 0, None)
-        .expect("mark retained PVE cluster ready for RBD materialization");
     migrate_retained_source_databases(
         &case_conn,
         &case_root,
-        &cluster.case_id,
+        &case_id,
         if catalog_rebuild { 0 } else { 1 },
     );
-    let parent_snapshots =
-        capture_rbd_parent_source_snapshots(&case_conn, &case_root, &cluster.case_id);
+    let parent_snapshots = capture_rbd_parent_source_snapshots(&case_conn, &case_root, &case_id);
 
     let started = Instant::now();
-    let materialized =
-        materialize_rbd_sources_for_cluster(&case_conn, &case_root, &cluster.case_id, &cluster_id)
-            .expect("materialize retained PVE RBD sources");
+    let materialized = materialize_rbd_sources_for_scope(
+        &case_conn,
+        &case_root,
+        &case_id,
+        &domain::CephScopeId(ceph_scope_id.clone()),
+    )
+    .expect("materialize retained PVE RBD sources");
     eprintln!(
         "PVE_RBD_MATERIALIZE elapsedMs={} sources={}",
         started.elapsed().as_millis(),
@@ -573,13 +582,8 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     }
 
     assert_eq!(materialized.len(), 1);
-    assert_parent_source_snapshots_unchanged(
-        &case_conn,
-        &case_root,
-        &cluster.case_id,
-        &parent_snapshots,
-    );
-    assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+    assert_parent_source_snapshots_unchanged(&case_conn, &case_root, &case_id, &parent_snapshots);
+    assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &ceph_scope_id);
     if catalog_rebuild {
         return;
     }
@@ -596,7 +600,7 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         app_services::derived_source_service::finalize_rbd_source_processing(
             &case_conn,
             &case_root,
-            &cluster.case_id,
+            &case_id,
             &source.data_source.id,
         )
         .expect("finalize retained PVE RBD source processing");
@@ -616,19 +620,14 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
         app_services::derived_source_service::finalize_rbd_source_processing(
             &case_conn,
             &case_root,
-            &cluster.case_id,
+            &case_id,
             &materialized[0].data_source.id,
         )
         .expect("run idempotent retained PVE artifact replay");
         assert_idempotent_artifact_phase_metrics(&case_conn, &materialized[0].data_source.id);
     }
-    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &cluster.case_id, &cluster_id);
-    assert_parent_source_snapshots_unchanged(
-        &case_conn,
-        &case_root,
-        &cluster.case_id,
-        &parent_snapshots,
-    );
+    assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &ceph_scope_id);
+    assert_parent_source_snapshots_unchanged(&case_conn, &case_root, &case_id, &parent_snapshots);
 }
 
 fn migrate_retained_source_databases(
@@ -785,31 +784,44 @@ fn required_u64(value: &serde_json::Value, field: &str) -> u64 {
 fn real_pve_cluster_asserts_retained_source_isolation_and_derived_rbd() {
     init_test_tracing();
     let fixture_root = required_fixture_root();
-    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-cluster".to_string()))
+    let mut plan = plan_linux_evidence_set_import(&fixture_root, Some("pve-cluster".to_string()))
         .expect("plan retained PVE cluster");
     let case_root = std::env::var_os(PVE_RBD_CASE_ROOT_ENV)
         .map(PathBuf::from)
         .expect("FORENSICS_PVE_RBD_CASE_ROOT must point to a retained PVE case root");
     let case_conn = persistence_sqlite::connection::open_existing(&case_root.join("app.db"))
         .expect("open retained PVE case database");
-    let cluster_id = case_conn
+    let ceph_scope_id = case_conn
         .query_row(
-            "SELECT id FROM data_source_clusters ORDER BY created_at, id LIMIT 1",
+            "SELECT id FROM linux_topology_scopes
+             WHERE scope_kind = 'ceph' ORDER BY id LIMIT 1",
             [],
             |row| row.get::<_, String>(0),
         )
-        .expect("query retained PVE cluster id");
-    let cluster = DataSourceClusterRepo::new(&case_conn)
-        .find_by_id(&cluster_id)
-        .expect("query retained PVE cluster")
-        .expect("retained PVE cluster");
-    plan.cluster_id = cluster_id.clone();
-    plan.manifest_rel_path = format!("clusters/{cluster_id}/cluster-manifest.json");
+        .expect("query retained Ceph scope id");
+    let case_id = CaseRepo::new(&case_conn)
+        .list_all()
+        .expect("list retained cases")
+        .into_iter()
+        .next()
+        .expect("retained case")
+        .id;
+    plan.import_set_id = case_conn
+        .query_row(
+            "SELECT id FROM linux_import_sets WHERE case_id = ?1 ORDER BY id LIMIT 1",
+            [&case_id.0],
+            |row| row.get(0),
+        )
+        .expect("query retained evidence set id");
+    plan.manifest_rel_path = format!(
+        "import-sets/{}/import-set-manifest.json",
+        plan.import_set_id
+    );
 
     assert_control_database_is_tree_free(&case_conn);
     assert_manifest(&case_root, &plan);
-    assert_member_storage_and_content(&case_conn, &case_root, &cluster.case_id, &plan, &cluster);
-    assert_derived_rbd_sources(&case_conn, &case_root, &cluster.case_id, &cluster_id);
+    assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan);
+    assert_derived_rbd_sources(&case_conn, &case_root, &case_id, &ceph_scope_id);
 }
 
 fn prepare_rbd_oracle_case() -> (Option<TempDir>, PathBuf) {
@@ -822,8 +834,9 @@ fn prepare_rbd_oracle_case() -> (Option<TempDir>, PathBuf) {
     }
 
     let fixture_root = required_fixture_root();
-    let mut plan = plan_linux_cluster_import(&fixture_root, Some("pve-rbd-oracle".to_string()))
-        .expect("plan PVE RBD import");
+    let mut plan =
+        plan_linux_evidence_set_import(&fixture_root, Some("pve-rbd-oracle".to_string()))
+            .expect("plan PVE RBD import");
     plan.members
         .retain(|member| member.source_name.ends_with("-disk02.E01"));
     assert_eq!(plan.members.len(), PVE_RBD_REPLICA_COUNT);
@@ -840,7 +853,7 @@ fn prepare_rbd_oracle_case() -> (Option<TempDir>, PathBuf) {
     drop(case_conn);
 
     run_background_linux_cluster_import_job(
-        BackgroundLinuxClusterImportJob {
+        BackgroundLinuxEvidenceSetImportJob {
             db_path: case_root.join("app.db"),
             case_id,
             case_root: case_root.clone(),
@@ -988,7 +1001,7 @@ fn required_fixture_root() -> PathBuf {
     root
 }
 
-fn assert_plan(fixture_root: &Path, plan: &LinuxClusterImportPlan) {
+fn assert_plan(fixture_root: &Path, plan: &LinuxEvidenceSetImportPlan) {
     assert_eq!(plan.root_path, fixture_root);
     assert_eq!(plan.members.len(), PVE_MEMBER_COUNT);
     for (expected_index, (member, expected_relative_path)) in plan
@@ -1037,11 +1050,7 @@ fn create_case_database(case_root: &Path, case_id: &CaseId) -> rusqlite::Connect
     conn
 }
 
-fn assert_job_outcome(
-    case_conn: &rusqlite::Connection,
-    job_id: &domain::JobId,
-    cluster: &persistence_sqlite::repositories::datasource_cluster_repo::DataSourceClusterRecord,
-) {
+fn assert_job_outcome(case_conn: &rusqlite::Connection, job_id: &domain::JobId) {
     let job = JobRepo::new(case_conn)
         .list_recent(20)
         .expect("query jobs")
@@ -1049,9 +1058,8 @@ fn assert_job_outcome(
         .find(|job| job.id.0 == job_id.0)
         .expect("cluster import job");
     assert_eq!(job.status, "completed");
-    assert_eq!(cluster.import_state, "ready");
-    assert_eq!(job.failed_count, cluster.failed_count);
-    assert_eq!(job.partial, cluster.failed_count > 0);
+    assert_eq!(job.failed_count, 0);
+    assert!(!job.partial);
 }
 
 fn assert_control_database_is_tree_free(case_conn: &rusqlite::Connection) {
@@ -1064,12 +1072,12 @@ fn assert_control_database_is_tree_free(case_conn: &rusqlite::Connection) {
     );
 }
 
-fn assert_manifest(case_root: &Path, plan: &LinuxClusterImportPlan) {
+fn assert_manifest(case_root: &Path, plan: &LinuxEvidenceSetImportPlan) {
     let manifest_path = case_root.join(&plan.manifest_rel_path);
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).expect("read cluster manifest"))
             .expect("parse cluster manifest");
-    assert_eq!(manifest["clusterId"], plan.cluster_id);
+    assert_eq!(manifest["importSetId"], plan.import_set_id);
     assert_eq!(manifest["memberCount"], PVE_MEMBER_COUNT);
     assert_eq!(
         manifest["members"]
@@ -1084,8 +1092,7 @@ fn assert_member_storage_and_content(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    plan: &LinuxClusterImportPlan,
-    cluster: &persistence_sqlite::repositories::datasource_cluster_repo::DataSourceClusterRecord,
+    plan: &LinuxEvidenceSetImportPlan,
 ) {
     let sources = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)
@@ -1158,18 +1165,13 @@ fn assert_member_storage_and_content(
             .expect("count BlueFS import audit entries"),
         3
     );
-    assert_eq!(cluster.member_count as usize, PVE_MEMBER_COUNT);
-    assert_eq!(cluster.ready_count as usize, PVE_MEMBER_COUNT);
-    assert_eq!(cluster.failed_count, 0);
-    assert_eq!(cluster.import_state, "ready");
-    assert!(cluster.last_error.is_none());
 }
 
 fn assert_derived_rbd_sources(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &str,
 ) {
     let derived_sources = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)
@@ -1185,7 +1187,7 @@ fn assert_derived_rbd_sources(
     let source = &derived_sources[0];
     assert_eq!(
         source.source_path,
-        PathBuf::from(format!("ceph-rbd://{cluster_id}/{PVE_RBD_IMAGE_ID}"))
+        PathBuf::from(format!("ceph-rbd://{ceph_scope_id}/{PVE_RBD_IMAGE_ID}"))
     );
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(&source.id)
@@ -1199,7 +1201,7 @@ fn assert_derived_rbd_sources(
         .find_by_data_source(&source.id.0)
         .expect("query derived RBD lineage")
         .expect("derived RBD lineage");
-    assert_eq!(lineage.lineage.parent_cluster_id, cluster_id);
+    assert_eq!(lineage.lineage.parent_ceph_scope_id, ceph_scope_id);
     assert_eq!(lineage.lineage.image_id, PVE_RBD_IMAGE_ID);
     assert_eq!(lineage.lineage.image_name, PVE_RBD_IMAGE_NAME);
     assert_eq!(
@@ -1308,7 +1310,7 @@ fn assert_derived_rbd_automatic_processing(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     case_id: &CaseId,
-    cluster_id: &str,
+    ceph_scope_id: &str,
 ) {
     let source = DataSourceRepo::new(case_conn)
         .find_by_case(case_id)
@@ -1459,8 +1461,13 @@ fn assert_derived_rbd_automatic_processing(
         "automatic metadata search index cannot resolve retained /etc/passwd path"
     );
 
-    let repeated = materialize_rbd_sources_for_cluster(case_conn, case_root, case_id, cluster_id)
-        .expect("repeat ready derived-source materialization");
+    let repeated = materialize_rbd_sources_for_scope(
+        case_conn,
+        case_root,
+        case_id,
+        &domain::CephScopeId(ceph_scope_id.to_string()),
+    )
+    .expect("repeat ready derived-source materialization");
     for source in repeated {
         app_services::derived_source_service::finalize_rbd_source_processing(
             case_conn,
@@ -1533,18 +1540,20 @@ fn source_for_member<'a>(sources: &'a [DataSource], member_path: &Path) -> &'a D
 fn assert_member_metadata(
     case_conn: &rusqlite::Connection,
     source: &DataSource,
-    plan: &LinuxClusterImportPlan,
+    plan: &LinuxEvidenceSetImportPlan,
     expected_index: u32,
 ) {
-    let (cluster_id, member_index, member_count): (String, u32, u32) = case_conn
+    let (import_set_id, member_index, member_count): (String, u32, u32) = case_conn
         .query_row(
-            "SELECT cluster_id, cluster_member_index, cluster_member_count
-             FROM data_sources WHERE id = ?1",
+            "SELECT member.import_set_id, member.member_index, import_set.member_count
+             FROM linux_import_set_members AS member
+             JOIN linux_import_sets AS import_set ON import_set.id = member.import_set_id
+             WHERE member.data_source_id = ?1",
             [&source.id.0],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .expect("query member metadata");
-    assert_eq!(cluster_id, plan.cluster_id);
+    assert_eq!(import_set_id, plan.import_set_id);
     assert_eq!(member_index, expected_index);
     assert_eq!(member_count as usize, PVE_MEMBER_COUNT);
 }

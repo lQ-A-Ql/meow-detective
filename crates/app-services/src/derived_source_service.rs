@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicBool;
 
 use domain::{DataSource, DataSourceId};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod catalog_build;
@@ -12,18 +13,18 @@ mod orchestration;
 
 pub use orchestration::{
     finalize_rbd_source_processing, finalize_rbd_source_processing_with_cancel,
-    materialize_rbd_sources_for_cluster, materialize_rbd_sources_for_cluster_with_cancel,
+    materialize_rbd_sources_for_scope, materialize_rbd_sources_for_scope_with_cancel,
     verify_derived_source_catalog,
 };
 
 #[derive(Debug, Error)]
 pub enum DerivedSourceError {
-    #[error("Ceph cluster {0} was not found")]
-    ClusterNotFound(String),
-    #[error("Ceph cluster {cluster_id} is not ready: {state}")]
-    ClusterNotReady { cluster_id: String, state: String },
-    #[error("Ceph cluster has no complete OSD source set")]
-    IncompleteCluster,
+    #[error("Ceph scope {0} was not found")]
+    ScopeNotFound(String),
+    #[error("Ceph scope {scope_id} is not ready: {state}")]
+    ScopeNotReady { scope_id: String, state: String },
+    #[error("Ceph scope has no complete OSD source set")]
+    IncompleteScope,
     #[error("Ceph source {data_source_id} has no usable OSD inventory")]
     MissingInventory { data_source_id: String },
     #[error("Ceph source {data_source_id} has conflicting OSD inventory")]
@@ -83,12 +84,27 @@ pub struct MaterializedRbdSource {
 }
 
 pub(super) fn derived_data_source_id(
-    cluster_id: &str,
+    ceph_scope_id: &str,
     image_id: &str,
 ) -> DerivedSourceResult<DataSourceId> {
-    validate_identity_component("cluster ID", cluster_id)?;
+    validate_scope_id(ceph_scope_id)?;
     validate_identity_component("image ID", image_id)?;
-    Ok(DataSourceId(format!("rbd-{cluster_id}-{image_id}")))
+    let scope_digest = hex::encode(Sha256::digest(ceph_scope_id.as_bytes()));
+    Ok(DataSourceId(format!(
+        "rbd-{}-{image_id}",
+        &scope_digest[..20]
+    )))
+}
+
+fn validate_scope_id(value: &str) -> DerivedSourceResult<()> {
+    if value.is_empty() || value.len() > 160 || value.contains('\0') || value.contains(['/', '\\'])
+    {
+        Err(DerivedSourceError::InvalidIdentity {
+            field: "Ceph scope ID",
+        })
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_identity_component(field: &'static str, value: &str) -> DerivedSourceResult<()> {

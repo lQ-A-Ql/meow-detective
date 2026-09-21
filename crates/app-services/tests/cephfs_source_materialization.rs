@@ -25,13 +25,14 @@ use chrono::Utc;
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
-    datasource_cluster_repo::{DataSourceClusterRecord, DataSourceClusterRepo},
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    linux_topology_membership_repo::{LinuxTopologyMembershipRecord, LinuxTopologyMembershipRepo},
+    linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
 };
 use sha2::Digest;
 
 const CASE_ID: &str = "case-cephfs-materialization";
-const CLUSTER_ID: &str = "cluster-cephfs-materialization";
+const CEPH_SCOPE_ID: &str = "scope:ceph:materialization";
 const FILESYSTEM_ID: &str = "ceph-fs:cluster-a:1:17:7";
 const FILE_ENTRY_ID: &str = "cephfs:0000000000000001:00000000:0000000000000002:hello.txt";
 const FILE_CONTENT: &[u8] = b"CephFS bounded preview\n";
@@ -59,22 +60,21 @@ fn fixture() -> Fixture {
             updated_at: Utc::now(),
         })
         .expect("insert case");
-    DataSourceClusterRepo::new(&case_conn)
-        .insert_pending(&DataSourceClusterRecord {
-            id: CLUSTER_ID.to_string(),
-            case_id: case_id.clone(),
-            name: "cluster-a".to_string(),
-            root_path: root.path().display().to_string(),
-            platform: "linux".to_string(),
-            profile: Some("pve_cluster".to_string()),
-            manifest_rel_path: "clusters/cluster-a/manifest.json".to_string(),
-            import_state: "ready".to_string(),
-            member_count: 3,
-            ready_count: 3,
-            failed_count: 0,
-            last_error: None,
+    let scope_repo = LinuxTopologyScopeRepo::new(&case_conn);
+    let membership_repo = LinuxTopologyMembershipRepo::new(&case_conn);
+    scope_repo
+        .insert(&LinuxTopologyScopeRecord {
+            id: CEPH_SCOPE_ID.to_string(),
+            case_id: case_id.0.clone(),
+            scope_kind: "ceph".to_string(),
+            name: "Ceph".to_string(),
+            identity_state: "unproven".to_string(),
+            identity_fingerprint: None,
+            status: "ready".to_string(),
+            evidence_completeness: "complete".to_string(),
+            diagnostics_json: "[]".to_string(),
         })
-        .expect("insert cluster");
+        .expect("insert Ceph scope");
 
     for (index, source_id) in ["osd-0", "osd-1", "osd-2"].into_iter().enumerate() {
         let id = DataSourceId(source_id.to_string());
@@ -86,18 +86,22 @@ fn fixture() -> Fixture {
             imported_at: Utc::now(),
             provenance: DataSourceProvenance::unknown(),
         };
-        let mut storage = DataSourceStorage::source_db(
-            source_id,
-            Some("linux"),
-            Some("cluster_member".to_string()),
-        );
+        let mut storage =
+            DataSourceStorage::source_db(source_id, Some("linux"), Some("ceph_osd".to_string()));
         storage.import_state = "ready".to_string();
         DataSourceRepo::new(&case_conn)
             .insert_with_storage(&case_id, &source, &storage)
             .expect("register cluster member");
-        DataSourceRepo::new(&case_conn)
-            .update_cluster_membership(&id, CLUSTER_ID, index as u32, 3)
-            .expect("bind cluster member");
+        membership_repo
+            .insert(&LinuxTopologyMembershipRecord {
+                scope_id: CEPH_SCOPE_ID.to_string(),
+                data_source_id: id.0.clone(),
+                role: "storage_node".to_string(),
+                member_index: Some(index as u32),
+                confidence: "candidate".to_string(),
+                provenance_json: "{}".to_string(),
+            })
+            .expect("bind Ceph member");
         drop(app_services::source_db::open_source_db(root.path(), &id).expect("create source db"));
     }
 
@@ -282,11 +286,12 @@ fn materialize_result_with_content(
 > {
     let assembly = assembly_for(graph);
     let descriptor = descriptor();
+    let ceph_scope_id = domain::CephScopeId(CEPH_SCOPE_ID.to_string());
     materialize_cephfs_source(CephFsSourceMaterializationRequest {
         case_conn: &fixture.case_conn,
         case_root: fixture.root.path(),
         case_id: &fixture.case_id,
-        cluster_id: CLUSTER_ID,
+        ceph_scope_id: &ceph_scope_id,
         presence,
         descriptor: &descriptor,
         namespace_assembly_input: &assembly,

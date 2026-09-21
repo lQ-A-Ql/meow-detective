@@ -98,7 +98,7 @@ export interface FileJumpContext {
 }
 
 export type ImportTargetPlatform = 'windows' | 'linux' | 'android';
-export type ImportSourceKind = 'auto' | 'linuxCluster' | 'localDisk';
+export type ImportSourceKind = 'auto' | 'linuxEvidenceSet' | 'localDisk';
 
 export interface ImportDataSourceRequest {
   sourcePath: string;

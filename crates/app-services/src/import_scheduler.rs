@@ -21,10 +21,10 @@ const ADMISSION_WAIT: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportWorkload {
     SingleSource,
-    LinuxCluster { member_count: usize },
+    LinuxEvidenceSet { member_count: usize },
 }
 
-/// Resource policy shared by ordinary and cluster imports.
+/// Resource policy shared by ordinary and evidence-set imports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImportSchedulingPolicy {
     pub cpu_budget: usize,
@@ -51,7 +51,7 @@ impl ImportSchedulingPolicy {
                 source_concurrency: 1,
                 memory_reservation_mb: SINGLE_SOURCE_MEMORY_RESERVATION_MB,
             },
-            ImportWorkload::LinuxCluster { member_count } => Self::for_linux_cluster(
+            ImportWorkload::LinuxEvidenceSet { member_count } => Self::for_linux_evidence_set(
                 cpu_budget,
                 requested_import,
                 requested_analysis,
@@ -60,7 +60,7 @@ impl ImportSchedulingPolicy {
         }
     }
 
-    pub fn for_linux_cluster(
+    pub fn for_linux_evidence_set(
         cpu_budget: usize,
         requested_import_workers: usize,
         requested_analysis_workers: usize,

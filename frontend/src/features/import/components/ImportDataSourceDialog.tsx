@@ -26,7 +26,7 @@ import {
 import type { ImportDataSourceRequest, ImportTargetPlatform, LocalDisk } from '@/types/models';
 import { BrandWatermark } from '@/components/brand';
 
-type SourceKind = 'auto' | 'linuxCluster' | 'localDisk';
+type SourceKind = 'auto' | 'linuxEvidenceSet' | 'localDisk';
 
 export interface ImportDataSourceDialogProps {
   open: boolean;
@@ -122,10 +122,10 @@ export function ImportDataSourceDialog({
     if (selectedPath) setPath(selectedPath);
   }
 
-  async function pickLinuxClusterDirectory() {
+  async function pickLinuxEvidenceSetDirectory() {
     const selectedPath = await pickDirectoryPath();
     if (selectedPath) {
-      setSourceKind('linuxCluster');
+      setSourceKind('linuxEvidenceSet');
       setPath(selectedPath);
     }
   }
@@ -249,13 +249,13 @@ export function ImportDataSourceDialog({
                   <ToggleGroupItem value="auto" aria-label={t('importDataSource.modes.single')}>
                     {t('importDataSource.modes.single')}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="linuxCluster" aria-label={t('importDataSource.modes.linuxCluster')}>
-                    {t('importDataSource.modes.linuxCluster')}
+                  <ToggleGroupItem value="linuxEvidenceSet" aria-label={t('importDataSource.modes.linuxEvidenceSet')}>
+                    {t('importDataSource.modes.linuxEvidenceSet')}
                   </ToggleGroupItem>
                 </ToggleGroup>
                 <p className="text-[11px] text-forensics-muted">
-                  {sourceKind === 'linuxCluster'
-                    ? t('importDataSource.hints.linuxCluster')
+                  {sourceKind === 'linuxEvidenceSet'
+                    ? t('importDataSource.hints.linuxEvidenceSet')
                     : t('importDataSource.hints.single')}
                 </p>
               </div>
@@ -334,7 +334,7 @@ export function ImportDataSourceDialog({
                   </>
                 ) : null}
                 {platform === 'linux' ? (
-                  <Button variant="outline" size="sm" onClick={pickLinuxClusterDirectory} className="shrink-0 gap-1">
+                  <Button variant="outline" size="sm" onClick={pickLinuxEvidenceSetDirectory} className="shrink-0 gap-1">
                     <FolderOpen size={12} />
                     {t('importDataSource.buttons.clusterDirectory')}
                   </Button>

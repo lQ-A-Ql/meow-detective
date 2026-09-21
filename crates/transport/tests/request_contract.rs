@@ -166,28 +166,28 @@ fn import_source_accepts_required_platform_and_optional_profile_contract() {
 #[test]
 fn import_source_accepts_linux_cluster_source_kind_contract() {
     let request: ImportDataSourceRequest = serde_json::from_str(
-        r#"{"sourcePath":"D:/cluster","sourceKind":"linuxCluster","platform":"linux"}"#,
+        r#"{"sourcePath":"D:/cluster","sourceKind":"linuxEvidenceSet","platform":"linux"}"#,
     )
     .unwrap();
 
-    assert_eq!(request.source_kind, ImportSourceKindDto::LinuxCluster);
+    assert_eq!(request.source_kind, ImportSourceKindDto::LinuxEvidenceSet);
     assert_eq!(request.platform, ImportTargetPlatformDto::Linux);
     assert!(request.validate().is_ok());
 
     let value = serde_json::to_value(request).unwrap();
-    assert_eq!(value["sourceKind"], "linuxCluster");
+    assert_eq!(value["sourceKind"], "linuxEvidenceSet");
 }
 
 #[test]
 fn import_source_rejects_linux_cluster_without_linux_platform() {
     let request: ImportDataSourceRequest = serde_json::from_str(
-        r#"{"sourcePath":"D:/cluster","sourceKind":"linuxCluster","platform":"windows"}"#,
+        r#"{"sourcePath":"D:/cluster","sourceKind":"linuxEvidenceSet","platform":"windows"}"#,
     )
     .unwrap();
 
     assert_eq!(
         request.validate().unwrap_err(),
-        "linuxCluster imports must use platform linux"
+        "linuxEvidenceSet imports must use platform linux"
     );
 }
 

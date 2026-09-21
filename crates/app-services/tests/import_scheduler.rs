@@ -11,7 +11,7 @@ use std::time::Duration;
 fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
     let ordinary = ImportSchedulingPolicy::for_workload(ImportWorkload::SingleSource, None, None);
     let cluster = ImportSchedulingPolicy::for_workload(
-        ImportWorkload::LinuxCluster { member_count: 6 },
+        ImportWorkload::LinuxEvidenceSet { member_count: 6 },
         None,
         None,
     );
@@ -29,7 +29,7 @@ fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
 
 #[test]
 fn cluster_policy_keeps_two_low_weight_members_parallel() {
-    let policy = ImportSchedulingPolicy::for_linux_cluster(4, 1, 1, 6);
+    let policy = ImportSchedulingPolicy::for_linux_evidence_set(4, 1, 1, 6);
 
     assert_eq!(policy.source_concurrency, 2);
     assert_eq!(policy.source_worker_count(100), 2);
@@ -41,7 +41,7 @@ fn cluster_policy_keeps_two_low_weight_members_parallel() {
 
 #[test]
 fn cluster_policy_uses_three_workers_per_member_with_six_cpu_budget() {
-    let policy = ImportSchedulingPolicy::for_linux_cluster(6, 99, 99, 6);
+    let policy = ImportSchedulingPolicy::for_linux_evidence_set(6, 99, 99, 6);
 
     assert_eq!(policy.import_workers, 3);
     assert_eq!(policy.analysis_workers, 3);
@@ -56,7 +56,7 @@ fn cluster_policy_uses_three_workers_per_member_with_six_cpu_budget() {
 
 #[test]
 fn cluster_policy_respects_a_small_cpu_budget() {
-    let policy = ImportSchedulingPolicy::for_linux_cluster(1, 6, 6, 6);
+    let policy = ImportSchedulingPolicy::for_linux_evidence_set(1, 6, 6, 6);
 
     assert_eq!(policy.import_workers, 1);
     assert_eq!(policy.analysis_workers, 1);
