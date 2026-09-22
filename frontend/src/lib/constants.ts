@@ -47,19 +47,6 @@ export const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 export const FILE_SIZE_BASE = 1024;
 
 // ============================================
-// 颜色常量
-// ============================================
-
-/** 连接线颜色 */
-export const TREE_CONNECTOR_COLOR = '#d0d0d0';
-
-/** 选中背景色 */
-export const TREE_SELECTED_BG = '#e0e8f0';
-
-/** 悬停背景色 */
-export const TREE_HOVER_BG = '#eaeaea';
-
-// ============================================
 // localStorage keys
 // ============================================
 

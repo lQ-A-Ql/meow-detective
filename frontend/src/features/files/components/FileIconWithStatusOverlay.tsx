@@ -1,5 +1,6 @@
 import { EyeOff, X } from 'lucide-react';
 import { getFileIcon } from '@/lib/file-icons';
+import { TokenIcon } from '@/components/data-display';
 
 export interface FileIconWithStatusOverlayProps {
   name: string;
@@ -49,7 +50,7 @@ export function FileIconWithStatusOverlay({
       data-deleted={deleted ? 'true' : undefined}
       data-hidden={hidden || system ? 'true' : undefined}
     >
-      <IconComponent size={size} style={{ color: iconInfo.color }} />
+      <TokenIcon icon={IconComponent} size={size} color={iconInfo.color} />
       {hidden || system ? (
         <span className="absolute -right-0.5 -top-0.5 flex size-2.5 items-center justify-center rounded-none border border-forensics-surface bg-forensics-text-tertiary text-white">
           <EyeOff size={7} strokeWidth={2.5} aria-hidden="true" />

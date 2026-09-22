@@ -162,6 +162,26 @@
   --forensics-graph-edge-annotates: #059669;
   --forensics-graph-node-fallback: #6b7280;
   --forensics-graph-edge-fallback: #9ca3af;
+  --forensics-file-icon-red: #e74c3c;
+  --forensics-file-icon-green: #2ecc71;
+  --forensics-file-icon-blue: #3498db;
+  --forensics-file-icon-emerald: #27ae60;
+  --forensics-file-icon-yellow: #f1c40f;
+  --forensics-file-icon-orange: #e67e22;
+  --forensics-file-icon-cyan: #00acd7;
+  --forensics-file-icon-neutral: #555555;
+  --forensics-file-icon-cobalt: #2965f1;
+  --forensics-file-icon-muted: #7f8c8d;
+  --forensics-file-icon-ocean: #2980b9;
+  --forensics-file-icon-amber: #f39c12;
+  --forensics-file-icon-violet: #8e44ad;
+  --forensics-file-icon-purple: #9b59b6;
+  --forensics-file-icon-teal: #1abc9c;
+  --forensics-file-icon-slate: #34495e;
+  --forensics-file-icon-soft: #95a5a6;
+  --forensics-file-icon-faint: #bdc3c7;
+  --forensics-file-icon-dark: #2c3e50;
+  --forensics-file-icon-default: #888888;
 }
 
 @theme inline {

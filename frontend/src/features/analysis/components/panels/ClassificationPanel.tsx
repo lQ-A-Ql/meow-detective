@@ -12,6 +12,7 @@ import {
   SummaryStrip,
   WarningList,
 } from './helpers';
+import { TokenIcon } from '@/components/data-display';
 
 export function EvidenceClassificationPanel({
   summary,
@@ -77,7 +78,7 @@ export function EvidenceClassificationPanel({
               <section key={category.category} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Icon size={17} style={{ color }} />
+                    <TokenIcon icon={Icon} size={17} color={color} />
                     <div>
                       <h4 className="text-[13px] font-light text-forensics-text">{category.displayName}</h4>
                       <div className="font-mono text-[10px] text-forensics-muted-light">{category.category}</div>

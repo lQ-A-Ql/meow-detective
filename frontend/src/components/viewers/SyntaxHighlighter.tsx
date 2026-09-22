@@ -4,7 +4,7 @@
  * 使用 highlight.js 实现代码语法高亮。
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import hljs from 'highlight.js/lib/core';
 
 // 按需加载语言
@@ -130,14 +130,29 @@ export function SyntaxHighlighter({
             {index + 1}
           </div>
           {/* 代码 */}
-          <div
-            className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0"
-            dangerouslySetInnerHTML={{ __html: lineHtml || '\u00A0' }}
-          />
+          <div className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0">
+            {renderHighlightedLine(lineHtml || '\u00A0')}
+          </div>
         </div>
       ))}
     </div>
   );
+}
+
+function renderHighlightedLine(html: string): ReactNode {
+  if (typeof DOMParser === 'undefined') return html;
+  const wrapper = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html').body.firstElementChild;
+  if (!wrapper) return html;
+  return Array.from(wrapper.childNodes).map((node, index) => renderHighlightedNode(node, index));
+}
+
+function renderHighlightedNode(node: ChildNode, key: number): ReactNode {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+  if (!(node instanceof HTMLElement)) return node.textContent;
+  const children = Array.from(node.childNodes).map((child, index) => renderHighlightedNode(child, index));
+  if (node.tagName.toLowerCase() !== 'span') return children;
+  const className = node.className.split(/\s+/).filter((value) => value.startsWith('hljs-')).join(' ');
+  return <span key={key} className={className || undefined}>{children}</span>;
 }
 
 export { getLanguageFromExtension };

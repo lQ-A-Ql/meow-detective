@@ -46,6 +46,34 @@ if (Test-Path -LiteralPath $pageRoot) {
     }
 }
 
+$forbiddenPatterns = @(
+  'dangerouslySetInnerHTML',
+  '#[0-9A-Fa-f]{3,8}',
+  'style\s*=\s*\{\{[^}]*color'
+)
+$patternRoots = @(
+  (Join-Path $root 'frontend/src/features'),
+  (Join-Path $root 'frontend/src/app/pages'),
+  (Join-Path $root 'frontend/src/lib')
+)
+foreach ($patternRoot in $patternRoots) {
+  if (-not (Test-Path -LiteralPath $patternRoot)) { continue }
+  Get-ChildItem -LiteralPath $patternRoot -Recurse -File -Include *.tsx,*.ts | Where-Object {
+    $_.FullName -notmatch '\.test\.(tsx|ts)$'
+  } | ForEach-Object {
+    $path = $_.FullName
+    $lineNumber = 0
+    Get-Content -LiteralPath $path | ForEach-Object {
+      $lineNumber++
+      foreach ($pattern in $forbiddenPatterns) {
+        if ($_ -match $pattern) {
+          $violations += "${path}:$lineNumber matches forbidden visual/security pattern '$pattern'"
+        }
+      }
+    }
+  }
+}
+
 if ($SelfTest) {
   if ($violations.Count -ne 0) {
     throw "Frontend UI boundary self-test failed: $($violations -join '; ')"

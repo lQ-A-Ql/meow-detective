@@ -6,6 +6,7 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { SectionHeader } from '@/components/data-display';
+import { ColorSwatch } from '@/components/data-display';
 import { ForceGraph } from '@/features/graph/visualization/ForceGraph';
 import { GraphEdgeDetails } from '@/features/graph/components/GraphEdgeDetails';
 import { GraphNodeDetails } from '@/features/graph/components/GraphNodeDetails';
@@ -84,7 +85,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
               variant="forensics"
               checkboxSize="compact"
             />
-            <span className="inline-block h-2 w-2 rounded-none" style={{ backgroundColor: edgeTypeColor(type) }} />
+            <ColorSwatch color={edgeTypeColor(type)} />
             <span>{t(EDGE_TYPE_KEYS[type])}</span>
           </label>
         ))}

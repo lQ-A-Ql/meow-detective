@@ -21,6 +21,7 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react';
+import { fileIconColor } from '@/design/file-icon-tokens';
 
 export interface FileIconInfo {
   icon: LucideIcon;
@@ -32,122 +33,122 @@ export interface FileIconInfo {
  */
 const EXTENSION_ICON_MAP: Record<string, FileIconInfo> = {
   // 可执行文件
-  exe: { icon: Terminal, color: '#e74c3c' },
-  dll: { icon: Terminal, color: '#e74c3c' },
-  bat: { icon: Terminal, color: '#e74c3c' },
-  cmd: { icon: Terminal, color: '#e74c3c' },
-  msi: { icon: Terminal, color: '#e74c3c' },
-  com: { icon: Terminal, color: '#e74c3c' },
-  scr: { icon: Terminal, color: '#e74c3c' },
-  ps1: { icon: Terminal, color: '#e74c3c' },
-  sh: { icon: Terminal, color: '#2ecc71' },
+  exe: { icon: Terminal, color: fileIconColor('red') },
+  dll: { icon: Terminal, color: fileIconColor('red') },
+  bat: { icon: Terminal, color: fileIconColor('red') },
+  cmd: { icon: Terminal, color: fileIconColor('red') },
+  msi: { icon: Terminal, color: fileIconColor('red') },
+  com: { icon: Terminal, color: fileIconColor('red') },
+  scr: { icon: Terminal, color: fileIconColor('red') },
+  ps1: { icon: Terminal, color: fileIconColor('red') },
+  sh: { icon: Terminal, color: fileIconColor('green') },
 
   // 文档
-  txt: { icon: FileText, color: '#3498db' },
-  doc: { icon: FileText, color: '#3498db' },
-  docx: { icon: FileText, color: '#3498db' },
-  pdf: { icon: FileText, color: '#e74c3c' },
-  rtf: { icon: FileText, color: '#3498db' },
-  odt: { icon: FileText, color: '#3498db' },
-  md: { icon: FileText, color: '#3498db' },
-  csv: { icon: FileText, color: '#27ae60' },
-  xls: { icon: FileText, color: '#27ae60' },
-  xlsx: { icon: FileText, color: '#27ae60' },
+  txt: { icon: FileText, color: fileIconColor('blue') },
+  doc: { icon: FileText, color: fileIconColor('blue') },
+  docx: { icon: FileText, color: fileIconColor('blue') },
+  pdf: { icon: FileText, color: fileIconColor('red') },
+  rtf: { icon: FileText, color: fileIconColor('blue') },
+  odt: { icon: FileText, color: fileIconColor('blue') },
+  md: { icon: FileText, color: fileIconColor('blue') },
+  csv: { icon: FileText, color: fileIconColor('emerald') },
+  xls: { icon: FileText, color: fileIconColor('emerald') },
+  xlsx: { icon: FileText, color: fileIconColor('emerald') },
 
   // 代码
-  js: { icon: FileCode, color: '#f1c40f' },
-  jsx: { icon: FileCode, color: '#f1c40f' },
-  ts: { icon: FileCode, color: '#3498db' },
-  tsx: { icon: FileCode, color: '#3498db' },
-  py: { icon: FileCode, color: '#2ecc71' },
-  rs: { icon: FileCode, color: '#e67e22' },
-  go: { icon: FileCode, color: '#00acd7' },
-  java: { icon: FileCode, color: '#e74c3c' },
-  c: { icon: FileCode, color: '#555' },
-  cpp: { icon: FileCode, color: '#555' },
-  h: { icon: FileCode, color: '#555' },
-  html: { icon: FileCode, color: '#e74c3c' },
-  htm: { icon: FileCode, color: '#e74c3c' },
-  css: { icon: FileCode, color: '#3498db' },
-  scss: { icon: FileCode, color: '#e74c3c' },
-  less: { icon: FileCode, color: '#2965f1' },
-  json: { icon: FileCode, color: '#f1c40f' },
-  xml: { icon: FileCode, color: '#e67e22' },
-  yaml: { icon: FileCode, color: '#e67e22' },
-  yml: { icon: FileCode, color: '#e67e22' },
-  toml: { icon: FileCode, color: '#e67e22' },
-  ini: { icon: Settings, color: '#7f8c8d' },
-  cfg: { icon: Settings, color: '#7f8c8d' },
-  conf: { icon: Settings, color: '#7f8c8d' },
+  js: { icon: FileCode, color: fileIconColor('yellow') },
+  jsx: { icon: FileCode, color: fileIconColor('yellow') },
+  ts: { icon: FileCode, color: fileIconColor('blue') },
+  tsx: { icon: FileCode, color: fileIconColor('blue') },
+  py: { icon: FileCode, color: fileIconColor('green') },
+  rs: { icon: FileCode, color: fileIconColor('orange') },
+  go: { icon: FileCode, color: fileIconColor('cyan') },
+  java: { icon: FileCode, color: fileIconColor('red') },
+  c: { icon: FileCode, color: fileIconColor('neutral') },
+  cpp: { icon: FileCode, color: fileIconColor('neutral') },
+  h: { icon: FileCode, color: fileIconColor('neutral') },
+  html: { icon: FileCode, color: fileIconColor('red') },
+  htm: { icon: FileCode, color: fileIconColor('red') },
+  css: { icon: FileCode, color: fileIconColor('blue') },
+  scss: { icon: FileCode, color: fileIconColor('red') },
+  less: { icon: FileCode, color: fileIconColor('cobalt') },
+  json: { icon: FileCode, color: fileIconColor('yellow') },
+  xml: { icon: FileCode, color: fileIconColor('orange') },
+  yaml: { icon: FileCode, color: fileIconColor('orange') },
+  yml: { icon: FileCode, color: fileIconColor('orange') },
+  toml: { icon: FileCode, color: fileIconColor('orange') },
+  ini: { icon: Settings, color: fileIconColor('muted') },
+  cfg: { icon: Settings, color: fileIconColor('muted') },
+  conf: { icon: Settings, color: fileIconColor('muted') },
 
   // 图片
-  jpg: { icon: Image, color: '#2ecc71' },
-  jpeg: { icon: Image, color: '#2ecc71' },
-  png: { icon: Image, color: '#2ecc71' },
-  gif: { icon: Image, color: '#2ecc71' },
-  bmp: { icon: Image, color: '#2ecc71' },
-  svg: { icon: Image, color: '#2ecc71' },
-  ico: { icon: Image, color: '#2ecc71' },
-  webp: { icon: Image, color: '#2ecc71' },
-  tiff: { icon: Image, color: '#2ecc71' },
-  tif: { icon: Image, color: '#2ecc71' },
-  psd: { icon: Image, color: '#2980b9' },
+  jpg: { icon: Image, color: fileIconColor('green') },
+  jpeg: { icon: Image, color: fileIconColor('green') },
+  png: { icon: Image, color: fileIconColor('green') },
+  gif: { icon: Image, color: fileIconColor('green') },
+  bmp: { icon: Image, color: fileIconColor('green') },
+  svg: { icon: Image, color: fileIconColor('green') },
+  ico: { icon: Image, color: fileIconColor('green') },
+  webp: { icon: Image, color: fileIconColor('green') },
+  tiff: { icon: Image, color: fileIconColor('green') },
+  tif: { icon: Image, color: fileIconColor('green') },
+  psd: { icon: Image, color: fileIconColor('ocean') },
 
   // 压缩包
-  zip: { icon: Archive, color: '#f39c12' },
-  rar: { icon: Archive, color: '#f39c12' },
-  '7z': { icon: Archive, color: '#f39c12' },
-  tar: { icon: Archive, color: '#f39c12' },
-  gz: { icon: Archive, color: '#f39c12' },
-  bz2: { icon: Archive, color: '#f39c12' },
-  xz: { icon: Archive, color: '#f39c12' },
-  cab: { icon: Archive, color: '#f39c12' },
-  iso: { icon: Archive, color: '#8e44ad' },
+  zip: { icon: Archive, color: fileIconColor('amber') },
+  rar: { icon: Archive, color: fileIconColor('amber') },
+  '7z': { icon: Archive, color: fileIconColor('amber') },
+  tar: { icon: Archive, color: fileIconColor('amber') },
+  gz: { icon: Archive, color: fileIconColor('amber') },
+  bz2: { icon: Archive, color: fileIconColor('amber') },
+  xz: { icon: Archive, color: fileIconColor('amber') },
+  cab: { icon: Archive, color: fileIconColor('amber') },
+  iso: { icon: Archive, color: fileIconColor('violet') },
 
   // 视频
-  mp4: { icon: FileVideo, color: '#9b59b6' },
-  avi: { icon: FileVideo, color: '#9b59b6' },
-  mkv: { icon: FileVideo, color: '#9b59b6' },
-  mov: { icon: FileVideo, color: '#9b59b6' },
-  wmv: { icon: FileVideo, color: '#9b59b6' },
-  flv: { icon: FileVideo, color: '#9b59b6' },
-  webm: { icon: FileVideo, color: '#9b59b6' },
+  mp4: { icon: FileVideo, color: fileIconColor('purple') },
+  avi: { icon: FileVideo, color: fileIconColor('purple') },
+  mkv: { icon: FileVideo, color: fileIconColor('purple') },
+  mov: { icon: FileVideo, color: fileIconColor('purple') },
+  wmv: { icon: FileVideo, color: fileIconColor('purple') },
+  flv: { icon: FileVideo, color: fileIconColor('purple') },
+  webm: { icon: FileVideo, color: fileIconColor('purple') },
 
   // 音频
-  mp3: { icon: FileAudio, color: '#1abc9c' },
-  wav: { icon: FileAudio, color: '#1abc9c' },
-  flac: { icon: FileAudio, color: '#1abc9c' },
-  aac: { icon: FileAudio, color: '#1abc9c' },
-  ogg: { icon: FileAudio, color: '#1abc9c' },
-  wma: { icon: FileAudio, color: '#1abc9c' },
-  m4a: { icon: FileAudio, color: '#1abc9c' },
+  mp3: { icon: FileAudio, color: fileIconColor('teal') },
+  wav: { icon: FileAudio, color: fileIconColor('teal') },
+  flac: { icon: FileAudio, color: fileIconColor('teal') },
+  aac: { icon: FileAudio, color: fileIconColor('teal') },
+  ogg: { icon: FileAudio, color: fileIconColor('teal') },
+  wma: { icon: FileAudio, color: fileIconColor('teal') },
+  m4a: { icon: FileAudio, color: fileIconColor('teal') },
 
   // 数据库
-  db: { icon: Database, color: '#34495e' },
-  sqlite: { icon: Database, color: '#34495e' },
-  sqlite3: { icon: Database, color: '#34495e' },
-  mdb: { icon: Database, color: '#34495e' },
-  accdb: { icon: Database, color: '#34495e' },
-  sql: { icon: Database, color: '#34495e' },
+  db: { icon: Database, color: fileIconColor('slate') },
+  sqlite: { icon: Database, color: fileIconColor('slate') },
+  sqlite3: { icon: Database, color: fileIconColor('slate') },
+  mdb: { icon: Database, color: fileIconColor('slate') },
+  accdb: { icon: Database, color: fileIconColor('slate') },
+  sql: { icon: Database, color: fileIconColor('slate') },
 
   // 系统/配置
-  sys: { icon: Settings, color: '#7f8c8d' },
-  drv: { icon: Settings, color: '#7f8c8d' },
-  log: { icon: FileText, color: '#95a5a6' },
-  tmp: { icon: FileText, color: '#bdc3c7' },
-  temp: { icon: FileText, color: '#bdc3c7' },
-  bak: { icon: FileText, color: '#95a5a6' },
-  old: { icon: FileText, color: '#95a5a6' },
+  sys: { icon: Settings, color: fileIconColor('muted') },
+  drv: { icon: Settings, color: fileIconColor('muted') },
+  log: { icon: FileText, color: fileIconColor('soft') },
+  tmp: { icon: FileText, color: fileIconColor('faint') },
+  temp: { icon: FileText, color: fileIconColor('faint') },
+  bak: { icon: FileText, color: fileIconColor('soft') },
+  old: { icon: FileText, color: fileIconColor('soft') },
 
   // 取证相关
-  evtx: { icon: Database, color: '#2c3e50' },
-  pf: { icon: FileCode, color: '#e67e22' },
-  lnk: { icon: FileCode, color: '#3498db' },
-  dat: { icon: Database, color: '#34495e' },
-  reg: { icon: Database, color: '#e74c3c' },
-  e01: { icon: Archive, color: '#8e44ad' },
-  raw: { icon: Database, color: '#555' },
-  img: { icon: Database, color: '#555' },
+  evtx: { icon: Database, color: fileIconColor('dark') },
+  pf: { icon: FileCode, color: fileIconColor('orange') },
+  lnk: { icon: FileCode, color: fileIconColor('blue') },
+  dat: { icon: Database, color: fileIconColor('slate') },
+  reg: { icon: Database, color: fileIconColor('red') },
+  e01: { icon: Archive, color: fileIconColor('violet') },
+  raw: { icon: Database, color: fileIconColor('neutral') },
+  img: { icon: Database, color: fileIconColor('neutral') },
 };
 
 /**
@@ -163,19 +164,19 @@ export function getFileIcon(node: {
   if (node.entryType === 'directory') {
     // 加密分区
     if (node.status === 'locked') {
-      return { icon: Lock, color: '#e67e22' };
+      return { icon: Lock, color: fileIconColor('orange') };
     }
     // 不支持的分区
     if (node.status === 'unsupported') {
-      return { icon: HelpCircle, color: '#bdc3c7' };
+      return { icon: HelpCircle, color: fileIconColor('faint') };
     }
     // 普通目录 (展开/折叠)
-    return { icon: node.expanded ? FolderOpen : Folder, color: '#888' };
+    return { icon: node.expanded ? FolderOpen : Folder, color: fileIconColor('default') };
   }
 
   // 文件 - 根据扩展名
   const ext = node.name.split('.').pop()?.toLowerCase() ?? '';
-  return EXTENSION_ICON_MAP[ext] ?? { icon: File, color: '#888' };
+  return EXTENSION_ICON_MAP[ext] ?? { icon: File, color: fileIconColor('default') };
 }
 
 /**

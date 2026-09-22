@@ -13,6 +13,7 @@ import {
   SummaryStrip,
   WarningList,
 } from './helpers';
+import { TokenIcon } from '@/components/data-display';
 
 const FAMILY_KEY: Record<string, string> = {
   documents: 'Documents',
@@ -68,7 +69,7 @@ export function FileClassificationBoard({
                 contentClassName="mt-3 space-y-3"
                 title={
                   <>
-                    <Icon size={17} style={{ color }} />
+                    <TokenIcon icon={Icon} size={17} color={color} />
                     <h4 className="text-[13px] font-light text-forensics-text">{group.displayName}</h4>
                     <span className="text-[11px] text-forensics-muted-lighter">
                       {group.fileCount} 个 · {formatSize(group.totalSize)}
