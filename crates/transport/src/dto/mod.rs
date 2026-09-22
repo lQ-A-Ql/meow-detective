@@ -20,6 +20,7 @@ pub mod files;
 mod governance;
 pub mod graph;
 pub mod import;
+pub mod infrastructure_graph;
 pub mod jobs;
 pub mod ledger;
 pub mod mcp;
@@ -111,6 +112,9 @@ pub use import::{
     ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto, JobCancellationDto,
     PartialResultDto, PartialResultKindDto, PerformanceMetricDto, PerformanceReportDto,
     PerformanceReportSummaryDto, ResultFreshnessDto,
+};
+pub use infrastructure_graph::{
+    InfrastructureGraphDto, InfrastructureGraphEdgeDto, InfrastructureGraphNodeDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use ledger::{

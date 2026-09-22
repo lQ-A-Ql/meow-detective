@@ -42,6 +42,7 @@ pub mod import_pipeline;
 pub mod import_precheck;
 pub mod import_scheduler;
 pub mod import_state;
+pub mod infrastructure_graph_service;
 pub mod job_service;
 pub mod ledger_service;
 pub mod mount_service;
