@@ -41,6 +41,19 @@
     "stats": { "dataSources": "Data sources", "crossSourceEntities": "Cross-source entities", "crossSourceRelations": "Cross-source relations", "nodes": "Nodes", "edges": "Edges", "density": "Density" },
     "help": { "selection": "Click a node for details, double-click to expand its neighborhood, or click an edge for provenance.", "navigation": "Drag nodes to reposition them, drag empty space to pan, and use the wheel to zoom." }
   },
+  "artifacts": {
+    "title": "Artifact family control",
+    "meta": "{{family}} / {{shown}} of {{total}} records",
+    "columns": { "familyPath": "{{family}} path", "targetPath": "Target path", "createdAt": "Created", "arguments": "Arguments" },
+    "emptyTitle": "No records in this artifact family",
+    "emptyDescription": "Switch family or wait for extraction to finish.",
+    "inspector": { "title": "Artifact properties", "none": "No artifact selected", "targetPath": "Target path", "attributes": "Attributes", "context": "Source context", "actions": "Related actions" },
+    "fields": { "driveType": "Drive type", "volumeSerial": "Volume serial", "machineId": "Machine ID" },
+    "actions": { "openSource": "Locate in file browser", "openTimeline": "View related timeline events" }
+  },
+  "timeline": {
+    "title": "Timeline control strip", "meta": "{{shown}}/{{total}} events / {{sources}} sources", "granularity": "Granularity", "adaptive": "Adaptive", "start": "Start", "end": "End", "invalidDate": "Invalid date", "apply": "Apply", "type": "Type", "all": "All", "clear": "Clear", "emptyTitle": "No events in this range", "emptyDescription": "Expand the range or adjust event filters.", "columns": { "timestamp": "Timestamp", "source": "Source", "type": "Type", "description": "Description" }, "jumpToSource": "Jump to source object", "inspector": { "title": "Event inspector", "current": "Current event", "none": "No event selected", "timestamp": "Timestamp", "type": "Event type", "activity": "Activity", "object": "Source object", "context": "Time context", "actions": "Related actions" }
+  },
   "fileBrowser": {
     "title": "File Browser Controls",
     "empty": {

@@ -41,6 +41,19 @@
     "stats": { "dataSources": "数据源", "crossSourceEntities": "跨源实体", "crossSourceRelations": "跨源关系", "nodes": "节点", "edges": "边", "density": "密度" },
     "help": { "selection": "单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。", "navigation": "拖拽节点调整位置，拖拽空白处平移，滚轮缩放。" }
   },
+  "artifacts": {
+    "title": "痕迹家族控制",
+    "meta": "{{family}} / 记录 {{shown}}/{{total}} 条",
+    "columns": { "familyPath": "{{family}} 路径", "targetPath": "目标路径", "createdAt": "创建时间", "arguments": "参数" },
+    "emptyTitle": "当前痕迹家族无记录",
+    "emptyDescription": "请切换 family 或等待解析任务完成。",
+    "inspector": { "title": "痕迹属性", "none": "未选择痕迹", "targetPath": "目标路径", "attributes": "属性字段", "context": "来源上下文", "actions": "关联动作" },
+    "fields": { "driveType": "驱动器类型", "volumeSerial": "卷序列号", "machineId": "机器 ID" },
+    "actions": { "openSource": "在文件浏览中定位目标", "openTimeline": "查看关联时间线事件" }
+  },
+  "timeline": {
+    "title": "时间线控制带", "meta": "事件 {{shown}}/{{total}} 条 / 数据源 {{sources}} 个", "granularity": "粒度", "adaptive": "自适应", "start": "起始", "end": "结束", "invalidDate": "日期无效", "apply": "应用", "type": "类型", "all": "全部", "clear": "清除", "emptyTitle": "当前时间范围无事件", "emptyDescription": "请扩大时间范围或调整事件过滤条件。", "columns": { "timestamp": "时间戳", "source": "数据源", "type": "类型", "description": "描述" }, "jumpToSource": "跳转到来源对象", "inspector": { "title": "事件检查器", "current": "当前事件", "none": "未选择事件", "timestamp": "时间戳", "type": "事件类型", "activity": "源活动", "object": "来源对象", "context": "时间上下文", "actions": "关联动作" }
+  },
   "fileBrowser": {
     "title": "文件浏览控制",
     "empty": {

@@ -1,4 +1,5 @@
 import { ChevronRight, Clock, ZoomIn, ZoomOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -20,22 +21,22 @@ import { TimelineHistogram } from '@/features/timeline/components/TimelineHistog
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
 
-const TIMELINE_COLUMNS: DenseColumn<TimelineEvent>[] = [
-  { key: 'ts', title: '时间戳', className: 'w-36 text-forensics-muted', render: (row) => row.ts },
-  { key: 'source', title: '数据源', className: 'w-28 text-forensics-muted-light', render: (row) => row.dataSourceId ?? '-' },
-  { key: 'eventType', title: '类型', className: 'w-28 text-forensics-muted', render: (row) => row.eventType },
-  { key: 'title', title: '描述', className: 'text-forensics-text-secondary', render: (row) => row.title },
-];
-
 interface TimelineWorkspaceProps {
   model: TimelineWorkspaceModel;
 }
 
 /** Pure timeline presentation surface. Query and selection behavior belong to the workspace model. */
 export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
+  const { t } = useTranslation();
+  const columns: DenseColumn<TimelineEvent>[] = [
+    { key: 'ts', title: t('timeline.columns.timestamp'), className: 'w-36 text-forensics-muted', render: (row) => row.ts },
+    { key: 'source', title: t('timeline.columns.source'), className: 'w-28 text-forensics-muted-light', render: (row) => row.dataSourceId ?? '-' },
+    { key: 'eventType', title: t('timeline.columns.type'), className: 'w-28 text-forensics-muted', render: (row) => row.eventType },
+    { key: 'title', title: t('timeline.columns.description'), className: 'text-forensics-text-secondary', render: (row) => row.title },
+  ];
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title="时间线控制带" meta={`事件 ${model.events.length}/${model.totalEvents} 条 / 数据源 ${model.sourceCount} 个`}>
+      <PageSubbar title={t('timeline.title')} meta={t('timeline.meta', { shown: model.events.length, total: model.totalEvents, sources: model.sourceCount })}>
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
           <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
@@ -46,31 +47,30 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             </div>
             <div className="h-4 border-l border-forensics-border" />
             <div className="flex items-center gap-2 text-[11px] text-forensics-muted-light">
-              粒度:
-              <span className="border border-forensics-border-strong bg-forensics-surface px-1.5 py-0.5 text-forensics-text">自适应</span>
+              {t('timeline.granularity')}: <span className="border border-forensics-border-strong bg-forensics-surface px-1.5 py-0.5 text-forensics-text">{t('timeline.adaptive')}</span>
             </div>
             <div className="h-4 border-l border-forensics-border" />
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
-              起始
+              {t('timeline.start')}
               <Input type="datetime-local" step={1} value={model.draftTimeStart} onChange={(event) => model.setDraftTimeStart(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
             </label>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
-              结束
+              {t('timeline.end')}
               <Input type="datetime-local" step={1} value={model.draftTimeEnd} onChange={(event) => model.setDraftTimeEnd(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
             </label>
-            {!model.draftDatesValid ? <span className="text-[11px] text-forensics-error-text">日期无效</span> : null}
-            <Button type="button" variant="forensicsOutline" size="compact" onClick={model.applyDateRange} disabled={!model.draftDatesValid}>应用</Button>
+            {!model.draftDatesValid ? <span className="text-[11px] text-forensics-error-text">{t('timeline.invalidDate')}</span> : null}
+            <Button type="button" variant="forensicsOutline" size="compact" onClick={model.applyDateRange} disabled={!model.draftDatesValid}>{t('timeline.apply')}</Button>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
-              类型
+              {t('timeline.type')}
               <Select value={model.eventType} onValueChange={model.selectEventType}>
-                <SelectTrigger variant="forensics" size="xs" className="w-28"><SelectValue placeholder="全部" /></SelectTrigger>
+                <SelectTrigger variant="forensics" size="xs" className="w-28"><SelectValue placeholder={t('timeline.all')} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">全部</SelectItem>
+                  <SelectItem value="__all__">{t('timeline.all')}</SelectItem>
                   {model.eventTypes.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                 </SelectContent>
               </Select>
             </label>
-            <Button type="button" variant="forensicsOutline" size="compact" onClick={model.clearFilters}>清除</Button>
+            <Button type="button" variant="forensicsOutline" size="compact" onClick={model.clearFilters}>{t('timeline.clear')}</Button>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomOut} disabled={!model.canZoomOut} aria-label="缩小"><ZoomOut size={14} /></Button>
@@ -99,9 +99,9 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             getRowKey={(row) => row.id}
             selectedRowKey={model.selectedEvent?.id}
             onRowClick={model.onEventRowClick}
-            emptyTitle="当前时间范围无事件"
-            emptyDescription="请扩大时间范围或调整事件过滤条件。"
-            columns={TIMELINE_COLUMNS}
+            emptyTitle={t('timeline.emptyTitle')}
+            emptyDescription={t('timeline.emptyDescription')}
+            columns={columns}
             loadContextKey={model.loadContextKey}
             loadStateKey={model.loadStateKey}
             onReachEnd={model.loadNextPage}
@@ -114,14 +114,14 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             />
           </DenseDataTableFrame>
         </div>
-        <InspectorPane title="事件检查器" subtitle={model.selectedEvent ? `当前事件 ${model.selectedEvent.id}` : '未选择事件'} widthClassName="w-80">
+        <InspectorPane title={t('timeline.inspector.title')} subtitle={model.selectedEvent ? `${t('timeline.inspector.current')} ${model.selectedEvent.id}` : t('timeline.inspector.none')} widthClassName="w-80">
           <div className="space-y-5">
-            <InspectorSection title="时间戳"><InspectorValue value={model.selectedEvent?.ts ?? '-'} mono strong /></InspectorSection>
-            <InspectorSection title="事件类型"><InspectorValue value={model.selectedEvent?.eventType ?? '-'} /></InspectorSection>
-            <InspectorSection title="源活动"><InspectorValue value={model.selectedEvent?.description ?? '-'} /></InspectorSection>
-            <InspectorSection title="来源对象"><InspectorValue value={model.selectedEvent?.title ?? '-'} mono /></InspectorSection>
-            <InspectorSection title="时间上下文"><div className="space-y-1 font-mono text-[10px] text-forensics-muted"><div className="max-w-full truncate">source: {model.selectedEvent?.dataSourceId ?? '-'}</div><div className="max-w-full truncate">window: {model.selectedEvent?.ts ?? '-'} +/- 10m</div></div></InspectorSection>
-            <InspectorSection title="关联动作"><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.jumpToSource(model.selectedEvent)} disabled={!model.selectedEvent} className="w-full justify-between font-mono text-forensics-text-tertiary"><span className="font-light">跳转到来源对象</span><ChevronRight size={12} className="text-forensics-muted-light" /></Button></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.timestamp')}><InspectorValue value={model.selectedEvent?.ts ?? '-'} mono strong /></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.type')}><InspectorValue value={model.selectedEvent?.eventType ?? '-'} /></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.activity')}><InspectorValue value={model.selectedEvent?.description ?? '-'} /></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.object')}><InspectorValue value={model.selectedEvent?.title ?? '-'} mono /></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.context')}><div className="space-y-1 font-mono text-[10px] text-forensics-muted"><div className="max-w-full truncate">source: {model.selectedEvent?.dataSourceId ?? '-'}</div><div className="max-w-full truncate">window: {model.selectedEvent?.ts ?? '-'} +/- 10m</div></div></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.actions')}><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.jumpToSource(model.selectedEvent)} disabled={!model.selectedEvent} className="w-full justify-between font-mono text-forensics-text-tertiary"><span className="font-light">{t('timeline.jumpToSource')}</span><ChevronRight size={12} className="text-forensics-muted-light" /></Button></InspectorSection>
           </div>
         </InspectorPane>
       </div>
