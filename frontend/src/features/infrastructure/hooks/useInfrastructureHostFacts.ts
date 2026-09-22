@@ -3,13 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { getLinuxArtifactSummary } from '@/lib/api/analysis';
 import { ANALYSIS_QUERY_OPTIONS } from '@/features/analysis/query-options';
-
-export interface InfrastructureHostFact {
-  hostname?: string;
-  operatingSystem?: string;
-  operatingSystemVersion?: string;
-  kernelVersion?: string;
-}
+import type { InfrastructureHostFact } from '../types';
 
 /** Reads existing Linux summary evidence for host labels and version facts. */
 export function useInfrastructureHostFacts() {
