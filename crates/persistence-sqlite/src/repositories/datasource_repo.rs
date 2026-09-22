@@ -60,6 +60,7 @@ impl<'a> DataSourceRepo<'a> {
         ds: &DataSource,
         storage: &DataSourceStorage,
     ) -> DbResult<()> {
+        validate_storage_id(&ds.id.0)?;
         self.conn.execute(
             "INSERT INTO data_sources (
                 id, case_id, name, kind, source_path, source_hash_sha256, hash_status,
@@ -338,6 +339,21 @@ impl<'a> DataSourceRepo<'a> {
         )?;
         tx.commit()?;
         Ok(())
+    }
+}
+
+fn validate_storage_id(value: &str) -> DbResult<()> {
+    if !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        Ok(())
+    } else {
+        Err(crate::connection::DbError::System(format!(
+            "data source '{}' cannot own a case-managed directory",
+            value
+        )))
     }
 }
 

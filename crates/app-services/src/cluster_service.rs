@@ -16,6 +16,7 @@ mod kubernetes_parser_error;
 mod kubernetes_yaml;
 mod linux_import;
 mod manifest_parser;
+pub(crate) mod scope_storage;
 mod topology_projection;
 
 pub mod kubernetes_paths;

@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 const CEPH_RECONSTRUCTION_MINIMUM_SOURCE_VERSION: &str = "source_016_file_partition_index";
 
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
+    super::identity::validate_source_storage_id(data_source_id)?;
     persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))
 }
 

@@ -35,6 +35,23 @@ fn global_file_id_rejects_unsafe_source_ids() {
 }
 
 #[test]
+fn opening_source_db_rejects_an_unsafe_storage_id() {
+    let root = tempfile::TempDir::new().unwrap();
+    let error =
+        crate::source_db::open_source_db(root.path(), &DataSourceId("../outside".to_string()))
+            .expect_err("unsafe source id must not create a case-managed database");
+    assert!(error.to_string().contains("case-managed directory"));
+}
+
+#[test]
+fn source_directory_never_uses_an_unsafe_id_as_a_path_component() {
+    let root = Path::new("D:/cases/case-1");
+    let path = crate::source_db::source_dir(root, &DataSourceId("../outside".to_string()));
+    assert!(path.starts_with(root.join("sources")));
+    assert!(!path.to_string_lossy().contains("..\\outside"));
+}
+
+#[test]
 fn safe_case_relative_path_rejects_escape_paths() {
     let case_root = Path::new("D:/cases/case-1");
 

@@ -79,6 +79,6 @@ fn cluster_inventory_rejects_a_non_kubernetes_topology_scope() {
     .unwrap_err();
     assert!(matches!(
         error,
-        crate::cluster_service::ClusterServiceError::InvalidClusterId
+        crate::cluster_service::ClusterServiceError::Unsupported
     ));
 }

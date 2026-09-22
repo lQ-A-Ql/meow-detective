@@ -13,6 +13,7 @@ pub(crate) fn source_build_db_path(
     data_source_id: &DataSourceId,
     attempt_id: &str,
 ) -> DbResult<PathBuf> {
+    super::identity::validate_source_storage_id(data_source_id)?;
     validate_attempt_id(attempt_id)?;
     Ok(super::source_dir(case_root, data_source_id)
         .join(format!("{SOURCE_BUILD_DB_FILE_NAME}.{attempt_id}")))
@@ -23,6 +24,7 @@ pub(crate) fn open_fresh_source_build_db(
     data_source_id: &DataSourceId,
     attempt_id: &str,
 ) -> DbResult<Connection> {
+    super::identity::validate_source_storage_id(data_source_id)?;
     let final_path = super::source_db_path(case_root, data_source_id);
     if final_path.exists() {
         return Err(DbError::System(format!(
@@ -75,6 +77,7 @@ pub(crate) fn publish_source_build_db(
     data_source_id: &DataSourceId,
     attempt_id: &str,
 ) -> DbResult<PathBuf> {
+    super::identity::validate_source_storage_id(data_source_id)?;
     let build_path = source_build_db_path(case_root, data_source_id, attempt_id)?;
     let final_path = super::source_db_path(case_root, data_source_id);
     if !build_path.is_file() {
@@ -106,6 +109,7 @@ pub(crate) fn preserve_unpublished_source_build_db(
     data_source_id: &DataSourceId,
     attempt_id: &str,
 ) -> DbResult<PathBuf> {
+    super::identity::validate_source_storage_id(data_source_id)?;
     publish_source_build_db(case_root, data_source_id, attempt_id)
 }
 

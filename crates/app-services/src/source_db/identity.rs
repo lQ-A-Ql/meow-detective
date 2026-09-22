@@ -64,7 +64,19 @@ pub fn parse_source_scoped_id(label: &str, value: &str) -> DbResult<(DataSourceI
 }
 
 pub(super) fn is_safe_data_source_id(value: &str) -> bool {
-    value
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+}
+
+pub(super) fn validate_source_storage_id(data_source_id: &DataSourceId) -> DbResult<()> {
+    if is_safe_data_source_id(&data_source_id.0) {
+        Ok(())
+    } else {
+        Err(DbError::System(format!(
+            "Data source '{}' cannot own a case-managed directory",
+            data_source_id.0
+        )))
+    }
 }

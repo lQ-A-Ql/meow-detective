@@ -10,6 +10,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{RbdReplicaPolicy, ReplicaIdentity};
+use crate::cluster_service::scope_storage;
 
 const EVIDENCE_FILE: &str = "osdmap-evidence.json";
 const EVIDENCE_KIND: &str = "ceph_osdmap_poolmap";
@@ -20,7 +21,6 @@ const MAX_EVIDENCE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_POOL_RECORDS: usize = 16_384;
 const MAX_OSD_RECORDS: usize = 131_072;
 const MAX_EPOCH_HISTORY: usize = 4_096;
-const EVIDENCE_DIRECTORY: &str = "topology-scopes/ceph-evidence";
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum OsdMapEvidenceError {
@@ -374,11 +374,7 @@ fn validate_cluster_id(cluster_id: &str) -> Result<(), OsdMapEvidenceError> {
 }
 
 pub(crate) fn evidence_path(case_root: &Path, scope_id: &str, file_name: &str) -> PathBuf {
-    let storage_key = hex::encode(Sha256::digest(scope_id.as_bytes()));
-    case_root
-        .join(EVIDENCE_DIRECTORY)
-        .join(storage_key)
-        .join(file_name)
+    scope_storage::artifact_path(case_root, scope_id, "ceph-evidence", file_name)
 }
 
 fn read_evidence_payload(path: &Path) -> Result<Option<Vec<u8>>, OsdMapEvidenceError> {

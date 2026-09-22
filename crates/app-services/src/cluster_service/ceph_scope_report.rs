@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::ceph_reconstruction::{InventoryCoverageReport, RbdReplicaPolicy};
 
-use super::{ClusterServiceError, Result};
+use super::{scope_storage, ClusterServiceError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,9 +124,5 @@ fn validate_scope_id(scope_id: &str) -> Result<()> {
 }
 
 fn report_path(case_root: &Path, ceph_scope_id: &str) -> PathBuf {
-    let storage_key = hex::encode(Sha256::digest(ceph_scope_id.as_bytes()));
-    case_root
-        .join("topology-scopes")
-        .join("ceph-coverage")
-        .join(format!("{storage_key}.json"))
+    scope_storage::artifact_path(case_root, ceph_scope_id, "ceph-coverage", "coverage.json")
 }

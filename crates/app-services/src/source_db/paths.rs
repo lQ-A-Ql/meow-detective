@@ -1,6 +1,7 @@
 use super::identity::is_safe_data_source_id;
 use domain::DataSourceId;
 use persistence_sqlite::{DbError, DbResult};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 const SOURCES_DIR_NAME: &str = "sources";
@@ -9,7 +10,9 @@ const SOURCE_DB_FILE_NAME: &str = "source.db";
 const SOURCE_INDEX_DIR_NAME: &str = "index";
 
 pub fn source_dir(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
-    case_root.join(SOURCES_DIR_NAME).join(&data_source_id.0)
+    case_root
+        .join(SOURCES_DIR_NAME)
+        .join(storage_component(data_source_id))
 }
 
 pub fn source_db_path(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
@@ -44,6 +47,16 @@ pub fn source_staging_dir(case_root: &Path, data_source_id: &DataSourceId) -> Db
         )));
     }
     Ok(case_root.join(STAGING_DIR_NAME).join(&data_source_id.0))
+}
+
+fn storage_component(data_source_id: &DataSourceId) -> String {
+    if is_safe_data_source_id(&data_source_id.0) {
+        return data_source_id.0.clone();
+    }
+    format!(
+        "__invalid-{}",
+        hex::encode(Sha256::digest(data_source_id.0.as_bytes()))
+    )
 }
 
 #[derive(Debug, Clone)]

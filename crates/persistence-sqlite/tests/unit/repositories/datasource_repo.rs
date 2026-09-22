@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn insert_rejects_a_data_source_id_that_could_escape_storage_root() {
+    let conn = setup_db();
+    let source = domain::DataSource {
+        id: domain::DataSourceId("../outside".to_string()),
+        name: "Unsafe".to_string(),
+        kind: domain::DataSourceKind::Raw,
+        source_path: std::path::PathBuf::from("D:/outside.raw"),
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
+    let error = DataSourceRepo::new(&conn)
+        .insert(&domain::CaseId("case-1".to_string()), &source)
+        .expect_err("unsafe source id must be rejected before SQL insertion");
+    assert!(error.to_string().contains("case-managed directory"));
+}
+
 fn setup_db() -> rusqlite::Connection {
     let conn = crate::connection::open_in_memory().unwrap();
     conn.execute_batch(
