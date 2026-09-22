@@ -29,6 +29,7 @@
       "imageInvalid": "图片源无效", "imageTimeout": "图片加载超时，请检查文件是否存在", "imageUnsupported": "图片格式不支持或文件损坏"
     }
   },
+  "browser": { "title": "浏览器记录", "unavailable": "浏览器记录暂不可用。", "stats": { "visits": "访问记录", "downloads": "下载记录", "cookies": "Cookie", "sessions": "会话标签", "passwords": "密码项", "browsers": "浏览器" }, "sections": { "visits": "访问历史", "downloads": "下载记录", "cookies": "Cookies", "sessions": "会话 / 标签页", "passwords": "保存的密码" }, "columns": { "time": "时间", "profile": "Profile", "title": "标题", "count": "次数", "targetPath": "目标路径", "size": "大小", "domain": "域名", "name": "名称", "valuePreview": "值预览", "expiry": "过期时间", "secure": "安全标记", "httpOnly": "仅 HTTP", "decryptionStatus": "解密状态", "window": "窗口", "tab": "标签", "lastActive": "最后活跃", "website": "网站", "username": "用户名", "passwordPreview": "密码预览", "createdAt": "创建时间", "timesUsed": "使用次数" }, "empty": { "visits": "暂无浏览历史", "visitsDescription": "支持 Chrome、Edge History 与 Firefox places.sqlite。", "downloads": "暂无下载记录", "downloadsDescription": "发现下载记录后会显示 URL、目标路径与大小。", "cookies": "暂无 Cookie 记录", "cookiesDescription": "发现 cookies 数据库后会显示域名、名称与过期时间。", "sessions": "暂无会话记录", "sessionsDescription": "发现 Session/Session Restore 文件后会显示标签页 URL。", "passwords": "暂无密码记录", "passwordsDescription": "发现 login data / logins.json 后仅展示 URL、用户名等元数据。" } },
   "graph": {
     "title": "关系图谱",
     "subtitle": "案件级跨数据源实体与证据邻域",

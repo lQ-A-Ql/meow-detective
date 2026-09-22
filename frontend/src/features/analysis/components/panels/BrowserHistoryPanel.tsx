@@ -98,7 +98,7 @@ export function BrowserHistoryPanel({
     sessions: [],
     passwords: [],
     generatedAt: '',
-    warnings: ['浏览器记录暂不可用。'],
+    warnings: [t('browser.unavailable')],
   };
 
   const visitGroups = groupByBrowser(info.visits);
@@ -109,29 +109,29 @@ export function BrowserHistoryPanel({
 
   return (
     <ExtractionTableSection
-      title="浏览器记录"
+      title={t('browser.title')}
       status={info.status}
       generatedAt={info.generatedAt}
       warnings={info.warnings}
       stats={[
-        ['访问记录', info.visitTotal.toString()],
-        ['下载记录', info.downloadTotal.toString()],
-        ['Cookie', info.cookieTotal.toString()],
-        ['会话标签', info.sessionTotal.toString()],
-        ['密码项', info.passwordTotal.toString()],
-        ['浏览器', Object.keys(visitGroups).sort(browserOrder).join(' / ') || '-'],
+        [t('browser.stats.visits'), info.visitTotal.toString()],
+        [t('browser.stats.downloads'), info.downloadTotal.toString()],
+        [t('browser.stats.cookies'), info.cookieTotal.toString()],
+        [t('browser.stats.sessions'), info.sessionTotal.toString()],
+        [t('browser.stats.passwords'), info.passwordTotal.toString()],
+        [t('browser.stats.browsers'), Object.keys(visitGroups).sort(browserOrder).join(' / ') || '-'],
       ]}
     >
       <div className="space-y-4">
-        <TableBlock title="访问历史">
+        <TableBlock title={t('browser.sections.visits')}>
           {info.visits.length === 0 ? (
             <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={visitColumns}
                 getRowKey={() => 'empty'}
-                emptyTitle="暂无浏览历史"
-                emptyDescription="支持 Chrome、Edge History 与 Firefox places.sqlite。"
+                emptyTitle={t('browser.empty.visits')}
+                emptyDescription={t('browser.empty.visitsDescription')}
               />
             </DenseDataTableFrame>
           ) : (
@@ -147,7 +147,7 @@ export function BrowserHistoryPanel({
                     rows={rows}
                     columns={visitColumns}
                     getRowKey={(row) => row.artifactId}
-                    emptyTitle="暂无浏览历史"
+                    emptyTitle={t('browser.empty.visits')}
                     emptyDescription=""
                   />
                 </DenseDataTableFrame>
@@ -155,15 +155,15 @@ export function BrowserHistoryPanel({
           )}
         </TableBlock>
 
-        <TableBlock title="下载记录">
+        <TableBlock title={t('browser.sections.downloads')}>
           {info.downloads.length === 0 ? (
             <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={downloadColumns}
                 getRowKey={() => 'empty'}
-                emptyTitle="暂无下载记录"
-                emptyDescription="发现下载记录后会显示 URL、目标路径与大小。"
+                emptyTitle={t('browser.empty.downloads')}
+                emptyDescription={t('browser.empty.downloadsDescription')}
               />
             </DenseDataTableFrame>
           ) : (
@@ -179,7 +179,7 @@ export function BrowserHistoryPanel({
                     rows={rows}
                     columns={downloadColumns}
                     getRowKey={(row) => row.artifactId}
-                    emptyTitle="暂无下载记录"
+                    emptyTitle={t('browser.empty.downloads')}
                     emptyDescription=""
                   />
                 </DenseDataTableFrame>
@@ -187,15 +187,15 @@ export function BrowserHistoryPanel({
           )}
         </TableBlock>
 
-        <TableBlock title="Cookies">
+        <TableBlock title={t('browser.sections.cookies')}>
           {info.cookies.length === 0 ? (
             <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={cookieColumns}
                 getRowKey={() => 'empty'}
-                emptyTitle="暂无 Cookie 记录"
-                emptyDescription="发现 cookies 数据库后会显示域名、名称与过期时间。"
+                emptyTitle={t('browser.empty.cookies')}
+                emptyDescription={t('browser.empty.cookiesDescription')}
               />
             </DenseDataTableFrame>
           ) : (
@@ -211,7 +211,7 @@ export function BrowserHistoryPanel({
                     rows={rows}
                     columns={cookieColumns}
                     getRowKey={(row) => row.artifactId}
-                    emptyTitle="暂无 Cookie 记录"
+                    emptyTitle={t('browser.empty.cookies')}
                     emptyDescription=""
                   />
                 </DenseDataTableFrame>
@@ -219,15 +219,15 @@ export function BrowserHistoryPanel({
           )}
         </TableBlock>
 
-        <TableBlock title="会话 / 标签页">
+        <TableBlock title={t('browser.sections.sessions')}>
           {info.sessions.length === 0 ? (
             <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={sessionColumns}
                 getRowKey={() => 'empty'}
-                emptyTitle="暂无会话记录"
-                emptyDescription="发现 Session/Session Restore 文件后会显示标签页 URL。"
+                emptyTitle={t('browser.empty.sessions')}
+                emptyDescription={t('browser.empty.sessionsDescription')}
               />
             </DenseDataTableFrame>
           ) : (
@@ -243,7 +243,7 @@ export function BrowserHistoryPanel({
                     rows={rows}
                     columns={sessionColumns}
                     getRowKey={(row) => row.artifactId}
-                    emptyTitle="暂无会话记录"
+                    emptyTitle={t('browser.empty.sessions')}
                     emptyDescription=""
                   />
                 </DenseDataTableFrame>
@@ -251,15 +251,15 @@ export function BrowserHistoryPanel({
           )}
         </TableBlock>
 
-        <TableBlock title="保存的密码">
+        <TableBlock title={t('browser.sections.passwords')}>
           {info.passwords.length === 0 ? (
             <DenseDataTableFrame rowCount={0}>
               <DenseDataTable
                 rows={[]}
                 columns={passwordColumns}
                 getRowKey={() => 'empty'}
-                emptyTitle="暂无密码记录"
-                emptyDescription="发现 login data / logins.json 后仅展示 URL、用户名等元数据。"
+                emptyTitle={t('browser.empty.passwords')}
+                emptyDescription={t('browser.empty.passwordsDescription')}
               />
             </DenseDataTableFrame>
           ) : (
@@ -275,7 +275,7 @@ export function BrowserHistoryPanel({
                     rows={rows}
                     columns={passwordColumns}
                     getRowKey={(row) => row.artifactId}
-                    emptyTitle="暂无密码记录"
+                    emptyTitle={t('browser.empty.passwords')}
                     emptyDescription=""
                   />
                 </DenseDataTableFrame>
