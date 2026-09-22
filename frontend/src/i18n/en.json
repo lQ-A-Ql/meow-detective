@@ -1,6 +1,6 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" },
+    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" }, "yes": "Yes", "no": "No", "unknown": "Unknown",
     "errors": { "unknownApi": "Unknown API error" },
     "partition": { "display": "Partition {{index}} ({{label}})" },
     "sort": { "name": "Name", "size": "Size", "modifiedAt": "Modified", "extension": "Extension" },

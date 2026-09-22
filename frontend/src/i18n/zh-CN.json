@@ -1,6 +1,6 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" },
+    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" }, "yes": "是", "no": "否", "unknown": "未知",
     "errors": { "unknownApi": "未知接口错误" },
     "partition": { "display": "分区{{index}}（{{label}}）" },
     "sort": { "name": "名称", "size": "大小", "modifiedAt": "修改时间", "extension": "扩展名" },
