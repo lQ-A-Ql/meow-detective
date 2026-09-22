@@ -130,6 +130,19 @@ describe('LinuxArtifactsPanel', () => {
     expect(screen.getByText('已锁定')).toBeDefined();
   });
 
+  it('renders legacy login rows that lack a record type', () => {
+    const summary = baseSummary({
+      loginCount: 1,
+      totalCount: 1,
+      loginRecords: [{
+        artifactId: 'legacy-wtmp', fileId: 'file-legacy', sourcePath: '/var/log/wtmp',
+        user: 'root', terminal: 'tty1', host: '', pid: 0,
+      }],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'login' }));
+    expect(screen.getByText('/var/log/wtmp')).toBeDefined();
+  });
+
   it('renders sudo content when activeTab is sudo', () => {
     render(createElement(LinuxArtifactsPanel, { activeTab: 'sudo' }));
     expect(screen.getByText('暂无 sudo/提权事件')).toBeDefined();

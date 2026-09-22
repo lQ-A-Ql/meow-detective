@@ -58,7 +58,6 @@ const WINDOWS_DELETED_RECOVERY_NODE: SourceTreeNode = {
 
 const LINUX_NODES: SourceTreeNode[] = [
   { labelKey: 'analysis.sidebar.linuxOverview', icon: Server, category: 'LinuxArtifacts', linuxTab: 'overview' },
-  { labelKey: 'analysis.sidebar.linuxCluster', icon: Server, linuxTab: 'cluster' },
   { labelKey: 'analysis.sidebar.linuxJournal', icon: FileClock, category: 'LinuxJournal', linuxTab: 'journal' },
   { labelKey: 'analysis.sidebar.linuxLogin', icon: Monitor, category: 'LinuxLogin', linuxTab: 'login' },
   { labelKey: 'analysis.sidebar.linuxCommands', icon: FileText, category: 'LinuxCommands', linuxTab: 'commands' },

@@ -24,6 +24,10 @@ impl<'a> EnvironmentObjectRepo<'a> {
         self.conn.execute("INSERT OR IGNORE INTO environment_objects (id, case_id, object_kind, name, identity_state, status, provenance_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![record.id, record.case_id, record.object_kind, record.name, record.identity_state, record.status, record.provenance_json])?;
         Ok(())
     }
+    pub fn upsert(&self, record: &EnvironmentObjectRecord) -> DbResult<()> {
+        self.conn.execute("INSERT INTO environment_objects (id, case_id, object_kind, name, identity_state, status, provenance_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(id) DO UPDATE SET object_kind = excluded.object_kind, name = excluded.name, identity_state = excluded.identity_state, status = excluded.status, provenance_json = excluded.provenance_json, updated_at = datetime('now')", params![record.id, record.case_id, record.object_kind, record.name, record.identity_state, record.status, record.provenance_json])?;
+        Ok(())
+    }
     pub fn find(&self, object_id: &str) -> DbResult<Option<EnvironmentObjectRecord>> {
         self.conn.query_row("SELECT id, case_id, object_kind, name, identity_state, status, provenance_json FROM environment_objects WHERE id = ?1", [object_id], |row| Ok(EnvironmentObjectRecord { id: row.get(0)?, case_id: row.get(1)?, object_kind: row.get(2)?, name: row.get(3)?, identity_state: row.get(4)?, status: row.get(5)?, provenance_json: row.get(6)? })).optional().map_err(Into::into)
     }

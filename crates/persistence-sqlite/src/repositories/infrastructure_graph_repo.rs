@@ -10,6 +10,7 @@ pub struct InfrastructureGraphNodeRecord {
     pub status: String,
     pub confidence: String,
     pub provenance_json: String,
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,21 +33,24 @@ impl<'a> InfrastructureGraphRepo<'a> {
 
     pub fn list_nodes(&self, case_id: &str) -> DbResult<Vec<InfrastructureGraphNodeRecord>> {
         let mut statement = self.conn.prepare(
-            "SELECT id, domain, kind, name, status, confidence, provenance_json
+            "SELECT id, domain, kind, name, status, confidence, provenance_json, version
              FROM (
                  SELECT id, 'environment' AS domain, object_kind AS kind, name, status,
-                        identity_state AS confidence, provenance_json
+                        identity_state AS confidence, provenance_json,
+                        json_extract(provenance_json, '$.version') AS version
                  FROM environment_objects WHERE case_id = ?1
                  UNION ALL
                  SELECT id, 'storage' AS domain, object_kind AS kind, name, status,
-                        identity_state AS confidence, provenance_json
+                        identity_state AS confidence, provenance_json,
+                        json_extract(provenance_json, '$.version') AS version
                  FROM storage_objects WHERE case_id = ?1
                  UNION ALL
                  SELECT 'analysis:' || scope_id || ':' || data_source_id || ':' || IFNULL(file_id, artifact_kind),
                         'analysis' AS domain, artifact_kind AS kind, artifact_kind AS name,
                         status, 'candidate' AS confidence,
                         json_object('scopeId', scope_id, 'dataSourceId', data_source_id,
-                                    'fileId', file_id, 'parser', parser)
+                                    'fileId', file_id, 'parser', parser),
+                        NULL AS version
                  FROM linux_topology_artifacts
                  WHERE data_source_id IN (SELECT id FROM data_sources WHERE case_id = ?1)
              )
@@ -61,6 +65,7 @@ impl<'a> InfrastructureGraphRepo<'a> {
                 status: row.get(4)?,
                 confidence: row.get(5)?,
                 provenance_json: row.get(6)?,
+                version: row.get(7)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()

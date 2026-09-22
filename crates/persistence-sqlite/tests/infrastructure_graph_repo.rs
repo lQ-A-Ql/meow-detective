@@ -24,12 +24,13 @@ fn infrastructure_graph_projects_environment_and_storage_domains() {
             name: "Linux".to_string(),
             identity_state: "candidate".to_string(),
             status: "ready".to_string(),
-            provenance_json: "{}".to_string(),
+            provenance_json: r#"{"version":"openEuler 24.03"}"#.to_string(),
         })
         .unwrap();
     let repo = InfrastructureGraphRepo::new(&conn);
     let nodes = repo.list_nodes("case-graph").unwrap();
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].domain, "environment");
+    assert_eq!(nodes[0].version.as_deref(), Some("openEuler 24.03"));
     assert!(repo.list_edges("case-graph").unwrap().is_empty());
 }

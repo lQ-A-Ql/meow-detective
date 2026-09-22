@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Fragment } from 'react';
 import {
   Boxes, ChevronRight, CircleDot, Copy, Database, ExternalLink, GitBranch,
   HardDrive, Layers3, Network, Search, Server,
@@ -13,7 +14,7 @@ import { StatusBadge } from '@/components/status/StatusBadge';
 import { EmptyState as SharedEmptyState, KeyValueField, MetricCard, SectionHeader } from '@/components/data-display';
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';
 import { useInfrastructureWorkspace } from '@/features/infrastructure/hooks/useInfrastructureWorkspace';
-import { TopologyCanvas } from '@/features/infrastructure/components/TopologyCanvas';
+import { NetworkTopologyCanvas } from '@/features/infrastructure/components/NetworkTopologyCanvas';
 import { domainLabel, kindLabel, relationLabel, stateLabel } from '@/features/infrastructure/logic/labels';
 import { INFRASTRUCTURE_DOMAIN_ORDER } from '@/features/infrastructure/types';
 
@@ -23,7 +24,7 @@ const DOMAIN_ORDER = INFRASTRUCTURE_DOMAIN_ORDER;
 export function InfrastructurePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentCase, graph, nodes, edges, domains: byDomain, visibleNodes, nodeNames, query, selected, selectedId, setQuery, setSelectedId } = useInfrastructureWorkspace();
+  const { currentCase, graph, nodes, edges, domains: byDomain, visibleNodes, nodeNames, networkTopology, hostFacts, query, selected, selectedId, setQuery, setSelectedId } = useInfrastructureWorkspace();
 
   if (!currentCase.data) return <SharedEmptyState className="flex flex-1 items-center justify-center">{t('infrastructure.noCase')}</SharedEmptyState>;
   if (graph.isLoading) return <SharedEmptyState className="flex flex-1 items-center justify-center">{t('common.loading')}</SharedEmptyState>;
@@ -45,12 +46,14 @@ export function InfrastructurePage() {
             <div className="mt-1 truncate">{currentCase.data.name}</div>
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-5">
           <MetricCard icon={Server} label={t('infrastructure.metrics.environments')} value={byDomain.environment.length} size="sm" className="border-0 border-r" />
           <MetricCard icon={Database} label={t('infrastructure.metrics.storage')} value={byDomain.storage.length} size="sm" className="border-0 border-r" />
           <MetricCard icon={Boxes} label={t('infrastructure.metrics.workloads')} value={byDomain.analysis.length} size="sm" className="border-0 border-r" />
           <MetricCard icon={Network} label={t('infrastructure.metrics.relations')} value={edges.length} size="sm" className="border-0" />
+          <MetricCard icon={GitBranch} label={t('infrastructure.metrics.hostLinks')} value={networkTopology.edges.length} size="sm" className="border-0" />
         </div>
+        <ClusterIdentitySummary nodes={nodes} hostFacts={hostFacts} t={t} />
       </header>
 
       <Tabs defaultValue="overview" className="min-h-0 flex-1 overflow-hidden px-5 py-4 lg:px-7">
@@ -65,9 +68,9 @@ export function InfrastructurePage() {
             <Input aria-label={t('infrastructure.actions.search')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('infrastructure.searchPlaceholder')} variant="forensics" inputSize="compact" className="pl-7" />
           </div>
         </div>
-        <TabsContent value="overview" className="h-[calc(100%-46px)] overflow-auto pt-4"><Overview domains={byDomain} edges={edges} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
-        <TabsContent value="topology" className="h-[calc(100%-46px)] overflow-auto pt-4"><Topology domains={byDomain} edges={edges} nodeNames={nodeNames} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
-        <TabsContent value="inventory" className="h-[calc(100%-46px)] overflow-auto pt-4"><Inventory nodes={visibleNodes} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
+        <TabsContent value="overview" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><Overview domains={byDomain} edges={edges} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
+        <TabsContent value="topology" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><Topology nodes={networkTopology.nodes} edges={networkTopology.edges} nodeNames={nodeNames} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
+        <TabsContent value="inventory" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><Inventory nodes={visibleNodes} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
       </Tabs>
       {selected ? <Inspector node={selected} edges={edges} onOpenFiles={() => navigate('/files')} onClose={() => setSelectedId(undefined)} t={t} /> : null}
     </main>
@@ -83,12 +86,18 @@ function LayerColumn({ domain, nodes, selectedId, onSelect, t }: { domain: Domai
   return <div className="border-b border-forensics-border p-4 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-forensics-text">{domainLabel(domain, t)}</div><div className="mt-1 text-[11px] leading-4 text-forensics-muted">{t(`infrastructure.domainDescriptions.${domain}`)}</div></div><Badge variant="outline">{nodes.length}</Badge></div><div className="mt-4 divide-y divide-forensics-border border-y border-forensics-border">{nodes.slice(0, 6).map((node) => <NodeListItem key={node.id} node={node} selected={selectedId === node.id} onSelect={onSelect} t={t} />)}</div>{nodes.length > 6 ? <div className="mt-3 text-[11px] text-forensics-muted">{t('infrastructure.moreObjects', { count: nodes.length - 6 })}</div> : null}{nodes.length === 0 ? <div className="mt-4 text-xs text-forensics-muted">{t('infrastructure.values.notFound')}</div> : null}</div>;
 }
 
-function Topology({ domains, edges, nodeNames, selectedId, onSelect, t }: { domains: Record<Domain, InfrastructureGraphNode[]>; edges: InfrastructureGraphEdge[]; nodeNames: Map<string, string>; selectedId?: string; onSelect: (id: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
-  const visualDomains = { ...domains, analysis: domains.analysis.slice(0, 48) };
-  const visualIds = new Set(DOMAIN_ORDER.flatMap((domain) => visualDomains[domain].map((node) => node.id)));
-  const visualEdges = edges.filter((edge) => visualIds.has(edge.sourceId) && visualIds.has(edge.targetId));
-  const hiddenEvidenceCount = domains.analysis.length - visualDomains.analysis.length;
-  return <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="overflow-hidden border border-forensics-border bg-forensics-surface p-4"><div className="mb-4 flex items-center gap-2 text-xs text-forensics-muted"><GitBranch size={14} />{t('infrastructure.topologyHint')}</div><TopologyCanvas domains={visualDomains} edges={visualEdges} selectedId={selectedId} onSelect={onSelect} t={t} />{hiddenEvidenceCount > 0 ? <div className="mt-3 border-t border-forensics-border pt-3 text-[11px] text-forensics-muted">{t('infrastructure.topologyHiddenEvidence', { count: hiddenEvidenceCount })}</div> : null}</section><RelationList edges={edges} nodeNames={nodeNames} t={t} /></div>;
+function Topology({ nodes, edges, nodeNames, selectedId, onSelect, t }: { nodes: InfrastructureGraphNode[]; edges: InfrastructureGraphEdge[]; nodeNames: Map<string, string>; selectedId?: string; onSelect: (id: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
+  return <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="overflow-hidden border border-forensics-border bg-forensics-surface p-4"><div className="mb-4 flex items-center gap-2 text-xs text-forensics-muted"><Network size={14} />{t('infrastructure.topologyHint')}</div><NetworkTopologyCanvas nodes={nodes} edges={edges} selectedId={selectedId} onSelect={onSelect} t={t} /></section><RelationList edges={edges} nodeNames={nodeNames} t={t} /></div>;
+}
+
+function ClusterIdentitySummary({ nodes, hostFacts, t }: { nodes: InfrastructureGraphNode[]; hostFacts: Map<string, { hostname?: string; operatingSystem?: string; operatingSystemVersion?: string; kernelVersion?: string }>; t: ReturnType<typeof useTranslation>['t'] }) {
+  const environment = nodes.filter((node) => node.domain === 'environment');
+  const hosts = nodes.filter((node) => node.kind === 'physical_host');
+  const kinds = [...new Set(environment.map((node) => kindLabel(node.kind, t)))];
+  const sourceId = hosts.map((node) => parseJson(node.provenanceJson).dataSourceId).find((value): value is string => typeof value === 'string');
+  const fact = sourceId ? hostFacts.get(sourceId) : undefined;
+  const version = [fact?.operatingSystem, fact?.operatingSystemVersion, fact?.kernelVersion].filter(Boolean).join(' / ');
+  return <section className="mt-4 border border-forensics-border bg-forensics-panel px-4 py-3"><div className="mb-3 text-xs font-light text-forensics-text">{t('infrastructure.clusterInfo.title')}</div><div className="grid gap-3 text-xs sm:grid-cols-5"><KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.types')} value={kinds.join(' / ') || t('infrastructure.values.unavailable')} /><KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.hosts')} value={hosts.length.toString()} /><KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.identity')} value={stateLabel(environment[0]?.confidence ?? 'unproven', t)} /><KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.hostname')} value={fact?.hostname ?? t('infrastructure.values.unavailable')} /><KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.version')} value={version || t('infrastructure.values.unavailable')} /></div><div className="mt-4 overflow-x-auto border-t border-forensics-border pt-3"><div className="mb-2 text-[11px] text-forensics-muted">{t('infrastructure.clusterInfo.hostEvidence')}</div><div className="grid min-w-[640px] grid-cols-[minmax(180px,1fr)_minmax(140px,1fr)_minmax(260px,2fr)] gap-x-4 gap-y-2 text-[11px]"><span className="text-forensics-muted">{t('infrastructure.clusterInfo.host')}</span><span className="text-forensics-muted">{t('infrastructure.clusterInfo.hostname')}</span><span className="text-forensics-muted">{t('infrastructure.clusterInfo.version')}</span>{hosts.map((host) => { const hostSourceId = parseJson(host.provenanceJson).dataSourceId; const hostFact = typeof hostSourceId === 'string' ? hostFacts.get(hostSourceId) : undefined; const hostVersion = [hostFact?.operatingSystem, hostFact?.operatingSystemVersion, hostFact?.kernelVersion].filter(Boolean).join(' / '); return <Fragment key={host.id}><span className="truncate text-forensics-text" title={host.name}>{host.name}</span><span className="truncate text-forensics-text-secondary">{hostFact?.hostname ?? t('infrastructure.values.unavailable')}</span><span className="truncate font-mono text-forensics-text-secondary">{hostVersion || t('infrastructure.values.unavailable')}</span></Fragment>; })}</div></div></section>;
 }
 
 function Inventory({ nodes, selectedId, onSelect, t }: { nodes: InfrastructureGraphNode[]; selectedId?: string; onSelect: (id: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {

@@ -68,7 +68,10 @@ export function useDenseTableFilter<T>({
       filterableColumns.map((column) => {
         const seen = new Set<string>();
         for (const row of rows) {
-          seen.add(column.text(row));
+          const value = column.text(row).trim();
+          if (value) {
+            seen.add(value);
+          }
         }
         return {
           key: column.key,

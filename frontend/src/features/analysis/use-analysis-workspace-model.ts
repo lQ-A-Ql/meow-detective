@@ -11,7 +11,6 @@ import {
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
   useLinuxArtifactSummary,
-  useKubernetesClusterSummary,
   usePluginModules,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
@@ -84,7 +83,6 @@ export function useAnalysisWorkspaceModel() {
     view: eventLogView,
   });
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
-  const kubernetesCluster = useKubernetesClusterSummary({ source: selectedDataSource });
   const androidDeviceInfo = useAndroidDeviceInfo(selectedDataSource);
   const androidPackages = useAndroidPackageSummary({ source: selectedDataSource, limit: 100 });
   const androidAnalysisRun = useRunAndroidAnalysis();
@@ -488,8 +486,6 @@ export function useAnalysisWorkspaceModel() {
     evidencePending: evidenceScan.isPending,
     summaryPending: summaryMutation.isPending,
     linuxSummary: linuxSummary.data,
-    kubernetesClusterSummary: kubernetesCluster.data,
-    kubernetesClusterLoading: kubernetesCluster.isLoading,
     linuxSummaryLoading: linuxSummary.isLoading,
     linuxSummaryHasMore: Boolean(linuxSummary.hasNextPage),
     linuxSummaryLoadingMore: linuxSummary.isFetchingNextPage,

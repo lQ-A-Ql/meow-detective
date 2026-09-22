@@ -15,7 +15,6 @@ import {
   EvidenceClassificationSummary,
   FileClassificationBoard,
   LinuxArtifactSummary,
-  KubernetesClusterSummary,
   PluginActionDescriptor,
   PluginFamilyEntries,
   PluginFamilyEntriesRequest,
@@ -101,10 +100,6 @@ export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
-}
-
-export async function getKubernetesClusterSummary(dataSourceId: string): Promise<KubernetesClusterSummary> {
-  return apiClient.request(COMMANDS.analysis.GET_KUBERNETES_CLUSTER_SUMMARY, { request: { dataSourceId } });
 }
 
 export async function runAndroidAnalysis(dataSourceId: string): Promise<AndroidAnalysisRun> {

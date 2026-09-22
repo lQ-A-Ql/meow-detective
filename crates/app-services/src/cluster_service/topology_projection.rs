@@ -113,16 +113,22 @@ pub fn project_import_set_topology(
         .into_iter()
         .map(|source| (source.id.0, source.name))
         .collect::<BTreeMap<_, _>>();
-    let member_source_names = source_members
+    let member_sources = source_members
         .iter()
-        .map(|(_, source_id)| source_names.get(source_id).cloned().unwrap_or_default())
+        .map(|(member_index, source_id)| {
+            (
+                *member_index,
+                source_id.clone(),
+                source_names.get(source_id).cloned().unwrap_or_default(),
+            )
+        })
         .collect::<Vec<_>>();
     project_environment_objects(
         case_connection,
         case_id,
         import_set_id,
         &projection,
-        &member_source_names,
+        &member_sources,
     )?;
     Ok(projection)
 }

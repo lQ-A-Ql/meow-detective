@@ -97,8 +97,6 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             pluginModules={model.pluginModules}
             activePluginId={model.activePluginId}
             dataSourceId={model.selectedDataSourceId}
-            kubernetesClusterSummary={model.kubernetesClusterSummary}
-            kubernetesClusterLoading={model.kubernetesClusterLoading}
           />
         ) : model.selectedPlatform === 'android' ? (
           <AndroidAnalysisView

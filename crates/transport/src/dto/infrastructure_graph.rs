@@ -10,6 +10,8 @@ pub struct InfrastructureGraphNodeDto {
     pub status: String,
     pub confidence: String,
     pub provenance_json: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

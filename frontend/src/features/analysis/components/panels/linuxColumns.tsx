@@ -45,7 +45,7 @@ export function useLinuxColumns() {
     { key: 'host', title: t('linuxArtifacts.columns.host'), className: 'w-[140px]', render: (row) => row.host || '-', text: (row) => row.host },
     { key: 'failures', title: t('linuxArtifacts.columns.failures'), className: 'w-[80px]', render: (row) => row.failures?.toString() ?? '-', text: (row) => row.failures?.toString() ?? '' },
     { key: 'lockout', title: t('linuxArtifacts.columns.lockout'), className: 'w-[80px]', render: (row) => row.lockout === undefined ? '-' : row.lockout ? t('linuxArtifacts.values.yes') : t('linuxArtifacts.values.no'), text: (row) => row.lockout === undefined ? '' : row.lockout ? t('linuxArtifacts.values.yes') : t('linuxArtifacts.values.no') },
-    { key: 'recordType', title: t('linuxArtifacts.columns.recordType'), className: 'w-[80px]', render: (row) => row.recordKind === 'lastlog' || row.recordKind === 'faillog' ? '-' : row.recordType.toString(), text: (row) => row.recordKind === 'lastlog' || row.recordKind === 'faillog' ? '' : row.recordType.toString() },
+    { key: 'recordType', title: t('linuxArtifacts.columns.recordType'), className: 'w-[80px]', render: (row) => row.recordKind === 'lastlog' || row.recordKind === 'faillog' ? '-' : row.recordType?.toString() ?? '-', text: (row) => row.recordKind === 'lastlog' || row.recordKind === 'faillog' ? '' : row.recordType?.toString() ?? '' },
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath, text: (row) => row.sourcePath },
     ] as DenseColumn<LinuxLoginRecord>[],
     command: [

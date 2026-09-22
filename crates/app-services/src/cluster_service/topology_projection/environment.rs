@@ -11,24 +11,25 @@ pub(super) fn project_environment_objects(
     case_id: &CaseId,
     import_set_id: &str,
     projection: &ImportSetTopologyProjection,
-    member_source_names: &[String],
+    member_sources: &[(u32, String, String)],
 ) -> Result<()> {
     let repo = EnvironmentObjectRepo::new(conn);
-    for (index, os_scope_id) in projection.os_scope_ids.iter().enumerate() {
-        let source_name = member_source_names
-            .get(index)
-            .filter(|name| !name.is_empty())
-            .cloned()
-            .unwrap_or_else(|| format!("member-{}", index + 1));
-        let host_id = format!("env:host:{import_set_id}:{index}");
-        let os_id = format!("env:os:{import_set_id}:{index}");
+    for ((member_index, data_source_id, source_name), os_scope_id) in
+        member_sources.iter().zip(&projection.os_scope_ids)
+    {
+        let source_name = (!source_name.is_empty())
+            .then(|| source_name.clone())
+            .unwrap_or_else(|| format!("member-{}", member_index + 1));
+        let host_id = format!("env:host:{import_set_id}:{member_index}");
+        let os_id = format!("env:os:{import_set_id}:{member_index}");
         insert_object(
             &repo,
             &host_id,
             case_id,
             "physical_host",
             &format!("Host evidence: {source_name}"),
-            &format!("scope:physical-host:{import_set_id}:{index}"),
+            &format!("scope:physical-host:{import_set_id}:{member_index}"),
+            data_source_id,
             "ready",
         )?;
         insert_object(
@@ -38,6 +39,7 @@ pub(super) fn project_environment_objects(
             "os_instance",
             &format!("Linux system: {source_name}"),
             os_scope_id,
+            data_source_id,
             "ready",
         )?;
         repo.insert_relation(
@@ -45,7 +47,8 @@ pub(super) fn project_environment_objects(
             &os_id,
             "hosts",
             "candidate",
-            "{\"basis\":\"topology_projection\"}",
+            &serde_json::json!({ "basis": "topology_projection", "dataSourceId": data_source_id })
+                .to_string(),
         )?;
     }
     if let Some(pve_scope_id) = &projection.pve_scope_id {
@@ -57,12 +60,13 @@ pub(super) fn project_environment_objects(
             "pve",
             "PVE environment",
             pve_scope_id,
+            "",
             "ready",
         )?;
-        for index in 0..projection.os_scope_ids.len() {
+        for (member_index, _, _) in member_sources {
             repo.insert_relation(
                 &pve_id,
-                &format!("env:host:{import_set_id}:{index}"),
+                &format!("env:host:{import_set_id}:{member_index}"),
                 "manages",
                 "candidate",
                 "{\"basis\":\"pve_scope\"}",
@@ -81,6 +85,7 @@ pub(super) fn project_environment_objects(
             "virtual_machine",
             "PVE virtual machine",
             vm_scope_id,
+            "",
             "partial",
         )?;
     }
@@ -93,11 +98,12 @@ pub(super) fn project_environment_objects(
             "kubernetes",
             "Kubernetes environment",
             kubernetes_scope_id,
+            "",
             "partial",
         )?;
-        for index in 0..projection.os_scope_ids.len() {
+        for (member_index, _, _) in member_sources {
             repo.insert_relation(
-                &format!("env:os:{import_set_id}:{index}"),
+                &format!("env:os:{import_set_id}:{member_index}"),
                 &kubernetes_id,
                 "runs",
                 "candidate",
@@ -115,16 +121,18 @@ fn insert_object(
     kind: &str,
     name: &str,
     scope_id: &str,
+    data_source_id: &str,
     status: &str,
 ) -> Result<()> {
-    repo.insert_if_absent(&EnvironmentObjectRecord {
+    repo.upsert(&EnvironmentObjectRecord {
         id: id.to_string(),
         case_id: case_id.0.clone(),
         object_kind: kind.to_string(),
         name: name.to_string(),
         identity_state: "candidate".to_string(),
         status: status.to_string(),
-        provenance_json: serde_json::json!({"scopeId": scope_id}).to_string(),
+        provenance_json: serde_json::json!({"scopeId": scope_id, "dataSourceId": data_source_id})
+            .to_string(),
     })?;
     Ok(())
 }

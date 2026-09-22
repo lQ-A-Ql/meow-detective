@@ -20,6 +20,7 @@ pub fn get_infrastructure_graph(
             status: node.status,
             confidence: node.confidence,
             provenance_json: node.provenance_json,
+            version: node.version,
         })
         .collect();
     let edges = repo

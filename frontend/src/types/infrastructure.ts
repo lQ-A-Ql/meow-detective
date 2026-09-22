@@ -6,6 +6,7 @@ export interface InfrastructureGraphNode {
   status: string;
   confidence: string;
   provenanceJson: string;
+  version?: string;
 }
 
 export interface InfrastructureGraphEdge {

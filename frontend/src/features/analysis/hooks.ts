@@ -429,4 +429,4 @@ export {
   useRunAndroidAnalysis,
 } from './hooks/android';
 
-export { useKubernetesClusterSummary, useLinuxArtifactSummary } from './hooks/linux';
+export { useLinuxArtifactSummary } from './hooks/linux';

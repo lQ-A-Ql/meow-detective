@@ -4,10 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useCurrentCase } from '@/features/case/hooks';
 import { getInfrastructureGraph } from '@/lib/api/infrastructure';
 import { groupNodesByDomain, matchesInfrastructureQuery } from '../logic/labels';
+import { buildNetworkTopology } from '../logic/network-topology';
+import { useInfrastructureHostFacts } from './useInfrastructureHostFacts';
 
 export function useInfrastructureWorkspace() {
   const { t } = useTranslation();
   const currentCase = useCurrentCase();
+  const hostFacts = useInfrastructureHostFacts();
   const graph = useQuery({
     queryKey: ['infrastructure', 'graph', currentCase.data?.id ?? null],
     queryFn: getInfrastructureGraph,
@@ -24,6 +27,7 @@ export function useInfrastructureWorkspace() {
     [nodes, query, t],
   );
   const nodeNames = useMemo(() => new Map(nodes.map((node) => [node.id, node.name])), [nodes]);
+  const networkTopology = useMemo(() => buildNetworkTopology({ nodes, edges }), [edges, nodes]);
 
   return {
     currentCase,
@@ -33,6 +37,8 @@ export function useInfrastructureWorkspace() {
     domains,
     visibleNodes,
     nodeNames,
+    networkTopology,
+    hostFacts,
     query,
     selected,
     selectedId,

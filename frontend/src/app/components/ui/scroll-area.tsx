@@ -37,7 +37,7 @@ function ScrollArea({
         data-slot="scroll-area-viewport"
         data-testid={viewportTestId}
         className={cn(
-          "focus-visible:ring-ring/20 size-full rounded-none transition-colors duration-500 focus:outline-none focus-visible:ring-1",
+          "focus-visible:ring-ring/20 size-full rounded-none scrollbar-none transition-colors duration-500 focus:outline-none focus-visible:ring-1",
           viewportClassName,
         )}
         {...viewportProps}
