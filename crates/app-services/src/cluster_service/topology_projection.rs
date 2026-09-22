@@ -52,7 +52,8 @@ pub fn project_import_set_topology(
         return Err(ClusterServiceError::InvalidClusterId);
     }
     if members.iter().any(|member| {
-        member.import_state != "ready" || member.data_source_id.as_deref().is_none_or(str::is_empty)
+        !matches!(member.import_state.as_str(), "ready" | "ready_metadata")
+            || member.data_source_id.as_deref().is_none_or(str::is_empty)
     }) {
         return Err(ClusterServiceError::IncompleteImportSet);
     }

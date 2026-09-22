@@ -123,6 +123,26 @@ impl<'a> LinuxImportSetRepo<'a> {
         Ok(())
     }
 
+    pub fn update_member_state_by_source(
+        &self,
+        data_source_id: &str,
+        import_state: &str,
+        last_error: Option<&str>,
+    ) -> DbResult<()> {
+        let affected = self.conn.execute(
+            "UPDATE linux_import_set_members
+             SET import_state = ?1, last_error = ?2
+             WHERE data_source_id = ?3",
+            params![import_state, last_error, data_source_id],
+        )?;
+        if affected != 1 {
+            return Err(crate::connection::DbError::System(format!(
+                "linux import-set member is not bound to data source: {data_source_id}"
+            )));
+        }
+        Ok(())
+    }
+
     pub fn find_members(&self, import_set_id: &str) -> DbResult<Vec<LinuxImportSetMemberRecord>> {
         let mut statement = self.conn.prepare(
             "SELECT import_set_id, member_index, source_path, source_kind,

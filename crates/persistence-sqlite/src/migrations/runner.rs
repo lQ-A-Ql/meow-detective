@@ -202,6 +202,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0056_provenance_assertions",
         include_str!("scripts/0056_provenance_assertions.sql"),
     ),
+    (
+        "0057_import_set_member_metadata_ready",
+        include_str!("scripts/0057_import_set_member_metadata_ready.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

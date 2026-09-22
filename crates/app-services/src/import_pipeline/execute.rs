@@ -1,7 +1,9 @@
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, job_repo::JobRepo, linux_import_set_repo::LinuxImportSetRepo,
+};
 use transport::{dto::CancellationStateDto, CommandError};
 
 use crate::import_pipeline::{
@@ -129,6 +131,13 @@ fn persist_import_outcome(
             DataSourceRepo::new(conn)
                 .update_import_state(data_source_id, ready_state, None)
                 .map_err(CommandError::from_service_error)?;
+            if let Err(error) = LinuxImportSetRepo::new(conn).update_member_state_by_source(
+                &data_source_id.0,
+                ready_state,
+                None,
+            ) {
+                tracing::warn!(data_source_id = %data_source_id.0, %error, "Failed to update evidence-set member readiness");
+            }
             Ok(message)
         }
         Err(error) => {
@@ -152,6 +161,13 @@ fn persist_failed_import(
             error = %update_error,
             "Failed to persist data source import failure state"
         );
+    }
+    if let Err(update_error) = LinuxImportSetRepo::new(conn).update_member_state_by_source(
+        &data_source_id.0,
+        "failed",
+        Some(&diagnostic),
+    ) {
+        tracing::warn!(data_source_id = %data_source_id.0, error = %update_error, "Failed to persist evidence-set member failure");
     }
 }
 
