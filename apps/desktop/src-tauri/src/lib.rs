@@ -107,6 +107,7 @@ macro_rules! desktop_command_handler {
             get_v3_governance_snapshot,
             get_case_overview_snapshot,
             get_correlation_snapshot,
+            get_infrastructure_graph,
             generate_analysis_summary,
             get_graph_snapshot,
             query_graph,

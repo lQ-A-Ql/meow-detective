@@ -290,6 +290,10 @@
         "label": "数据源分析",
         "context": "系统信息、文件分类与分析报告"
       },
+      "infrastructure": {
+        "label": "基础设施取证",
+        "context": "Linux 集群、节点、工作负载与存储关系"
+      },
       "v2": {
         "label": "V2 治理",
         "context": "可信验证、Benchmark、安全治理与发布评分"
@@ -329,6 +333,19 @@
       "running": "{{count}} 运行中",
       "warnings": "{{count}}"
     }
+  },
+  "infrastructure": {
+    "title": "Linux 集群取证",
+    "subtitle": "基础设施关系、工作负载与存储证据",
+    "noCase": "请先打开案件",
+    "empty": "当前案件未发现基础设施对象",
+    "tabs": { "overview": "概览", "topology": "拓扑", "nodes": "节点", "workloads": "容器与服务", "storage": "存储", "evidence": "证据" },
+    "metrics": { "environments": "环境对象", "storage": "存储对象", "workloads": "运行时证据", "relations": "关系" },
+    "sections": { "domains": "基础设施域", "relations": "关系", "inspector": "检查器", "nodes": "节点", "workloads": "容器与服务证据", "storage": "存储对象", "evidence": "证据与来源" },
+    "columns": { "name": "名称", "type": "类型", "status": "状态", "confidence": "置信度", "source": "来源", "relation": "关系", "from": "起点", "to": "终点", "parser": "解析器", "artifact": "证据类型" },
+    "values": { "unselected": "未选择对象", "unknown": "未知", "notFound": "未发现" },
+    "actions": { "openFiles": "打开文件浏览", "copyId": "复制 ID" },
+    "workloadHint": "仅展示在证据中发现的静态 Pod、容器日志、运行时元数据与服务配置；不推断实时运行状态。"
   },
   "bottomDrawer": {
     "headline": {

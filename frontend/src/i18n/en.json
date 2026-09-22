@@ -290,6 +290,10 @@
         "label": "Data Source Analysis",
         "context": "System info, file classification and analysis reports"
       },
+      "infrastructure": {
+        "label": "Infrastructure",
+        "context": "Linux clusters, nodes, workloads and storage relationships"
+      },
       "v2": {
         "label": "V2 Governance",
         "context": "Trusted verification, benchmark, security governance and release scorecard"
@@ -329,6 +333,19 @@
       "running": "{{count}} running",
       "warnings": "{{count}}"
     }
+  },
+  "infrastructure": {
+    "title": "Linux Infrastructure Forensics",
+    "subtitle": "Infrastructure relationships, workloads and storage evidence",
+    "noCase": "Open a case first",
+    "empty": "No infrastructure objects were found in this case",
+    "tabs": { "overview": "Overview", "topology": "Topology", "nodes": "Nodes", "workloads": "Containers & Services", "storage": "Storage", "evidence": "Evidence" },
+    "metrics": { "environments": "Environment", "storage": "Storage", "workloads": "Runtime evidence", "relations": "Relations" },
+    "sections": { "domains": "Infrastructure domains", "relations": "Relations", "inspector": "Inspector", "nodes": "Nodes", "workloads": "Container and service evidence", "storage": "Storage objects", "evidence": "Evidence and source" },
+    "columns": { "name": "Name", "type": "Type", "status": "Status", "confidence": "Confidence", "source": "Source", "relation": "Relation", "from": "From", "to": "To", "parser": "Parser", "artifact": "Evidence type" },
+    "values": { "unselected": "No object selected", "unknown": "Unknown", "notFound": "Not found" },
+    "actions": { "openFiles": "Open file browser", "copyId": "Copy ID" },
+    "workloadHint": "Only static Pods, container logs, runtime metadata, and service configuration found in evidence are listed. No live runtime state is inferred."
   },
   "bottomDrawer": {
     "headline": {

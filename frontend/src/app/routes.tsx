@@ -42,6 +42,12 @@ export const appRoutes: RouteObject[] = [
         }),
       },
       {
+        path: 'infrastructure/linux',
+        lazy: async () => ({
+          Component: (await import('./pages/LinuxInfrastructure')).LinuxInfrastructure,
+        }),
+      },
+      {
         path: 'emulation',
         lazy: async () => ({
           Component: (await import('./pages/Emulation')).Emulation,

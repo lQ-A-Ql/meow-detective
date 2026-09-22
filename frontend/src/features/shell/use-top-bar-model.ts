@@ -14,6 +14,7 @@ const productionLinks: TopBarLink[] = [
   { to: '/files', page: 'files' },
   { to: '/emulation', page: 'emulation' },
   { to: '/analysis', page: 'analysis' },
+  { to: '/infrastructure/linux', page: 'infrastructure' },
   { to: '/v3', page: 'v3' },
   { to: '/search', page: 'search' },
   { to: '/timeline', page: 'timeline' },

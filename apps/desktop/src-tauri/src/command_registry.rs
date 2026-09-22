@@ -47,6 +47,7 @@ pub(crate) use crate::commands::{
         query_graph,
     },
     import::pipeline::{cancel_import, import_data_source},
+    infrastructure_commands::get_infrastructure_graph,
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     ledger_commands::{get_ledger_proof, get_ledger_snapshot, seal_ledger_batch},
     mcp_commands::{

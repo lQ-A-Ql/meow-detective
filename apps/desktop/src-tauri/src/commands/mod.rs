@@ -7,6 +7,7 @@ pub mod emulation_commands;
 pub mod file_commands;
 pub mod graph_commands;
 pub mod import;
+pub mod infrastructure_commands;
 pub mod job_commands;
 pub mod ledger_commands;
 pub mod mcp_commands;

@@ -41,6 +41,14 @@ impl<'a> InfrastructureGraphRepo<'a> {
                  SELECT id, 'storage' AS domain, object_kind AS kind, name, status,
                         identity_state AS confidence, provenance_json
                  FROM storage_objects WHERE case_id = ?1
+                 UNION ALL
+                 SELECT 'analysis:' || scope_id || ':' || data_source_id || ':' || IFNULL(file_id, artifact_kind),
+                        'analysis' AS domain, artifact_kind AS kind, artifact_kind AS name,
+                        status, 'candidate' AS confidence,
+                        json_object('scopeId', scope_id, 'dataSourceId', data_source_id,
+                                    'fileId', file_id, 'parser', parser)
+                 FROM linux_topology_artifacts
+                 WHERE data_source_id IN (SELECT id FROM data_sources WHERE case_id = ?1)
              )
              ORDER BY domain, kind, id",
         )?;
@@ -73,6 +81,13 @@ impl<'a> InfrastructureGraphRepo<'a> {
              FROM linux_topology_edges AS edge
              JOIN linux_topology_scopes AS source ON source.id = edge.source_scope_id
              WHERE source.case_id = ?1
+             UNION ALL
+             SELECT 'analysis:' || artifact.scope_id || ':' || artifact.data_source_id || ':' || IFNULL(artifact.file_id, artifact.artifact_kind),
+                    REPLACE(artifact.scope_id, 'scope:kubernetes:', 'env:kubernetes:'),
+                    'derived_from', 'candidate', artifact.diagnostics_json
+             FROM linux_topology_artifacts AS artifact
+             WHERE artifact.layer = 'orchestration'
+               AND artifact.data_source_id IN (SELECT id FROM data_sources WHERE case_id = ?1)
              ORDER BY source_object_id, target_object_id, relation_kind",
         )?;
         let rows = statement.query_map(params![case_id], |row| {

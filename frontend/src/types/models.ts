@@ -31,3 +31,4 @@ export * from './batch';
 export * from './mount';
 export * from './emulation';
 export * from './ledger';
+export * from './infrastructure';

@@ -111,6 +111,9 @@ export const COMMANDS = {
     GET_NODE_NEIGHBORHOOD: 'get_node_neighborhood',
     GET_PROVENANCE_CHAIN: 'get_provenance_chain',
   },
+  infrastructure: {
+    GET_GRAPH: 'get_infrastructure_graph',
+  },
   analysis: {
     GET_SYSTEM_INFO: 'get_system_info',
     GET_KUBERNETES_CLUSTER_SUMMARY: 'get_kubernetes_cluster_summary',
