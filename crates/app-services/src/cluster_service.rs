@@ -3,6 +3,7 @@ use thiserror::Error;
 use crate::datasource_service;
 
 mod audit_parser;
+mod capability;
 mod ceph_scope_report;
 mod etcd_bolt;
 mod etcd_wal;
@@ -27,6 +28,7 @@ pub use audit_parser::{
     parse_kubernetes_audit_log, KubernetesAuditEvent, KubernetesAuditIndicator,
     KubernetesAuditParseResult,
 };
+pub use capability::{require_ceph_scope, require_kubernetes_scope, require_os_scope};
 pub use ceph_scope_report::{read_ceph_scope_coverage_report, write_ceph_scope_coverage_report};
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};

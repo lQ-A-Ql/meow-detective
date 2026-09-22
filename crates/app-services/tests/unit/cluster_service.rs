@@ -149,5 +149,8 @@ mod kubernetes;
 #[path = "cluster_service/topology_projection.rs"]
 mod topology_projection;
 
+#[path = "cluster_service/capability.rs"]
+mod capability;
+
 #[path = "cluster_service/kubernetes_parsers.rs"]
 mod kubernetes_parsers;

@@ -1,8 +1,5 @@
 use domain::{DataSourceId, EntryType, FileEntryId, KubernetesScopeId};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo,
-    linux_topology_scope_repo::LinuxTopologyScopeRepo,
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use rusqlite::Connection;
 
 use crate::source_db;
@@ -10,7 +7,7 @@ use crate::source_db;
 use super::kubernetes_paths::{
     classify_kubernetes_path, KubernetesArtifactKind, MAX_KUBERNETES_ARTIFACTS,
 };
-use super::{ClusterServiceError, Result, TopologyScopeKind};
+use super::{ClusterServiceError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KubernetesMemberArtifact {
@@ -84,14 +81,10 @@ pub fn discover_kubernetes_cluster_artifacts(
     case_id: &domain::CaseId,
     scope_id: &KubernetesScopeId,
 ) -> Result<KubernetesClusterArtifactInventory> {
-    let scope_repo = LinuxTopologyScopeRepo::new(case_connection);
-    let scope_kind = scope_repo.find_kind(&scope_id.0)?;
-    if scope_kind.as_deref() != Some(TopologyScopeKind::Kubernetes.as_str()) {
-        return Err(ClusterServiceError::InvalidClusterId);
-    }
+    let scope = super::require_kubernetes_scope(case_connection, &case_id.0, scope_id)?;
     let source_ids =
         DataSourceRepo::new(case_connection).find_ids_by_topology_scope(case_id, &scope_id.0)?;
-    let expected_member_count = source_ids.len() as u32;
+    let expected_member_count = scope.member_count;
     let mut members = Vec::with_capacity(source_ids.len());
     for source_id in source_ids {
         let ready = source_db::open_ready_source_read_only_by_id(

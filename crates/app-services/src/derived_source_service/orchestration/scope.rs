@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicBool;
 use domain::{CaseId, CephScopeId, DataSourceId};
 use persistence_sqlite::repositories::ceph_osd_repo::CephOsdRepo;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
-use rusqlite::OptionalExtension;
 
 use super::super::{ensure_not_cancelled, DerivedSourceError, DerivedSourceResult};
 
@@ -17,42 +16,14 @@ pub(super) fn load_ceph_scope(
     case_id: &CaseId,
     ceph_scope_id: &CephScopeId,
 ) -> DerivedSourceResult<CephScopeState> {
-    let row = conn
-        .query_row(
-            "SELECT status, evidence_completeness, identity_state, case_id
-             FROM linux_topology_scopes
-             WHERE id = ?1 AND scope_kind = 'ceph'",
-            [&ceph_scope_id.0],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(persistence_sqlite::DbError::from)
-        .map_err(DerivedSourceError::Database)?;
-    let (status, completeness, identity_state, owner_case_id) =
-        row.ok_or_else(|| DerivedSourceError::ScopeNotFound(ceph_scope_id.0.clone()))?;
-    if owner_case_id != case_id.0
-        || completeness != "complete"
-        || !matches!(identity_state.as_str(), "candidate" | "proven")
-    {
+    let summary = crate::cluster_service::require_ceph_scope(conn, &case_id.0, ceph_scope_id)
+        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
+    if summary.evidence_completeness != "complete" {
         return Err(DerivedSourceError::IncompleteScope);
     }
-    let member_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM linux_topology_memberships WHERE scope_id = ?1",
-            [&ceph_scope_id.0],
-            |row| row.get(0),
-        )
-        .map_err(persistence_sqlite::DbError::from)?;
     Ok(CephScopeState {
-        status,
-        member_count: member_count.max(0) as usize,
+        status: summary.status,
+        member_count: summary.member_count as usize,
     })
 }
 
