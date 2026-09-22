@@ -44,6 +44,7 @@ pub mod linux_topology_scope_repo;
 pub mod notebook_repo;
 pub mod partition_repo;
 pub mod processing_phase_repo;
+pub mod provenance_assertion_repo;
 pub mod report_repo;
 pub mod source_meta_repo;
 pub mod staging_fingerprint_repo;

@@ -198,6 +198,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0055_environment_objects",
         include_str!("scripts/0055_environment_objects.sql"),
     ),
+    (
+        "0056_provenance_assertions",
+        include_str!("scripts/0056_provenance_assertions.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
