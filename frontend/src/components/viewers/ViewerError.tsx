@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { AlertCircle, Copy, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import type { ApiErrorDto } from '@/types/models';
 
 interface ViewerErrorProps {
@@ -21,6 +22,7 @@ function copyErrorToClipboard(error: ApiErrorDto) {
 }
 
 export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerErrorProps) {
+  const { t } = useTranslation();
   const handleCopy = useCallback(() => copyErrorToClipboard(error), [error]);
 
   return (
@@ -29,7 +31,7 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
         <AlertCircle size={36} className="mx-auto mb-3 text-forensics-error-text" />
 
         <h3 className="mb-2 font-mono text-[13px] font-light text-forensics-text">
-          [{error.code}] 文件预览失败
+          [{error.code}] {t('viewer.error.title')}
         </h3>
 
         <p className="mb-4 text-[13px] leading-relaxed text-forensics-muted">
@@ -50,10 +52,10 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
             variant="forensicsOutline"
             size="xs"
             onClick={handleCopy}
-            aria-label="复制错误详情"
+            aria-label={t('viewer.error.copyDetails')}
           >
             <Copy size={14} />
-            复制详情
+            {t('viewer.error.copyDetails')}
           </Button>
           {error.recoverable && onRetry && (
             <Button
@@ -61,10 +63,10 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
               variant="forensicsPrimary"
               size="xs"
               onClick={onRetry}
-              aria-label="重试预览"
+              aria-label={t('viewer.error.retryPreview')}
             >
               <RefreshCw size={14} />
-              重试
+              {t('viewer.error.retry')}
             </Button>
           )}
         </div>

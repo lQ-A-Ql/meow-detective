@@ -1,4 +1,5 @@
 import type { DataSourcePartition } from '@/types/models';
+import i18n from '@/i18n';
 
 const PARTITION_ROOT_RE = /^Partition\s+(\d+)(?:\s*\(([^)]+)\))?/i;
 
@@ -53,7 +54,7 @@ export function partitionDisplayLabel(partition: DataSourcePartition) {
 }
 
 export function formatPartitionDisplayName(partition: DataSourcePartition) {
-  return `分区${partition.index}（${partitionDisplayLabel(partition)}）`;
+  return i18n.t('common.partition.display', { index: partition.index, label: partitionDisplayLabel(partition) });
 }
 
 export function formatPartitionRootDisplayName(
@@ -71,5 +72,5 @@ export function formatPartitionRootDisplayName(
   }
 
   const label = normalizePartitionLabel(rootName.trim().match(PARTITION_ROOT_RE)?.[2]) ?? 'UNKNOWN';
-  return `分区${index}（${label}）`;
+  return i18n.t('common.partition.display', { index, label });
 }

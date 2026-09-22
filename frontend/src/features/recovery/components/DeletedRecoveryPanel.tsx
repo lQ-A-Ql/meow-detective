@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -25,12 +26,6 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { HexViewer } from '@/components/viewers/HexViewer';
 import type { DeletedFileRecovery, RecoveryProvenanceRange } from '@/types/models';
 import type { DeletedRecoveryViewModel } from '../types';
-
-const COMPLETENESS_LABELS: Record<DeletedFileRecovery['completeness'], string> = {
-  metadata_only: '仅元数据',
-  partial: '部分内容',
-  complete: '完整内容',
-};
 
 const HASH_ALGORITHM_LABELS = {
   md5: 'MD5',
@@ -51,9 +46,10 @@ function rangeLabel(range: RecoveryProvenanceRange) {
 }
 
 function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
+  const { t } = useTranslation();
   const recovery = model.selectedRecovery;
   if (!recovery) {
-    return <EmptyState className="m-3">选择候选记录查看取证元数据</EmptyState>;
+    return <EmptyState className="m-3">{t('recovery.empty.selectCandidate')}</EmptyState>;
   }
 
   return (
@@ -64,15 +60,15 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
         {recovery.mftSequence !== undefined ? (
           <KeyValueField label="MFT sequence" value={String(recovery.mftSequence)} mono />
         ) : null}
-        <KeyValueField label="完整度" value={COMPLETENESS_LABELS[recovery.completeness]} />
-        <KeyValueField label="声明大小" value={formatBytes(recovery.declaredSize)} />
-        <KeyValueField label="可恢复" value={formatBytes(recovery.recoverableBytes)} />
-        <KeyValueField label="恢复方法" value={recovery.recoveryMethod} />
-        <KeyValueField label="置信度" value={`${Math.round(recovery.confidence * 100)}%`} />
+        <KeyValueField label={t('recovery.fields.completeness')} value={t(`recovery.completeness.${recovery.completeness}`)} />
+        <KeyValueField label={t('recovery.fields.declaredSize')} value={formatBytes(recovery.declaredSize)} />
+        <KeyValueField label={t('recovery.fields.recoverable')} value={formatBytes(recovery.recoverableBytes)} />
+        <KeyValueField label={t('recovery.fields.method')} value={recovery.recoveryMethod} />
+        <KeyValueField label={t('recovery.fields.confidence')} value={`${Math.round(recovery.confidence * 100)}%`} />
       </div>
 
       <KeyValueField
-        label="原始路径"
+        label={t('recovery.fields.originalPath')}
         value={recovery.originalPath}
         mono
         valueClassName="break-all"
@@ -101,13 +97,13 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
       {model.contentRanges.length > 0 ? (
         <div className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
-            <div className="mb-1 text-[10px] text-forensics-muted-light">已验证内容区间</div>
+            <div className="mb-1 text-[10px] text-forensics-muted-light">{t('recovery.verifiedRanges')}</div>
             <Select
               value={model.selectedRangeOrdinal?.toString()}
               onValueChange={(value) => model.selectRange(Number(value))}
             >
               <SelectTrigger size="xs" variant="mono">
-                <SelectValue placeholder="选择区间" />
+                <SelectValue placeholder={t('recovery.selectRange')} />
               </SelectTrigger>
               <SelectContent>
                 {model.contentRanges.map((range) => (
@@ -126,11 +122,11 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
             onClick={model.readSelectedRange}
           >
             {model.reading ? <LoaderCircle className="animate-spin" /> : <Eye />}
-            读取
+            {t('recovery.read')}
           </Button>
         </div>
       ) : (
-        <EmptyState className="p-3">该候选没有可读取的已验证内容区间</EmptyState>
+        <EmptyState className="p-3">{t('recovery.noVerifiedRange')}</EmptyState>
       )}
 
       {model.preview ? (
@@ -156,12 +152,12 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
         onClick={model.exportSelected}
       >
         {model.exporting ? <LoaderCircle className="animate-spin" /> : <Download />}
-        导出完整恢复文件
+        {t('recovery.exportFull')}
       </Button>
 
       {model.lastExport ? (
         <div className="space-y-1 border border-forensics-success-border bg-forensics-success-bg p-2 text-[10px] text-forensics-success-text">
-          <div>已导出 {formatBytes(model.lastExport.bytesWritten)}</div>
+          <div>{t('recovery.exported', { bytes: formatBytes(model.lastExport.bytesWritten) })}</div>
           <div className="break-all font-mono">SHA-256: {model.lastExport.sha256}</div>
         </div>
       ) : null}
@@ -172,46 +168,50 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
 
 // Module-level columns: stable reference keeps DenseDataTable row memoization
 // intact across model state updates.
-const columns: DenseColumn<DeletedFileRecovery>[] = [
+function recoveryColumns(t: ReturnType<typeof useTranslation>['t']): DenseColumn<DeletedFileRecovery>[] {
+return [
   {
     key: 'partition',
-    title: '分区',
+    title: t('recovery.columns.partition'),
     className: 'w-[64px]',
     render: (row) => `P${row.partitionIndex}`,
   },
   {
     key: 'inode',
-    title: 'Inode',
+    title: t('recovery.columns.inode'),
     className: 'w-[110px]',
     render: (row) => row.inode,
   },
   {
     key: 'path',
-    title: '原始路径',
+    title: t('recovery.columns.originalPath'),
     className: 'min-w-[240px]',
     render: (row) => row.originalPath ?? '-',
   },
   {
     key: 'size',
-    title: '大小',
+    title: t('recovery.columns.size'),
     className: 'w-[90px]',
     render: (row) => formatBytes(row.declaredSize),
   },
   {
     key: 'completeness',
-    title: '恢复状态',
+    title: t('recovery.columns.completeness'),
     className: 'w-[100px]',
-    render: (row) => COMPLETENESS_LABELS[row.completeness],
+    render: (row) => t(`recovery.completeness.${row.completeness}`),
   },
   {
     key: 'confidence',
-    title: '置信度',
+    title: t('recovery.columns.confidence'),
     className: 'w-[75px]',
     render: (row) => `${Math.round(row.confidence * 100)}%`,
   },
 ];
+}
 
 export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewModel }) {
+  const { t } = useTranslation();
+  const columns = recoveryColumns(t);
   const handleRowClick = useCallback(
     (row: DeletedFileRecovery) => model.selectRecovery(row.id),
     [model],
@@ -220,22 +220,22 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
       <SectionHeader
         icon={ScanSearch}
-        title="删除文件恢复"
-        subtitle="NTFS MFT / EXT4 journal / XFS log"
+        title={t('recovery.title')}
+        subtitle={t('recovery.subtitle')}
       />
 
       {model.partitions.length === 0 ? (
-        <EmptyState>当前数据源没有可执行删除恢复的 NTFS/EXT4/XFS 分区</EmptyState>
+        <EmptyState>{t('recovery.noPartitions')}</EmptyState>
       ) : (
         <div className="flex items-end gap-3 border-b border-forensics-border-light pb-3">
           <div className="w-72">
-            <div className="mb-1 text-[10px] text-forensics-muted-light">目标分区</div>
+            <div className="mb-1 text-[10px] text-forensics-muted-light">{t('recovery.targetPartition')}</div>
             <Select
               value={model.selectedPartitionIndex?.toString()}
               onValueChange={(value) => model.selectPartition(Number(value))}
             >
               <SelectTrigger size="sm" variant="forensics">
-                <SelectValue placeholder="选择 NTFS/EXT4/XFS 分区" />
+                <SelectValue placeholder={t('recovery.selectPartition')} />
               </SelectTrigger>
               <SelectContent>
                 {model.partitions.map((partition) => (
@@ -254,13 +254,13 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             onClick={model.runScan}
           >
             {model.scanning ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-            {model.page ? '重新扫描' : '开始扫描'}
+            {model.page ? t('recovery.rescan') : t('recovery.startScan')}
           </Button>
           {model.page ? (
             <div className="ml-auto flex items-center gap-2 text-[11px] text-forensics-muted">
               <Badge variant="outline">{model.page.scan.filesystemType.toUpperCase()}</Badge>
-              <span>{model.page.scan.transactionCount} transactions</span>
-              <span>{model.total} candidates</span>
+                <span>{t('recovery.transactions', { count: model.page.scan.transactionCount })}</span>
+                <span>{t('recovery.candidates', { count: model.total })}</span>
             </div>
           ) : null}
         </div>
@@ -272,11 +272,11 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-forensics-muted-light" />
               <Input
-                aria-label="恢复文件哈希"
+                aria-label={t('recovery.hashSearch.label')}
                 aria-invalid={Boolean(model.hashQuery) && !model.hashQueryValid}
                 className="pl-7 pr-8"
                 inputSize="compact"
-                placeholder="MD5 / SHA-1 / SHA-256"
+                placeholder={t('recovery.hashSearch.placeholder')}
                 spellCheck={false}
                 value={model.hashQuery}
                 variant="mono"
@@ -289,10 +289,10 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               />
               {model.hashQuery ? (
                 <Button
-                  aria-label="清除哈希搜索"
+                  aria-label={t('recovery.hashSearch.clear')}
                   className="absolute right-0.5 top-0.5"
                   size="iconXs"
-                  title="清除哈希搜索"
+                  title={t('recovery.hashSearch.clear')}
                   type="button"
                   variant="forensicsGhost"
                   onClick={model.clearHashSearch}
@@ -303,7 +303,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             </div>
             {model.hashQuery && !model.hashQueryValid ? (
               <div className="mt-1 text-[10px] text-forensics-error-text">
-                哈希必须是 32、40 或 64 位十六进制值
+                {t('recovery.hashSearch.invalid')}
               </div>
             ) : null}
             {model.hashSearchError ? (
@@ -318,11 +318,11 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             onClick={model.runHashSearch}
           >
             {model.hashSearching ? <LoaderCircle className="animate-spin" /> : <Search />}
-            按哈希查找
+            {t('recovery.hashSearch.submit')}
           </Button>
           {model.hashSearch ? (
             <Badge variant="outline" className="mt-1">
-              {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {model.hashSearch.matches.length} 项匹配
+              {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}
             </Badge>
           ) : null}
         </div>
@@ -343,10 +343,10 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
       {model.state === 'loading' || model.scanning ? (
         <div className="flex flex-1 items-center justify-center gap-2 text-[12px] text-forensics-muted">
           <LoaderCircle className="animate-spin" />
-          正在读取恢复扫描结果
+          {t('recovery.loading')}
         </div>
       ) : model.state === 'unscanned' ? (
-        <EmptyState className="flex-1">当前分区尚未执行删除恢复扫描</EmptyState>
+        <EmptyState className="flex-1">{t('recovery.unscanned')}</EmptyState>
       ) : model.state === 'ready' ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden border border-forensics-border">
           <div className="flex min-h-0 min-w-0 flex-col border-r border-forensics-border">
@@ -357,19 +357,19 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               getRowKey={(row) => row.id}
               selectedRowKey={model.selectedRecoveryId}
               onRowClick={handleRowClick}
-              emptyTitle="没有删除恢复候选"
-              emptyDescription="当前扫描未重建出可报告的删除记录。"
+              emptyTitle={t('recovery.empty.noCandidates')}
+              emptyDescription={t('recovery.empty.noCandidatesDescription')}
               />
             </DenseDataTableFrame>
             <div className="flex shrink-0 items-center justify-between border-t border-forensics-border px-2 py-1 text-[10px] text-forensics-muted">
               <span>
                 {model.hashSearch
-                  ? `哈希匹配 ${model.recoveries.length} / ${model.total}`
-                  : `显示 ${model.page?.offset ?? 0}-${(model.page?.offset ?? 0) + model.recoveries.length} / ${model.total}`}
+                  ? t('recovery.pagination.hashMatches', { shown: model.recoveries.length, total: model.total })
+                  : t('recovery.pagination.range', { start: model.page?.offset ?? 0, end: (model.page?.offset ?? 0) + model.recoveries.length, total: model.total })}
               </span>
               <div className="flex gap-1">
-                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}>上一组</Button>
-                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}>下一组</Button>
+                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}>{t('recovery.pagination.previous')}</Button>
+                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}>{t('recovery.pagination.next')}</Button>
               </div>
             </div>
           </div>

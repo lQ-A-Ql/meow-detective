@@ -1,4 +1,12 @@
 {
+  "common": {
+    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" },
+    "errors": { "unknownApi": "未知接口错误" },
+    "partition": { "display": "分区{{index}}（{{label}}）" },
+    "sort": { "name": "名称", "size": "大小", "modifiedAt": "修改时间", "extension": "扩展名" },
+    "fileTypes": { "directory": "目录", "file": "文件", "extension": "{{extension}} 文件" }
+  },
+  "viewer": { "error": { "title": "文件预览失败", "copyDetails": "复制错误详情", "retryPreview": "重试预览", "retry": "重试" }, "hex": { "ariaLabel": "Hex 与 ASCII 字节预览", "empty": "选择文件后显示十六进制预览", "loadedRanges": "已加载区间" } },
   "media": {
     "loading": "加载中...",
     "audio": "音频",
@@ -6,6 +14,8 @@
     "audioProgress": "音频播放进度",
     "videoProgress": "视频播放进度",
     "volume": "音量",
+    "image": "图片",
+    "controls": { "zoomIn": "放大", "zoomOut": "缩小", "rotate": "旋转", "fit": "适应窗口", "reset": "重置视图", "download": "下载", "skipBack": "快退 10 秒", "skipForward": "快进 10 秒", "play": "播放", "pause": "暂停", "mute": "静音", "unmute": "取消静音", "fullscreen": "全屏", "exitFullscreen": "退出全屏" },
     "errors": {
       "playback": "播放失败：{{message}}",
       "audioLoad": "音频加载失败",
@@ -15,7 +25,8 @@
       "audioDecode": "音频解码失败，格式可能不支持",
       "videoDecode": "视频解码失败，格式可能不支持",
       "audioUnsupported": "音频格式不支持或文件损坏",
-      "videoUnsupported": "视频格式不支持或文件损坏"
+      "videoUnsupported": "视频格式不支持或文件损坏",
+      "imageInvalid": "图片源无效", "imageTimeout": "图片加载超时，请检查文件是否存在", "imageUnsupported": "图片格式不支持或文件损坏"
     }
   },
   "graph": {
@@ -54,6 +65,7 @@
   "timeline": {
     "title": "时间线控制带", "meta": "事件 {{shown}}/{{total}} 条 / 数据源 {{sources}} 个", "granularity": "粒度", "adaptive": "自适应", "start": "起始", "end": "结束", "invalidDate": "日期无效", "apply": "应用", "type": "类型", "all": "全部", "clear": "清除", "emptyTitle": "当前时间范围无事件", "emptyDescription": "请扩大时间范围或调整事件过滤条件。", "columns": { "timestamp": "时间戳", "source": "数据源", "type": "类型", "description": "描述" }, "jumpToSource": "跳转到来源对象", "inspector": { "title": "事件检查器", "current": "当前事件", "none": "未选择事件", "timestamp": "时间戳", "type": "事件类型", "activity": "源活动", "object": "来源对象", "context": "时间上下文", "actions": "关联动作" }
   },
+  "reports": { "template": "选择模板", "runningSummary": "运行中 {{running}} / 已完成 {{completed}}", "scope": "导出范围", "scopeOptions": { "fileSystemMetadata": "包含文件系统元数据", "registry": "包含注册表项", "fullTimeline": "包含完整时间线", "rawFiles": "包含原始文件提取（会增加文件大小）" }, "format": "格式", "summaryTitle": "导出摘要", "summaryDescription": "当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。", "expectedOutput": { "raw": "预计产物: 报告 + 原始文件批量导出清单 + SHA256SUMS", "report": "预计产物: 报告主体文件" }, "generating": "生成中...", "generate": "生成报告", "recent": "最近导出", "recordCount": "{{count}} 条记录" },
   "fileBrowser": {
     "title": "文件浏览控制",
     "empty": {
@@ -357,7 +369,7 @@
         "label": "取证总览",
         "context": "图统计、数据源覆盖、痕迹关联与规则包状态"
       },
-      "search": {
+  "search": {
         "label": "全局搜索",
         "context": "关键字、结构化查询与命中详情"
       },
@@ -369,7 +381,7 @@
         "label": "痕迹分析",
         "context": "Windows 痕迹家族与解析字段"
       },
-      "reports": {
+  "reports": {
         "label": "报告导出",
         "context": "模板、导出任务与报告产物"
       }
@@ -389,6 +401,8 @@
       "warnings": "{{count}}"
     }
   },
+  "recovery": { "title": "删除文件恢复", "subtitle": "NTFS MFT / EXT4 journal / XFS log", "targetPartition": "目标分区", "selectPartition": "选择 NTFS/EXT4/XFS 分区", "startScan": "开始扫描", "rescan": "重新扫描", "transactions": "{{count}} transactions", "candidates": "{{count}} candidates", "loading": "正在读取恢复扫描结果", "unscanned": "当前分区尚未执行删除恢复扫描", "noPartitions": "当前数据源没有可执行删除恢复的 NTFS/EXT4/XFS 分区", "verifiedRanges": "已验证内容区间", "selectRange": "选择区间", "read": "读取", "noVerifiedRange": "该候选没有可读取的已验证内容区间", "exportFull": "导出完整恢复文件", "exported": "已导出 {{bytes}}", "completeness": { "metadata_only": "仅元数据", "partial": "部分内容", "complete": "完整内容" }, "fields": { "completeness": "完整度", "declaredSize": "声明大小", "recoverable": "可恢复", "method": "恢复方法", "confidence": "置信度", "originalPath": "原始路径" }, "columns": { "partition": "分区", "inode": "Inode", "originalPath": "原始路径", "size": "大小", "completeness": "恢复状态", "confidence": "置信度" }, "hashSearch": { "label": "恢复文件哈希", "placeholder": "MD5 / SHA-1 / SHA-256", "clear": "清除哈希搜索", "invalid": "哈希必须是 32、40 或 64 位十六进制值", "submit": "按哈希查找", "matches": "{{count}} 项匹配" }, "empty": { "selectCandidate": "选择候选记录查看取证元数据", "noCandidates": "没有删除恢复候选", "noCandidatesDescription": "当前扫描未重建出可报告的删除记录。" }, "pagination": { "hashMatches": "哈希匹配 {{shown}} / {{total}}", "range": "显示 {{start}}-{{end}} / {{total}}", "previous": "上一组", "next": "下一组" } },
+  "search": { "title": "文件搜索", "inputPlaceholder": "输入文件名、目录名或路径", "inputLabel": "文件名搜索", "pathToggle": "路径", "allTypes": "全部类型", "file": "文件", "directory": "目录", "extensionPlaceholder": "扩展名", "extensionLabel": "扩展名筛选", "allSources": "全部数据源", "meta": { "loaded": "已载入 {{shown}}/{{total}} 项", "waiting": "输入文件名或路径开始搜索", "found": "找到 {{count}} 个结果", "idle": "等待输入", "took": "查询 {{ms}} ms" }, "coverage": { "incomplete": "索引覆盖不完整，需要重新分析以重建索引 {{indexed}}/{{expected}}", "complete": "索引覆盖 {{indexed}} 项 / {{sources}} 个数据源" }, "truncated": "结果超过浏览上限，仅显示前 {{count}} 项窗口", "columns": { "name": "名称", "path": "路径", "size": "大小", "modifiedAt": "修改时间", "source": "数据源" }, "empty": { "noMatch": "没有匹配的文件", "noMatchDescription": "尝试修改文件名、路径或筛选条件。", "start": "输入文件名开始搜索", "startDescription": "搜索仅定位已导入数据源中的文件和目录。" } },
   "infrastructure": {
     "eyebrow": "基础设施证据",
     "title": "Linux 集群取证",

@@ -1,4 +1,5 @@
 import { AlertTriangle, File, Folder, Search, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -32,10 +33,11 @@ function entryIcon(entryType: string) {
     : <File size={13} className="text-forensics-muted" />;
 }
 
-const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
+function searchFileColumns(t: ReturnType<typeof useTranslation>['t']): DenseColumn<SearchFileHit>[] {
+return [
   {
     key: 'name',
-    title: '名称',
+    title: t('search.columns.name'),
     sortable: true,
     sortKey: 'name',
     className: 'w-[27%]',
@@ -49,7 +51,7 @@ const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
   },
   {
     key: 'path',
-    title: '路径',
+    title: t('search.columns.path'),
     sortable: true,
     sortKey: 'path',
     className: 'w-[38%] text-forensics-text-secondary',
@@ -57,7 +59,7 @@ const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
   },
   {
     key: 'size',
-    title: '大小',
+    title: t('search.columns.size'),
     sortable: true,
     sortKey: 'size',
     className: 'w-28 text-right text-forensics-muted',
@@ -65,7 +67,7 @@ const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
   },
   {
     key: 'modifiedAt',
-    title: '修改时间',
+    title: t('search.columns.modifiedAt'),
     sortable: true,
     sortKey: 'modifiedAt',
     className: 'w-44 text-forensics-muted',
@@ -73,22 +75,25 @@ const SEARCH_FILE_COLUMNS: DenseColumn<SearchFileHit>[] = [
   },
   {
     key: 'source',
-    title: '数据源',
+    title: t('search.columns.source'),
     className: 'w-36 text-forensics-muted',
     render: (row) => <span className="block truncate" title={row.dataSourceName}>{row.dataSourceName}</span>,
   },
 ];
+}
 
 export function SearchWorkspace({ model }: SearchWorkspaceProps) {
+  const { t } = useTranslation();
+  const searchColumns = searchFileColumns(t);
   const selectedSource = model.options.dataSourceIds[0] ?? '__all__';
   const coverage = model.coverage;
   const resultMeta = model.activeQuery
-    ? `已载入 ${model.searchHits.length}/${model.totalHits} 项`
-    : '输入文件名或路径开始搜索';
+    ? t('search.meta.loaded', { shown: model.searchHits.length, total: model.totalHits })
+    : t('search.meta.waiting');
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title="文件搜索" meta={resultMeta}>
+      <PageSubbar title={t('search.title')} meta={resultMeta}>
         <div className="flex min-w-0 flex-1 items-center gap-2 p-3">
           <div className="flex min-w-0 flex-1 items-center border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 focus-within:border-forensics-sakura-500">
             <Search size={14} className="mr-2 shrink-0 text-forensics-muted" />
@@ -102,8 +107,8 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
               variant="search"
               inputSize="compact"
               className="w-full font-mono text-[13px] text-forensics-text"
-              placeholder="输入文件名、目录名或路径"
-              aria-label="文件名搜索"
+              placeholder={t('search.inputPlaceholder')}
+              aria-label={t('search.inputLabel')}
             />
             {model.queryInput ? (
               <Button type="button" variant="forensicsGhost" size="iconXs" onClick={model.clearQuery} title="清除搜索">
@@ -117,14 +122,14 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
             size="compact"
             onClick={() => model.setOption('matchPath', !model.options.matchPath)}
           >
-            路径
+            {t('search.pathToggle')}
           </Button>
           <Select value={model.options.entryType} onValueChange={(value) => model.setOption('entryType', value as SearchWorkspaceModel['options']['entryType'])}>
             <SelectTrigger size="xs" variant="forensics" className="w-24"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="any">全部类型</SelectItem>
-              <SelectItem value="file">文件</SelectItem>
-              <SelectItem value="directory">目录</SelectItem>
+              <SelectItem value="any">{t('search.allTypes')}</SelectItem>
+              <SelectItem value="file">{t('search.file')}</SelectItem>
+              <SelectItem value="directory">{t('search.directory')}</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -133,13 +138,13 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
             variant="forensics"
             inputSize="compact"
             className="w-24 font-mono"
-            placeholder="扩展名"
-            aria-label="扩展名筛选"
+            placeholder={t('search.extensionPlaceholder')}
+            aria-label={t('search.extensionLabel')}
           />
           <Select value={selectedSource} onValueChange={(value) => model.setOption('dataSourceIds', value === '__all__' ? [] : [value])}>
             <SelectTrigger size="xs" variant="forensics" className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">全部数据源</SelectItem>
+              <SelectItem value="__all__">{t('search.allSources')}</SelectItem>
               {model.dataSources.map((source) => <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -148,25 +153,25 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-3 border-b border-forensics-border bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
-          <span>{model.activeQuery ? `找到 ${model.totalHits} 个结果` : '等待输入'}</span>
-          {model.activeQuery ? <span>查询 {model.searchTookMs} ms</span> : null}
+          <span>{model.activeQuery ? t('search.meta.found', { count: model.totalHits }) : t('search.meta.idle')}</span>
+          {model.activeQuery ? <span>{t('search.meta.took', { ms: model.searchTookMs })}</span> : null}
           {coverage && !coverage.complete ? (
             <span className="flex items-center gap-1 text-forensics-error-text" title={`未就绪数据源: ${coverage.missingSourceIds.join(', ')}`}>
-              <AlertTriangle size={12} />索引覆盖不完整，需要重新分析以重建索引 {coverage.indexedEntryCount}/{coverage.expectedEntryCount}
+              <AlertTriangle size={12} />{t('search.coverage.incomplete', { indexed: coverage.indexedEntryCount, expected: coverage.expectedEntryCount })}
             </span>
-          ) : coverage ? <span>索引覆盖 {coverage.indexedEntryCount} 项 / {coverage.readySourceCount} 个数据源</span> : null}
-          {model.truncated ? <span className="text-forensics-error-text">结果超过浏览上限，仅显示前 {model.searchHits.length > 0 ? model.searchHits.length : model.totalHits} 项窗口</span> : null}
+          ) : coverage ? <span>{t('search.coverage.complete', { indexed: coverage.indexedEntryCount, sources: coverage.readySourceCount })}</span> : null}
+          {model.truncated ? <span className="text-forensics-error-text">{t('search.truncated', { count: model.searchHits.length > 0 ? model.searchHits.length : model.totalHits })}</span> : null}
         </div>
 
         <DenseDataTableFrame layout="fill" variant="plain">
           <DenseDataTable<SearchFileHit>
           rows={model.searchHits}
-          columns={SEARCH_FILE_COLUMNS}
+          columns={searchColumns}
           getRowKey={(row) => row.fileId}
           selectedRowKey={model.selectedHit?.fileId}
           onRowClick={model.onHitRowClick}
-          emptyTitle={model.activeQuery ? '没有匹配的文件' : '输入文件名开始搜索'}
-          emptyDescription={model.activeQuery ? '尝试修改文件名、路径或筛选条件。' : '搜索仅定位已导入数据源中的文件和目录。'}
+          emptyTitle={model.activeQuery ? t('search.empty.noMatch') : t('search.empty.start')}
+          emptyDescription={model.activeQuery ? t('search.empty.noMatchDescription') : t('search.empty.startDescription')}
           sortKey={model.sortKey}
           sortDirection={model.sortDirection}
           onSort={model.toggleSort}

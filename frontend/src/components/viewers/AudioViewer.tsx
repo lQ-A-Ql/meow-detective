@@ -201,7 +201,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           variant="mediaControl"
           size="mediaIcon"
           onClick={() => skip(-10)}
-          aria-label="快退 10 秒"
+          aria-label={t('media.controls.skipBack')}
         >
           <SkipBack size={20} />
         </Button>
@@ -212,7 +212,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           variant="mediaPrimaryControl"
           size="mediaPrimary"
           onClick={togglePlay}
-          aria-label={isPlaying ? '暂停' : '播放'}
+          aria-label={isPlaying ? t('media.controls.pause') : t('media.controls.play')}
         >
           {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
         </Button>
@@ -223,7 +223,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           variant="mediaControl"
           size="mediaIcon"
           onClick={() => skip(10)}
-          aria-label="快进 10 秒"
+          aria-label={t('media.controls.skipForward')}
         >
           <SkipForward size={20} />
         </Button>
@@ -236,7 +236,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           variant="mediaControl"
           size="iconSm"
           onClick={toggleMute}
-          aria-label={isMuted ? '取消静音' : '静音'}
+          aria-label={isMuted ? t('media.controls.unmute') : t('media.controls.mute')}
         >
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </Button>

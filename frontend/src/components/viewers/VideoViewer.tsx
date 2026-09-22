@@ -206,17 +206,17 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       {/* 控制栏 */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-forensics-850 text-white text-[12px] shrink-0">
         {/* 播放/暂停 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={togglePlay} aria-label={isPlaying ? t('media.controls.pause') : t('media.controls.play')}>
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </Button>
 
         {/* 快退 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(-10)} aria-label="快退 10 秒">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(-10)} aria-label={t('media.controls.skipBack')}>
           <SkipBack size={16} />
         </Button>
 
         {/* 快进 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(10)} aria-label="快进 10 秒">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(10)} aria-label={t('media.controls.skipForward')}>
           <SkipForward size={16} />
         </Button>
 
@@ -240,7 +240,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         </span>
 
         {/* 音量 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleMute} aria-label={isMuted ? '取消静音' : '静音'}>
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleMute} aria-label={isMuted ? t('media.controls.unmute') : t('media.controls.mute')}>
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </Button>
         <Slider
@@ -258,7 +258,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         />
 
         {/* 全屏 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleFullscreen} aria-label={isFullscreen ? '退出全屏' : '全屏'}>
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleFullscreen} aria-label={isFullscreen ? t('media.controls.exitFullscreen') : t('media.controls.fullscreen')}>
           {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
         </Button>
       </div>

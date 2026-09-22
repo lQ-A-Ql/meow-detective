@@ -1,4 +1,5 @@
 import { Archive, Monitor, Server, Folder, Database, HardDrive } from 'lucide-react';
+import i18n from '@/i18n';
 import type { DataSourceSummary } from '@/types/models';
 
 export type DataSourcePlatform = DataSourceSummary['platform'];
@@ -11,11 +12,11 @@ export function sourceKindLabel(kind: string): string {
     case 'raw':
       return 'RAW';
     case 'local_disk':
-      return '本地磁盘';
+      return i18n.t('common.dataSourceKinds.localDisk');
     case 'logical_directory':
-      return '目录';
+      return i18n.t('common.dataSourceKinds.directory');
     case 'logical_archive':
-      return '归档';
+      return i18n.t('common.dataSourceKinds.archive');
     case 'android_sparse':
       return 'Android Sparse';
     default:

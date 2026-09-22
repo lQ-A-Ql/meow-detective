@@ -1,4 +1,5 @@
 import type { ApiErrorDto } from '@/types/models';
+import i18n from '@/i18n';
 
 export function isApiErrorDto(value: unknown): value is ApiErrorDto {
   if (!value || typeof value !== 'object') {
@@ -12,7 +13,7 @@ export function isApiErrorDto(value: unknown): value is ApiErrorDto {
     && (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean');
 }
 
-export function errorMessage(error: unknown, fallback = '未知接口错误') {
+export function errorMessage(error: unknown, fallback = i18n.t('common.errors.unknownApi')) {
   if (isApiErrorDto(error)) {
     return error.message;
   }

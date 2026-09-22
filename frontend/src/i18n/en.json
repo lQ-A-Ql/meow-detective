@@ -1,4 +1,12 @@
 {
+  "common": {
+    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" },
+    "errors": { "unknownApi": "Unknown API error" },
+    "partition": { "display": "Partition {{index}} ({{label}})" },
+    "sort": { "name": "Name", "size": "Size", "modifiedAt": "Modified", "extension": "Extension" },
+    "fileTypes": { "directory": "Directory", "file": "File", "extension": "{{extension}} file" }
+  },
+  "viewer": { "error": { "title": "File preview failed", "copyDetails": "Copy error details", "retryPreview": "Retry preview", "retry": "Retry" }, "hex": { "ariaLabel": "Hex and ASCII byte preview", "empty": "Select a file to preview hexadecimal data", "loadedRanges": "Loaded ranges" } },
   "media": {
     "loading": "Loading...",
     "audio": "Audio",
@@ -6,6 +14,8 @@
     "audioProgress": "Audio playback progress",
     "videoProgress": "Video playback progress",
     "volume": "Volume",
+    "image": "Image",
+    "controls": { "zoomIn": "Zoom in", "zoomOut": "Zoom out", "rotate": "Rotate", "fit": "Fit window", "reset": "Reset view", "download": "Download", "skipBack": "Skip back 10 seconds", "skipForward": "Skip forward 10 seconds", "play": "Play", "pause": "Pause", "mute": "Mute", "unmute": "Unmute", "fullscreen": "Fullscreen", "exitFullscreen": "Exit fullscreen" },
     "errors": {
       "playback": "Playback failed: {{message}}",
       "audioLoad": "Audio failed to load",
@@ -15,7 +25,8 @@
       "audioDecode": "Audio decoding failed; the format may be unsupported",
       "videoDecode": "Video decoding failed; the format may be unsupported",
       "audioUnsupported": "Audio format is unsupported or the file is damaged",
-      "videoUnsupported": "Video format is unsupported or the file is damaged"
+      "videoUnsupported": "Video format is unsupported or the file is damaged",
+      "imageInvalid": "Invalid image source", "imageTimeout": "Image load timed out. Check that the file exists.", "imageUnsupported": "Image format is unsupported or the file is damaged"
     }
   },
   "graph": {
@@ -54,6 +65,7 @@
   "timeline": {
     "title": "Timeline control strip", "meta": "{{shown}}/{{total}} events / {{sources}} sources", "granularity": "Granularity", "adaptive": "Adaptive", "start": "Start", "end": "End", "invalidDate": "Invalid date", "apply": "Apply", "type": "Type", "all": "All", "clear": "Clear", "emptyTitle": "No events in this range", "emptyDescription": "Expand the range or adjust event filters.", "columns": { "timestamp": "Timestamp", "source": "Source", "type": "Type", "description": "Description" }, "jumpToSource": "Jump to source object", "inspector": { "title": "Event inspector", "current": "Current event", "none": "No event selected", "timestamp": "Timestamp", "type": "Event type", "activity": "Activity", "object": "Source object", "context": "Time context", "actions": "Related actions" }
   },
+  "reports": { "template": "Select template", "runningSummary": "{{running}} running / {{completed}} completed", "scope": "Export scope", "scopeOptions": { "fileSystemMetadata": "Include filesystem metadata", "registry": "Include registry entries", "fullTimeline": "Include full timeline", "rawFiles": "Include raw file extraction (increases size)" }, "format": "Format", "summaryTitle": "Export summary", "summaryDescription": "The selected template will generate a case summary, key timeline and artifact inventory.", "expectedOutput": { "raw": "Expected output: report + raw file manifest + SHA256SUMS", "report": "Expected output: report file" }, "generating": "Generating...", "generate": "Generate report", "recent": "Recent exports", "recordCount": "{{count}} records" },
   "fileBrowser": {
     "title": "File Browser Controls",
     "empty": {
@@ -357,7 +369,7 @@
         "label": "Forensics Overview",
         "context": "Graph stats, data source coverage, artifact correlation and rule pack status"
       },
-      "search": {
+  "search": {
         "label": "Global Search",
         "context": "Keywords, structured queries and hit details"
       },
@@ -369,7 +381,7 @@
         "label": "Artifact Analysis",
         "context": "Windows artifact families and parsed fields"
       },
-      "reports": {
+  "reports": {
         "label": "Reports",
         "context": "Templates, export jobs and report artifacts"
       }
@@ -389,6 +401,8 @@
       "warnings": "{{count}}"
     }
   },
+  "recovery": { "title": "Deleted file recovery", "subtitle": "NTFS MFT / EXT4 journal / XFS log", "targetPartition": "Target partition", "selectPartition": "Select an NTFS/EXT4/XFS partition", "startScan": "Start scan", "rescan": "Rescan", "transactions": "{{count}} transactions", "candidates": "{{count}} candidates", "loading": "Reading recovery scan results", "unscanned": "This partition has not been scanned for deleted recovery", "noPartitions": "The current source has no NTFS/EXT4/XFS partitions eligible for deleted recovery", "verifiedRanges": "Verified content ranges", "selectRange": "Select range", "read": "Read", "noVerifiedRange": "This candidate has no readable verified content range", "exportFull": "Export complete recovery file", "exported": "Exported {{bytes}}", "completeness": { "metadata_only": "Metadata only", "partial": "Partial content", "complete": "Complete content" }, "fields": { "completeness": "Completeness", "declaredSize": "Declared size", "recoverable": "Recoverable", "method": "Recovery method", "confidence": "Confidence", "originalPath": "Original path" }, "columns": { "partition": "Partition", "inode": "Inode", "originalPath": "Original path", "size": "Size", "completeness": "Recovery status", "confidence": "Confidence" }, "hashSearch": { "label": "Recovered file hash", "placeholder": "MD5 / SHA-1 / SHA-256", "clear": "Clear hash search", "invalid": "Hash must be 32, 40 or 64 hexadecimal characters", "submit": "Find by hash", "matches": "{{count}} matches" }, "empty": { "selectCandidate": "Select a candidate to view forensic metadata", "noCandidates": "No deleted recovery candidates", "noCandidatesDescription": "The current scan did not reconstruct reportable deleted records." }, "pagination": { "hashMatches": "Hash matches {{shown}} / {{total}}", "range": "Showing {{start}}-{{end}} / {{total}}", "previous": "Previous", "next": "Next" } },
+  "search": { "title": "File search", "inputPlaceholder": "Enter a file, directory or path", "inputLabel": "File name search", "pathToggle": "Path", "allTypes": "All types", "file": "File", "directory": "Directory", "extensionPlaceholder": "Extension", "extensionLabel": "Extension filter", "allSources": "All sources", "meta": { "loaded": "Loaded {{shown}}/{{total}} items", "waiting": "Enter a file name or path to search", "found": "{{count}} results", "idle": "Waiting for input", "took": "Query {{ms}} ms" }, "coverage": { "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}", "complete": "Index covers {{indexed}} entries / {{sources}} sources" }, "truncated": "Result window capped; showing {{count}} items", "columns": { "name": "Name", "path": "Path", "size": "Size", "modifiedAt": "Modified", "source": "Source" }, "empty": { "noMatch": "No matching files", "noMatchDescription": "Try changing the name, path or filters.", "start": "Enter a file name to search", "startDescription": "Search only covers files and directories from imported sources." } },
   "infrastructure": {
     "eyebrow": "Infrastructure evidence",
     "title": "Linux Infrastructure Forensics",

@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fileIconColor } from '@/design/file-icon-tokens';
+import i18n from '@/i18n';
 
 export interface FileIconInfo {
   icon: LucideIcon;
@@ -187,11 +188,11 @@ export function getFileTypeLabel(node: {
   entryType?: string;
 }): string {
   if (node.entryType === 'directory') {
-    return '目录';
+    return i18n.t('common.fileTypes.directory');
   }
 
   const ext = node.name.split('.').pop()?.toLowerCase();
-  if (!ext) return '文件';
+  if (!ext) return i18n.t('common.fileTypes.file');
 
   const labelMap: Record<string, string> = {
     exe: '可执行文件',
@@ -213,5 +214,5 @@ export function getFileTypeLabel(node: {
     sqlite: '数据库',
   };
 
-  return labelMap[ext] ?? `${ext.toUpperCase()} 文件`;
+  return labelMap[ext] ?? i18n.t('common.fileTypes.extension', { extension: ext.toUpperCase() });
 }

@@ -290,7 +290,7 @@ export function TextViewer({
               size="iconXs"
               onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
               disabled={currentPage === 0}
-              aria-label="上一页"
+              aria-label={t('textViewer.previousPage')}
             >
               <ChevronLeft size={12} />
             </Button>
@@ -303,7 +303,7 @@ export function TextViewer({
               size="iconXs"
               onClick={goToNextPage}
               disabled={!hasNextPage}
-              aria-label="下一页"
+              aria-label={t('textViewer.nextPage')}
             >
               <ChevronRight size={12} />
             </Button>

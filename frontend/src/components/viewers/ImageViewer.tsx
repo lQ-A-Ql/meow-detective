@@ -19,6 +19,7 @@ import {
   Image,
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { useTranslation } from 'react-i18next';
 
 interface ImageViewerProps {
   /** 图片 URL (data: URL 或 blob: URL) */
@@ -30,6 +31,7 @@ interface ImageViewerProps {
 }
 
 export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -71,11 +73,11 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
     
     // 提供更详细的错误信息
     if (!target.src || target.src === 'about:blank') {
-      setError('图片源无效');
+      setError(t('media.errors.imageInvalid'));
     } else if (target.src.startsWith('asset://') && !target.complete) {
-      setError('图片加载超时，请检查文件是否存在');
+      setError(t('media.errors.imageTimeout'));
     } else {
-      setError('图片格式不支持或文件损坏');
+      setError(t('media.errors.imageUnsupported'));
     }
   }, []);
 
@@ -162,8 +164,8 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           variant="viewerControl"
           size="iconSm"
           onClick={() => setScale((s) => Math.min(10, s * 1.2))}
-          title="放大"
-          aria-label="放大"
+          title={t('media.controls.zoomIn')}
+          aria-label={t('media.controls.zoomIn')}
         >
           <ZoomIn size={14} />
         </Button>
@@ -175,8 +177,8 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           variant="viewerControl"
           size="iconSm"
           onClick={() => setScale((s) => Math.max(0.1, s * 0.8))}
-          title="缩小"
-          aria-label="缩小"
+          title={t('media.controls.zoomOut')}
+          aria-label={t('media.controls.zoomOut')}
         >
           <ZoomOut size={14} />
         </Button>
@@ -189,8 +191,8 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           variant="viewerControl"
           size="iconSm"
           onClick={() => setRotation((r) => (r + 90) % 360)}
-          title="旋转"
-          aria-label="旋转"
+          title={t('media.controls.rotate')}
+          aria-label={t('media.controls.rotate')}
         >
           <RotateCw size={14} />
         </Button>
@@ -201,8 +203,8 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           variant="viewerControl"
           size="iconSm"
           onClick={fitToWindow}
-          title="适应窗口"
-          aria-label="适应窗口"
+          title={t('media.controls.fit')}
+          aria-label={t('media.controls.fit')}
         >
           <Maximize size={14} />
         </Button>
@@ -214,9 +216,9 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           size="xs"
           onClick={resetView}
           className="h-6 text-[10px]"
-          title="重置视图"
+          title={t('media.controls.reset')}
         >
-          重置
+          {t('media.controls.reset')}
         </Button>
 
         <div className="flex-1" />
@@ -234,7 +236,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
             href={src}
             download={fileName}
             className="p-1 hover:bg-forensics-hover rounded-none"
-            title="下载"
+            title={t('media.controls.download')}
           >
             <Download size={14} />
           </a>
@@ -256,7 +258,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         {/* 加载状态 */}
         {isLoading && (
           <div className="flex items-center justify-center h-full text-forensics-muted-lighter">
-            加载中...
+            {t('media.loading')}
           </div>
         )}
 
@@ -290,7 +292,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
 
       {/* 状态栏 */}
       <div className="flex items-center gap-3 px-3 py-1 border-t bg-forensics-panel text-[10px] text-forensics-muted-lighter shrink-0">
-        <span>{mimeType || '图片'}</span>
+        <span>{mimeType || t('media.image')}</span>
         {fileName && (
           <>
             <span className="text-forensics-muted-lighter">|</span>

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { HexByteRow } from '@/components/viewers/HexByteRow';
 import {
   BYTES_PER_ROW,
@@ -73,6 +74,7 @@ export function HexViewer({
   loadedRanges,
   onNeedMoreRange,
 }: HexViewerProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const dragAnchorRef = useRef<number>();
   const draggingRef = useRef(false);
@@ -371,7 +373,7 @@ export function HexViewer({
         className="min-h-0 flex-1 touch-pan-y select-none overflow-auto"
         role="grid"
         tabIndex={rowCount > 0 ? 0 : -1}
-        aria-label="Hex 与 ASCII 字节预览"
+        aria-label={t('viewer.hex.ariaLabel')}
         onKeyDown={handleKeyDown}
         onPointerCancel={finishPointerSelection}
         onPointerDown={handlePointerDown}
@@ -409,14 +411,14 @@ export function HexViewer({
 
         {rowCount === 0 && (
           <div className="flex h-full items-center justify-center text-forensics-muted-lighter">
-            选择文件后显示十六进制预览
+            {t('viewer.hex.empty')}
           </div>
         )}
       </div>
 
       {loadedRanges?.length ? (
         <div className="shrink-0 border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
-          已加载区间: {loadedRanges.map((range) => `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1).toString(16).toUpperCase()}`).join(', ')}
+          {t('viewer.hex.loadedRanges')}: {loadedRanges.map((range) => `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1).toString(16).toUpperCase()}`).join(', ')}
         </div>
       ) : null}
     </div>

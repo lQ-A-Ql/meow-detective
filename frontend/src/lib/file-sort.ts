@@ -11,6 +11,7 @@
  */
 
 import { FileEntryRow } from '@/types/models';
+import i18n from '@/i18n';
 
 /**
  * 排序键类型
@@ -181,10 +182,10 @@ export function toggleSortDirection(current: FileSortDirection): FileSortDirecti
  */
 export function getSortKeyLabel(key: FileSortKey): string {
   const labels: Record<FileSortKey, string> = {
-    name: '名称',
-    size: '大小',
-    modifiedAt: '修改时间',
-    ext: '扩展名',
+    name: i18n.t('common.sort.name'),
+    size: i18n.t('common.sort.size'),
+    modifiedAt: i18n.t('common.sort.modifiedAt'),
+    ext: i18n.t('common.sort.extension'),
   };
   return labels[key];
 }
