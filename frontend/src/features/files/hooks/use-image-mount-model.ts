@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
   launchEmulation,
@@ -60,6 +59,7 @@ export function useImageMountModel() {
   const [selectedPartitionIndex, setSelectedPartitionIndex] = useState('');
   const [mountPoint, setMountPoint] = useState('auto');
   const [recoveryIsoPath, setRecoveryIsoPath] = useState('');
+  const [directBootConfirmationOpen, setDirectBootConfirmationOpen] = useState(false);
 
   const mountsQuery = useQuery({
     queryKey: MOUNT_QUERY_KEY,
@@ -205,7 +205,8 @@ export function useImageMountModel() {
   const submit = useCallback(async () => {
     if (mountMode === 'emulation') {
       const allowDirectBoot = recoveryIsoPath.length === 0;
-      if (!confirmEmulationBoot(recoveryIsoPath, t('fileBrowser.mount.directBootConfirm'))) {
+      if (recoveryIsoPath.length === 0) {
+        setDirectBootConfirmationOpen(true);
         return;
       }
       await emulationMutation.mutateAsync(allowDirectBoot);
@@ -249,6 +250,12 @@ export function useImageMountModel() {
     mountPoint,
     setMountPoint,
     recoveryIsoPath,
+    directBootConfirmationOpen: directBootConfirmationOpen ?? false,
+    cancelDirectBoot: () => setDirectBootConfirmationOpen(false),
+    confirmDirectBoot: async () => {
+      setDirectBootConfirmationOpen(false);
+      await emulationMutation.mutateAsync(true);
+    },
     setRecoveryIsoPath,
     pickRecoveryIso,
     mounts: mountsQuery.data ?? [],

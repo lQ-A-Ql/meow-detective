@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { confirmEmulationBoot } from '@/features/emulation/boot-consent';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
 import {
   applyEmulationBypass,
@@ -100,6 +99,9 @@ export interface EmulationWorkspaceModel {
   start: () => Promise<void>;
   release: (sessionId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  directBootConfirmationOpen: boolean;
+  cancelDirectBoot: () => void;
+  confirmDirectBoot: () => Promise<void>;
 }
 
 function isActiveSession(session: EmulationSessionStatus): boolean {
@@ -144,6 +146,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const [cleanupOsdata, setCleanupOsdata] = useState(true);
   const [installEfiFallback, setInstallEfiFallback] = useState(true);
   const [repairFilesystems, setRepairFilesystems] = useState(true);
+  const [directBootConfirmationOpen, setDirectBootConfirmationOpen] = useState(false);
   const sessionsQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
@@ -356,9 +359,17 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   }, []);
   const start = useCallback(async () => {
     const allowDirectBoot = recoveryIsoPath.length === 0;
-    if (!confirmEmulationBoot(recoveryIsoPath, t('emulationPage.boot.directBootConfirm'))) return;
+    if (allowDirectBoot) {
+      setDirectBootConfirmationOpen(true);
+      return;
+    }
     await startMutation.mutateAsync(allowDirectBoot);
   }, [recoveryIsoPath, startMutation, t]);
+  const cancelDirectBoot = useCallback(() => setDirectBootConfirmationOpen(false), []);
+  const confirmDirectBoot = useCallback(async () => {
+    setDirectBootConfirmationOpen(false);
+    await startMutation.mutateAsync(true);
+  }, [startMutation]);
   const release = useCallback(async (sessionId: string) => {
     await releaseMutation.mutateAsync(sessionId);
   }, [releaseMutation]);
@@ -430,5 +441,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     start,
     release,
     refresh,
+    directBootConfirmationOpen,
+    cancelDirectBoot,
+    confirmDirectBoot,
   };
 }

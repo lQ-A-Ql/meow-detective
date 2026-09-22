@@ -34,14 +34,14 @@ describe('DataSourcesPanel', () => {
         setEditingDataSourceId={vi.fn()}
         setEditingDataSourceName={vi.fn()}
         onRename={vi.fn()}
-        onDelete={vi.fn()}
+        onRequestDelete={vi.fn()}
       />,
     );
 
     expect(screen.getByText('处理失败').getAttribute('title')).toBe('Search phase failed');
-    expect(screen.getByText('phase 4/6')).toBeTruthy();
-    expect(screen.getByText('failed 1')).toBeTruthy();
-    expect(screen.getByText('deferred 1')).toBeTruthy();
+    expect(screen.getByText('阶段 4/6')).toBeTruthy();
+    expect(screen.getByText('失败 1')).toBeTruthy();
+    expect(screen.getByText('延后 1')).toBeTruthy();
   });
 
   it('shows live evidence hash progress for the matching data source', () => {
@@ -54,7 +54,7 @@ describe('DataSourcesPanel', () => {
         setEditingDataSourceId={vi.fn()}
         setEditingDataSourceName={vi.fn()}
         onRename={vi.fn()}
-        onDelete={vi.fn()}
+        onRequestDelete={vi.fn()}
       />,
     );
 
@@ -72,7 +72,7 @@ describe('DataSourcesPanel', () => {
         setEditingDataSourceId={vi.fn()}
         setEditingDataSourceName={vi.fn()}
         onRename={vi.fn()}
-        onDelete={vi.fn()}
+        onRequestDelete={vi.fn()}
       />,
     );
 
@@ -89,7 +89,7 @@ describe('DataSourcesPanel', () => {
         setEditingDataSourceId={vi.fn()}
         setEditingDataSourceName={vi.fn()}
         onRename={vi.fn()}
-        onDelete={vi.fn()}
+        onRequestDelete={vi.fn()}
       />,
     );
 

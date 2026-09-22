@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   CheckCircle,
@@ -17,12 +18,6 @@ import { RulePackCoveragePanel } from '@/features/rule-packs/components/RulePack
 import type { RulePackManagerModel } from '@/features/rule-packs/use-rule-pack-manager-model';
 import type { RulePackSummary } from '@/types/models';
 
-const STATUS_CONFIG: Record<RulePackSummary['status'], { label: string; icon: typeof Shield; tone: string }> = {
-  loaded: { label: '已加载', icon: CheckCircle, tone: 'bg-forensics-success-bg border-forensics-success-border text-forensics-success-text' },
-  validating: { label: '校验中', icon: Loader2, tone: 'bg-forensics-warning-bg border-forensics-warning-border text-forensics-warning-text' },
-  error: { label: '错误', icon: XCircle, tone: 'bg-forensics-error-bg border-forensics-error-border text-forensics-error-text' },
-};
-
 function formatTimestamp(iso: string) {
   try {
     const d = new Date(iso);
@@ -33,6 +28,12 @@ function formatTimestamp(iso: string) {
 }
 
 export function RulePackManager({ model }: { model: RulePackManagerModel }) {
+  const { t } = useTranslation();
+  const statusConfig = {
+    loaded: { label: t('rulePacks.status.loaded'), icon: CheckCircle, tone: 'bg-forensics-success-bg border-forensics-success-border text-forensics-success-text' },
+    validating: { label: t('rulePacks.status.validating'), icon: Loader2, tone: 'bg-forensics-warning-bg border-forensics-warning-border text-forensics-warning-text' },
+    error: { label: t('rulePacks.status.error'), icon: XCircle, tone: 'bg-forensics-error-bg border-forensics-error-border text-forensics-error-text' },
+  } satisfies Record<RulePackSummary['status'], { label: string; icon: typeof Shield; tone: string }>;
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [loadPath, setLoadPath] = useState('');
 
@@ -51,7 +52,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
     return (
       <div className="flex h-64 items-center justify-center text-forensics-muted-lighter">
         <Loader2 size={24} className="mr-2 opacity-70" />
-        正在加载规则包...
+        {t('rulePacks.loading')}
       </div>
     );
   }
@@ -60,14 +61,14 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <XCircle size={32} className="text-forensics-error-text" />
-        <div className="text-[13px] text-forensics-muted">无法加载规则包列表</div>
+        <div className="text-[13px] text-forensics-muted">{t('rulePacks.loadError')}</div>
         <Button
           type="button"
           variant="outline"
           onClick={model.retry}
           className="h-8 rounded-none border-forensics-border bg-forensics-surface px-4 text-[12px] hover:bg-forensics-panel-strong"
         >
-          重试
+          {t('rulePacks.retry')}
         </Button>
       </div>
     );
@@ -79,9 +80,9 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
       <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="font-serif text-xl tracking-tight text-forensics-text">规则包管理</div>
+            <div className="font-serif text-xl tracking-tight text-forensics-text">{t('rulePacks.title')}</div>
             <div className="mt-1 font-mono text-[11px] text-forensics-muted">
-              加载、校验并查看规则包覆盖范围
+              {t('rulePacks.subtitle')}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -93,7 +94,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
               className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
             >
               <RefreshCw size={14} className={model.loading ? 'opacity-70' : ''} />
-              刷新
+              {t('rulePacks.refresh')}
             </Button>
           </div>
         </div>
@@ -102,15 +103,15 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
         <div className="mt-4 grid grid-cols-3 gap-4">
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
             <div className="text-2xl font-light text-forensics-text">{model.packs.length}</div>
-            <div className="mt-1 text-[11px] text-forensics-muted">规则包</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">{t('rulePacks.summary.packs')}</div>
           </div>
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
             <div className="text-2xl font-light text-forensics-text">{model.totalRules}</div>
-            <div className="mt-1 text-[11px] text-forensics-muted">规则总数</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">{t('rulePacks.summary.rules')}</div>
           </div>
           <div className="rounded-none border border-forensics-border bg-forensics-surface px-4 py-3 text-center">
             <div className="text-2xl font-light text-forensics-text">{model.coveragePercent}%</div>
-            <div className="mt-1 text-[11px] text-forensics-muted">覆盖率</div>
+            <div className="mt-1 text-[11px] text-forensics-muted">{t('rulePacks.summary.coverage')}</div>
           </div>
         </div>
       </div>
@@ -120,10 +121,10 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-[14px]">
             <FileUp size={16} />
-            加载新规则包
+            {t('rulePacks.load.title')}
           </CardTitle>
           <CardDescription className="text-[11px]">
-            选择规则包文件（.yaml / .yml / .json），Tauri 文件对话框将在后端接入后启用。
+            {t('rulePacks.load.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -132,7 +133,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
               type="text"
               value={loadPath}
               onChange={(e) => setLoadPath(e.target.value)}
-              placeholder="C:/rules/my-rule-pack.yaml"
+              placeholder={t('rulePacks.load.placeholder')}
               variant="path"
               inputSize="compact"
               className="flex-1"
@@ -148,7 +149,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
               ) : (
                 <PackageOpen size={14} />
               )}
-              加载
+              {t('rulePacks.load.action')}
             </Button>
           </div>
           {model.loadError && (
@@ -162,7 +163,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
       {/* Pack list */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {model.packs.map((pack) => {
-          const config = STATUS_CONFIG[pack.status] ?? STATUS_CONFIG.loaded;
+          const config = statusConfig[pack.status] ?? statusConfig.loaded;
           const StatusIcon = config.icon;
           const isSelected = selectedPackId === pack.id;
 
@@ -206,10 +207,10 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
               <CardContent>
                 <div className="flex flex-wrap items-center gap-4 text-[11px] text-forensics-muted">
                   <span>
-                    规则数: <span className="font-mono font-light text-forensics-text">{pack.ruleCount}</span>
+                    {t('rulePacks.pack.ruleCount')}: <span className="font-mono font-light text-forensics-text">{pack.ruleCount}</span>
                   </span>
                   <span className="text-forensics-muted-lighter">|</span>
-                  <span>加载时间: {formatTimestamp(pack.loadedAt)}</span>
+                  <span>{t('rulePacks.pack.loadedAt')}: {formatTimestamp(pack.loadedAt)}</span>
                 </div>
 
                 {/* Covered families */}
@@ -238,7 +239,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
                     ))}
                     {pack.warnings.length > 2 && (
                       <div className="mt-0.5 text-forensics-warning-text">
-                        ...以及 {pack.warnings.length - 2} 条更多
+                        {t('rulePacks.pack.moreWarnings', { count: pack.warnings.length - 2 })}
                       </div>
                     )}
                   </div>
@@ -274,7 +275,7 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
                     ) : (
                       <Shield size={12} />
                     )}
-                    校验
+                    {t('rulePacks.pack.validate')}
                   </Button>
                 </div>
               </CardContent>
@@ -286,8 +287,8 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
       {model.packs.length === 0 && (
         <div className="flex h-40 flex-col items-center justify-center rounded-none border border-dashed border-forensics-border-strong bg-forensics-surface">
           <PackageOpen size={32} className="text-forensics-muted-lighter" />
-          <div className="mt-3 text-[13px] text-forensics-muted">暂未加载任何规则包</div>
-          <div className="mt-1 text-[11px] text-forensics-muted-lighter">使用上方输入框加载您的第一个规则包</div>
+          <div className="mt-3 text-[13px] text-forensics-muted">{t('rulePacks.empty.title')}</div>
+          <div className="mt-1 text-[11px] text-forensics-muted-lighter">{t('rulePacks.empty.description')}</div>
         </div>
       )}
 

@@ -99,13 +99,13 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('owns direct-boot confirmation and sends explicit authorization after approval', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.canStart).toBe(true));
 
     await act(async () => result.current.start());
+    expect(result.current.directBootConfirmationOpen).toBe(true);
+    await act(async () => result.current.confirmDirectBoot?.());
 
-    expect(confirm).toHaveBeenCalledOnce();
     expect(mocks.prepare).toHaveBeenCalledWith({
       dataSourceId: 'source-1',
       recoveryIsoPath: undefined,
@@ -135,18 +135,17 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('does not prepare a session when direct boot is declined', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
 
     await act(async () => result.current.start());
+    await act(async () => result.current.cancelDirectBoot?.());
 
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
   });
 
   it('blocks session creation until the selected source preflight completes', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocks.preflight.mockReturnValue(new Promise(() => undefined));
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
@@ -154,7 +153,8 @@ describe('useEmulationWorkspaceModel', () => {
     expect(result.current.preflightLoading).toBe(true);
     expect(result.current.canStart).toBe(false);
     await act(async () => {
-      await expect(result.current.start()).rejects.toThrow('镜像预检尚未成功完成');
+      await result.current.start();
+      await expect(result.current.confirmDirectBoot!()).rejects.toThrow('镜像预检尚未成功完成');
     });
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
@@ -169,7 +169,6 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('releases the prepared session when OSDATA cleanup is refused', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
       installs: [{
@@ -187,7 +186,8 @@ describe('useEmulationWorkspaceModel', () => {
     await waitFor(() => expect(result.current.osdataCleanupPartitions).toEqual([2]));
 
     await act(async () => {
-      await expect(result.current.start()).rejects.toThrow();
+      await result.current.start();
+      await expect(result.current.confirmDirectBoot!()).rejects.toThrow();
     });
 
     expect(mocks.cleanupOsdata).toHaveBeenCalledWith({ sessionId: 'emulation-1', partitionIndex: 2 });
@@ -257,7 +257,6 @@ describe('useEmulationWorkspaceModel', () => {
   }
 
   it('installs the EFI fallback after prepare and before launch when the linux source needs it', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource();
     mocks.installEfiFallback.mockResolvedValue({
       sessionId: 'emulation-1',
@@ -270,7 +269,10 @@ describe('useEmulationWorkspaceModel', () => {
     await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
     expect(result.current.installEfiFallback).toBe(true);
 
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');
     expect(mocks.installEfiFallback.mock.invocationCallOrder[0])
@@ -280,27 +282,31 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('skips the EFI fallback install when the investigator unchecks it', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource();
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
 
     act(() => result.current.toggleInstallEfiFallback());
     expect(result.current.installEfiFallback).toBe(false);
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.installEfiFallback).not.toHaveBeenCalled();
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
 
   it('repairs dirty XFS logs after prepare and before launch', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['xfs-log-dirty']);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
     expect(result.current.repairFilesystems).toBe(true);
 
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
     expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
@@ -310,12 +316,14 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('repairs dirty ext4 journals after prepare and before launch', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['ext4-journal-dirty']);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
 
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
     expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
@@ -325,12 +333,14 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('rechecks an unverified XFS log before launch', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['xfs-log-unverified']);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
 
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
@@ -353,20 +363,21 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('allows the investigator to skip the XFS log repair', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['xfs-log-dirty']);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
 
     act(() => result.current.toggleRepairFilesystems());
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.repairFsJournals).not.toHaveBeenCalled();
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
 
   it('releases the prepared session when an XFS volume is unsupported', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource(['xfs-log-dirty']);
     mocks.repairFsJournals.mockResolvedValue({
       sessionId: 'emulation-1',
@@ -377,7 +388,8 @@ describe('useEmulationWorkspaceModel', () => {
     await waitFor(() => expect(result.current.needsFsRepair).toBe(true));
 
     await act(async () => {
-      await expect(result.current.start()).rejects.toThrow();
+      await result.current.start();
+      await expect(result.current.confirmDirectBoot!()).rejects.toThrow();
     });
 
     expect(mocks.release).toHaveBeenCalledWith('emulation-1');
@@ -385,7 +397,6 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('does not install the EFI fallback for windows sources even when the note appears', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
       installs: [{
@@ -400,21 +411,24 @@ describe('useEmulationWorkspaceModel', () => {
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
 
-    await act(async () => result.current.start());
+    await act(async () => {
+      await result.current.start();
+      await result.current.confirmDirectBoot!();
+    });
 
     expect(mocks.installEfiFallback).not.toHaveBeenCalled();
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
 
   it('releases the prepared session when the EFI fallback install fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     useLinuxEfiSource();
     mocks.installEfiFallback.mockRejectedValue(new Error('esp write failed'));
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.needsEfiFallback).toBe(true));
 
     await act(async () => {
-      await expect(result.current.start()).rejects.toThrow('esp write failed');
+      await result.current.start();
+      await expect(result.current.confirmDirectBoot!()).rejects.toThrow('esp write failed');
     });
 
     expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');

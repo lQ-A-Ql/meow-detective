@@ -1,5 +1,6 @@
 import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -10,12 +11,12 @@ import type { EvidenceHashJobView } from '../types';
 
 // ── Shared helper ──
 
-const processingStatePresentation = {
-  pending: { label: '等待处理', tone: 'border-forensics-border bg-forensics-panel text-forensics-muted' },
-  running: { label: '处理中', tone: 'border-forensics-info-border bg-forensics-info-bg text-forensics-info-text' },
-  ready: { label: '处理完成', tone: 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text' },
-  failed: { label: '处理失败', tone: 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text' },
-  deferred: { label: '部分延后', tone: 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text' },
+const processingStateTone = {
+  pending: 'border-forensics-border bg-forensics-panel text-forensics-muted',
+  running: 'border-forensics-info-border bg-forensics-info-bg text-forensics-info-text',
+  ready: 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text',
+  failed: 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text',
+  deferred: 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text',
 } as const;
 
 export function MetricBlock({
@@ -50,13 +51,14 @@ export function CaseMetricsStrip({
   timelineEventCount: number;
   artifactCount: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="border-b border-forensics-border shrink-0">
       <div className="grid grid-cols-4 divide-x divide-forensics-border">
-        <MetricBlock icon={<Database size={12} />} title="数据源" value={dataSourceCount} />
-        <MetricBlock icon={<FileText size={12} />} title="已索引文件" value={indexedFileCount} />
-        <MetricBlock icon={<Clock size={12} />} title="时间线事件" value={timelineEventCount} />
-        <MetricBlock icon={<AlertTriangle size={12} />} title="提取痕迹" value={artifactCount} />
+        <MetricBlock icon={<Database size={12} />} title={t('caseHome.metrics.dataSources')} value={dataSourceCount} />
+        <MetricBlock icon={<FileText size={12} />} title={t('caseHome.metrics.indexedFiles')} value={indexedFileCount} />
+        <MetricBlock icon={<Clock size={12} />} title={t('caseHome.metrics.timelineEvents')} value={timelineEventCount} />
+        <MetricBlock icon={<AlertTriangle size={12} />} title={t('caseHome.metrics.artifacts')} value={artifactCount} />
       </div>
     </div>
   );
@@ -73,12 +75,13 @@ export function RecentTasksPanel({
   completedJobs: JobSnapshot[];
   partialJobCount: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="w-1/2 border-r border-forensics-border flex flex-col min-h-0 bg-forensics-surface">
       <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
-        <span>最近任务</span>
+        <span>{t('caseHome.recentTasks.title')}</span>
         <span className="font-mono text-[10px] text-forensics-muted-light">
-          完成 {completedJobs.length} / 部分 {partialJobCount} / 运行 {runningJob ? 1 : 0}
+          {t('caseHome.recentTasks.summary', { completed: completedJobs.length, partial: partialJobCount, running: runningJob ? 1 : 0 })}
         </span>
       </div>
       <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-3 p-4">
@@ -102,16 +105,16 @@ export function RecentTasksPanel({
               {job.partial ? (
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-mono">
                   <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 text-forensics-warning-text">
-                    PARTIAL
+                    {t('caseHome.jobStates.partial')}
                   </span>
                   <span className="border border-forensics-warning-border bg-forensics-surface px-1.5 py-0.5 text-forensics-warning-text">
-                    warnings {job.warningCount}
+                    {t('caseHome.jobStates.warnings', { count: job.warningCount })}
                   </span>
                   <span className="border border-forensics-border-strong bg-forensics-surface px-1.5 py-0.5 text-forensics-text-tertiary">
-                    skipped {job.skippedCount}
+                    {t('caseHome.jobStates.skipped', { count: job.skippedCount })}
                   </span>
                   <span className="border border-forensics-error-border bg-forensics-surface px-1.5 py-0.5 text-forensics-error-text">
-                    failed {job.failedCount}
+                    {t('caseHome.jobStates.failed', { count: job.failedCount })}
                   </span>
                 </div>
               ) : null}
@@ -133,7 +136,7 @@ export interface DataSourcesPanelProps {
   setEditingDataSourceId: (id: string | undefined) => void;
   setEditingDataSourceName: (name: string) => void;
   onRename: (dataSourceId: string, name: string) => void;
-  onDelete: (dataSourceId: string) => void;
+  onRequestDelete: (source: DataSourceSummary) => void;
 }
 
 export function DataSourcesPanel({
@@ -144,13 +147,14 @@ export function DataSourcesPanel({
   setEditingDataSourceId,
   setEditingDataSourceName,
   onRename,
-  onDelete,
+  onRequestDelete,
 }: DataSourcesPanelProps) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
-        <span>已有数据源</span>
-        <span className="font-mono text-[10px] text-forensics-muted-light">{dataSources?.length ?? 0} 个</span>
+        <span>{t('caseHome.dataSources.title')}</span>
+        <span className="font-mono text-[10px] text-forensics-muted-light">{t('caseHome.count', { count: dataSources?.length ?? 0 })}</span>
       </div>
       <ScrollArea className="max-h-64 border-b border-forensics-border bg-forensics-surface">
         {dataSources?.length ? (
@@ -179,7 +183,7 @@ export function DataSourcesPanel({
                           size="compact"
                           onClick={() => onRename(source.id, editingDataSourceName.trim())}
                         >
-                          保存
+                          {t('caseHome.actions.save')}
                         </Button>
                         <Button
                           type="button"
@@ -190,7 +194,7 @@ export function DataSourcesPanel({
                             setEditingDataSourceName('');
                           }}
                         >
-                          取消
+                          {t('caseHome.actions.cancel')}
                         </Button>
                       </div>
                     ) : (
@@ -211,11 +215,8 @@ export function DataSourcesPanel({
                           type="button"
                           variant="forensicsDangerGhost"
                           size="iconSm"
-                          onClick={() => {
-                            if (window.confirm(`确定删除数据源 "${source.name}"？\n\n该操作将级联删除其下的所有文件条目、时间线事件和提取痕迹，且不可撤销。`)) {
-                              onDelete(source.id);
-                            }
-                          }}
+                          onClick={() => onRequestDelete(source)}
+                          aria-label={t('caseHome.actions.deleteDataSource')}
                         >
                           <Trash2 size={12} />
                         </Button>
@@ -226,13 +227,13 @@ export function DataSourcesPanel({
                     <div className="mt-2 border border-forensics-border-light bg-forensics-panel px-2.5 py-2">
                       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                         <Hash size={11} />
-                        <span>证据 SHA-256</span>
+                        <span>{t('caseHome.dataSources.sha256')}</span>
                       </div>
                       {hashJob ? (
                         <div className="mt-2">
                           <InlineProgressRow
-                            title={hashJob.status === 'pending' ? '等待计算' : '后台计算中'}
-                            subtitle="导入完成后自动计算"
+                            title={hashJob.status === 'pending' ? t('caseHome.hash.waiting') : t('caseHome.hash.running')}
+                            subtitle={t('caseHome.hash.auto')}
                             detail={`${hashJob.progress}%`}
                             progress={hashJob.progress}
                           />
@@ -241,7 +242,7 @@ export function DataSourcesPanel({
                         <div className="mt-1.5">
                           <div className="flex items-center gap-1 text-[10px] text-forensics-success-text">
                             <CheckCircle2 size={11} />
-                            <span>已完成</span>
+                            <span>{t('caseHome.hash.completed')}</span>
                           </div>
                           <div className="mt-1 break-all font-mono text-[10px] leading-4 text-forensics-text" data-testid={`source-hash-${source.id}`}>
                             {source.sourceHash}
@@ -250,33 +251,33 @@ export function DataSourcesPanel({
                       ) : hashStatus === 'failed' ? (
                         <div className="mt-1.5 flex items-center gap-1 text-[10px] text-forensics-error-text">
                           <XCircle size={11} />
-                          <span>计算失败</span>
+                          <span>{t('caseHome.hash.failed')}</span>
                         </div>
                       ) : hashStatus === 'unavailable' ? (
-                        <div className="mt-1.5 text-[10px] text-forensics-muted">当前数据源不可计算</div>
+                        <div className="mt-1.5 text-[10px] text-forensics-muted">{t('caseHome.hash.unavailable')}</div>
                       ) : (
-                        <div className="mt-1.5 text-[10px] text-forensics-muted">等待后台任务</div>
+                        <div className="mt-1.5 text-[10px] text-forensics-muted">{t('caseHome.hash.waiting')}</div>
                       )}
                     </div>
                     {source.processing ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                         <span
-                          className={`border px-2 py-0.5 font-light ${processingStatePresentation[source.processing.state].tone}`}
+                          className={`border px-2 py-0.5 font-light ${processingStateTone[source.processing.state]}`}
                           title={source.processing.lastError}
                         >
-                          {processingStatePresentation[source.processing.state].label}
+                          {t(`caseHome.processing.${source.processing.state}`)}
                         </span>
                         <span className="font-mono text-forensics-muted">
-                          phase {source.processing.readyCount}/{source.processing.totalCount}
+                          {t('caseHome.processing.phase', { ready: source.processing.readyCount, total: source.processing.totalCount })}
                         </span>
                         {source.processing.failedCount > 0 ? (
                           <span className="font-mono text-forensics-error-text">
-                            failed {source.processing.failedCount}
+                            {t('caseHome.jobStates.failed', { count: source.processing.failedCount })}
                           </span>
                         ) : null}
                         {source.processing.deferredCount > 0 ? (
                           <span className="font-mono text-forensics-warning-text">
-                            deferred {source.processing.deferredCount}
+                            {t('caseHome.processing.deferredCount', { count: source.processing.deferredCount })}
                           </span>
                         ) : null}
                       </div>
@@ -284,8 +285,8 @@ export function DataSourcesPanel({
                     {partitionCount > 0 ? (
                       <div className="mt-3 space-y-2">
                         <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-forensics-muted">
-                          <span>分区结构</span>
-                          <span className="font-mono">{partitionCount} 项</span>
+                          <span>{t('caseHome.dataSources.partitions')}</span>
+                          <span className="font-mono">{t('caseHome.count', { count: partitionCount })}</span>
                         </div>
                         <div className="space-y-2">
                           {source.partitions?.map((partition: DataSourcePartition) => {
@@ -297,10 +298,10 @@ export function DataSourcesPanel({
                                   : 'border-forensics-border bg-forensics-panel text-forensics-muted';
                             const statusLabel =
                               partition.status === 'supported'
-                                ? '可浏览'
+                                ? t('caseHome.partitions.supported')
                                 : partition.status === 'locked'
-                                  ? '需要解锁'
-                                  : '暂不支持';
+                                  ? t('caseHome.partitions.locked')
+                                  : t('caseHome.partitions.unsupported');
 
                             return (
                               <div key={`${source.id}-${partition.index}`} className={`border px-3 py-2 text-[11px] ${statusTone}`}>
@@ -311,7 +312,7 @@ export function DataSourcesPanel({
                                     </div>
                                     <div className="mt-1 text-forensics-text-tertiary">{partition.name}</div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted">
-                                      offset {partition.offset} / length {partition.length}
+                                      {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partition.length })}
                                     </div>
                                     {partition.typeGuid ? (
                                       <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
@@ -342,14 +343,14 @@ export function DataSourcesPanel({
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[11px] text-forensics-text font-mono">{source.fileCount ?? 0}</div>
-                    <div className="text-[10px] text-forensics-muted-light">objects</div>
+                    <div className="text-[10px] text-forensics-muted-light">{t('caseHome.dataSources.objects')}</div>
                   </div>
                 </div>
               </div>
             );
           })
         ) : (
-          <div className="px-4 py-6 text-[12px] text-forensics-muted">导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。</div>
+          <div className="px-4 py-6 text-[12px] text-forensics-muted">{t('caseHome.dataSources.empty')}</div>
         )}
       </ScrollArea>
     </>
@@ -359,11 +360,12 @@ export function DataSourcesPanel({
 // ── Recent objects panel ──
 
 export function RecentObjectsPanel({ recentObjects }: { recentObjects: RecentObject[] | undefined }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="h-8 border-b border-forensics-border bg-forensics-panel flex items-center justify-between px-4 text-[11px] font-light uppercase text-forensics-text-tertiary tracking-wider shrink-0">
-        <span>高价值对象</span>
-        <span className="font-mono text-[10px] text-forensics-muted-light">最近发现 {recentObjects?.length ?? 0} 项</span>
+        <span>{t('caseHome.recentObjects.title')}</span>
+        <span className="font-mono text-[10px] text-forensics-muted-light">{t('caseHome.recentObjects.count', { count: recentObjects?.length ?? 0 })}</span>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col border-b border-forensics-border">
@@ -381,7 +383,7 @@ export function RecentObjectsPanel({ recentObjects }: { recentObjects: RecentObj
               </div>
             ))
           ) : (
-            <div className="px-4 py-6 text-[12px] text-forensics-muted">导入并完成初步解析后，这里会展示最近发现的高价值对象。</div>
+            <div className="px-4 py-6 text-[12px] text-forensics-muted">{t('caseHome.recentObjects.empty')}</div>
           )}
         </div>
       </ScrollArea>

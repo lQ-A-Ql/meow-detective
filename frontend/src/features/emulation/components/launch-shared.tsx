@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldHint, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
@@ -247,15 +248,22 @@ export function ErrorNote({ model }: LaunchPanelProps) {
 export function StartButton({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <Button
-      type="button"
-      variant="forensicsPrimary"
-      className="w-full"
-      onClick={() => void model.start()}
-      disabled={!model.canStart}
-    >
-      {model.starting ? <LoaderCircle className="animate-spin" /> : <Play />}
-      {model.starting ? t('emulationPage.actions.starting') : t('emulationPage.actions.start')}
-    </Button>
+    <>
+      <Button type="button" variant="forensicsPrimary" className="w-full" onClick={() => void model.start()} disabled={!model.canStart}>
+        {model.starting ? <LoaderCircle className="animate-spin" /> : <Play />}
+        {model.starting ? t('emulationPage.actions.starting') : t('emulationPage.actions.start')}
+      </Button>
+      <ConfirmationDialog
+        open={model.directBootConfirmationOpen}
+        onOpenChange={(open) => { if (!open) model.cancelDirectBoot(); }}
+        title={t('emulationPage.boot.directBootTitle')}
+        description={t('emulationPage.boot.directBootConfirm')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('emulationPage.boot.directBootAction')}
+        onConfirm={() => void model.confirmDirectBoot()}
+        pending={model.starting}
+        destructive
+      />
+    </>
   );
 }

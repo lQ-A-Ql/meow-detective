@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
@@ -19,15 +20,16 @@ interface V3DashboardWorkspaceProps {
 
 /** Pure dashboard presentation surface. Dashboard data loading belongs to the workspace model. */
 export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
       <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div><div className="font-serif text-xl tracking-tight text-forensics-text">取证总览</div><div className="mt-1 font-mono text-[11px] text-forensics-muted">图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态</div></div>
-          <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={14} className={model.graph.isFetching || model.overview.isFetching ? 'opacity-70' : ''} />刷新</Button>
+          <div><div className="font-serif text-xl tracking-tight text-forensics-text">{t('dashboard.title')}</div><div className="mt-1 font-mono text-[11px] text-forensics-muted">{t('dashboard.subtitle')}</div></div>
+          <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={14} className={model.graph.isFetching || model.overview.isFetching ? 'opacity-70' : ''} />{t('dashboard.refresh')}</Button>
         </div>
       </div>
-      {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text="正在加载取证总览快照..." /> : (
+      {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text={t('dashboard.loading')} /> : (
         <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">
           {model.error ? <AnalysisErrorBanner message={errorMessage(model.error)} onRetry={model.refresh} /> : null}
           <GraphStatsSection data={model.graph.data} />

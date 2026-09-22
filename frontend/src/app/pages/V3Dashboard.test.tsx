@@ -242,8 +242,8 @@ describe('V3Dashboard', () => {
     expect(screen.getByText('关联统计')).toBeDefined();
     expect(screen.getByText('家族覆盖')).toBeDefined();
     // Covered/Missing status text appears as direct text nodes in status badges
-    expect(screen.getAllByText('covered').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('missing').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已覆盖').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('缺失').length).toBeGreaterThan(0);
   });
 
   it('shows platform coverage from the overview snapshot', () => {

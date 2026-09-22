@@ -1,4 +1,5 @@
 import { FolderOpen, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -21,7 +22,7 @@ export interface CaseWelcomeFormsProps {
   openPending: boolean;
   openError: string | null;
   recentCases: RecentCase[];
-  onDeleteCase: (caseRoot: string) => void;
+  onRequestDeleteCase: (recentCase: RecentCase) => void;
 }
 
 export function CaseWelcomeForms({
@@ -38,26 +39,27 @@ export function CaseWelcomeForms({
   openPending,
   openError,
   recentCases,
-  onDeleteCase,
+  onRequestDeleteCase,
 }: CaseWelcomeFormsProps) {
+  const { t } = useTranslation();
   return (
     <ScrollArea className="min-h-0 flex-1 bg-forensics-surface" viewportClassName="flex min-h-full flex-col">
       <div className="border-b border-forensics-border bg-forensics-panel p-8">
         <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">{BRAND_DISPLAY_NAME}</div>
         <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
-          当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入真实文件浏览链路。
+          {t('caseHome.welcome.description')}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6 p-8">
         <div className="border border-forensics-border bg-forensics-surface p-5">
-          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">新建案件</div>
+          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">{t('caseHome.welcome.create.title')}</div>
           <div className="space-y-2 mb-3">
             <Input
               type="text"
               value={caseRoot}
               onChange={(e) => setCaseRoot(e.target.value)}
-              placeholder="案件父目录"
+              placeholder={t('caseHome.welcome.create.rootPlaceholder')}
               variant="path"
               inputSize="compact"
             />
@@ -65,7 +67,7 @@ export function CaseWelcomeForms({
               type="text"
               value={caseName}
               onChange={(e) => setCaseName(e.target.value)}
-              placeholder="案件名称"
+              placeholder={t('caseHome.welcome.create.namePlaceholder')}
               variant="forensics"
               inputSize="compact"
             />
@@ -77,7 +79,7 @@ export function CaseWelcomeForms({
             onClick={onCreateCase}
             disabled={createPending || !caseRoot || !caseName}
           >
-            {createPending ? '创建中...' : '创建案件'}
+            {createPending ? t('caseHome.welcome.create.pending') : t('caseHome.welcome.create.action')}
           </Button>
           {createError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{createError}</div>
@@ -85,13 +87,13 @@ export function CaseWelcomeForms({
         </div>
 
         <div className="border border-forensics-border bg-forensics-surface p-5">
-          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">打开已有案件</div>
+          <div className="text-[13px] font-light text-forensics-text-secondary mb-3">{t('caseHome.welcome.open.title')}</div>
           <div className="space-y-2 mb-3">
             <Input
               type="text"
               value={openCasePath}
               onChange={(e) => setOpenCasePath(e.target.value)}
-              placeholder="案件路径"
+              placeholder={t('caseHome.welcome.open.pathPlaceholder')}
               variant="path"
               inputSize="compact"
             />
@@ -103,7 +105,7 @@ export function CaseWelcomeForms({
             onClick={() => onOpenCase(openCasePath)}
             disabled={openPending || !openCasePath}
           >
-            {openPending ? '打开中...' : '打开案件'}
+            {openPending ? t('caseHome.welcome.open.pending') : t('caseHome.welcome.open.action')}
           </Button>
           {openError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{openError}</div>
@@ -114,8 +116,8 @@ export function CaseWelcomeForms({
       <div className="px-8 pb-8">
         <div className="border border-forensics-border bg-forensics-surface">
           <div className="border-b border-forensics-border bg-forensics-panel px-5 py-3 flex items-center justify-between">
-            <div className="text-[13px] font-light text-forensics-text-secondary">最近打开案件</div>
-            <div className="text-[10px] font-mono text-forensics-muted-light">{recentCases.length} 项</div>
+            <div className="text-[13px] font-light text-forensics-text-secondary">{t('caseHome.welcome.recent.title')}</div>
+            <div className="text-[10px] font-mono text-forensics-muted-light">{t('caseHome.count', { count: recentCases.length })}</div>
           </div>
           {recentCases.length ? (
             <div className="divide-y divide-forensics-border-light">
@@ -136,12 +138,11 @@ export function CaseWelcomeForms({
                     size="iconSm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`确定删除案件 "${item.name}"？\n\n该操作将删除案件目录及其所有数据，且不可撤销。`)) {
-                        onDeleteCase(item.caseRoot);
-                      }
+                      onRequestDeleteCase(item);
                     }}
                     className="shrink-0"
-                    title="删除案件"
+                    title={t('caseHome.actions.deleteCase')}
+                    aria-label={t('caseHome.actions.deleteCase')}
                   >
                     <Trash2 size={12} />
                   </Button>
@@ -149,7 +150,7 @@ export function CaseWelcomeForms({
               ))}
             </div>
           ) : (
-            <div className="px-5 py-6 text-[12px] text-forensics-muted">这里会保留最近打开过的案件，便于重新进入分析现场。</div>
+            <div className="px-5 py-6 text-[12px] text-forensics-muted">{t('caseHome.welcome.recent.empty')}</div>
           )}
         </div>
       </div>
@@ -190,6 +191,7 @@ export function ImportSection({
   onBrowseFile,
   onBrowseDirectory,
 }: ImportSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="border-b border-forensics-border bg-forensics-panel p-4 shrink-0">
       <div className="flex items-center gap-3">
@@ -197,7 +199,7 @@ export function ImportSection({
           type="text"
           value={importPath}
           onChange={(e) => setImportPath(e.target.value)}
-          placeholder="镜像路径或逻辑目录路径"
+          placeholder={t('caseHome.import.pathPlaceholder')}
           variant="path"
           inputSize="compact"
           className="flex-1"
@@ -213,7 +215,7 @@ export function ImportSection({
             }
           }}
         >
-          <FolderOpen size={12} /> 文件
+          <FolderOpen size={12} /> {t('caseHome.import.file')}
         </Button>
         <Button
           type="button"
@@ -226,7 +228,7 @@ export function ImportSection({
             }
           }}
         >
-          <FolderOpen size={12} /> 目录
+          <FolderOpen size={12} /> {t('caseHome.import.directory')}
         </Button>
         <Button
           type="button"
@@ -235,7 +237,7 @@ export function ImportSection({
           onClick={onImport}
           disabled={importPending || Boolean(importJob)}
         >
-          {importPending ? '提交中...' : importJob ? '后台导入中...' : '导入'}
+          {importPending ? t('caseHome.import.submitting') : importJob ? t('caseHome.import.running') : t('caseHome.import.action')}
         </Button>
         <Button
           type="button"
@@ -245,18 +247,18 @@ export function ImportSection({
             onClose();
           }}
         >
-          取消
+          {t('caseHome.actions.cancel')}
         </Button>
       </div>
       {importPending ? (
         <div className="mt-2 flex items-center gap-2 text-[11px] text-forensics-muted">
           <div className="w-3 h-3 border-2 border-forensics-muted border-t-transparent rounded-none opacity-70" />
-          正在提交导入任务，后台进度会在任务列表中持续更新。
+          {t('caseHome.import.submitHint')}
         </div>
       ) : null}
       {importJob ? (
         <div className="mt-2 text-[11px] text-forensics-text-tertiary font-mono bg-forensics-surface border border-forensics-350 p-2">
-          <div>后台导入进行中: {importJob.name} · {importJob.progress}% · {importJob.detail}</div>
+          <div>{t('caseHome.import.progress', { name: importJob.name, progress: importJob.progress, detail: importJob.detail })}</div>
           <Button
             type="button"
             variant="forensicsLink"
@@ -265,7 +267,7 @@ export function ImportSection({
             disabled={cancelImportPending}
             className="mt-1 text-[10px] text-forensics-error-text hover:text-forensics-error-text"
           >
-            {cancelImportPending ? '取消中...' : '取消导入'}
+            {cancelImportPending ? t('caseHome.import.canceling') : t('caseHome.import.cancel')}
           </Button>
         </div>
       ) : null}
@@ -276,12 +278,12 @@ export function ImportSection({
       ) : null}
       {importError ? (
         <div className="mt-2 text-[11px] text-forensics-error-text font-mono bg-forensics-error-bg border border-forensics-error-border p-2">
-          导入失败: {importError}
+          {t('caseHome.import.failed', { error: importError })}
         </div>
       ) : null}
       {failedImportJob ? (
         <div className="mt-2 text-[11px] text-forensics-error-text font-mono bg-forensics-error-bg border border-forensics-error-border p-2">
-          后台导入失败: {failedImportJob.detail || failedImportJob.name}
+          {t('caseHome.import.backgroundFailed', { detail: failedImportJob.detail || failedImportJob.name })}
         </div>
       ) : null}
     </div>

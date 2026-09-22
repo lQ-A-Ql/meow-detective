@@ -19,6 +19,7 @@ import { useAppSettings } from '@/features/settings/hooks';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 import { readLocalSettings } from '@/lib/settings';
 import type { ImportDataSourceRequest } from '@/types/models';
+import type { DataSourceSummary, RecentCase } from '@/types/models';
 import type { EvidenceHashJobView } from './types';
 
 function mutationError(error: unknown): string | null {
@@ -50,6 +51,11 @@ export function useCaseHomeModel() {
   const [openCasePath, setOpenCasePath] = useState('C:\\Cases\\case-001');
   const [editingDataSourceId, setEditingDataSourceId] = useState<string | undefined>();
   const [editingDataSourceName, setEditingDataSourceName] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'case'; value: RecentCase }
+    | { kind: 'dataSource'; value: DataSourceSummary }
+    | undefined
+  >();
   const hasEditedCaseRoot = useRef(false);
   const currentCase = currentCaseQuery.data;
   const jobs = jobsQuery.data;
@@ -94,6 +100,17 @@ export function useCaseHomeModel() {
       },
     });
   }, [deleteCaseMutation, removeCaseFromListMutation]);
+  const requestDeleteCase = useCallback((recentCase: RecentCase) => setDeleteTarget({ kind: 'case', value: recentCase }), []);
+  const requestDeleteDataSource = useCallback((source: DataSourceSummary) => setDeleteTarget({ kind: 'dataSource', value: source }), []);
+  const confirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === 'case') {
+      deleteCase(deleteTarget.value.caseRoot);
+    } else {
+      deleteDataSourceMutation.mutate(deleteTarget.value.id);
+    }
+    setDeleteTarget(undefined);
+  }, [deleteCase, deleteDataSourceMutation, deleteTarget]);
   const renameDataSource = useCallback((dataSourceId: string, name: string) => {
     renameDataSourceMutation.mutate({ dataSourceId, name }, {
       onSuccess: () => {
@@ -120,7 +137,9 @@ export function useCaseHomeModel() {
     currentCase,
     dataSources: dataSourcesQuery.data,
     deleteCase,
+    deleteTarget,
     deleteDataSource: deleteDataSourceMutation.mutate,
+    confirmDelete,
     evidenceHashJobs,
     editingDataSourceId,
     editingDataSourceName,
@@ -138,12 +157,15 @@ export function useCaseHomeModel() {
     openCasePending: openCaseMutation.isPending,
     partialJobCount,
     recentCases,
+    requestDeleteCase,
+    requestDeleteDataSource,
     recentObjects: recentObjectsQuery.data,
     renameDataSource,
     runningJob: runningJobs[0],
     setCaseName,
     setEditingDataSourceId,
     setEditingDataSourceName,
+    setDeleteTarget,
     setImportDialogOpen,
     setOpenCasePath,
     updateCaseRoot,

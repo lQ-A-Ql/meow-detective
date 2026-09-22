@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import {
   Dialog,
   DialogContent,
@@ -55,6 +56,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
     && !model.isSubmitting;
 
   return (
+    <>
     <Dialog open={model.dialogOpen} onOpenChange={model.setDialogOpen}>
       <DialogContent className="max-h-[min(720px,calc(100vh-2rem))] overflow-y-auto p-0 sm:max-w-2xl">
         <div className="border-b border-forensics-border bg-forensics-panel-strong px-5 py-4">
@@ -319,5 +321,17 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
+    <ConfirmationDialog
+      open={model.directBootConfirmationOpen}
+      onOpenChange={(open) => { if (!open) model.cancelDirectBoot(); }}
+      title={t('fileBrowser.mount.directBootTitle')}
+      description={t('fileBrowser.mount.directBootConfirm')}
+      cancelLabel={t('common.cancel')}
+      confirmLabel={t('fileBrowser.mount.directBootAction')}
+      onConfirm={() => void model.confirmDirectBoot()}
+      pending={model.isSubmitting}
+      destructive
+    />
+    </>
   );
 }

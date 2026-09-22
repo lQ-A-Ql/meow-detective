@@ -1,10 +1,32 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" }, "yes": "是", "no": "否", "unknown": "未知",
+    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" }, "yes": "是", "no": "否", "unknown": "未知", "cancel": "取消",
     "errors": { "unknownApi": "未知接口错误" },
     "partition": { "display": "分区{{index}}（{{label}}）" },
     "sort": { "name": "名称", "size": "大小", "modifiedAt": "修改时间", "extension": "扩展名" },
     "fileTypes": { "directory": "目录", "file": "文件", "extension": "{{extension}} 文件" }
+  },
+  "dashboard": {
+    "title": "取证总览", "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态", "refresh": "刷新", "loading": "正在加载取证总览快照...",
+    "query": { "loading": "正在加载...", "empty": "暂无数据。" },
+    "status": { "ready": "就绪", "covered": "已覆盖", "review": "待复核", "missing": "缺失", "unknown": "未知" },
+    "artifacts": { "title": "痕迹统计", "subtitle": "按痕迹家族汇总", "familyCount": "家族数量", "recordCount": "记录总量", "details": "家族明细" },
+    "batch": { "title": "批处理状态", "subtitle": "批量导入、批量提取、批量报告", "active": "进行中", "completed": "已完成", "failed": "失败", "queued": "排队中", "total": "总计", "empty": "暂无批处理作业。" },
+    "timeline": { "title": "时间线概览", "subtitle": "跨数据源事件总量与就绪状态", "total": "事件总量", "ready": "时间线就绪", "status": "时间线状态" },
+    "correlation": { "title": "关联统计", "subtitle": "关联分析快照", "nodes": "关联节点", "edges": "关联边", "clusters": "聚合簇", "leads": "线索数", "familyCoverage": "家族覆盖", "leadCount": "{{count}} 线索", "clusterCount": "{{count}} 簇" },
+    "sources": { "title": "数据源覆盖", "subtitle": "导入来源及分区", "count": "数据源数量", "partitions": "分区总数", "e01": "E01 源", "ewf": "EWF 格式", "raw": "RAW 源", "rawSubtitle": "原始镜像", "details": "源明细", "files": "{{count}} 文件", "partitionCount": "{{count}} 分区", "empty": "当前案件没有数据源。" },
+    "platforms": { "title": "平台覆盖", "subtitle": "痕迹家族按目标平台分布", "windows": "Windows", "linux": "Linux", "crossPlatform": "跨平台", "unknown": "未分类", "familyUnit": "个家族", "details": "家族明细" },
+    "rulePacks": { "title": "规则包状态", "subtitle": "规则版本、覆盖率、执行状态", "loaded": "已加载规则包", "totalRules": "规则总数", "definitionStatus": "定义状态", "executionStatus": "本案执行", "ruleCount": "{{count}} 规则", "empty": "规则包数据将在导入数据源后加载。" },
+    "graph": { "title": "图统计", "subtitle": "节点与边按类型分布", "nodes": "节点总数", "edges": "边总数", "density": "密度", "largestComponent": "最大联通分量", "notCalculated": "未计算", "nodeTypes": "节点类型数", "byNodeType": "按节点类型", "byEdgeType": "按边类型" }
+  },
+  "rulePacks": {
+    "title": "规则包管理", "subtitle": "加载、校验并查看规则包覆盖范围", "loading": "正在加载规则包...", "loadError": "无法加载规则包列表", "retry": "重试", "refresh": "刷新",
+    "summary": { "packs": "规则包", "rules": "规则总数", "coverage": "覆盖率" },
+    "load": { "title": "加载新规则包", "description": "选择规则包文件（.yaml / .yml / .json），Tauri 文件对话框将在后端接入后启用。", "placeholder": "C:/rules/my-rule-pack.yaml", "action": "加载" },
+    "status": { "loaded": "已加载", "validating": "校验中", "error": "错误" },
+    "pack": { "ruleCount": "规则数", "loadedAt": "加载时间", "moreWarnings": "...以及 {{count}} 条更多", "validate": "校验" },
+    "empty": { "title": "暂未加载任何规则包", "description": "使用上方输入框加载您的第一个规则包" },
+    "coverage": { "title": "覆盖范围摘要", "description": "所有已加载规则包的合并覆盖范围", "overall": "整体覆盖率", "covered": "已覆盖 ({{count}})", "uncovered": "未覆盖 ({{count}})" }
   },
   "viewer": { "error": { "title": "文件预览失败", "copyDetails": "复制错误详情", "retryPreview": "重试预览", "retry": "重试" }, "hex": { "ariaLabel": "Hex 与 ASCII 字节预览", "empty": "选择文件后显示十六进制预览", "loadedRanges": "已加载区间" } },
   "media": {
@@ -432,6 +454,32 @@
     "actions": { "search": "搜索基础设施对象", "openFiles": "打开文件浏览", "copyId": "复制对象 ID", "close": "关闭详情" },
     "values": { "unselected": "未选择对象", "unknown": "未知", "unavailable": "未提供", "notFound": "未发现" }
   },
+  "caseHome": {
+    "count": "{{count}} 项",
+    "metrics": { "dataSources": "数据源", "indexedFiles": "已索引文件", "timelineEvents": "时间线事件", "artifacts": "提取痕迹" },
+    "actions": { "save": "保存", "cancel": "取消", "delete": "删除", "deleteCase": "删除案件", "deleteDataSource": "删除数据源" },
+    "recentTasks": { "title": "最近任务", "summary": "完成 {{completed}} / 部分 {{partial}} / 运行 {{running}}" },
+    "jobStates": { "partial": "部分完成", "warnings": "警告 {{count}}", "skipped": "跳过 {{count}}", "failed": "失败 {{count}}" },
+    "dataSources": { "title": "已有数据源", "sha256": "证据 SHA-256", "objects": "对象", "partitions": "分区结构", "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。" },
+    "hash": { "waiting": "等待计算", "running": "后台计算中", "auto": "导入完成后自动计算", "completed": "已完成", "failed": "计算失败", "unavailable": "当前数据源不可计算" },
+    "processing": { "pending": "等待处理", "running": "处理中", "ready": "处理完成", "failed": "处理失败", "deferred": "部分延后", "phase": "阶段 {{ready}}/{{total}}", "deferredCount": "延后 {{count}}" },
+    "partitions": { "supported": "可浏览", "locked": "需要解锁", "unsupported": "暂不支持", "offsetLength": "偏移 {{offset}} / 长度 {{length}}" },
+    "recentObjects": { "title": "高价值对象", "count": "最近发现 {{count}} 项", "empty": "导入并完成初步解析后，这里会展示最近发现的高价值对象。" },
+    "workspace": { "caseNumber": "案件 #{{number}}", "active": "当前状态: 活跃", "dataSources": "数据源: {{count}}", "warnings": "告警: {{count}}", "partialJobs": "部分完成任务: {{count}}", "status": "状态", "activeValue": "活跃", "createdAt": "创建时间", "examiner": "检验人" },
+    "import": { "pathPlaceholder": "镜像路径或逻辑目录路径", "file": "文件", "directory": "目录", "submitting": "提交中...", "running": "后台导入中...", "action": "导入", "submitHint": "正在提交导入任务，后台进度会在任务列表中持续更新。", "progress": "后台导入进行中: {{name}} · {{progress}}% · {{detail}}", "canceling": "取消中...", "cancel": "取消导入", "failed": "导入失败: {{error}}", "backgroundFailed": "后台导入失败: {{detail}}" },
+    "welcome": {
+      "description": "当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入真实文件浏览链路。",
+      "create": { "title": "新建案件", "rootPlaceholder": "案件父目录", "namePlaceholder": "案件名称", "pending": "创建中...", "action": "创建案件" },
+      "open": { "title": "打开已有案件", "pathPlaceholder": "案件路径", "pending": "打开中...", "action": "打开案件" },
+      "recent": { "title": "最近打开案件", "empty": "这里会保留最近打开过的案件，便于重新进入分析现场。" }
+    },
+    "confirm": {
+      "deleteCaseTitle": "删除案件",
+      "deleteCaseDescription": "确定删除案件“{{name}}”？该操作将删除案件目录及其所有数据，且不可撤销。",
+      "deleteDataSourceTitle": "删除数据源",
+      "deleteDataSourceDescription": "确定删除数据源“{{name}}”？该操作将级联删除其下的所有文件条目、时间线事件和提取痕迹，且不可撤销。"
+    }
+  },
   "bottomDrawer": {
     "headline": {
       "waiting": "等待任务执行"
@@ -556,6 +604,26 @@
     }
   },
   "analysis": {
+    "registry": {
+      "title": "注册表提取",
+      "unavailable": "注册表提取结果暂不可用。",
+      "tabs": { "users": "用户账户", "activity": "用户活动", "network": "网络配置", "software": "软件列表", "usb": "USB 设备", "raw": "原始键值" },
+      "accountStates": { "enabled": "启用", "locked": "锁定", "disabled": "禁用" },
+      "values": { "never": "从未登录", "enabled": "启用", "disabled": "禁用", "entries": "条", "txlog": "事务日志已合并", "deleted": "已删 {{count}}", "keyValues": "键值数", "sourceHives": "来源 Hive" },
+      "network": { "adapters": "网络适配器（物理与虚拟）", "profiles": "网络配置文件与连接历史" },
+      "columns": {
+        "username": "用户名", "status": "状态", "groups": "组", "loginCount": "登录次数", "lastLogin": "最后登录", "profilePath": "Profile 路径", "passwordHash": "密码哈希 (LM:NT)", "passwordHint": "密码提示", "programPath": "程序路径", "executionCount": "执行次数", "lastExecution": "最后执行", "notes": "备注", "profileName": "配置文件名称", "managed": "托管", "firstNetwork": "首次网络", "gatewayMac": "网关 MAC", "dnsSuffix": "DNS 后缀", "createdAt": "创建时间", "lastConnected": "最后连接", "adapter": "适配器", "deviceDescription": "设备描述", "currentMac": "当前 MAC", "permanentMac": "物理 MAC", "ipAddresses": "IP 地址", "subnetMasks": "子网掩码", "gateways": "默认网关", "dhcpServer": "DHCP 服务器", "dnsServers": "DNS 服务器", "pnpInstance": "PnP 实例", "driverService": "驱动服务", "interfaceGuid": "接口 GUID", "softwareName": "软件名称", "version": "版本", "publisher": "发布商", "installDate": "安装日期", "size": "大小", "deviceName": "设备名称", "serialNumber": "序列号", "driveLetter": "盘符", "fileSystem": "文件系统", "capacity": "容量", "firstConnected": "首次连接"
+      },
+      "empty": {
+        "usersTitle": "暂无用户账户数据", "usersDescription": "运行提取后将显示 SAM 账户信息。",
+        "activityTitle": "暂无 UserAssist 数据", "activityDescription": "从 NTUSER.DAT 提取程序执行记录。",
+        "adaptersTitle": "暂无物理网卡信息", "adaptersDescription": "从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。",
+        "profilesTitle": "暂无网络配置文件", "profilesDescription": "从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取。",
+        "softwareTitle": "暂无已安装软件数据", "softwareDescription": "从 SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall 提取。",
+        "usbTitle": "暂无 USB 设备历史", "usbDescription": "从 SYSTEM hive USBSTOR 提取连接记录。",
+        "rawTitle": "暂无原始键值数据", "rawDescription": "运行提取后会显示关键 hive 的 key/value 摘要。"
+      }
+    },
     "platformViews": {
       "windows": "Windows 取证",
       "linux": "Linux 取证",
@@ -735,6 +803,8 @@
       "directSystem": "原系统（需确认）"
     },
     "boot": {
+      "directBootTitle": "确认启动原系统",
+      "directBootAction": "继续启动",
       "directBootConfirm": "未选择可信的 WinPE 启动介质。\n\n确认后将直接启动镜像中的原系统。所有磁盘写入仍仅保存到案件 COW overlay，不会修改原始证据。是否继续？"
     },
     "preflight": {

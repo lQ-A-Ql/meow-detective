@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Progress } from '@/app/components/ui/progress';
 import { RuleFamilyList } from '@/features/rule-packs/components/RuleFamilyList';
@@ -12,19 +13,20 @@ export function RulePackCoveragePanel({
   uncovered: string[];
   coveragePercent: number;
 }) {
+  const { t } = useTranslation();
   return (
     <Card className="border-forensics-border bg-forensics-surface">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[14px]">
           <Shield size={16} />
-          覆盖范围摘要
+          {t('rulePacks.coverage.title')}
         </CardTitle>
-        <CardDescription className="text-[11px]">所有已加载规则包的合并覆盖范围</CardDescription>
+        <CardDescription className="text-[11px]">{t('rulePacks.coverage.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
           <div className="mb-1 flex items-center justify-between text-[11px]">
-            <span className="text-forensics-muted">整体覆盖率</span>
+            <span className="text-forensics-muted">{t('rulePacks.coverage.overall')}</span>
             <span className="font-mono font-light text-forensics-text">{coveragePercent}%</span>
           </div>
           <Progress value={coveragePercent} className="h-1.5 rounded-none bg-forensics-panel-strong" />
@@ -32,14 +34,14 @@ export function RulePackCoveragePanel({
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <RuleFamilyList
-            title={`已覆盖 (${covered.length})`}
+            title={t('rulePacks.coverage.covered', { count: covered.length })}
             families={covered}
             icon={<CheckCircle size={12} />}
             titleClassName="text-forensics-success-text"
             badgeClassName="bg-forensics-success-bg text-forensics-success-text hover:bg-forensics-success-bg"
           />
           <RuleFamilyList
-            title={`未覆盖 (${uncovered.length})`}
+            title={t('rulePacks.coverage.uncovered', { count: uncovered.length })}
             families={uncovered}
             icon={<AlertTriangle size={12} />}
             titleClassName="text-forensics-error-text"

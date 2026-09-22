@@ -18,7 +18,7 @@ function baseWelcomeProps(overrides: Partial<CaseWelcomeFormsProps> = {}): CaseW
     openPending: false,
     openError: null,
     recentCases: [],
-    onDeleteCase: vi.fn(),
+    onRequestDeleteCase: vi.fn(),
     ...overrides,
   };
 }
@@ -122,10 +122,9 @@ describe('CaseWelcomeForms', () => {
     expect(onOpenCase).toHaveBeenCalledWith('C:\\cases\\case-1');
   });
 
-  it('deletes a recent case only when the confirm dialog is accepted', () => {
-    const onDeleteCase = vi.fn();
+  it('requests deletion of a recent case without opening it', () => {
+    const onRequestDeleteCase = vi.fn();
     const onOpenCase = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     render(
       <CaseWelcomeForms
@@ -133,22 +132,19 @@ describe('CaseWelcomeForms', () => {
           recentCases: [
             { caseRoot: 'C:\\cases\\case-1', name: 'Case One', openedAt: '2026-06-01' },
           ],
-          onDeleteCase,
+          onRequestDeleteCase,
           onOpenCase,
         })}
       />,
     );
 
     fireEvent.click(screen.getByTitle('删除案件'));
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(onDeleteCase).not.toHaveBeenCalled();
+    expect(onRequestDeleteCase).toHaveBeenCalledWith({
+      caseRoot: 'C:\\cases\\case-1',
+      name: 'Case One',
+      openedAt: '2026-06-01',
+    });
     expect(onOpenCase).not.toHaveBeenCalled();
-
-    confirmSpy.mockReturnValue(true);
-    fireEvent.click(screen.getByTitle('删除案件'));
-    expect(onDeleteCase).toHaveBeenCalledWith('C:\\cases\\case-1');
-
-    confirmSpy.mockRestore();
   });
 });
 

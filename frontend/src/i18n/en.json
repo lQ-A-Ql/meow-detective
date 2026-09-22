@@ -1,10 +1,32 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" }, "yes": "Yes", "no": "No", "unknown": "Unknown",
+    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" }, "yes": "Yes", "no": "No", "unknown": "Unknown", "cancel": "Cancel",
     "errors": { "unknownApi": "Unknown API error" },
     "partition": { "display": "Partition {{index}} ({{label}})" },
     "sort": { "name": "Name", "size": "Size", "modifiedAt": "Modified", "extension": "Extension" },
     "fileTypes": { "directory": "Directory", "file": "File", "extension": "{{extension}} file" }
+  },
+  "dashboard": {
+    "title": "Forensic overview", "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status", "refresh": "Refresh", "loading": "Loading forensic overview...",
+    "query": { "loading": "Loading...", "empty": "No data." },
+    "status": { "ready": "Ready", "covered": "Covered", "review": "Needs review", "missing": "Missing", "unknown": "Unknown" },
+    "artifacts": { "title": "Artifact statistics", "subtitle": "Grouped by artifact family", "familyCount": "Families", "recordCount": "Records", "details": "Family details" },
+    "batch": { "title": "Batch status", "subtitle": "Batch imports, extraction and reports", "active": "Active", "completed": "Completed", "failed": "Failed", "queued": "Queued", "total": "Total", "empty": "No batch jobs." },
+    "timeline": { "title": "Timeline overview", "subtitle": "Cross-source event volume and readiness", "total": "Total events", "ready": "Timeline ready", "status": "Timeline status" },
+    "correlation": { "title": "Correlation statistics", "subtitle": "Correlation analysis snapshot", "nodes": "Related nodes", "edges": "Related edges", "clusters": "Clusters", "leads": "Leads", "familyCoverage": "Family coverage", "leadCount": "{{count}} leads", "clusterCount": "{{count}} clusters" },
+    "sources": { "title": "Data source coverage", "subtitle": "Imported sources and partitions", "count": "Data sources", "partitions": "Partitions", "e01": "E01 sources", "ewf": "EWF format", "raw": "RAW sources", "rawSubtitle": "Raw image", "details": "Source details", "files": "{{count}} files", "partitionCount": "{{count}} partitions", "empty": "This case has no data sources." },
+    "platforms": { "title": "Platform coverage", "subtitle": "Artifact families by target platform", "windows": "Windows", "linux": "Linux", "crossPlatform": "Cross-platform", "unknown": "Unclassified", "familyUnit": "families", "details": "Family details" },
+    "rulePacks": { "title": "Rule-pack status", "subtitle": "Rule versions, coverage and execution state", "loaded": "Loaded rule packs", "totalRules": "Total rules", "definitionStatus": "Definition status", "executionStatus": "Case execution", "ruleCount": "{{count}} rules", "empty": "Rule-pack data loads after evidence import." },
+    "graph": { "title": "Graph statistics", "subtitle": "Nodes and edges by type", "nodes": "Total nodes", "edges": "Total edges", "density": "Density", "largestComponent": "Largest component", "notCalculated": "Not calculated", "nodeTypes": "Node types", "byNodeType": "By node type", "byEdgeType": "By edge type" }
+  },
+  "rulePacks": {
+    "title": "Rule-pack management", "subtitle": "Load, validate and review rule-pack coverage", "loading": "Loading rule packs...", "loadError": "Unable to load rule-pack list", "retry": "Retry", "refresh": "Refresh",
+    "summary": { "packs": "Rule packs", "rules": "Total rules", "coverage": "Coverage" },
+    "load": { "title": "Load a rule pack", "description": "Choose a .yaml, .yml or .json rule-pack file. The Tauri file dialog will be enabled when the backend is connected.", "placeholder": "C:/rules/my-rule-pack.yaml", "action": "Load" },
+    "status": { "loaded": "Loaded", "validating": "Validating", "error": "Error" },
+    "pack": { "ruleCount": "Rules", "loadedAt": "Loaded", "moreWarnings": "...and {{count}} more", "validate": "Validate" },
+    "empty": { "title": "No rule packs loaded", "description": "Use the input above to load your first rule pack" },
+    "coverage": { "title": "Coverage summary", "description": "Combined coverage of all loaded rule packs", "overall": "Overall coverage", "covered": "Covered ({{count}})", "uncovered": "Uncovered ({{count}})" }
   },
   "viewer": { "error": { "title": "File preview failed", "copyDetails": "Copy error details", "retryPreview": "Retry preview", "retry": "Retry" }, "hex": { "ariaLabel": "Hex and ASCII byte preview", "empty": "Select a file to preview hexadecimal data", "loadedRanges": "Loaded ranges" } },
   "media": {
@@ -432,6 +454,32 @@
     "actions": { "search": "Search infrastructure objects", "openFiles": "Open file browser", "copyId": "Copy object ID", "close": "Close details" },
     "values": { "unselected": "No object selected", "unknown": "Unknown", "unavailable": "Not provided", "notFound": "Not found" }
   },
+  "caseHome": {
+    "count": "{{count}} items",
+    "metrics": { "dataSources": "Data sources", "indexedFiles": "Indexed files", "timelineEvents": "Timeline events", "artifacts": "Extracted artifacts" },
+    "actions": { "save": "Save", "cancel": "Cancel", "delete": "Delete", "deleteCase": "Delete case", "deleteDataSource": "Delete data source" },
+    "recentTasks": { "title": "Recent tasks", "summary": "Completed {{completed}} / Partial {{partial}} / Running {{running}}" },
+    "jobStates": { "partial": "Partial", "warnings": "Warnings {{count}}", "skipped": "Skipped {{count}}", "failed": "Failed {{count}}" },
+    "dataSources": { "title": "Data sources", "sha256": "Evidence SHA-256", "objects": "objects", "partitions": "Partition structure", "empty": "Imported evidence sources for this case will appear here and can be renamed." },
+    "hash": { "waiting": "Waiting to calculate", "running": "Calculating in background", "auto": "Calculated automatically after import", "completed": "Completed", "failed": "Calculation failed", "unavailable": "This data source cannot be calculated" },
+    "processing": { "pending": "Pending", "running": "Processing", "ready": "Completed", "failed": "Failed", "deferred": "Deferred", "phase": "Phase {{ready}}/{{total}}", "deferredCount": "Deferred {{count}}" },
+    "partitions": { "supported": "Browsable", "locked": "Unlock required", "unsupported": "Unsupported", "offsetLength": "Offset {{offset}} / Length {{length}}" },
+    "recentObjects": { "title": "High-value objects", "count": "{{count}} recently found", "empty": "High-value objects found during initial analysis will appear here." },
+    "workspace": { "caseNumber": "Case #{{number}}", "active": "Status: Active", "dataSources": "Data sources: {{count}}", "warnings": "Warnings: {{count}}", "partialJobs": "Partial jobs: {{count}}", "status": "Status", "activeValue": "Active", "createdAt": "Created", "examiner": "Examiner" },
+    "import": { "pathPlaceholder": "Image or logical directory path", "file": "File", "directory": "Directory", "submitting": "Submitting...", "running": "Import running...", "action": "Import", "submitHint": "Submitting the import task; background progress will continue in the task list.", "progress": "Import in progress: {{name}} · {{progress}}% · {{detail}}", "canceling": "Cancelling...", "cancel": "Cancel import", "failed": "Import failed: {{error}}", "backgroundFailed": "Background import failed: {{detail}}" },
+    "welcome": {
+      "description": "No case is active. Create or open a case directory, then import a logical directory, RAW/DD/IMG or E01 image to enter the file-browsing workflow.",
+      "create": { "title": "Create case", "rootPlaceholder": "Case parent directory", "namePlaceholder": "Case name", "pending": "Creating...", "action": "Create case" },
+      "open": { "title": "Open existing case", "pathPlaceholder": "Case path", "pending": "Opening...", "action": "Open case" },
+      "recent": { "title": "Recently opened cases", "empty": "Recently opened cases are retained here for quick return to an investigation." }
+    },
+    "confirm": {
+      "deleteCaseTitle": "Delete case",
+      "deleteCaseDescription": "Delete case “{{name}}”? This permanently deletes the case directory and all of its data.",
+      "deleteDataSourceTitle": "Delete data source",
+      "deleteDataSourceDescription": "Delete data source “{{name}}”? This permanently deletes its file entries, timeline events, and extracted artifacts."
+    }
+  },
   "bottomDrawer": {
     "headline": {
       "waiting": "Waiting for tasks"
@@ -556,6 +604,26 @@
     }
   },
   "analysis": {
+    "registry": {
+      "title": "Registry extraction",
+      "unavailable": "Registry extraction results are unavailable.",
+      "tabs": { "users": "User accounts", "activity": "User activity", "network": "Network configuration", "software": "Installed software", "usb": "USB devices", "raw": "Raw values" },
+      "accountStates": { "enabled": "Enabled", "locked": "Locked", "disabled": "Disabled" },
+      "values": { "never": "Never logged in", "enabled": "Enabled", "disabled": "Disabled", "entries": "entries", "txlog": "transaction log merged", "deleted": "{{count}} deleted", "keyValues": "Key values", "sourceHives": "Source hives" },
+      "network": { "adapters": "Network adapters (physical and virtual)", "profiles": "Network profiles and connection history" },
+      "columns": {
+        "username": "Username", "status": "Status", "groups": "Groups", "loginCount": "Login count", "lastLogin": "Last login", "profilePath": "Profile path", "passwordHash": "Password hash (LM:NT)", "passwordHint": "Password hint", "programPath": "Program path", "executionCount": "Execution count", "lastExecution": "Last execution", "notes": "Notes", "profileName": "Profile name", "managed": "Managed", "firstNetwork": "First network", "gatewayMac": "Gateway MAC", "dnsSuffix": "DNS suffix", "createdAt": "Created", "lastConnected": "Last connected", "adapter": "Adapter", "deviceDescription": "Device description", "currentMac": "Current MAC", "permanentMac": "Permanent MAC", "ipAddresses": "IP addresses", "subnetMasks": "Subnet masks", "gateways": "Default gateways", "dhcpServer": "DHCP server", "dnsServers": "DNS servers", "pnpInstance": "PnP instance", "driverService": "Driver service", "interfaceGuid": "Interface GUID", "softwareName": "Software name", "version": "Version", "publisher": "Publisher", "installDate": "Install date", "size": "Size", "deviceName": "Device name", "serialNumber": "Serial number", "driveLetter": "Drive letter", "fileSystem": "Filesystem", "capacity": "Capacity", "firstConnected": "First connected"
+      },
+      "empty": {
+        "usersTitle": "No user account data", "usersDescription": "SAM account information appears after extraction.",
+        "activityTitle": "No UserAssist data", "activityDescription": "Program execution records are extracted from NTUSER.DAT.",
+        "adaptersTitle": "No physical network adapter data", "adaptersDescription": "Extracted from TCP/IP, Network, NetworkSetup2, and Class configuration in the SYSTEM hive.",
+        "profilesTitle": "No network profiles", "profilesDescription": "Extracted from SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList.",
+        "softwareTitle": "No installed software data", "softwareDescription": "Extracted from SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall.",
+        "usbTitle": "No USB device history", "usbDescription": "Connection history is extracted from SYSTEM hive USBSTOR.",
+        "rawTitle": "No raw registry values", "rawDescription": "A key/value summary of important hives appears after extraction."
+      }
+    },
     "platformViews": {
       "windows": "Windows Forensics",
       "linux": "Linux Forensics",
@@ -735,6 +803,8 @@
       "directSystem": "Original system (confirm)"
     },
     "boot": {
+      "directBootTitle": "Confirm original system boot",
+      "directBootAction": "Continue boot",
       "directBootConfirm": "No trusted WinPE boot media is selected.\n\nContinuing will boot the operating system inside the image. All disk writes remain in the case COW overlay and cannot modify original evidence. Continue?"
     },
     "preflight": {
