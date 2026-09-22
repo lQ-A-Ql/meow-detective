@@ -6,10 +6,10 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { SectionHeader } from '@/components/data-display';
-import { ForceGraph } from '@/features/graph/components/ForceGraph';
+import { ForceGraph } from '@/features/graph/visualization/ForceGraph';
 import { GraphEdgeDetails } from '@/features/graph/components/GraphEdgeDetails';
 import { GraphNodeDetails } from '@/features/graph/components/GraphNodeDetails';
-import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_TYPE_KEYS } from '@/features/graph/components/graph-utils';
+import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
 import type { GraphVisualizationModel } from '@/features/graph/use-graph-visualization-model';
 
 export function GraphVisualizationSection({ model }: { model: GraphVisualizationModel }) {

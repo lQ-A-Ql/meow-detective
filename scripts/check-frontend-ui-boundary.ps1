@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $scanRoots = @(
   (Join-Path $root 'frontend/src/app/pages'),
-  (Join-Path $root 'frontend/src/features/infrastructure')
+  (Join-Path $root 'frontend/src/features')
 )
 $forbidden = @('<button', '<select', '<textarea', '<input')
 $violations = @()
@@ -26,6 +26,24 @@ foreach ($scanRoot in $scanRoots) {
       }
     }
   }
+}
+
+$pageRoot = Join-Path $root 'frontend/src/app/pages'
+if (Test-Path -LiteralPath $pageRoot) {
+  Get-ChildItem -LiteralPath $pageRoot -Recurse -File -Include *.tsx,*.ts |
+    Where-Object { $_.Name -notmatch '\.test\.(tsx|ts)$' } |
+    ForEach-Object {
+      $path = $_.FullName
+      $lineNumber = 0
+      Get-Content -LiteralPath $path | ForEach-Object {
+        $lineNumber++
+        foreach ($token in @('useQuery', 'useMutation', 'apiClient', 'invoke(')) {
+          if ($_ -cmatch [regex]::Escape($token)) {
+            $violations += "${path}:$lineNumber page contains logic boundary token '$token'"
+          }
+        }
+      }
+    }
 }
 
 if ($SelfTest) {

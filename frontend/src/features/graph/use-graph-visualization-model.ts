@@ -6,7 +6,7 @@ import {
   useNodeNeighborhood,
   useProvenanceChain,
 } from '@/features/graph/hooks';
-import { ALL_EDGE_TYPES, buildEdgeMap, buildNodeMap } from '@/features/graph/components/graph-utils';
+import { ALL_EDGE_TYPES, buildEdgeMap, buildNodeMap } from '@/features/graph/logic/graph-utils';
 import type { EdgeType, GraphEdge, GraphNode } from '@/types/models';
 
 const MAX_SEEDS = 6;

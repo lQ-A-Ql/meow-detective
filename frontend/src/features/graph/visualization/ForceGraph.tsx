@@ -12,7 +12,7 @@ import {
   nodeTypeColor,
   tickSimulation,
   type SimulationNode,
-} from './graph-utils';
+} from '../logic/graph-utils';
 
 const MAX_SIMULATION_TICKS = 240;
 const STABLE_TICK_TARGET = 12;

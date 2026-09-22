@@ -1,5 +1,5 @@
 import { Button } from '@/app/components/ui/button';
-import { EDGE_TYPE_KEYS } from '@/features/graph/components/graph-utils';
+import { EDGE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
 import { useTranslation } from 'react-i18next';
 import type { GraphEdge, GraphNode, GraphProvenanceEntry } from '@/types/models';
 
