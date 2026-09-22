@@ -1,4 +1,46 @@
 {
+  "media": {
+    "loading": "加载中...",
+    "audio": "音频",
+    "video": "视频",
+    "audioProgress": "音频播放进度",
+    "videoProgress": "视频播放进度",
+    "volume": "音量",
+    "errors": {
+      "playback": "播放失败：{{message}}",
+      "audioLoad": "音频加载失败",
+      "videoLoad": "视频加载失败",
+      "aborted": "媒体加载被中止",
+      "network": "网络错误，请检查文件路径",
+      "audioDecode": "音频解码失败，格式可能不支持",
+      "videoDecode": "视频解码失败，格式可能不支持",
+      "audioUnsupported": "音频格式不支持或文件损坏",
+      "videoUnsupported": "视频格式不支持或文件损坏"
+    }
+  },
+  "graph": {
+    "title": "关系图谱",
+    "subtitle": "案件级跨数据源实体与证据邻域",
+    "depth": "深度",
+    "pause": "暂停",
+    "resume": "继续",
+    "refresh": "刷新",
+    "edgeTypeLabel": "关系类型：",
+    "selectAll": "全选",
+    "clearAll": "清空",
+    "loading": "加载图数据...",
+    "canvasLabel": "关系图谱力导向图",
+    "truncated": "当前图窗口已达到节点或关系预算，请缩小深度或关系类型。",
+    "empty": { "title": "暂无确定性的跨数据源实体关联。", "description": "完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。" },
+    "nodeTypes": { "file": "文件", "artifact": "痕迹", "timelineEvent": "时间线", "entity": "实体", "lead": "线索", "notebookEntry": "笔记" },
+    "edgeTypes": { "contains": "包含", "references": "引用", "correlatesWith": "关联", "derivesFrom": "派生", "precedes": "先于", "cites": "引用", "annotates": "标注" },
+    "values": { "untitled": "无标签", "noSummary": "无摘要", "unknown": "未知" },
+    "actions": { "expandOne": "展开 1 层", "expandTwo": "展开 2 层", "close": "关闭" },
+    "details": { "type": "类型", "degree": "度", "confidence": "置信度", "source": "源", "target": "目标", "provenance": "来源追溯", "parser": "解析器", "rule": "规则", "version": "版本", "noProvenance": "无追溯记录" },
+    "controls": { "zoomIn": "放大", "zoomOut": "缩小", "fit": "适应视图", "reset": "重置布局" },
+    "stats": { "dataSources": "数据源", "crossSourceEntities": "跨源实体", "crossSourceRelations": "跨源关系", "nodes": "节点", "edges": "边", "density": "密度" },
+    "help": { "selection": "单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。", "navigation": "拖拽节点调整位置，拖拽空白处平移，滚轮缩放。" }
+  },
   "fileBrowser": {
     "title": "文件浏览控制",
     "empty": {

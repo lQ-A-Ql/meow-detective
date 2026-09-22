@@ -24,7 +24,7 @@ import {
   STATUS_BADGE,
   STATUS_LABEL,
   formatTimestampShort,
-  simpleMarkdownToHtml,
+  simpleMarkdownToReact,
 } from './helpers';
 import { CitationPicker } from './NotebookEntryForm';
 
@@ -177,10 +177,9 @@ export function EntryDetailView({
             className="leading-6"
           />
         ) : (
-          <div
-            className="prose prose-sm max-w-none text-[12px] leading-6 text-forensics-text-secondary"
-            dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(entry.bodyMarkdown) }}
-          />
+          <div className="prose prose-sm max-w-none text-[12px] leading-6 text-forensics-text-secondary">
+            {simpleMarkdownToReact(entry.bodyMarkdown)}
+          </div>
         )}
       </div>
 

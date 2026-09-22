@@ -1,4 +1,46 @@
 {
+  "media": {
+    "loading": "Loading...",
+    "audio": "Audio",
+    "video": "Video",
+    "audioProgress": "Audio playback progress",
+    "videoProgress": "Video playback progress",
+    "volume": "Volume",
+    "errors": {
+      "playback": "Playback failed: {{message}}",
+      "audioLoad": "Audio failed to load",
+      "videoLoad": "Video failed to load",
+      "aborted": "Media loading was aborted",
+      "network": "Network error. Check the evidence path.",
+      "audioDecode": "Audio decoding failed; the format may be unsupported",
+      "videoDecode": "Video decoding failed; the format may be unsupported",
+      "audioUnsupported": "Audio format is unsupported or the file is damaged",
+      "videoUnsupported": "Video format is unsupported or the file is damaged"
+    }
+  },
+  "graph": {
+    "title": "Evidence graph",
+    "subtitle": "Case-level cross-source entities and evidence neighborhoods",
+    "depth": "Depth",
+    "pause": "Pause",
+    "resume": "Resume",
+    "refresh": "Refresh",
+    "edgeTypeLabel": "Relation types:",
+    "selectAll": "Select all",
+    "clearAll": "Clear",
+    "loading": "Loading graph data...",
+    "canvasLabel": "Evidence force-directed graph",
+    "truncated": "The graph window reached its node or relation budget. Reduce depth or relation types.",
+    "empty": { "title": "No deterministic cross-source entity relations.", "description": "Extract traces and entities from at least two sources to build the case graph." },
+    "nodeTypes": { "file": "File", "artifact": "Artifact", "timelineEvent": "Timeline", "entity": "Entity", "lead": "Lead", "notebookEntry": "Notebook" },
+    "edgeTypes": { "contains": "Contains", "references": "References", "correlatesWith": "Correlates", "derivesFrom": "Derived from", "precedes": "Precedes", "cites": "Cites", "annotates": "Annotates" },
+    "values": { "untitled": "Untitled", "noSummary": "No summary", "unknown": "Unknown" },
+    "actions": { "expandOne": "Expand 1 level", "expandTwo": "Expand 2 levels", "close": "Close" },
+    "details": { "type": "Type", "degree": "Degree", "confidence": "Confidence", "source": "Source", "target": "Target", "provenance": "Provenance", "parser": "Parser", "rule": "Rule", "version": "Version", "noProvenance": "No provenance records" },
+    "controls": { "zoomIn": "Zoom in", "zoomOut": "Zoom out", "fit": "Fit view", "reset": "Reset layout" },
+    "stats": { "dataSources": "Data sources", "crossSourceEntities": "Cross-source entities", "crossSourceRelations": "Cross-source relations", "nodes": "Nodes", "edges": "Edges", "density": "Density" },
+    "help": { "selection": "Click a node for details, double-click to expand its neighborhood, or click an edge for provenance.", "navigation": "Drag nodes to reposition them, drag empty space to pan, and use the wheel to zoom." }
+  },
   "fileBrowser": {
     "title": "File Browser Controls",
     "empty": {

@@ -635,14 +635,16 @@ describe('DenseDataTable filterable toolbar', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'syslog' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Kind' }));
+    fireEvent.click(screen.getByRole('option', { name: 'syslog' }));
 
     expect(screen.queryByText('Alpha')).toBeNull();
     expect(screen.getByText('Bravo')).toBeDefined();
     expect(screen.queryByText('Charlie')).toBeNull();
     expect(screen.getByText(/筛选 1 \/ 已加载 3/)).toBeDefined();
 
-    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Kind' }));
+    fireEvent.click(screen.getByRole('option', { name: '全部' }));
     expect(screen.getByText('Alpha')).toBeDefined();
     expect(screen.getByText('Charlie')).toBeDefined();
   });
@@ -690,7 +692,8 @@ describe('DenseDataTable filterable toolbar', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'journald' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Kind' }));
+    fireEvent.click(screen.getByRole('option', { name: 'journald' }));
 
     const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {

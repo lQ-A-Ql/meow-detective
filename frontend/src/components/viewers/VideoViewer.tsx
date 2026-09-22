@@ -21,6 +21,8 @@ import {
   SkipForward,
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { Slider } from '@/app/components/ui/slider';
+import { useTranslation } from 'react-i18next';
 
 interface VideoViewerProps {
   /** 视频 URL */
@@ -32,6 +34,7 @@ interface VideoViewerProps {
 }
 
 export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +76,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
     setError(null);
     video.play().catch((e) => {
       setIsPlaying(false);
-      setError(`播放失败: ${e.message}`);
+      setError(t('media.errors.playback', { message: e.message }));
     });
   }, [isPlaying]);
 
@@ -133,21 +136,21 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
       const mediaError = video.error;
-      let errorMsg = '视频加载失败';
+      let errorMsg = t('media.errors.videoLoad');
       
       if (mediaError) {
         switch (mediaError.code) {
           case MediaError.MEDIA_ERR_ABORTED:
-            errorMsg = '视频加载被中止';
+            errorMsg = t('media.errors.aborted');
             break;
           case MediaError.MEDIA_ERR_NETWORK:
-            errorMsg = '网络错误，请检查文件路径';
+            errorMsg = t('media.errors.network');
             break;
           case MediaError.MEDIA_ERR_DECODE:
-            errorMsg = '视频解码失败，格式可能不支持';
+            errorMsg = t('media.errors.videoDecode');
             break;
           case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMsg = '视频格式不支持或文件损坏';
+            errorMsg = t('media.errors.videoUnsupported');
             break;
         }
       }
@@ -186,7 +189,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       {/* 视频区域 */}
       <div className="flex-1 flex items-center justify-center relative">
         {isLoading && (
-          <div className="absolute text-white text-[14px]">加载中...</div>
+          <div className="absolute text-white text-[14px]">{t('media.loading')}</div>
         )}
         {error && (
           <div className="absolute text-forensics-error-text text-[14px]">{error}</div>
@@ -218,20 +221,17 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         </Button>
 
         {/* 进度条 */}
-        <input
-          type="range"
+        <Slider
           min={0}
           max={duration || 0}
           step={0.1}
-          value={currentTime}
-          onChange={(e) => {
-            const time = parseFloat(e.target.value);
-            if (videoRef.current) {
-              videoRef.current.currentTime = time;
-            }
+          value={[currentTime]}
+          onValueChange={([time]) => {
+            if (videoRef.current) videoRef.current.currentTime = time;
             setCurrentTime(time);
           }}
-          className="flex-1 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
+          aria-label={t('media.videoProgress')}
+          className="min-w-24 flex-1"
         />
 
         {/* 时间 */}
@@ -243,21 +243,18 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleMute} aria-label={isMuted ? '取消静音' : '静音'}>
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </Button>
-        <input
-          type="range"
+        <Slider
           min={0}
           max={1}
           step={0.05}
-          value={isMuted ? 0 : volume}
-          onChange={(e) => {
-            const vol = parseFloat(e.target.value);
+          value={[isMuted ? 0 : volume]}
+          onValueChange={([vol]) => {
             setVolume(vol);
             setIsMuted(vol === 0);
-            if (videoRef.current) {
-              videoRef.current.volume = vol;
-            }
+            if (videoRef.current) videoRef.current.volume = vol;
           }}
-          className="w-20 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
+          aria-label={t('media.volume')}
+          className="w-20"
         />
 
         {/* 全屏 */}
@@ -269,7 +266,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       {/* 状态栏 */}
       <div className="flex items-center gap-3 px-3 py-1 bg-forensics-text text-[10px] text-forensics-muted shrink-0">
         <Video size={10} />
-        <span>{mimeType || 'video'}</span>
+        <span>{mimeType || t('media.video')}</span>
         {fileName && (
           <>
             <span className="text-forensics-text-secondary">|</span>

@@ -1,4 +1,5 @@
 import { GitBranch, Pause, Play, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
@@ -8,10 +9,11 @@ import { SectionHeader } from '@/components/data-display';
 import { ForceGraph } from '@/features/graph/components/ForceGraph';
 import { GraphEdgeDetails } from '@/features/graph/components/GraphEdgeDetails';
 import { GraphNodeDetails } from '@/features/graph/components/GraphNodeDetails';
-import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_LABELS } from '@/features/graph/components/graph-utils';
+import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_TYPE_KEYS } from '@/features/graph/components/graph-utils';
 import type { GraphVisualizationModel } from '@/features/graph/use-graph-visualization-model';
 
 export function GraphVisualizationSection({ model }: { model: GraphVisualizationModel }) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
@@ -28,10 +30,10 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeader icon={GitBranch} title="关系图谱" subtitle="案件级跨数据源实体与证据邻域" />
+        <SectionHeader icon={GitBranch} title={t('graph.title')} subtitle={t('graph.subtitle')} />
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-forensics-muted">深度</span>
+            <span className="text-forensics-muted">{t('graph.depth')}</span>
             <Select value={String(model.maxDepth)} onValueChange={(value) => model.setMaxDepth(Number(value))}>
               <SelectTrigger size="xs" variant="forensics" className="w-16"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -49,7 +51,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
             className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
             {model.running ? <Pause size={12} className="mr-1" /> : <Play size={12} className="mr-1" />}
-            {model.running ? '暂停' : '继续'}
+            {model.running ? t('graph.pause') : t('graph.resume')}
           </Button>
           <Button
             type="button"
@@ -58,13 +60,13 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
             disabled={model.isLoadingGraph}
             className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
           >
-            <RefreshCw size={12} className="mr-1 opacity-70" />刷新
+            <RefreshCw size={12} className="mr-1 opacity-70" />{t('graph.refresh')}
           </Button>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-[11px] text-forensics-muted">关系类型:</span>
+        <span className="text-[11px] text-forensics-muted">{t('graph.edgeTypeLabel')}</span>
         <Button
           type="button"
           variant="forensicsGhost"
@@ -72,7 +74,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
           onClick={() => model.selectAllEdgeTypes(model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
           className="text-[10px]"
         >
-          {model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? '全选' : '清空'}
+          {model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? t('graph.selectAll') : t('graph.clearAll')}
         </Button>
         {ALL_EDGE_TYPES.map((type) => (
           <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
@@ -83,7 +85,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
               checkboxSize="compact"
             />
             <span className="inline-block h-2 w-2 rounded-none" style={{ backgroundColor: edgeTypeColor(type) }} />
-            <span>{EDGE_LABELS[type]}</span>
+            <span>{t(EDGE_TYPE_KEYS[type])}</span>
           </label>
         ))}
       </div>
@@ -92,8 +94,8 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
         <div ref={canvasRef} className="relative flex-1">
           {!model.hasNodes && !model.isLoadingGraph ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-forensics-muted">
-              <div>暂无确定性的跨数据源实体关联。</div>
-              <div className="mt-1">完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。</div>
+              <div>{t('graph.empty.title')}</div>
+              <div className="mt-1">{t('graph.empty.description')}</div>
             </div>
           ) : (
             <ForceGraph
@@ -113,7 +115,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
           {model.isLoadingGraph ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
               <div className="flex items-center gap-2 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] shadow-sm">
-                <RefreshCw size={12} className="opacity-70" />加载图数据...
+                <RefreshCw size={12} className="opacity-70" />{t('graph.loading')}
               </div>
             </div>
           ) : null}
@@ -145,19 +147,20 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
 }
 
 function GraphSummary({ model }: { model: GraphVisualizationModel }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3 text-[11px] text-forensics-muted">
-      <p>单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。</p>
-      <p>拖拽节点调整位置，拖拽空白处平移，滚轮缩放。</p>
+      <p>{t('graph.help.selection')}</p>
+      <p>{t('graph.help.navigation')}</p>
       {model.snapshot ? (
         <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
           {[
-            ['数据源', model.snapshot.dataSourceCount],
-            ['跨源实体', model.snapshot.crossSourceEntityCount],
-            ['跨源关系', model.snapshot.crossSourceEdgeCount],
-            ['节点', model.snapshot.totalNodes],
-            ['边', model.snapshot.totalEdges],
-            ['密度', model.snapshot.density],
+            [t('graph.stats.dataSources'), model.snapshot.dataSourceCount],
+            [t('graph.stats.crossSourceEntities'), model.snapshot.crossSourceEntityCount],
+            [t('graph.stats.crossSourceRelations'), model.snapshot.crossSourceEdgeCount],
+            [t('graph.stats.nodes'), model.snapshot.totalNodes],
+            [t('graph.stats.edges'), model.snapshot.totalEdges],
+            [t('graph.stats.density'), model.snapshot.density],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between">
               <span>{label}</span><span className="font-mono text-forensics-text">{value}</span>
@@ -165,7 +168,7 @@ function GraphSummary({ model }: { model: GraphVisualizationModel }) {
           ))}
         </div>
       ) : null}
-      {model.truncated ? <p className="text-forensics-warning">当前图窗口已达到节点或关系预算，请缩小深度或关系类型。</p> : null}
+      {model.truncated ? <p className="text-forensics-warning">{t('graph.truncated')}</p> : null}
     </div>
   );
 }

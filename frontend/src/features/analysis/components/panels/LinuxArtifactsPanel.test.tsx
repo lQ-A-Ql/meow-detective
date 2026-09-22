@@ -124,8 +124,8 @@ describe('LinuxArtifactsPanel', () => {
       ],
     });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'login' }));
-    expect(screen.getAllByText('lastlog').length).toBeGreaterThan(1);
-    expect(screen.getAllByText('faillog').length).toBeGreaterThan(1);
+    expect(screen.getByText('/var/log/lastlog')).toBeDefined();
+    expect(screen.getByText('/var/log/faillog')).toBeDefined();
     expect(screen.getByText('5')).toBeDefined();
     expect(screen.getByText('已锁定')).toBeDefined();
   });

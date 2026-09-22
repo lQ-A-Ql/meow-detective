@@ -11,6 +11,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Music, SkipBack, SkipForward } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { Slider } from '@/app/components/ui/slider';
+import { useTranslation } from 'react-i18next';
 
 interface AudioViewerProps {
   /** 音频 URL */
@@ -22,6 +24,7 @@ interface AudioViewerProps {
 }
 
 export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
+  const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -61,7 +64,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
     setError(null);
     audio.play().catch((e) => {
       setIsPlaying(false);
-      setError(`播放失败: ${e.message}`);
+      setError(t('media.errors.playback', { message: e.message }));
     });
   }, [isPlaying]);
 
@@ -98,21 +101,21 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
       const mediaError = audio.error;
-      let errorMsg = '音频加载失败';
+      let errorMsg = t('media.errors.audioLoad');
       
       if (mediaError) {
         switch (mediaError.code) {
           case MediaError.MEDIA_ERR_ABORTED:
-            errorMsg = '音频加载被中止';
+            errorMsg = t('media.errors.aborted');
             break;
           case MediaError.MEDIA_ERR_NETWORK:
-            errorMsg = '网络错误，请检查文件路径';
+            errorMsg = t('media.errors.network');
             break;
           case MediaError.MEDIA_ERR_DECODE:
-            errorMsg = '音频解码失败，格式可能不支持';
+            errorMsg = t('media.errors.audioDecode');
             break;
           case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMsg = '音频格式不支持或文件损坏';
+            errorMsg = t('media.errors.audioUnsupported');
             break;
         }
       }
@@ -146,9 +149,6 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // 计算进度百分比
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
     <div className="flex flex-col h-full bg-forensics-850 text-white p-6">
       {/* 音频图标 */}
@@ -167,37 +167,25 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
 
       {/* 加载/错误状态 */}
       {isLoading && (
-        <div className="text-center text-forensics-muted-lighter text-[12px] mb-4">加载中...</div>
+        <div className="text-center text-forensics-muted-lighter text-[12px] mb-4">{t('media.loading')}</div>
       )}
       {error && (
         <div className="text-center text-forensics-error-text text-[12px] mb-4">{error}</div>
       )}
 
       {/* 进度条 */}
-      <div className="relative w-full mb-4 focus-within:ring-2 focus-within:ring-white/40">
-        <div className="relative h-1.5 bg-forensics-text-secondary rounded-none overflow-hidden">
-          <div
-            className="absolute left-0 top-0 h-full bg-forensics-surface rounded-none transition-colors duration-500 duration-100"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          value={currentTime}
-          onChange={(e) => {
-            const time = parseFloat(e.target.value);
-            if (audioRef.current) {
-              audioRef.current.currentTime = time;
-            }
-            setCurrentTime(time);
-          }}
-          aria-label="音频播放进度"
-          className="absolute inset-x-0 -top-2 h-5 opacity-0 cursor-pointer"
-        />
-      </div>
+      <Slider
+        min={0}
+        max={duration || 0}
+        step={0.1}
+        value={[currentTime]}
+        onValueChange={([time]) => {
+          if (audioRef.current) audioRef.current.currentTime = time;
+          setCurrentTime(time);
+        }}
+          aria-label={t('media.audioProgress')}
+        className="mb-4"
+      />
 
       {/* 时间显示 */}
       <div className="flex justify-between text-[11px] text-forensics-muted-lighter mb-6 font-mono">
@@ -252,21 +240,18 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
         >
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </Button>
-        <input
-          type="range"
+        <Slider
           min={0}
           max={1}
           step={0.05}
-          value={isMuted ? 0 : volume}
-          onChange={(e) => {
-            const vol = parseFloat(e.target.value);
+          value={[isMuted ? 0 : volume]}
+          onValueChange={([vol]) => {
             setVolume(vol);
             setIsMuted(vol === 0);
-            if (audioRef.current) {
-              audioRef.current.volume = vol;
-            }
+            if (audioRef.current) audioRef.current.volume = vol;
           }}
-          className="w-24 h-1 bg-forensics-text-secondary rounded-none appearance-none cursor-pointer"
+          aria-label={t('media.volume')}
+          className="w-24"
         />
         <span className="text-[10px] text-forensics-muted w-8">
           {Math.round((isMuted ? 0 : volume) * 100)}%
@@ -275,7 +260,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
 
       {/* 文件信息 */}
       <div className="mt-6 text-center text-[10px] text-forensics-muted">
-        <span>{mimeType || 'audio'}</span>
+        <span>{mimeType || t('media.audio')}</span>
       </div>
 
       {/* 隐藏的音频元素 */}

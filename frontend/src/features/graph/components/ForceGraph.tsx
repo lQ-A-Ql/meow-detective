@@ -1,7 +1,8 @@
 import { Minus, Plus, RotateCcw, Target } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
-import type { GraphEdge, GraphNode, NodeType } from '@/types/models';
+import type { GraphEdge, GraphNode } from '@/types/models';
 import {
   ALL_EDGE_TYPES,
   deterministicNodePosition,
@@ -9,7 +10,6 @@ import {
   edgeTypeColor,
   fitTransform,
   nodeTypeColor,
-  NODE_LABELS,
   tickSimulation,
   type SimulationNode,
 } from './graph-utils';
@@ -63,6 +63,7 @@ export function ForceGraph({
   height,
   running = true,
 }: ForceGraphProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<SVGSVGElement>(null);
   const [positions, setPositions] = useState<Map<string, SimulationNode>>(new Map());
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
@@ -268,7 +269,7 @@ export function ForceGraph({
       onWheel={handleWheel}
       onClick={onBackgroundClick}
       role="img"
-      aria-label="关系图谱力导向图"
+      aria-label={t('graph.canvasLabel')}
     >
       <defs>
         {ALL_EDGE_TYPES.map((type) => (
@@ -371,7 +372,7 @@ export function ForceGraph({
                   {node.label || node.id}
                 </text>
               ) : null}
-              <title>{`${node.label || node.id} (${NODE_LABELS[node.nodeType as NodeType] ?? node.nodeType})`}</title>
+              <title>{node.label || node.id}</title>
             </g>
           );
         })}
@@ -412,20 +413,21 @@ function GraphOverlay({
   onFit: () => void;
   onReset: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <g pointerEvents="none">
       <foreignObject x="10" y="10" width="36" height="164">
         <div className="flex flex-col gap-1.5">
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomIn} title="放大" aria-label="放大">
+          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomIn} title={t('graph.controls.zoomIn')} aria-label={t('graph.controls.zoomIn')}>
             <Plus size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomOut} title="缩小" aria-label="缩小">
+          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomOut} title={t('graph.controls.zoomOut')} aria-label={t('graph.controls.zoomOut')}>
             <Minus size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onFit} title="适应视图" aria-label="适应视图">
+          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onFit} title={t('graph.controls.fit')} aria-label={t('graph.controls.fit')}>
             <Target size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onReset} title="重置布局" aria-label="重置布局">
+          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onReset} title={t('graph.controls.reset')} aria-label={t('graph.controls.reset')}>
             <RotateCcw size={14} />
           </Button>
         </div>

@@ -10,41 +10,41 @@ export interface SimulationNode {
 }
 
 export const NODE_COLORS: Record<NodeType, string> = {
-  file: '#4f46e5',
-  artifact: '#059669',
-  timelineEvent: '#d97706',
-  entity: '#7c3aed',
-  lead: '#dc2626',
-  notebookEntry: '#0891b2',
+  file: 'var(--forensics-graph-node-file)',
+  artifact: 'var(--forensics-graph-node-artifact)',
+  timelineEvent: 'var(--forensics-graph-node-timeline-event)',
+  entity: 'var(--forensics-graph-node-entity)',
+  lead: 'var(--forensics-graph-node-lead)',
+  notebookEntry: 'var(--forensics-graph-node-notebook-entry)',
 };
 
-export const NODE_LABELS: Record<NodeType, string> = {
-  file: '文件',
-  artifact: '痕迹',
-  timelineEvent: '时间线',
-  entity: '实体',
-  lead: '线索',
-  notebookEntry: '笔记',
+export const NODE_TYPE_KEYS: Record<NodeType, string> = {
+  file: 'graph.nodeTypes.file',
+  artifact: 'graph.nodeTypes.artifact',
+  timelineEvent: 'graph.nodeTypes.timelineEvent',
+  entity: 'graph.nodeTypes.entity',
+  lead: 'graph.nodeTypes.lead',
+  notebookEntry: 'graph.nodeTypes.notebookEntry',
 };
 
 export const EDGE_COLORS: Record<EdgeType, string> = {
-  contains: '#9ca3af',
-  references: '#2563eb',
-  correlatesWith: '#dc2626',
-  derivesFrom: '#7c3aed',
-  precedes: '#d97706',
-  cites: '#0891b2',
-  annotates: '#059669',
+  contains: 'var(--forensics-graph-edge-contains)',
+  references: 'var(--forensics-graph-edge-references)',
+  correlatesWith: 'var(--forensics-graph-edge-correlates)',
+  derivesFrom: 'var(--forensics-graph-edge-derives)',
+  precedes: 'var(--forensics-graph-edge-precedes)',
+  cites: 'var(--forensics-graph-edge-cites)',
+  annotates: 'var(--forensics-graph-edge-annotates)',
 };
 
-export const EDGE_LABELS: Record<EdgeType, string> = {
-  contains: '包含',
-  references: '引用',
-  correlatesWith: '关联',
-  derivesFrom: '派生',
-  precedes: '先于',
-  cites: '引用',
-  annotates: '标注',
+export const EDGE_TYPE_KEYS: Record<EdgeType, string> = {
+  contains: 'graph.edgeTypes.contains',
+  references: 'graph.edgeTypes.references',
+  correlatesWith: 'graph.edgeTypes.correlatesWith',
+  derivesFrom: 'graph.edgeTypes.derivesFrom',
+  precedes: 'graph.edgeTypes.precedes',
+  cites: 'graph.edgeTypes.cites',
+  annotates: 'graph.edgeTypes.annotates',
 };
 
 export const ALL_EDGE_TYPES: EdgeType[] = [
@@ -58,11 +58,11 @@ export const ALL_EDGE_TYPES: EdgeType[] = [
 ];
 
 export function nodeTypeColor(nodeType: NodeType): string {
-  return NODE_COLORS[nodeType] ?? '#6b7280';
+  return NODE_COLORS[nodeType] ?? 'var(--forensics-graph-node-fallback)';
 }
 
 export function edgeTypeColor(edgeType: EdgeType): string {
-  return EDGE_COLORS[edgeType] ?? '#9ca3af';
+  return EDGE_COLORS[edgeType] ?? 'var(--forensics-graph-edge-fallback)';
 }
 
 export function buildNodeMap(nodes: GraphNode[]): Map<string, GraphNode> {

@@ -7,6 +7,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/app/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { DenseTableFilterSelect } from './useDenseTableFilter';
 
 interface DenseTableFilterBarProps {
@@ -42,25 +43,28 @@ export function DenseTableFilterBar({
         className="min-w-[180px] flex-1 bg-forensics-surface"
       />
       {selects.map((select) => (
-        <label
+        <div
           key={select.key}
           className="flex items-center gap-1 text-forensics-text-tertiary"
         >
           <span className="shrink-0">{select.label}</span>
-          <select
-            value={select.value}
-            onChange={(event) => onSelectChange(select.key, event.target.value)}
-            aria-label={select.label}
-            className="h-6 max-w-[160px] rounded-none border border-forensics-border-strong bg-forensics-surface px-1 font-mono text-[11px] text-forensics-text focus:outline-none focus-visible:border-forensics-sakura-500"
+          <Select
+            value={select.value || '__all__'}
+            onValueChange={(value) => onSelectChange(select.key, value === '__all__' ? '' : value)}
           >
-            <option value="">{t('denseTable.filterAll')}</option>
+            <SelectTrigger aria-label={select.label} size="xs" variant="mono" className="max-w-[160px]">
+              <SelectValue placeholder={t('denseTable.filterAll')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t('denseTable.filterAll')}</SelectItem>
             {select.options.map((option) => (
-              <option key={option} value={option}>
+              <SelectItem key={option} value={option}>
                 {option}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-        </label>
+            </SelectContent>
+          </Select>
+        </div>
       ))}
       {filterActive ? (
         <span className="font-mono text-forensics-muted">

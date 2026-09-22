@@ -2,6 +2,8 @@ import type {
   NotebookEntryStatus,
   NotebookEntryType,
 } from '@/types/models';
+import type { ReactNode } from 'react';
+import { Checkbox } from '@/app/components/ui/checkbox';
 
 export const ENTRY_TYPE_CONFIG: Record<NotebookEntryType, { label: string; order: number }> = {
   observation: { label: '观察', order: 0 },
@@ -54,23 +56,32 @@ export function formatTimestampShort(iso: string) {
   }
 }
 
-export function simpleMarkdownToHtml(md: string): string {
-  const escaped = md
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const html = escaped
-    .replace(/^### (.+)$/gm, '<h4 class="text-[13px] font-light mt-3 mb-1">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="text-[14px] font-light mt-3 mb-1">$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2 class="text-[15px] font-light mt-3 mb-1">$1</h2>')
-    .replace(/^- \[x\] (.+)$/gm, '<label class="text-[11px] text-forensics-text-tertiary"><input type="checkbox" checked disabled class="mr-1" />$1</label>')
-    .replace(/^- \[ \] (.+)$/gm, '<label class="text-[11px] text-forensics-text-tertiary"><input type="checkbox" disabled class="mr-1" />$1</label>')
-    .replace(/^\* (.+)$/gm, '<li class="text-[11px] text-forensics-text-tertiary ml-4">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="text-[11px] text-forensics-text-tertiary ml-4">$1. $2</li>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code class="font-mono text-[11px] bg-forensics-panel-strong px-1 rounded-none">$1</code>')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-b border-forensics-border-strong pb-1 my-1 text-[11px] text-forensics-muted">$1</blockquote>')
-    .replace(/\n\n/g, '<br/><br/>')
-    .replace(/\n/g, '<br/>');
-  return html;
+export function simpleMarkdownToReact(md: string): ReactNode[] {
+  return md.split(/\r?\n/).map((line, index) => {
+    const key = `${index}-${line}`;
+    if (!line.trim()) return <br key={key} />;
+    const heading = /^(#{1,3}) (.+)$/.exec(line);
+    if (heading) {
+      const Heading = heading[1].length === 1 ? 'h2' : heading[1].length === 2 ? 'h3' : 'h4';
+      return <Heading key={key} className="mt-3 mb-1 font-light">{renderMarkdownInline(heading[2])}</Heading>;
+    }
+    const checklist = /^- \[([ xX])\] (.+)$/.exec(line);
+    if (checklist) {
+      return <div key={key} className="flex items-center gap-1 text-[11px] text-forensics-text-tertiary"><Checkbox checked={checklist[1].toLowerCase() === 'x'} disabled variant="forensics" checkboxSize="compact" />{renderMarkdownInline(checklist[2])}</div>;
+    }
+    const bullet = /^\* (.+)$/.exec(line);
+    if (bullet) return <div key={key} className="ml-4 text-[11px] text-forensics-text-tertiary">• {renderMarkdownInline(bullet[1])}</div>;
+    const ordered = /^(\d+)\. (.+)$/.exec(line);
+    if (ordered) return <div key={key} className="ml-4 text-[11px] text-forensics-text-tertiary">{ordered[1]}. {renderMarkdownInline(ordered[2])}</div>;
+    if (line.startsWith('> ')) return <blockquote key={key} className="my-1 border-b border-forensics-border-strong pb-1 text-[11px] text-forensics-muted">{renderMarkdownInline(line.slice(2))}</blockquote>;
+    return <p key={key} className="m-0">{renderMarkdownInline(line)}</p>;
+  });
+}
+
+function renderMarkdownInline(value: string): ReactNode[] {
+  return value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="bg-forensics-panel-strong px-1 font-mono text-[11px]">{part.slice(1, -1)}</code>;
+    return <span key={index}>{part}</span>;
+  });
 }

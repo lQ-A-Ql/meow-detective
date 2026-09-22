@@ -134,6 +134,34 @@
   --forensics-badge-covered-text: #353535;
   --forensics-badge-review-bg: #e5e5e5;
   --forensics-badge-review-text: #4a4a4a;
+
+  /* Shared canvas visualization tokens. */
+  --forensics-viz-text: #1f2933;
+  --forensics-viz-muted: #68747c;
+  --forensics-viz-border: #c8ced1;
+  --forensics-viz-canvas: #fbfcfc;
+  --forensics-viz-lane: #f4f6f7;
+  --forensics-viz-selected: #2d6cdf;
+  --forensics-viz-edge: #9ca8ad;
+  --forensics-viz-environment: #dcecff;
+  --forensics-viz-storage: #e9e1ff;
+  --forensics-viz-analysis: #e2f3ea;
+  --forensics-viz-font-family: ui-sans-serif, system-ui, sans-serif;
+  --forensics-graph-node-file: #4f46e5;
+  --forensics-graph-node-artifact: #059669;
+  --forensics-graph-node-timeline-event: #d97706;
+  --forensics-graph-node-entity: #7c3aed;
+  --forensics-graph-node-lead: #dc2626;
+  --forensics-graph-node-notebook-entry: #0891b2;
+  --forensics-graph-edge-contains: #9ca3af;
+  --forensics-graph-edge-references: #2563eb;
+  --forensics-graph-edge-correlates: #dc2626;
+  --forensics-graph-edge-derives: #7c3aed;
+  --forensics-graph-edge-precedes: #d97706;
+  --forensics-graph-edge-cites: #0891b2;
+  --forensics-graph-edge-annotates: #059669;
+  --forensics-graph-node-fallback: #6b7280;
+  --forensics-graph-edge-fallback: #9ca3af;
 }
 
 @theme inline {
