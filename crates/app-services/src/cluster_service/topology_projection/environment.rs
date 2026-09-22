@@ -11,9 +11,15 @@ pub(super) fn project_environment_objects(
     case_id: &CaseId,
     import_set_id: &str,
     projection: &ImportSetTopologyProjection,
+    member_source_names: &[String],
 ) -> Result<()> {
     let repo = EnvironmentObjectRepo::new(conn);
     for (index, os_scope_id) in projection.os_scope_ids.iter().enumerate() {
+        let source_name = member_source_names
+            .get(index)
+            .filter(|name| !name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("member-{}", index + 1));
         let host_id = format!("env:host:{import_set_id}:{index}");
         let os_id = format!("env:os:{import_set_id}:{index}");
         insert_object(
@@ -21,7 +27,7 @@ pub(super) fn project_environment_objects(
             &host_id,
             case_id,
             "physical_host",
-            &format!("Physical host {index}"),
+            &format!("Host evidence: {source_name}"),
             &format!("scope:physical-host:{import_set_id}:{index}"),
             "ready",
         )?;
@@ -30,7 +36,7 @@ pub(super) fn project_environment_objects(
             &os_id,
             case_id,
             "os_instance",
-            &format!("OS instance {index}"),
+            &format!("Linux system: {source_name}"),
             os_scope_id,
             "ready",
         )?;

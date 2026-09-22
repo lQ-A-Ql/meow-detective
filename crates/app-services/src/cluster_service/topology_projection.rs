@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use domain::{CaseId, DataSourceId};
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
+    datasource_repo::DataSourceRepo,
     file_repo::FileRepo,
     linux_import_set_repo::LinuxImportSetRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
@@ -107,7 +108,22 @@ pub fn project_import_set_topology(
         kubernetes_sources,
         kubernetes_artifacts,
     )?;
-    project_environment_objects(case_connection, case_id, import_set_id, &projection)?;
+    let source_names = DataSourceRepo::new(case_connection)
+        .find_by_case(case_id)?
+        .into_iter()
+        .map(|source| (source.id.0, source.name))
+        .collect::<BTreeMap<_, _>>();
+    let member_source_names = source_members
+        .iter()
+        .map(|(_, source_id)| source_names.get(source_id).cloned().unwrap_or_default())
+        .collect::<Vec<_>>();
+    project_environment_objects(
+        case_connection,
+        case_id,
+        import_set_id,
+        &projection,
+        &member_source_names,
+    )?;
     Ok(projection)
 }
 
@@ -188,7 +204,7 @@ fn register_host_and_os_scope(
         &os_id,
         case_id,
         TopologyScopeKind::OsInstance,
-        format!("OS instance {member_index}"),
+        format!("Linux host system {member_index}"),
         "complete",
     ))?;
     edge_repo.insert(&edge_record(
