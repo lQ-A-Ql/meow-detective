@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, io::Read, path::Path};
+use std::{
+    collections::BTreeSet,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,6 +20,7 @@ const MAX_EVIDENCE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_POOL_RECORDS: usize = 16_384;
 const MAX_OSD_RECORDS: usize = 131_072;
 const MAX_EPOCH_HISTORY: usize = 4_096;
+const EVIDENCE_DIRECTORY: &str = "topology-scopes/ceph-evidence";
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum OsdMapEvidenceError {
@@ -112,10 +117,7 @@ pub(crate) fn resolve_policy(
     pool_id: Option<i64>,
 ) -> Result<Option<OsdMapPolicyResolution>, OsdMapEvidenceError> {
     validate_cluster_id(cluster_id)?;
-    let path = case_root
-        .join("clusters")
-        .join(cluster_id)
-        .join(EVIDENCE_FILE);
+    let path = evidence_path(case_root, cluster_id, EVIDENCE_FILE);
     let payload = match read_evidence_payload(&path)? {
         Some(payload) => payload,
         None => return Ok(None),
@@ -146,10 +148,7 @@ pub(crate) fn validate_inventory_membership(
     identities: &[ReplicaIdentity],
 ) -> Result<Option<usize>, OsdMapEvidenceError> {
     validate_cluster_id(cluster_id)?;
-    let path = case_root
-        .join("clusters")
-        .join(cluster_id)
-        .join(EVIDENCE_FILE);
+    let path = evidence_path(case_root, cluster_id, EVIDENCE_FILE);
     let payload = match read_evidence_payload(&path)? {
         Some(payload) => payload,
         None => return Ok(None),
@@ -191,10 +190,7 @@ pub(crate) fn evidence_is_present(
     cluster_id: &str,
 ) -> Result<bool, OsdMapEvidenceError> {
     validate_cluster_id(cluster_id)?;
-    let path = case_root
-        .join("clusters")
-        .join(cluster_id)
-        .join(EVIDENCE_FILE);
+    let path = evidence_path(case_root, cluster_id, EVIDENCE_FILE);
     match std::fs::metadata(path) {
         Ok(metadata) => Ok(metadata.is_file()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -375,6 +371,14 @@ fn validate_cluster_id(cluster_id: &str) -> Result<(), OsdMapEvidenceError> {
         return Err(OsdMapEvidenceError::Invalid("cluster ID"));
     }
     Ok(())
+}
+
+pub(crate) fn evidence_path(case_root: &Path, scope_id: &str, file_name: &str) -> PathBuf {
+    let storage_key = hex::encode(Sha256::digest(scope_id.as_bytes()));
+    case_root
+        .join(EVIDENCE_DIRECTORY)
+        .join(storage_key)
+        .join(file_name)
 }
 
 fn read_evidence_payload(path: &Path) -> Result<Option<Vec<u8>>, OsdMapEvidenceError> {

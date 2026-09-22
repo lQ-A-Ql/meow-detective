@@ -9,9 +9,10 @@ fn document(pool_count: &str, digest: &str) -> String {
 }
 
 fn write_document(root: &Path, payload: &str) {
-    let directory = root.join("clusters").join("cluster-1");
+    let path = evidence_path(root, "cluster-1", "osdmap-evidence.json");
+    let directory = path.parent().expect("evidence directory");
     std::fs::create_dir_all(&directory).expect("evidence directory");
-    std::fs::write(directory.join("osdmap-evidence.json"), payload).expect("evidence document");
+    std::fs::write(path, payload).expect("evidence document");
 }
 
 fn with_digest(payload: String) -> String {
@@ -251,14 +252,23 @@ fn uuid_deduplication_is_canonical_and_case_insensitive() {
 #[test]
 fn oversized_evidence_is_rejected_before_json_parsing() {
     let root = tempfile::TempDir::new().expect("root");
-    let directory = root.path().join("clusters").join("cluster-1");
+    let path = evidence_path(root.path(), "cluster-1", "osdmap-evidence.json");
+    let directory = path.parent().expect("evidence directory");
     std::fs::create_dir_all(&directory).expect("evidence directory");
-    std::fs::write(
-        directory.join("osdmap-evidence.json"),
-        vec![b'{'; 8 * 1024 * 1024 + 1],
-    )
-    .expect("evidence document");
+    std::fs::write(path, vec![b'{'; 8 * 1024 * 1024 + 1]).expect("evidence document");
     let error = validate_inventory_membership(root.path(), "cluster-1", &[])
         .expect_err("oversized evidence");
     assert_eq!(error, OsdMapEvidenceError::Invalid("evidence size"));
+}
+
+#[test]
+fn typed_ceph_scope_ids_use_a_filesystem_safe_evidence_key() {
+    let root = tempfile::TempDir::new().expect("root");
+    let path = evidence_path(
+        root.path(),
+        "scope:ceph:18ea03d0-b1f3-4975-b552-12df7e0b53f1",
+        "osdmap-evidence.json",
+    );
+    assert!(!path.to_string_lossy().contains("scope:ceph:"));
+    assert!(path.starts_with(root.path()));
 }

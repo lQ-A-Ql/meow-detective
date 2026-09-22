@@ -77,10 +77,7 @@ pub(crate) fn resolve_rbd_replica_policy(
     observed_replica_count: usize,
 ) -> Result<ReplicaPolicyResolution, PoolEvidenceError> {
     validate_cluster_id(cluster_id)?;
-    let path = case_root
-        .join("clusters")
-        .join(cluster_id)
-        .join(POOL_EVIDENCE_FILE);
+    let path = osdmap_evidence::evidence_path(case_root, cluster_id, POOL_EVIDENCE_FILE);
     if let Some(resolution) = osdmap_evidence::resolve_policy(case_root, cluster_id, pool_id)? {
         if resolution.policy.expected_count() != observed_replica_count {
             return Err(PoolEvidenceError::ReplicaCountMismatch);

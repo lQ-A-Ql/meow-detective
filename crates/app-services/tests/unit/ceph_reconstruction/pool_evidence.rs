@@ -3,10 +3,11 @@ use std::path::Path;
 use super::*;
 
 fn write_document(root: &Path, cluster_id: &str, pools: &str) {
-    let directory = root.join("clusters").join(cluster_id);
+    let path = super::osdmap_evidence::evidence_path(root, cluster_id, "pool-evidence.json");
+    let directory = path.parent().expect("evidence directory");
     std::fs::create_dir_all(&directory).expect("evidence directory");
     std::fs::write(
-        directory.join("pool-evidence.json"),
+        path,
         format!(
             r#"{{"schemaVersion":1,"clusterId":"{cluster_id}","evidenceKind":"rbd_pool_replication","pools":{pools}}}"#
         ),
@@ -15,10 +16,11 @@ fn write_document(root: &Path, cluster_id: &str, pools: &str) {
 }
 
 #[test]
-fn missing_document_falls_back_without_exposing_host_path() {
+fn typed_ceph_scope_without_map_evidence_falls_back_without_exposing_host_path() {
     let root = tempfile::TempDir::new().expect("root");
+    let scope_id = "scope:ceph:18ea03d0-b1f3-4975-b552-12df7e0b53f1";
     let resolution =
-        resolve_rbd_replica_policy(root.path(), "cluster-1", None, 3).expect("legacy fallback");
+        resolve_rbd_replica_policy(root.path(), scope_id, None, 3).expect("legacy fallback");
 
     assert_eq!(resolution.policy, RbdReplicaPolicy::strict_legacy());
     assert_eq!(resolution.diagnostics.len(), 1);
@@ -96,7 +98,7 @@ fn malformed_or_tampered_document_is_rejected() {
     assert!(matches!(error, PoolEvidenceError::DuplicatePool));
 
     std::fs::write(
-        root.path().join("clusters/cluster-1/pool-evidence.json"),
+        super::osdmap_evidence::evidence_path(root.path(), "cluster-1", "pool-evidence.json"),
         "not-json",
     )
     .expect("tamper document");
