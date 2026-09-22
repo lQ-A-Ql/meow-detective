@@ -6,6 +6,7 @@ import type {
   BrowserSessionTab,
   BrowserVisit,
 } from '@/types/models';
+import { useTranslation } from 'react-i18next';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import {
@@ -34,51 +35,56 @@ function browserOrder(a: string, b: string): number {
 
 // Module-level columns: stable references keep DenseDataTable's memoized rows
 // from re-rendering whenever panel state changes above the tables.
+function browserColumns(t: ReturnType<typeof useTranslation>['t']) {
 const visitColumns: DenseColumn<BrowserVisit>[] = [
-  { key: 'visitTime', title: '时间', className: 'w-[170px]', render: (row) => row.visitTime ?? '-' },
+  { key: 'visitTime', title: t('browser.columns.time'), className: 'w-[170px]', render: (row) => row.visitTime ?? '-' },
   { key: 'profile', title: 'Profile', className: 'w-[130px]', render: (row) => row.profile || '-' },
-  { key: 'title', title: '标题', className: 'min-w-[220px]', render: (row) => row.title || '-' },
+  { key: 'title', title: t('browser.columns.title'), className: 'min-w-[220px]', render: (row) => row.title || '-' },
   { key: 'url', title: 'URL', className: 'min-w-[300px]', render: (row) => row.url },
-  { key: 'visitCount', title: '次数', className: 'w-[70px]', render: (row) => row.visitCount.toString() },
+  { key: 'visitCount', title: t('browser.columns.count'), className: 'w-[70px]', render: (row) => row.visitCount.toString() },
 ];
 const downloadColumns: DenseColumn<BrowserDownload>[] = [
-  { key: 'startTime', title: '时间', className: 'w-[170px]', render: (row) => row.startTime ?? '-' },
+  { key: 'startTime', title: t('browser.columns.time'), className: 'w-[170px]', render: (row) => row.startTime ?? '-' },
   { key: 'profile', title: 'Profile', className: 'w-[130px]', render: (row) => row.profile || '-' },
-  { key: 'targetPath', title: '目标路径', className: 'min-w-[260px]', render: (row) => row.targetPath || '-' },
+  { key: 'targetPath', title: t('browser.columns.targetPath'), className: 'min-w-[260px]', render: (row) => row.targetPath || '-' },
   { key: 'url', title: 'URL', className: 'min-w-[260px]', render: (row) => row.url || '-' },
-  { key: 'totalBytes', title: '大小', className: 'w-[110px]', render: (row) => formatSize(row.totalBytes) },
+  { key: 'totalBytes', title: t('browser.columns.size'), className: 'w-[110px]', render: (row) => formatSize(row.totalBytes) },
 ];
 const cookieColumns: DenseColumn<BrowserCookie>[] = [
   { key: 'profile', title: 'Profile', className: 'w-[120px]', render: (row) => row.profile || '-' },
-  { key: 'domain', title: '域名', className: 'min-w-[220px]', render: (row) => row.domain },
-  { key: 'name', title: '名称', className: 'min-w-[180px]', render: (row) => row.name },
-  { key: 'valuePreview', title: '值预览', className: 'min-w-[220px]', render: (row) => row.valuePreview ?? '-' },
-  { key: 'expiry', title: '过期时间', className: 'w-[170px]', render: (row) => row.expiry ?? '-' },
-  { key: 'secure', title: '安全标记', className: 'w-[80px]', render: (row) => (row.secure ? '是' : '否') },
-  { key: 'httpOnly', title: '仅 HTTP', className: 'w-[80px]', render: (row) => (row.httpOnly ? '是' : '否') },
-  { key: 'decryptionStatus', title: '解密状态', className: 'w-[110px]', render: (row) => row.decryptionStatus ?? '未知' },
+  { key: 'domain', title: t('browser.columns.domain'), className: 'min-w-[220px]', render: (row) => row.domain },
+  { key: 'name', title: t('browser.columns.name'), className: 'min-w-[180px]', render: (row) => row.name },
+  { key: 'valuePreview', title: t('browser.columns.valuePreview'), className: 'min-w-[220px]', render: (row) => row.valuePreview ?? '-' },
+  { key: 'expiry', title: t('browser.columns.expiry'), className: 'w-[170px]', render: (row) => row.expiry ?? '-' },
+  { key: 'secure', title: t('browser.columns.secure'), className: 'w-[80px]', render: (row) => (row.secure ? t('common.yes') : t('common.no')) },
+  { key: 'httpOnly', title: t('browser.columns.httpOnly'), className: 'w-[80px]', render: (row) => (row.httpOnly ? t('common.yes') : t('common.no')) },
+  { key: 'decryptionStatus', title: t('browser.columns.decryptionStatus'), className: 'w-[110px]', render: (row) => row.decryptionStatus ?? t('common.unknown') },
 ];
 const sessionColumns: DenseColumn<BrowserSessionTab>[] = [
-  { key: 'title', title: '标题', className: 'min-w-[220px]', render: (row) => row.title ?? '-' },
+  { key: 'title', title: t('browser.columns.title'), className: 'min-w-[220px]', render: (row) => row.title ?? '-' },
   { key: 'url', title: 'URL', className: 'min-w-[300px]', render: (row) => row.url },
-  { key: 'windowIndex', title: '窗口', className: 'w-[70px]', render: (row) => row.windowIndex.toString() },
-  { key: 'tabIndex', title: '标签', className: 'w-[70px]', render: (row) => row.tabIndex.toString() },
-  { key: 'lastActive', title: '最后活跃', className: 'w-[170px]', render: (row) => row.lastActive ?? '-' },
+  { key: 'windowIndex', title: t('browser.columns.window'), className: 'w-[70px]', render: (row) => row.windowIndex.toString() },
+  { key: 'tabIndex', title: t('browser.columns.tab'), className: 'w-[70px]', render: (row) => row.tabIndex.toString() },
+  { key: 'lastActive', title: t('browser.columns.lastActive'), className: 'w-[170px]', render: (row) => row.lastActive ?? '-' },
 ];
 const passwordColumns: DenseColumn<BrowserPassword>[] = [
-  { key: 'url', title: '网站', className: 'min-w-[260px]', render: (row) => row.url },
-  { key: 'username', title: '用户名', className: 'min-w-[180px]', render: (row) => row.username },
-  { key: 'passwordPreview', title: '密码预览', className: 'min-w-[160px]', render: (row) => row.passwordPreview ?? '-' },
-  { key: 'createdAt', title: '创建时间', className: 'w-[170px]', render: (row) => row.createdAt ?? '-' },
-  { key: 'timesUsed', title: '使用次数', className: 'w-[90px]', render: (row) => row.timesUsed.toString() },
-  { key: 'decryptionStatus', title: '解密状态', className: 'w-[110px]', render: (row) => row.decryptionStatus ?? '未知' },
+  { key: 'url', title: t('browser.columns.website'), className: 'min-w-[260px]', render: (row) => row.url },
+  { key: 'username', title: t('browser.columns.username'), className: 'min-w-[180px]', render: (row) => row.username },
+  { key: 'passwordPreview', title: t('browser.columns.passwordPreview'), className: 'min-w-[160px]', render: (row) => row.passwordPreview ?? '-' },
+  { key: 'createdAt', title: t('browser.columns.createdAt'), className: 'w-[170px]', render: (row) => row.createdAt ?? '-' },
+  { key: 'timesUsed', title: t('browser.columns.timesUsed'), className: 'w-[90px]', render: (row) => row.timesUsed.toString() },
+  { key: 'decryptionStatus', title: t('browser.columns.decryptionStatus'), className: 'w-[110px]', render: (row) => row.decryptionStatus ?? t('common.unknown') },
 ];
+return { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns };
+}
 
 export function BrowserHistoryPanel({
   summary,
 }: {
   summary?: BrowserHistorySummary;
 }) {
+  const { t } = useTranslation();
+  const { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns } = browserColumns(t);
   const info = summary ?? {
     status: 'unavailable' as const,
     visitTotal: 0,
