@@ -41,7 +41,7 @@ export function InfrastructurePage() {
         </div>
         <TabsContent value="overview" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><ClusterOverviewPanel nodes={nodes} edges={edges} hostFacts={hostFacts} networkFacts={networkFacts} t={t} /></TabsContent>
         <TabsContent value="topology" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><NetworkTopologyPanel nodes={networkTopology.nodes} edges={networkTopology.edges} networkFacts={networkFacts} nodeNames={nodeNames} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
-        <TabsContent value="workloads" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><WorkloadEvidencePanel nodes={workloads} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
+        <TabsContent value="workloads" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><WorkloadEvidencePanel nodes={workloads} selectedId={selectedId} onSelect={setSelectedId} networkFacts={networkFacts} t={t} /></TabsContent>
         <TabsContent value="storage" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><StorageEvidencePanel nodes={storage} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
         <TabsContent value="inventory" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><InfrastructureInventoryPanel nodes={visibleNodes} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
       </Tabs>
