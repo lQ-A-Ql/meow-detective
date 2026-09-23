@@ -30,8 +30,9 @@ export function drawNetworkTopology(
     const target = points.get(edge.targetId);
     if (!source || !target) continue;
     context.strokeStyle = palette.edge;
-    context.lineWidth = edge.relationKind === 'peer' ? 1 : 1.6;
-    context.setLineDash(edge.relationKind === 'peer' ? [5, 4] : []);
+    const networkLink = edge.relationKind === 'network_link';
+    context.lineWidth = networkLink ? 2 : 1.6;
+    context.setLineDash(networkLink ? [3, 3] : []);
     context.beginPath();
     context.moveTo(source.x, source.y);
     context.bezierCurveTo((source.x + target.x) / 2, source.y, (source.x + target.x) / 2, target.y, target.x, target.y);
