@@ -5,6 +5,7 @@ use super::kubeconfig_parser::{parse_kubeconfig, KubeconfigSummary};
 use super::kubernetes_parser_error::{KubernetesParserError, Result};
 use super::kubernetes_paths::KubernetesArtifactKind;
 use super::manifest_parser::{parse_static_pod_manifests, StaticPodManifestSummary};
+use super::network_parser::CniNetworkSummary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KubernetesParsedArtifact {
@@ -13,6 +14,7 @@ pub enum KubernetesParsedArtifact {
     AuditLog(KubernetesAuditParseResult),
     EtcdBackend(EtcdBoltSummary),
     EtcdWal(EtcdWalSummary),
+    CniNetwork(CniNetworkSummary),
 }
 
 pub fn parse_kubernetes_artifact(
@@ -34,6 +36,9 @@ pub fn parse_kubernetes_artifact(
         ))),
         KubernetesArtifactKind::EtcdWal => Ok(Some(KubernetesParsedArtifact::EtcdWal(
             parse_etcd_wal(bytes)?,
+        ))),
+        KubernetesArtifactKind::CniConfig => Ok(Some(KubernetesParsedArtifact::CniNetwork(
+            super::network_parser::parse_cni_config(bytes)?,
         ))),
         _ => Ok(None),
     }

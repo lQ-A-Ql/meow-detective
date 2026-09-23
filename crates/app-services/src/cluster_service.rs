@@ -16,6 +16,7 @@ mod kubernetes_parser_error;
 mod kubernetes_yaml;
 mod linux_import;
 mod manifest_parser;
+mod network_parser;
 pub(crate) mod scope_storage;
 mod topology_projection;
 
@@ -52,6 +53,7 @@ pub use linux_import::{
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
+pub use network_parser::{parse_cni_config, CniNetworkSummary};
 
 #[derive(Debug, Error)]
 pub enum ClusterServiceError {
