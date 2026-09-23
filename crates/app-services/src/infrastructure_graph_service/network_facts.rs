@@ -155,6 +155,17 @@ fn append_cni_facts(
     if let Some(name) = summary.name.as_deref() {
         push_cni_fact(facts, case_id, source, host_id, entry, "name", name);
     }
+    if let Some(version) = summary.cni_version.as_deref() {
+        push_cni_fact(
+            facts,
+            case_id,
+            source,
+            host_id,
+            entry,
+            "cni_version",
+            version,
+        );
+    }
     for plugin in summary.plugin_types {
         push_cni_fact(facts, case_id, source, host_id, entry, "plugin", &plugin);
     }
