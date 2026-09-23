@@ -440,7 +440,7 @@
     "domains": { "environment": "运行环境", "storage": "存储底座", "analysis": "分析证据" },
     "domainDescriptions": { "environment": "物理主机、虚拟机、操作系统和编排环境", "storage": "Ceph、RBD、CephFS 等存储对象", "analysis": "从镜像中解析出的容器、服务和配置证据" },
     "kinds": { "physical_host": "物理主机", "pve": "PVE 虚拟化底座", "virtual_machine": "虚拟机", "os_instance": "Linux 主机系统", "kubernetes": "Kubernetes 集群", "ceph": "Ceph 存储集群", "ceph_cluster": "Ceph 存储集群", "ceph_rbd": "RBD 虚拟块设备", "ceph_fs": "CephFS 文件系统", "virtual_disk": "虚拟磁盘", "static_pod_manifest": "静态 Pod 清单", "pod_log": "Pod 日志", "container_log": "容器日志", "runtime_metadata": "运行时元数据", "pod_volume": "Pod 卷", "kubelet_config": "kubelet 配置", "kubeconfig": "集群访问配置", "audit_log": "审计日志", "cni_config": "容器网络配置" },
-    "relations": { "hosts": "承载", "provides_storage": "提供存储", "boots": "启动", "runs": "运行", "manages": "管理", "consumes_storage": "使用存储", "derived_from": "派生自" },
+    "relations": { "hosts": "承载", "provides_storage": "提供存储", "boots": "启动", "runs": "运行", "manages": "管理", "consumes_storage": "使用存储", "derived_from": "派生自", "network_link": "网络连接" },
     "states": { "ready": "已就绪", "complete": "完整", "verified": "已验证", "candidate": "候选", "unproven": "待证明", "indeterminate": "无法确定", "parsed": "已解析", "pending": "处理中", "failed": "失败" },
     "layersDescription": "对象按其在基础设施中的职责分层，避免把虚拟化、操作系统、容器和存储混为一类。",
     "relationsDescription": "关系来自拓扑投影和证据来源；候选关系不会被标记为实时状态。",
