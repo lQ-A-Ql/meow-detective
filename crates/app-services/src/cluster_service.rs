@@ -53,7 +53,10 @@ pub use linux_import::{
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
-pub use network_parser::{parse_cni_config, CniNetworkSummary};
+pub use network_parser::{
+    parse_cni_config, parse_kubernetes_network_resources, CniNetworkSummary,
+    KubernetesNetworkResource,
+};
 
 #[derive(Debug, Error)]
 pub enum ClusterServiceError {

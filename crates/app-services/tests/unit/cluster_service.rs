@@ -154,3 +154,6 @@ mod capability;
 
 #[path = "cluster_service/kubernetes_parsers.rs"]
 mod kubernetes_parsers;
+
+#[path = "cluster_service/network_parser_resources.rs"]
+mod network_parser_resources;
