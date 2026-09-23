@@ -28,7 +28,7 @@ export function buildClusterPresentation(
     .map(({ fact }) => formatHostVersion(fact))
     .filter((value): value is string => Boolean(value));
   const kubernetesVersions = networkFacts
-    .filter((fact) => fact.factKind === 'kubernetes_version')
+    .filter((fact) => ['kubernetes_version', 'platform_version'].includes(fact.factKind))
     .map((fact) => `${fact.subject}: ${fact.value}`);
   return {
     hosts,

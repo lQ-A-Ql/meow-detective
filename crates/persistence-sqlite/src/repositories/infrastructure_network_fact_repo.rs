@@ -161,6 +161,8 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
                  OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/network/interfaces'
                  OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/pve/corosync.conf'
                  OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/corosync/corosync.conf'
+                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/pve/.version'
+                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/debian_version'
                )
              ORDER BY id LIMIT ?1",
         )?;

@@ -57,6 +57,9 @@ pub(super) fn refresh_network_facts(
                 .then_with(|| left.artifact_id.cmp(&right.artifact_id))
         });
         let mut facts = extract_network_facts(&case_id.0, &source_id, &host_id, &rows);
+        facts.extend(super::platform_facts::extract(
+            case_id, &source, &host_id, &rows,
+        ));
         extract_cni_facts(
             case_conn,
             case_root,

@@ -7,6 +7,7 @@ use transport::dto::{
 
 mod kubernetes_network_facts;
 mod network_facts;
+mod platform_facts;
 
 pub fn get_infrastructure_graph(
     connection: &rusqlite::Connection,

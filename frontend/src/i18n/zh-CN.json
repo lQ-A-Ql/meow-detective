@@ -457,7 +457,7 @@
     "kubernetesEvidence": { "title": "Kubernetes 网络与服务证据", "description": "从节点、Service、EndpointSlice、Ingress、NetworkPolicy 和 CNI 配置中读取的离线事实。", "empty": "未发现 Kubernetes 网络或服务证据。" },
     "storage": { "title": "存储系统证据", "description": "Ceph、RBD、CephFS 和虚拟磁盘等存储对象及其已证实状态。", "empty": "未发现存储系统证据。" },
     "networkTopology": { "hostNetwork": "主机网络拓扑", "hint": "节点按主机、基础设施服务和运行实例组织。", "canvasLabel": "Linux 集群主机网络拓扑" },
-    "networkFacts": { "title": "网络配置证据", "description": "来自主机配置文件和 Kubernetes 资源的地址、解析器、服务与集群链路。", "empty": "尚未发现网络配置证据。", "kinds": { "hostname_mapping": "主机名映射", "dns_server": "DNS 服务器", "interface_address": "接口地址", "gateway": "网关", "bridge_member": "网桥成员", "cluster_link": "集群链路", "cni_network": "CNI 网络", "kubernetes_version": "Kubernetes 版本", "kubernetes_node": "Kubernetes 节点", "kubernetes_service": "Kubernetes 服务", "kubernetes_endpoint_slice": "服务端点", "kubernetes_ingress": "入口路由", "kubernetes_network_policy": "网络策略" } },
+    "networkFacts": { "title": "网络配置证据", "description": "来自主机配置文件和 Kubernetes 资源的地址、解析器、服务与集群链路。", "empty": "尚未发现网络配置证据。", "kinds": { "hostname_mapping": "主机名映射", "dns_server": "DNS 服务器", "interface_address": "接口地址", "gateway": "网关", "bridge_member": "网桥成员", "cluster_link": "集群链路", "platform_version": "平台版本", "cni_network": "CNI 网络", "kubernetes_version": "Kubernetes 版本", "kubernetes_node": "Kubernetes 节点", "kubernetes_service": "Kubernetes 服务", "kubernetes_endpoint_slice": "服务端点", "kubernetes_ingress": "入口路由", "kubernetes_network_policy": "网络策略" } },
     "values": { "unselected": "未选择对象", "unknown": "未知", "unavailable": "未提供", "notFound": "未发现" }
   },
   "caseHome": {
