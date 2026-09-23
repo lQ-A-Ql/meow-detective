@@ -1833,6 +1833,8 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
                 10,
             ),
             file_with_ds("pve-storage", &ds_id, "etc/pve/storage.cfg", 10),
+            file_with_ds("debian-version", &ds_id, "etc/debian_version", 10),
+            file_with_ds("pve-version", &ds_id, "etc/pve/.version", 10),
             file_with_ds("pve-qemu", &ds_id, "etc/pve/qemu-server/100.conf", 10),
             file_with_ds("pve-lxc", &ds_id, "etc/pve/lxc/101.conf", 10),
             file_with_ds("pve-corosync", &ds_id, "etc/pve/corosync.conf", 10),
@@ -1846,7 +1848,13 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
     let candidates = discover_evidence_candidates(&conn).unwrap();
     let linux = candidates.get("LinuxArtifacts").unwrap();
 
-    assert_eq!(linux.len(), 18);
+    assert_eq!(linux.len(), 20);
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/debian_version")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/pve/.version")));
     assert!(linux
         .iter()
         .any(|item| item.path.ends_with("cl/root/etc/passwd")));

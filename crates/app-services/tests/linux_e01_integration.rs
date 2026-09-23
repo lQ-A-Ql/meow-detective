@@ -3367,7 +3367,83 @@ fn pve_cluster_host_root_filesystems_enumerate_and_preview() {
 
 #[test]
 #[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
+fn pve_cluster_host_identity_evidence_is_readable_or_explicitly_absent() {
+    let root = pve_cluster_root();
+    let images = pve_host_disk_e01_files(&root);
+    assert_eq!(
+        images.len(),
+        3,
+        "PVE fixture should contain three host disks"
+    );
+    for (index, image) in images.into_iter().enumerate() {
+        let mut reader = E01Reader::open(&image).expect("open PVE host image");
+        let mut probe = detect_image_filesystem(&mut reader).expect("probe PVE host image");
+        expand_lvm_pool_candidates(&mut probe, &image, &DataSourceKind::E01);
+        let candidate = probe
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .lvm_identity
+                    .as_ref()
+                    .is_some_and(|identity| identity.lv_name == "root")
+                    && matches!(
+                        candidate.kind,
+                        ImageFilesystemKind::Ext4
+                            | ImageFilesystemKind::Xfs
+                            | ImageFilesystemKind::Btrfs
+                    )
+            })
+            .expect("PVE host root LV");
+        let fs = open_pve_host_filesystem(&image, candidate);
+        for path in [
+            "etc/hostname",
+            "etc/os-release",
+            "usr/lib/os-release",
+            "etc/debian_version",
+            "etc/pve/.version",
+            "etc/pve/corosync.conf",
+            "etc/corosync/corosync.conf",
+            "etc/network/interfaces",
+        ] {
+            match fs.open_file(path) {
+                Ok(mut file) => {
+                    let mut bytes = Vec::new();
+                    file.by_ref()
+                        .take(4096)
+                        .read_to_end(&mut bytes)
+                        .expect("read identity evidence");
+                    let text = String::from_utf8_lossy(&bytes);
+                    match path {
+                        "etc/hostname" => assert_eq!(text.trim(), format!("pve-node{}", index + 1)),
+                        "etc/os-release" => assert_eq!(text.trim(), "../usr/lib/os-release"),
+                        "usr/lib/os-release" => assert!(text.contains("VERSION_ID=\"13\"")),
+                        "etc/debian_version" => assert_eq!(text.trim(), "13.2"),
+                        "etc/corosync/corosync.conf" => assert!(text.contains("nodelist")),
+                        "etc/network/interfaces" => assert!(text.contains("iface")),
+                        "etc/pve/.version" | "etc/pve/corosync.conf" => {
+                            panic!("unexpected static PVE mount content: {path}")
+                        }
+                        _ => {}
+                    }
+                }
+                Err(error) => {
+                    if !matches!(path, "etc/pve/.version" | "etc/pve/corosync.conf") {
+                        panic!("required host evidence is missing: {path}: {error}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
 fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter("error")
+        .with_test_writer()
+        .try_init();
     let root = pve_cluster_root();
     let image_path = pve_host_disk_e01_files(&root)
         .into_iter()
@@ -3466,6 +3542,29 @@ fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
                 [&ds_id.0],
                 |row| row.get(0),
             )?;
+            let config_artifacts: u64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxSystemConfig'",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(
+                config_artifacts, 0,
+                "metadata-only import does not extract Linux configuration"
+            );
+            let candidates = evidence_candidates_for_categories(&source_conn, &["LinuxArtifacts"])
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            for required in [
+                "etc/hostname",
+                "usr/lib/os-release",
+                "etc/debian_version",
+            ] {
+                assert!(
+                    candidates.iter().any(|item| item.path.ends_with(required)),
+                    "metadata-only catalog must retain candidate {required}; candidates={} matching={:?}",
+                    candidates.len(),
+                    candidates.iter().filter(|item| item.path.contains("hostname") || item.path.contains("debian_version") || item.path.contains("os-release")).map(|item| item.path.as_str()).collect::<Vec<_>>()
+                );
+            }
             for path in [
                 "/etc/passwd",
                 "/etc/os-release",

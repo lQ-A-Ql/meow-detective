@@ -12,6 +12,8 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
         || normalized.ends_with("/etc/gshadow")
         || normalized.ends_with("/etc/group")
         || normalized.ends_with("/etc/hostname")
+        || normalized.ends_with("/etc/debian_version")
+        || normalized.ends_with("/etc/pve/.version")
         || normalized.ends_with("/etc/hosts")
         || normalized.ends_with("/etc/fstab")
         || normalized.ends_with("/etc/resolv.conf")

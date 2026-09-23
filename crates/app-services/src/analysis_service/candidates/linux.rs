@@ -29,6 +29,8 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Suffix("/etc/gshadow"),
         EvidencePathPattern::Suffix("/etc/group"),
         EvidencePathPattern::Suffix("/etc/hostname"),
+        EvidencePathPattern::Suffix("/etc/debian_version"),
+        EvidencePathPattern::Suffix("/etc/pve/.version"),
         EvidencePathPattern::Suffix("/etc/hosts"),
         EvidencePathPattern::Suffix("/etc/fstab"),
         EvidencePathPattern::Suffix("/etc/resolv.conf"),

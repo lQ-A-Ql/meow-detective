@@ -682,6 +682,37 @@ fn linux_empty_hostname_emits_nothing() {
 }
 
 #[test]
+fn linux_platform_version_files_emit_source_bound_config_lines() {
+    for (path, content, expected) in [
+        ("/etc/debian_version", "13.2\n", "13.2"),
+        (
+            "/etc/pve/.version",
+            "pve-manager/8.4.1\n",
+            "pve-manager/8.4.1",
+        ),
+    ] {
+        let outcome = extract_linux_candidate(&candidate(path), content.as_bytes());
+        let artifact = outcome
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.family == "LinuxSystemConfig")
+            .expect("platform version artifact");
+        assert_eq!(
+            artifact_attr(artifact, "line").and_then(|value| value.as_str()),
+            Some(expected)
+        );
+        assert_eq!(
+            artifact_attr(artifact, "sourcePath").and_then(|value| value.as_str()),
+            Some(path)
+        );
+        assert_eq!(
+            artifact_attr(artifact, "lineNumber").and_then(|value| value.as_u64()),
+            Some(1)
+        );
+    }
+}
+
+#[test]
 fn linux_machine_id_emits_single_value_config() {
     let candidate = candidate("/etc/machine-id");
     let outcome = extract_linux_candidate(&candidate, b"0123456789abcdef0123456789abcdef\n");

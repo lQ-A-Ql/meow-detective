@@ -294,3 +294,132 @@ fn real_kubernetes_sample_reads_and_parses_discovered_control_plane_artifacts() 
         "sample should parse kubeconfig and static Pod manifest"
     );
 }
+
+#[test]
+#[ignore = "requires FORENSICS_K8S_CLUSTER_ROOT real Kubernetes E01 cluster sample"]
+fn real_kubernetes_sample_host_identity_and_cni_paths_are_accounted_for() {
+    let root = std::env::var_os("FORENSICS_K8S_CLUSTER_ROOT")
+        .map(PathBuf::from)
+        .expect("set FORENSICS_K8S_CLUSTER_ROOT");
+    let mut images = std::fs::read_dir(root)
+        .expect("sample root")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("E01"))
+        })
+        .collect::<Vec<_>>();
+    images.sort();
+    assert_eq!(
+        images.len(),
+        4,
+        "Kubernetes sample has four evidence members"
+    );
+    for (index, image) in images.into_iter().enumerate() {
+        let mut reader = E01Reader::open(&image).expect("open E01");
+        let mut probe = detect_image_filesystem(&mut reader).expect("probe E01");
+        expand_lvm_pool_candidates(&mut probe, &image, &domain::DataSourceKind::E01);
+        let mut inspected_roots = 0;
+        for candidate in probe.candidates.iter().filter(|candidate| {
+            matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume)
+                && matches!(
+                    candidate.kind,
+                    ImageFilesystemKind::Ext4
+                        | ImageFilesystemKind::Xfs
+                        | ImageFilesystemKind::Btrfs
+                )
+        }) {
+            let Some(identity) = candidate.lvm_identity.as_ref() else {
+                continue;
+            };
+            let reader: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&image).expect("reopen E01"));
+            let pool = fs_lvm::LvmPool::discover(vec![reader], identity.pv_offsets.clone())
+                .expect("LVM pool");
+            let Some(lv_index) = pool
+                .list_volumes()
+                .iter()
+                .position(|volume| volume.name == identity.lv_name)
+            else {
+                continue;
+            };
+            let lv_reader = pool.open_volume(lv_index).expect("open LV");
+            let fs: Box<dyn FileSystemReader> = match candidate.kind {
+                ImageFilesystemKind::Ext4 => {
+                    Box::new(fs_ext4::Ext4Reader::open(Box::new(lv_reader), 0).expect("ext4"))
+                }
+                ImageFilesystemKind::Xfs => {
+                    Box::new(fs_xfs::XfsReader::open(Box::new(lv_reader), 0).expect("xfs"))
+                }
+                ImageFilesystemKind::Btrfs => {
+                    Box::new(fs_btrfs::BtrfsReader::open(Box::new(lv_reader), 0).expect("btrfs"))
+                }
+                _ => continue,
+            };
+            inspected_roots += 1;
+            let hostname = fs
+                .read_file_range("etc/hostname", 0, 128)
+                .expect("hostname");
+            let expected = ["master", "node1", "node2", "localhost.localdomain"][index];
+            assert_eq!(String::from_utf8_lossy(&hostname).trim(), expected);
+            let link = fs
+                .read_file_range("etc/os-release", 0, 128)
+                .expect("os-release link");
+            assert_eq!(
+                String::from_utf8_lossy(&link).trim(),
+                "../usr/lib/os-release"
+            );
+            let release = fs
+                .read_file_range("usr/lib/os-release", 0, 512)
+                .expect("os-release content");
+            assert!(String::from_utf8_lossy(&release).contains("VERSION_ID=\"7\""));
+            let cni = fs.list_children("etc/cni/net.d");
+            if index < 3 {
+                assert!(cni
+                    .expect("CNI directory")
+                    .iter()
+                    .any(|entry| entry.name == "10-calico.conflist"));
+                let config = fs
+                    .read_file_range("etc/cni/net.d/10-calico.conflist", 0, 16 * 1024)
+                    .expect("CNI config");
+                let summary = crate::cluster_service::parse_cni_config(&config)
+                    .expect("parse real CNI config");
+                assert!(summary.plugin_types.iter().any(|plugin| plugin == "calico"));
+            } else {
+                assert!(cni.is_err(), "fourth member has no CNI directory");
+            }
+            let manifests = fs.list_children("etc/kubernetes/manifests");
+            if index == 0 {
+                assert!(manifests
+                    .expect("control-plane manifests")
+                    .iter()
+                    .any(|entry| entry.name == "kube-apiserver.yaml"));
+                let manifest = fs
+                    .read_file_range("etc/kubernetes/manifests/kube-apiserver.yaml", 0, 16 * 1024)
+                    .expect("API server manifest");
+                let parsed = parse_static_pod_manifests(
+                    std::str::from_utf8(&manifest).expect("UTF-8 manifest"),
+                )
+                .expect("parse API server manifest");
+                assert!(parsed
+                    .iter()
+                    .flat_map(|pod| &pod.containers)
+                    .any(|container| {
+                        container
+                            .image
+                            .as_deref()
+                            .is_some_and(|image| image.contains("kube-apiserver:"))
+                    }));
+            } else if index < 3 {
+                assert!(manifests.expect("worker manifest directory").is_empty());
+            } else {
+                assert!(manifests.is_err(), "fourth member has no static manifests");
+            }
+        }
+        assert!(
+            inspected_roots > 0,
+            "each Kubernetes member must expose a root LV"
+        );
+    }
+}
