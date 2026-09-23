@@ -7,9 +7,9 @@ use persistence_sqlite::repositories::{
     file_repo::FileRepo,
     linux_import_set_repo::LinuxImportSetRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
-    linux_topology_edge_repo::{LinuxTopologyEdgeRecord, LinuxTopologyEdgeRepo},
-    linux_topology_membership_repo::{LinuxTopologyMembershipRecord, LinuxTopologyMembershipRepo},
-    linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
+    linux_topology_edge_repo::LinuxTopologyEdgeRepo,
+    linux_topology_membership_repo::LinuxTopologyMembershipRepo,
+    linux_topology_scope_repo::LinuxTopologyScopeRepo,
     storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 
@@ -24,6 +24,11 @@ mod pve;
 use pve::register_pve_scope;
 mod environment;
 use environment::project_environment_objects;
+mod helpers;
+use helpers::is_pve_path;
+use helpers::{
+    edge_record, insert_memberships, membership_record, pve_qemu_vm_id, replace_scope, scope_record,
+};
 
 struct SourceObservations {
     pve_sources: Vec<(u32, String)>,
@@ -417,101 +422,4 @@ fn register_ceph_scope(
     })?;
     projection.ceph_scope_id = Some(scope_id);
     Ok(())
-}
-
-pub(super) fn replace_scope(scope_repo: &LinuxTopologyScopeRepo<'_>, scope_id: &str) -> Result<()> {
-    scope_repo.delete(scope_id)?;
-    Ok(())
-}
-
-pub(super) fn scope_record(
-    id: &str,
-    case_id: &CaseId,
-    kind: TopologyScopeKind,
-    name: String,
-    completeness: &str,
-) -> LinuxTopologyScopeRecord {
-    LinuxTopologyScopeRecord {
-        id: id.to_string(),
-        case_id: case_id.0.clone(),
-        scope_kind: kind.as_str().to_string(),
-        name,
-        identity_state: match kind {
-            TopologyScopeKind::PhysicalHost => "unproven".to_string(),
-            TopologyScopeKind::Pve
-            | TopologyScopeKind::Ceph
-            | TopologyScopeKind::VirtualMachine
-            | TopologyScopeKind::OsInstance
-            | TopologyScopeKind::Kubernetes => "candidate".to_string(),
-        },
-        identity_fingerprint: None,
-        status: "ready".to_string(),
-        evidence_completeness: completeness.to_string(),
-        diagnostics_json: "[]".to_string(),
-    }
-}
-
-pub(super) fn insert_memberships(
-    membership_repo: &LinuxTopologyMembershipRepo<'_>,
-    scope_id: &str,
-    sources: &[(u32, String)],
-    role: TopologyMemberRole,
-) -> Result<()> {
-    for (member_index, data_source_id) in sources {
-        membership_repo.insert(&membership_record(
-            scope_id,
-            data_source_id,
-            role,
-            *member_index,
-            "source-local artifact projection",
-        ))?;
-    }
-    Ok(())
-}
-
-pub(super) fn membership_record(
-    scope_id: &str,
-    data_source_id: &str,
-    role: TopologyMemberRole,
-    member_index: u32,
-    basis: &str,
-) -> LinuxTopologyMembershipRecord {
-    LinuxTopologyMembershipRecord {
-        scope_id: scope_id.to_string(),
-        data_source_id: data_source_id.to_string(),
-        role: role.as_str().to_string(),
-        member_index: Some(member_index),
-        confidence: "candidate".to_string(),
-        provenance_json: serde_json::json!({ "basis": basis }).to_string(),
-    }
-}
-
-pub(super) fn edge_record(
-    source_scope_id: &str,
-    target_scope_id: &str,
-    edge_kind: TopologyEdgeKind,
-    basis: &str,
-) -> LinuxTopologyEdgeRecord {
-    LinuxTopologyEdgeRecord {
-        source_scope_id: source_scope_id.to_string(),
-        target_scope_id: target_scope_id.to_string(),
-        edge_kind: edge_kind.as_str().to_string(),
-        confidence: "candidate".to_string(),
-        provenance_json: serde_json::json!({ "basis": basis }).to_string(),
-    }
-}
-
-fn is_pve_path(path: &str) -> bool {
-    let path = path.replace('\\', "/").to_ascii_lowercase();
-    path.contains("/etc/pve/")
-        || path.ends_with("/etc/pve")
-        || path.contains("/etc/corosync/corosync.conf")
-}
-
-fn pve_qemu_vm_id(path: &str) -> Option<String> {
-    let normalized = path.replace('\\', "/").to_ascii_lowercase();
-    let (_, file_name) = normalized.rsplit_once("/etc/pve/qemu-server/")?;
-    let vm_id = file_name.strip_suffix(".conf")?;
-    (!vm_id.is_empty() && vm_id.bytes().all(|byte| byte.is_ascii_digit()))
-        .then(|| vm_id.to_string())
 }

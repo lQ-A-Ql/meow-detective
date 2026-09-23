@@ -14,43 +14,7 @@ pub(super) fn project_environment_objects(
     member_sources: &[(u32, String, String)],
 ) -> Result<()> {
     let repo = EnvironmentObjectRepo::new(conn);
-    for ((member_index, data_source_id, source_name), os_scope_id) in
-        member_sources.iter().zip(&projection.os_scope_ids)
-    {
-        let source_name = (!source_name.is_empty())
-            .then(|| source_name.clone())
-            .unwrap_or_else(|| format!("member-{}", member_index + 1));
-        let host_id = format!("env:host:{import_set_id}:{member_index}");
-        let os_id = format!("env:os:{import_set_id}:{member_index}");
-        insert_object(
-            &repo,
-            &host_id,
-            case_id,
-            "physical_host",
-            &format!("Host evidence: {source_name}"),
-            &format!("scope:physical-host:{import_set_id}:{member_index}"),
-            data_source_id,
-            "ready",
-        )?;
-        insert_object(
-            &repo,
-            &os_id,
-            case_id,
-            "os_instance",
-            &format!("Linux system: {source_name}"),
-            os_scope_id,
-            data_source_id,
-            "ready",
-        )?;
-        repo.insert_relation(
-            &host_id,
-            &os_id,
-            "hosts",
-            "candidate",
-            &serde_json::json!({ "basis": "topology_projection", "dataSourceId": data_source_id })
-                .to_string(),
-        )?;
-    }
+    project_host_objects(&repo, case_id, import_set_id, projection, member_sources)?;
     if let Some(pve_scope_id) = &projection.pve_scope_id {
         let pve_id = format!("env:pve:{import_set_id}");
         insert_object(
@@ -110,6 +74,53 @@ pub(super) fn project_environment_objects(
                 "{\"basis\":\"kubernetes_scope\"}",
             )?;
         }
+    }
+    Ok(())
+}
+
+fn project_host_objects(
+    repo: &EnvironmentObjectRepo<'_>,
+    case_id: &CaseId,
+    import_set_id: &str,
+    projection: &ImportSetTopologyProjection,
+    member_sources: &[(u32, String, String)],
+) -> Result<()> {
+    for ((member_index, data_source_id, source_name), os_scope_id) in
+        member_sources.iter().zip(&projection.os_scope_ids)
+    {
+        let source_name = (!source_name.is_empty())
+            .then(|| source_name.clone())
+            .unwrap_or_else(|| format!("member-{}", member_index + 1));
+        let host_id = format!("env:host:{import_set_id}:{member_index}");
+        let os_id = format!("env:os:{import_set_id}:{member_index}");
+        insert_object(
+            repo,
+            &host_id,
+            case_id,
+            "physical_host",
+            &format!("Host evidence: {source_name}"),
+            &format!("scope:physical-host:{import_set_id}:{member_index}"),
+            data_source_id,
+            "ready",
+        )?;
+        insert_object(
+            repo,
+            &os_id,
+            case_id,
+            "os_instance",
+            &format!("Linux system: {source_name}"),
+            os_scope_id,
+            data_source_id,
+            "ready",
+        )?;
+        repo.insert_relation(
+            &host_id,
+            &os_id,
+            "hosts",
+            "candidate",
+            &serde_json::json!({ "basis": "topology_projection", "dataSourceId": data_source_id })
+                .to_string(),
+        )?;
     }
     Ok(())
 }
