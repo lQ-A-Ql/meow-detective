@@ -1,5 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InfrastructureNetworkFactRecord {
@@ -71,7 +72,11 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
             "DELETE FROM infrastructure_network_facts WHERE case_id = ?1 AND data_source_id = ?2",
             params![case_id, data_source_id],
         )?;
+        let mut seen = HashSet::with_capacity(facts.len());
         for fact in facts {
+            if !seen.insert(fact_key(fact)) {
+                continue;
+            }
             transaction.execute(
                 "INSERT INTO infrastructure_network_facts (
                     id, case_id, data_source_id, environment_object_id, file_id,
@@ -186,4 +191,16 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
+}
+
+fn fact_key(fact: &InfrastructureNetworkFactRecord) -> (&str, &str, &str, u64, &str, &str, &str) {
+    (
+        &fact.case_id,
+        &fact.data_source_id,
+        &fact.file_id,
+        fact.line_number,
+        &fact.fact_kind,
+        &fact.subject,
+        &fact.value,
+    )
 }

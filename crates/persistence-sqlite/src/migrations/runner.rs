@@ -210,6 +210,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0058_infrastructure_network_facts",
         include_str!("scripts/0058_infrastructure_network_facts.sql"),
     ),
+    (
+        "0059_expand_infrastructure_network_fact_kinds",
+        include_str!("scripts/0059_expand_infrastructure_network_fact_kinds.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
@@ -231,10 +235,6 @@ pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
 }
 
 pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
-    // Hot read paths open source databases frequently, so avoid a bookkeeping
-    // write when the complete registry is present. Checking only the latest
-    // row is insufficient because a damaged or manually edited database can
-    // contain the latest marker while an earlier migration is missing.
     if all_migrations_recorded(conn, migrations) {
         return Ok(0);
     }
@@ -425,9 +425,6 @@ fn source_analysis_file_feed_index_sql() -> &'static str {
 }
 
 fn ensure_timeline_case_id_index(conn: &Connection, sql: &str) -> DbResult<()> {
-    // Staging and legacy catalogs may not carry timeline_events (or its
-    // case_id column); the covering index only applies where the canonical
-    // timeline schema exists.
     let has_case_id: bool = conn.query_row(
         "SELECT COUNT(*) = 1
          FROM sqlite_master, pragma_table_info('timeline_events') AS info
