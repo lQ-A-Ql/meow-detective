@@ -67,6 +67,16 @@ pub(super) fn refresh_network_facts(
             &mut facts,
             &mut diagnostics,
         );
+        let (kubernetes_facts, kubernetes_diagnostics) = super::kubernetes_network_facts::extract(
+            case_conn,
+            case_root,
+            case_id,
+            &source,
+            &source_conn,
+            &host_id,
+        );
+        facts.extend(kubernetes_facts);
+        diagnostics.extend(kubernetes_diagnostics);
         repo.replace_for_source(&case_id.0, &source_id, &facts)?;
     }
     Ok(diagnostics)
@@ -397,7 +407,7 @@ fn push_fact(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn push_fact_with_parser(
+pub(super) fn push_fact_with_parser(
     facts: &mut Vec<Fact>,
     case_id: &str,
     source_id: &str,

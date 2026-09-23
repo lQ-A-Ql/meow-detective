@@ -5,6 +5,7 @@ use transport::dto::{
     InfrastructureNetworkFactDto,
 };
 
+mod kubernetes_network_facts;
 mod network_facts;
 
 pub fn get_infrastructure_graph(

@@ -55,7 +55,8 @@ pub use manifest_parser::{
 };
 pub use network_parser::{
     parse_cni_config, parse_kubernetes_network_resources, CniNetworkSummary,
-    KubernetesNetworkResource,
+    KubernetesEndpointSliceSummary, KubernetesIngressSummary, KubernetesNetworkPolicySummary,
+    KubernetesNetworkResource, KubernetesNodeNetworkSummary, KubernetesServiceNetworkSummary,
 };
 
 #[derive(Debug, Error)]
