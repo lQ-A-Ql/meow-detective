@@ -39,7 +39,7 @@ export function InfrastructurePage() {
           </TabsList>
           <div className="relative mb-1 w-full sm:w-64"><Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted" size={14} /><Input aria-label={t('infrastructure.actions.search')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('infrastructure.searchPlaceholder')} variant="forensics" inputSize="compact" className="pl-7" /></div>
         </div>
-        <TabsContent value="overview" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><ClusterOverviewPanel nodes={nodes} edges={edges} hostFacts={hostFacts} t={t} /></TabsContent>
+        <TabsContent value="overview" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><ClusterOverviewPanel nodes={nodes} edges={edges} hostFacts={hostFacts} networkFacts={networkFacts} t={t} /></TabsContent>
         <TabsContent value="topology" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><NetworkTopologyPanel nodes={networkTopology.nodes} edges={networkTopology.edges} networkFacts={networkFacts} nodeNames={nodeNames} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
         <TabsContent value="workloads" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><WorkloadEvidencePanel nodes={workloads} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>
         <TabsContent value="storage" className="h-[calc(100%-46px)] overflow-auto scrollbar-none pt-4"><StorageEvidencePanel nodes={storage} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent>

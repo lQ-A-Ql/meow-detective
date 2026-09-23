@@ -1,4 +1,5 @@
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';
+import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import type { InfrastructureHostFact } from '../types';
 
 export interface InfrastructureHostView {
@@ -10,6 +11,7 @@ export function buildClusterPresentation(
   nodes: InfrastructureGraphNode[],
   edges: InfrastructureGraphEdge[],
   hostFacts: Map<string, InfrastructureHostFact>,
+  networkFacts: InfrastructureNetworkFact[] = [],
 ) {
   const hosts = nodes
     .filter((node) => node.kind === 'physical_host')
@@ -25,6 +27,9 @@ export function buildClusterPresentation(
   const versionEvidence = hosts
     .map(({ fact }) => formatHostVersion(fact))
     .filter((value): value is string => Boolean(value));
+  const kubernetesVersions = networkFacts
+    .filter((fact) => fact.factKind === 'kubernetes_version')
+    .map((fact) => `${fact.subject}: ${fact.value}`);
   return {
     hosts,
     infrastructure,
@@ -33,7 +38,7 @@ export function buildClusterPresentation(
     workloads,
     storage,
     relationCount: edges.length,
-    versionEvidence: [...new Set(versionEvidence)],
+    versionEvidence: [...new Set([...versionEvidence, ...kubernetesVersions])],
   };
 }
 

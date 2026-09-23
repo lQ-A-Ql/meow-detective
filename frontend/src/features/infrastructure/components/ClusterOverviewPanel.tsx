@@ -2,6 +2,7 @@ import { CircleDot, Server } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { KeyValueField, PanelFrame, SectionHeader } from '@/components/data-display';
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';
+import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import type { InfrastructureHostFact } from '../types';
 import { buildClusterPresentation, formatHostVersion } from '../logic/cluster-presentation';
 import { kindLabel, stateLabel } from '../logic/labels';
@@ -10,14 +11,16 @@ export function ClusterOverviewPanel({
   nodes,
   edges,
   hostFacts,
+  networkFacts,
   t,
 }: {
   nodes: InfrastructureGraphNode[];
   edges: InfrastructureGraphEdge[];
   hostFacts: Map<string, InfrastructureHostFact>;
+  networkFacts: InfrastructureNetworkFact[];
   t: TFunction;
 }) {
-  const presentation = buildClusterPresentation(nodes, edges, hostFacts);
+  const presentation = buildClusterPresentation(nodes, edges, hostFacts, networkFacts);
   const platforms = presentation.infrastructure.map((node) => kindLabel(node.kind, t));
   return (
     <div className="space-y-4">

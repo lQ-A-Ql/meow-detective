@@ -8,7 +8,9 @@ use persistence_sqlite::repositories::{
 use rusqlite::Connection;
 
 use crate::{
-    cluster_service::{parse_kubernetes_network_resources, KubernetesNetworkResource},
+    cluster_service::{
+        parse_kubernetes_network_resources, parse_static_pod_manifests, KubernetesNetworkResource,
+    },
     file_service::{read_file_bytes_for_case, SourceReadContext},
 };
 
@@ -92,6 +94,58 @@ fn extract_file(
             "Kubernetes network evidence could not be parsed for {}: {error}",
             entry.path
         )),
+    }
+    if is_static_manifest(&entry.path) {
+        if let Ok(manifests) = parse_static_pod_manifests(text) {
+            append_manifest_versions(facts, case_id, source, host_id, entry, manifests);
+        }
+    }
+}
+
+fn is_static_manifest(path: &str) -> bool {
+    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    normalized.contains("/etc/kubernetes/manifests/")
+        && (normalized.ends_with(".yaml") || normalized.ends_with(".yml"))
+}
+
+fn append_manifest_versions(
+    facts: &mut Vec<Fact>,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    host_id: &str,
+    entry: &FileEntry,
+    manifests: Vec<crate::cluster_service::StaticPodManifestSummary>,
+) {
+    for manifest in manifests {
+        for container in manifest.containers {
+            let Some(image) = container.image else {
+                continue;
+            };
+            let image_name = image.rsplit('/').next().unwrap_or(image.as_str());
+            let Some(component) = [
+                "kube-apiserver",
+                "kube-controller-manager",
+                "kube-scheduler",
+                "kube-proxy",
+            ]
+            .iter()
+            .find(|component| image_name.starts_with(*component)) else {
+                continue;
+            };
+            let Some(version) = image_name.split_once(':').map(|(_, value)| value) else {
+                continue;
+            };
+            push_resource_fact(
+                facts,
+                case_id,
+                source,
+                host_id,
+                entry,
+                "kubernetes_version",
+                component,
+                version,
+            );
+        }
     }
 }
 
