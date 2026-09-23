@@ -40,4 +40,18 @@ describe('buildNetworkTopology', () => {
     expect(result.edges).toHaveLength(1);
     expect(result.edges[0].relationKind).toBe('network_link');
   });
+
+  it('does not link an address shared by multiple hosts', () => {
+    const graph = {
+      nodes: [
+        { id: 'a', domain: 'environment' as const, kind: 'physical_host', name: 'a', status: 'ready', confidence: 'candidate', provenanceJson: '{}' },
+        { id: 'b', domain: 'environment' as const, kind: 'physical_host', name: 'b', status: 'ready', confidence: 'candidate', provenanceJson: '{}' },
+        { id: 'c', domain: 'environment' as const, kind: 'physical_host', name: 'c', status: 'ready', confidence: 'candidate', provenanceJson: '{}' },
+      ],
+      edges: [],
+    };
+    const fact = (id: string, host: string, kind: string, value: string) => ({ id, dataSourceId: host, environmentObjectId: host, fileId: id, sourcePath: '/etc/network/interfaces', lineNumber: 1, factKind: kind, subject: 'eth0', value, assertionKind: 'configured', confidence: 'candidate', parser: 'linux.network.config.v1' });
+    const result = buildNetworkTopology(graph, [fact('a-link', 'a', 'cluster_link', 'ring0_addr:192.0.2.20'), fact('b-ip', 'b', 'interface_address', '192.0.2.20/24'), fact('c-ip', 'c', 'interface_address', '192.0.2.20/24')]);
+    expect(result.edges).toHaveLength(0);
+  });
 });
