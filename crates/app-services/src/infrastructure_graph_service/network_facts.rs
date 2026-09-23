@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use domain::{CaseId, DataSourceId};
+use domain::{CaseId, DataSourceId, FileEntry};
 use persistence_sqlite::{
     repositories::infrastructure_network_fact_repo::{
         InfrastructureNetworkConfigRow as ConfigRow, InfrastructureNetworkFactRecord as Fact,
@@ -11,10 +11,17 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-use crate::source_db;
+use crate::{
+    cluster_service::parse_cni_config,
+    file_service::{read_file_bytes_for_case, SourceReadContext},
+    source_db,
+};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 
 const MAX_NETWORK_CONFIG_ROWS: usize = 8_192;
 const PARSER_ID: &str = "linux.network.config.v1";
+const CNI_PARSER_ID: &str = "kubernetes.network.cni.v1";
+const MAX_CNI_BYTES: u32 = 512 * 1024;
 
 pub(super) fn refresh_network_facts(
     case_conn: &Connection,
@@ -49,10 +56,136 @@ pub(super) fn refresh_network_facts(
                 .then_with(|| left.line_number.cmp(&right.line_number))
                 .then_with(|| left.artifact_id.cmp(&right.artifact_id))
         });
-        let facts = extract_network_facts(&case_id.0, &source_id, &host_id, &rows);
+        let mut facts = extract_network_facts(&case_id.0, &source_id, &host_id, &rows);
+        extract_cni_facts(
+            case_conn,
+            case_root,
+            case_id,
+            &source,
+            &source_conn,
+            &host_id,
+            &mut facts,
+            &mut diagnostics,
+        );
         repo.replace_for_source(&case_id.0, &source_id, &facts)?;
     }
     Ok(diagnostics)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn extract_cni_facts(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    source_conn: &Connection,
+    host_id: &str,
+    facts: &mut Vec<Fact>,
+    diagnostics: &mut Vec<String>,
+) {
+    let Ok(entries) = FileRepo::new(source_conn).find_by_data_source(source) else {
+        return;
+    };
+    let candidates = entries.into_iter().filter(|entry| {
+        let path = entry.path.replace('\\', "/").to_ascii_lowercase();
+        path.contains("/etc/cni/net.d/")
+            && (path.ends_with(".json") || path.ends_with(".conf") || path.ends_with(".conflist"))
+    });
+    for entry in candidates.take(128) {
+        extract_cni_entry(
+            case_conn,
+            case_root,
+            case_id,
+            source,
+            source_conn,
+            host_id,
+            &entry,
+            facts,
+            diagnostics,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn extract_cni_entry(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    source_conn: &Connection,
+    host_id: &str,
+    entry: &FileEntry,
+    facts: &mut Vec<Fact>,
+    diagnostics: &mut Vec<String>,
+) {
+    let mut context = SourceReadContext::new(source_conn, case_conn, case_root, case_id, source);
+    let size = entry.size.unwrap_or(0).min(MAX_CNI_BYTES as u64) as u32;
+    let Ok(bytes) = read_file_bytes_for_case(&mut context, &entry.id, 0, size) else {
+        diagnostics.push(format!("CNI evidence could not be read for {}", entry.path));
+        return;
+    };
+    let Ok(summary) = parse_cni_config(&bytes) else {
+        diagnostics.push(format!(
+            "CNI evidence could not be parsed for {}",
+            entry.path
+        ));
+        return;
+    };
+    append_cni_facts(facts, case_id, source, host_id, entry, summary);
+}
+
+fn append_cni_facts(
+    facts: &mut Vec<Fact>,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    host_id: &str,
+    entry: &FileEntry,
+    summary: crate::cluster_service::CniNetworkSummary,
+) {
+    if let Some(name) = summary.name.as_deref() {
+        push_cni_fact(facts, case_id, source, host_id, entry, "name", name);
+    }
+    for plugin in summary.plugin_types {
+        push_cni_fact(facts, case_id, source, host_id, entry, "plugin", &plugin);
+    }
+    if let Some(ipam) = summary.ipam_type {
+        push_cni_fact(facts, case_id, source, host_id, entry, "ipam", &ipam);
+    }
+    for subnet in summary.subnets {
+        push_cni_fact(facts, case_id, source, host_id, entry, "subnet", &subnet);
+    }
+    for route in summary.routes {
+        push_cni_fact(facts, case_id, source, host_id, entry, "route", &route);
+    }
+}
+
+fn push_cni_fact(
+    facts: &mut Vec<Fact>,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    host_id: &str,
+    entry: &FileEntry,
+    subject: &str,
+    value: &str,
+) {
+    let row = ConfigRow {
+        artifact_id: entry.id.0.clone(),
+        file_id: entry.id.0.clone(),
+        source_path: entry.path.clone(),
+        line_number: 1,
+        line: value.to_string(),
+    };
+    push_fact_with_parser(
+        facts,
+        &case_id.0,
+        &source.0,
+        host_id,
+        &row,
+        "cni_network",
+        subject,
+        value,
+        CNI_PARSER_ID,
+    );
 }
 
 fn extract_network_facts(
@@ -258,6 +391,23 @@ fn push_fact(
     subject: &str,
     value: &str,
 ) {
+    push_fact_with_parser(
+        facts, case_id, source_id, host_id, row, kind, subject, value, PARSER_ID,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_fact_with_parser(
+    facts: &mut Vec<Fact>,
+    case_id: &str,
+    source_id: &str,
+    host_id: &str,
+    row: &ConfigRow,
+    kind: &str,
+    subject: &str,
+    value: &str,
+    parser: &str,
+) {
     if subject.is_empty()
         || subject.len() > 256
         || value.is_empty()
@@ -287,7 +437,7 @@ fn push_fact(
         value: value.to_string(),
         assertion_kind: "configured".to_string(),
         confidence: "candidate".to_string(),
-        parser: PARSER_ID.to_string(),
+        parser: parser.to_string(),
         source_artifact_id: row.artifact_id.clone(),
     });
 }
