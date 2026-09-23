@@ -206,6 +206,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0057_import_set_member_metadata_ready",
         include_str!("scripts/0057_import_set_member_metadata_ready.sql"),
     ),
+    (
+        "0058_infrastructure_network_facts",
+        include_str!("scripts/0058_infrastructure_network_facts.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

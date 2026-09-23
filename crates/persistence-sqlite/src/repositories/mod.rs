@@ -34,6 +34,7 @@ pub mod filesystem_locator_repo;
 pub mod fingerprint_repo;
 pub mod graph_repo;
 pub mod infrastructure_graph_repo;
+pub mod infrastructure_network_fact_repo;
 pub mod job_repo;
 mod ledger_batch_repo;
 pub mod ledger_repo;

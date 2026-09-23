@@ -456,6 +456,7 @@
     "workloads": { "title": "工作负载与服务证据", "description": "容器、Pod、运行时配置与日志作为离线证据展示，不宣称其为镜像采集时的实时状态。", "empty": "未发现可归类的容器或服务证据。" },
     "storage": { "title": "存储系统证据", "description": "Ceph、RBD、CephFS 和虚拟磁盘等存储对象及其已证实状态。", "empty": "未发现存储系统证据。" },
     "networkTopology": { "hostNetwork": "主机网络拓扑", "hint": "节点按主机、基础设施服务和运行实例组织。", "canvasLabel": "Linux 集群主机网络拓扑" },
+    "networkFacts": { "title": "网络配置证据", "description": "来自主机配置文件的地址、解析器、网关和集群链路。", "empty": "尚未发现网络配置证据。", "kinds": { "hostname_mapping": "主机名映射", "dns_server": "DNS 服务器", "interface_address": "接口地址", "gateway": "网关", "bridge_member": "网桥成员", "cluster_link": "集群链路", "cni_network": "CNI 网络" } },
     "values": { "unselected": "未选择对象", "unknown": "未知", "unavailable": "未提供", "notFound": "未发现" }
   },
   "caseHome": {

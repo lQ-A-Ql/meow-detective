@@ -456,6 +456,7 @@
     "workloads": { "title": "Workload and service evidence", "description": "Containers, Pods, runtime configuration, and logs are shown as offline evidence and not asserted as live state at acquisition time.", "empty": "No container or service evidence was classified." },
     "storage": { "title": "Storage system evidence", "description": "Ceph, RBD, CephFS, virtual disks, and their evidence-backed state.", "empty": "No storage-system evidence was found." },
     "networkTopology": { "hostNetwork": "Host network topology", "hint": "Nodes are organized as hosts, infrastructure services, and runtime instances.", "canvasLabel": "Linux cluster host network topology" },
+    "networkFacts": { "title": "Network configuration evidence", "description": "Addresses, resolvers, gateways, and cluster links recovered from host configuration files.", "empty": "No network configuration evidence was found.", "kinds": { "hostname_mapping": "Hostname mapping", "dns_server": "DNS server", "interface_address": "Interface address", "gateway": "Gateway", "bridge_member": "Bridge member", "cluster_link": "Cluster link", "cni_network": "CNI network" } },
     "values": { "unselected": "No object selected", "unknown": "Unknown", "unavailable": "Not provided", "notFound": "Not found" }
   },
   "caseHome": {

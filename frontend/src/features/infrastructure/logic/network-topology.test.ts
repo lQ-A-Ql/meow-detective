@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildNetworkTopology } from './network-topology';
 
 describe('buildNetworkTopology', () => {
-  it('keeps environment nodes and infers peer host links from shared infrastructure', () => {
+  it('keeps only evidence-backed environment relations', () => {
     const result = buildNetworkTopology({
       nodes: [
         { id: 'pve', domain: 'environment', kind: 'pve', name: 'PVE', status: 'ready', confidence: 'candidate', provenanceJson: '{}' },
@@ -18,8 +18,7 @@ describe('buildNetworkTopology', () => {
     });
 
     expect(result.nodes.map((node) => node.id)).toEqual(['pve', 'host-a', 'host-b']);
-    expect(result.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sourceId: 'host-a', targetId: 'host-b', relationKind: 'peer' }),
-    ]));
+    expect(result.edges).toHaveLength(2);
+    expect(result.edges.some((edge) => edge.relationKind === 'peer')).toBe(false);
   });
 });

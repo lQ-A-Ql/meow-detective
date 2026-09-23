@@ -115,6 +115,7 @@ pub use import::{
 };
 pub use infrastructure_graph::{
     InfrastructureGraphDto, InfrastructureGraphEdgeDto, InfrastructureGraphNodeDto,
+    InfrastructureNetworkFactDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use ledger::{

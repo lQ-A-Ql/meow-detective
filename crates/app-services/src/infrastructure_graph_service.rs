@@ -2,12 +2,17 @@ use domain::CaseId;
 use persistence_sqlite::repositories::infrastructure_graph_repo::InfrastructureGraphRepo;
 use transport::dto::{
     InfrastructureGraphDto, InfrastructureGraphEdgeDto, InfrastructureGraphNodeDto,
+    InfrastructureNetworkFactDto,
 };
+
+mod network_facts;
 
 pub fn get_infrastructure_graph(
     connection: &rusqlite::Connection,
+    case_root: &std::path::Path,
     case_id: &CaseId,
 ) -> Result<InfrastructureGraphDto, persistence_sqlite::DbError> {
+    let network_diagnostics = network_facts::refresh_network_facts(connection, case_root, case_id)?;
     let repo = InfrastructureGraphRepo::new(connection);
     let nodes = repo
         .list_nodes(&case_id.0)?
@@ -34,5 +39,28 @@ pub fn get_infrastructure_graph(
             provenance_json: edge.provenance_json,
         })
         .collect();
-    Ok(InfrastructureGraphDto { nodes, edges })
+    let network_facts = persistence_sqlite::repositories::infrastructure_network_fact_repo::InfrastructureNetworkFactRepo::new(connection)
+        .list_for_case(&case_id.0)?
+        .into_iter()
+        .map(|fact| InfrastructureNetworkFactDto {
+            id: fact.id,
+            data_source_id: fact.data_source_id,
+            environment_object_id: fact.environment_object_id,
+            file_id: fact.file_id,
+            source_path: fact.source_path,
+            line_number: fact.line_number,
+            fact_kind: fact.fact_kind,
+            subject: fact.subject,
+            value: fact.value,
+            assertion_kind: fact.assertion_kind,
+            confidence: fact.confidence,
+            parser: fact.parser,
+        })
+        .collect();
+    Ok(InfrastructureGraphDto {
+        nodes,
+        edges,
+        network_facts,
+        network_diagnostics,
+    })
 }

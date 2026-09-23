@@ -20,4 +20,21 @@ export interface InfrastructureGraphEdge {
 export interface InfrastructureGraph {
   nodes: InfrastructureGraphNode[];
   edges: InfrastructureGraphEdge[];
+  networkFacts?: InfrastructureNetworkFact[];
+  networkDiagnostics?: string[];
+}
+
+export interface InfrastructureNetworkFact {
+  id: string;
+  dataSourceId: string;
+  environmentObjectId: string;
+  fileId: string;
+  sourcePath: string;
+  lineNumber: number;
+  factKind: string;
+  subject: string;
+  value: string;
+  assertionKind: string;
+  confidence: string;
+  parser: string;
 }

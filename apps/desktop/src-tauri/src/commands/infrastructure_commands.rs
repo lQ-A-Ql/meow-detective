@@ -14,6 +14,7 @@ pub async fn get_infrastructure_graph(
         let connection = get_case_connection(&app_state)?;
         app_services::infrastructure_graph_service::get_infrastructure_graph(
             &connection,
+            &active.case_root,
             &domain::CaseId(active.case_id.clone()),
         )
         .map_err(CommandError::from_typed_service_error)
