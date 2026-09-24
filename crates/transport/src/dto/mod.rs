@@ -76,7 +76,8 @@ pub use analysis::{
 };
 pub use analysis_linux_cluster::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyScopeSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
+    LinuxTopologyScopeSummaryDto,
 };
 pub use analysis_linux_events::LinuxEvidenceEventDto;
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};

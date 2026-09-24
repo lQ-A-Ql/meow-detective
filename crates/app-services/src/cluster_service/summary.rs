@@ -7,7 +7,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use transport::dto::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyScopeSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
+    LinuxTopologyScopeSummaryDto,
 };
 
 use super::{ClusterServiceError, Result};
@@ -246,7 +247,11 @@ fn load_scopes(
     let mut scopes = Vec::new();
     for row in rows {
         let row = row?;
-        let member_source_ids = load_scope_members(conn, &row.id)?;
+        let member_roles = load_scope_members(conn, &row.id)?;
+        let member_source_ids = member_roles
+            .iter()
+            .map(|member| member.data_source_id.clone())
+            .collect::<Vec<_>>();
         scopes.push(LinuxTopologyScopeSummaryDto {
             id: row.id,
             kind: row.kind,
@@ -256,18 +261,32 @@ fn load_scopes(
             evidence_completeness: row.completeness,
             member_count: member_source_ids.len() as u32,
             member_source_ids,
+            member_roles,
             diagnostics: row.diagnostics,
         });
     }
     Ok(scopes)
 }
 
-fn load_scope_members(conn: &Connection, scope_id: &str) -> Result<Vec<String>> {
+fn load_scope_members(
+    conn: &Connection,
+    scope_id: &str,
+) -> Result<Vec<LinuxTopologyMemberSummaryDto>> {
     let mut statement = conn.prepare(
-        "SELECT data_source_id FROM linux_topology_memberships
+        "SELECT data_source_id, role, member_index, confidence
+         FROM linux_topology_memberships
          WHERE scope_id = ?1 ORDER BY member_index, data_source_id",
     )?;
-    let rows = statement.query_map([scope_id], |row| row.get(0))?;
+    let rows = statement.query_map([scope_id], |row| {
+        Ok(LinuxTopologyMemberSummaryDto {
+            data_source_id: row.get(0)?,
+            role: row.get(1)?,
+            member_index: row
+                .get::<_, Option<i64>>(2)?
+                .and_then(|value| u32::try_from(value).ok()),
+            confidence: row.get(3)?,
+        })
+    })?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(Into::into)
 }

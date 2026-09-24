@@ -58,7 +58,17 @@ pub struct LinuxTopologyScopeSummaryDto {
     pub evidence_completeness: String,
     pub member_count: u32,
     pub member_source_ids: Vec<String>,
+    pub member_roles: Vec<LinuxTopologyMemberSummaryDto>,
     pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxTopologyMemberSummaryDto {
+    pub data_source_id: String,
+    pub role: String,
+    pub member_index: Option<u32>,
+    pub confidence: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

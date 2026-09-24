@@ -45,7 +45,15 @@ export interface LinuxTopologyScopeSummary {
   evidenceCompleteness: string;
   memberCount: number;
   memberSourceIds: string[];
+  memberRoles: LinuxTopologyMemberSummary[];
   diagnostics: string[];
+}
+
+export interface LinuxTopologyMemberSummary {
+  dataSourceId: string;
+  role: string;
+  memberIndex?: number;
+  confidence: string;
 }
 
 export interface LinuxTopologyEdgeSummary {
