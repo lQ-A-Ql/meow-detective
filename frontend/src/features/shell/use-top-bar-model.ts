@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { useCurrentCase } from '@/features/case/hooks';
+import { useCloseCase, useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot } from '@/features/jobs/hooks';
 import { isDevOrAuditMode } from '@/lib/env';
 import { useUiStore, type PageKey } from '@/stores/ui-store';
@@ -25,6 +25,7 @@ const productionLinks: TopBarLink[] = [
 export function useTopBarModel() {
   const navigate = useNavigate();
   const { data: currentCase } = useCurrentCase();
+  const closeCaseMutation = useCloseCase();
   const { data: jobs } = useJobsSnapshot();
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
   const setCurrentPage = useUiStore((state) => state.setCurrentPage);
@@ -37,6 +38,7 @@ export function useTopBarModel() {
   return {
     links,
     currentCaseName: currentCase?.name,
+    hasCurrentCase: Boolean(currentCase),
     runningCount: jobs?.filter((job) => job.status === 'running').length ?? 0,
     globalSearchQuery,
     setGlobalSearchQuery,
@@ -48,6 +50,9 @@ export function useTopBarModel() {
     },
     openSettings() {
       navigate('/settings');
+    },
+    returnToCaseEntry() {
+      closeCaseMutation.mutate(undefined, { onSuccess: () => navigate('/') });
     },
   };
 }

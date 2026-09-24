@@ -363,6 +363,7 @@
     "toggleSidebar": "切换侧边栏"
   },
   "topBar": {
+    "case": { "return": "返回案件入口", "noCase": "未打开案件" },
     "links": {
       "home": {
         "label": "案件概览",
@@ -467,7 +468,6 @@
       "evidenceSet": "证据集",
       "noEvidenceSet": "暂无证据集",
       "openTimeline": "在主时间线打开",
-      "backToCase": "返回案件首页",
       "loadFailed": "集群证据摘要读取失败",
       "reportReady": "可发布",
       "reportPartial": "provenance=partial",

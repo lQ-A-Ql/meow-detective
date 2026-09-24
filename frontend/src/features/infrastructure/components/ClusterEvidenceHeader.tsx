@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
+import { Activity, ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '@/app/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
@@ -16,7 +16,6 @@ export function ClusterEvidenceHeader({
   provenance,
   onSelectSet,
   onOpenTimeline,
-  onBackToCase,
   eventCount,
   evidenceStats,
   t,
@@ -28,7 +27,6 @@ export function ClusterEvidenceHeader({
   provenance: string;
   onSelectSet: (id: string) => void;
   onOpenTimeline: () => void;
-  onBackToCase: () => void;
   eventCount: number;
   evidenceStats: { fileCount: number; evidenceSize: number };
   t: TFunction;
@@ -49,7 +47,6 @@ export function ClusterEvidenceHeader({
               <SelectContent>{sets.map((item) => <SelectItem key={item.importSetId} value={item.importSetId}>{item.name} · {item.state}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <Button type="button" variant="forensicsGhost" size="sm" onClick={onBackToCase}><ArrowLeft size={14} />{t('infrastructure.workspace.backToCase')}</Button>
           <Button type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><Activity size={14} />{t('infrastructure.workspace.openTimeline')}</Button>
         </div>
       </div>

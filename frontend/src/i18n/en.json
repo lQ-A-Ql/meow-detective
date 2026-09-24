@@ -363,6 +363,7 @@
     "toggleSidebar": "Toggle sidebar"
   },
   "topBar": {
+    "case": { "return": "Back to case entry", "noCase": "No case open" },
     "links": {
       "home": {
         "label": "Case Overview",
@@ -467,7 +468,6 @@
       "evidenceSet": "Evidence Set",
       "noEvidenceSet": "No evidence set",
       "openTimeline": "Open main timeline",
-      "backToCase": "Back to case home",
       "loadFailed": "Unable to load the cluster evidence summary",
       "reportReady": "Ready to publish",
       "reportPartial": "provenance=partial",

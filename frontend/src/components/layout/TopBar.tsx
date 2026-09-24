@@ -1,4 +1,4 @@
-import { Activity, Search, Settings } from 'lucide-react';
+import { Activity, ArrowLeft, Search, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router';
 import { Button } from '@/app/components/ui/button';
@@ -35,6 +35,7 @@ export function TopBar({ model }: { model: TopBarModel }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-forensics-muted">
+          {model.hasCurrentCase ? <Button type="button" variant="forensicsOutline" size="xs" onClick={model.returnToCaseEntry}><ArrowLeft size={13} />{t('topBar.case.return')}</Button> : null}
           <div className="flex items-center gap-2 rounded-none border border-forensics-border bg-transparent px-2 py-1">
             <Search size={12} className="text-forensics-muted-light" />
             <Input

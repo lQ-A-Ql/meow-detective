@@ -44,7 +44,7 @@ export function InfrastructurePage() {
   const stages = trustStages(summary.data);
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-forensics-panel">
-      <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} onBackToCase={() => navigate('/')} eventCount={events.data?.length ?? 0} t={t} />
+      <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4 lg:px-7">
         <div className="flex min-h-0 flex-col gap-4 xl:flex-row">
           <nav aria-label={t('infrastructure.workspace.navigation.label')} className="shrink-0 xl:w-56"><div className="flex gap-1 overflow-x-auto border-b border-forensics-border pb-2 xl:grid xl:gap-1 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-3">{(['overview', 'members', 'topology', 'findings', 'provenance'] as const).map((item) => <button key={item} type="button" onClick={() => setSection(item)} aria-current={section === item ? 'page' : undefined} className={`whitespace-nowrap border px-3 py-2 text-left text-xs transition-colors ${section === item ? 'border-forensics-primary-blue text-forensics-primary-blue' : 'border-transparent text-forensics-muted hover:border-forensics-border hover:text-forensics-text'}`}>{t(`infrastructure.workspace.navigation.${item}`)}</button>)}</div></nav>

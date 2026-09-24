@@ -5,6 +5,7 @@ import { TopBarContainer as TopBar } from './TopBarContainer';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
+  closeCase: vi.fn(),
   jobs: vi.fn(),
   uiState: {
     setCurrentPage: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
+  useCloseCase: () => ({ mutate: mocks.closeCase }),
 }));
 
 vi.mock('@/features/jobs/hooks', () => ({
