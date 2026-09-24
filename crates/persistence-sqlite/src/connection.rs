@@ -31,9 +31,9 @@ pub fn open_or_create(path: &Path) -> DbResult<Connection> {
     }
     let conn = Connection::open(path)?;
     conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
+        "PRAGMA busy_timeout=30000;
+         PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;
          PRAGMA synchronous=NORMAL;",
     )?;
     Ok(conn)
@@ -72,7 +72,7 @@ pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
     conn.execute_batch(
         "PRAGMA query_only=ON;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;",
+         PRAGMA busy_timeout=30000;",
     )?;
     Ok(conn)
 }
@@ -87,9 +87,9 @@ pub fn open_existing(path: &Path) -> DbResult<Connection> {
     }
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
+        "PRAGMA busy_timeout=30000;
+         PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;
          PRAGMA synchronous=NORMAL;",
     )?;
     Ok(conn)
@@ -109,9 +109,9 @@ pub fn open_staging(path: &Path) -> DbResult<Connection> {
     }
     let conn = Connection::open(path)?;
     conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
+        "PRAGMA busy_timeout=30000;
+         PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;
          PRAGMA synchronous=NORMAL;",
     )?;
     // Run staging migration (idempotent)

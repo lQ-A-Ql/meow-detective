@@ -60,6 +60,7 @@ fn run_progress_reporter(
             continue;
         }
         last_percent = percent;
+        let _write_guard = super::hash_db_write_guard();
         if update_hash_progress(&connection, &data_source_id, &job_id, percent).is_err() {
             return;
         }

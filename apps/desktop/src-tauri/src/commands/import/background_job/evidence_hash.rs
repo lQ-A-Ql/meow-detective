@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use app_services::hash_service::{
     evidence_jobs::{
@@ -23,6 +23,14 @@ use progress::{finish_progress_reporter, spawn_progress_reporter};
 use status::{cancel_hash, complete_hash, fail_hash, fail_hash_setup};
 
 const HASH_TASK_STACK_BYTES: usize = 16 * 1024 * 1024;
+static HASH_DB_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+pub(super) fn hash_db_write_guard() -> std::sync::MutexGuard<'static, ()> {
+    HASH_DB_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
 
 pub(crate) fn schedule_pending_evidence_hashes(
     case_root: &Path,

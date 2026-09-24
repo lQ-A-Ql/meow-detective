@@ -138,6 +138,16 @@ fn open_or_create_wal_mode() {
 }
 
 #[test]
+fn writable_connections_wait_for_concurrent_writers() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let connection = open_or_create(&tmp.path().join("busy-timeout.db")).unwrap();
+    let timeout_ms: i64 = connection
+        .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(timeout_ms, 30_000);
+}
+
+#[test]
 fn open_existing_fails_if_missing() {
     let tmp = tempfile::TempDir::new().unwrap();
     let path = tmp.path().join("nonexistent.db");

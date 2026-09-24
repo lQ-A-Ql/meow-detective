@@ -21,6 +21,7 @@ pub(super) fn complete_hash(
     app: Option<&AppHandle>,
     result: &EvidenceHashResult,
 ) -> Result<(), CommandError> {
+    let _write_guard = super::hash_db_write_guard();
     let detail = complete_hash_job(connection, data_source_id, job_id, result)
         .map_err(CommandError::from_typed_service_error)?;
     if let Err(error) = app_services::cluster_service::update_linux_evidence_set_manifest_hash(
@@ -58,6 +59,7 @@ pub(super) fn fail_hash(
     app: Option<&AppHandle>,
     error: EvidenceHashError,
 ) -> Result<(), CommandError> {
+    let _write_guard = super::hash_db_write_guard();
     let detail = format!("Evidence SHA-256 failed: {error}");
     settle_failed_job(connection, case_root, data_source_id, job_id, app, &detail)?;
     Err(CommandError::internal(detail))
@@ -71,6 +73,7 @@ pub(super) fn fail_hash_setup(
     app: Option<&AppHandle>,
     error: EvidenceHashJobError,
 ) -> Result<(), CommandError> {
+    let _write_guard = super::hash_db_write_guard();
     tracing::warn!(data_source_id = %data_source_id.0, %error, "Failed to load evidence source for background hashing");
     let detail = "Evidence SHA-256 setup failed";
     settle_failed_job(connection, case_root, data_source_id, job_id, app, detail)?;
@@ -109,6 +112,7 @@ pub(super) fn cancel_hash(
     job_id: &JobId,
     app: Option<&AppHandle>,
 ) -> Result<(), CommandError> {
+    let _write_guard = super::hash_db_write_guard();
     let detail = "Evidence hash cancelled by user";
     let changed = cancel_hash_job(connection, data_source_id, job_id, detail)
         .map_err(CommandError::from_typed_service_error)?;
