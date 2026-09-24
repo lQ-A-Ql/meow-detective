@@ -5,7 +5,7 @@ export type EvidenceStatus = 'complete' | 'partial' | 'failed' | 'pending' | 'ca
 
 export function evidenceStatus(value: string | undefined): EvidenceStatus {
   const normalized = value?.toLowerCase() ?? 'unknown';
-  if (normalized === 'ready' || normalized === 'complete' || normalized === 'hashed' || normalized === 'parsed' || normalized === 'verified') return 'complete';
+  if (normalized === 'ready' || normalized === 'complete' || normalized === 'hashed' || normalized === 'parsed' || normalized === 'verified' || normalized === 'recorded') return 'complete';
   if (normalized === 'failed' || normalized === 'conflicted') return 'failed';
   if (normalized === 'pending' || normalized === 'importing') return 'pending';
   if (normalized === 'proven' || normalized === 'corroborated') return 'proven';
@@ -54,12 +54,12 @@ export function capabilitiesForSummary(summary: LinuxEvidenceSetSummary): Cluste
   const rbd = derived.find((item) => item.kind.toLowerCase().includes('rbd'));
   const cephFs = derived.find((item) => item.kind.toLowerCase().includes('cephfs'));
   return [
-    { kind: 'linux_host', level: host ? 'metadata-browseable' : 'unsupported', status: host?.status ?? 'unsupported', diagnostics: host?.diagnostics ?? [] },
-    { kind: 'pve', level: pve ? 'metadata-only' : 'unsupported', status: pve?.identityState ?? 'unsupported', diagnostics: pve?.diagnostics ?? [] },
-    { kind: 'ceph', level: ceph ? 'metadata-only' : 'unsupported', status: ceph?.evidenceCompleteness ?? 'unsupported', diagnostics: ceph?.diagnostics ?? [] },
+    { kind: 'linux_host', level: host ? 'metadata-browseable' : 'unsupported', status: host?.status ?? 'unsupported', diagnostics: host?.diagnostics ?? (['未发现 Linux host scope evidence']) },
+    { kind: 'pve', level: pve ? 'metadata-only' : 'unsupported', status: pve?.identityState ?? 'unsupported', diagnostics: pve?.diagnostics ?? ['未发现 PVE scope evidence'] },
+    { kind: 'ceph', level: ceph ? 'metadata-only' : 'unsupported', status: ceph?.evidenceCompleteness ?? 'unsupported', diagnostics: ceph?.diagnostics ?? ['未发现 Ceph scope evidence'] },
     { kind: 'rbd', level: rbd?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: rbd?.provenanceStatus ?? 'unsupported', diagnostics: rbd ? [] : ['没有派生 RBD 数据源'] },
     { kind: 'cephfs', level: cephFs?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: cephFs?.provenanceStatus ?? 'indeterminate', diagnostics: cephFs ? [] : ['没有派生 CephFS 数据源'] },
-    { kind: 'kubernetes', level: kubernetes ? 'metadata-only' : 'unsupported', status: kubernetes?.identityState ?? 'candidate', diagnostics: kubernetes?.diagnostics ?? [] },
+    { kind: 'kubernetes', level: kubernetes ? 'metadata-only' : 'unsupported', status: kubernetes?.identityState ?? 'candidate', diagnostics: kubernetes?.diagnostics ?? ['未发现 Kubernetes scope evidence'] },
   ];
 }
 

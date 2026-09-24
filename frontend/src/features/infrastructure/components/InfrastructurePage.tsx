@@ -28,7 +28,7 @@ export function InfrastructurePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const model = useLinuxClusterWorkspaceModel();
-  const { currentCase, summary, evidenceSets, selectedSetId, setSelectedSetId, section, setSection, selectedMember, selectedMemberIndex, setSelectedMemberIndex, capabilities, provenance, events, fallback, infrastructure } = model;
+  const { currentCase, summary, evidenceSets, selectedSetId, setSelectedSetId, section, setSection, selectedMember, selectedMemberIndex, setSelectedMemberIndex, capabilities, provenance, events, fallback, infrastructure, sourceMetadata, evidenceStats } = model;
 
   const openTimeline = () => {
     if (selectedSetId) navigate(`/timeline?scope=importSet&id=${encodeURIComponent(selectedSetId)}`);
@@ -44,13 +44,13 @@ export function InfrastructurePage() {
   const stages = trustStages(summary.data);
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-forensics-panel">
-      <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
+      <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4 lg:px-7">
         <div className="flex min-h-0 flex-col gap-4 xl:flex-row">
           <nav aria-label={t('infrastructure.workspace.navigation.label')} className="shrink-0 xl:w-56"><div className="flex gap-1 overflow-x-auto border-b border-forensics-border pb-2 xl:grid xl:gap-1 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-3">{(['overview', 'members', 'topology', 'findings', 'provenance'] as const).map((item) => <button key={item} type="button" onClick={() => setSection(item)} aria-current={section === item ? 'page' : undefined} className={`whitespace-nowrap border px-3 py-2 text-left text-xs transition-colors ${section === item ? 'border-forensics-primary-blue text-forensics-primary-blue' : 'border-transparent text-forensics-muted hover:border-forensics-border hover:text-forensics-text'}`}>{t(`infrastructure.workspace.navigation.${item}`)}</button>)}</div></nav>
           <section className="min-w-0 flex-1">
             {section === 'overview' ? <div className="space-y-4"><EvidenceTrustBar stages={stages} t={t} /><CapabilityMatrix capabilities={capabilities} t={t} /><TimelineContextCard events={events.data ?? []} memberCount={summary.data.memberCount} onOpen={openTimeline} t={t} /></div> : null}
-            {section === 'members' ? <MemberEvidenceTable members={summary.data.members} selectedIndex={selectedMemberIndex} onSelect={setSelectedMemberIndex} t={t} /> : null}
+            {section === 'members' ? <MemberEvidenceTable members={summary.data.members} sourceMetadata={sourceMetadata} selectedIndex={selectedMemberIndex} onSelect={setSelectedMemberIndex} t={t} /> : null}
             {section === 'topology' ? <EvidenceTopologyPanel scopes={summary.data.scopes} edges={summary.data.edges} t={t} /> : null}
             {section === 'findings' ? <FindingsPanel summary={summary.data} onOpenTimeline={openTimeline} t={t} /> : null}
             {section === 'provenance' ? <ProvenancePanel summary={summary.data} provenance={provenance} t={t} /> : null}

@@ -1,7 +1,9 @@
-import { Activity, ChevronRight, Database, FileCheck2, ShieldCheck } from 'lucide-react';
+import { Activity, ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '@/app/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { MetricCard } from '@/components/data-display';
+import { formatBytes } from '@/lib/format-bytes';
 import { StatusBadge } from '@/components/status/StatusBadge';
 import type { LinuxEvidenceSetListItem, LinuxEvidenceSetSummary } from '@/types/linuxCluster';
 import { statusLabel, statusVariant } from '../model/cluster-status-map';
@@ -15,6 +17,7 @@ export function ClusterEvidenceHeader({
   onSelectSet,
   onOpenTimeline,
   eventCount,
+  evidenceStats,
   t,
 }: {
   caseName: string;
@@ -25,6 +28,7 @@ export function ClusterEvidenceHeader({
   onSelectSet: (id: string) => void;
   onOpenTimeline: () => void;
   eventCount: number;
+  evidenceStats: { fileCount: number; evidenceSize: number };
   t: TFunction;
 }) {
   return (
@@ -36,23 +40,21 @@ export function ClusterEvidenceHeader({
           <p className="mt-1 max-w-3xl text-xs leading-5 text-forensics-muted">{t('infrastructure.workspace.subtitle')}</p>
         </div>
         <div className="flex max-w-full flex-wrap items-end justify-end gap-2">
-          <label className="grid gap-1 text-left text-[10px] uppercase tracking-wide text-forensics-muted">
+          <div className="grid gap-1 text-left text-[10px] uppercase tracking-wide text-forensics-muted">
             <span>{t('infrastructure.workspace.evidenceSet')}</span>
-            <select
-              aria-label={t('infrastructure.workspace.evidenceSet')}
-              value={selectedSetId ?? ''}
-              onChange={(event) => onSelectSet(event.target.value)}
-              className="h-8 min-w-56 border border-forensics-border-strong bg-forensics-panel px-2 text-xs text-forensics-text outline-none focus:border-forensics-primary-blue"
-            >
-              {sets.map((item) => <option key={item.importSetId} value={item.importSetId}>{item.name} · {item.state}</option>)}
-            </select>
-          </label>
+            <Select value={selectedSetId ?? ''} onValueChange={onSelectSet}>
+              <SelectTrigger aria-label={t('infrastructure.workspace.evidenceSet')} variant="forensics" size="sm" className="min-w-56"><SelectValue placeholder={t('infrastructure.workspace.noEvidenceSet')} /></SelectTrigger>
+              <SelectContent>{sets.map((item) => <SelectItem key={item.importSetId} value={item.importSetId}>{item.name} · {item.state}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
           <Button type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><Activity size={14} />{t('infrastructure.workspace.openTimeline')}</Button>
         </div>
       </div>
-      <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-4 xl:grid-cols-7">
+      <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-4 xl:grid-cols-9">
         <MetricCard icon={Database} label={t('infrastructure.workspace.metrics.members')} value={summary?.memberCount ?? 0} size="sm" className="border-0 border-r" />
         <MetricCard icon={FileCheck2} label={t('infrastructure.workspace.metrics.ready')} value={summary?.readyCount ?? 0} size="sm" className="border-0 border-r" />
+        <MetricCard icon={HardDrive} label={t('infrastructure.workspace.metrics.files')} value={evidenceStats.fileCount.toLocaleString()} size="sm" className="border-0 border-r" />
+        <MetricCard icon={Weight} label={t('infrastructure.workspace.metrics.size')} value={evidenceStats.evidenceSize ? formatBytes(evidenceStats.evidenceSize) : '—'} size="sm" className="border-0 border-r" />
         <MetricCard icon={ShieldCheck} label={t('infrastructure.workspace.metrics.provenance')} value={<StatusBadge label={statusLabel(provenance, t)} variant={statusVariant(provenance)} />} size="sm" className="border-0 border-r" />
         <MetricCard label={t('infrastructure.workspace.metrics.report')} value={provenance === 'complete' ? t('infrastructure.workspace.reportReady') : t('infrastructure.workspace.reportPartial')} size="sm" className="border-0 border-r" />
         <MetricCard label={t('infrastructure.workspace.metrics.scopes')} value={summary?.scopes.length ?? 0} size="sm" className="border-0 border-r" />

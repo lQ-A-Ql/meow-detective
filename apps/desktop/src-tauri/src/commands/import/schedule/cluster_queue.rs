@@ -130,7 +130,16 @@ fn run_evidence_set_background(
             return Err(error.message);
         }
     }
-    complete_browseable_evidence_set_job(&outcome, app.as_ref()).map_err(|error| error.message)
+    complete_browseable_evidence_set_job(&outcome, app.as_ref()).map_err(|error| error.message)?;
+    if let Err(error) = super::super::background_job::schedule_pending_evidence_hashes(
+        &outcome.processing.case_root,
+        &outcome.processing.case_id.0,
+        app.as_ref(),
+        task_manager,
+    ) {
+        tracing::warn!(error = %error.message, "Failed to schedule evidence hash jobs after Linux evidence-set import");
+    }
+    Ok(())
 }
 
 fn schedule_derived_processing(

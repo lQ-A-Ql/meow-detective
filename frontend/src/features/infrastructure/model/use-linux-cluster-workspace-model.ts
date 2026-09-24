@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useCurrentCase } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { getLinuxEvidenceEvents, getLinuxEvidenceSetSummary, listLinuxEvidenceSets } from '@/lib/api/analysis';
 import { useInfrastructureWorkspace } from '../hooks/useInfrastructureWorkspace';
 import { capabilitiesForSummary, provenanceState } from './cluster-status-map';
@@ -9,6 +9,7 @@ export type ClusterWorkspaceSection = 'overview' | 'members' | 'topology' | 'fin
 
 export function useLinuxClusterWorkspaceModel() {
   const currentCase = useCurrentCase();
+  const dataSources = useDataSources();
   const infrastructure = useInfrastructureWorkspace();
   const evidenceSets = useQuery({
     queryKey: ['linux-evidence-sets', currentCase.data?.id ?? null],
@@ -25,6 +26,7 @@ export function useLinuxClusterWorkspaceModel() {
     queryKey: ['linux-evidence-set-summary', currentCase.data?.id ?? null, selectedSetId ?? null],
     queryFn: () => getLinuxEvidenceSetSummary(selectedSetId as string),
     enabled: Boolean(selectedSetId),
+    refetchInterval: (query) => query.state.data?.members.some((member) => member.hashStatus === 'pending') ? 2_000 : false,
   });
   const events = useQuery({
     queryKey: ['linux-evidence-set-events', currentCase.data?.id ?? null, selectedSetId ?? null],
@@ -35,6 +37,22 @@ export function useLinuxClusterWorkspaceModel() {
     () => summary.data?.members.find((member) => member.memberIndex === selectedMemberIndex),
     [selectedMemberIndex, summary.data],
   );
+  const sourceMetadata = useMemo(
+    () => new Map((dataSources.data ?? []).map((source) => [source.id, source])),
+    [dataSources.data],
+  );
+  const evidenceStats = useMemo(() => {
+    const members = summary.data?.members ?? [];
+    return members.reduce(
+      (totals, member) => {
+        const source = member.dataSourceId ? sourceMetadata.get(member.dataSourceId) : undefined;
+        totals.fileCount += source?.fileCount ?? 0;
+        totals.evidenceSize += source?.evidenceSize ?? 0;
+        return totals;
+      },
+      { fileCount: 0, evidenceSize: 0 },
+    );
+  }, [sourceMetadata, summary.data?.members]);
   const capabilities = useMemo(
     () => (summary.data ? capabilitiesForSummary(summary.data) : []),
     [summary.data],
@@ -52,6 +70,8 @@ export function useLinuxClusterWorkspaceModel() {
     summary,
     events,
     selectedMember,
+    sourceMetadata,
+    evidenceStats,
     selectedMemberIndex,
     setSelectedMemberIndex,
     capabilities,
