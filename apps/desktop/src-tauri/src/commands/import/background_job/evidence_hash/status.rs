@@ -3,6 +3,7 @@ use app_services::hash_service::{
     EvidenceHashError, EvidenceHashResult,
 };
 use domain::{DataSourceId, JobId};
+use std::path::Path;
 use tauri::AppHandle;
 use transport::dto::{
     CancellationStateDto, PartialResultDto, PartialResultKindDto, ResultFreshnessDto,
@@ -14,6 +15,7 @@ use crate::events::event_bridge;
 
 pub(super) fn complete_hash(
     connection: &rusqlite::Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     job_id: &JobId,
     app: Option<&AppHandle>,
@@ -21,6 +23,15 @@ pub(super) fn complete_hash(
 ) -> Result<(), CommandError> {
     let detail = complete_hash_job(connection, data_source_id, job_id, result)
         .map_err(CommandError::from_typed_service_error)?;
+    if let Err(error) = app_services::cluster_service::update_linux_evidence_set_manifest_hash(
+        case_root,
+        connection,
+        &data_source_id.0,
+        "hashed",
+        Some(&result.digest),
+    ) {
+        tracing::warn!(data_source_id = %data_source_id.0, %error, "Evidence hash completed but import-set manifest could not be updated");
+    }
     if let Some(app) = app {
         event_bridge::emit_job_progress(app, &job_id.0, 100, &detail);
         event_bridge::emit_job_completed(app, &job_id.0, &detail);
@@ -41,18 +52,20 @@ pub(super) fn complete_hash(
 
 pub(super) fn fail_hash(
     connection: &rusqlite::Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     job_id: &JobId,
     app: Option<&AppHandle>,
     error: EvidenceHashError,
 ) -> Result<(), CommandError> {
     let detail = format!("Evidence SHA-256 failed: {error}");
-    settle_failed_job(connection, data_source_id, job_id, app, &detail)?;
+    settle_failed_job(connection, case_root, data_source_id, job_id, app, &detail)?;
     Err(CommandError::internal(detail))
 }
 
 pub(super) fn fail_hash_setup(
     connection: &rusqlite::Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     job_id: &JobId,
     app: Option<&AppHandle>,
@@ -60,12 +73,13 @@ pub(super) fn fail_hash_setup(
 ) -> Result<(), CommandError> {
     tracing::warn!(data_source_id = %data_source_id.0, %error, "Failed to load evidence source for background hashing");
     let detail = "Evidence SHA-256 setup failed";
-    settle_failed_job(connection, data_source_id, job_id, app, detail)?;
+    settle_failed_job(connection, case_root, data_source_id, job_id, app, detail)?;
     Err(CommandError::internal(detail))
 }
 
 fn settle_failed_job(
     connection: &rusqlite::Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     job_id: &JobId,
     app: Option<&AppHandle>,
@@ -73,6 +87,15 @@ fn settle_failed_job(
 ) -> Result<(), CommandError> {
     fail_hash_job(connection, data_source_id, job_id, detail)
         .map_err(CommandError::from_typed_service_error)?;
+    if let Err(error) = app_services::cluster_service::update_linux_evidence_set_manifest_hash(
+        case_root,
+        connection,
+        &data_source_id.0,
+        "failed",
+        None,
+    ) {
+        tracing::warn!(data_source_id = %data_source_id.0, %error, "Evidence hash failure could not be reflected in import-set manifest");
+    }
     if let Some(app) = app {
         event_bridge::emit_job_failed(app, &job_id.0, detail);
     }
@@ -81,6 +104,7 @@ fn settle_failed_job(
 
 pub(super) fn cancel_hash(
     connection: &rusqlite::Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     job_id: &JobId,
     app: Option<&AppHandle>,
@@ -88,6 +112,15 @@ pub(super) fn cancel_hash(
     let detail = "Evidence hash cancelled by user";
     let changed = cancel_hash_job(connection, data_source_id, job_id, detail)
         .map_err(CommandError::from_typed_service_error)?;
+    if let Err(error) = app_services::cluster_service::update_linux_evidence_set_manifest_hash(
+        case_root,
+        connection,
+        &data_source_id.0,
+        "pending",
+        None,
+    ) {
+        tracing::warn!(data_source_id = %data_source_id.0, %error, "Evidence hash cancellation could not be reflected in import-set manifest");
+    }
     if changed {
         if let Some(app) = app {
             event_bridge::emit_job_cancelled(app, &job_id.0, detail);

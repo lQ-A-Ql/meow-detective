@@ -25,7 +25,8 @@ pub use crate::dto::analysis_evtx::{
     EvtxSecurityEventDto,
 };
 pub use crate::dto::analysis_kubernetes::{
-    KubernetesClusterArtifactDto, KubernetesClusterNodeDto, KubernetesClusterSummaryDto,
+    KubernetesAnalysisRunDto, KubernetesClusterArtifactDto, KubernetesClusterNodeDto,
+    KubernetesClusterSummaryDto,
 };
 pub use crate::dto::analysis_linux::{
     LinuxAccountDto, LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto,

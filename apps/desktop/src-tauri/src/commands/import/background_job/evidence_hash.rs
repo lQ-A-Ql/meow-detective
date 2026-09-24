@@ -111,8 +111,12 @@ pub(crate) fn run_background_evidence_hash(
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
+    let case_root = db_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
     if cancel_token.load(Ordering::Acquire) {
-        cancel_hash(&connection, &data_source_id, &job_id, app)?;
+        cancel_hash(&connection, &case_root, &data_source_id, &job_id, app)?;
         return Ok(());
     }
     if let Some(app) = app {
@@ -121,7 +125,16 @@ pub(crate) fn run_background_evidence_hash(
     }
     let source = match load_hash_source(&connection, &data_source_id) {
         Ok(source) => source,
-        Err(error) => return fail_hash_setup(&connection, &data_source_id, &job_id, app, error),
+        Err(error) => {
+            return fail_hash_setup(
+                &connection,
+                &case_root,
+                &data_source_id,
+                &job_id,
+                app,
+                error,
+            )
+        }
     };
     let reporter = spawn_progress_reporter(&db_path, &data_source_id, &job_id, app);
     let progress_sender = reporter.as_ref().map(progress::ProgressReporter::sender);
@@ -137,11 +150,25 @@ pub(crate) fn run_background_evidence_hash(
     );
     finish_progress_reporter(reporter);
     match hash_result {
-        Ok(result) => complete_hash(&connection, &data_source_id, &job_id, app, &result),
+        Ok(result) => complete_hash(
+            &connection,
+            &case_root,
+            &data_source_id,
+            &job_id,
+            app,
+            &result,
+        ),
         Err(EvidenceHashError::Cancelled) if cancel_token.load(Ordering::Acquire) => {
-            cancel_hash(&connection, &data_source_id, &job_id, app)
+            cancel_hash(&connection, &case_root, &data_source_id, &job_id, app)
         }
-        Err(error) => fail_hash(&connection, &data_source_id, &job_id, app, error),
+        Err(error) => fail_hash(
+            &connection,
+            &case_root,
+            &data_source_id,
+            &job_id,
+            app,
+            error,
+        ),
     }
 }
 

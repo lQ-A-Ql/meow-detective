@@ -9,6 +9,9 @@ import {
   getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvidenceClassificationSummary,
+  getLinuxEvidenceSetSummary,
+  getLinuxEvidenceEvents,
+  listLinuxEvidenceSets,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
   getSystemInfo,
@@ -141,6 +144,20 @@ describe('analysis API', () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getCaseOverviewSnapshot();
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_CASE_OVERVIEW_SNAPSHOT);
+  });
+
+  it('lists Linux evidence sets for the active case', async () => {
+    requestMock.mockResolvedValueOnce([] as never);
+    await listLinuxEvidenceSets();
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.LIST_LINUX_EVIDENCE_SETS, { request: {} });
+  });
+
+  it('loads Linux evidence set summary and scoped events', async () => {
+    requestMock.mockResolvedValueOnce({} as never).mockResolvedValueOnce([] as never);
+    await getLinuxEvidenceSetSummary('set-1');
+    await getLinuxEvidenceEvents('set-1', 10, 25);
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.analysis.GET_LINUX_EVIDENCE_SET_SUMMARY, { request: { importSetId: 'set-1' } });
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, { request: { importSetId: 'set-1', offset: 10, limit: 25 } });
   });
 
   it('getCorrelationSnapshot calls the correct command', async () => {

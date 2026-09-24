@@ -30,9 +30,17 @@ pub(super) fn scope_record(
         }
         .to_string(),
         identity_fingerprint: None,
-        status: "ready".to_string(),
+        status: scope_status(completeness).to_string(),
         evidence_completeness: completeness.to_string(),
         diagnostics_json: "[]".to_string(),
+    }
+}
+
+fn scope_status(completeness: &str) -> &'static str {
+    match completeness {
+        "complete" => "ready",
+        "partial" => "partial",
+        _ => "discovered",
     }
 }
 

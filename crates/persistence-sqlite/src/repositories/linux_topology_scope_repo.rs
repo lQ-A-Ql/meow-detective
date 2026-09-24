@@ -144,6 +144,42 @@ impl<'a> LinuxTopologyScopeRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
+
+    pub fn find_for_import_set(
+        &self,
+        case_id: &str,
+        import_set_id: &str,
+        scope_kind: &str,
+    ) -> DbResult<Option<LinuxTopologyScopeSummary>> {
+        self.conn
+            .query_row(
+                "SELECT scope.id, scope.case_id, scope.scope_kind, scope.name,
+                        scope.status, scope.evidence_completeness,
+                        COUNT(membership.data_source_id)
+                 FROM linux_topology_scopes AS scope
+                 LEFT JOIN linux_topology_memberships AS membership
+                   ON membership.scope_id = scope.id
+                 WHERE scope.case_id = ?1 AND scope.scope_kind = ?2
+                   AND scope.id LIKE ?3
+                 GROUP BY scope.id, scope.case_id, scope.scope_kind, scope.name,
+                          scope.status, scope.evidence_completeness
+                 ORDER BY scope.id ASC LIMIT 1",
+                params![case_id, scope_kind, format!("scope:%:{import_set_id}%")],
+                |row| {
+                    Ok(LinuxTopologyScopeSummary {
+                        id: row.get(0)?,
+                        case_id: row.get(1)?,
+                        scope_kind: row.get(2)?,
+                        name: row.get(3)?,
+                        status: row.get(4)?,
+                        evidence_completeness: row.get(5)?,
+                        member_count: row.get::<_, i64>(6)?.max(0) as u32,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
 }
 
 #[cfg(test)]

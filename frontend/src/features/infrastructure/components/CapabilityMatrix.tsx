@@ -1,0 +1,10 @@
+import { Layers3 } from 'lucide-react';
+import type { TFunction } from 'i18next';
+import { PanelFrame, SectionHeader } from '@/components/data-display';
+import { StatusBadge } from '@/components/status/StatusBadge';
+import type { ClusterCapability } from '../model/cluster-status-map';
+import { statusLabel, statusVariant } from '../model/cluster-status-map';
+
+export function CapabilityMatrix({ capabilities, t }: { capabilities: ClusterCapability[]; t: TFunction }) {
+  return <PanelFrame className="overflow-hidden bg-forensics-surface p-0"><SectionHeader icon={Layers3} title={t('infrastructure.workspace.capabilities.title')} subtitle={t('infrastructure.workspace.capabilities.description')} className="px-4 py-3" /><div className="overflow-x-auto"><div className="grid min-w-[720px] grid-cols-[minmax(170px,1fr)_170px_150px_minmax(220px,1.5fr)] gap-3 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wide text-forensics-muted"><span>{t('infrastructure.workspace.capabilities.kind')}</span><span>{t('infrastructure.workspace.capabilities.level')}</span><span>{t('infrastructure.workspace.capabilities.status')}</span><span>{t('infrastructure.workspace.capabilities.diagnostics')}</span></div><div className="divide-y divide-forensics-border-light">{capabilities.map((capability) => <div key={capability.kind} className="grid min-w-[720px] grid-cols-[minmax(170px,1fr)_170px_150px_minmax(220px,1.5fr)] items-center gap-3 px-4 py-3 text-xs"><span className="font-mono text-forensics-text">{t(`infrastructure.workspace.capabilities.kinds.${capability.kind}`)}</span><span className="text-forensics-muted">{t(`infrastructure.workspace.capabilities.levels.${capability.level}`)}</span><span><StatusBadge label={statusLabel(capability.status, t)} variant={statusVariant(capability.status)} /></span><span className="truncate text-forensics-muted" title={capability.diagnostics.join('; ')}>{capability.diagnostics[0] ?? t('infrastructure.workspace.capabilities.noDiagnostic')}</span></div>)}</div></div></PanelFrame>;
+}

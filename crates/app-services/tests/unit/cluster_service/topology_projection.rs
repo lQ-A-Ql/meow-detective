@@ -1,4 +1,9 @@
-use crate::{cluster_service::project_import_set_topology, source_db};
+use crate::{
+    cluster_service::{
+        get_linux_evidence_set_summary, list_linux_evidence_sets, project_import_set_topology,
+    },
+    source_db,
+};
 use chrono::Utc;
 use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
@@ -129,6 +134,72 @@ fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
         projection.virtual_machine_scope_ids,
         vec!["scope:vm:evidence-set:100"]
     );
+    let scope_states = conn
+        .prepare(
+            "SELECT scope_kind, status, evidence_completeness
+             FROM linux_topology_scopes
+             WHERE id IN ('scope:physical-host:evidence-set:0',
+                          'scope:os:evidence-set:0',
+                          'scope:ceph:evidence-set',
+                          'scope:pve:evidence-set')
+             ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(scope_states.len(), 4);
+    assert!(scope_states
+        .iter()
+        .all(|(_, status, completeness)| status == "partial" && completeness == "partial"));
+    let environment_states: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT object_kind, status
+             FROM environment_objects
+             WHERE id IN ('env:host:evidence-set:0',
+                          'env:os:evidence-set:0',
+                          'env:pve:evidence-set')
+             ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(environment_states.len(), 3);
+    assert!(environment_states
+        .iter()
+        .all(|(_, status)| status == "partial"));
+
+    let summary =
+        get_linux_evidence_set_summary(&conn, root.path(), &case_id, import_set_id).unwrap();
+    let sets = list_linux_evidence_sets(&conn, &case_id).unwrap();
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0].import_set_id, import_set_id);
+    assert_eq!(summary.member_count, 2);
+    assert_eq!(summary.ready_count, 2);
+    assert_eq!(summary.scopes.len(), 8);
+    assert_eq!(summary.edges.len(), 6);
+    assert_eq!(summary.capability_level, "metadata_only");
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.contains("partial")));
+    let assertion_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM provenance_assertions WHERE case_id = ?1",
+            [&case_id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(assertion_count >= 10);
 
     let edges = conn.prepare("SELECT source_scope_id, target_scope_id, edge_kind FROM linux_topology_edges ORDER BY source_scope_id, target_scope_id, edge_kind").unwrap()
         .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))).unwrap()

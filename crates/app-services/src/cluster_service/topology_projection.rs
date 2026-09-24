@@ -25,6 +25,7 @@ use pve::register_pve_scope;
 mod environment;
 use environment::project_environment_objects;
 mod helpers;
+mod provenance;
 use helpers::is_pve_path;
 use helpers::{
     edge_record, insert_memberships, membership_record, pve_qemu_vm_id, replace_scope, scope_record,
@@ -135,6 +136,14 @@ pub fn project_import_set_topology(
         &projection,
         &member_sources,
     )?;
+    provenance::persist_topology_provenance(case_connection, case_id, import_set_id)?;
+    provenance::persist_analysis_links(
+        case_connection,
+        case_root,
+        case_id,
+        import_set_id,
+        &member_sources,
+    )?;
     Ok(projection)
 }
 
@@ -200,7 +209,7 @@ fn register_host_and_os_scope(
         case_id,
         TopologyScopeKind::PhysicalHost,
         format!("Physical host {member_index}"),
-        "complete",
+        "partial",
     ))?;
     membership_repo.insert(&membership_record(
         &host_id,
@@ -216,7 +225,7 @@ fn register_host_and_os_scope(
         case_id,
         TopologyScopeKind::OsInstance,
         format!("Linux host system {member_index}"),
-        "complete",
+        "partial",
     ))?;
     edge_repo.insert(&edge_record(
         &host_id,
@@ -281,18 +290,18 @@ fn observe_source(
 fn k8_member_role(
     artifacts: &[super::kubernetes_inventory::KubernetesMemberArtifact],
 ) -> TopologyMemberRole {
-    artifacts
-        .iter()
-        .any(|artifact| {
-            matches!(
-                artifact.kind,
-                super::kubernetes_paths::KubernetesArtifactKind::StaticPodManifest
-                    | super::kubernetes_paths::KubernetesArtifactKind::EtcdBackend
-                    | super::kubernetes_paths::KubernetesArtifactKind::EtcdWal
-            )
-        })
-        .then_some(TopologyMemberRole::ControlPlane)
-        .unwrap_or(TopologyMemberRole::Unknown)
+    if artifacts.iter().any(|artifact| {
+        matches!(
+            artifact.kind,
+            super::kubernetes_paths::KubernetesArtifactKind::StaticPodManifest
+                | super::kubernetes_paths::KubernetesArtifactKind::EtcdBackend
+                | super::kubernetes_paths::KubernetesArtifactKind::EtcdWal
+        )
+    }) {
+        TopologyMemberRole::ControlPlane
+    } else {
+        TopologyMemberRole::Unknown
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -332,7 +341,7 @@ fn register_detected_scopes(
     )?;
     if !kubernetes_sources.is_empty() {
         let scope_id = format!("scope:kubernetes:{import_set_id}");
-        replace_scope(&scope_repo, &scope_id)?;
+        replace_scope(scope_repo, &scope_id)?;
         scope_repo.insert(&scope_record(
             &scope_id,
             case_id,
@@ -403,7 +412,7 @@ fn register_ceph_scope(
         case_id,
         TopologyScopeKind::Ceph,
         "Ceph candidate scope".to_string(),
-        "complete",
+        "partial",
     ))?;
     insert_memberships(
         membership_repo,

@@ -15,6 +15,10 @@ import {
   EvidenceClassificationSummary,
   FileClassificationBoard,
   LinuxArtifactSummary,
+  LinuxEvidenceSetSummary,
+  LinuxEvidenceSetListItem,
+  LinuxEvidenceEvent,
+  KubernetesAnalysisRun,
   PluginActionDescriptor,
   PluginFamilyEntries,
   PluginFamilyEntriesRequest,
@@ -100,6 +104,36 @@ export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
+}
+
+export async function getLinuxEvidenceSetSummary(
+  importSetId: string,
+): Promise<LinuxEvidenceSetSummary> {
+  return apiClient.request(COMMANDS.analysis.GET_LINUX_EVIDENCE_SET_SUMMARY, {
+    request: { importSetId },
+  });
+}
+
+export async function listLinuxEvidenceSets(): Promise<LinuxEvidenceSetListItem[]> {
+  return apiClient.request(COMMANDS.analysis.LIST_LINUX_EVIDENCE_SETS, { request: {} });
+}
+
+export async function getLinuxEvidenceEvents(
+  importSetId: string,
+  offset = 0,
+  limit = 100,
+): Promise<LinuxEvidenceEvent[]> {
+  return apiClient.request(COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, {
+    request: { importSetId, offset, limit },
+  });
+}
+
+export async function runKubernetesClusterAnalysis(
+  importSetId: string,
+): Promise<KubernetesAnalysisRun> {
+  return apiClient.request(COMMANDS.analysis.RUN_KUBERNETES_CLUSTER_ANALYSIS, {
+    request: { importSetId },
+  });
 }
 
 export async function runAndroidAnalysis(dataSourceId: string): Promise<AndroidAnalysisRun> {

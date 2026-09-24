@@ -7,6 +7,8 @@ mod analysis_email;
 mod analysis_evtx;
 mod analysis_kubernetes;
 mod analysis_linux;
+mod analysis_linux_cluster;
+mod analysis_linux_events;
 mod analysis_plugin;
 mod analysis_registry;
 mod analysis_system;
@@ -54,13 +56,13 @@ pub use analysis::{
     EvtxEventViewDto, EvtxSecurityEventDto, FileClassificationBoardDto, GovernanceFactSourceDto,
     GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
     GovernanceRuntimeSubcheckDto, InstalledSoftwareDto, KnownLimitationDto,
-    KnownLimitationStatusDto, KubernetesClusterArtifactDto, KubernetesClusterNodeDto,
-    KubernetesClusterSummaryDto, LastVisitedMruEntryDto, LinuxAccountDto, LinuxAptEventDto,
-    LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto, LinuxJournalEntryDto,
-    LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto, LinuxMysqlLogEntryDto,
-    LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto, LinuxWebAccessLogDto,
-    LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto, LsaPackageDto, LsaSecretDto,
-    MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
+    KnownLimitationStatusDto, KubernetesAnalysisRunDto, KubernetesClusterArtifactDto,
+    KubernetesClusterNodeDto, KubernetesClusterSummaryDto, LastVisitedMruEntryDto, LinuxAccountDto,
+    LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
+    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto,
+    LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto,
+    LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto, LsaPackageDto,
+    LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
     ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, PluginActionDescriptorDto,
     PluginArtifactEntryDto, PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto,
     RegistryExtractionSummaryDto, RegistryHiveOverviewDto, RegistryNetworkAdapterDto,
@@ -72,6 +74,11 @@ pub use analysis::{
     VerificationGuaranteeLevelDto, VerificationResultDto, WeChatKeyRecoveryResultDto,
     WeChatRecoveredKeyDto, WinlogonConfigDto,
 };
+pub use analysis_linux_cluster::{
+    LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyScopeSummaryDto,
+};
+pub use analysis_linux_events::LinuxEvidenceEventDto;
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use bitlocker::{

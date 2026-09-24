@@ -1,8 +1,7 @@
+use super::source_registry::SOURCE_MIGRATIONS;
 use crate::connection::{DbError, DbResult};
 use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashSet;
-
-use super::source_registry::SOURCE_MIGRATIONS;
 
 pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
@@ -213,6 +212,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0059_expand_infrastructure_network_fact_kinds",
         include_str!("scripts/0059_expand_infrastructure_network_fact_kinds.sql"),
+    ),
+    (
+        "0060_kubernetes_analysis_runs",
+        include_str!("scripts/0060_kubernetes_analysis_runs.sql"),
     ),
 ];
 

@@ -51,6 +51,45 @@ pub struct GetAnalysisSourceRequest {
     pub data_source_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetLinuxEvidenceSetSummaryRequest {
+    pub import_set_id: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListLinuxEvidenceSetsRequest {}
+
+impl GetLinuxEvidenceSetSummaryRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.import_set_id.trim().is_empty() {
+            return Err("importSetId must not be blank".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetLinuxEvidenceEventsRequest {
+    pub import_set_id: String,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_analysis_extraction_limit")]
+    pub limit: u32,
+}
+
+impl GetLinuxEvidenceEventsRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.import_set_id.trim().is_empty() {
+            return Err("importSetId must not be blank".to_string());
+        }
+        self.limit = self.limit.clamp(1, MAX_PAGE_LIMIT);
+        Ok(())
+    }
+}
+
 impl GetAnalysisSourceRequest {
     pub fn validate(&self) -> Result<(), String> {
         validate_required_data_source_id(&self.data_source_id)

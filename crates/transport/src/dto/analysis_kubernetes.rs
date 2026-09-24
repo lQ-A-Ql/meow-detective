@@ -50,3 +50,19 @@ pub struct KubernetesClusterArtifactDto {
     pub detail: Option<String>,
     pub diagnostics: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KubernetesAnalysisRunDto {
+    pub run_id: String,
+    pub import_set_id: String,
+    pub scope_id: String,
+    pub state: String,
+    pub attempt: u32,
+    pub expected_member_count: u32,
+    pub parsed_artifact_count: u32,
+    pub failed_artifact_count: u32,
+    pub diagnostics: Vec<String>,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+}

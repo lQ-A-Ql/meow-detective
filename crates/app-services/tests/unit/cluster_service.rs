@@ -108,6 +108,7 @@ fn evidence_set_manifest_write_is_atomic_and_readable() {
     let tmp = tempfile::TempDir::new().unwrap();
     std::fs::write(tmp.path().join("a.raw"), b"raw").unwrap();
     std::fs::write(tmp.path().join("b.raw"), b"raw").unwrap();
+    std::fs::write(tmp.path().join("a.E02"), b"segment").unwrap();
     let plan = plan_linux_evidence_set_import(tmp.path(), None).unwrap();
     let case_root = tempfile::TempDir::new().unwrap();
 
@@ -116,6 +117,82 @@ fn evidence_set_manifest_write_is_atomic_and_readable() {
 
     assert!(manifest.contains(&plan.import_set_id));
     assert!(manifest.contains("\"memberCount\": 2"));
+    assert!(manifest.contains("\"manifestDigest\": "));
+    assert!(manifest.contains("\"sourceSizeBytes\": 3"));
+    assert!(manifest.contains("\"hashStatus\": \"pending\""));
+    assert!(manifest.contains("\"scanPolicy\": \"recursive-root-relative-v1\""));
+    assert!(manifest.contains("\"secondary_e01_segment\""));
+}
+
+#[test]
+fn evidence_set_manifest_hash_update_rewrites_digest_and_member_status() {
+    let source_root = tempfile::TempDir::new().unwrap();
+    std::fs::write(source_root.path().join("a.raw"), b"raw").unwrap();
+    std::fs::write(source_root.path().join("b.raw"), b"raw").unwrap();
+    let plan = plan_linux_evidence_set_import(source_root.path(), None).unwrap();
+    let case_root = tempfile::TempDir::new().unwrap();
+    write_linux_evidence_set_manifest(case_root.path(), &plan).unwrap();
+
+    let conn = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO cases (id, name) VALUES ('case-manifest', 'manifest')",
+        [],
+    )
+    .unwrap();
+    let member = &plan.members[0];
+    conn.execute(
+        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+         VALUES ('source-manifest', 'case-manifest', 'a', 'raw', ?1, datetime('now'))",
+        [member.source_path.display().to_string()],
+    )
+    .unwrap();
+    let repo =
+        persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetRepo::new(&conn);
+    repo.insert(
+        &persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetRecord {
+            id: plan.import_set_id.clone(),
+            case_id: "case-manifest".to_string(),
+            name: plan.import_set_name.clone(),
+            root_path: plan.root_path.display().to_string(),
+            import_state: "ready".to_string(),
+            member_count: 2,
+            ready_count: 2,
+            failed_count: 0,
+            last_error: None,
+        },
+    )
+    .unwrap();
+    repo.insert_member(
+        &persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetMemberRecord {
+            import_set_id: plan.import_set_id.clone(),
+            member_index: member.member_index,
+            source_path: member.source_path.display().to_string(),
+            source_kind: "raw".to_string(),
+            data_source_id: Some("source-manifest".to_string()),
+            import_state: "ready".to_string(),
+            last_error: None,
+        },
+    )
+    .unwrap();
+
+    update_linux_evidence_set_manifest_hash(
+        case_root.path(),
+        &conn,
+        "source-manifest",
+        "hashed",
+        Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+    )
+    .unwrap();
+    let manifest_path = case_root.path().join(&plan.manifest_rel_path);
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["members"][0]["hashStatus"], "hashed");
+    assert_eq!(
+        manifest["members"][0]["sourceSha256"],
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    );
+    assert!(manifest["manifestDigest"].as_str().is_some());
 }
 
 #[test]

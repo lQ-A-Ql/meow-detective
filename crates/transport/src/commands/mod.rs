@@ -13,7 +13,8 @@ pub use crate::dto::PrepareEmulationRequestDto;
 pub use crate::dto::{MountImageRequestDto, MountPhysicalImageRequestDto};
 pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
-    GetAndroidPackagesRequest, GetEvtxEventSummaryRequest, GetPluginFamilyEntriesRequest,
+    GetAndroidPackagesRequest, GetEvtxEventSummaryRequest, GetLinuxEvidenceEventsRequest,
+    GetLinuxEvidenceSetSummaryRequest, GetPluginFamilyEntriesRequest, ListLinuxEvidenceSetsRequest,
     ListPluginActionsRequest, RecoverWeChatKeysRequest, RunAnalysisExtractionRequest,
     RunEvidenceClassificationRequest,
 };

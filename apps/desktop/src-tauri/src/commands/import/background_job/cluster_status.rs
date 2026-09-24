@@ -99,6 +99,22 @@ pub(super) fn materialize_ceph_scope_rbd_sources(
     ) {
         Ok(sources) => Ok(Some(sources)),
         Err(DerivedSourceError::ProcessingCancelled) => {
+            if let Err(error) =
+                app_services::cluster_service::update_linux_evidence_set_import_state(
+                    connection,
+                    &job.plan.import_set_id,
+                    "cancelled",
+                    summary.ready_count,
+                    summary.failed_count,
+                    Some("Linux evidence set RBD materialization cancelled by user"),
+                )
+            {
+                tracing::error!(
+                    import_set_id = %job.plan.import_set_id,
+                    %error,
+                    "Failed to mark Linux evidence set cancelled after RBD cancellation"
+                );
+            }
             cancel_job(
                 job_repo,
                 &job.job_id,

@@ -94,7 +94,8 @@ fn generate_json_export_for_case_with_context(
     } else {
         None
     };
-    let warnings = super::report_warnings(conn, &case.id.0, scope, raw_bundle.as_ref());
+    let warnings =
+        super::report_warnings_for_case(conn, case_root, &case.id.0, scope, raw_bundle.as_ref());
     write_report_atomically(&path, scope.overwrite, |file| {
         if let Some(bundle) = &raw_bundle {
             json_val["rawExport"] = serde_json::json!({

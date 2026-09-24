@@ -117,6 +117,10 @@ export const COMMANDS = {
   analysis: {
     GET_SYSTEM_INFO: 'get_system_info',
     GET_KUBERNETES_CLUSTER_SUMMARY: 'get_kubernetes_cluster_summary',
+    GET_LINUX_EVIDENCE_SET_SUMMARY: 'get_linux_evidence_set_summary',
+    LIST_LINUX_EVIDENCE_SETS: 'list_linux_evidence_sets',
+    GET_LINUX_EVIDENCE_EVENTS: 'get_linux_evidence_events',
+    RUN_KUBERNETES_CLUSTER_ANALYSIS: 'run_kubernetes_cluster_analysis',
     RUN_ANDROID_ANALYSIS: 'run_android_analysis',
     GET_ANDROID_DEVICE_INFO: 'get_android_device_info',
     GET_ANDROID_PACKAGE_SUMMARY: 'get_android_package_summary',

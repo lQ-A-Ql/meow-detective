@@ -18,9 +18,6 @@ pub(super) fn load_ceph_scope(
 ) -> DerivedSourceResult<CephScopeState> {
     let summary = crate::cluster_service::require_ceph_scope(conn, &case_id.0, ceph_scope_id)
         .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
-    if summary.evidence_completeness != "complete" {
-        return Err(DerivedSourceError::IncompleteScope);
-    }
     Ok(CephScopeState {
         status: summary.status,
         member_count: summary.member_count as usize,

@@ -40,7 +40,9 @@ pub(crate) use source_analysis::{current_analysis_for_case, ReportAnalysis, Repo
 pub(crate) use timeline_rows::load_full_timeline_for_case;
 pub use types::BitLockerReportContext;
 pub(crate) use types::{RawExportBundle, ReportCorrelation, ReportGovernance};
-pub(crate) use warnings::{evidence_hash_warnings, report_scope_warnings, report_warnings};
+pub(crate) use warnings::{
+    evidence_hash_warnings, report_scope_warnings, report_warnings, report_warnings_for_case,
+};
 
 #[cfg(test)]
 #[path = "../../tests/unit/report/mod.rs"]

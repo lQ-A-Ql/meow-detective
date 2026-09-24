@@ -7,6 +7,7 @@ mod capability;
 mod ceph_scope_report;
 mod etcd_bolt;
 mod etcd_wal;
+mod events;
 mod kind;
 mod kubeconfig_parser;
 mod kubernetes_analysis;
@@ -18,6 +19,7 @@ mod linux_import;
 mod manifest_parser;
 mod network_parser;
 pub(crate) mod scope_storage;
+mod summary;
 mod topology_projection;
 
 pub mod kubernetes_paths;
@@ -34,10 +36,13 @@ pub use capability::{require_ceph_scope, require_kubernetes_scope, require_os_sc
 pub use ceph_scope_report::{read_ceph_scope_coverage_report, write_ceph_scope_coverage_report};
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};
+pub use events::get_linux_evidence_events;
 pub use kubeconfig_parser::{
     parse_kubeconfig, KubeconfigCluster, KubeconfigContext, KubeconfigSummary, KubeconfigUser,
 };
-pub use kubernetes_analysis::get_source_kubernetes_cluster_summary;
+pub use kubernetes_analysis::{
+    get_source_kubernetes_cluster_summary, run_kubernetes_cluster_analysis,
+};
 pub use kubernetes_dispatch::{parse_kubernetes_artifact, KubernetesParsedArtifact};
 pub use kubernetes_inventory::{
     discover_kubernetes_cluster_artifacts, discover_kubernetes_member_artifacts,
@@ -47,8 +52,9 @@ pub use kubernetes_inventory::{
 pub use kubernetes_parser_error::KubernetesParserError;
 pub use linux_import::{
     plan_linux_evidence_set_import, register_linux_evidence_set_import,
-    update_linux_evidence_set_import_state, write_linux_evidence_set_manifest,
-    LinuxEvidenceSetImportPlan, LinuxEvidenceSetMemberPlan,
+    update_linux_evidence_set_import_state, update_linux_evidence_set_manifest_hash,
+    validate_linux_evidence_set_manifest, write_linux_evidence_set_manifest,
+    LinuxEvidenceSetImportPlan, LinuxEvidenceSetMemberPlan, LinuxEvidenceSetSkippedEntry,
 };
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
@@ -58,6 +64,7 @@ pub use network_parser::{
     KubernetesEndpointSliceSummary, KubernetesIngressSummary, KubernetesNetworkPolicySummary,
     KubernetesNetworkResource, KubernetesNodeNetworkSummary, KubernetesServiceNetworkSummary,
 };
+pub use summary::{get_linux_evidence_set_summary, list_linux_evidence_sets};
 
 #[derive(Debug, Error)]
 pub enum ClusterServiceError {
@@ -85,6 +92,12 @@ pub enum ClusterServiceError {
     Json(#[from] serde_json::Error),
     #[error("CephFS presence assessment failed: {0}")]
     CephFsPresence(#[from] crate::ceph_reconstruction::CephFsPresenceError),
+}
+
+impl From<rusqlite::Error> for ClusterServiceError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Db(error.into())
+    }
 }
 
 impl transport::ServiceErrorCategory for ClusterServiceError {

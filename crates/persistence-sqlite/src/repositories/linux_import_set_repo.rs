@@ -1,5 +1,5 @@
 use crate::connection::DbResult;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxImportSetRecord {
@@ -141,6 +141,44 @@ impl<'a> LinuxImportSetRepo<'a> {
             )));
         }
         Ok(())
+    }
+
+    pub fn has_member_source(&self, data_source_id: &str) -> DbResult<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM linux_import_set_members
+                 WHERE data_source_id = ?1
+             )",
+            [data_source_id],
+            |row| row.get(0),
+        )?)
+    }
+
+    pub fn find_member_by_source(
+        &self,
+        data_source_id: &str,
+    ) -> DbResult<Option<LinuxImportSetMemberRecord>> {
+        self.conn
+            .query_row(
+                "SELECT import_set_id, member_index, source_path, source_kind,
+                        data_source_id, import_state, last_error
+                 FROM linux_import_set_members
+                 WHERE data_source_id = ?1",
+                [data_source_id],
+                |row| {
+                    Ok(LinuxImportSetMemberRecord {
+                        import_set_id: row.get(0)?,
+                        member_index: row.get::<_, i64>(1)?.max(0) as u32,
+                        source_path: row.get(2)?,
+                        source_kind: row.get(3)?,
+                        data_source_id: row.get(4)?,
+                        import_state: row.get(5)?,
+                        last_error: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn find_members(&self, import_set_id: &str) -> DbResult<Vec<LinuxImportSetMemberRecord>> {

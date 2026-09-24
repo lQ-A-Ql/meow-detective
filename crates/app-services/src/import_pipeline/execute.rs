@@ -131,12 +131,31 @@ fn persist_import_outcome(
             DataSourceRepo::new(conn)
                 .update_import_state(data_source_id, ready_state, None)
                 .map_err(CommandError::from_service_error)?;
-            if let Err(error) = LinuxImportSetRepo::new(conn).update_member_state_by_source(
-                &data_source_id.0,
-                ready_state,
-                None,
-            ) {
-                tracing::warn!(data_source_id = %data_source_id.0, %error, "Failed to update evidence-set member readiness");
+            let import_set_repo = LinuxImportSetRepo::new(conn);
+            if import_set_repo
+                .has_member_source(&data_source_id.0)
+                .map_err(CommandError::from_service_error)?
+            {
+                if let Err(error) = import_set_repo.update_member_state_by_source(
+                    &data_source_id.0,
+                    ready_state,
+                    None,
+                ) {
+                    let command_error = CommandError::from_service_error(error);
+                    let diagnostic = command_error.message.clone();
+                    if let Err(update_error) = DataSourceRepo::new(conn).update_import_state(
+                        data_source_id,
+                        "failed",
+                        Some(&diagnostic),
+                    ) {
+                        tracing::error!(
+                            data_source_id = %data_source_id.0,
+                            error = %update_error,
+                            "Failed to close data source state after evidence-set member update failure"
+                        );
+                    }
+                    return Err(command_error);
+                }
             }
             Ok(message)
         }
@@ -162,12 +181,27 @@ fn persist_failed_import(
             "Failed to persist data source import failure state"
         );
     }
-    if let Err(update_error) = LinuxImportSetRepo::new(conn).update_member_state_by_source(
-        &data_source_id.0,
-        "failed",
-        Some(&diagnostic),
-    ) {
-        tracing::warn!(data_source_id = %data_source_id.0, error = %update_error, "Failed to persist evidence-set member failure");
+    let import_set_repo = LinuxImportSetRepo::new(conn);
+    match import_set_repo.has_member_source(&data_source_id.0) {
+        Ok(true) => {
+            if let Err(update_error) = import_set_repo.update_member_state_by_source(
+                &data_source_id.0,
+                "failed",
+                Some(&diagnostic),
+            ) {
+                tracing::error!(
+                    data_source_id = %data_source_id.0,
+                    error = %update_error,
+                    "Failed to persist evidence-set member failure"
+                );
+            }
+        }
+        Ok(false) => {}
+        Err(update_error) => tracing::error!(
+            data_source_id = %data_source_id.0,
+            error = %update_error,
+            "Failed to determine whether data source belongs to an evidence set"
+        ),
     }
 }
 

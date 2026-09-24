@@ -55,7 +55,7 @@ pub fn materialize_rbd_sources_for_scope_with_cancel(
 ) -> DerivedSourceResult<Vec<MaterializedRbdSource>> {
     ensure_not_cancelled(&cancel_token)?;
     let scope = load_ceph_scope(case_conn, case_id, ceph_scope_id)?;
-    if scope.status != "ready" {
+    if !matches!(scope.status.as_str(), "ready" | "partial") {
         return Err(DerivedSourceError::ScopeNotReady {
             scope_id: ceph_scope_id.0.clone(),
             state: scope.status,

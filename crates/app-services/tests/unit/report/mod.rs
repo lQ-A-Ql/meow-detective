@@ -714,6 +714,9 @@ fn json_export_warns_when_evidence_hash_is_pending_or_unavailable() {
     assert!(warnings
         .iter()
         .any(|warning| warning.as_str().unwrap().contains("evidenceHash pending")));
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.as_str().unwrap().contains("provenance=partial")));
     assert!(warnings.iter().any(|warning| warning
         .as_str()
         .unwrap()
