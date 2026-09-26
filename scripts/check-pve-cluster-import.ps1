@@ -9,7 +9,13 @@ param(
     [switch]$ColdArtifactReplay,
     [switch]$CatalogRebuild,
     [ValidateRange(1, 86400)]
-    [int]$TimeoutSeconds = 1200
+    [int]$TimeoutSeconds = 1200,
+    [ValidateRange(1, 64)]
+    [int]$TestCpuCapacity = 8,
+    [ValidateRange(1024, 262144)]
+    [int]$TestMemoryCapacityMb = 8192,
+    [ValidateRange(1, 16)]
+    [int]$TestClusterMemberCap = 4
 )
 
 Set-StrictMode -Version Latest
@@ -139,6 +145,10 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
+$startInfo.Environment["FORENSICS_TEST_CPU_CAPACITY"] = $TestCpuCapacity.ToString()
+$startInfo.Environment["FORENSICS_TEST_MEMORY_CAPACITY_MB"] = $TestMemoryCapacityMb.ToString()
+$startInfo.Environment["FORENSICS_TEST_CLUSTER_MEMBER_CAP"] = $TestClusterMemberCap.ToString()
+$startInfo.Environment["FORENSICS_TEST_MEMBER_WORKER_CAP"] = "1"
 if (-not [string]::IsNullOrWhiteSpace($RetainCaseRoot)) {
     $retainedRoot = [System.IO.Path]::GetFullPath($RetainCaseRoot)
     $startInfo.Environment["FORENSICS_PVE_CASE_OUTPUT_ROOT"] = $retainedRoot
@@ -149,7 +159,7 @@ if (-not $useRetainedCase) {
     Write-Host "PVE fixture preflight passed in exact import order:"
     $expectedMembers | ForEach-Object { Write-Host "  $_" }
 }
-Write-Host "Running bounded-scheduler regression ($timeoutContext) with timeout ${TimeoutSeconds}s: cargo $($startInfo.Arguments)"
+Write-Host "Running test scheduler regression ($timeoutContext) with timeout ${TimeoutSeconds}s: CPU=$TestCpuCapacity memory=${TestMemoryCapacityMb}MiB source/disk concurrency=$TestClusterMemberCap; cargo $($startInfo.Arguments)"
 
 $result = Invoke-RustGuardProcess `
     -StartInfo $startInfo `

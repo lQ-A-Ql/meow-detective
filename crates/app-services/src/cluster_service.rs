@@ -15,6 +15,7 @@ mod kubernetes_dispatch;
 mod kubernetes_inventory;
 mod kubernetes_parser_error;
 mod kubernetes_yaml;
+mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
 mod network_parser;
@@ -26,6 +27,7 @@ pub mod kubernetes_paths;
 
 pub use kind::{TopologyEdgeKind, TopologyMemberRole, TopologyScopeKind};
 pub use kubernetes_paths::KubernetesArtifactKind;
+pub use linux_evidence_facts::{collect_linux_evidence_facts, persist_linux_evidence_facts};
 pub use topology_projection::{project_import_set_topology, ImportSetTopologyProjection};
 
 pub use audit_parser::{

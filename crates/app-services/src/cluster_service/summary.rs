@@ -11,6 +11,7 @@ use transport::dto::{
     LinuxTopologyScopeSummaryDto,
 };
 
+use super::linux_evidence_facts::collect_linux_evidence_facts;
 use super::{ClusterServiceError, Result};
 
 #[derive(Debug, Clone)]
@@ -56,7 +57,14 @@ pub fn get_linux_evidence_set_summary(
         .into_iter()
         .map(|source| (source.id.0.clone(), source))
         .collect::<BTreeMap<_, _>>();
-    let members = load_members(conn, import_set_id, &import_set.root_path, &sources)?;
+    let members = load_members(
+        conn,
+        case_root,
+        case_id,
+        import_set_id,
+        &import_set.root_path,
+        &sources,
+    )?;
     let scopes = load_scopes(conn, case_id, import_set_id)?;
     let scope_ids = scopes
         .iter()
@@ -170,6 +178,8 @@ fn load_import_set(
 
 fn load_members(
     conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
     import_set_id: &str,
     root_path: &str,
     sources: &BTreeMap<String, domain::DataSource>,
@@ -178,30 +188,78 @@ fn load_members(
         "SELECT member_index, source_path, source_kind, data_source_id, import_state
          FROM linux_import_set_members WHERE import_set_id = ?1 ORDER BY member_index",
     )?;
-    let rows = statement.query_map([import_set_id], |row| {
-        let source_id: Option<String> = row.get(3)?;
-        let source = source_id.as_ref().and_then(|id| sources.get(id));
-        let source_path: String = row.get(1)?;
-        Ok(LinuxEvidenceSetMemberSummaryDto {
-            member_index: row.get::<_, i64>(0)?.max(0) as u32,
-            data_source_id: source_id,
-            source_name: source
-                .map(|value| value.name.clone())
-                .unwrap_or_else(|| format!("member-{}", row.get::<_, i64>(0).unwrap_or(0) + 1)),
-            source_path: root_relative_path(root_path, &source_path),
-            source_kind: row.get(2)?,
-            import_state: row.get(4)?,
-            hash_status: source
-                .map(|value| format!("{:?}", value.provenance.hash_status).to_ascii_lowercase())
-                .unwrap_or_else(|| "unknown".to_string()),
-            provenance_status: source
-                .map(|value| {
-                    format!("{:?}", value.provenance.provenance_status).to_ascii_lowercase()
+    let rows = statement
+        .query_map([import_set_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?.max(0) as u32,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(statement);
+    rows.into_iter()
+        .map(
+            |(member_index, source_path, source_kind, source_id, import_state)| {
+                let source = source_id.as_ref().and_then(|id| sources.get(id));
+                let facts = source_id.as_ref().map(|source_id| {
+                    collect_linux_evidence_facts(
+                        conn,
+                        case_root,
+                        case_id,
+                        &domain::DataSourceId(source_id.clone()),
+                    )
+                });
+                Ok(LinuxEvidenceSetMemberSummaryDto {
+                    member_index,
+                    data_source_id: source_id,
+                    source_name: source
+                        .map(|value| value.name.clone())
+                        .unwrap_or_else(|| format!("member-{}", member_index + 1)),
+                    source_path: root_relative_path(root_path, &source_path),
+                    source_kind,
+                    import_state,
+                    hash_status: source
+                        .map(|value| {
+                            format!("{:?}", value.provenance.hash_status).to_ascii_lowercase()
+                        })
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    provenance_status: source
+                        .map(|value| {
+                            format!("{:?}", value.provenance.provenance_status).to_ascii_lowercase()
+                        })
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    hostname: facts.as_ref().and_then(|facts| facts.hostname.clone()),
+                    operating_system: facts
+                        .as_ref()
+                        .and_then(|facts| facts.operating_system.clone()),
+                    os_version: facts.as_ref().and_then(|facts| facts.os_version.clone()),
+                    kernel_version: facts
+                        .as_ref()
+                        .and_then(|facts| facts.kernel_version.clone()),
+                    addresses: facts
+                        .as_ref()
+                        .map(|facts| facts.addresses.clone())
+                        .unwrap_or_default(),
+                    roles: facts
+                        .as_ref()
+                        .map(|facts| facts.roles.clone())
+                        .unwrap_or_default(),
+                    services: facts
+                        .as_ref()
+                        .map(|facts| facts.services.clone())
+                        .unwrap_or_default(),
+                    containers: facts
+                        .as_ref()
+                        .map(|facts| facts.containers.clone())
+                        .unwrap_or_default(),
+                    diagnostics: facts.map(|facts| facts.diagnostics).unwrap_or_default(),
                 })
-                .unwrap_or_else(|| "unknown".to_string()),
-        })
-    })?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
+            },
+        )
+        .collect::<Result<Vec<_>>>()
         .map_err(Into::into)
 }
 

@@ -11,8 +11,8 @@ const summary = (overrides: Partial<LinuxEvidenceSetSummary> = {}): LinuxEvidenc
   failedCount: 0,
   capabilityLevel: 'metadata_only',
   members: [
-    { memberIndex: 0, sourceName: 'node-a', sourcePath: 'node-a.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete' },
-    { memberIndex: 1, sourceName: 'node-b', sourcePath: 'node-b.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete' },
+    { memberIndex: 0, sourceName: 'node-a', sourcePath: 'node-a.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete', addresses: [], roles: [], services: [], containers: [], diagnostics: [] },
+    { memberIndex: 1, sourceName: 'node-b', sourcePath: 'node-b.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete', addresses: [], roles: [], services: [], containers: [], diagnostics: [] },
   ],
   scopes: [{ id: 'scope:os', kind: 'os', name: 'node-a', identityState: 'candidate', status: 'partial', evidenceCompleteness: 'partial', memberCount: 1, memberSourceIds: ['a'], memberRoles: [{ dataSourceId: 'a', role: 'os_root', memberIndex: 0, confidence: 'candidate' }], diagnostics: [] }],
   edges: [],

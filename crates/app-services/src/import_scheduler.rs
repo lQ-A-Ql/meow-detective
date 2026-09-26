@@ -71,14 +71,17 @@ impl ImportSchedulingPolicy {
         // worker budget at three so two members can make progress without
         // multiplying the ordinary six-worker source budget.
         let member_worker_cap = cpu_budget.clamp(1, CLUSTER_MEMBER_WORKER_CAP);
-        let import_workers = requested_import_workers.clamp(1, member_worker_cap);
-        let analysis_workers = requested_analysis_workers.clamp(1, member_worker_cap);
+        let test_member_worker_cap = test_override("FORENSICS_TEST_MEMBER_WORKER_CAP")
+            .unwrap_or(member_worker_cap)
+            .clamp(1, member_worker_cap);
+        let import_workers = requested_import_workers.clamp(1, test_member_worker_cap);
+        let analysis_workers = requested_analysis_workers.clamp(1, test_member_worker_cap);
         let per_member_cpu = import_workers.max(analysis_workers);
         let source_concurrency = member_count
-            .min(CLUSTER_MEMBER_CAP)
+            .min(test_cluster_member_cap())
             .min((cpu_budget / per_member_cpu).max(1))
             .max(1);
-        let memory_reservation_mb = (MEMORY_CAPACITY_MB / source_concurrency as u64).max(1024);
+        let memory_reservation_mb = (memory_capacity_mb() / source_concurrency as u64).max(1024);
         Self {
             cpu_budget,
             import_workers,
@@ -284,14 +287,36 @@ impl Drop for ImportPermit {
 
 pub fn global_import_admission() -> &'static ImportAdmission {
     static ADMISSION: OnceLock<ImportAdmission> = OnceLock::new();
-    ADMISSION.get_or_init(|| ImportAdmission::new(default_cpu_budget(), MEMORY_CAPACITY_MB))
+    ADMISSION.get_or_init(|| ImportAdmission::new(default_cpu_budget(), memory_capacity_mb()))
 }
 
 pub fn default_cpu_budget() -> usize {
+    if let Some(cap) = test_override("FORENSICS_TEST_CPU_CAPACITY") {
+        return cap.max(1);
+    }
     std::thread::available_parallelism()
         .map(|count| count.get().min(DEFAULT_CPU_CAP))
         .unwrap_or(DEFAULT_CPU_CAP)
         .max(1)
+}
+
+fn memory_capacity_mb() -> u64 {
+    test_override("FORENSICS_TEST_MEMORY_CAPACITY_MB")
+        .map(|value| value as u64)
+        .unwrap_or(MEMORY_CAPACITY_MB)
+}
+
+fn test_cluster_member_cap() -> usize {
+    test_override("FORENSICS_TEST_CLUSTER_MEMBER_CAP")
+        .unwrap_or(CLUSTER_MEMBER_CAP)
+        .max(1)
+}
+
+fn test_override(name: &str) -> Option<usize> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
 }
 
 pub fn resolve_import_worker_count(max_import_workers: Option<usize>) -> usize {

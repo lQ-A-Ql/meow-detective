@@ -45,6 +45,24 @@ pub struct LinuxEvidenceSetMemberSummaryDto {
     pub import_state: String,
     pub hash_status: String,
     pub provenance_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operating_system: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kernel_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addresses: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub containers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

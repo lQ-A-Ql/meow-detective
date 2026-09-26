@@ -34,6 +34,15 @@ export interface LinuxEvidenceSetMemberSummary {
   importState: string;
   hashStatus: string;
   provenanceStatus: string;
+  hostname?: string;
+  operatingSystem?: string;
+  osVersion?: string;
+  kernelVersion?: string;
+  addresses: string[];
+  roles: string[];
+  services: string[];
+  containers: string[];
+  diagnostics: string[];
 }
 
 export interface LinuxTopologyScopeSummary {

@@ -84,7 +84,54 @@ pub fn execute_import_job_with_counts(
             "ready_metadata"
         }
     };
-    let message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
+    let should_auto_extract_linux = ctx.import_config.platform == domain::DataSourcePlatform::Linux
+        && matches!(
+            ctx.content_kind,
+            crate::import_pipeline::context::ImportContentKind::Filesystem
+        )
+        && !ctx.options.cancel_token.load(Ordering::Relaxed);
+    let mut message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
+    if should_auto_extract_linux {
+        ctx.report_job_progress(96, "Linux artifact analysis started automatically")?;
+        match crate::analysis_service::run_source_analysis_extraction(
+            conn,
+            case_root,
+            case_id,
+            &ds.id,
+            &["LinuxArtifacts"],
+        ) {
+            Ok(run) => {
+                let facts = crate::cluster_service::collect_linux_evidence_facts(
+                    conn, case_root, case_id, &ds.id,
+                );
+                if let Err(error) = crate::cluster_service::persist_linux_evidence_facts(
+                    &source_conn,
+                    &ds.id,
+                    &facts,
+                ) {
+                    tracing::warn!(data_source_id = %ds.id.0, %error, "Linux evidence facts cache could not be persisted");
+                }
+                message.push_str(&format!(
+                    "; Linux artifacts auto-analyzed: artifacts={} timeline={}",
+                    run.artifact_count, run.timeline_event_count
+                ));
+            }
+            Err(error) => {
+                ctx.counts.warning_count = ctx.counts.warning_count.saturating_add(1);
+                ctx.counts.failed_count = ctx.counts.failed_count.saturating_add(1);
+                ctx.job_repo
+                    .update_outcome_counts(
+                        job_id,
+                        ctx.counts.warning_count,
+                        ctx.counts.skipped_count,
+                        ctx.counts.failed_count,
+                        true,
+                    )
+                    .map_err(CommandError::from_service_error)?;
+                message.push_str(&format!("; Linux artifact auto-analysis partial: {error}"));
+            }
+        }
+    }
     phases::emit_data_source_ready(&ctx, &ds)?;
     Ok((message, counts))
 }
