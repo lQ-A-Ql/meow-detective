@@ -9,8 +9,8 @@ use transport::CommandError;
 use super::super::background_job::{
     cancel_browseable_evidence_set_job, complete_browseable_evidence_set_job,
     continue_ceph_rbd_processing, fail_browseable_evidence_set_job,
-    run_background_linux_evidence_set_import_until_browseable,
-    BackgroundDerivedSourceProcessingJob, BackgroundLinuxEvidenceSetImportJob,
+    run_background_linux_evidence_set_import_with_scheduler, BackgroundDerivedSourceProcessingJob,
+    BackgroundLinuxEvidenceSetImportJob,
 };
 use crate::events::event_bridge;
 use crate::state::TaskScope;
@@ -92,10 +92,11 @@ fn run_evidence_set_background(
     task_manager: Arc<crate::state::TaskManager>,
     group_id: String,
 ) -> Result<(), String> {
-    let Some(outcome) = run_background_linux_evidence_set_import_until_browseable(
+    let Some(outcome) = run_background_linux_evidence_set_import_with_scheduler(
         job,
         app.as_ref(),
         cancel.clone(),
+        Some(Arc::clone(&task_manager)),
     )
     .map_err(|error| error.message)?
     else {

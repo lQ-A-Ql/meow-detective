@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use super::status::fail_linux_evidence_set_job;
 use super::types::{BackgroundLinuxEvidenceSetImportJob, EvidenceSetImportSummary};
+use crate::state::TaskManager;
 use app_services::import_scheduler;
 use coordinator::cancel_evidence_set_members;
 use execution::run_member_workers;
@@ -24,6 +25,7 @@ pub(super) fn import_evidence_set_members(
     job: &BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
     cancel_token: &Arc<AtomicBool>,
+    task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<EvidenceSetImportSummary>, CommandError> {
     let configs = job.plan.member_import_configs();
     let total_members = configs.len() as u32;
@@ -66,6 +68,7 @@ pub(super) fn import_evidence_set_members(
         app,
         cancel_token,
         total_members,
+        task_manager,
     };
     let mut summary = run_member_workers(&coordinator, scheduling, work)?;
     summary.member_messages.sort();

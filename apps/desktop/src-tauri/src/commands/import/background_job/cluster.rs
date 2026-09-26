@@ -9,6 +9,7 @@ use super::{
     types::{BackgroundLinuxEvidenceSetImportJob, BrowseableEvidenceSetImport},
 };
 use crate::events::event_bridge;
+use crate::state::TaskManager;
 use app_services::cluster_service;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::{
@@ -21,10 +22,20 @@ use transport::CommandError;
 use completion::complete_evidence_set_import;
 use ledger::record_cluster_phase;
 
+#[cfg(test)]
 pub(crate) fn run_background_linux_evidence_set_import_until_browseable(
     job: BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
+) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
+    run_background_linux_evidence_set_import_with_scheduler(job, app, cancel_token, None)
+}
+
+pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
+    job: BackgroundLinuxEvidenceSetImportJob,
+    app: Option<&AppHandle>,
+    cancel_token: Arc<AtomicBool>,
+    task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
     let connection = app_services::connection::open_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
@@ -56,23 +67,29 @@ pub(crate) fn run_background_linux_evidence_set_import_until_browseable(
         return Err(error);
     }
     record_cluster_phase(&connection, &job, "initialize", true, None, 0, 0);
-    let summary =
-        match import_evidence_set_members(&connection, &job_repo, &job, app, &cancel_token) {
-            Ok(Some(summary)) => summary,
-            Ok(None) => return Ok(None),
-            Err(error) => {
-                record_cluster_phase(
-                    &connection,
-                    &job,
-                    "member_import",
-                    false,
-                    Some(&error.message),
-                    0,
-                    0,
-                );
-                return Err(error);
-            }
-        };
+    let summary = match import_evidence_set_members(
+        &connection,
+        &job_repo,
+        &job,
+        app,
+        &cancel_token,
+        task_manager,
+    ) {
+        Ok(Some(summary)) => summary,
+        Ok(None) => return Ok(None),
+        Err(error) => {
+            record_cluster_phase(
+                &connection,
+                &job,
+                "member_import",
+                false,
+                Some(&error.message),
+                0,
+                0,
+            );
+            return Err(error);
+        }
+    };
     record_cluster_phase(
         &connection,
         &job,

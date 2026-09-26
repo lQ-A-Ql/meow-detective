@@ -1,5 +1,6 @@
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 
 use super::super::super::cancellation::is_import_cancelled_message;
 use super::super::status::cancel_job;
@@ -94,7 +95,27 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
         summary
             .member_messages
             .push(format!("member {}: {message}", member_index + 1));
-        update_cluster_progress(self.connection, self.job, summary)
+        update_cluster_progress(self.connection, self.job, summary)?;
+        if let Some(task_manager) = self.task_manager.as_ref() {
+            match super::super::schedule_pending_evidence_hashes(
+                &self.job.case_root,
+                &self.job.case_id.0,
+                self.app,
+                Arc::clone(task_manager),
+            ) {
+                Ok(job_ids) => tracing::info!(
+                    member_index,
+                    scheduled_hash_jobs = job_ids.len(),
+                    "Evidence hash scheduling triggered after Linux member became ready"
+                ),
+                Err(error) => tracing::warn!(
+                    member_index,
+                    error = %error.message,
+                    "Failed to schedule evidence hash after Linux member became ready"
+                ),
+            }
+        }
+        Ok(())
     }
 
     fn handle_member_failure(

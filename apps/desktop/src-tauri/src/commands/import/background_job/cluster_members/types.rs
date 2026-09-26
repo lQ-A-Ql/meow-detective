@@ -7,6 +7,7 @@ use domain::JobId;
 
 use super::super::types::{BackgroundLinuxEvidenceSetImportJob, EvidenceSetImportSummary};
 use super::{AppHandle, CommandError, JobRepo};
+use crate::state::TaskManager;
 
 pub(super) enum MemberFailureAction {
     Continue,
@@ -42,6 +43,7 @@ pub(super) struct MemberCoordinator<'a, 'db> {
     pub(super) app: Option<&'a AppHandle>,
     pub(super) cancel_token: &'a Arc<AtomicBool>,
     pub(super) total_members: u32,
+    pub(super) task_manager: Option<Arc<TaskManager>>,
 }
 
 pub(super) fn update_cluster_progress(

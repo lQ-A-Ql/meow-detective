@@ -53,15 +53,17 @@ pub struct LinuxEvidenceSetMemberSummaryDto {
     pub os_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kernel_version: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    // These collections are part of the frontend contract. Empty evidence is
+    // represented by [] so consumers never have to branch on an omitted field.
+    #[serde(default)]
     pub addresses: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub roles: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub services: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub containers: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub diagnostics: Vec<String>,
 }
 
@@ -108,3 +110,7 @@ pub struct LinuxDerivedSourceSummaryDto {
     pub provenance_status: String,
     pub source_path: String,
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/dto/analysis_linux_cluster.rs"]
+mod tests;
