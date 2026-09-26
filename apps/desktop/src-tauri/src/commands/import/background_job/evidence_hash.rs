@@ -1,28 +1,27 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use app_services::hash_service::{
-    evidence_jobs::{
-        create_hash_job_if_absent, list_pending_hash_sources, load_hash_source,
-        settle_registration_failure, EVIDENCE_HASH_JOB_KIND,
-    },
-    EvidenceHashError, HashService,
-};
-use domain::{CaseId, DataSourceId, JobId};
+use app_services::hash_service::{evidence_jobs::load_hash_source, EvidenceHashError, HashService};
+use domain::{DataSourceId, JobId};
 use tauri::AppHandle;
 use transport::CommandError;
 
 use crate::events::event_bridge;
-use crate::state::{TaskManager, TaskRegistrationError, TaskScope};
 
 mod progress;
+mod schedule;
 mod status;
+
+#[cfg(test)]
+pub(super) use crate::state::TaskManager;
+#[cfg(test)]
+pub(super) use schedule::hash_task_id;
+pub(crate) use schedule::schedule_pending_evidence_hashes;
 
 use progress::{finish_progress_reporter, spawn_progress_reporter};
 use status::{cancel_hash, complete_hash, fail_hash, fail_hash_setup};
 
-const HASH_TASK_STACK_BYTES: usize = 16 * 1024 * 1024;
 static HASH_DB_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(super) fn hash_db_write_guard() -> std::sync::MutexGuard<'static, ()> {
@@ -30,84 +29,6 @@ pub(super) fn hash_db_write_guard() -> std::sync::MutexGuard<'static, ()> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|error| error.into_inner())
-}
-
-pub(crate) fn schedule_pending_evidence_hashes(
-    case_root: &Path,
-    case_id: &str,
-    app: Option<&AppHandle>,
-    task_manager: Arc<TaskManager>,
-) -> Result<Vec<String>, CommandError> {
-    let db_path = case_root.join("app.db");
-    let connection = app_services::connection::open_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
-    let case_id = CaseId(case_id.to_string());
-    let sources = list_pending_hash_sources(&connection, &case_id)
-        .map_err(CommandError::from_typed_service_error)?;
-    let mut scheduled = Vec::new();
-    for source_id in sources {
-        let task_id = hash_task_id(&source_id);
-        if task_manager.is_running(&task_id) {
-            continue;
-        }
-        let Some(job_id) = create_hash_job_if_absent(&connection, &case_id, &source_id)
-            .map_err(CommandError::from_typed_service_error)?
-        else {
-            continue;
-        };
-        emit_hash_queued(app, &job_id);
-        let registration = spawn_hash_task(
-            &task_manager,
-            task_id,
-            &case_id,
-            source_id.clone(),
-            job_id.clone(),
-            db_path.clone(),
-            app.cloned(),
-        );
-        if let Err(error) = registration {
-            let duplicate = matches!(error, TaskRegistrationError::DuplicateTaskId(_));
-            if let Err(settle_error) =
-                settle_registration_failure(&connection, &job_id, &source_id, duplicate)
-            {
-                tracing::warn!(error = %settle_error, "Failed to settle evidence hash registration failure");
-            }
-            tracing::warn!(error = %error, "Failed to register evidence hash task");
-            continue;
-        }
-        scheduled.push(job_id.0);
-    }
-    Ok(scheduled)
-}
-
-fn spawn_hash_task(
-    task_manager: &TaskManager,
-    task_id: String,
-    case_id: &CaseId,
-    data_source_id: DataSourceId,
-    job_id: JobId,
-    db_path: PathBuf,
-    app: Option<AppHandle>,
-) -> Result<(), TaskRegistrationError> {
-    let cancel_token = Arc::new(AtomicBool::new(false));
-    let worker_cancel = Arc::clone(&cancel_token);
-    let scope = TaskScope::data_source(&case_id.0, &data_source_id.0, &job_id.0);
-    task_manager.spawn_scoped_with_stack_size(
-        task_id,
-        scope,
-        cancel_token,
-        HASH_TASK_STACK_BYTES,
-        move || {
-            run_background_evidence_hash(
-                db_path,
-                data_source_id,
-                job_id,
-                app.as_ref(),
-                worker_cancel,
-            )
-            .map_err(|error| error.message)
-        },
-    )
 }
 
 pub(crate) fn run_background_evidence_hash(
@@ -178,18 +99,6 @@ pub(crate) fn run_background_evidence_hash(
             error,
         ),
     }
-}
-
-fn emit_hash_queued(app: Option<&AppHandle>, job_id: &JobId) {
-    let Some(app) = app else {
-        return;
-    };
-    event_bridge::emit_job_created(app, &job_id.0, EVIDENCE_HASH_JOB_KIND);
-    event_bridge::emit_job_progress(app, &job_id.0, 1, "Evidence hash queued");
-}
-
-fn hash_task_id(data_source_id: &DataSourceId) -> String {
-    format!("evidence-hash:{}", data_source_id.0)
 }
 
 #[cfg(test)]
