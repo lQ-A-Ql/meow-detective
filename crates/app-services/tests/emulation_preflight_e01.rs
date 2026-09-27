@@ -42,6 +42,8 @@ fn import_image(active: &app_services::active_case::ActiveCase, image: &Path) ->
                     max_import_workers: Some(1),
                     max_analysis_workers: Some(1),
                     analysis_mode: ImportAnalysisMode::MetadataOnly,
+
+                    defer_linux_artifacts: false,
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;

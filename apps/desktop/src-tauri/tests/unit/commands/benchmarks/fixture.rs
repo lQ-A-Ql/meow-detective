@@ -102,6 +102,8 @@ pub(super) fn setup_case() -> (app_services::active_case::ActiveCase, TempDir) {
                     max_import_workers: None,
                     max_analysis_workers: Some(1),
                     analysis_mode: app_services::import_analysis::ImportAnalysisMode::MetadataOnly,
+
+                    defer_linux_artifacts: false,
                 },
             )
             .expect("benchmark setup import should succeed");

@@ -80,6 +80,7 @@ pub(crate) fn run_background_import_job(
         max_import_workers: Some(scheduling.import_workers),
         max_analysis_workers: Some(scheduling.analysis_workers),
         analysis_mode: job.analysis_mode,
+        defer_linux_artifacts: false,
     };
     match execute_import_job(
         &connection,

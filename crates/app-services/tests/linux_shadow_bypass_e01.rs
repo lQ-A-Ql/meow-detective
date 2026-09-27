@@ -57,6 +57,8 @@ fn linux_shadow_bypass_edits_only_the_overlay() {
                     max_import_workers: Some(1),
                     max_analysis_workers: Some(1),
                     analysis_mode: app_services::import_analysis::ImportAnalysisMode::MetadataOnly,
+
+                    defer_linux_artifacts: false,
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;

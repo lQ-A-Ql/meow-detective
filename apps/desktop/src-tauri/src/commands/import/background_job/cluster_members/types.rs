@@ -34,6 +34,7 @@ pub(super) struct MemberExecutionContext {
     pub(super) cancel_token: Arc<AtomicBool>,
     pub(super) scheduling: import_scheduler::ImportSchedulingPolicy,
     pub(super) analysis_mode: import_analysis::ImportAnalysisMode,
+    pub(super) defer_linux_artifacts: bool,
 }
 
 pub(super) struct MemberCoordinator<'a, 'db> {

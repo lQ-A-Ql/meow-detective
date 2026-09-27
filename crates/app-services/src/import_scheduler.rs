@@ -10,8 +10,11 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 const DEFAULT_CPU_CAP: usize = 6;
-const CLUSTER_MEMBER_CAP: usize = 2;
-const CLUSTER_MEMBER_WORKER_CAP: usize = 3;
+// E01 members are independent disk-backed sources. Allow three members in
+// flight by default; each member still has a bounded worker budget and the
+// weighted admission controller prevents CPU/memory overcommit.
+const CLUSTER_MEMBER_CAP: usize = 3;
+const CLUSTER_MEMBER_WORKER_CAP: usize = 2;
 const MEMORY_CAPACITY_MB: u64 = 4096;
 const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 4096;
 const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 512;

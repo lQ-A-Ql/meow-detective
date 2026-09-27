@@ -59,6 +59,8 @@ fn linux_logical_import_auto_extracts_identity_and_service_artifacts() {
                     max_import_workers: Some(1),
                     max_analysis_workers: Some(1),
                     analysis_mode: ImportAnalysisMode::MetadataOnly,
+
+                    defer_linux_artifacts: false,
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;

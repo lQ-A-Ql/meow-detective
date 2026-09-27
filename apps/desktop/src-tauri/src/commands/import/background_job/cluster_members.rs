@@ -1,4 +1,5 @@
 mod coordinator;
+mod deferred;
 mod execution;
 mod queue;
 mod types;

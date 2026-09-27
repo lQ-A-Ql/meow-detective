@@ -80,9 +80,20 @@ server01 外部可直接看到 `pve-cluster`、`pvedaemon`、`pveproxy`、`pvest
 | server02-disk01 | 62,364 | 62,380 | +16 |
 | server03-disk01 | 62,389 | 62,405 | +16 |
 
-差值在三台主机上完全相同，不能解释为随机样本缺失。外部树还分别包含约 5,011 个符号链接和 33 个特殊节点；后端计数是统一 `file_entries` Catalog 计数，可能包含根节点、分区根节点或其它取证 Catalog 合成节点。
+差值在三台主机上完全相同，不能解释为随机样本缺失。进一步对 server01 做了外部 ESP 只读挂载：ESP 有 **13** 个子项。后端导入链路还会为 GPT BIOS boot 分区和 ESP 分区各保留一个 partition-root Catalog 节点，并为 `pve/root` 保留一个文件系统根节点。于是：
 
-**结论**：这是一个需要继续拆分 entry-type/path 的**计数口径差异**，目前不能判定为文件内容漏采，也不能直接判定为后端错误。下一步应针对这 16 条记录输出 `entry_type/path/partition_index/source`，建立外部路径集合与后端 Catalog 的集合差分。
+```text
+外部 pve/root 子项                  62,387
++ ESP 子项                              13
++ BIOS/ESP partition-root 节点           2
++ pve/root 文件系统根节点               1
+                                      -----
+后端 file_entries                      62,403
+```
+
+三台主机都满足同一 `+16` 关系。外部 root 挂载树还分别包含约 5,011 个符号链接和 33 个特殊节点；后端计数是整块镜像统一 Catalog 计数，而不是只计 `/dev/pve/root` 的后代。
+
+**结论**：这不是样本缺失，也不是文件内容漏采，而是外部比较最初只统计了宿主 root LV，后端统计了整张镜像的 ESP、分区根和 root 节点。该差异已解释闭合，不需要修改枚举器。
 
 ## 5. BlueStore OSD 比对
 
@@ -125,6 +136,35 @@ server01 外部可直接看到 `pve-cluster`、`pvedaemon`、`pveproxy`、`pvest
 
 ## 7. 本轮回归状态和解释
 
+### 本轮性能复跑
+
+原配置将六成员限制为串行成员导入，且 Linux artifact 自动解析在每个成员导入线程内同步执行。单宿主生产导入回归实测约 314 秒；三个宿主再叠加 BlueStore/RBD 阶段后，六成员回归超过 1,200 秒 guard。
+
+本轮做了两项调整：
+
+1. Linux evidence-set 成员先发布 Catalog/`ready`，Linux artifact extraction 改为独立后台任务。分析仍受全局 extraction gate 保护，不会并发写同一 source DB；它不再阻塞下一个成员的 E01/BlueStore 读取和哈希。
+2. 集群低 worker 配置允许三成员同时 admitted。每成员仍限制为一个导入 worker 时，磁盘读取并行度提高到 3；CPU/内存 admission 仍限制总权重。后台 artifact task 也持久化为独立 Job，成功/失败可追踪。
+
+激进磁盘调度复跑结果（本次回归入口测量的是 Catalog/BlueStore/RBD 可浏览链路；它没有等待桌面 TaskManager 中随后排队的 Linux artifact 任务和镜像 hash 任务）：
+
+| 指标 | 串行超时复跑 | 三成员并行复跑 |
+|---|---:|---:|
+| 测试结果 | 1,200 秒超时 | 通过 |
+| 集群状态 | 未形成新结果 | `ready` |
+| ready/failed | 未形成新结果 | `6 / 0` |
+| browseable 阶段 | >1,200 秒 | 451,987 ms |
+| 派生后处理 | 未形成新结果 | 158,467 ms |
+| 测试进程总耗时 | >1,200 秒 | 786.43 秒 |
+| 峰值 RSS | 未形成新结果 | 约 1,291 MiB |
+
+后端 semantic oracle、RBD Catalog 和成员隔离均通过。性能瓶颈主要集中在：
+
+- 三个 BlueStore semantic snapshot 的 RocksDB/SQLite 解析与持久化；
+- RBD 派生 VM 文件树 Catalog 构建与文件系统枚举；
+- 旧链路中每个宿主同步 Linux artifact extraction 对成员队列的阻塞。
+
+并行度提高有效消除了本轮超时，但峰值 RSS 上升到约 1.3 GiB，不能继续无上限增加成员数。当前实现还把 artifact extraction 和 hash 任务拆成独立后台 Job；完整案件“分析完成”时间应以这些 Job 的终态为准，而不是以 cluster parent job 的 `ready` 为准。生产默认采用每成员最多 2 个导入/分析 worker、最多 3 个成员并行的 weighted admission；内存不足时自动降低并行度。
+
 ### 已通过
 
 - PVE 三宿主 LVM/EXT4 probe 与 root LV 发现
@@ -134,10 +174,8 @@ server01 外部可直接看到 `pve-cluster`、`pvedaemon`、`pveproxy`、`pvest
 
 ### 需要修正或继续核对
 
-1. 六成员完整生产回归本轮在 1,200 秒 guard 上限超时，未产生可采纳的完整新结果；历史 2026-07-19 基线仍是 `ready=6/failed=0`，但本轮不能重复宣称通过。
-2. 当前宿主外部树与后端 Catalog 稳定相差 16 条，需要输出差异行并确定是否为合成根/分区节点。
-3. `pve_cluster_representative_host_imports_tree_and_previews_by_file_id` 的旧断言要求 metadata-only import 的 LinuxSystemConfig artifact 数为 0；当前自动 artifact 解析产品行为返回 `5785`，这是**测试契约落后于产品行为**，不是样本缺失或解析失败。
-4. 容器、静态 `/etc/pve`、OSDMap/CRUSH/PG、RBD 完整外部闭合证据仍未从本样本中得到，后端必须保持显式 partial/unsupported 边界。
+1. `pve_cluster_representative_host_imports_tree_and_previews_by_file_id` 的旧断言要求 metadata-only import 的 LinuxSystemConfig artifact 数为 0；当前自动 artifact 解析产品行为返回 `5785`，测试断言已按产品契约更新。这是**测试契约落后于产品行为**，不是样本缺失或解析失败。
+2. 容器、静态 `/etc/pve`、OSDMap/CRUSH/PG、RBD 完整外部闭合证据仍未从本样本中得到，后端必须保持显式 partial/unsupported 边界。
 
 ## 8. 最终分类
 
@@ -149,6 +187,6 @@ server01 外部可直接看到 `pve-cluster`、`pvedaemon`、`pveproxy`、`pvest
 | Docker 容器 metadata | 外部未发现，不能判定为后端漏显示 |
 | BlueStore label/OSD identity/FSID/epoch/size | 外部与后端一致 |
 | BlueFS/semantic 行数与 digest | 后端内部 oracle 已通过，尚缺独立外部复算 |
-| 宿主 file-entry 数 | 稳定的 16 条口径差异，需差分定位 |
+| 宿主 file-entry 数 | 已解释：ESP 13 项 + BIOS/ESP 两个分区根 + root 文件系统根节点 |
 | RBD VM 文件树 | 后端能力已有，外部集群映射证据尚未闭合 |
-| 自动 Linux artifact | 产品行为已改变，旧测试断言需要更新 |
+| 自动 Linux artifact | 已拆为集群成员完成后的独立后台 Job，旧测试断言已更新 |

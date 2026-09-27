@@ -65,6 +65,8 @@ fn case_open_stage_timing_probe() {
                         max_import_workers: Some(1),
                         max_analysis_workers: Some(1),
                         analysis_mode: ImportAnalysisMode::MetadataOnly,
+
+                        defer_linux_artifacts: false,
                     },
                 );
                 if let Err(error) = outcome {

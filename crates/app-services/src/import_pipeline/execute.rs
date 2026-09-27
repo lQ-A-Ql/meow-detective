@@ -89,6 +89,11 @@ pub fn execute_import_job_with_counts(
             ctx.content_kind,
             crate::import_pipeline::context::ImportContentKind::Filesystem
         )
+        // Cluster members publish their Catalog first. Their Linux artifact
+        // extraction is scheduled by the desktop cluster coordinator so the
+        // serial analysis gate cannot block the next member's evidence import.
+        && ctx.import_config.import_set.is_none()
+        && !ctx.options.defer_linux_artifacts
         && !ctx.options.cancel_token.load(Ordering::Relaxed);
     let mut message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
     if should_auto_extract_linux {

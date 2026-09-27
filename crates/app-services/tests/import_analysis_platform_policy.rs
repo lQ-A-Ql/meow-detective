@@ -55,6 +55,8 @@ fn unknown_platform_fails_before_database_or_staging_access() {
             enable_content_extraction: true,
             enable_text_indexing: true,
             analysis_mode: mode,
+
+            defer_linux_artifacts: false,
             content_budget: content_budget_for_mode(mode),
             memory_soft_limit_mb: default_memory_soft_limit_mb(),
             memory_hard_limit_mb: default_memory_hard_limit_mb(),
@@ -110,6 +112,8 @@ fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> Pipeline
                     max_import_workers: Some(1),
                     max_analysis_workers: Some(1),
                     analysis_mode: ImportAnalysisMode::BudgetedContent,
+
+                    defer_linux_artifacts: false,
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;

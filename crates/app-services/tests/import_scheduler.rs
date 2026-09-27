@@ -19,39 +19,39 @@ fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
     assert!((1..=6).contains(&ordinary.cpu_budget));
     assert!(ordinary.import_workers <= ordinary.cpu_budget);
     assert!(ordinary.analysis_workers <= ordinary.cpu_budget);
-    assert!(cluster.source_concurrency <= 2);
-    assert!(cluster.import_workers <= 3);
-    assert!(cluster.analysis_workers <= 3);
+    assert!(cluster.source_concurrency <= 3);
+    assert!(cluster.import_workers <= 2);
+    assert!(cluster.analysis_workers <= 2);
     assert!(
         cluster.admission_request().cpu_weight * cluster.source_concurrency <= cluster.cpu_budget
     );
 }
 
 #[test]
-fn cluster_policy_keeps_two_low_weight_members_parallel() {
+fn cluster_policy_keeps_three_low_weight_members_parallel() {
     let policy = ImportSchedulingPolicy::for_linux_evidence_set(4, 1, 1, 6);
 
-    assert_eq!(policy.source_concurrency, 2);
-    assert_eq!(policy.source_worker_count(100), 2);
+    assert_eq!(policy.source_concurrency, 3);
+    assert_eq!(policy.source_worker_count(100), 3);
     assert_eq!(policy.source_worker_count(0), 0);
     assert_eq!(policy.import_workers, 1);
     assert_eq!(policy.analysis_workers, 1);
-    assert_eq!(policy.memory_reservation_mb, 2048);
+    assert_eq!(policy.memory_reservation_mb, 1365);
 }
 
 #[test]
 fn cluster_policy_uses_three_workers_per_member_with_six_cpu_budget() {
     let policy = ImportSchedulingPolicy::for_linux_evidence_set(6, 99, 99, 6);
 
-    assert_eq!(policy.import_workers, 3);
-    assert_eq!(policy.analysis_workers, 3);
-    assert_eq!(policy.source_concurrency, 2);
-    assert_eq!(policy.admission_request().cpu_weight, 3);
+    assert_eq!(policy.import_workers, 2);
+    assert_eq!(policy.analysis_workers, 2);
+    assert_eq!(policy.source_concurrency, 3);
+    assert_eq!(policy.admission_request().cpu_weight, 2);
     assert_eq!(
         policy.admission_request().cpu_weight * policy.source_concurrency,
         6
     );
-    assert_eq!(policy.memory_reservation_mb, 2048);
+    assert_eq!(policy.memory_reservation_mb, 1365);
 }
 
 #[test]

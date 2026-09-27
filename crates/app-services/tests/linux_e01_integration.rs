@@ -3492,6 +3492,7 @@ fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
                     max_import_workers: Some(1),
                     max_analysis_workers: Some(1),
                     analysis_mode: app_services::import_analysis::ImportAnalysisMode::MetadataOnly,
+defer_linux_artifacts: false,
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
@@ -3547,9 +3548,9 @@ fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
                 [],
                 |row| row.get(0),
             )?;
-            assert_eq!(
-                config_artifacts, 0,
-                "metadata-only import does not extract Linux configuration"
+            assert!(
+                config_artifacts > 0,
+                "Linux artifact analysis should run automatically after import"
             );
             let candidates = evidence_candidates_for_categories(&source_conn, &["LinuxArtifacts"])
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;

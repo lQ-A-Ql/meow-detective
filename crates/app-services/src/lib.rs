@@ -45,6 +45,7 @@ pub mod import_state;
 pub mod infrastructure_graph_service;
 pub mod job_service;
 pub mod ledger_service;
+pub mod linux_artifact_job;
 pub mod mount_service;
 pub mod notebook_service;
 pub mod parallel_enum;

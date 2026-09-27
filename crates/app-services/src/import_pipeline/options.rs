@@ -20,6 +20,10 @@ pub struct ImportJobOptions<'a> {
     pub max_import_workers: Option<usize>,
     pub max_analysis_workers: Option<usize>,
     pub analysis_mode: import_analysis::ImportAnalysisMode,
+    /// Cluster imports can publish their Catalog before Linux artifact
+    /// extraction. The desktop coordinator then runs that phase as a
+    /// separate background task.
+    pub defer_linux_artifacts: bool,
 }
 
 impl JobOutcomeCounts {

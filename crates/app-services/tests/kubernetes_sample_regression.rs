@@ -70,6 +70,8 @@ fn real_kubernetes_e01_import_matches_external_identity_and_auto_analysis() {
                 max_import_workers: Some(1),
                 max_analysis_workers: Some(1),
                 analysis_mode: ImportAnalysisMode::MetadataOnly,
+
+                defer_linux_artifacts: false,
             },
         )
         .expect("production member import");

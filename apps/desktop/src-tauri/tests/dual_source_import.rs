@@ -159,6 +159,8 @@ fn import_fixture_serially(
         max_import_workers: Some(1),
         max_analysis_workers: Some(1),
         analysis_mode: ImportAnalysisMode::BudgetedContent,
+
+        defer_linux_artifacts: false,
     };
 
     execute_import_job_with_counts(case_conn, case_id, case_root, config, &job_id, options)

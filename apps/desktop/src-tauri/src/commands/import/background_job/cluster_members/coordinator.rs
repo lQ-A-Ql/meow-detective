@@ -96,6 +96,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
             .member_messages
             .push(format!("member {}: {message}", member_index + 1));
         update_cluster_progress(self.connection, self.job, summary)?;
+        self.schedule_linux_artifacts(member_index);
         if let Some(task_manager) = self.task_manager.as_ref() {
             match super::super::schedule_pending_evidence_hashes(
                 &self.job.case_root,

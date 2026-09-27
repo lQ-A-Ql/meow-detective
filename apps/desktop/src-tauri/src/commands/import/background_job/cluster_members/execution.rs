@@ -33,6 +33,7 @@ pub(super) fn run_member_workers(
                 cancel_token: Arc::clone(coordinator.cancel_token),
                 scheduling,
                 analysis_mode: coordinator.job.analysis_mode,
+                defer_linux_artifacts: coordinator.task_manager.is_some(),
             };
             scope.spawn(move || loop {
                 let member = pending
@@ -132,6 +133,7 @@ fn run_member_import(
         max_import_workers: Some(execution.scheduling.import_workers),
         max_analysis_workers: Some(execution.scheduling.analysis_workers),
         analysis_mode: execution.analysis_mode,
+        defer_linux_artifacts: execution.defer_linux_artifacts,
     };
     execute_import_job(
         &connection,

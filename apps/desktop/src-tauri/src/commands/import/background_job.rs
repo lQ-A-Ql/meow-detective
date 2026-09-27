@@ -7,6 +7,7 @@ mod cluster_presence;
 mod cluster_status;
 mod evidence_hash;
 mod gate;
+mod linux_artifacts;
 mod single;
 mod status;
 mod types;
@@ -19,6 +20,7 @@ pub(crate) use cluster_status::{
     continue_ceph_rbd_processing, fail_browseable_evidence_set_job,
 };
 pub(crate) use evidence_hash::schedule_pending_evidence_hashes;
+pub(crate) use linux_artifacts::schedule_linux_artifact_analysis;
 pub(crate) use single::run_background_import_job;
 pub(crate) use types::{
     BackgroundDerivedSourceProcessingJob, BackgroundImportJob, BackgroundLinuxEvidenceSetImportJob,
