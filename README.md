@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 40 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：11 frontend pages、139 Tauri commands、36 source modules、migration scripts (89)、121 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：12 frontend pages、148 Tauri commands、38 source modules、migration scripts (100)、123 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -53,7 +53,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 事件日志：EVTX 解析、开关机、登录、进程、账户与应用事件分类。
 - 用户行为：Prefetch、LNK、Jump List、Recycle Bin、SRU、Thumbcache、浏览器历史/下载/会话等。
 - 浏览器与凭据：Chrome、Edge、Firefox 浏览器数据提取；离线 DPAPI 相关链路按前置材料与支持边界处理。
-- BitLocker：卷元数据检查、密码/恢复密码解锁、已验证密钥安全存储及重开案件恢复；匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证，定位链路经内嵌的 1077 build 内核符号注册表（Windows 10 10240 → Windows 11 28000），不绑定单一 Windows 版本。
+- BitLocker：卷元数据检查、密码/恢复密码解锁，以及在文件浏览器为已锁定卷选择本地 UTF-8 密码字典并逐行验证；字典任务显示已尝试数与读取进度，可取消，且不向前端返回候选密码。匹配成功后只沿既有已验证密钥链路解锁和持久化；原始证据始终只读。匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证，定位链路经内嵌的 1077 build 内核符号注册表（Windows 10 10240 → Windows 11 28000），不绑定单一 Windows 版本。
 
 ### Linux 与 PVE 分析
 

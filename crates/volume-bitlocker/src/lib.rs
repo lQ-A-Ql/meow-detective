@@ -49,6 +49,7 @@ mod reader;
 mod recovery_password;
 mod secret;
 mod unlock;
+mod unlock_dictionary;
 mod unlock_vmk;
 
 pub use cipher::SectorCipher;
@@ -69,7 +70,7 @@ pub use recovery_password::{
 pub use secret::{Passphrase, PersistedKeyBlob, RecoveredVmk, RecoveryPassword};
 pub use unlock::{
     read_volume_identities, read_volume_identity, restore_volume_from_persisted_key,
-    unlock_volume_with_password, unlock_volume_with_recovery_password, VerifiedUnlock,
-    VolumeIdentity,
+    unlock_volume_with_password, unlock_volume_with_password_for_identities,
+    unlock_volume_with_recovery_password, VerifiedUnlock, VolumeIdentity,
 };
 pub use unlock_vmk::unlock_volume_with_recovered_vmk;

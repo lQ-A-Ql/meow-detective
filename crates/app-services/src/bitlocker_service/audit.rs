@@ -13,6 +13,7 @@ pub(crate) struct BitLockerAudit<'a> {
 pub(crate) fn record(conn: &rusqlite::Connection, entry: BitLockerAudit<'_>) {
     let action = match entry.operation {
         "lock" => AuditAction::BitLockerLock,
+        "passwordDictionary" => AuditAction::BitLockerPasswordDictionary,
         "restoreKey" => AuditAction::BitLockerKeyRestore,
         "forgetKey" => AuditAction::BitLockerKeyForget,
         "catalogImport" => AuditAction::BitLockerCatalogImport,

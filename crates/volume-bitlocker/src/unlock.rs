@@ -28,6 +28,7 @@ use crate::metadata::{
 use crate::protector::ProtectorKind;
 use crate::reader::UnlockedVolume;
 use crate::secret::{Passphrase, PersistedKeyBlob, VolumeKeyPackage};
+use crate::unlock_dictionary;
 
 /// The 512-byte volume header sector.
 const HEADER_LEN: usize = 512;
@@ -46,9 +47,9 @@ pub struct VolumeIdentity {
 /// A volume identity paired with immutable cipher state produced only after both
 /// AES-CCM authentication checks succeed.
 pub struct VerifiedUnlock {
-    identity: VolumeIdentity,
-    volume: Arc<UnlockedVolume>,
-    keys: VolumeKeyPackage,
+    pub(crate) identity: VolumeIdentity,
+    pub(crate) volume: Arc<UnlockedVolume>,
+    pub(crate) keys: VolumeKeyPackage,
 }
 
 impl VerifiedUnlock {
@@ -191,6 +192,26 @@ pub fn unlock_volume_with_password<R: Read + Seek>(
     )
 }
 
+/// Unlocks a volume using identities that were already read from its metadata.
+///
+/// Dictionary attacks try many credentials against one immutable metadata set.
+/// Keeping the identities outside the candidate loop avoids seeking and parsing
+/// the evidence for every password while preserving the same authenticated VMK
+/// and FVEK checks as [`unlock_volume_with_password`].
+pub fn unlock_volume_with_password_for_identities(
+    identities: &[VolumeIdentity],
+    password: &Passphrase,
+) -> Result<VerifiedUnlock> {
+    let hash = password_hash(password.expose_for_derivation());
+    unlock_dictionary::unlock_identities_with_hash(
+        identities,
+        ProtectorKind::Password,
+        PROTECTION_PASSWORD,
+        &hash,
+        STRETCH_ITERATIONS,
+    )
+}
+
 /// Unlocks a volume with a 48-digit recovery password, trying every complete
 /// metadata copy before failing.
 pub fn unlock_volume_with_recovery_password<R: Read + Seek>(
@@ -216,33 +237,12 @@ fn unlock_volume_with_hash<R: Read + Seek>(
     iterations: u64,
 ) -> Result<VerifiedUnlock> {
     let identities = read_volume_identities(reader)?;
-    let mut preferred_error = None;
-    for identity in identities {
-        match derive_key_package(
-            &identity.metadata,
-            protector,
-            protection_code,
-            credential_hash,
-            iterations,
-        )
-        .and_then(|keys| {
-            let volume = UnlockedVolume::new(&identity.metadata, &keys)?;
-            Ok((keys, volume))
-        }) {
-            Ok((keys, volume)) => {
-                return Ok(VerifiedUnlock {
-                    identity,
-                    volume: Arc::new(volume),
-                    keys,
-                });
-            }
-            Err(error) => retain_preferred_error(&mut preferred_error, error),
-        }
-    }
-    Err(
-        preferred_error.unwrap_or_else(|| BitLockerError::MetadataUnreadable {
-            reason: "no metadata copy produced a verified volume key".to_string(),
-        }),
+    unlock_dictionary::unlock_identities_with_hash(
+        &identities,
+        protector,
+        protection_code,
+        credential_hash,
+        iterations,
     )
 }
 

@@ -74,6 +74,31 @@ export interface FileExtractionResult {
   warning?: string;
 }
 
+export type BitLockerDictionaryAttackPhase =
+  | 'queued'
+  | 'running'
+  | 'cancelling'
+  | 'found'
+  | 'exhausted'
+  | 'cancelled'
+  | 'failed';
+
+/**
+ * Progress for a BitLocker password-dictionary attempt.
+ *
+ * Candidate values and backend error details deliberately never cross the
+ * IPC boundary. The UI only receives bounded progress counters and a coarse
+ * terminal phase.
+ */
+export interface BitLockerDictionaryAttack {
+  taskId: string;
+  phase: BitLockerDictionaryAttackPhase;
+  testedCandidates: number;
+  bytesProcessed: number;
+  totalBytes: number;
+  error?: string;
+}
+
 export interface ExtractFileRequest {
   operationId: string;
   fileId: string;

@@ -35,6 +35,9 @@ function model(overrides: Partial<BitLockerVolumeModel> = {}): BitLockerVolumeMo
     unlocking: false,
     memoryUnlocking: false,
     importing: false,
+    dictionaryAttack: undefined,
+    dictionaryAttacking: false,
+    dictionaryCancelling: false,
     catalogImport: undefined,
     inspect: vi.fn(),
     unlock: vi.fn().mockResolvedValue(true),
@@ -43,6 +46,8 @@ function model(overrides: Partial<BitLockerVolumeModel> = {}): BitLockerVolumeMo
     importCatalog: vi.fn().mockResolvedValue(true),
     lock: vi.fn().mockResolvedValue(true),
     forget: vi.fn().mockResolvedValue(true),
+    startDictionaryAttack: vi.fn().mockResolvedValue(true),
+    cancelDictionaryAttack: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -96,6 +101,45 @@ describe('BitLockerVolumePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /从内存镜像恢复并验证/ }));
     expect(unlockFromMemoryImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers dictionary import and cancellation while an attempt is running', () => {
+    const startDictionaryAttack = vi.fn().mockResolvedValue(true);
+    const cancelDictionaryAttack = vi.fn().mockResolvedValue(true);
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({
+          startDictionaryAttack,
+          cancelDictionaryAttack,
+          dictionaryAttack: {
+            taskId: 'task-1',
+            phase: 'running',
+            testedCandidates: 12,
+            bytesProcessed: 120,
+            totalBytes: 240,
+          },
+          dictionaryAttacking: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/已尝试 12 项/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /取消密码字典尝试/ }));
+    expect(cancelDictionaryAttack).toHaveBeenCalledTimes(1);
+  });
+
+  it('delegates dictionary selection to the feature model', () => {
+    const startDictionaryAttack = vi.fn().mockResolvedValue(true);
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({ startDictionaryAttack })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /导入密码字典并尝试/ }));
+    expect(startDictionaryAttack).toHaveBeenCalledTimes(1);
   });
 
   it('shows the reconstructed recovery password with a copy action', () => {

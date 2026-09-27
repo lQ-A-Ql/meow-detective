@@ -19,7 +19,10 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
   const [credential, setCredential] = useState('');
   const [passwordCopied, setPasswordCopied] = useState(false);
   const status = model.status;
-  const canSubmit = Boolean(credential) && !model.unlocking && !model.memoryUnlocking;
+  const canSubmit = Boolean(credential)
+    && !model.unlocking
+    && !model.memoryUnlocking
+    && !model.dictionaryAttacking;
   const reconstruction = status?.recoveryPasswordReconstruction;
 
   const submitCredential = () => {
@@ -52,7 +55,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
           variant="viewerControl"
           size="iconXs"
           onClick={() => void model.inspect()}
-          disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing}
+          disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing || model.dictionaryAttacking}
           aria-label={t('fileBrowser.inspector.bitlocker.refresh')}
           title={t('fileBrowser.inspector.bitlocker.refresh')}
         >
@@ -183,6 +186,63 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
         </div>
       ) : null}
 
+      {status && !status.unlocked && status.supportsPassword ? (
+        <div className="space-y-2 border-t border-forensics-border pt-2">
+          <Button
+            type="button"
+            variant="forensicsSurface"
+            size="xs"
+            className="w-full"
+            onClick={() => void model.startDictionaryAttack()}
+            disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing || model.dictionaryAttacking}
+          >
+            <KeyRound size={12} /> {model.dictionaryAttacking
+              ? t('fileBrowser.inspector.bitlocker.dictionaryStarting')
+              : t('fileBrowser.inspector.bitlocker.importDictionary')}
+          </Button>
+        </div>
+      ) : null}
+
+      {model.dictionaryAttack ? (
+        <div className="space-y-1 border-t border-forensics-border pt-2 font-mono text-[10px]">
+          {model.dictionaryAttack.phase === 'queued' || model.dictionaryAttack.phase === 'running' || model.dictionaryAttack.phase === 'cancelling' ? (
+            <>
+              <div className="text-forensics-text">
+                {t('fileBrowser.inspector.bitlocker.dictionaryProgress', {
+                  tested: model.dictionaryAttack.testedCandidates,
+                  processed: model.dictionaryAttack.bytesProcessed,
+                  total: model.dictionaryAttack.totalBytes,
+                })}
+              </div>
+              <Button
+                type="button"
+                variant="forensicsDangerGhost"
+                size="xs"
+                className="w-full"
+                onClick={() => void model.cancelDictionaryAttack()}
+                disabled={model.dictionaryCancelling || model.dictionaryAttack.phase === 'cancelling'}
+              >
+                {model.dictionaryCancelling || model.dictionaryAttack.phase === 'cancelling'
+                  ? t('fileBrowser.inspector.bitlocker.dictionaryCancelling')
+                  : t('fileBrowser.inspector.bitlocker.cancelDictionary')}
+              </Button>
+            </>
+          ) : (
+            <div className={model.dictionaryAttack.phase === 'found'
+              ? 'text-forensics-success'
+              : 'text-forensics-muted-light'}>
+              {model.dictionaryAttack.phase === 'found'
+                ? t('fileBrowser.inspector.bitlocker.dictionaryFound')
+                : model.dictionaryAttack.phase === 'exhausted'
+                  ? t('fileBrowser.inspector.bitlocker.dictionaryExhausted')
+                  : model.dictionaryAttack.phase === 'cancelled'
+                    ? t('fileBrowser.inspector.bitlocker.dictionaryCancelled')
+                    : t('fileBrowser.inspector.bitlocker.dictionaryFailed')}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {status && !status.unlocked ? (
         <Button
           type="button"
@@ -190,7 +250,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
           size="xs"
           className="w-full"
           onClick={() => void model.unlockFromMemoryImage()}
-          disabled={model.memoryUnlocking || model.unlocking || model.loading}
+          disabled={model.memoryUnlocking || model.unlocking || model.loading || model.dictionaryAttacking}
         >
           <MemoryStick size={12} /> {model.memoryUnlocking
             ? t('fileBrowser.inspector.bitlocker.memoryUnlocking')
@@ -199,7 +259,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
       ) : null}
 
       {status && !status.unlocked && status.storedKeyAvailable ? (
-        <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.restore()} disabled={model.loading || model.memoryUnlocking}>
+        <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.restore()} disabled={model.loading || model.memoryUnlocking || model.dictionaryAttacking}>
           <KeyRound size={12} /> {t('fileBrowser.inspector.bitlocker.restore')}
         </Button>
       ) : null}
@@ -211,14 +271,14 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
               ? t('fileBrowser.inspector.bitlocker.importing')
               : t('fileBrowser.inspector.bitlocker.importCatalog')}
           </Button>
-          <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.lock()} disabled={model.loading || model.importing}>
+          <Button type="button" variant="forensicsSurface" size="xs" className="w-full" onClick={() => void model.lock()} disabled={model.loading || model.importing || model.dictionaryAttacking}>
             <LockKeyhole size={12} /> {t('fileBrowser.inspector.bitlocker.lock')}
           </Button>
         </div>
       ) : null}
 
       {status?.storedKeyAvailable ? (
-        <Button type="button" variant="forensicsDangerGhost" size="xs" className="w-full" onClick={() => void model.forget()} disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing}>
+        <Button type="button" variant="forensicsDangerGhost" size="xs" className="w-full" onClick={() => void model.forget()} disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing || model.dictionaryAttacking}>
           {t('fileBrowser.inspector.bitlocker.forget')}
         </Button>
       ) : null}

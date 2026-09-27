@@ -49,6 +49,9 @@ export const COMMANDS = {
     LOCK_BITLOCKER_VOLUME: 'lock_bitlocker_volume',
     RESTORE_PERSISTED_BITLOCKER_KEY: 'restore_persisted_bitlocker_key',
     FORGET_PERSISTED_BITLOCKER_KEY: 'forget_persisted_bitlocker_key',
+    START_BITLOCKER_DICTIONARY_ATTACK: 'start_bitlocker_dictionary_attack',
+    GET_BITLOCKER_DICTIONARY_ATTACK_STATUS: 'get_bitlocker_dictionary_attack_status',
+    CANCEL_BITLOCKER_DICTIONARY_ATTACK: 'cancel_bitlocker_dictionary_attack',
   },
   mount: {
     MOUNT_IMAGE: 'mount_image',

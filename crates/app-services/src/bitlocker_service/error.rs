@@ -1,3 +1,4 @@
+use std::io;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
 #[derive(Debug, thiserror::Error)]
@@ -43,6 +44,10 @@ pub enum BitLockerServiceError {
     MemoryImage(#[from] memory_windows::MemoryWindowsError),
     #[error("the structurally recovered BitLocker VMK did not pass volume-bound validation")]
     MemoryKeyNotValidated,
+    #[error("BitLocker password dictionary is invalid: {reason}")]
+    DictionaryInvalid { reason: &'static str },
+    #[error("BitLocker password dictionary could not be read")]
+    DictionaryRead(#[source] io::Error),
 }
 
 impl ServiceErrorCategory for BitLockerServiceError {
@@ -83,6 +88,8 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::MemoryKeyNotValidated => ErrorCategory::Security,
             Self::DrainTimeout => ErrorCategory::Timeout,
             Self::StoredKeyNotFound => ErrorCategory::Validation,
+            Self::DictionaryInvalid { .. } => ErrorCategory::Validation,
+            Self::DictionaryRead(_) => ErrorCategory::Io,
         }
     }
 
@@ -117,6 +124,8 @@ impl ServiceErrorCategory for BitLockerServiceError {
             }
             Self::MemoryImage(_) => Some("BITLOCKER_MEMORY_IMAGE_INVALID"),
             Self::MemoryKeyNotValidated => Some("BITLOCKER_MEMORY_KEY_NOT_VALIDATED"),
+            Self::DictionaryInvalid { .. } => Some("BITLOCKER_DICTIONARY_INVALID"),
+            Self::DictionaryRead(_) => Some("BITLOCKER_DICTIONARY_READ_FAILED"),
             _ => None,
         }
     }
@@ -168,6 +177,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             | Self::KeyStore(super::BitLockerKeyStoreError::CorruptBlob(_)) => Some(false),
             Self::MemoryKeyNotValidated => Some(true),
             Self::MemoryImage(error) if is_unsupported_memory_profile(error) => Some(false),
+            Self::DictionaryInvalid { .. } | Self::DictionaryRead(_) => Some(false),
             _ => None,
         }
     }

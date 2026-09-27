@@ -7,10 +7,13 @@ import type { BitLockerCatalogImport, BitLockerVolumeStatus } from '@/types/mode
 
 const api = vi.hoisted(() => ({
   forgetPersistedBitLockerKey: vi.fn(),
+  cancelBitLockerDictionaryAttack: vi.fn(),
+  getBitLockerDictionaryAttackStatus: vi.fn(),
   importUnlockedBitLockerCatalog: vi.fn(),
   inspectBitLockerVolume: vi.fn(),
   lockBitLockerVolume: vi.fn(),
   restorePersistedBitLockerKey: vi.fn(),
+  startBitLockerDictionaryAttack: vi.fn(),
   unlockBitLockerWithPassword: vi.fn(),
   unlockBitLockerWithRecoveryPassword: vi.fn(),
   unlockBitLockerWithMemoryImage: vi.fn(),
@@ -53,6 +56,8 @@ describe('useBitLockerVolumeModel', () => {
     vi.clearAllMocks();
     api.inspectBitLockerVolume.mockResolvedValue(volume);
     platform.openDialog.mockResolvedValue(null);
+    api.getBitLockerDictionaryAttackStatus.mockResolvedValue(null);
+    api.cancelBitLockerDictionaryAttack.mockResolvedValue(true);
   });
 
   it('selects a real memory image path through the platform adapter', async () => {
@@ -133,5 +138,48 @@ describe('useBitLockerVolumeModel', () => {
     await waitFor(() => expect(result.current.importing).toBe(false));
     expect(result.current.catalogImport).toBeUndefined();
     expect(result.current.catalog).toMatchObject({ fileCount: 10, directoryCount: 2 });
+  });
+
+  it('selects a dictionary path, polls progress, and refreshes the volume after a match', async () => {
+    const lockedVolume = { ...volume, unlocked: false, storedKeyAvailable: false };
+    platform.openDialog.mockResolvedValue('D:\\evidence\\passwords.txt');
+    api.startBitLockerDictionaryAttack.mockResolvedValue({
+      taskId: 'task-1',
+      phase: 'running',
+      testedCandidates: 1,
+      bytesProcessed: 12,
+      totalBytes: 24,
+    });
+    api.getBitLockerDictionaryAttackStatus
+      .mockResolvedValueOnce({
+        taskId: 'task-1',
+        phase: 'found',
+        testedCandidates: 2,
+        bytesProcessed: 24,
+        totalBytes: 24,
+      });
+    api.inspectBitLockerVolume
+      .mockResolvedValueOnce(lockedVolume)
+      .mockResolvedValueOnce(volume);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const { result } = renderHook(() => useBitLockerVolumeModel(target), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(api.inspectBitLockerVolume).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      expect(await result.current.startDictionaryAttack()).toBe(true);
+    });
+    await waitFor(() => expect(api.getBitLockerDictionaryAttackStatus).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.dictionaryAttack?.phase).toBe('found'));
+    expect(api.startBitLockerDictionaryAttack).toHaveBeenCalledWith(
+      'source-1',
+      2,
+      'D:\\evidence\\passwords.txt',
+    );
+    expect(api.inspectBitLockerVolume).toHaveBeenCalledTimes(2);
+    expect(result.current.status).toEqual(volume);
   });
 });

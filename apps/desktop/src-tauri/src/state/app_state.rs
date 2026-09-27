@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;
 
+use super::bitlocker_dictionary::BitLockerDictionaryAttackRegistry;
 use super::task_manager::TaskManager;
 use crate::emulation_registry::EmulationRegistry;
 use crate::mount_registry::MountRegistry;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub bitlocker_runtime: Arc<BitLockerUnlockRegistry>,
     /// OS-protected persistence for verified FVEK/tweak packages.
     pub bitlocker_key_store: Arc<dyn BitLockerKeyStore>,
+    /// In-memory progress and terminal state for BitLocker dictionary jobs.
+    pub bitlocker_dictionary_attacks: Arc<BitLockerDictionaryAttackRegistry>,
     /// Active user-mode read-only logical mounts.
     pub mount_registry: Arc<MountRegistry>,
     /// Active loopback iSCSI read-only physical-disk mounts.
@@ -76,6 +79,7 @@ impl Default for AppState {
             preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),
             bitlocker_runtime: Arc::new(BitLockerUnlockRegistry::default()),
             bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
+            bitlocker_dictionary_attacks: Arc::new(BitLockerDictionaryAttackRegistry::default()),
             mount_registry: Arc::new(MountRegistry::default()),
             physical_mount_registry: Arc::new(PhysicalMountRegistry::default()),
             emulation_registry: Arc::new(EmulationRegistry::default()),

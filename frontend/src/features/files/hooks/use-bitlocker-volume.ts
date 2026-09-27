@@ -2,17 +2,24 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import {
   forgetPersistedBitLockerKey,
+  cancelBitLockerDictionaryAttack,
+  getBitLockerDictionaryAttackStatus,
   importUnlockedBitLockerCatalog,
   inspectBitLockerVolume,
   lockBitLockerVolume,
   restorePersistedBitLockerKey,
+  startBitLockerDictionaryAttack,
   unlockBitLockerWithPassword,
   unlockBitLockerWithRecoveryPassword,
   unlockBitLockerWithMemoryImage,
 } from '@/lib/api/files';
 import { isApiErrorDto } from '@/lib/errors';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
-import type { BitLockerCatalogImport, BitLockerVolumeStatus } from '@/types/models';
+import type {
+  BitLockerCatalogImport,
+  BitLockerDictionaryAttack,
+  BitLockerVolumeStatus,
+} from '@/types/models';
 import type { BitLockerTarget } from '@/features/files/bitlocker';
 
 export type BitLockerUnlockMethod = 'password' | 'recoveryPassword';
@@ -30,6 +37,9 @@ export interface BitLockerVolumeModel {
   unlocking: boolean;
   memoryUnlocking: boolean;
   importing: boolean;
+  dictionaryAttack?: BitLockerDictionaryAttack;
+  dictionaryAttacking: boolean;
+  dictionaryCancelling: boolean;
   catalogImport?: BitLockerCatalogImportLifecycle;
   error?: string;
   inspect: () => Promise<void>;
@@ -39,6 +49,8 @@ export interface BitLockerVolumeModel {
   importCatalog: () => Promise<boolean>;
   lock: () => Promise<boolean>;
   forget: () => Promise<boolean>;
+  startDictionaryAttack: () => Promise<boolean>;
+  cancelDictionaryAttack: () => Promise<boolean>;
 }
 
 function safeErrorMessage(error: unknown): string {
@@ -72,6 +84,8 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   const [unlocking, setUnlocking] = useState(false);
   const [memoryUnlocking, setMemoryUnlocking] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [dictionaryAttack, setDictionaryAttack] = useState<BitLockerDictionaryAttack>();
+  const [dictionaryCancelling, setDictionaryCancelling] = useState(false);
   const [catalogImport, setCatalogImport] = useState<BitLockerCatalogImportLifecycle>();
   const [error, setError] = useState<string>();
 
@@ -95,11 +109,45 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     setCatalog(undefined);
     setCatalogImport(undefined);
     setImporting(false);
+    setDictionaryAttack(undefined);
+    setDictionaryCancelling(false);
     setError(undefined);
     if (target) {
       void inspect();
     }
   }, [inspect, target]);
+
+  useEffect(() => {
+    if (!target || !dictionaryAttack || !['queued', 'running', 'cancelling'].includes(dictionaryAttack.phase)) {
+      return;
+    }
+    let active = true;
+    const poll = async () => {
+      try {
+        const next = await getBitLockerDictionaryAttackStatus(
+          target.dataSourceId,
+          target.partitionIndex,
+        );
+        if (!active || !next) {
+          return;
+        }
+        setDictionaryAttack(next);
+        if (next.phase === 'found') {
+          await inspect();
+        }
+      } catch (reason) {
+        if (active) {
+          setError(safeErrorMessage(reason));
+        }
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 750);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [dictionaryAttack?.phase, inspect, target]);
 
   const unlock = useCallback(async (method: BitLockerUnlockMethod, credential: string) => {
     if (!target || !credential) {
@@ -233,6 +281,59 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
   }, [target]);
 
+  const startDictionaryAttack = useCallback(async () => {
+    if (!target || dictionaryAttack?.phase === 'queued' || dictionaryAttack?.phase === 'running' || dictionaryAttack?.phase === 'cancelling') {
+      return false;
+    }
+    setError(undefined);
+    try {
+      const selectedPath = singleDialogPath(await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [{
+          name: 'BitLocker password dictionary',
+          extensions: ['txt', 'dic', 'lst'],
+        }],
+      }));
+      if (!selectedPath) {
+        return false;
+      }
+      const next = await startBitLockerDictionaryAttack(
+        target.dataSourceId,
+        target.partitionIndex,
+        selectedPath,
+      );
+      setDictionaryAttack(next);
+      if (next.phase === 'found') {
+        await inspect();
+      }
+      return true;
+    } catch (reason) {
+      setError(safeErrorMessage(reason));
+      return false;
+    }
+  }, [dictionaryAttack?.phase, inspect, target]);
+
+  const cancelDictionaryAttack = useCallback(async () => {
+    if (!target || !dictionaryAttack || !['queued', 'running'].includes(dictionaryAttack.phase) || dictionaryCancelling) {
+      return false;
+    }
+    setDictionaryCancelling(true);
+    setError(undefined);
+    try {
+      const cancelled = await cancelBitLockerDictionaryAttack(
+        target.dataSourceId,
+        target.partitionIndex,
+      );
+      return cancelled;
+    } catch (reason) {
+      setError(safeErrorMessage(reason));
+      return false;
+    } finally {
+      setDictionaryCancelling(false);
+    }
+  }, [dictionaryAttack?.phase, dictionaryCancelling, target]);
+
   return {
     status,
     catalog,
@@ -240,6 +341,9 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     unlocking,
     memoryUnlocking,
     importing,
+    dictionaryAttack,
+    dictionaryAttacking: dictionaryAttack?.phase === 'queued' || dictionaryAttack?.phase === 'running' || dictionaryAttack?.phase === 'cancelling',
+    dictionaryCancelling,
     catalogImport,
     error,
     inspect,
@@ -249,5 +353,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     importCatalog,
     lock,
     forget,
+    startDictionaryAttack,
+    cancelDictionaryAttack,
   };
 }

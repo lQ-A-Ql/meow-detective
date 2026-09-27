@@ -8,9 +8,14 @@ use crate::state::AppState;
 
 use super::support::run_active_case_command;
 
+mod dictionary;
 mod memory;
 mod persistence;
 
+pub use dictionary::{
+    cancel_bitlocker_dictionary_attack, get_bitlocker_dictionary_attack_status,
+    start_bitlocker_dictionary_attack,
+};
 pub use memory::unlock_bitlocker_with_memory_image;
 pub use persistence::{forget_persisted_bitlocker_key, restore_persisted_bitlocker_key};
 

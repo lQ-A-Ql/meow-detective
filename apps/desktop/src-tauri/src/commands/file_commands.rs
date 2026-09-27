@@ -10,8 +10,10 @@ mod support;
 mod viewer;
 
 pub use bitlocker::{
-    forget_persisted_bitlocker_key, import_unlocked_bitlocker_catalog, inspect_bitlocker_volume,
-    lock_bitlocker_volume, restore_persisted_bitlocker_key, unlock_bitlocker_with_memory_image,
+    cancel_bitlocker_dictionary_attack, forget_persisted_bitlocker_key,
+    get_bitlocker_dictionary_attack_status, import_unlocked_bitlocker_catalog,
+    inspect_bitlocker_volume, lock_bitlocker_volume, restore_persisted_bitlocker_key,
+    start_bitlocker_dictionary_attack, unlock_bitlocker_with_memory_image,
     unlock_bitlocker_with_password, unlock_bitlocker_with_recovery_password,
 };
 pub use browse::{

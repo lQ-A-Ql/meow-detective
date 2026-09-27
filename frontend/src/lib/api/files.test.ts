@@ -3,7 +3,9 @@ import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import {
   cancelImport,
+  cancelBitLockerDictionaryAttack,
   getFileChildrenPage,
+  getBitLockerDictionaryAttackStatus,
   getFileJumpContext,
   getFileRowsPage,
   getFileTree,
@@ -24,6 +26,7 @@ import {
   forgetPersistedBitLockerKey,
   lockBitLockerVolume,
   restorePersistedBitLockerKey,
+  startBitLockerDictionaryAttack,
   unlockBitLockerWithPassword,
   unlockBitLockerWithRecoveryPassword,
   unlockBitLockerWithMemoryImage,
@@ -222,6 +225,38 @@ describe('files API', () => {
         partitionIndex: 2,
         credential: 'test-recovery',
       },
+    );
+  });
+
+  it('routes dictionary attack lifecycle calls without reading the dictionary', async () => {
+    requestMock.mockResolvedValue({
+      taskId: 'task-1',
+      phase: 'running',
+      testedCandidates: 4,
+      bytesProcessed: 32,
+      totalBytes: 128,
+    } as never);
+    await startBitLockerDictionaryAttack('source-1', 2, 'D:\\evidence\\passwords.txt');
+    await getBitLockerDictionaryAttackStatus('source-1', 2);
+    await cancelBitLockerDictionaryAttack('source-1', 2);
+    expect(requestMock).toHaveBeenNthCalledWith(
+      1,
+      COMMANDS.files.START_BITLOCKER_DICTIONARY_ATTACK,
+      {
+        dataSourceId: 'source-1',
+        partitionIndex: 2,
+        dictionaryPath: 'D:\\evidence\\passwords.txt',
+      },
+    );
+    expect(requestMock).toHaveBeenNthCalledWith(
+      2,
+      COMMANDS.files.GET_BITLOCKER_DICTIONARY_ATTACK_STATUS,
+      { dataSourceId: 'source-1', partitionIndex: 2 },
+    );
+    expect(requestMock).toHaveBeenNthCalledWith(
+      3,
+      COMMANDS.files.CANCEL_BITLOCKER_DICTIONARY_ATTACK,
+      { dataSourceId: 'source-1', partitionIndex: 2 },
     );
   });
 

@@ -15,6 +15,7 @@ mod analysis_system;
 pub mod artifacts;
 pub mod batch;
 pub mod bitlocker;
+pub mod bitlocker_dictionary;
 pub mod case;
 pub mod correlation;
 pub mod emulation;
@@ -86,6 +87,7 @@ pub use bitlocker::{
     BitLockerCatalogImportDto, BitLockerProtectorDto, BitLockerVolumeStatusDto,
     RecoveryPasswordReconstructionDto,
 };
+pub use bitlocker_dictionary::BitLockerDictionaryAttackDto;
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,

@@ -19,6 +19,7 @@ import {
   ViewerHandle,
   ViewerRangeRequest,
   BitLockerCatalogImport,
+  BitLockerDictionaryAttack,
   BitLockerVolumeStatus,
   ExtractFileRequest,
   FileExtractionResult,
@@ -173,6 +174,38 @@ export async function forgetPersistedBitLockerKey(
   partitionIndex: number,
 ): Promise<BitLockerVolumeStatus> {
   return apiClient.request(COMMANDS.files.FORGET_PERSISTED_BITLOCKER_KEY, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function startBitLockerDictionaryAttack(
+  dataSourceId: string,
+  partitionIndex: number,
+  dictionaryPath: string,
+): Promise<BitLockerDictionaryAttack> {
+  return apiClient.request(COMMANDS.files.START_BITLOCKER_DICTIONARY_ATTACK, {
+    dataSourceId,
+    partitionIndex,
+    dictionaryPath,
+  });
+}
+
+export async function getBitLockerDictionaryAttackStatus(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<BitLockerDictionaryAttack | null> {
+  return apiClient.request(COMMANDS.files.GET_BITLOCKER_DICTIONARY_ATTACK_STATUS, {
+    dataSourceId,
+    partitionIndex,
+  });
+}
+
+export async function cancelBitLockerDictionaryAttack(
+  dataSourceId: string,
+  partitionIndex: number,
+): Promise<boolean> {
+  return apiClient.request(COMMANDS.files.CANCEL_BITLOCKER_DICTIONARY_ATTACK, {
     dataSourceId,
     partitionIndex,
   });

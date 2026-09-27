@@ -449,6 +449,28 @@ fn full_stretch_matches_the_production_path() {
 }
 
 #[test]
+fn cached_identities_use_the_same_verified_password_path() {
+    let volume = build_volume(&VolumeSpec {
+        protectors: &[Credential::Password(TEST_PASSWORD)],
+        iterations: crate::kdf::STRETCH_ITERATIONS,
+        ..VolumeSpec::default()
+    });
+    let identities = read_volume_identities(&mut Cursor::new(volume.image)).expect("metadata");
+    let verified = unlock_volume_with_password_for_identities(
+        &identities,
+        &Passphrase::new(TEST_PASSWORD.to_string()),
+    )
+    .unwrap_or_else(|_| panic!("cached identities should authenticate"));
+    let persisted = verified.persisted_key_blob();
+    let restored = restore_volume_from_persisted_key(identities[0].clone(), persisted)
+        .unwrap_or_else(|_| panic!("verified key package should restore"));
+    assert_eq!(
+        restored.identity().metadata.encryption_method_code,
+        identities[0].metadata.encryption_method_code
+    );
+}
+
+#[test]
 fn a_reduced_stretch_does_not_unlock_a_real_volume() {
     // Guards the inverse: if the production count were ever lowered to match the
     // test count, this would start passing.

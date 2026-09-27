@@ -32,6 +32,7 @@ pub enum AuditAction {
     DataSourceDelete,
     DataSourceRename,
     BitLockerUnlock,
+    BitLockerPasswordDictionary,
     BitLockerLock,
     BitLockerKeyRestore,
     BitLockerKeyForget,
@@ -79,6 +80,7 @@ impl AuditAction {
             Self::DataSourceDelete => "datasource.delete",
             Self::DataSourceRename => "datasource.rename",
             Self::BitLockerUnlock => "bitlocker.unlock",
+            Self::BitLockerPasswordDictionary => "bitlocker.password_dictionary",
             Self::BitLockerLock => "bitlocker.lock",
             Self::BitLockerKeyRestore => "bitlocker.key.restore",
             Self::BitLockerKeyForget => "bitlocker.key.forget",
@@ -123,6 +125,7 @@ impl AuditAction {
                 "datasource"
             }
             Self::BitLockerUnlock
+            | Self::BitLockerPasswordDictionary
             | Self::BitLockerLock
             | Self::BitLockerKeyRestore
             | Self::BitLockerKeyForget

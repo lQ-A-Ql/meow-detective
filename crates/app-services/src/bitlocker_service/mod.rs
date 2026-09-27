@@ -2,6 +2,7 @@ mod activation;
 mod audit;
 mod catalog;
 mod context;
+mod dictionary;
 mod error;
 mod key_store;
 mod memory_recovery;
@@ -14,6 +15,10 @@ mod use_cases;
 
 pub use catalog::import_unlocked_bitlocker_catalog;
 pub use context::BitLockerRuntimeContext;
+pub use dictionary::{
+    try_password_dictionary, validate_dictionary_path, DictionaryAttackOutcome,
+    DictionaryAttackProgress, DictionaryAttackRequest,
+};
 pub use error::BitLockerServiceError;
 pub use key_store::{BitLockerKeyStore, BitLockerKeyStoreError, BitLockerKeyStoreOperation};
 pub use memory_recovery::unlock_bitlocker_with_memory_image;
