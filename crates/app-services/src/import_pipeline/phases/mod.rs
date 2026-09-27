@@ -1,6 +1,7 @@
 mod analyze;
 mod enumerate;
 mod finalize;
+mod locked;
 mod logical_enumeration;
 mod merge;
 mod probe;
@@ -9,4 +10,5 @@ mod register;
 pub(crate) use analyze::run_analyze_phase;
 pub(crate) use enumerate::run_enumeration_phase;
 pub(crate) use finalize::{emit_data_source_ready, run_finalize_phase};
+pub(crate) use locked::mark_locked_partitions_done;
 pub(crate) use register::run_attach_phase;

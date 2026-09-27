@@ -5,7 +5,9 @@ use transport::CommandError;
 
 use crate::{datasource_service, file_service, staging};
 
-use super::{logical_enumeration::enumerate_logical_source, merge, probe};
+use super::{
+    logical_enumeration::enumerate_logical_source, mark_locked_partitions_done, merge, probe,
+};
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::execute::{emit_import_cancellation_state, mark_import_cancelling};
 use crate::import_pipeline::partition::build_partition_work;
@@ -35,7 +37,7 @@ pub(crate) fn run_enumeration_phase(
         domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the ordinary import pipeline",
-            ))
+            ));
         }
     };
     populate_file_graph(ctx, data_source, &mut stats);
@@ -87,6 +89,10 @@ fn enumerate_image_data_source_with_staging(
         "Building filesystem readers...",
     );
     probe::load_resume_candidates(ctx, data_source, &mut candidates)?;
+    mark_locked_partitions_done(&mut manifest, &candidates);
+    manifest
+        .save(ctx.case_root)
+        .map_err(CommandError::from_service_error)?;
 
     let (pending, failures) =
         build_pending_partition_work(ctx, data_source, &candidates, &mut manifest)?;

@@ -776,7 +776,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                     max_import_workers: None,
                     max_analysis_workers: None,
                     analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
-defer_linux_artifacts: false,
+                    defer_linux_artifacts: false,
                 },
             )
             .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
@@ -996,7 +996,6 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                     enable_content_extraction: false,
                     enable_text_indexing: false,
                     analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
-defer_linux_artifacts: false,
                     tier_state: Arc::new(std::sync::Mutex::new(
                         import_analysis::tier::TierStateMachine::new(),
                     )),
@@ -1096,7 +1095,7 @@ fn e01_full_import() {
                     max_import_workers: None,
                     max_analysis_workers: None,
                     analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
-defer_linux_artifacts: false,
+                    defer_linux_artifacts: false,
                 },
             );
             match &result {
