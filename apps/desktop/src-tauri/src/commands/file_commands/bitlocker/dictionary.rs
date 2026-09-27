@@ -31,26 +31,7 @@ pub async fn start_bitlocker_dictionary_attack(
             "BitLocker dictionary attack is already running",
         ));
     }
-    if let Some(existing) = app_state.bitlocker_dictionary_attacks.get(&existing_key) {
-        match existing.phase.as_str() {
-            "cancelling" => {
-                app_state.bitlocker_dictionary_attacks.set(
-                    existing_key.clone(),
-                    BitLockerDictionaryAttackDto {
-                        phase: "cancelled".to_string(),
-                        ..existing
-                    },
-                );
-            }
-            "queued" | "running" => set_failure(
-                &app_state,
-                &existing_key,
-                existing.task_id,
-                "BITLOCKER_DICTIONARY_TASK_FAILED",
-            ),
-            _ => {}
-        }
-    }
+    reconcile_previous_attack(&app_state, &existing_key);
     let total_bytes = app_services::bitlocker_service::validate_dictionary_path(
         std::path::Path::new(&dictionary_path),
     )
@@ -114,6 +95,28 @@ pub async fn start_bitlocker_dictionary_attack(
         ));
     }
     Ok(queued)
+}
+
+fn reconcile_previous_attack(app_state: &AppState, key: &str) {
+    let Some(existing) = app_state.bitlocker_dictionary_attacks.get(key) else {
+        return;
+    };
+    match existing.phase.as_str() {
+        "cancelling" => app_state.bitlocker_dictionary_attacks.set(
+            key,
+            BitLockerDictionaryAttackDto {
+                phase: "cancelled".to_string(),
+                ..existing
+            },
+        ),
+        "queued" | "running" => set_failure(
+            app_state,
+            key,
+            existing.task_id,
+            "BITLOCKER_DICTIONARY_TASK_FAILED",
+        ),
+        _ => {}
+    }
 }
 
 #[tauri::command]
