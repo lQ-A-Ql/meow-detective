@@ -123,20 +123,12 @@ pub(crate) fn conditional_security_settings(
 pub(crate) fn conditional_network_settings(
     options: VmOptions,
     linux_guest: bool,
-    linux_network_pci_slot: u16,
+    _linux_network_interface_index: u16,
 ) -> Vec<(&'static str, &'static str)> {
     let mut settings = Vec::new();
     match options.network_mode.connection_type() {
         Some(connection_type) => {
-            let ethernet_slot = if linux_guest {
-                if linux_network_pci_slot == 160 {
-                    "160"
-                } else {
-                    "33"
-                }
-            } else {
-                "160"
-            };
+            let ethernet_slot = if linux_guest { "33" } else { "160" };
             settings.extend([
                 ("ethernet0.present", "TRUE"),
                 ("ethernet0.connectionType", connection_type),

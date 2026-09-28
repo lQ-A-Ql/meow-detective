@@ -33,7 +33,7 @@ pub struct VmxConfig {
     firmware: VmwareFirmware,
     guest_os: String,
     linux_console_compat: bool,
-    linux_network_pci_slot: u16,
+    linux_network_interface_index: u16,
     options: VmOptions,
 }
 
@@ -50,7 +50,7 @@ impl VmxConfig {
             firmware,
             guest_os: "windows9-64".to_string(),
             linux_console_compat: false,
-            linux_network_pci_slot: 33,
+            linux_network_interface_index: 33,
             options: VmOptions::default(),
         })
     }
@@ -84,8 +84,8 @@ impl VmxConfig {
         Ok(self)
     }
 
-    pub fn with_linux_network_pci_slot(mut self, slot: u16) -> Self {
-        self.linux_network_pci_slot = slot;
+    pub fn with_linux_network_pci_slot(mut self, interface_index: u16) -> Self {
+        self.linux_network_interface_index = interface_index;
         self
     }
 
@@ -145,7 +145,7 @@ impl VmxConfig {
             .chain(conditional_network_settings(
                 self.options,
                 self.linux_console_compat,
-                self.linux_network_pci_slot,
+                self.linux_network_interface_index,
             ))
         {
             values.insert(key, value.to_string());
@@ -204,7 +204,10 @@ impl VmxConfig {
         if self.linux_console_compat && self.options.network_mode.connection_type().is_some() {
             values.insert(
                 "ethernet0.pciSlotNumber",
-                self.linux_network_pci_slot.clamp(1, 255).to_string(),
+                self.linux_network_interface_index
+                    .saturating_add(1)
+                    .clamp(1, 255)
+                    .to_string(),
             );
         }
         values
@@ -225,16 +228,20 @@ fn validate_network_settings(
     guest_os: &str,
 ) -> Result<(), EmulationError> {
     let linux_guest = guest_os != "windows9-64";
-    let slot = settings
+    let pci_slot = settings
         .get("ethernet0.pciSlotNumber")
         .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(33);
-    if linux_guest && !(1..=255).contains(&slot) {
+        .unwrap_or(0);
+    let interface_index = pci_slot.saturating_sub(1);
+    if linux_guest
+        && options.network_mode.connection_type().is_some()
+        && !(1..=254).contains(&interface_index)
+    {
         return Err(invalid_vmx(
             "Linux network adapter must use a supported predictable-name PCI slot",
         ));
     }
-    for (key, value) in conditional_network_settings(options, linux_guest, slot) {
+    for (key, value) in conditional_network_settings(options, linux_guest, interface_index) {
         if key == "ethernet0.pciSlotNumber" && linux_guest {
             continue;
         }
@@ -244,7 +251,7 @@ fn validate_network_settings(
             )));
         }
     }
-    let rendered_slot = slot.to_string();
+    let rendered_slot = pci_slot.to_string();
     if linux_guest
         && options.network_mode.connection_type().is_some()
         && settings.get("ethernet0.pciSlotNumber").map(String::as_str)
