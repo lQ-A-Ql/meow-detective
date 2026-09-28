@@ -212,6 +212,7 @@ pub(super) struct MachineSpec<'a> {
     pub guest_os: &'a str,
     pub disk_adapter: VmdkAdapter,
     pub disk_adapter_reason: &'a str,
+    pub network_pci_slot: u16,
 }
 
 pub(super) fn prepare_machine_materials(
@@ -248,6 +249,7 @@ pub(super) fn prepare_machine_materials(
     let mut vmx = VmxConfig::new("disk.vmdk", spec.firmware)?
         .with_guest_os(spec.guest_os)?
         .with_disk_adapter(disk_adapter)
+        .with_linux_network_pci_slot(spec.network_pci_slot)
         .with_options(options)?;
     if let Some(media) = recovery_media {
         vmx = vmx.with_recovery_iso(media.vmware_path())?;

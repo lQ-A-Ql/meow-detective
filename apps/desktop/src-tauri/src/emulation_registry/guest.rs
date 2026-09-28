@@ -10,6 +10,7 @@ pub(super) struct GuestProfile {
     pub(super) guest_os: String,
     pub(super) disk_adapter: evidence_emulation::VmdkAdapter,
     pub(super) disk_adapter_reason: String,
+    pub(super) network_pci_slot: u16,
 }
 
 /// Linux derives both the guestid and storage controller from read-only
@@ -38,6 +39,7 @@ pub(super) fn guest_profile_for_source(
             guest_os: profile.guest_os,
             disk_adapter: profile.disk_adapter,
             disk_adapter_reason: profile.disk_adapter_reason,
+            network_pci_slot: profile.network_pci_slot,
         })
     } else {
         Ok(GuestProfile {
@@ -45,6 +47,7 @@ pub(super) fn guest_profile_for_source(
             guest_os: "windows9-64".to_string(),
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
             disk_adapter_reason: "Windows guest uses the inbox IDE controller".to_string(),
+            network_pci_slot: 160,
         })
     }
 }

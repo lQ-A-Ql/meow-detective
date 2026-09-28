@@ -33,6 +33,7 @@ pub struct VmxConfig {
     firmware: VmwareFirmware,
     guest_os: String,
     linux_console_compat: bool,
+    linux_network_pci_slot: u16,
     options: VmOptions,
 }
 
@@ -49,6 +50,7 @@ impl VmxConfig {
             firmware,
             guest_os: "windows9-64".to_string(),
             linux_console_compat: false,
+            linux_network_pci_slot: 33,
             options: VmOptions::default(),
         })
     }
@@ -80,6 +82,11 @@ impl VmxConfig {
         options.validate()?;
         self.options = options;
         Ok(self)
+    }
+
+    pub fn with_linux_network_pci_slot(mut self, slot: u16) -> Self {
+        self.linux_network_pci_slot = slot;
+        self
     }
 
     /// Attaches the generated maintenance CD as the second optical drive. The
@@ -138,6 +145,7 @@ impl VmxConfig {
             .chain(conditional_network_settings(
                 self.options,
                 self.linux_console_compat,
+                self.linux_network_pci_slot,
             ))
         {
             values.insert(key, value.to_string());
@@ -193,6 +201,12 @@ impl VmxConfig {
                 ("ide1:1.startConnected", "TRUE".to_string()),
             ]);
         }
+        if self.linux_console_compat && self.options.network_mode.connection_type().is_some() {
+            values.insert(
+                "ethernet0.pciSlotNumber",
+                self.linux_network_pci_slot.clamp(1, 255).to_string(),
+            );
+        }
         values
     }
 
@@ -210,13 +224,35 @@ fn validate_network_settings(
     options: VmOptions,
     guest_os: &str,
 ) -> Result<(), EmulationError> {
-    let expected = conditional_network_settings(options, guest_os != "windows9-64");
-    for (key, value) in expected {
+    let linux_guest = guest_os != "windows9-64";
+    let slot = settings
+        .get("ethernet0.pciSlotNumber")
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(33);
+    if linux_guest && !(1..=255).contains(&slot) {
+        return Err(invalid_vmx(
+            "Linux network adapter must use a supported predictable-name PCI slot",
+        ));
+    }
+    for (key, value) in conditional_network_settings(options, linux_guest, slot) {
+        if key == "ethernet0.pciSlotNumber" && linux_guest {
+            continue;
+        }
         if settings.get(key).map(String::as_str) != Some(value) {
             return Err(invalid_vmx(format!(
                 "network setting {key} is missing or invalid"
             )));
         }
+    }
+    let rendered_slot = slot.to_string();
+    if linux_guest
+        && options.network_mode.connection_type().is_some()
+        && settings.get("ethernet0.pciSlotNumber").map(String::as_str)
+            != Some(rendered_slot.as_str())
+    {
+        return Err(invalid_vmx(
+            "Linux network adapter PCI slot does not match the rendered VMX",
+        ));
     }
     if options.network_mode == crate::VmNetworkMode::Off
         && settings

@@ -20,6 +20,7 @@ use transport::dto::{EmulationInstallDto, EmulationInstallPlatformDto};
 
 use super::emulation::EvidenceContext;
 use super::emulation_linux_controller::LinuxControllerEvidence;
+use super::emulation_linux_network::linux_network_pci_slot;
 use super::MountServiceError;
 use crate::datasource_service::open_evidence_reader;
 
@@ -392,6 +393,7 @@ pub fn linux_guest_profile(
     // filesystems. A dedicated /boot partition is included in this scan.
     let mut distro_id = None;
     let mut controller_evidence = LinuxControllerEvidence::default();
+    let mut network_pci_slot = None;
     for record in &all_partitions {
         let Some(fs_label) = record.filesystem.as_deref() else {
             continue;
@@ -414,6 +416,9 @@ pub fn linux_guest_profile(
                 }
             }
         }
+        if network_pci_slot.is_none() {
+            network_pci_slot = linux_network_pci_slot(fs.as_ref());
+        }
         if distro_id.is_some() && controller_evidence.ide_is_decisive() {
             break;
         }
@@ -423,6 +428,7 @@ pub fn linux_guest_profile(
         guest_os: linux_guest_os_id(distro_id.as_deref()).to_string(),
         disk_adapter: controller.adapter,
         disk_adapter_reason: controller.reason.to_string(),
+        network_pci_slot: network_pci_slot.unwrap_or(33),
     })
 }
 
@@ -430,6 +436,8 @@ pub struct LinuxGuestProfile {
     pub guest_os: String,
     pub disk_adapter: evidence_emulation::VmdkAdapter,
     pub disk_adapter_reason: String,
+    /// PCI slot used to preserve the guest's configured predictable NIC name.
+    pub network_pci_slot: u16,
 }
 
 #[cfg(test)]

@@ -183,6 +183,7 @@ impl EmulationRegistry {
                 guest_os: &guest.guest_os,
                 disk_adapter: guest.disk_adapter,
                 disk_adapter_reason: &guest.disk_adapter_reason,
+                network_pci_slot: guest.network_pci_slot,
             },
             ProvenanceIds {
                 session_id: &session_id,
