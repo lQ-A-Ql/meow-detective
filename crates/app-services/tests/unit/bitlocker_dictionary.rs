@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::sync::atomic::AtomicBool;
 
 use super::*;
 
@@ -54,4 +55,48 @@ fn dictionary_rejects_growth_past_file_limit() {
             reason: "dictionary file exceeds the size limit"
         })
     ));
+}
+
+#[test]
+fn dictionary_identity_is_stable_and_changes_with_content() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let path = directory.path().join("dictionary.txt");
+    std::fs::write(&path, b"first\nsecond\n").expect("write dictionary");
+    let cancelled = AtomicBool::new(false);
+    let (_, first) =
+        crate::bitlocker_service::dictionary_identity::open_and_fingerprint(&path, &cancelled)
+            .expect("fingerprint")
+            .expect("not cancelled");
+    let (_, second) =
+        crate::bitlocker_service::dictionary_identity::open_and_fingerprint(&path, &cancelled)
+            .expect("fingerprint")
+            .expect("not cancelled");
+    assert_eq!(first.size, 13);
+    assert_eq!(first.sha256, second.sha256);
+
+    std::fs::write(&path, b"changed\n").expect("change dictionary");
+    let (_, changed) =
+        crate::bitlocker_service::dictionary_identity::open_and_fingerprint(&path, &cancelled)
+            .expect("fingerprint")
+            .expect("not cancelled");
+    assert_ne!(first.sha256, changed.sha256);
+}
+
+#[test]
+fn dictionary_audit_details_exclude_path_and_candidate_values() {
+    let details = dictionary_input_details(
+        Some(
+            &crate::bitlocker_service::dictionary_identity::DictionaryIdentity {
+                sha256: "abc123".to_string(),
+                size: 42,
+            },
+        ),
+        7,
+    );
+    let object = details.as_object().expect("object details");
+    assert_eq!(object["dictionarySha256"], "abc123");
+    assert_eq!(object["dictionarySize"], 42);
+    assert_eq!(object["testedCandidates"], 7);
+    assert!(!details.to_string().contains("dictionary.txt"));
+    assert!(!details.to_string().contains("password"));
 }

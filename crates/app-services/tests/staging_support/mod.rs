@@ -47,7 +47,7 @@ pub fn done_partition(index: usize, name: &str, file_count: u64) -> PartitionEnt
         index,
         name: name.to_string(),
         fs_kind: "Ntfs".to_string(),
-        staging_db: format!("partition_{index}.db"),
+        staging_db: format!("enum_partition_{index}.db"),
         status: PartitionStatus::Done,
         file_count,
         dir_count: 0,

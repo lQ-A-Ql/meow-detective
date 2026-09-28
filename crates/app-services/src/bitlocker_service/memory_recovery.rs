@@ -206,6 +206,7 @@ fn audit_reconstruction(context: &UnlockContext<'_>, metadata: &FveMetadata, out
             operation: "recoveryPasswordReconstruction",
             outcome,
             error_code: None,
+            extra_details: None,
         },
     );
 }

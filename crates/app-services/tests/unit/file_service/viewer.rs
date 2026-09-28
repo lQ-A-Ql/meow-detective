@@ -1,7 +1,6 @@
 use super::*;
 use super::{
-    descriptor::descriptor_is_fresh, filesystem::mft_partition_index_from_entry_id,
-    range::api::read_file_bytes_for_descriptor_with_context,
+    descriptor::descriptor_is_fresh, range::api::read_file_bytes_for_descriptor_with_context,
 };
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
 use crate::file_service::{
@@ -1120,7 +1119,7 @@ fn setup_e01_preview_routing_case(
 }
 
 #[test]
-fn preview_descriptor_prefers_persisted_partition_index_over_legacy_hints() {
+fn preview_descriptor_uses_persisted_partition_index() {
     let (_dir, conn, file_id) =
         setup_e01_preview_routing_case("mft:2:42", Some(4), "Partition 9 (NTFS)");
 
@@ -1140,14 +1139,15 @@ fn preview_descriptor_prefers_persisted_partition_index_over_legacy_hints() {
 }
 
 #[test]
-fn preview_descriptor_freshness_uses_the_same_legacy_root_fallback_as_creation() {
+fn preview_descriptor_rejects_entries_without_partition_metadata() {
     let (_dir, conn, file_id) =
         setup_e01_preview_routing_case("legacy-file-id", None, "Partition 2 (NTFS)");
 
-    let descriptor = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id).unwrap();
-
-    assert_eq!(descriptor.partition_index, Some(2));
-    assert!(descriptor_is_fresh(&conn, &file_id, &descriptor));
+    let error = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id)
+        .expect_err("partition metadata is required");
+    assert!(error
+        .to_string()
+        .contains("requires an exact partition index"));
 }
 
 #[test]
@@ -1999,52 +1999,6 @@ fn truncated_e01_chunk_read_no_panic() {
         "Short read returned {} bytes (expected for tiny E01)",
         big_buf.len()
     );
-}
-
-#[test]
-fn multi_partition_resolves_partition_index_correctly() {
-    // Verify that entries with partition index in ID format resolve correctly
-    assert_eq!(
-        mft_partition_index_from_entry_id("mft:0:42"),
-        Some(0),
-        "Partition 0 entry should resolve to index 0"
-    );
-    assert_eq!(
-        mft_partition_index_from_entry_id("mft:2:100"),
-        Some(2),
-        "Partition 2 entry should resolve to index 2"
-    );
-
-    // Verify that entries WITHOUT partition index in ID fall back to parent chain
-    assert_eq!(
-        mft_partition_index_from_entry_id("mft:42"),
-        None,
-        "Legacy format should return None and fall back to parent chain"
-    );
-
-    // Verify root name parsing from parent chain (simulated via function)
-    let root_name = "Partition 3 (NTFS)";
-    let idx: Option<usize> = root_name.strip_prefix("Partition ").and_then(|rest| {
-        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-        digits.parse().ok()
-    });
-    assert_eq!(
-        idx,
-        Some(3),
-        "Root name 'Partition 3 (NTFS)' should resolve to index 3"
-    );
-}
-
-#[test]
-fn mft_partition_index_from_entry_id_parses_partition_record_format() {
-    assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
-    assert_eq!(mft_partition_index_from_entry_id("mft:0:5"), Some(0));
-}
-
-#[test]
-fn mft_partition_index_from_entry_id_returns_none_for_legacy_format() {
-    assert_eq!(mft_partition_index_from_entry_id("mft:42"), None);
-    assert_eq!(mft_partition_index_from_entry_id("not-mft:1:2"), None);
 }
 
 #[test]

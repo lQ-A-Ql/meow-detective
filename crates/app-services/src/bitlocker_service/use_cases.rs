@@ -324,6 +324,7 @@ fn audit_unlock(
             operation: method.audit_name(),
             outcome,
             error_code,
+            extra_details: None,
         },
     );
 }
@@ -406,6 +407,7 @@ fn audit_lock(
             operation: "lock",
             outcome,
             error_code: (outcome == "timeout").then_some("BITLOCKER_LOCK_TIMEOUT"),
+            extra_details: None,
         },
     );
 }

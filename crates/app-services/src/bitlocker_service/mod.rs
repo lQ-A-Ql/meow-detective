@@ -3,6 +3,7 @@ mod audit;
 mod catalog;
 mod context;
 mod dictionary;
+mod dictionary_identity;
 mod error;
 mod key_store;
 mod memory_recovery;

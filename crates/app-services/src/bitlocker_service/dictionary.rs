@@ -5,7 +5,6 @@
 //! normal verified-unlock status; a matching password never crosses the
 //! service boundary.
 
-use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +21,7 @@ use volume_bitlocker::{
 use super::{
     audit::{self, BitLockerAudit},
     context::BitLockerRuntimeContext,
+    dictionary_identity::{open_and_fingerprint, DictionaryIdentity},
     error::BitLockerServiceError,
     source::{open_partition_window, open_source_read_only},
     use_cases::{complete_verified_unlock, UnlockContext, UnlockMethod},
@@ -82,16 +82,37 @@ pub fn try_password_dictionary(
     request: DictionaryAttackRequest<'_>,
     mut on_progress: impl FnMut(DictionaryAttackProgress),
 ) -> Result<DictionaryAttackOutcome, BitLockerServiceError> {
-    let result = try_password_dictionary_inner(&request, &mut on_progress);
-    record_dictionary_outcome(&request, &result);
+    let mut identity = None;
+    let mut tested_candidates = 0;
+    let result = try_password_dictionary_inner(
+        &request,
+        &mut identity,
+        &mut tested_candidates,
+        &mut on_progress,
+    );
+    record_dictionary_outcome(&request, &result, identity.as_ref(), tested_candidates);
     result
 }
 
 fn try_password_dictionary_inner(
     request: &DictionaryAttackRequest<'_>,
+    identity: &mut Option<DictionaryIdentity>,
+    tested_candidates: &mut u64,
     on_progress: &mut impl FnMut(DictionaryAttackProgress),
 ) -> Result<DictionaryAttackOutcome, BitLockerServiceError> {
-    let total_bytes = validate_dictionary_path(request.dictionary_path)?;
+    let Some((file, dictionary_identity)) =
+        open_and_fingerprint(request.dictionary_path, request.cancel_token)?
+    else {
+        return Ok(DictionaryAttackOutcome::Cancelled {
+            progress: DictionaryAttackProgress {
+                tested_candidates: 0,
+                bytes_processed: 0,
+                total_bytes: 0,
+            },
+        });
+    };
+    let dictionary_size = dictionary_identity.size;
+    *identity = Some(dictionary_identity);
     let _read_lease = request
         .runtimes
         .preview_runtime
@@ -117,13 +138,11 @@ fn try_password_dictionary_inner(
         }
         .into());
     }
-    let file =
-        File::open(request.dictionary_path).map_err(BitLockerServiceError::DictionaryRead)?;
     let mut reader = BufReader::new(file);
     let mut progress = DictionaryAttackProgress {
         tested_candidates: 0,
         bytes_processed: 0,
-        total_bytes,
+        total_bytes: dictionary_size,
     };
     loop {
         if request.cancel_token.load(Ordering::Acquire) {
@@ -140,6 +159,7 @@ fn try_password_dictionary_inner(
             continue;
         }
         progress.tested_candidates = progress.tested_candidates.saturating_add(1);
+        *tested_candidates = progress.tested_candidates;
         let passphrase = Passphrase::new(std::mem::take(&mut *candidate));
         let attempt = unlock_volume_with_password_for_identities(&identities, &passphrase);
         drop(passphrase);
@@ -175,6 +195,8 @@ fn try_password_dictionary_inner(
 fn record_dictionary_outcome(
     request: &DictionaryAttackRequest<'_>,
     result: &Result<DictionaryAttackOutcome, BitLockerServiceError>,
+    identity: Option<&DictionaryIdentity>,
+    tested_candidates: u64,
 ) {
     let (outcome, code) = match result {
         Ok(DictionaryAttackOutcome::Found { .. }) => ("success", None),
@@ -183,6 +205,8 @@ fn record_dictionary_outcome(
         Err(error) => ("failed", error.code()),
     };
     let fingerprint = read_dictionary_fingerprint(request);
+    let tested_candidates = dictionary_tested_candidates(result, tested_candidates);
+    let extra = dictionary_input_details(identity, tested_candidates);
     audit::record(
         request.case_conn,
         BitLockerAudit {
@@ -193,8 +217,43 @@ fn record_dictionary_outcome(
             operation: "passwordDictionary",
             outcome,
             error_code: code,
+            extra_details: Some(&extra),
         },
     );
+}
+
+fn dictionary_input_details(
+    identity: Option<&DictionaryIdentity>,
+    tested_candidates: u64,
+) -> serde_json::Value {
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "testedCandidates".to_string(),
+        serde_json::json!(tested_candidates),
+    );
+    if let Some(identity) = identity {
+        details.insert(
+            "dictionarySize".to_string(),
+            serde_json::json!(identity.size),
+        );
+        details.insert(
+            "dictionarySha256".to_string(),
+            serde_json::json!(identity.sha256),
+        );
+    }
+    serde_json::Value::Object(details)
+}
+
+fn dictionary_tested_candidates(
+    result: &Result<DictionaryAttackOutcome, BitLockerServiceError>,
+    fallback: u64,
+) -> u64 {
+    match result {
+        Ok(DictionaryAttackOutcome::Found { progress })
+        | Ok(DictionaryAttackOutcome::Exhausted { progress })
+        | Ok(DictionaryAttackOutcome::Cancelled { progress }) => progress.tested_candidates,
+        Err(_) => fallback,
+    }
 }
 
 fn read_dictionary_fingerprint(request: &DictionaryAttackRequest<'_>) -> Option<String> {

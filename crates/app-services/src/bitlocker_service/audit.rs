@@ -8,6 +8,7 @@ pub(crate) struct BitLockerAudit<'a> {
     pub operation: &'a str,
     pub outcome: &'a str,
     pub error_code: Option<&'a str>,
+    pub extra_details: Option<&'a serde_json::Value>,
 }
 
 pub(crate) fn record(conn: &rusqlite::Connection, entry: BitLockerAudit<'_>) {
@@ -27,6 +28,10 @@ pub(crate) fn record(conn: &rusqlite::Connection, entry: BitLockerAudit<'_>) {
         "outcome": entry.outcome,
         "errorCode": entry.error_code,
     });
+    let mut details = details;
+    if let (Some(object), Some(extra)) = (details.as_object_mut(), entry.extra_details) {
+        object.extend(extra.as_object().cloned().unwrap_or_default());
+    }
     let serialized = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
     if let Err(error) = AuditRepo::new(conn).log(
         Some(entry.case_id),

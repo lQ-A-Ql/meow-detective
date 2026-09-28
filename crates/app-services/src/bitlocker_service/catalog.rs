@@ -349,6 +349,7 @@ fn record_catalog_audit(
             operation: "catalogImport",
             outcome,
             error_code: None,
+            extra_details: None,
         },
     );
 }

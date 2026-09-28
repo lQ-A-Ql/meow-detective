@@ -129,7 +129,7 @@ fn make_done_partition(index: usize, name: &str, file_count: u64) -> staging::Pa
         index,
         name: name.to_string(),
         fs_kind: if index == 0 { "Ntfs" } else { "Fat" }.to_string(),
-        staging_db: format!("partition_{}.db", index),
+        staging_db: format!("enum_partition_{}.db", index),
         status: staging::PartitionStatus::Done,
         file_count,
         dir_count: 0,

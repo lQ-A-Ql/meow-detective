@@ -4,10 +4,6 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 
 use crate::file_service::FileServiceError;
 
-pub fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize> {
-    mft_file_locator_from_entry_id(entry_id).map(|(partition_index, _)| partition_index)
-}
-
 pub(crate) fn mft_file_locator_from_entry_id(entry_id: &str) -> Option<(usize, u64)> {
     let mut parts = entry_id.split(':');
     match (parts.next(), parts.next(), parts.next(), parts.next()) {
@@ -22,44 +18,7 @@ pub(crate) fn resolve_partition_index_for_entry(
     repo: &FileRepo<'_>,
     entry: &domain::FileEntry,
 ) -> Result<Option<usize>, FileServiceError> {
-    if let Some(index) = repo.find_partition_index_by_id(&entry.id)? {
-        return Ok(Some(index));
-    }
-
-    if let Some(index) = mft_partition_index_from_entry_id(&entry.id.0) {
-        tracing::debug!(
-            file_id = %entry.id.0,
-            partition_index = index,
-            "Preview routing is using the legacy MFT identifier fallback"
-        );
-        return Ok(Some(index));
-    }
-
-    let mut current = entry.clone();
-    while let Some(parent_id) = &current.parent_id {
-        let Some(parent) = repo.find_by_id(parent_id)? else {
-            return Ok(None);
-        };
-        current = parent;
-    }
-
-    let resolved = current.name.strip_prefix("Partition ").and_then(|suffix| {
-        suffix
-            .chars()
-            .take_while(char::is_ascii_digit)
-            .collect::<String>()
-            .parse()
-            .ok()
-    });
-    if let Some(index) = resolved {
-        tracing::debug!(
-            file_id = %entry.id.0,
-            root_name = %current.name,
-            partition_index = index,
-            "Preview routing is using the legacy partition-root name fallback"
-        );
-    }
-    Ok(resolved)
+    Ok(repo.find_partition_index_by_id(&entry.id)?)
 }
 
 pub(crate) fn format_image_range_error(

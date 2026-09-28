@@ -109,13 +109,7 @@ fn ensure_current_source_schemas(
                 source.id.0
             )));
         }
-        let Some(rel_path) = storage.source_db_rel_path else {
-            return Err(CaseServiceError::InvalidCaseDir(format!(
-                "data source '{}' is missing source DB path; re-import is required",
-                source.id.0
-            )));
-        };
-        let source_path = root.join(rel_path);
+        let source_path = crate::source_db::registered_source_db_path(conn, root, &source.id)?;
         let source_conn = persistence_sqlite::open_existing_source_read_only(&source_path)?;
         if persistence_sqlite::migrations::runner::current_version(&source_conn)?.as_deref()
             != Some(expected)

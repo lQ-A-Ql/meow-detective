@@ -70,31 +70,6 @@ fn enum_staging_db_path(case_root: &Path, data_source_id: &str, partition_index:
     staging_dir(case_root, data_source_id).join(format!("enum_partition_{}.db", partition_index))
 }
 
-fn legacy_partition_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(format!("partition_{}.db", partition_index))
-}
-
-fn existing_enum_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    let current = enum_staging_db_path(case_root, data_source_id, partition_index);
-    if current.exists() {
-        return current;
-    }
-    let legacy = legacy_partition_staging_db_path(case_root, data_source_id, partition_index);
-    if legacy.exists() {
-        legacy
-    } else {
-        current
-    }
-}
-
 fn analysis_staging_db_path(case_root: &Path, data_source_id: &str, worker_id: usize) -> PathBuf {
     staging_dir(case_root, data_source_id).join(format!("analysis_worker_{}.db", worker_id))
 }
@@ -109,7 +84,7 @@ impl StagingRepo {
         data_source_id: &str,
         partition_index: usize,
     ) -> DbResult<Connection> {
-        let path = existing_enum_staging_db_path(case_root, data_source_id, partition_index);
+        let path = enum_staging_db_path(case_root, data_source_id, partition_index);
         let conn =
             open_staging_with_schema(&path, include_str!("../migrations/scripts/staging_001.sql"))?;
         Self::ensure_enum_staging_columns(&conn)?;

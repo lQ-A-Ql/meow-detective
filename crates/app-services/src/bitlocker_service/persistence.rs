@@ -230,6 +230,7 @@ fn audit_persistence(
             operation,
             outcome,
             error_code,
+            extra_details: None,
         },
     );
 }

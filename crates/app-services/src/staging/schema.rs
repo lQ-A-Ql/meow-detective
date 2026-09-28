@@ -129,31 +129,6 @@ pub fn enum_staging_db_path(
     staging_dir(case_root, data_source_id).join(format!("enum_partition_{partition_index}.db"))
 }
 
-fn legacy_partition_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(format!("partition_{partition_index}.db"))
-}
-
-pub(super) fn existing_enum_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    let current = enum_staging_db_path(case_root, data_source_id, partition_index);
-    if current.exists() {
-        return current;
-    }
-    let legacy = legacy_partition_staging_db_path(case_root, data_source_id, partition_index);
-    if legacy.exists() {
-        legacy
-    } else {
-        current
-    }
-}
-
 pub fn analysis_staging_db_path(
     case_root: &Path,
     data_source_id: &str,

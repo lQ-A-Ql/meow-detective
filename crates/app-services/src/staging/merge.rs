@@ -1,8 +1,8 @@
 use super::error::StagingError;
 use super::partition_root::{merge_partition_into_main, PartitionMergeStats};
 use super::schema::{
-    analysis_staging_db_path, existing_enum_staging_db_path, open_analysis_staging,
-    open_partition_staging, PartitionStatus, StagingManifest,
+    analysis_staging_db_path, enum_staging_db_path, open_analysis_staging, open_partition_staging,
+    PartitionStatus, StagingManifest,
 };
 use super::writer::{get_staging_meta, get_worker_meta, set_staging_meta, set_worker_meta};
 use persistence_sqlite::repositories::staging_repo::StagingRepo;
@@ -87,7 +87,7 @@ pub fn merge_all_staging_to_main_with_cancel(
         if partition.status != PartitionStatus::Done {
             continue;
         }
-        if !existing_enum_staging_db_path(case_root, data_source_id, partition.index).exists() {
+        if !enum_staging_db_path(case_root, data_source_id, partition.index).exists() {
             continue;
         }
         if partition_already_merged(case_root, data_source_id, partition.index)? {

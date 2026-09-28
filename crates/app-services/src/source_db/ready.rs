@@ -237,8 +237,8 @@ pub fn open_ready_source_connections(
 }
 
 /// Read-only variant of [`open_ready_source_connections`] for pure query
-/// paths. Migrations are intentionally not run here; case opening migrates
-/// ready source databases before read-only consumers see them.
+/// paths. Migrations are intentionally not run here; callers must open a case
+/// whose source databases already match the current schema.
 pub fn open_ready_source_connections_read_only(
     case_conn: &Connection,
     case_root: &std::path::Path,
