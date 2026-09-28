@@ -272,3 +272,39 @@ fn open_existing_source_read_only_does_not_migrate_or_create_sidecars() {
         Some("source_001".to_string())
     );
 }
+
+#[test]
+fn open_existing_source_does_not_migrate_existing_database() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("source.db");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migrations (
+                     id INTEGER PRIMARY KEY,
+                     name TEXT NOT NULL UNIQUE,
+                     applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+                 );
+                 INSERT INTO schema_migrations(name) VALUES ('source_001');",
+            )
+            .unwrap();
+    }
+
+    let connection = open_existing_source(&path).unwrap();
+    assert_eq!(
+        crate::migrations::runner::current_version(&connection).unwrap(),
+        Some("source_001".to_string())
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'ceph_bluestore_omap_scans'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        0
+    );
+}

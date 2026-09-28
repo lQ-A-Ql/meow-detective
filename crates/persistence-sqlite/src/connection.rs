@@ -56,9 +56,9 @@ pub fn open_existing_case_graph_read_only(path: &Path) -> DbResult<Connection> {
 }
 
 pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
-    let conn = open_existing(path)?;
-    crate::migrations::runner::run_source_all(&conn)?;
-    Ok(conn)
+    // Existing source databases are opened as-is. Compatibility migrations
+    // belong to explicit import/build creation paths, never to case reads.
+    open_existing(path)
 }
 
 pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
