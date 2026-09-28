@@ -117,18 +117,17 @@ pub(crate) fn conditional_security_settings(
     settings
 }
 
-/// Render the complete virtual NIC profile. Linux images commonly carry a
-/// netplan file matching `ens33`; pinning the adapter to PCI slot 33 keeps the
-/// guest's predictable interface name stable across emulation sessions.
+/// Render the complete virtual NIC profile. VMware vmxnet3 is used for the
+/// common `ens160` Linux profile; other predictable names use e1000 with a
+/// one-based PCI slot adjustment.
 pub(crate) fn conditional_network_settings(
     options: VmOptions,
     linux_guest: bool,
-    _linux_network_interface_index: u16,
+    linux_network_interface_index: u16,
 ) -> Vec<(&'static str, &'static str)> {
     let mut settings = Vec::new();
     match options.network_mode.connection_type() {
         Some(connection_type) => {
-            let ethernet_slot = if linux_guest { "33" } else { "160" };
             settings.extend([
                 ("ethernet0.present", "TRUE"),
                 ("ethernet0.connectionType", connection_type),
@@ -136,9 +135,16 @@ pub(crate) fn conditional_network_settings(
                 ("ethernet0.addressType", "generated"),
                 (
                     "ethernet0.virtualDev",
-                    if linux_guest { "e1000" } else { "e1000e" },
+                    if linux_guest {
+                        if linux_network_interface_index == 160 {
+                            "vmxnet3"
+                        } else {
+                            "e1000"
+                        }
+                    } else {
+                        "e1000e"
+                    },
                 ),
-                ("ethernet0.pciSlotNumber", ethernet_slot),
                 // VMware only honors secondary PCI slots when the standard
                 // root-port bridge topology is present. Without these
                 // entries it silently rewrites the NIC slot to 16.

@@ -603,6 +603,25 @@ fn vmx_pins_linux_network_to_ens33_compatible_hardware() {
 }
 
 #[test]
+fn vmx_uses_vmxnet3_without_pci_pin_for_ens160_linux_profiles() {
+    let options = VmOptions {
+        network_mode: VmNetworkMode::Nat,
+        ..VmOptions::default()
+    };
+    let rendered = VmxConfig::new("disk.vmdk", VmwareFirmware::Bios)
+        .unwrap()
+        .with_guest_os("other5xlinux-64")
+        .unwrap()
+        .with_linux_network_interface_index(160)
+        .with_options(options)
+        .unwrap()
+        .render();
+    assert!(rendered.contains("ethernet0.virtualDev = \"vmxnet3\""));
+    assert!(!rendered.contains("ethernet0.pciSlotNumber"));
+    VmxConfig::validate_rendered(&rendered, options, false).unwrap();
+}
+
+#[test]
 fn vmx_validator_rejects_linux_network_without_predictable_name_pin() {
     let options = VmOptions {
         network_mode: VmNetworkMode::Nat,

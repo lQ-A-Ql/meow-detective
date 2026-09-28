@@ -84,7 +84,7 @@ impl VmxConfig {
         Ok(self)
     }
 
-    pub fn with_linux_network_pci_slot(mut self, interface_index: u16) -> Self {
+    pub fn with_linux_network_interface_index(mut self, interface_index: u16) -> Self {
         self.linux_network_interface_index = interface_index;
         self
     }
@@ -161,6 +161,23 @@ impl VmxConfig {
             ("numvcpus", self.options.processor_count.to_string()),
             ("virtualHW.version", "16".to_string()),
         ]);
+        if self.options.network_mode.connection_type().is_some() {
+            if !self.linux_console_compat || self.linux_network_interface_index != 160 {
+                values.insert(
+                    "ethernet0.pciSlotNumber",
+                    if self.linux_console_compat {
+                        self.linux_network_interface_index
+                            .saturating_add(1)
+                            .clamp(1, 255)
+                            .to_string()
+                    } else {
+                        "160".to_string()
+                    },
+                );
+            } else {
+                values.remove("ethernet0.pciSlotNumber");
+            }
+        }
         if self.linux_console_compat {
             // Keep the virtual framebuffer available for VMware's console
             // while disabling 3D acceleration. Removing SVGA makes the
@@ -201,15 +218,6 @@ impl VmxConfig {
                 ("ide1:1.startConnected", "TRUE".to_string()),
             ]);
         }
-        if self.linux_console_compat && self.options.network_mode.connection_type().is_some() {
-            values.insert(
-                "ethernet0.pciSlotNumber",
-                self.linux_network_interface_index
-                    .saturating_add(1)
-                    .clamp(1, 255)
-                    .to_string(),
-            );
-        }
         values
     }
 
@@ -233,15 +241,23 @@ fn validate_network_settings(
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(0);
     let interface_index = pci_slot.saturating_sub(1);
+    let vmxnet3 = settings.get("ethernet0.virtualDev").map(String::as_str) == Some("vmxnet3");
+    if linux_guest && vmxnet3 && settings.get("ethernet0.pciSlotNumber").is_some() {
+        return Err(invalid_vmx(
+            "vmxnet3 Linux networking must not pin a PCI slot",
+        ));
+    }
     if linux_guest
         && options.network_mode.connection_type().is_some()
         && !(1..=254).contains(&interface_index)
+        && !vmxnet3
     {
         return Err(invalid_vmx(
             "Linux network adapter must use a supported predictable-name PCI slot",
         ));
     }
-    for (key, value) in conditional_network_settings(options, linux_guest, interface_index) {
+    let profile_index = if vmxnet3 { 160 } else { interface_index };
+    for (key, value) in conditional_network_settings(options, linux_guest, profile_index) {
         if key == "ethernet0.pciSlotNumber" && linux_guest {
             continue;
         }
@@ -253,6 +269,7 @@ fn validate_network_settings(
     }
     let rendered_slot = pci_slot.to_string();
     if linux_guest
+        && !vmxnet3
         && options.network_mode.connection_type().is_some()
         && settings.get("ethernet0.pciSlotNumber").map(String::as_str)
             != Some(rendered_slot.as_str())
