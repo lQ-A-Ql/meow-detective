@@ -260,7 +260,6 @@ fn load_members(
             },
         )
         .collect::<Result<Vec<_>>>()
-        .map_err(Into::into)
 }
 
 fn root_relative_path(root_path: &str, source_path: &str) -> String {

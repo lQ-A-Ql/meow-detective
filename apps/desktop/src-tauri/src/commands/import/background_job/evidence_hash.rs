@@ -13,9 +13,9 @@ mod progress;
 mod schedule;
 mod status;
 
-#[cfg(test)]
+#[allow(unused_imports)]
 pub(super) use crate::state::TaskManager;
-#[cfg(test)]
+#[allow(unused_imports)]
 pub(super) use schedule::hash_task_id;
 pub(crate) use schedule::schedule_pending_evidence_hashes;
 

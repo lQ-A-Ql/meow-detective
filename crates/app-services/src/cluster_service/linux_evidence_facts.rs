@@ -97,29 +97,18 @@ pub fn collect_linux_evidence_facts(
         case_id,
         data_source_id,
     );
-    let read =
-        |entry: &domain::FileEntry, context: &mut SourceReadContext<'_>| -> Option<Vec<u8>> {
-            read_file_bytes_for_case(
-                context,
-                &entry.id,
-                0,
-                entry.size.unwrap_or(0).min(16 * 1024 * 1024) as u32,
-            )
-            .ok()
-        };
-
     if let Some(entry) = find_entry(&entries, &["etc/hostname"]) {
-        facts.hostname = read(entry, &mut context).and_then(|bytes| clean_text(&bytes));
+        facts.hostname = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes));
     }
     if let Some(entry) = find_entry(&entries, &["usr/lib/os-release", "etc/os-release"]) {
-        if let Some(text) = read(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
+        if let Some(text) = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
             facts.operating_system =
                 key_value(&text, "PRETTY_NAME").or_else(|| key_value(&text, "NAME"));
             facts.os_version = key_value(&text, "VERSION_ID");
         }
     }
     if let Some(entry) = find_entry(&entries, &["etc/hosts"]) {
-        if let Some(text) = read(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
+        if let Some(text) = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
             facts.addresses = parse_hosts_addresses(&text, facts.hostname.as_deref());
         }
     }
@@ -136,6 +125,18 @@ pub fn collect_linux_evidence_facts(
         }
     }
 
+    collect_manifest_facts(&entries, &mut facts, &mut context);
+    collect_container_facts(&entries, &mut facts, &mut context);
+    collect_artifact_facts(&source_connection, &mut facts);
+    finalize_identity_facts(&entries, &mut facts);
+    facts
+}
+
+fn collect_manifest_facts(
+    entries: &[domain::FileEntry],
+    facts: &mut LinuxEvidenceFacts,
+    context: &mut SourceReadContext<'_>,
+) {
     let manifest_entries = entries
         .iter()
         .filter(|entry| {
@@ -144,7 +145,7 @@ pub fn collect_linux_evidence_facts(
         })
         .take(32);
     for entry in manifest_entries {
-        if let Some(text) = read(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
+        if let Some(text) = read_entry(entry, context).and_then(|bytes| clean_text(&bytes)) {
             facts.roles.push("control_plane".to_string());
             facts
                 .services
@@ -160,7 +161,13 @@ pub fn collect_linux_evidence_facts(
     if has_kubelet && !facts.roles.iter().any(|role| role == "control_plane") {
         facts.roles.push("worker".to_string());
     }
+}
 
+fn collect_container_facts(
+    entries: &[domain::FileEntry],
+    facts: &mut LinuxEvidenceFacts,
+    context: &mut SourceReadContext<'_>,
+) {
     let container_entries = entries
         .iter()
         .filter(|entry| {
@@ -169,7 +176,7 @@ pub fn collect_linux_evidence_facts(
         })
         .take(256);
     for entry in container_entries {
-        if let Some(bytes) = read(entry, &mut context) {
+        if let Some(bytes) = read_entry(entry, context) {
             if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
                 let name = value["Name"]
                     .as_str()
@@ -181,7 +188,9 @@ pub fn collect_linux_evidence_facts(
             }
         }
     }
-    collect_artifact_facts(&source_connection, &mut facts);
+}
+
+fn finalize_identity_facts(entries: &[domain::FileEntry], facts: &mut LinuxEvidenceFacts) {
     if facts.hostname.is_none() && facts.operating_system.is_none() {
         let candidates = entries
             .iter()
@@ -202,11 +211,20 @@ pub fn collect_linux_evidence_facts(
             ));
         }
     }
-    facts.roles = unique(facts.roles);
-    facts.services = unique(facts.services);
-    facts.containers = unique(facts.containers);
-    facts.addresses = unique(facts.addresses);
-    facts
+    facts.roles = unique(std::mem::take(&mut facts.roles));
+    facts.services = unique(std::mem::take(&mut facts.services));
+    facts.containers = unique(std::mem::take(&mut facts.containers));
+    facts.addresses = unique(std::mem::take(&mut facts.addresses));
+}
+
+fn read_entry(entry: &domain::FileEntry, context: &mut SourceReadContext<'_>) -> Option<Vec<u8>> {
+    read_file_bytes_for_case(
+        context,
+        &entry.id,
+        0,
+        entry.size.unwrap_or(0).min(16 * 1024 * 1024) as u32,
+    )
+    .ok()
 }
 
 fn collect_artifact_facts(

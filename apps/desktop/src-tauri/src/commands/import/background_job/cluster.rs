@@ -22,7 +22,7 @@ use transport::CommandError;
 use completion::complete_evidence_set_import;
 use ledger::record_cluster_phase;
 
-#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn run_background_linux_evidence_set_import_until_browseable(
     job: BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,

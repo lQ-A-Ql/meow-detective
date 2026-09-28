@@ -87,6 +87,7 @@ fn schedule_pending_evidence_hashes_internal(
     Ok(scheduled)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_hash_task(
     task_manager: &TaskManager,
     task_id: String,

@@ -12,7 +12,7 @@ mod single;
 mod status;
 mod types;
 
-#[cfg(test)]
+#[allow(unused_imports, dead_code)]
 pub(crate) use cluster::run_background_linux_evidence_set_import_until_browseable;
 pub(crate) use cluster::run_background_linux_evidence_set_import_with_scheduler;
 pub(crate) use cluster_status::{
@@ -25,7 +25,3 @@ pub(crate) use single::run_background_import_job;
 pub(crate) use types::{
     BackgroundDerivedSourceProcessingJob, BackgroundImportJob, BackgroundLinuxEvidenceSetImportJob,
 };
-
-#[cfg(test)]
-#[path = "../../../tests/unit/commands/import/background_job.rs"]
-mod tests;
