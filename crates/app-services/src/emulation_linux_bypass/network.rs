@@ -18,6 +18,7 @@ pub(super) fn prepare(
             Ok(false) => continue,
             Err(EmulationBypassError::PartitionNotFound { .. }) => continue,
             Err(EmulationBypassError::Unsupported(_)) => continue,
+            Err(EmulationBypassError::EvidenceRead(_)) => continue,
             Err(error) => return Err(error),
         }
     }

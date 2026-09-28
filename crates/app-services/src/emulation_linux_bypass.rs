@@ -33,6 +33,7 @@ pub fn prepare_network_for_emulation(
     disk: &Arc<CowDisk>,
     case_context: &BypassCaseContext<'_>,
 ) -> Result<bool, EmulationBypassError> {
+    crate::emulation_ext4_repair::repair_ext4_journals(disk, case_context)?;
     network::prepare(disk, case_context)
 }
 const SHA512_PASSWORD_HASH: &str = "$6$meow1234$Ece2JtWkjNGCiGYoIvqBZ8teI2U1Lmd73FwcHlczR6zRf0q8ET2EdwZ6ZaEz0WZ196VlNUTZk240LtfFdViux1";
