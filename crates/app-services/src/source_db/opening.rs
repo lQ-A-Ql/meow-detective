@@ -44,7 +44,7 @@ pub fn open_registered_source_db(
         )));
     }
     drop(read_only);
-    persistence_sqlite::open_existing_source(&db_path)
+    persistence_sqlite::open_existing(&db_path)
 }
 
 pub fn open_registered_source_db_read_only(
