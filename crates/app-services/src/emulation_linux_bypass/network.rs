@@ -30,17 +30,10 @@ fn prepare_network_partition(
     partition_index: u32,
 ) -> Result<bool, EmulationBypassError> {
     let partition = volume::open_linux_partition(case_context, partition_index, Some(disk))?;
-    let children = match partition.fs.list_children("etc/sysconfig/network-scripts") {
-        Ok(children) => children,
-        Err(_) => return Ok(false),
-    };
-    let profile = children
-        .into_iter()
-        .find(|entry| entry.name.starts_with("ifcfg-") && !entry.is_dir);
-    let Some(profile) = profile else {
+    let Some(profile) = find_ifcfg_profile(&partition) else {
         return Ok(false);
     };
-    let path = format!("etc/sysconfig/network-scripts/{}", profile.name);
+    let path = format!("etc/sysconfig/network-scripts/{profile}");
     let bytes = partition
         .fs
         .read_file_range(&path, 0, MAX_NETWORK_PROFILE_BYTES + 1)
@@ -60,6 +53,28 @@ fn prepare_network_partition(
     rewrite::apply_rewrite_plan(disk, &partition.mapping, &plan)?;
     rewrite::verify_patch_bytes(disk, &partition.mapping, &plan)?;
     Ok(true)
+}
+
+fn find_ifcfg_profile(partition: &volume::LinuxPartition) -> Option<String> {
+    if let Ok(children) = partition.fs.list_children("etc/sysconfig/network-scripts") {
+        if let Some(entry) = children
+            .into_iter()
+            .find(|entry| entry.name.starts_with("ifcfg-") && !entry.is_dir)
+        {
+            return Some(entry.name);
+        }
+    }
+    let mut candidates = vec![
+        "ifcfg-ens160".to_string(),
+        "ifcfg-ens33".to_string(),
+        "ifcfg-ens32".to_string(),
+        "ifcfg-eth0".to_string(),
+    ];
+    candidates.extend((1..=255).map(|index| format!("ifcfg-ens{index}")));
+    candidates.into_iter().find(|name| {
+        let path = format!("etc/sysconfig/network-scripts/{name}");
+        partition.fs.read_file_range(&path, 0, 1).is_ok()
+    })
 }
 
 fn rewrite_ifcfg_for_dhcp(text: &str) -> Result<Option<String>, EmulationBypassError> {
