@@ -22,15 +22,12 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     let after_preflight = started.elapsed();
     let active = ActiveCase::new(stored, root.to_path_buf(), open_existing(&db_path)?);
     let after_db_open = started.elapsed();
-    active.with_conn(|conn| {
-        crate::source_db::migrate_ready_source_databases(conn, root, &active.meta.id)
-    })?;
     // Stage timing is the factual basis for case cold-start optimization;
     // keep it at info level so it shows up in the regular log.
     tracing::info!(
         preflight_ms = after_preflight.as_millis(),
         db_open_ms = (after_db_open - after_preflight).as_millis(),
-        source_migration_ms = (started.elapsed() - after_db_open).as_millis(),
+        source_migration_ms = 0,
         total_ms = started.elapsed().as_millis(),
         "case open stage timing"
     );
@@ -72,6 +69,7 @@ fn preflight_case_workspace(db_path: &Path, case_id: &CaseId) -> Result<CaseMeta
         .map_err(persistence_sqlite::DbError::from)?;
     ensure_current_schema(&conn)?;
     let stored = load_case_record(&conn, case_id)?;
+    ensure_current_source_schemas(&conn, db_path, case_id)?;
     if has_retired_linux_cluster_relationships(&conn, case_id)? {
         return Err(CaseServiceError::TopologyReimportRequired);
     }
@@ -82,6 +80,53 @@ fn preflight_case_workspace(db_path: &Path, case_id: &CaseId) -> Result<CaseMeta
         ));
     }
     Ok(stored)
+}
+
+fn ensure_current_source_schemas(
+    conn: &Connection,
+    case_db_path: &Path,
+    case_id: &CaseId,
+) -> Result<()> {
+    let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+    let root = case_db_path.parent().unwrap_or_else(|| Path::new("."));
+    let expected = persistence_sqlite::migrations::runner::latest_source_version();
+    for source in repo.find_by_case(case_id)? {
+        let Some(storage) = repo.find_storage(&source.id)? else {
+            return Err(CaseServiceError::InvalidCaseDir(format!(
+                "data source '{}' is missing storage metadata; re-import is required",
+                source.id.0
+            )));
+        };
+        if !matches!(
+            storage.import_state.trim().to_ascii_lowercase().as_str(),
+            "ready" | "ready_metadata"
+        ) {
+            continue;
+        }
+        if storage.schema_version.as_deref() != Some(expected) {
+            return Err(CaseServiceError::InvalidCaseDir(format!(
+                "data source '{}' uses an obsolete source DB schema; re-import is required",
+                source.id.0
+            )));
+        }
+        let Some(rel_path) = storage.source_db_rel_path else {
+            return Err(CaseServiceError::InvalidCaseDir(format!(
+                "data source '{}' is missing source DB path; re-import is required",
+                source.id.0
+            )));
+        };
+        let source_path = root.join(rel_path);
+        let source_conn = persistence_sqlite::open_existing_source_read_only(&source_path)?;
+        if persistence_sqlite::migrations::runner::current_version(&source_conn)?.as_deref()
+            != Some(expected)
+        {
+            return Err(CaseServiceError::InvalidCaseDir(format!(
+                "data source '{}' physical source DB schema is obsolete; re-import is required",
+                source.id.0
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn ensure_current_schema(conn: &Connection) -> Result<()> {

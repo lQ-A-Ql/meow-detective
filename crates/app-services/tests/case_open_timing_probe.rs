@@ -90,20 +90,6 @@ fn case_open_stage_timing_probe() {
         let started = Instant::now();
         let active = app_services::case_service::open_case(&case_root).expect("open probe case");
         eprintln!("open #{attempt}: total={:?}", started.elapsed());
-        let migrate_started = Instant::now();
-        active
-            .with_conn(|conn| {
-                app_services::source_db::migrate_ready_source_databases(
-                    conn,
-                    &active.case_root,
-                    &active.meta.id,
-                )
-            })
-            .expect("migrate ready source databases");
-        eprintln!(
-            "open #{attempt}: migrate_ready_source_databases={:?}",
-            migrate_started.elapsed()
-        );
         drop(active);
     }
 }

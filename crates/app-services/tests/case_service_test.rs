@@ -215,7 +215,7 @@ fn open_case_reads_metadata() {
 }
 
 #[test]
-fn open_case_migrates_ready_source_partition_routing_before_reads() {
+fn open_case_rejects_ready_source_schema_that_requires_migration() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(tmp.path(), "source-reopen", None).unwrap();
     let case_root = active.case_root.clone();
@@ -273,36 +273,11 @@ fn open_case_migrates_ready_source_partition_routing_before_reads() {
         .unwrap();
     drop(active);
 
-    let reopened = case_service::open_case(&case_root).unwrap();
-    reopened
-        .with_conn(|case_conn| {
-            let updated = DataSourceRepo::new(case_conn)
-                .find_storage(&source.id)?
-                .expect("source storage metadata");
-            assert_eq!(
-                updated.schema_version.as_deref(),
-                Some(persistence_sqlite::runner::latest_source_version())
-            );
-            Ok(())
-        })
-        .unwrap();
-
-    let source_conn = source_db::open_source_db(&case_root, &source.id).unwrap();
-    let schema_version = persistence_sqlite::runner::current_version(&source_conn).unwrap();
-    assert_eq!(
-        schema_version.as_deref(),
-        Some(persistence_sqlite::runner::latest_source_version())
-    );
-    for (id, expected) in [("root-2", 2_i64), ("etc", 2_i64), ("passwd", 2_i64)] {
-        let partition_index: Option<i64> = source_conn
-            .query_row(
-                "SELECT partition_index FROM file_entries WHERE id = ?1",
-                [id],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(partition_index, Some(expected), "{id}");
-    }
+    let error = match case_service::open_case(&case_root) {
+        Ok(_) => panic!("obsolete ready source schema unexpectedly opened"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("re-import is required"));
 }
 
 #[test]

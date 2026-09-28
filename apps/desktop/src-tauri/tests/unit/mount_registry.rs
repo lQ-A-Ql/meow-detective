@@ -42,8 +42,6 @@ fn real_e01_mount_reads_through_a_read_only_drive_and_releases_it() {
             .query_row("SELECT id FROM cases LIMIT 1", [], |row| row.get(0))
             .expect("case row must exist"),
     );
-    app_services::source_db::migrate_ready_source_databases(&case_conn, &case_root, &case_id)
-        .expect("case-open source database migrations must succeed");
     let source_db = source_db_path(&case_conn, &case_root, &data_source_id);
     let expected_root_entries =
         mountable_root_child_count(&source_db, &data_source_id, partition_index);
@@ -147,8 +145,6 @@ fn real_e01_mount_streams_a_large_file_with_bounded_latency() {
             .query_row("SELECT id FROM cases LIMIT 1", [], |row| row.get(0))
             .expect("case row must exist"),
     );
-    app_services::source_db::migrate_ready_source_databases(&case_conn, &case_root, &case_id)
-        .expect("case-open source database migrations must succeed");
     let source_db = source_db_path(&case_conn, &case_root, &data_source_id);
     let session = app_services::mount_service::prepare_mount_session(
         &case_conn,

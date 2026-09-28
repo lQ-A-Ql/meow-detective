@@ -13,8 +13,6 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
-const CEPH_RECONSTRUCTION_MINIMUM_SOURCE_VERSION: &str = "source_016_file_partition_index";
-
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
     super::identity::validate_source_storage_id(data_source_id)?;
     persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))
@@ -29,14 +27,24 @@ pub fn open_registered_source_db(
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(data_source_id)?
         .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    let expected_schema_version =
-        persistence_sqlite::migrations::runner::latest_source_version().to_string();
-    let connection = persistence_sqlite::open_existing_source(&db_path)?;
-    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
-        DataSourceRepo::new(case_conn)
-            .update_schema_version(data_source_id, &expected_schema_version)?;
+    let expected_schema_version = persistence_sqlite::migrations::runner::latest_source_version();
+    if storage.schema_version.as_deref() != Some(expected_schema_version) {
+        return Err(DbError::System(format!(
+            "Data source '{}' source DB schema is obsolete; re-import is required",
+            data_source_id.0
+        )));
     }
-    Ok(connection)
+    let read_only = persistence_sqlite::open_existing_source_read_only(&db_path)?;
+    let actual_schema_version =
+        persistence_sqlite::migrations::runner::current_version(&read_only)?;
+    if actual_schema_version.as_deref() != Some(expected_schema_version) {
+        return Err(DbError::System(format!(
+            "Data source '{}' physical source DB schema is obsolete; re-import is required",
+            data_source_id.0
+        )));
+    }
+    drop(read_only);
+    persistence_sqlite::open_existing_source(&db_path)
 }
 
 pub fn open_registered_source_db_read_only(
@@ -44,33 +52,7 @@ pub fn open_registered_source_db_read_only(
     case_root: &Path,
     data_source_id: &DataSourceId,
 ) -> DbResult<Connection> {
-    open_registered_source_db_read_only_at_least(
-        case_conn,
-        case_root,
-        data_source_id,
-        persistence_sqlite::migrations::runner::latest_source_version(),
-    )
-}
-
-pub(crate) fn open_registered_reconstruction_source_db_read_only(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-) -> DbResult<Connection> {
-    open_registered_source_db_read_only_at_least(
-        case_conn,
-        case_root,
-        data_source_id,
-        CEPH_RECONSTRUCTION_MINIMUM_SOURCE_VERSION,
-    )
-}
-
-fn open_registered_source_db_read_only_at_least(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-    minimum_schema_version: &str,
-) -> DbResult<Connection> {
+    let expected = persistence_sqlite::migrations::runner::latest_source_version();
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(data_source_id)?
         .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
@@ -80,13 +62,10 @@ fn open_registered_source_db_read_only_at_least(
             data_source_id.0
         ))
     })?;
-    if !persistence_sqlite::migrations::runner::source_version_is_at_least(
-        registered_schema_version,
-        minimum_schema_version,
-    ) {
+    if registered_schema_version != expected {
         return Err(DbError::System(format!(
-            "Data source '{}' requires source DB migration to at least '{}' before read-only access",
-            data_source_id.0, minimum_schema_version
+            "Data source '{}' uses an obsolete source DB schema; re-import is required",
+            data_source_id.0
         )));
     }
     let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
@@ -105,15 +84,10 @@ fn open_registered_source_db_read_only_at_least(
             data_source_id.0, registered_schema_version, actual_schema_version
         )));
     }
-    if !persistence_sqlite::migrations::runner::source_version_is_at_least(
-        actual_schema_version,
-        minimum_schema_version,
-    ) {
+    if actual_schema_version != expected {
         return Err(DbError::System(format!(
-            "Data source '{}' physical source DB schema is stale; requires at least '{}', found '{}'",
-            data_source_id.0,
-            minimum_schema_version,
-            actual_schema_version
+            "Data source '{}' physical source DB schema is obsolete; re-import is required",
+            data_source_id.0
         )));
     }
     Ok(connection)
