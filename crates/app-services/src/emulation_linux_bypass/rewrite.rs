@@ -11,6 +11,44 @@ pub(super) struct VolumePatch {
     pub(super) bytes: Vec<u8>,
 }
 
+pub(super) fn plan_file_rewrite(
+    partition: &LinuxPartition,
+    path: &str,
+    content: &[u8],
+) -> Result<Vec<VolumePatch>, EmulationBypassError> {
+    let pairs = match &partition.fs {
+        LinuxFilesystem::Ext4(fs) => {
+            require_clean_journal(fs)?;
+            let old_len = fs
+                .file_size_by_path(path)
+                .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
+            if old_len != content.len() as u64 {
+                return Err(EmulationBypassError::Unsupported(
+                    "network profile rewrite must preserve file size".to_string(),
+                ));
+            }
+            let extents = fs
+                .file_extent_map(path)
+                .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?;
+            extent_range_patches(&extents, 0, content.len() as u64, Some(content))?
+        }
+        LinuxFilesystem::Xfs(fs) => fs
+            .plan_in_place_file_rewrite(path, content)
+            .map_err(map_xfs_rewrite_error)?
+            .patches
+            .into_iter()
+            .map(|patch| (patch.volume_offset, patch.bytes))
+            .collect(),
+    };
+    Ok(pairs
+        .into_iter()
+        .map(|(volume_offset, bytes)| VolumePatch {
+            volume_offset,
+            bytes,
+        })
+        .collect())
+}
+
 /// Ext4 shadow edits are deliberately size-preserving: changing the inode
 /// size would require an additional metadata transaction and block-allocation
 /// update.  A shorter replacement is padded with blank lines, which the

@@ -8,6 +8,7 @@
 //! and `fs-xfs` has proved the existing allocation safe for an in-place
 //! rewrite.
 
+mod network;
 mod rewrite;
 mod volume;
 
@@ -27,6 +28,13 @@ const MAX_SHADOW_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_PASSWD_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_LOGIN_DEFS_BYTES: u64 = 1024 * 1024;
 pub const LINUX_BYPASS_PASSWORD: &str = "123456";
+
+pub fn prepare_network_for_emulation(
+    disk: &Arc<CowDisk>,
+    case_context: &BypassCaseContext<'_>,
+) -> Result<bool, EmulationBypassError> {
+    network::prepare(disk, case_context)
+}
 const SHA512_PASSWORD_HASH: &str = "$6$meow1234$Ece2JtWkjNGCiGYoIvqBZ8teI2U1Lmd73FwcHlczR6zRf0q8ET2EdwZ6ZaEz0WZ196VlNUTZk240LtfFdViux1";
 const SHA256_PASSWORD_HASH: &str = "$5$meow1234$qQo/HTqGwuXnYwUW/4dOt0XW4nIwccjEttTNDrymHn2";
 const MD5_PASSWORD_HASH: &str = "$1$meow123$b2lFkt4IaVGRkj8fDdzcD/";

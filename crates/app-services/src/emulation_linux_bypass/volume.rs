@@ -40,6 +40,13 @@ impl LinuxFilesystem {
         }
     }
 
+    pub(super) fn list_children(&self, path: &str) -> io::Result<Vec<evidence_core::FsNode>> {
+        match self {
+            Self::Ext4(fs) => fs.list_children(path),
+            Self::Xfs(fs) => fs.list_children(path),
+        }
+    }
+
     pub(super) fn verify_rewrite_state(
         &self,
         path: &str,

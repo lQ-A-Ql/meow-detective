@@ -15,6 +15,7 @@ use crate::emulation_backend::{self, EmulationBackendHandle};
 
 mod guest;
 mod materials;
+mod network;
 mod recovery_media;
 mod session_discovery;
 mod session_ops;
@@ -24,8 +25,9 @@ mod workspace;
 
 use guest::guest_profile_for_source;
 pub(crate) use materials::maintenance_tool_available;
-use materials::{
-    build_maintenance_payload, detect_firmware, image_kind, prepare_machine_materials,
+use materials::{detect_firmware, image_kind, prepare_machine_materials};
+use network::{
+    build_maintenance_for_guest, cleanup_prepare_failure, prepare_linux_network_if_needed,
 };
 use recovery_media::RecoveryMedia;
 use vmware::VmwareControl;
@@ -155,26 +157,30 @@ impl EmulationRegistry {
                 return Err(error);
             }
         };
-        // The maintenance CD rides the recovery-media route: Windows installs
-        // get the WinPE helper tool, Linux installs get the rescue CD with
-        // TARGETS.JSON and the rescue README (no in-guest tool for Linux).
-        let maintenance = if recovery_media.is_some() {
-            let payload = if guest.is_linux {
-                materials::build_linux_rescue_payload(case_conn, case_root, case_id, data_source_id)
-            } else {
-                build_maintenance_payload(case_conn, case_root, case_id, data_source_id)
-            };
-            match payload {
-                Ok(payload) => payload,
-                Err(error) => {
-                    let _ = backend.stop();
-                    workspace.remove_best_effort();
-                    return Err(error);
-                }
-            }
-        } else {
-            None
-        };
+        if let Err(error) = prepare_linux_network_if_needed(
+            guest.is_linux,
+            options,
+            &disk,
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+        ) {
+            return Err(cleanup_prepare_failure(&workspace, &backend, error));
+        }
+        let maintenance = build_maintenance_for_guest(
+            recovery_media.is_some(),
+            guest.is_linux,
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+        )
+        .map_err(|error| {
+            let _ = backend.stop();
+            workspace.remove_best_effort();
+            error
+        })?;
         let materials = prepare_machine_materials(
             &workspace,
             &identity,
