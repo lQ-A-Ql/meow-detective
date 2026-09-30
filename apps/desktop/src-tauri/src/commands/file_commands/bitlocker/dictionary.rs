@@ -64,7 +64,7 @@ pub async fn start_bitlocker_dictionary_attack(
     let registration =
         app_state
             .task_manager
-            .spawn_scoped_heavy(task_id, scope, cancel_token, move || {
+            .spawn_scoped(task_id, scope, cancel_token, move || {
                 run_dictionary_attack(
                     worker_state,
                     worker_registry_key,

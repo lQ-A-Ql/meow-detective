@@ -14,14 +14,14 @@ use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::ServiceErrorCategory;
 use volume_bitlocker::{
-    read_volume_identities, unlock_volume_with_password_for_identities, BitLockerError,
-    MetadataFingerprint, Passphrase, ProtectorKind,
+    read_volume_identities, BitLockerError, MetadataFingerprint, ProtectorKind,
 };
 
 use super::{
     audit::{self, BitLockerAudit},
     context::BitLockerRuntimeContext,
     dictionary_identity::{open_and_fingerprint, DictionaryIdentity},
+    dictionary_parallel::{worker_count, DictionaryWorkers},
     error::BitLockerServiceError,
     source::{open_partition_window, open_source_read_only},
     use_cases::{complete_verified_unlock, UnlockContext, UnlockMethod},
@@ -113,10 +113,6 @@ fn try_password_dictionary_inner(
     };
     let dictionary_size = dictionary_identity.size;
     *identity = Some(dictionary_identity);
-    let _read_lease = request
-        .runtimes
-        .preview_runtime
-        .begin_session(request.case_id, request.data_source_id)?;
     let source = open_source_read_only(
         request.case_conn,
         request.case_root,
@@ -139,6 +135,8 @@ fn try_password_dictionary_inner(
         .into());
     }
     let mut reader = BufReader::new(file);
+    let batch_size = worker_count(1024).saturating_mul(4).max(1);
+    let workers = DictionaryWorkers::new(batch_size)?;
     let mut progress = DictionaryAttackProgress {
         tested_candidates: 0,
         bytes_processed: 0,
@@ -148,23 +146,27 @@ fn try_password_dictionary_inner(
         if request.cancel_token.load(Ordering::Acquire) {
             return Ok(DictionaryAttackOutcome::Cancelled { progress });
         }
-        let Some(raw_line) = read_bounded_line(&mut reader)? else {
-            return Ok(DictionaryAttackOutcome::Exhausted { progress });
-        };
-        progress.bytes_processed =
-            checked_bytes_processed(progress.bytes_processed, raw_line.len())?;
-        let mut candidate = decode_candidate(raw_line)?;
-        if candidate.is_empty() {
-            on_progress(progress);
-            continue;
+        let mut candidates = Vec::with_capacity(batch_size);
+        while candidates.len() < batch_size {
+            let Some(raw_line) = read_bounded_line(&mut reader)? else {
+                break;
+            };
+            progress.bytes_processed =
+                checked_bytes_processed(progress.bytes_processed, raw_line.len())?;
+            let candidate = decode_candidate(raw_line)?;
+            if !candidate.is_empty() {
+                candidates.push(candidate);
+            }
         }
-        progress.tested_candidates = progress.tested_candidates.saturating_add(1);
+        if candidates.is_empty() {
+            return Ok(DictionaryAttackOutcome::Exhausted { progress });
+        }
+        progress.tested_candidates = progress
+            .tested_candidates
+            .saturating_add(candidates.len() as u64);
         *tested_candidates = progress.tested_candidates;
-        let passphrase = Passphrase::new(std::mem::take(&mut *candidate));
-        let attempt = unlock_volume_with_password_for_identities(&identities, &passphrase);
-        drop(passphrase);
-        match attempt {
-            Ok(verified) => {
+        match workers.try_batch(&identities, candidates, request.cancel_token)? {
+            Some(verified) => {
                 if request.cancel_token.load(Ordering::Acquire) {
                     return Ok(DictionaryAttackOutcome::Cancelled { progress });
                 }
@@ -186,8 +188,7 @@ fn try_password_dictionary_inner(
                 )?;
                 return Ok(DictionaryAttackOutcome::Found { progress });
             }
-            Err(BitLockerError::CredentialRejected) => on_progress(progress),
-            Err(error) => return Err(error.into()),
+            None => on_progress(progress),
         }
     }
 }

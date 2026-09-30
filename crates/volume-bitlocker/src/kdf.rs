@@ -32,10 +32,14 @@ type BitLockerCcm = Ccm<Aes256, U16, U12>;
 /// characters alone.
 #[must_use]
 pub(crate) fn password_hash(password: &str) -> Zeroizing<[u8; 32]> {
-    let utf16: Zeroizing<Vec<u8>> =
-        Zeroizing::new(password.encode_utf16().flat_map(u16::to_le_bytes).collect());
-    let first = Sha256::digest(utf16.as_slice());
-    Zeroizing::new(Sha256::digest(first).into())
+    let mut first_hasher = Sha256::new();
+    for code_unit in password.encode_utf16() {
+        first_hasher.update(code_unit.to_le_bytes());
+    }
+    let first = first_hasher.finalize();
+    let mut second_hasher = Sha256::new();
+    second_hasher.update(first);
+    Zeroizing::new(second_hasher.finalize().into())
 }
 
 /// Runs the stretch loop `iterations` times.

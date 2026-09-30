@@ -4,6 +4,7 @@ mod catalog;
 mod context;
 mod dictionary;
 mod dictionary_identity;
+mod dictionary_parallel;
 mod error;
 mod key_store;
 mod memory_recovery;

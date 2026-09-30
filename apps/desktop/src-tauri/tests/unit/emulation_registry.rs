@@ -144,6 +144,7 @@ fn real_e01_mount_uses_a_descriptor_and_sparse_cow_without_materializing_the_dis
             guest_os: "windows9-64",
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
             disk_adapter_reason: "test",
+            network_pci_slot: 160,
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,
@@ -237,6 +238,7 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
             guest_os: "windows9-64",
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
             disk_adapter_reason: "test",
+            network_pci_slot: 160,
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,
