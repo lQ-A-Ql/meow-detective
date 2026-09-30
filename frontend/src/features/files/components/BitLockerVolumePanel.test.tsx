@@ -115,6 +115,7 @@ describe('BitLockerVolumePanel', () => {
           dictionaryAttack: {
             taskId: 'task-1',
             phase: 'running',
+            backend: 'cpu',
             testedCandidates: 12,
             bytesProcessed: 120,
             totalBytes: 240,
@@ -140,6 +141,24 @@ describe('BitLockerVolumePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /导入密码字典并尝试/ }));
     expect(startDictionaryAttack).toHaveBeenCalledTimes(1);
+    expect(startDictionaryAttack).toHaveBeenCalledWith('cpu');
+  });
+
+  it('passes optional GPU mode when selected', () => {
+    const startDictionaryAttack = vi.fn().mockResolvedValue(true);
+    render(<BitLockerVolumePanel partition={partition} model={model({startDictionaryAttack})} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /GPU/ }));
+    fireEvent.click(screen.getByRole('button', { name: /导入密码字典并尝试/ }));
+    expect(startDictionaryAttack).toHaveBeenCalledWith('gpu');
+  });
+
+  it('explains unavailable GPU mode and offers CPU retry', () => {
+    render(<BitLockerVolumePanel partition={partition} model={model({ dictionaryAttack: {
+      taskId: 'gpu-task', phase: 'failed', backend: 'gpu', testedCandidates: 0,
+      bytesProcessed: 0, totalBytes: 100, error: 'BITLOCKER_GPU_UNAVAILABLE',
+    } })} />);
+    expect(screen.getByText(/未检测到可用 GPU/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /导入密码字典并尝试/ })).toBeEnabled();
   });
 
   it('shows the reconstructed recovery password with a copy action', () => {

@@ -87,7 +87,7 @@ pub use bitlocker::{
     BitLockerCatalogImportDto, BitLockerProtectorDto, BitLockerVolumeStatusDto,
     RecoveryPasswordReconstructionDto,
 };
-pub use bitlocker_dictionary::BitLockerDictionaryAttackDto;
+pub use bitlocker_dictionary::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,

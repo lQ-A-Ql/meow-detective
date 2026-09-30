@@ -6,6 +6,17 @@ use volume_bitlocker::{
 
 use super::*;
 
+#[test]
+fn unavailable_gpu_has_an_explicit_cpu_retry_contract() {
+    let error = BitLockerServiceError::DictionaryGpu(BitLockerGpuError::Unavailable);
+    assert_eq!(error.code(), Some("BITLOCKER_GPU_UNAVAILABLE"));
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Unsupported
+    ));
+    assert!(error.user_message().expect("retry message").contains("CPU"));
+}
+
 fn identity_with_password_and_recovery() -> VolumeIdentity {
     let mut password = vec![0u8; 28];
     password[26..28].copy_from_slice(&0x2000u16.to_le_bytes());

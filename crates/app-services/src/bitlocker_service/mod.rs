@@ -3,6 +3,8 @@ mod audit;
 mod catalog;
 mod context;
 mod dictionary;
+mod dictionary_backend;
+mod dictionary_gpu;
 mod dictionary_identity;
 mod dictionary_parallel;
 mod error;
@@ -21,6 +23,7 @@ pub use dictionary::{
     try_password_dictionary, validate_dictionary_path, DictionaryAttackOutcome,
     DictionaryAttackProgress, DictionaryAttackRequest,
 };
+pub use dictionary_gpu::GpuError as BitLockerGpuError;
 pub use error::BitLockerServiceError;
 pub use key_store::{BitLockerKeyStore, BitLockerKeyStoreError, BitLockerKeyStoreOperation};
 pub use memory_recovery::unlock_bitlocker_with_memory_image;

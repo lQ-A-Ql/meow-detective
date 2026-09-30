@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use app_services::bitlocker_service::DictionaryAttackProgress;
 use tauri::State;
-use transport::{dto::BitLockerDictionaryAttackDto, CommandError};
+use transport::{
+    dto::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto},
+    CommandError,
+};
 
 use crate::commands::command_support::require_active_case;
 use crate::state::{AppState, TaskRegistrationError, TaskScope};
@@ -20,6 +23,7 @@ pub async fn start_bitlocker_dictionary_attack(
     data_source_id: String,
     partition_index: u32,
     dictionary_path: String,
+    backend: BitLockerDictionaryBackendDto,
 ) -> Result<BitLockerDictionaryAttackDto, CommandError> {
     let app_state = state.inner().clone();
     let active = require_active_case(&app_state)?;
@@ -46,6 +50,7 @@ pub async fn start_bitlocker_dictionary_attack(
             total_bytes,
         },
         None,
+        backend,
     );
     app_state
         .bitlocker_dictionary_attacks
@@ -74,6 +79,7 @@ pub async fn start_bitlocker_dictionary_attack(
                     worker_source_id,
                     partition_index,
                     worker_dictionary_path,
+                    backend,
                     worker_cancel,
                 )
             });

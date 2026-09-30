@@ -18,6 +18,7 @@ import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import type {
   BitLockerCatalogImport,
   BitLockerDictionaryAttack,
+  BitLockerDictionaryBackend,
   BitLockerVolumeStatus,
 } from '@/types/models';
 import type { BitLockerTarget } from '@/features/files/bitlocker';
@@ -49,7 +50,7 @@ export interface BitLockerVolumeModel {
   importCatalog: () => Promise<boolean>;
   lock: () => Promise<boolean>;
   forget: () => Promise<boolean>;
-  startDictionaryAttack: () => Promise<boolean>;
+  startDictionaryAttack: (backend?: BitLockerDictionaryBackend) => Promise<boolean>;
   cancelDictionaryAttack: () => Promise<boolean>;
 }
 
@@ -281,7 +282,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
   }, [target]);
 
-  const startDictionaryAttack = useCallback(async () => {
+  const startDictionaryAttack = useCallback(async (backend: BitLockerDictionaryBackend = 'cpu') => {
     if (!target || dictionaryAttack?.phase === 'queued' || dictionaryAttack?.phase === 'running' || dictionaryAttack?.phase === 'cancelling') {
       return false;
     }
@@ -302,6 +303,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
         target.dataSourceId,
         target.partitionIndex,
         selectedPath,
+        backend,
       );
       setDictionaryAttack(next);
       if (next.phase === 'found') {

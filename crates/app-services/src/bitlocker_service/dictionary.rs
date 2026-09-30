@@ -12,6 +12,7 @@ use zeroize::Zeroizing;
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
+use transport::dto::BitLockerDictionaryBackendDto;
 use transport::ServiceErrorCategory;
 use volume_bitlocker::{
     read_volume_identities, BitLockerError, MetadataFingerprint, ProtectorKind,
@@ -20,8 +21,8 @@ use volume_bitlocker::{
 use super::{
     audit::{self, BitLockerAudit},
     context::BitLockerRuntimeContext,
+    dictionary_backend::DictionaryBackend,
     dictionary_identity::{open_and_fingerprint, DictionaryIdentity},
-    dictionary_parallel::{worker_count, DictionaryWorkers},
     error::BitLockerServiceError,
     source::{open_partition_window, open_source_read_only},
     use_cases::{complete_verified_unlock, UnlockContext, UnlockMethod},
@@ -51,6 +52,7 @@ pub struct DictionaryAttackRequest<'a> {
     pub data_source_id: &'a DataSourceId,
     pub partition_index: u32,
     pub dictionary_path: &'a Path,
+    pub backend: BitLockerDictionaryBackendDto,
     pub runtimes: BitLockerRuntimeContext<'a>,
     pub cancel_token: &'a AtomicBool,
 }
@@ -149,8 +151,8 @@ fn try_password_dictionary_inner(
         .into());
     }
     let mut reader = BufReader::new(file);
-    let workers = DictionaryWorkers::new()?;
-    let batch_size = worker_count(usize::MAX).saturating_mul(4).max(1);
+    let workers = DictionaryBackend::new(request.backend, &identities)?;
+    let batch_size = workers.batch_size();
     let mut progress = DictionaryAttackProgress {
         tested_candidates: 0,
         bytes_processed: 0,
@@ -170,7 +172,8 @@ fn try_password_dictionary_inner(
             DictionaryBatch::End => return Ok(DictionaryAttackOutcome::Exhausted { progress }),
             DictionaryBatch::Candidates(candidates) => candidates,
         };
-        let batch = workers.try_batch(&identities, candidates, request.cancel_token);
+        on_progress(progress);
+        let batch = workers.try_batch(&identities, candidates, request.cancel_token)?;
         progress.tested_candidates = progress
             .tested_candidates
             .saturating_add(batch.attempted as u64);
@@ -259,7 +262,8 @@ fn record_dictionary_outcome(
     };
     let fingerprint = read_dictionary_fingerprint(request);
     let tested_candidates = dictionary_tested_candidates(result, tested_candidates);
-    let extra = dictionary_input_details(identity, tested_candidates);
+    let mut extra = dictionary_input_details(identity, tested_candidates);
+    extra["backend"] = serde_json::json!(request.backend);
     audit::record(
         request.case_conn,
         BitLockerAudit {

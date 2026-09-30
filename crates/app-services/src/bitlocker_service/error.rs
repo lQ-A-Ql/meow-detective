@@ -50,6 +50,8 @@ pub enum BitLockerServiceError {
     DictionaryRead(#[source] io::Error),
     #[error("BitLocker dictionary workers could not be started")]
     DictionaryWorkers(#[source] rayon::ThreadPoolBuildError),
+    #[error(transparent)]
+    DictionaryGpu(#[from] super::dictionary_gpu::GpuError),
 }
 
 impl ServiceErrorCategory for BitLockerServiceError {
@@ -93,6 +95,10 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::DictionaryInvalid { .. } => ErrorCategory::Validation,
             Self::DictionaryRead(_) => ErrorCategory::Io,
             Self::DictionaryWorkers(_) => ErrorCategory::Internal,
+            Self::DictionaryGpu(super::dictionary_gpu::GpuError::Unavailable) => {
+                ErrorCategory::Unsupported
+            }
+            Self::DictionaryGpu(_) => ErrorCategory::External,
         }
     }
 
@@ -130,12 +136,22 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::DictionaryInvalid { .. } => Some("BITLOCKER_DICTIONARY_INVALID"),
             Self::DictionaryRead(_) => Some("BITLOCKER_DICTIONARY_READ_FAILED"),
             Self::DictionaryWorkers(_) => Some("BITLOCKER_DICTIONARY_WORKERS_UNAVAILABLE"),
+            Self::DictionaryGpu(super::dictionary_gpu::GpuError::Unavailable) => {
+                Some("BITLOCKER_GPU_UNAVAILABLE")
+            }
+            Self::DictionaryGpu(super::dictionary_gpu::GpuError::Busy) => {
+                Some("BITLOCKER_GPU_BUSY")
+            }
+            Self::DictionaryGpu(_) => Some("BITLOCKER_GPU_FAILED"),
             _ => None,
         }
     }
 
     fn user_message(&self) -> Option<&'static str> {
         match self {
+            Self::DictionaryGpu(super::dictionary_gpu::GpuError::Unavailable) => Some("GPU acceleration requires a compatible OpenCL GPU driver. Select CPU or install the graphics driver."),
+            Self::DictionaryGpu(super::dictionary_gpu::GpuError::Busy) => Some("Another BitLocker GPU task is running. Wait for it to finish or select CPU."),
+            Self::DictionaryGpu(_) => Some("GPU acceleration failed. Select CPU to retry."),
             Self::Volume(volume_bitlocker::BitLockerError::CredentialRejected) => {
                 Some("The BitLocker credential was rejected")
             }

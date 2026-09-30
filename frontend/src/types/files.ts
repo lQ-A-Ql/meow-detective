@@ -74,6 +74,7 @@ export interface FileExtractionResult {
   warning?: string;
 }
 
+export type BitLockerDictionaryBackend = 'cpu' | 'gpu';
 export type BitLockerDictionaryAttackPhase =
   | 'queued'
   | 'running'
@@ -93,6 +94,7 @@ export type BitLockerDictionaryAttackPhase =
 export interface BitLockerDictionaryAttack {
   taskId: string;
   phase: BitLockerDictionaryAttackPhase;
+  backend: BitLockerDictionaryBackend;
   testedCandidates: number;
   bytesProcessed: number;
   totalBytes: number;

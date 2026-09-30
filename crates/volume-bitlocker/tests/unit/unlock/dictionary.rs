@@ -13,6 +13,37 @@ fn password_identity() -> VolumeIdentity {
 }
 
 #[test]
+fn acceleration_target_requires_authenticated_keys_and_handles_damaged_copies() {
+    let healthy = password_identity();
+    let mut damaged = healthy.clone();
+    damaged
+        .metadata
+        .entries
+        .iter_mut()
+        .find(|entry| entry.entry_type == crate::metadata::ENTRY_TYPE_FVEK)
+        .expect("FVEK")
+        .data[12] ^= 1;
+    let target = crate::PasswordAccelerationTarget::new(&[damaged, healthy]).expect("target");
+    assert_eq!(target.salts(), &[support::SALT]);
+    assert!(matches!(
+        target.verify(&[]),
+        Err(BitLockerError::CredentialRejected)
+    ));
+    assert!(matches!(
+        target.verify(&[[0; 32]]),
+        Err(BitLockerError::CredentialRejected)
+    ));
+    let key = crate::kdf::stretch_key_n(
+        &password_hash(TEST_PASSWORD),
+        &support::SALT,
+        TEST_ITERATIONS,
+    );
+    target
+        .verify(&[*key])
+        .expect("both CCM checks and healthy copy required");
+}
+
+#[test]
 fn same_salt_is_stretched_once_but_each_metadata_copy_is_authenticated() {
     let healthy = password_identity();
     let mut damaged = healthy.clone();

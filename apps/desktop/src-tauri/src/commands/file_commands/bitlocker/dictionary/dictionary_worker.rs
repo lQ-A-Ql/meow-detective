@@ -6,7 +6,10 @@ use app_services::bitlocker_service::{
     self, DictionaryAttackOutcome, DictionaryAttackProgress, DictionaryAttackRequest,
 };
 use domain::{CaseId, DataSourceId};
-use transport::{dto::BitLockerDictionaryAttackDto, ServiceErrorCategory};
+use transport::{
+    dto::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto},
+    ServiceErrorCategory,
+};
 
 use crate::state::AppState;
 
@@ -20,6 +23,7 @@ pub(super) fn run_dictionary_attack(
     data_source_id: String,
     partition_index: u32,
     dictionary_path: PathBuf,
+    backend: BitLockerDictionaryBackendDto,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let starting_phase = if app_state
@@ -71,6 +75,7 @@ pub(super) fn run_dictionary_attack(
             data_source_id: &DataSourceId(data_source_id),
             partition_index,
             dictionary_path: &dictionary_path,
+            backend,
             runtimes,
             cancel_token: &cancel_token,
         },
@@ -99,39 +104,18 @@ fn settle_dictionary_result(
     task_id: String,
     result: Result<DictionaryAttackOutcome, bitlocker_service::BitLockerServiceError>,
 ) -> Result<(), String> {
-    match result {
-        Ok(DictionaryAttackOutcome::Found { progress }) => {
-            set_phase(app_state, registry_key, task_id, "found", progress, None);
-            Ok(())
-        }
-        Ok(DictionaryAttackOutcome::Exhausted { progress }) => {
-            set_phase(
-                app_state,
-                registry_key,
-                task_id,
-                "exhausted",
-                progress,
-                None,
-            );
-            Ok(())
-        }
-        Ok(DictionaryAttackOutcome::Cancelled { progress }) => {
-            set_phase(
-                app_state,
-                registry_key,
-                task_id,
-                "cancelled",
-                progress,
-                None,
-            );
-            Ok(())
-        }
+    let (phase, progress) = match result {
+        Ok(DictionaryAttackOutcome::Found { progress }) => ("found", progress),
+        Ok(DictionaryAttackOutcome::Exhausted { progress }) => ("exhausted", progress),
+        Ok(DictionaryAttackOutcome::Cancelled { progress }) => ("cancelled", progress),
         Err(error) => {
             let code = error.code().unwrap_or("BITLOCKER_DICTIONARY_FAILED");
             set_failure(app_state, registry_key, task_id, code);
-            Err(code.to_string())
+            return Err(code.to_string());
         }
-    }
+    };
+    set_phase(app_state, registry_key, task_id, phase, progress, None);
+    Ok(())
 }
 
 pub(super) fn set_failure(app_state: &AppState, key: &str, task_id: String, code: &str) {
@@ -166,9 +150,15 @@ fn set_phase(
     progress: DictionaryAttackProgress,
     error: Option<String>,
 ) {
-    app_state
+    let backend = app_state
         .bitlocker_dictionary_attacks
-        .set(key.to_string(), state_dto(task_id, phase, progress, error));
+        .get(key)
+        .map(|state| state.backend)
+        .unwrap_or(BitLockerDictionaryBackendDto::Cpu);
+    app_state.bitlocker_dictionary_attacks.set(
+        key.to_string(),
+        state_dto(task_id, phase, progress, error, backend),
+    );
 }
 
 pub(super) fn state_dto(
@@ -176,10 +166,12 @@ pub(super) fn state_dto(
     phase: &str,
     progress: DictionaryAttackProgress,
     error: Option<String>,
+    backend: BitLockerDictionaryBackendDto,
 ) -> BitLockerDictionaryAttackDto {
     BitLockerDictionaryAttackDto {
         task_id,
         phase: phase.to_string(),
+        backend,
         tested_candidates: progress.tested_candidates,
         bytes_processed: progress.bytes_processed,
         total_bytes: progress.total_bytes,

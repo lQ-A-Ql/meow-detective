@@ -43,6 +43,7 @@ mod kdf;
 mod layout;
 mod metadata;
 mod method;
+mod password_acceleration;
 mod persisted_key;
 mod protector;
 mod reader;
@@ -61,6 +62,7 @@ pub use kdf::RecoveryPasswordError;
 pub use layout::VolumeLayout;
 pub use metadata::{FveMetadata, MetadataEntry};
 pub use method::EncryptionMethod;
+pub use password_acceleration::PasswordAccelerationTarget;
 pub use protector::{ProtectorInventory, ProtectorKind};
 pub use reader::{BitLockerReader, UnlockedVolume};
 pub use recovery_password::{

@@ -146,6 +146,7 @@ describe('useBitLockerVolumeModel', () => {
     api.startBitLockerDictionaryAttack.mockResolvedValue({
       taskId: 'task-1',
       phase: 'running',
+      backend: 'cpu',
       testedCandidates: 1,
       bytesProcessed: 12,
       totalBytes: 24,
@@ -154,6 +155,7 @@ describe('useBitLockerVolumeModel', () => {
       .mockResolvedValueOnce({
         taskId: 'task-1',
         phase: 'found',
+        backend: 'cpu',
         testedCandidates: 2,
         bytesProcessed: 24,
         totalBytes: 24,
@@ -178,6 +180,7 @@ describe('useBitLockerVolumeModel', () => {
       'source-1',
       2,
       'D:\\evidence\\passwords.txt',
+      'cpu',
     );
     expect(api.inspectBitLockerVolume).toHaveBeenCalledTimes(2);
     expect(result.current.status).toEqual(volume);

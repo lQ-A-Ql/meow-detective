@@ -5,7 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import type { DataSourcePartition } from '@/types/models';
+import type { DataSourcePartition, BitLockerDictionaryBackend } from '@/types/models';
 import type { BitLockerUnlockMethod, BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 
 interface BitLockerVolumePanelProps {
@@ -17,6 +17,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
   const { t } = useTranslation();
   const [method, setMethod] = useState<BitLockerUnlockMethod>('password');
   const [credential, setCredential] = useState('');
+  const [dictionaryBackend, setDictionaryBackend] = useState<BitLockerDictionaryBackend>('cpu');
   const [passwordCopied, setPasswordCopied] = useState(false);
   const status = model.status;
   const canSubmit = Boolean(credential)
@@ -188,12 +189,21 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
 
       {status && !status.unlocked && status.supportsPassword ? (
         <div className="space-y-2 border-t border-forensics-border pt-2">
+          <label className="flex items-center gap-2 text-[10px] text-forensics-text">
+            <input type="checkbox" checked={dictionaryBackend === 'gpu'}
+              disabled={model.dictionaryAttacking}
+              onChange={(event) => setDictionaryBackend(event.target.checked ? 'gpu' : 'cpu')} />
+            {t('fileBrowser.inspector.bitlocker.gpuAcceleration')}
+          </label>
+          {dictionaryBackend === 'gpu' ? <p className="text-[10px] text-forensics-muted-light">
+            {t('fileBrowser.inspector.bitlocker.gpuRequirements')}
+          </p> : null}
           <Button
             type="button"
             variant="forensicsSurface"
             size="xs"
             className="w-full"
-            onClick={() => void model.startDictionaryAttack()}
+            onClick={() => void model.startDictionaryAttack(dictionaryBackend)}
             disabled={model.loading || model.unlocking || model.memoryUnlocking || model.importing || model.dictionaryAttacking}
           >
             <KeyRound size={12} /> {model.dictionaryAttacking
@@ -205,6 +215,7 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
 
       {model.dictionaryAttack ? (
         <div className="space-y-1 border-t border-forensics-border pt-2 font-mono text-[10px]">
+          <div className="text-forensics-muted-light">{model.dictionaryAttack.backend === 'gpu' ? 'GPU' : 'CPU'}</div>
           {model.dictionaryAttack.phase === 'queued' || model.dictionaryAttack.phase === 'running' || model.dictionaryAttack.phase === 'cancelling' ? (
             <>
               <div className="text-forensics-text">
@@ -237,7 +248,13 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
                   ? t('fileBrowser.inspector.bitlocker.dictionaryExhausted')
                   : model.dictionaryAttack.phase === 'cancelled'
                     ? t('fileBrowser.inspector.bitlocker.dictionaryCancelled')
-                    : t('fileBrowser.inspector.bitlocker.dictionaryFailed')}
+                    : model.dictionaryAttack.error === 'BITLOCKER_GPU_UNAVAILABLE'
+                      ? t('fileBrowser.inspector.bitlocker.gpuUnavailable')
+                      : model.dictionaryAttack.error === 'BITLOCKER_GPU_BUSY'
+                        ? t('fileBrowser.inspector.bitlocker.gpuBusy')
+                        : model.dictionaryAttack.error === 'BITLOCKER_GPU_FAILED'
+                          ? t('fileBrowser.inspector.bitlocker.gpuFailed')
+                          : t('fileBrowser.inspector.bitlocker.dictionaryFailed')}
             </div>
           )}
         </div>

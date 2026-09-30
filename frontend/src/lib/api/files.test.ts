@@ -246,6 +246,7 @@ describe('files API', () => {
         dataSourceId: 'source-1',
         partitionIndex: 2,
         dictionaryPath: 'D:\\evidence\\passwords.txt',
+        backend: 'cpu',
       },
     );
     expect(requestMock).toHaveBeenNthCalledWith(

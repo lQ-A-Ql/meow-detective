@@ -20,6 +20,7 @@ import {
   ViewerRangeRequest,
   BitLockerCatalogImport,
   BitLockerDictionaryAttack,
+  BitLockerDictionaryBackend,
   BitLockerVolumeStatus,
   ExtractFileRequest,
   FileExtractionResult,
@@ -183,11 +184,13 @@ export async function startBitLockerDictionaryAttack(
   dataSourceId: string,
   partitionIndex: number,
   dictionaryPath: string,
+  backend: BitLockerDictionaryBackend = 'cpu',
 ): Promise<BitLockerDictionaryAttack> {
   return apiClient.request(COMMANDS.files.START_BITLOCKER_DICTIONARY_ATTACK, {
     dataSourceId,
     partitionIndex,
     dictionaryPath,
+    backend,
   });
 }
 

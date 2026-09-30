@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BitLockerDictionaryBackendDto {
+    Cpu,
+    Gpu,
+}
+
 /// Progress and terminal state for a BitLocker password dictionary attempt.
 ///
 /// Candidate passwords are intentionally absent.  The matching credential is
@@ -11,6 +18,7 @@ pub struct BitLockerDictionaryAttackDto {
     pub task_id: String,
     /// `queued`, `running`, `cancelling`, `found`, `exhausted`, `cancelled`, or `failed`.
     pub phase: String,
+    pub backend: BitLockerDictionaryBackendDto,
     pub tested_candidates: u64,
     pub bytes_processed: u64,
     pub total_bytes: u64,

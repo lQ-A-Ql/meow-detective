@@ -151,6 +151,13 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
                     data_source_id: &source.id,
                     partition_index: 0,
                     dictionary_path: &dictionary,
+                    backend: match std::env::var("FORENSICS_BITLOCKER_DICTIONARY_BACKEND")
+                        .as_deref()
+                    {
+                        Ok("gpu") => transport::dto::BitLockerDictionaryBackendDto::Gpu,
+                        Ok("cpu") | Err(_) => transport::dto::BitLockerDictionaryBackendDto::Cpu,
+                        _ => panic!("backend must be cpu or gpu"),
+                    },
                     runtimes: BitLockerRuntimeContext::new(&preview, &unlock, &store),
                     cancel_token: &cancel,
                 },
@@ -209,8 +216,13 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
         if outcome_name == "cancelled" {
             assert!(progress.tested_candidates >= limit);
         } else {
-            assert!(progress.tested_candidates <= limit);
+            assert!(progress.tested_candidates <= limit.saturating_add(2048));
         }
+    } else {
+        assert_eq!(
+            outcome_name, "found",
+            "full oracle dictionary must unlock the image"
+        );
     }
 
     let image_sha256_after = sha256_file(&image);
