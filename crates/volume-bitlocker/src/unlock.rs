@@ -18,9 +18,7 @@ use zeroize::Zeroizing;
 use crate::bytes::le_u32;
 use crate::error::{BitLockerError, Result};
 use crate::header::VolumeHeader;
-use crate::kdf::{
-    aes_ccm_unwrap, password_hash, recovery_key_hash, stretch_key_n, STRETCH_ITERATIONS,
-};
+use crate::kdf::{aes_ccm_unwrap, password_hash, recovery_key_hash, STRETCH_ITERATIONS};
 use crate::metadata::{
     FveMetadata, MetadataEntry, BLOCK_HEADER_LEN, MAX_METADATA_ENTRIES_LEN, METADATA_HEADER_LEN,
     PROTECTION_PASSWORD, PROTECTION_RECOVERY, VALUE_TYPE_AES_CCM, VALUE_TYPE_STRETCH,
@@ -295,43 +293,24 @@ fn read_metadata_copy<R: Read + Seek>(
     })
 }
 
-/// Derives and verifies the key package for one protector.
-///
-/// The steps are: locate the VMK entry for this protector, stretch the credential
-/// hash with that VMK's salt, AES-CCM-unwrap the VMK, then AES-CCM-unwrap the
-/// FVEK with it. Both tag checks must pass, which is what makes the returned
-/// package *verified* rather than merely derived.
-///
-/// # Errors
-///
-/// - [`BitLockerError::UnsupportedEncryptionMethod`] when the cipher has no
-///   validated decrypt path, checked before any credential work so an unsupported
-///   volume fails fast instead of after a one-million-iteration stretch.
-/// - [`BitLockerError::UnsupportedProtector`] when the volume has no VMK for this
-///   protector.
-/// - [`BitLockerError::CredentialRejected`] when either AES-CCM tag fails.
-/// - [`BitLockerError::MetadataUnreadable`] when required key material is absent
-///   or too short.
-///
-/// `iterations` is crate-internal on purpose. The two public entry points always
-/// pass [`STRETCH_ITERATIONS`], so no caller outside this crate can weaken the
-/// derivation; tests use the parameter to exercise the orchestration without
-/// paying a million SHA-256 rounds per case.
-pub(crate) fn derive_key_package(
-    metadata: &FveMetadata,
-    protector: ProtectorKind,
-    protection_code: u16,
-    credential_hash: &[u8; 32],
-    iterations: u64,
-) -> Result<VolumeKeyPackage> {
-    let method = metadata.encryption_method;
-    let fvek_len = method
+pub(crate) fn checked_fvek_len(metadata: &FveMetadata) -> Result<usize> {
+    metadata
+        .encryption_method
         .fvek_len()
         .ok_or(BitLockerError::UnsupportedEncryptionMethod {
             code: metadata.encryption_method_code,
-            label: method.label(),
-        })?;
+            label: metadata.encryption_method.label(),
+        })
+}
 
+/// Derives the password-protector unwrap key inputs without authenticating the
+/// wrapped VMK. Dictionary callers use the salt as a cache key so redundant
+/// metadata copies do not repeat the million-round stretch.
+pub(crate) fn stretch_salt_for_protector(
+    metadata: &FveMetadata,
+    protector: ProtectorKind,
+    protection_code: u16,
+) -> Result<[u8; 16]> {
     let vmk = metadata
         .vmk_entries()
         .find(|entry| entry.protection_code() == Some(protection_code))
@@ -341,8 +320,25 @@ pub(crate) fn derive_key_package(
 
     // VMK properties are nested entries starting at value-data offset 28.
     let properties = vmk.nested(28);
-    let salt = stretch_salt(&properties, protector)?;
-    let unwrap_key = stretch_key_n(credential_hash, &salt, iterations);
+    stretch_salt(&properties, protector)
+}
+
+/// Finishes a password attempt with an already stretched VMK unwrap key.
+/// Authentication and FVEK validation still run for every metadata copy.
+pub(crate) fn derive_key_package_with_unwrap_key(
+    metadata: &FveMetadata,
+    protection_code: u16,
+    unwrap_key: &[u8; 32],
+) -> Result<VolumeKeyPackage> {
+    let fvek_len = checked_fvek_len(metadata)?;
+
+    let vmk = metadata
+        .vmk_entries()
+        .find(|entry| entry.protection_code() == Some(protection_code))
+        .ok_or_else(|| BitLockerError::UnsupportedProtector {
+            found: describe_inventory(metadata),
+        })?;
+    let properties = vmk.nested(28);
 
     let wrapped_vmk = properties
         .iter()
@@ -351,7 +347,7 @@ pub(crate) fn derive_key_package(
             reason: "VMK protector carries no AES-CCM wrapped key".to_string(),
         })?;
     let vmk_container =
-        aes_ccm_unwrap(&unwrap_key, &wrapped_vmk.data).ok_or(BitLockerError::CredentialRejected)?;
+        aes_ccm_unwrap(unwrap_key, &wrapped_vmk.data).ok_or(BitLockerError::CredentialRejected)?;
     let vmk_key = take_key::<32>(&vmk_container, 12, "volume master key")?;
 
     derive_key_package_from_vmk_bytes(metadata, &vmk_key, fvek_len)

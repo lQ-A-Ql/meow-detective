@@ -58,6 +58,56 @@ fn dictionary_rejects_growth_past_file_limit() {
 }
 
 #[test]
+fn dictionary_batches_have_a_fixed_byte_budget() {
+    let mut line = vec![b'x'; MAX_DICTIONARY_LINE_BYTES];
+    line[MAX_DICTIONARY_LINE_BYTES - 1] = b'\n';
+    let mut reader = Cursor::new(line.repeat(5));
+    let mut bytes = 0;
+    let cancel = AtomicBool::new(false);
+    let DictionaryBatch::Candidates(candidates) =
+        read_candidate_batch(&mut reader, &cancel, &mut bytes, 100).expect("batch")
+    else {
+        panic!("expected candidates");
+    };
+    assert_eq!(candidates.len(), 4);
+    assert_eq!(bytes, MAX_DICTIONARY_BATCH_BYTES as u64);
+    assert!(reader.position() < reader.get_ref().len() as u64);
+}
+
+#[test]
+fn blank_line_budget_does_not_mean_dictionary_exhaustion() {
+    let mut input = vec![b'\n'; MAX_DICTIONARY_BATCH_BYTES];
+    input.extend_from_slice(b"candidate\n");
+    let mut reader = Cursor::new(input);
+    let mut bytes = 0;
+    let cancel = AtomicBool::new(false);
+    assert!(matches!(
+        read_candidate_batch(&mut reader, &cancel, &mut bytes, 4).expect("blank batch"),
+        DictionaryBatch::Empty
+    ));
+    let DictionaryBatch::Candidates(candidates) =
+        read_candidate_batch(&mut reader, &cancel, &mut bytes, 4).expect("second batch")
+    else {
+        panic!("candidate after blanks must still be processed");
+    };
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(&*candidates[0], "candidate");
+}
+
+#[test]
+fn cancellation_stops_dictionary_reads_before_the_next_line() {
+    let mut reader = Cursor::new(b"unused\n");
+    let mut bytes = 0;
+    assert!(matches!(
+        read_candidate_batch(&mut reader, &AtomicBool::new(true), &mut bytes, 4)
+            .expect("cancelled batch"),
+        DictionaryBatch::Cancelled
+    ));
+    assert_eq!(bytes, 0);
+    assert_eq!(reader.position(), 0);
+}
+
+#[test]
 fn dictionary_identity_is_stable_and_changes_with_content() {
     let directory = tempfile::tempdir().expect("temporary directory");
     let path = directory.path().join("dictionary.txt");

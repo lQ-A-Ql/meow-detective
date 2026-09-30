@@ -33,6 +33,9 @@ pub const MAX_DICTIONARY_LINE_BYTES: usize = 1024 * 1024;
 /// A dictionary is an investigator-selected input, but still receives a hard
 /// bound so an accidental multi-gigabyte file cannot exhaust the worker.
 pub const MAX_DICTIONARY_BYTES: u64 = 1024 * 1024 * 1024;
+/// Keep the in-flight candidate buffer bounded even when a dictionary contains
+/// many long lines.  The line limit remains the upper bound for one candidate.
+pub const MAX_DICTIONARY_BATCH_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DictionaryAttackProgress {
@@ -56,6 +59,13 @@ pub enum DictionaryAttackOutcome {
     Found { progress: DictionaryAttackProgress },
     Exhausted { progress: DictionaryAttackProgress },
     Cancelled { progress: DictionaryAttackProgress },
+}
+
+enum DictionaryBatch {
+    Cancelled,
+    Empty,
+    End,
+    Candidates(Vec<Zeroizing<String>>),
 }
 
 /// Validate the investigator-selected dictionary before scheduling work.
@@ -82,6 +92,10 @@ pub fn try_password_dictionary(
     request: DictionaryAttackRequest<'_>,
     mut on_progress: impl FnMut(DictionaryAttackProgress),
 ) -> Result<DictionaryAttackOutcome, BitLockerServiceError> {
+    let _read_lease = request
+        .runtimes
+        .preview_runtime
+        .begin_session(request.case_id, request.data_source_id)?;
     let mut identity = None;
     let mut tested_candidates = 0;
     let result = try_password_dictionary_inner(
@@ -135,37 +149,33 @@ fn try_password_dictionary_inner(
         .into());
     }
     let mut reader = BufReader::new(file);
-    let batch_size = worker_count(1024).saturating_mul(4).max(1);
-    let workers = DictionaryWorkers::new(batch_size)?;
+    let workers = DictionaryWorkers::new()?;
+    let batch_size = worker_count(usize::MAX).saturating_mul(4).max(1);
     let mut progress = DictionaryAttackProgress {
         tested_candidates: 0,
         bytes_processed: 0,
         total_bytes: dictionary_size,
     };
     loop {
-        if request.cancel_token.load(Ordering::Acquire) {
-            return Ok(DictionaryAttackOutcome::Cancelled { progress });
-        }
-        let mut candidates = Vec::with_capacity(batch_size);
-        while candidates.len() < batch_size {
-            let Some(raw_line) = read_bounded_line(&mut reader)? else {
-                break;
-            };
-            progress.bytes_processed =
-                checked_bytes_processed(progress.bytes_processed, raw_line.len())?;
-            let candidate = decode_candidate(raw_line)?;
-            if !candidate.is_empty() {
-                candidates.push(candidate);
+        let candidates = match read_candidate_batch(
+            &mut reader,
+            request.cancel_token,
+            &mut progress.bytes_processed,
+            batch_size,
+        )? {
+            DictionaryBatch::Cancelled => {
+                return Ok(DictionaryAttackOutcome::Cancelled { progress });
             }
-        }
-        if candidates.is_empty() {
-            return Ok(DictionaryAttackOutcome::Exhausted { progress });
-        }
+            DictionaryBatch::Empty => continue,
+            DictionaryBatch::End => return Ok(DictionaryAttackOutcome::Exhausted { progress }),
+            DictionaryBatch::Candidates(candidates) => candidates,
+        };
+        let batch = workers.try_batch(&identities, candidates, request.cancel_token);
         progress.tested_candidates = progress
             .tested_candidates
-            .saturating_add(candidates.len() as u64);
+            .saturating_add(batch.attempted as u64);
         *tested_candidates = progress.tested_candidates;
-        match workers.try_batch(&identities, candidates, request.cancel_token)? {
+        match batch.verified? {
             Some(verified) => {
                 if request.cancel_token.load(Ordering::Acquire) {
                     return Ok(DictionaryAttackOutcome::Cancelled { progress });
@@ -188,8 +198,50 @@ fn try_password_dictionary_inner(
                 )?;
                 return Ok(DictionaryAttackOutcome::Found { progress });
             }
-            None => on_progress(progress),
+            None => {
+                on_progress(progress);
+                if request.cancel_token.load(Ordering::Acquire) {
+                    return Ok(DictionaryAttackOutcome::Cancelled { progress });
+                }
+            }
         }
+    }
+}
+
+fn read_candidate_batch<R: BufRead>(
+    reader: &mut R,
+    cancel_token: &AtomicBool,
+    bytes_processed: &mut u64,
+    batch_size: usize,
+) -> Result<DictionaryBatch, BitLockerServiceError> {
+    let mut candidates = Vec::with_capacity(batch_size);
+    let mut batch_bytes = 0usize;
+    let mut at_end = false;
+    while candidates.len() < batch_size
+        && batch_bytes <= MAX_DICTIONARY_BATCH_BYTES - MAX_DICTIONARY_LINE_BYTES
+    {
+        if cancel_token.load(Ordering::Acquire) {
+            return Ok(DictionaryBatch::Cancelled);
+        }
+        let Some(raw_line) = read_bounded_line(reader)? else {
+            at_end = true;
+            break;
+        };
+        *bytes_processed = checked_bytes_processed(*bytes_processed, raw_line.len())?;
+        batch_bytes = batch_bytes.saturating_add(raw_line.len());
+        let candidate = decode_candidate(raw_line)?;
+        if !candidate.is_empty() {
+            candidates.push(candidate);
+        }
+    }
+    if candidates.is_empty() {
+        Ok(if at_end {
+            DictionaryBatch::End
+        } else {
+            DictionaryBatch::Empty
+        })
+    } else {
+        Ok(DictionaryBatch::Candidates(candidates))
     }
 }
 

@@ -3,6 +3,7 @@
 // bridge to be exactly `mod tests;`, which means a helper here cannot be shared
 // with the other test modules — each of those builds only the fixture its own
 // module needs instead.
+mod dictionary;
 #[path = "support.rs"]
 mod support;
 
@@ -23,6 +24,19 @@ fn identity_of(image: Vec<u8>) -> Result<VolumeIdentity> {
     read_volume_identity(&mut Cursor::new(image))
 }
 
+fn derive_at_test_cost(
+    metadata: &FveMetadata,
+    protector: ProtectorKind,
+    protection_code: u16,
+    credential_hash: &[u8; 32],
+    iterations: u64,
+) -> Result<VolumeKeyPackage> {
+    checked_fvek_len(metadata)?;
+    let salt = stretch_salt_for_protector(metadata, protector, protection_code)?;
+    let unwrap_key = crate::kdf::stretch_key_n(credential_hash, &salt, iterations);
+    derive_key_package_with_unwrap_key(metadata, protection_code, &unwrap_key)
+}
+
 /// Derives a key package at the reduced test stretch cost.
 ///
 /// The synthetic volumes are built with [`TEST_ITERATIONS`], so the unlock must
@@ -30,7 +44,7 @@ fn identity_of(image: Vec<u8>) -> Result<VolumeIdentity> {
 /// the real 0x100000-round path.
 fn unlock_at_test_cost(metadata: &FveMetadata, password: &Passphrase) -> Result<VolumeKeyPackage> {
     let hash = password_hash(password.expose_for_derivation());
-    derive_key_package(
+    derive_at_test_cost(
         metadata,
         ProtectorKind::Password,
         PROTECTION_PASSWORD,
@@ -46,7 +60,7 @@ fn unlock_recovery_at_test_cost(
 ) -> Result<VolumeKeyPackage> {
     let hash = recovery_key_hash(recovery.expose_for_derivation())
         .map_err(|_| BitLockerError::CredentialRejected)?;
-    derive_key_package(
+    derive_at_test_cost(
         metadata,
         ProtectorKind::RecoveryPassword,
         PROTECTION_RECOVERY,
@@ -437,7 +451,7 @@ fn full_stretch_matches_the_production_path() {
     let identity = identity_of(volume.image).expect("readable");
 
     let hash = password_hash(TEST_PASSWORD);
-    let package = derive_key_package(
+    let package = derive_at_test_cost(
         &identity.metadata,
         ProtectorKind::Password,
         PROTECTION_PASSWORD,

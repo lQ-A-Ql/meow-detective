@@ -48,6 +48,8 @@ pub enum BitLockerServiceError {
     DictionaryInvalid { reason: &'static str },
     #[error("BitLocker password dictionary could not be read")]
     DictionaryRead(#[source] io::Error),
+    #[error("BitLocker dictionary workers could not be started")]
+    DictionaryWorkers(#[source] rayon::ThreadPoolBuildError),
 }
 
 impl ServiceErrorCategory for BitLockerServiceError {
@@ -90,6 +92,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::StoredKeyNotFound => ErrorCategory::Validation,
             Self::DictionaryInvalid { .. } => ErrorCategory::Validation,
             Self::DictionaryRead(_) => ErrorCategory::Io,
+            Self::DictionaryWorkers(_) => ErrorCategory::Internal,
         }
     }
 
@@ -126,6 +129,7 @@ impl ServiceErrorCategory for BitLockerServiceError {
             Self::MemoryKeyNotValidated => Some("BITLOCKER_MEMORY_KEY_NOT_VALIDATED"),
             Self::DictionaryInvalid { .. } => Some("BITLOCKER_DICTIONARY_INVALID"),
             Self::DictionaryRead(_) => Some("BITLOCKER_DICTIONARY_READ_FAILED"),
+            Self::DictionaryWorkers(_) => Some("BITLOCKER_DICTIONARY_WORKERS_UNAVAILABLE"),
             _ => None,
         }
     }
