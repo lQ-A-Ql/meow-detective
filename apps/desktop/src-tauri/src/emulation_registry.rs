@@ -176,10 +176,9 @@ impl EmulationRegistry {
             case_id,
             data_source_id,
         )
-        .map_err(|error| {
+        .inspect_err(|_| {
             let _ = backend.stop();
             workspace.remove_best_effort();
-            error
         })?;
         let materials = prepare_machine_materials(
             &workspace,
