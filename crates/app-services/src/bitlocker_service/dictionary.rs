@@ -5,21 +5,22 @@
 //! normal verified-unlock status; a matching password never crosses the
 //! service boundary.
 
-use std::io::{self, BufRead, BufReader};
+use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use zeroize::Zeroizing;
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::dto::BitLockerDictionaryBackendDto;
-use transport::ServiceErrorCategory;
-use volume_bitlocker::{
-    read_volume_identities, BitLockerError, MetadataFingerprint, ProtectorKind,
-};
+use volume_bitlocker::{read_volume_identities, BitLockerError, ProtectorKind};
+
+mod dictionary_audit;
+mod dictionary_input;
+
+pub(super) use dictionary_audit::record_dictionary_outcome;
+pub(super) use dictionary_input::{read_candidate_batch, DictionaryBatch};
 
 use super::{
-    audit::{self, BitLockerAudit},
     context::BitLockerRuntimeContext,
     dictionary_backend::DictionaryBackend,
     dictionary_identity::{open_and_fingerprint, DictionaryIdentity},
@@ -61,13 +62,6 @@ pub enum DictionaryAttackOutcome {
     Found { progress: DictionaryAttackProgress },
     Exhausted { progress: DictionaryAttackProgress },
     Cancelled { progress: DictionaryAttackProgress },
-}
-
-enum DictionaryBatch {
-    Cancelled,
-    Empty,
-    End,
-    Candidates(Vec<Zeroizing<String>>),
 }
 
 /// Validate the investigator-selected dictionary before scheduling work.
@@ -208,206 +202,6 @@ fn try_password_dictionary_inner(
                 }
             }
         }
-    }
-}
-
-fn read_candidate_batch<R: BufRead>(
-    reader: &mut R,
-    cancel_token: &AtomicBool,
-    bytes_processed: &mut u64,
-    batch_size: usize,
-) -> Result<DictionaryBatch, BitLockerServiceError> {
-    let mut candidates = Vec::with_capacity(batch_size);
-    let mut batch_bytes = 0usize;
-    let mut at_end = false;
-    while candidates.len() < batch_size
-        && batch_bytes <= MAX_DICTIONARY_BATCH_BYTES - MAX_DICTIONARY_LINE_BYTES
-    {
-        if cancel_token.load(Ordering::Acquire) {
-            return Ok(DictionaryBatch::Cancelled);
-        }
-        let Some(raw_line) = read_bounded_line(reader)? else {
-            at_end = true;
-            break;
-        };
-        *bytes_processed = checked_bytes_processed(*bytes_processed, raw_line.len())?;
-        batch_bytes = batch_bytes.saturating_add(raw_line.len());
-        let candidate = decode_candidate(raw_line)?;
-        if !candidate.is_empty() {
-            candidates.push(candidate);
-        }
-    }
-    if candidates.is_empty() {
-        Ok(if at_end {
-            DictionaryBatch::End
-        } else {
-            DictionaryBatch::Empty
-        })
-    } else {
-        Ok(DictionaryBatch::Candidates(candidates))
-    }
-}
-
-fn record_dictionary_outcome(
-    request: &DictionaryAttackRequest<'_>,
-    result: &Result<DictionaryAttackOutcome, BitLockerServiceError>,
-    identity: Option<&DictionaryIdentity>,
-    tested_candidates: u64,
-) {
-    let (outcome, code) = match result {
-        Ok(DictionaryAttackOutcome::Found { .. }) => ("success", None),
-        Ok(DictionaryAttackOutcome::Exhausted { .. }) => ("exhausted", None),
-        Ok(DictionaryAttackOutcome::Cancelled { .. }) => ("cancelled", None),
-        Err(error) => ("failed", error.code()),
-    };
-    let fingerprint = read_dictionary_fingerprint(request);
-    let tested_candidates = dictionary_tested_candidates(result, tested_candidates);
-    let mut extra = dictionary_input_details(identity, tested_candidates);
-    extra["backend"] = serde_json::json!(request.backend);
-    audit::record(
-        request.case_conn,
-        BitLockerAudit {
-            case_id: &request.case_id.0,
-            data_source_id: &request.data_source_id.0,
-            partition_index: request.partition_index,
-            metadata_fingerprint: fingerprint.as_deref(),
-            operation: "passwordDictionary",
-            outcome,
-            error_code: code,
-            extra_details: Some(&extra),
-        },
-    );
-}
-
-fn dictionary_input_details(
-    identity: Option<&DictionaryIdentity>,
-    tested_candidates: u64,
-) -> serde_json::Value {
-    let mut details = serde_json::Map::new();
-    details.insert(
-        "testedCandidates".to_string(),
-        serde_json::json!(tested_candidates),
-    );
-    if let Some(identity) = identity {
-        details.insert(
-            "dictionarySize".to_string(),
-            serde_json::json!(identity.size),
-        );
-        details.insert(
-            "dictionarySha256".to_string(),
-            serde_json::json!(identity.sha256),
-        );
-    }
-    serde_json::Value::Object(details)
-}
-
-fn dictionary_tested_candidates(
-    result: &Result<DictionaryAttackOutcome, BitLockerServiceError>,
-    fallback: u64,
-) -> u64 {
-    match result {
-        Ok(DictionaryAttackOutcome::Found { progress })
-        | Ok(DictionaryAttackOutcome::Exhausted { progress })
-        | Ok(DictionaryAttackOutcome::Cancelled { progress }) => progress.tested_candidates,
-        Err(_) => fallback,
-    }
-}
-
-fn read_dictionary_fingerprint(request: &DictionaryAttackRequest<'_>) -> Option<String> {
-    let source = open_source_read_only(
-        request.case_conn,
-        request.case_root,
-        request.case_id,
-        request.data_source_id,
-        request.partition_index,
-    )
-    .ok()?;
-    let mut window = open_partition_window(&source).ok()?;
-    let identities = read_volume_identities(&mut window).ok()?;
-    identities.first().map(|identity| {
-        MetadataFingerprint::from_metadata(&identity.metadata)
-            .as_str()
-            .to_string()
-    })
-}
-
-fn checked_bytes_processed(current: u64, line_len: usize) -> Result<u64, BitLockerServiceError> {
-    let additional =
-        u64::try_from(line_len).map_err(|_| BitLockerServiceError::DictionaryInvalid {
-            reason: "dictionary file exceeds the size limit",
-        })?;
-    let next = current
-        .checked_add(additional)
-        .ok_or(BitLockerServiceError::DictionaryInvalid {
-            reason: "dictionary file exceeds the size limit",
-        })?;
-    if next > MAX_DICTIONARY_BYTES {
-        return Err(BitLockerServiceError::DictionaryInvalid {
-            reason: "dictionary file exceeds the size limit",
-        });
-    }
-    Ok(next)
-}
-
-fn decode_candidate(
-    raw_line: Zeroizing<Vec<u8>>,
-) -> Result<Zeroizing<String>, BitLockerServiceError> {
-    let mut raw_line = raw_line;
-    if raw_line.last() == Some(&b'\n') {
-        raw_line.pop();
-        if raw_line.last() == Some(&b'\r') {
-            raw_line.pop();
-        }
-    }
-    let mut candidate = Zeroizing::new(
-        std::str::from_utf8(&raw_line)
-            .map_err(|_| BitLockerServiceError::DictionaryInvalid {
-                reason: "dictionary contains invalid UTF-8",
-            })?
-            .to_owned(),
-    );
-    if candidate.starts_with('\u{feff}') {
-        candidate.drain(..'\u{feff}'.len_utf8());
-    }
-    Ok(candidate)
-}
-
-fn read_bounded_line<R: BufRead>(
-    reader: &mut R,
-) -> Result<Option<Zeroizing<Vec<u8>>>, BitLockerServiceError> {
-    let mut line = Zeroizing::new(Vec::new());
-    loop {
-        let chunk = reader
-            .fill_buf()
-            .map_err(BitLockerServiceError::DictionaryRead)?;
-        if chunk.is_empty() {
-            return Ok((!line.is_empty()).then(|| std::mem::take(&mut line)));
-        }
-        if let Some(newline) = chunk.iter().position(|byte| *byte == b'\n') {
-            let take = newline + 1;
-            if line.len().saturating_add(take) > MAX_DICTIONARY_LINE_BYTES {
-                return Err(BitLockerServiceError::DictionaryInvalid {
-                    reason: "dictionary line exceeds the size limit",
-                });
-            }
-            line.extend_from_slice(&chunk[..take]);
-            reader.consume(take);
-            return Ok(Some(std::mem::take(&mut line)));
-        }
-        if line.len().saturating_add(chunk.len()) > MAX_DICTIONARY_LINE_BYTES {
-            return Err(BitLockerServiceError::DictionaryInvalid {
-                reason: "dictionary line exceeds the size limit",
-            });
-        }
-        let consumed = chunk.len();
-        line.extend_from_slice(chunk);
-        reader.consume(consumed);
-    }
-}
-
-impl From<io::Error> for BitLockerServiceError {
-    fn from(error: io::Error) -> Self {
-        Self::DictionaryRead(error)
     }
 }
 

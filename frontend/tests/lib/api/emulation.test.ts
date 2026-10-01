@@ -1,0 +1,105 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiClient } from '@/lib/api/client';
+import { COMMANDS } from '@/lib/api/commands';
+import {
+  getEmulationStatus,
+  installEmulationEfiFallback,
+  launchEmulation,
+  listEmulationSessions,
+  prepareEmulation,
+  repairEmulationFsJournals,
+  releaseEmulation,
+} from '@/lib/api/emulation';
+
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    request: vi.fn(),
+  },
+}));
+
+const requestMock = vi.mocked(apiClient.request);
+
+describe('emulation API', () => {
+  beforeEach(() => {
+    requestMock.mockReset();
+  });
+
+  it('prepares an emulation session with the selected WinPE ISO', async () => {
+    requestMock.mockResolvedValueOnce({} as never);
+    const request = {
+      dataSourceId: 'source-1',
+      recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
+      allowDirectBoot: false,
+    };
+
+    await prepareEmulation(request);
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.PREPARE, { request });
+  });
+
+  it('routes lifecycle calls through the registered command names', async () => {
+    requestMock
+      .mockResolvedValueOnce({} as never)
+      .mockResolvedValueOnce({} as never)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce({} as never);
+
+    await launchEmulation('emulation-1');
+    await getEmulationStatus('emulation-1');
+    await listEmulationSessions();
+    await releaseEmulation('emulation-1');
+
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.emulation.LAUNCH, {
+      sessionId: 'emulation-1',
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.emulation.GET_STATUS, {
+      sessionId: 'emulation-1',
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(3, COMMANDS.emulation.LIST_SESSIONS);
+    expect(requestMock).toHaveBeenNthCalledWith(4, COMMANDS.emulation.RELEASE, {
+      sessionId: 'emulation-1',
+    });
+  });
+
+  it('installs the EFI fallback loader through the registered command', async () => {
+    requestMock.mockResolvedValueOnce({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      espPartitionIndex: 1,
+      strategy: 'grub',
+      filesWritten: ['\\EFI\\BOOT\\BOOTX64.EFI'],
+      alreadyPresent: false,
+    } as never);
+
+    const result = await installEmulationEfiFallback('emulation-1');
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.INSTALL_EFI_FALLBACK, {
+      sessionId: 'emulation-1',
+    });
+    expect(result.strategy).toBe('grub');
+    expect(result.alreadyPresent).toBe(false);
+  });
+
+  it('repairs filesystem journals through the prepared session', async () => {
+    requestMock.mockResolvedValueOnce({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      items: [{
+        partitionIndex: 2,
+        initialState: 'dirty',
+        state: 'clean',
+        repaired: true,
+        logBytes: 10_485_760,
+      }],
+    } as never);
+
+    const result = await repairEmulationFsJournals('emulation-1');
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.REPAIR_FS_JOURNALS, {
+      sessionId: 'emulation-1',
+    });
+    expect(result.items[0]?.initialState).toBe('dirty');
+    expect(result.items[0]?.state).toBe('clean');
+    expect(result.items[0]?.repaired).toBe(true);
+  });
+});

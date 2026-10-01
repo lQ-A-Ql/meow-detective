@@ -17,5 +17,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }

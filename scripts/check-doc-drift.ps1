@@ -166,7 +166,7 @@ $repoCount = @($repositoryNames | Sort-Object -Unique).Count
 $migrationCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/persistence-sqlite/src/migrations/scripts') -Filter '*.sql' | Measure-Object).Count
 $pageCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'frontend/src/app/pages') -Filter '*.tsx' | Where-Object { $_.Name -notlike '*.test.tsx' } | Measure-Object).Count
 $frontendTestCount = (
-  Get-ChildItem -LiteralPath (Join-Path $repoRoot 'frontend/src') -Recurse -File |
+  Get-ChildItem -LiteralPath (Join-Path $repoRoot 'frontend/tests') -Recurse -File |
     Where-Object { $_.Name -like '*.test.ts' -or $_.Name -like '*.test.tsx' } |
     Measure-Object
 ).Count
@@ -195,7 +195,7 @@ Assert-TableFact $docIndex 'SQLite repositories' "$repoCount logical repositorie
 Assert-TableFact $docIndex 'SQLite migration scripts' $migrationCount 'documentation-index migration count is stale'
 Assert-TableFact $docIndex 'frontend test files' $frontendTestCount 'documentation-index frontend test summary is stale'
 Assert-TableFact $docIndex 'frontend/src/app/pages/*.tsx' $pageCount 'documentation-index frontend page row is stale'
-Assert-TableFact $docIndex 'frontend/src/**/*.test.ts(x)' $frontendTestCount 'documentation-index frontend test row is stale'
+Assert-TableFact $docIndex 'frontend/tests/**/*.{test,spec}.{ts,tsx}' $frontendTestCount 'documentation-index frontend test row is stale'
 Assert-TableFact $docIndex 'apps/desktop/src-tauri/src/commands/**/*.rs' $commandCount 'documentation-index command path row is stale'
 Assert-Equals $appServicesModuleDebtCount 0 'app-services module baseline debt was reintroduced'
 Assert-Equals $appServicesFunctionDebtCount 0 'app-services function baseline debt was reintroduced'

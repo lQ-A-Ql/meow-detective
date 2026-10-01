@@ -48,6 +48,23 @@ foreach ($workspaceRoot in $workspaceRoots) {
   }
 }
 
+$frontendSrc = Join-Path $repoRoot 'frontend/src'
+$frontendTests = Join-Path $repoRoot 'frontend/tests'
+if (-not (Test-Path -LiteralPath $frontendTests)) {
+  $errors.Add('frontend/tests must exist as the physical frontend test root')
+} else {
+  $frontendSourceTests = @(Get-ChildItem -LiteralPath $frontendSrc -Recurse -File |
+    Where-Object { $_.Name -match '\.(test|spec)\.(ts|tsx)$' })
+  if ($frontendSourceTests.Count -gt 0) {
+    $errors.Add("frontend source contains colocated tests: $($frontendSourceTests.FullName -join '; ')")
+  }
+  $frontendTestFiles = @(Get-ChildItem -LiteralPath $frontendTests -Recurse -File |
+    Where-Object { $_.Name -match '\.(test|spec)\.(ts|tsx)$' })
+  if ($frontendTestFiles.Count -eq 0) {
+    $errors.Add('frontend/tests contains no test files')
+  }
+}
+
 if ($errors.Count -gt 0) {
   Write-Error "Stage 6 test separation guard failed:`n$($errors -join "`n")"
 }

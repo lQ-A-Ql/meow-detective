@@ -9,10 +9,15 @@ mod support;
 
 use std::io::Cursor;
 
+use super::credentials::unlock_volume_with_hash;
 use super::*;
+use crate::kdf::{password_hash, recovery_key_hash, STRETCH_ITERATIONS};
+use crate::metadata::{PROTECTION_PASSWORD, PROTECTION_RECOVERY};
 use crate::secret::RecoveredVmk;
+use crate::secret::VolumeKeyPackage;
 use crate::unlock_vmk::unlock_volume_with_recovered_vmk;
 use crate::EncryptionMethod;
+use crate::{BitLockerError, FveMetadata, Passphrase, ProtectorKind, Result};
 use support::{build_volume, Credential, VolumeSpec, META_BLOCK_OFFSET, TEST_ITERATIONS};
 
 /// The password every synthetic password-protected volume uses.

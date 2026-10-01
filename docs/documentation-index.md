@@ -58,7 +58,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
-| `frontend/src/**/*.test.ts(x)` | 123 |
+| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 123 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 148 |
 
 治理事实源：

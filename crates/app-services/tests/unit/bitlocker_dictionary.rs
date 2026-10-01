@@ -1,6 +1,8 @@
 use std::io::Cursor;
 use std::sync::atomic::AtomicBool;
 
+use super::dictionary_audit::dictionary_input_details;
+use super::dictionary_input::{checked_bytes_processed, decode_candidate, read_bounded_line};
 use super::*;
 
 #[test]
