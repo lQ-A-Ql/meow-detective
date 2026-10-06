@@ -5,6 +5,8 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
+import type { McpPermissionProfile } from '@/lib/api/mcp';
+import { defaultPermissions } from '@/stores/mcp-error-utils';
 interface McpServerDialogProps {
   onClose: () => void;
   onAdd: (server: {
@@ -15,12 +17,14 @@ interface McpServerDialogProps {
     args?: string[];
     enabled: boolean;
     autoConnect: boolean;
+    permissions: McpPermissionProfile;
   }) => Promise<void>;
   testConnection: (
     transportType: string,
     url?: string,
     command?: string,
     args?: string[],
+    permissions?: McpPermissionProfile,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -32,6 +36,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
   const [argsStr, setArgsStr] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [autoConnect, setAutoConnect] = useState(false);
+  const [permissions, setPermissions] = useState<McpPermissionProfile>(() => defaultPermissions());
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
@@ -43,7 +48,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
     setTestResult(null);
     try {
       const args = argsStr ? argsStr.split(' ').filter(Boolean) : undefined;
-      const result = await testConnection(transportType, url, command, args);
+      const result = await testConnection(transportType, url, command, args, permissions);
       setTestResult(result);
     } finally {
       setTesting(false);
@@ -78,6 +83,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
         args,
         enabled,
         autoConnect,
+        permissions,
       });
       onClose();
     } catch (err) {
@@ -206,6 +212,43 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
                 variant="forensics"
               />
               <span className="text-[12px] text-forensics-muted">自动连接</span>
+            </label>
+          </div>
+
+          <div className="space-y-3 border border-forensics-border bg-forensics-panel p-3">
+            <div className="text-[11px] font-light text-forensics-muted">访问权限</div>
+            <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted">
+              <span>资源访问</span>
+              <select value={permissions.resourceAccess} onChange={(event) => setPermissions((current) => ({ ...current, resourceAccess: event.target.value as McpPermissionProfile['resourceAccess'] }))} className="h-7 border border-forensics-border bg-forensics-surface px-2 text-[11px] text-forensics-text">
+                <option value="readOnly">只读</option>
+                <option value="disabled">禁用</option>
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted">
+              <span>Prompt 访问</span>
+              <select value={permissions.promptAccess} onChange={(event) => setPermissions((current) => ({ ...current, promptAccess: event.target.value as McpPermissionProfile['promptAccess'] }))} className="h-7 border border-forensics-border bg-forensics-surface px-2 text-[11px] text-forensics-text">
+                <option value="readOnly">只读</option>
+                <option value="disabled">禁用</option>
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted">
+              <span>工具访问</span>
+              <select value={permissions.toolAccess} onChange={(event) => setPermissions((current) => ({ ...current, toolAccess: event.target.value as McpPermissionProfile['toolAccess'] }))} className="h-7 border border-forensics-border bg-forensics-surface px-2 text-[11px] text-forensics-text">
+                <option value="disabled">禁用</option>
+                <option value="allowList">仅允许白名单</option>
+              </select>
+            </label>
+            {permissions.toolAccess === 'allowList' ? <Field>
+              <FieldLabel>工具白名单（逗号或空格分隔）</FieldLabel>
+              <Input type="text" value={permissions.allowedTools.join(', ')} onChange={(event) => setPermissions((current) => ({ ...current, allowedTools: event.target.value.split(/[\s,]+/).filter(Boolean) }))} placeholder="queryTimeline, searchFiles" variant="mono" inputSize="compact" />
+            </Field> : null}
+            <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted">
+              <span>网络策略</span>
+              <select value={permissions.networkPolicy} onChange={(event) => setPermissions((current) => ({ ...current, networkPolicy: event.target.value as McpPermissionProfile['networkPolicy'] }))} className="h-7 border border-forensics-border bg-forensics-surface px-2 text-[11px] text-forensics-text">
+                <option value="localhostOnly">仅本机</option>
+                <option value="privateLanAllowed">允许局域网</option>
+                <option value="anyHost">允许任意主机</option>
+              </select>
             </label>
           </div>
 

@@ -105,6 +105,19 @@ fn test_json_rpc_request() {
 }
 
 #[test]
+fn test_json_rpc_notification_omits_request_id() {
+    let notification = JsonRpcNotification {
+        jsonrpc: "2.0".to_string(),
+        method: "notifications/initialized".to_string(),
+        params: None,
+    };
+
+    let json = serde_json::to_string(&notification).unwrap();
+    assert!(json.contains("\"method\":\"notifications/initialized\""));
+    assert!(!json.contains("\"id\""));
+}
+
+#[test]
 fn test_mcp_server_status() {
     let status = McpServerStatus {
         id: "test".to_string(),

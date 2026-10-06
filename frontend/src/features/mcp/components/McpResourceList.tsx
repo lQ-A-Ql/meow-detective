@@ -8,10 +8,11 @@ export interface McpResourceListProps {
     description?: string;
   }>;
   loading: boolean;
+  error?: string | null;
   onRefresh: () => void;
 }
 
-export function McpResourceList({ resources, loading, onRefresh }: McpResourceListProps) {
+export function McpResourceList({ resources, loading, error, onRefresh }: McpResourceListProps) {
   return (
     <div className="bg-forensics-panel border border-forensics-border p-3">
       <div className="flex items-center justify-between mb-2">
@@ -31,6 +32,8 @@ export function McpResourceList({ resources, loading, onRefresh }: McpResourceLi
           )}
         </Button>
       </div>
+
+      {error ? <div className="mb-2 border border-forensics-error-border bg-forensics-error-bg p-2 text-[10px] text-forensics-error-text">{error}</div> : null}
 
       {resources.length === 0 ? (
         <div className="text-[11px] text-forensics-muted py-2">

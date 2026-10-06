@@ -344,6 +344,15 @@ pub struct JsonRpcRequest {
     pub params: Option<serde_json::Value>,
 }
 
+/// JSON-RPC notification without a response ID.
+#[derive(Debug, Serialize)]
+pub struct JsonRpcNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,

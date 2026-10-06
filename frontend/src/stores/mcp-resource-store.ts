@@ -16,6 +16,15 @@ export interface McpResourceSlice {
   resources: McpResource[];
   tools: McpTool[];
   prompts: McpPrompt[];
+  resourcesByServer: Record<string, McpResource[]>;
+  toolsByServer: Record<string, McpTool[]>;
+  promptsByServer: Record<string, McpPrompt[]>;
+  resourceLoadingByServer: Record<string, boolean>;
+  toolLoadingByServer: Record<string, boolean>;
+  promptLoadingByServer: Record<string, boolean>;
+  resourceErrorsByServer: Record<string, string | null>;
+  toolErrorsByServer: Record<string, string | null>;
+  promptErrorsByServer: Record<string, string | null>;
   refreshResources: (serverId: string) => Promise<void>;
   refreshTools: (serverId: string) => Promise<void>;
   callTool: (serverId: string, toolName: string, args: unknown) => Promise<McpToolCallResult>;
@@ -38,24 +47,55 @@ export const createMcpResourceSlice: StateCreator<
   resources: [],
   tools: [],
   prompts: [],
+  resourcesByServer: {},
+  toolsByServer: {},
+  promptsByServer: {},
+  resourceLoadingByServer: {},
+  toolLoadingByServer: {},
+  promptLoadingByServer: {},
+  resourceErrorsByServer: {},
+  toolErrorsByServer: {},
+  promptErrorsByServer: {},
 
   refreshResources: async (serverId) => {
+    set((state) => ({
+      resourceLoadingByServer: { ...state.resourceLoadingByServer, [serverId]: true },
+      resourceErrorsByServer: { ...state.resourceErrorsByServer, [serverId]: null },
+    }));
     try {
-      set({ loading: true, error: null });
       const resources = await listMcpResources(serverId);
-      set({ resources, loading: false });
+      set((state) => ({
+        resources,
+        resourcesByServer: { ...state.resourcesByServer, [serverId]: resources },
+        resourceLoadingByServer: { ...state.resourceLoadingByServer, [serverId]: false },
+      }));
     } catch (err) {
-      set({ error: formatError(err), loading: false });
+      const error = formatError(err);
+      set((state) => ({
+        resourceLoadingByServer: { ...state.resourceLoadingByServer, [serverId]: false },
+        resourceErrorsByServer: { ...state.resourceErrorsByServer, [serverId]: error },
+      }));
     }
   },
 
   refreshTools: async (serverId) => {
+    set((state) => ({
+      toolLoadingByServer: { ...state.toolLoadingByServer, [serverId]: true },
+      toolErrorsByServer: { ...state.toolErrorsByServer, [serverId]: null },
+    }));
     try {
-      set({ loading: true, error: null });
       const tools = await listMcpTools(serverId);
-      set({ tools, loading: false });
+      set((state) => ({
+        tools,
+        toolsByServer: { ...state.toolsByServer, [serverId]: tools },
+        toolLoadingByServer: { ...state.toolLoadingByServer, [serverId]: false },
+      }));
     } catch (err) {
-      set({ error: formatError(err), loading: false });
+      const error = formatError(err);
+      set((state) => ({
+        toolLoadingByServer: { ...state.toolLoadingByServer, [serverId]: false },
+        toolErrorsByServer: { ...state.toolErrorsByServer, [serverId]: error },
+      }));
     }
   },
 
@@ -76,12 +116,23 @@ export const createMcpResourceSlice: StateCreator<
   },
 
   refreshPrompts: async (serverId) => {
+    set((state) => ({
+      promptLoadingByServer: { ...state.promptLoadingByServer, [serverId]: true },
+      promptErrorsByServer: { ...state.promptErrorsByServer, [serverId]: null },
+    }));
     try {
-      set({ loading: true, error: null });
       const prompts = await listMcpPrompts(serverId);
-      set({ prompts, loading: false });
+      set((state) => ({
+        prompts,
+        promptsByServer: { ...state.promptsByServer, [serverId]: prompts },
+        promptLoadingByServer: { ...state.promptLoadingByServer, [serverId]: false },
+      }));
     } catch (err) {
-      set({ error: formatError(err), loading: false });
+      const error = formatError(err);
+      set((state) => ({
+        promptLoadingByServer: { ...state.promptLoadingByServer, [serverId]: false },
+        promptErrorsByServer: { ...state.promptErrorsByServer, [serverId]: error },
+      }));
     }
   },
 
@@ -94,6 +145,19 @@ export const createMcpResourceSlice: StateCreator<
   },
 
   clearResources: () => {
-    set({ resources: [], tools: [], prompts: [] });
+    set({
+      resources: [],
+      tools: [],
+      prompts: [],
+      resourcesByServer: {},
+      toolsByServer: {},
+      promptsByServer: {},
+      resourceLoadingByServer: {},
+      toolLoadingByServer: {},
+      promptLoadingByServer: {},
+      resourceErrorsByServer: {},
+      toolErrorsByServer: {},
+      promptErrorsByServer: {},
+    });
   },
 });

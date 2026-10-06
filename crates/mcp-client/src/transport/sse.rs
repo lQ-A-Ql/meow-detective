@@ -66,7 +66,7 @@ impl SseTransport {
             params,
         };
 
-        debug!("Sending JSON-RPC request: {:?}", request);
+        debug!(method, id, "Sending JSON-RPC request via HTTP");
 
         let response = self
             .client
@@ -86,7 +86,7 @@ impl SseTransport {
             .await
             .map_err(|e| McpError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
 
-        debug!("Received JSON-RPC response: {:?}", rpc_response);
+        debug!(method, id, "Received JSON-RPC response via HTTP");
 
         if let Some(error) = rpc_response.error {
             return Err(McpError::Server {
@@ -98,6 +98,33 @@ impl SseTransport {
         rpc_response
             .result
             .ok_or_else(|| McpError::InvalidResponse("No result in response".to_string()))
+    }
+
+    async fn send_notification(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> McpResult<()> {
+        let notification = JsonRpcNotification {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params,
+        };
+        let response = self
+            .client
+            .post(&self.url)
+            .json(&notification)
+            .send()
+            .await
+            .map_err(|e| McpError::Connection(format!("Failed to send notification: {}", e)))?;
+        if !response.status().is_success() {
+            return Err(McpError::Connection(format!(
+                "HTTP error while sending notification: {}",
+                response.status()
+            )));
+        }
+        debug!(method, "Sent JSON-RPC notification via HTTP");
+        Ok(())
     }
 }
 
@@ -144,6 +171,8 @@ impl McpTransportTrait for SseTransport {
 
         *self.capabilities.lock().await = Some(capabilities.clone());
         self.connected.store(true, Ordering::SeqCst);
+        self.send_notification("notifications/initialized", None)
+            .await?;
 
         info!("MCP connection initialized successfully");
         Ok(capabilities)

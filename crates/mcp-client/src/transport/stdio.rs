@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
+use tokio::time::{timeout, Duration};
 use tracing::{debug, info};
 
 use super::McpTransportTrait;
@@ -31,6 +32,9 @@ pub struct StdioTransport {
     connected: Arc<AtomicBool>,
     /// Request ID counter
     request_id: Arc<AtomicU64>,
+    /// Serializes request write/read pairs so each response remains associated
+    /// with the request that produced it.
+    request_lock: Arc<Mutex<()>>,
     /// Command to spawn
     command: String,
     /// Arguments for the command
@@ -51,6 +55,7 @@ impl StdioTransport {
             stdout: Arc::new(Mutex::new(None)),
             connected: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
+            request_lock: Arc::new(Mutex::new(())),
             command,
             args: args.to_vec(),
             capabilities: Arc::new(Mutex::new(None)),
@@ -63,6 +68,7 @@ impl StdioTransport {
         method: &str,
         params: Option<serde_json::Value>,
     ) -> McpResult<serde_json::Value> {
+        let _request_guard = self.request_lock.lock().await;
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
 
         let request = JsonRpcRequest {
@@ -75,7 +81,7 @@ impl StdioTransport {
         let mut request_json = serde_json::to_string(&request).map_err(McpError::Json)?;
         request_json.push('\n');
 
-        debug!("Sending JSON-RPC via stdio: {}", request_json.trim());
+        debug!(method, id, "Sending JSON-RPC request via stdio");
 
         // Write request to stdin
         {
@@ -96,9 +102,9 @@ impl StdioTransport {
             let mut stdout_guard = self.stdout.lock().await;
             let stdout = stdout_guard.as_mut().ok_or(McpError::NotConnected)?;
             let mut line = String::new();
-            stdout
-                .read_line(&mut line)
+            timeout(Duration::from_secs(30), stdout.read_line(&mut line))
                 .await
+                .map_err(|_| McpError::Timeout)?
                 .map_err(|e| McpError::Transport(format!("Failed to read from stdout: {}", e)))?;
             if line.is_empty() {
                 return Err(McpError::Transport("Process stdout closed".to_string()));
@@ -106,10 +112,17 @@ impl StdioTransport {
             line
         };
 
-        debug!("Received JSON-RPC via stdio: {}", response_line.trim());
+        debug!(method, id, "Received JSON-RPC response via stdio");
 
         let rpc_response: JsonRpcResponse = serde_json::from_str(&response_line)
             .map_err(|e| McpError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
+
+        if rpc_response.id != Some(id) {
+            return Err(McpError::InvalidResponse(format!(
+                "Response id does not match request id {}",
+                id
+            )));
+        }
 
         if let Some(error) = rpc_response.error {
             return Err(McpError::Server {
@@ -122,21 +135,49 @@ impl StdioTransport {
             .result
             .ok_or_else(|| McpError::InvalidResponse("No result in response".to_string()))
     }
+
+    async fn send_notification(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> McpResult<()> {
+        let _request_guard = self.request_lock.lock().await;
+        let notification = JsonRpcNotification {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params,
+        };
+        let mut notification_json = serde_json::to_string(&notification).map_err(McpError::Json)?;
+        notification_json.push('\n');
+        let mut stdin_guard = self.stdin.lock().await;
+        let stdin = stdin_guard.as_mut().ok_or(McpError::NotConnected)?;
+        stdin
+            .write_all(notification_json.as_bytes())
+            .await
+            .map_err(|e| McpError::Transport(format!("Failed to write notification: {}", e)))?;
+        stdin
+            .flush()
+            .await
+            .map_err(|e| McpError::Transport(format!("Failed to flush notification: {}", e)))?;
+        debug!(method, "Sent JSON-RPC notification via stdio");
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl McpTransportTrait for StdioTransport {
     async fn initialize(&mut self) -> McpResult<McpCapabilities> {
         info!(
-            "Starting MCP server process: {} {:?}",
-            self.command, self.args
+            command = %self.command,
+            arg_count = self.args.len(),
+            "Starting MCP server process"
         );
 
         let mut child = Command::new(&self.command)
             .args(&self.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| McpError::Connection(format!("Failed to spawn process: {}", e)))?;
 
@@ -148,6 +189,18 @@ impl McpTransportTrait for StdioTransport {
             .stdout
             .take()
             .ok_or_else(|| McpError::Connection("Failed to open stdout".to_string()))?;
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                let mut stderr = BufReader::new(stderr);
+                let mut line = String::new();
+                let mut bytes = 0usize;
+                while stderr.read_line(&mut line).await.unwrap_or(0) > 0 {
+                    bytes = bytes.saturating_add(line.len());
+                    line.clear();
+                }
+                debug!(target: "mcp_client", stderr_bytes = bytes, "MCP server stderr stream closed");
+            });
+        }
 
         *self.child.lock().await = Some(child);
         *self.stdin.lock().await = Some(stdin);
@@ -193,7 +246,8 @@ impl McpTransportTrait for StdioTransport {
         *self.capabilities.lock().await = Some(capabilities.clone());
 
         // Send initialized notification
-        let _ = self.send_request("notifications/initialized", None).await;
+        self.send_notification("notifications/initialized", None)
+            .await?;
 
         info!("MCP stdio connection initialized successfully");
         Ok(capabilities)

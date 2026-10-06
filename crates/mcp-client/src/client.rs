@@ -45,7 +45,13 @@ impl McpClient {
             McpTransport::Stdio { command, args } => Box::new(StdioTransport::new(command, args)?),
         };
 
-        let capabilities = transport.initialize().await?;
+        let capabilities = match transport.initialize().await {
+            Ok(capabilities) => capabilities,
+            Err(error) => {
+                let _ = transport.disconnect().await;
+                return Err(error);
+            }
+        };
         self.transport = Some(transport);
         self.connected = true;
         self.capabilities = Some(capabilities.clone());
@@ -117,7 +123,24 @@ impl McpClient {
             ));
         }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
-        transport.list_tools().await
+        let tools = transport.list_tools().await?;
+        if matches!(
+            self.config.permissions.tool_access,
+            McpToolAccess::AllowList
+        ) {
+            Ok(tools
+                .into_iter()
+                .filter(|tool| {
+                    self.config
+                        .permissions
+                        .allowed_tools
+                        .iter()
+                        .any(|allowed| allowed.eq_ignore_ascii_case(&tool.name))
+                })
+                .collect())
+        } else {
+            Ok(tools)
+        }
     }
 
     /// Call a tool

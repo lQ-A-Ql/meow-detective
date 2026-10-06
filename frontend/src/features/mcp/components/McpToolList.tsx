@@ -6,6 +6,7 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 export interface McpToolListProps {
   tools: Array<{ name: string; description: string }>;
   loading: boolean;
+  error?: string | null;
   onRefresh: () => void;
   onTestTool: (toolName: string) => Promise<{
     success: boolean;
@@ -14,7 +15,7 @@ export interface McpToolListProps {
   }>;
 }
 
-export function McpToolList({ tools, loading, onRefresh, onTestTool }: McpToolListProps) {
+export function McpToolList({ tools, loading, error, onRefresh, onTestTool }: McpToolListProps) {
   const [testingTool, setTestingTool] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     toolName: string;
@@ -53,6 +54,8 @@ export function McpToolList({ tools, loading, onRefresh, onTestTool }: McpToolLi
           )}
         </Button>
       </div>
+
+      {error ? <div className="mb-2 border border-forensics-error-border bg-forensics-error-bg p-2 text-[10px] text-forensics-error-text">{error}</div> : null}
 
       {tools.length === 0 ? (
         <div className="text-[11px] text-forensics-muted py-2">

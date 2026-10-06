@@ -4,6 +4,9 @@ import {
   connectMcpServer,
   getMcpConfig,
   getMcpPrompt,
+  listMcpPrompts,
+  listMcpResources,
+  listMcpTools,
   testMcpConnection,
   type McpPermissionProfile,
 } from '@/lib/api/mcp';
@@ -28,6 +31,8 @@ const getMcpConfigMock = vi.mocked(getMcpConfig);
 const connectMcpServerMock = vi.mocked(connectMcpServer);
 const callMcpToolMock = vi.mocked(callMcpTool);
 const getMcpPromptMock = vi.mocked(getMcpPrompt);
+const listMcpResourcesMock = vi.mocked(listMcpResources);
+const listMcpToolsMock = vi.mocked(listMcpTools);
 const testMcpConnectionMock = vi.mocked(testMcpConnection);
 
 const defaultPermissions: McpPermissionProfile = {
@@ -45,6 +50,15 @@ function resetMcpStore() {
     resources: [],
     tools: [],
     prompts: [],
+    resourcesByServer: {},
+    toolsByServer: {},
+    promptsByServer: {},
+    resourceLoadingByServer: {},
+    toolLoadingByServer: {},
+    promptLoadingByServer: {},
+    resourceErrorsByServer: {},
+    toolErrorsByServer: {},
+    promptErrorsByServer: {},
     selectedServerId: null,
     loading: false,
     error: null,
@@ -177,10 +191,8 @@ describe('mcp-store contract baseline', () => {
   });
 
   it('does not crash when API normalization returns fallback resource, tool, and prompt data', async () => {
-    const { listMcpPrompts, listMcpResources, listMcpTools } = await import('@/lib/api/mcp');
-
-    vi.mocked(listMcpResources).mockResolvedValueOnce([{ uri: '', name: '', mimeType: undefined }]);
-    vi.mocked(listMcpTools).mockResolvedValueOnce([{ name: '', description: '', inputSchema: { type: 'object' } }]);
+    listMcpResourcesMock.mockResolvedValueOnce([{ uri: '', name: '', mimeType: undefined }]);
+    listMcpToolsMock.mockResolvedValueOnce([{ name: '', description: '', inputSchema: { type: 'object' } }]);
     vi.mocked(listMcpPrompts).mockResolvedValueOnce([{ name: '', arguments: [] }]);
 
     await useMcpStore.getState().refreshResources('srv-1');
@@ -194,5 +206,21 @@ describe('mcp-store contract baseline', () => {
       loading: false,
       error: null,
     });
+  });
+
+  it('keeps remote catalogs isolated by server id', async () => {
+    listMcpResourcesMock.mockImplementation(async (serverId) => [{ uri: `${serverId}:resource`, name: serverId }]);
+    listMcpToolsMock.mockImplementation(async (serverId) => [{ name: `${serverId}:tool`, description: '', inputSchema: { type: 'object' } }]);
+
+    await Promise.all([
+      useMcpStore.getState().refreshResources('srv-a'),
+      useMcpStore.getState().refreshTools('srv-b'),
+    ]);
+
+    expect(useMcpStore.getState().resourcesByServer['srv-a']).toEqual([{ uri: 'srv-a:resource', name: 'srv-a' }]);
+    expect(useMcpStore.getState().resourcesByServer['srv-b']).toBeUndefined();
+    expect(useMcpStore.getState().toolsByServer['srv-b']).toEqual([{ name: 'srv-b:tool', description: '', inputSchema: { type: 'object' } }]);
+    expect(useMcpStore.getState().resourceLoadingByServer['srv-a']).toBe(false);
+    expect(useMcpStore.getState().toolLoadingByServer['srv-b']).toBe(false);
   });
 });
