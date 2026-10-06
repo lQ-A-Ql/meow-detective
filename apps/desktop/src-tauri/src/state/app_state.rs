@@ -5,7 +5,7 @@ use mcp_client::{
     validate_mcp_config, validate_mcp_server_config, McpClient, McpConfig, McpServerConfig,
 };
 use runtime_cache::RuntimeCache;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -115,31 +115,36 @@ impl AppState {
     }
 
     pub async fn sync_mcp_clients_with_config(&self) -> Result<(), String> {
-        let allowed_ids: HashSet<String> = {
+        let configs = {
             let guard = self
                 .mcp_config
                 .lock()
                 .map_err(|e| format!("Lock poisoned: {}", e))?;
-            guard
-                .servers
-                .iter()
-                .map(|server| server.id.clone())
-                .collect()
+            guard.servers.clone()
         };
 
-        let stale_clients = {
+        let clients = {
             let clients = self.mcp_clients.read().await;
             clients
-                .keys()
-                .filter(|id| !allowed_ids.contains(*id))
-                .cloned()
+                .iter()
+                .map(|(id, client)| (id.clone(), client.clone()))
                 .collect::<Vec<_>>()
         };
 
-        for server_id in stale_clients {
-            if let Some(client) = self.remove_mcp_client(&server_id).await? {
-                let mut client = client.lock().await;
-                let _ = client.disconnect().await;
+        for (server_id, client) in clients {
+            let mut guard = client.lock().await;
+            if let Some(config) = configs.iter().find(|config| {
+                config.id == server_id
+                    && config.enabled
+                    && config.transport == guard.config().transport
+            }) {
+                guard
+                    .update_permissions(config.permissions.clone())
+                    .map_err(|error| format!("Failed to update MCP permissions: {error}"))?;
+            } else {
+                let _ = guard.disconnect().await;
+                drop(guard);
+                self.remove_mcp_client(&server_id).await?;
             }
         }
 

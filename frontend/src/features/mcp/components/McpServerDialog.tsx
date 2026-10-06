@@ -234,6 +234,7 @@ export function McpServerDialog({ onClose, onAdd, testConnection }: McpServerDia
             <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted">
               <span>工具访问</span>
               <select value={permissions.toolAccess} onChange={(event) => setPermissions((current) => ({ ...current, toolAccess: event.target.value as McpPermissionProfile['toolAccess'] }))} className="h-7 border border-forensics-border bg-forensics-surface px-2 text-[11px] text-forensics-text">
+                <option value="allowAll">全部允许（可在工具列表禁用）</option>
                 <option value="disabled">禁用</option>
                 <option value="allowList">仅允许白名单</option>
               </select>

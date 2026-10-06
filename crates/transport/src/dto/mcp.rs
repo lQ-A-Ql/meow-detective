@@ -31,6 +31,8 @@ pub struct McpPermissionProfileDto {
     pub network_policy: String,
     pub allowed_tools: Vec<String>,
     pub allowed_commands: Vec<String>,
+    #[serde(default)]
+    pub denied_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

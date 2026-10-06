@@ -3,10 +3,11 @@ import type { McpPermissionProfile } from '@/lib/api/mcp';
 export function defaultPermissions(): McpPermissionProfile {
   return {
     resourceAccess: 'readOnly',
-    toolAccess: 'disabled',
+    toolAccess: 'allowAll',
     promptAccess: 'readOnly',
     networkPolicy: 'localhostOnly',
     allowedTools: [],
+    deniedTools: [],
     allowedCommands: [],
   };
 }

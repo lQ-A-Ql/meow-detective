@@ -17,9 +17,13 @@ export interface McpToolListProps {
     data?: unknown;
     error?: string;
   }>;
+  disabledTools?: string[];
+  onToggleTool?: (toolName: string, disabled: boolean) => void;
+  toolAccess?: 'allowAll' | 'disabled' | 'allowList';
+  onEnableAll?: () => void;
 }
 
-export function McpToolList({ tools, loading, error, onRefresh, onTestTool }: McpToolListProps) {
+export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disabledTools = [], onToggleTool, toolAccess = 'allowAll', onEnableAll }: McpToolListProps) {
   const [query, setQuery] = useState('');
   const [selectedToolName, setSelectedToolName] = useState<string>();
   const [argumentsText, setArgumentsText] = useState('');
@@ -37,6 +41,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool }: Mc
     return tools.filter((tool) => `${tool.name} ${tool.description}`.toLowerCase().includes(normalized));
   }, [query, tools]);
   const selectedTool = tools.find((tool) => tool.name === selectedToolName) ?? filteredTools[0];
+  const isToolDisabled = (toolName: string) => disabledTools.some((name) => name.toLowerCase() === toolName.toLowerCase());
 
   useEffect(() => {
     if (!selectedToolName || tools.some((tool) => tool.name === selectedToolName)) return;
@@ -79,6 +84,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool }: Mc
     <div className="min-w-0 border border-forensics-border bg-forensics-panel p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[11px] font-light text-forensics-muted">可用 Tools ({tools.length})</div>
+        {toolAccess !== 'allowAll' && onEnableAll ? <Button type="button" variant="forensicsOutline" size="compact" onClick={onEnableAll} className="mr-auto ml-2 h-6 px-2 text-[10px]">{toolAccess === 'disabled' ? '启用工具' : '切换为全部工具'}</Button> : null}
         <Button type="button" variant="forensicsGhost" size="iconSm" onClick={onRefresh} disabled={loading} title="刷新工具">
           {loading ? <Loader2 size={12} className="opacity-70 text-forensics-muted" /> : <RefreshCw size={12} className="text-forensics-muted" />}
         </Button>
@@ -98,9 +104,10 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool }: Mc
                 <span className="block truncate text-[11px] font-light text-forensics-muted">{tool.name}</span>
                 <span className="block truncate text-[10px] text-forensics-muted" title={tool.description}>{tool.description || '无描述'}</span>
               </button>
-              <Button type="button" variant="forensicsGhost" size="compact" onClick={(event) => { event.stopPropagation(); void runTool(tool); }} disabled={testingTool === tool.name} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title="使用当前参数测试">
+              <Button type="button" variant="forensicsGhost" size="compact" onClick={(event) => { event.stopPropagation(); void runTool(tool); }} disabled={testingTool === tool.name || isToolDisabled(tool.name)} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title="使用当前参数测试">
                 {testingTool === tool.name ? <Loader2 size={10} className="opacity-70" /> : <Play size={10} />}
               </Button>
+              {onToggleTool ? <Button type="button" variant="forensicsGhost" size="compact" aria-pressed={isToolDisabled(tool.name)} onClick={(event) => { event.stopPropagation(); onToggleTool(tool.name, !isToolDisabled(tool.name)); }} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title={isToolDisabled(tool.name) ? '启用工具' : '禁用工具'}>{isToolDisabled(tool.name) ? '启用' : '禁用'}</Button> : null}
             </div>
           )} />
       )}

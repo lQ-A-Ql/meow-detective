@@ -7,6 +7,7 @@ import {
   listMcpPrompts,
   listMcpResources,
   listMcpTools,
+  saveMcpConfig,
   testMcpConnection,
   type McpPermissionProfile,
 } from '@/lib/api/mcp';
@@ -33,14 +34,16 @@ const callMcpToolMock = vi.mocked(callMcpTool);
 const getMcpPromptMock = vi.mocked(getMcpPrompt);
 const listMcpResourcesMock = vi.mocked(listMcpResources);
 const listMcpToolsMock = vi.mocked(listMcpTools);
+const saveMcpConfigMock = vi.mocked(saveMcpConfig);
 const testMcpConnectionMock = vi.mocked(testMcpConnection);
 
 const defaultPermissions: McpPermissionProfile = {
   resourceAccess: 'readOnly',
-  toolAccess: 'disabled',
+  toolAccess: 'allowAll',
   promptAccess: 'readOnly',
   networkPolicy: 'localhostOnly',
   allowedTools: [],
+  deniedTools: [],
   allowedCommands: [],
 };
 
@@ -222,5 +225,30 @@ describe('mcp-store contract baseline', () => {
     expect(useMcpStore.getState().toolsByServer['srv-b']).toEqual([{ name: 'srv-b:tool', description: '', inputSchema: { type: 'object' } }]);
     expect(useMcpStore.getState().resourceLoadingByServer['srv-a']).toBe(false);
     expect(useMcpStore.getState().toolLoadingByServer['srv-b']).toBe(false);
+  });
+
+  it('persists a tool disable choice without requiring a tool-name whitelist', async () => {
+    useMcpStore.setState({
+      servers: [{
+        id: 'srv-1',
+        name: 'Local MCP',
+        transportType: 'stdio',
+        enabled: true,
+        autoConnect: false,
+        permissions: defaultPermissions,
+        connected: true,
+        hasResources: false,
+        hasTools: true,
+        hasPrompts: false,
+      }],
+    });
+    saveMcpConfigMock.mockResolvedValueOnce(undefined);
+
+    await useMcpStore.getState().setToolDisabled('srv-1', 'queryTimeline', true);
+
+    expect(useMcpStore.getState().servers[0].permissions.deniedTools).toEqual(['queryTimeline']);
+    expect(saveMcpConfigMock).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'srv-1', permissions: expect.objectContaining({ deniedTools: ['queryTimeline'] }) }),
+    ]));
   });
 });

@@ -34,6 +34,7 @@ pub enum McpResourceAccess {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum McpToolAccess {
     #[default]
+    AllowAll,
     Disabled,
     AllowList,
 }
@@ -66,6 +67,8 @@ pub struct McpPermissionProfile {
     #[serde(default)]
     pub allowed_tools: Vec<String>,
     #[serde(default)]
+    pub denied_tools: Vec<String>,
+    #[serde(default)]
     pub allowed_commands: Vec<String>,
 }
 
@@ -73,10 +76,11 @@ impl Default for McpPermissionProfile {
     fn default() -> Self {
         Self {
             resource_access: McpResourceAccess::ReadOnly,
-            tool_access: McpToolAccess::Disabled,
+            tool_access: McpToolAccess::AllowAll,
             prompt_access: McpPromptAccess::ReadOnly,
             network_policy: McpNetworkPolicy::LocalhostOnly,
             allowed_tools: Vec::new(),
+            denied_tools: Vec::new(),
             allowed_commands: Vec::new(),
         }
     }
@@ -188,7 +192,8 @@ pub fn validate_mcp_transport(transport: &mut McpTransport) -> McpResult<()> {
 }
 
 pub fn validate_mcp_permissions(config: &mut McpServerConfig) -> McpResult<()> {
-    normalize_string_list(&mut config.permissions.allowed_tools);
+    normalize_tool_names(&mut config.permissions.allowed_tools);
+    normalize_tool_names(&mut config.permissions.denied_tools);
     normalize_string_list(&mut config.permissions.allowed_commands);
 
     match &mut config.transport {
@@ -285,6 +290,19 @@ pub fn validate_stdio_command(command: &mut String, args: &[String]) -> McpResul
 
     *command = trimmed.to_string();
     Ok(())
+}
+
+fn normalize_tool_names(values: &mut Vec<String>) {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::with_capacity(values.len());
+    for value in values.drain(..) {
+        let name = value.trim();
+        let key = name.to_ascii_lowercase();
+        if !name.is_empty() && seen.insert(key) {
+            normalized.push(name.to_string());
+        }
+    }
+    *values = normalized;
 }
 
 fn normalize_string_list(values: &mut Vec<String>) {

@@ -158,7 +158,10 @@ async fn test_client_blocks_disabled_tool_access_before_transport() {
         },
         enabled: true,
         auto_connect: false,
-        permissions: McpPermissionProfile::default(),
+        permissions: McpPermissionProfile {
+            tool_access: McpToolAccess::Disabled,
+            ..McpPermissionProfile::default()
+        },
     };
     let client = McpClient::new(config);
     let result = client.call_tool("lookup", serde_json::json!({})).await;

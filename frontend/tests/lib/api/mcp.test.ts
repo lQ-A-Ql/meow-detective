@@ -61,11 +61,12 @@ describe('mcp API layer', () => {
           autoConnect: true,
           permissions: {
             resourceAccess: 'readOnly',
-            toolAccess: 'disabled',
+          toolAccess: 'allowAll',
             promptAccess: 'readOnly',
             networkPolicy: 'localhostOnly',
             allowedTools: [],
             allowedCommands: [],
+            deniedTools: [],
           },
         },
       ],
@@ -88,11 +89,12 @@ describe('mcp API layer', () => {
         autoConnect: false,
         permissions: {
           resourceAccess: 'readOnly',
-          toolAccess: 'disabled',
+          toolAccess: 'allowAll',
           promptAccess: 'readOnly',
           networkPolicy: 'localhostOnly',
           allowedTools: [],
           allowedCommands: [],
+          deniedTools: [],
         },
       },
     ]);
@@ -111,11 +113,12 @@ describe('mcp API layer', () => {
             auto_connect: false,
             permissions: {
               resource_access: 'readOnly',
-              tool_access: 'disabled',
+              tool_access: 'allowAll',
               prompt_access: 'readOnly',
               network_policy: 'localhostOnly',
               allowed_tools: [],
               allowed_commands: [],
+              denied_tools: [],
             },
           },
         ],
@@ -149,6 +152,7 @@ describe('mcp API layer', () => {
         networkPolicy: 'localhostOnly',
         allowedTools: [],
         allowedCommands: [],
+        deniedTools: [],
       },
     });
 
@@ -169,6 +173,7 @@ describe('mcp API layer', () => {
           network_policy: 'localhostOnly',
           allowed_tools: [],
           allowed_commands: [],
+          denied_tools: [],
         },
       },
     });
@@ -210,11 +215,12 @@ describe('mcp API layer', () => {
         args: ['server.js'],
         permissions: {
           resource_access: 'readOnly',
-          tool_access: 'disabled',
+          tool_access: 'allowAll',
           prompt_access: 'readOnly',
           network_policy: 'localhostOnly',
           allowed_tools: [],
           allowed_commands: [],
+          denied_tools: [],
         },
       },
     });

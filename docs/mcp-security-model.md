@@ -14,10 +14,11 @@ V2 安全治理与发布门禁总计划见：
 默认权限：
 
 - `resourceAccess = readOnly`
-- `toolAccess = disabled`
+- `toolAccess = allowAll`
 - `promptAccess = readOnly`
 - `networkPolicy = localhostOnly`
 - `allowedTools = []`
+- `deniedTools = []`
 - `allowedCommands = []`
 
 对于 stdio：
@@ -51,8 +52,11 @@ V2 安全治理与发布门禁总计划见：
 
 ### 4.2 Tools
 
-- 默认禁用
-- `allowList` 时仅允许 `allowedTools`
+- 默认允许发现和调用
+- 前端连接后列出工具，用户可以逐项加入 `deniedTools`
+- 被禁用的工具仍然显示在列表中，便于重新启用
+- `allowList` 作为高级模式，仅允许 `allowedTools`
+- `disabled` 作为显式全禁用模式
 
 ### 4.3 Prompts
 
@@ -86,7 +90,7 @@ V2 安全治理与发布门禁总计划见：
 
 ## 6. 前端约束
 
-- 前端必须显式承接权限配置，不得默认“全开”
+- 前端必须显式承接权限配置，并在工具列表提供逐项禁用/启用
 - 未声明权限的 server 配置自动回落到最小权限
 - UI 文案不得暗示 MCP 是任意执行通道
 

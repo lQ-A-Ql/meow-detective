@@ -82,6 +82,15 @@ impl McpClient {
         &self.config
     }
 
+    /// Apply a validated policy to the current connection without restarting it.
+    pub fn update_permissions(&mut self, permissions: McpPermissionProfile) -> McpResult<()> {
+        let mut config = self.config.clone();
+        config.permissions = permissions;
+        validate_mcp_server_config(&mut config)?;
+        self.config = config;
+        Ok(())
+    }
+
     /// Get capabilities returned by the server during initialization.
     pub fn capabilities(&self) -> Option<&McpCapabilities> {
         self.capabilities.as_ref()
@@ -115,32 +124,10 @@ impl McpClient {
         transport.read_resource(uri).await
     }
 
-    /// List available tools
+    /// Discover all tools, including tools currently disabled by local policy.
     pub async fn list_tools(&self) -> McpResult<Vec<McpTool>> {
-        if matches!(self.config.permissions.tool_access, McpToolAccess::Disabled) {
-            return Err(McpError::Protocol(
-                "MCP tool access is disabled for this server".to_string(),
-            ));
-        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
-        let tools = transport.list_tools().await?;
-        if matches!(
-            self.config.permissions.tool_access,
-            McpToolAccess::AllowList
-        ) {
-            Ok(tools
-                .into_iter()
-                .filter(|tool| {
-                    self.config
-                        .permissions
-                        .allowed_tools
-                        .iter()
-                        .any(|allowed| allowed.eq_ignore_ascii_case(&tool.name))
-                })
-                .collect())
-        } else {
-            Ok(tools)
-        }
+        transport.list_tools().await
     }
 
     /// Call a tool
@@ -149,12 +136,25 @@ impl McpClient {
         name: &str,
         arguments: serde_json::Value,
     ) -> McpResult<serde_json::Value> {
+        if self
+            .config
+            .permissions
+            .denied_tools
+            .iter()
+            .any(|denied| denied.eq_ignore_ascii_case(name))
+        {
+            return Err(McpError::ToolNotFound(format!(
+                "{} (disabled by server policy)",
+                name
+            )));
+        }
         match self.config.permissions.tool_access {
             McpToolAccess::Disabled => {
                 return Err(McpError::Protocol(
                     "MCP tool access is disabled for this server".to_string(),
                 ))
             }
+            McpToolAccess::AllowAll => {}
             McpToolAccess::AllowList => {
                 if !self
                     .config

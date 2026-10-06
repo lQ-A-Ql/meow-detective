@@ -19,6 +19,7 @@ fn server_config_serializes_current_snake_case_response_fields() {
             network_policy: "localhostOnly".to_string(),
             allowed_tools: vec!["timeline_lookup".to_string()],
             allowed_commands: vec!["node".to_string()],
+            denied_tools: vec![],
         },
     };
 

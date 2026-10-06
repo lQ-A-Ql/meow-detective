@@ -11,6 +11,7 @@ fn dummy_permissions() -> McpPermissionProfileDto {
         network_policy: "localhostOnly".to_string(),
         allowed_tools: vec![],
         allowed_commands: vec![],
+        denied_tools: vec![],
     }
 }
 

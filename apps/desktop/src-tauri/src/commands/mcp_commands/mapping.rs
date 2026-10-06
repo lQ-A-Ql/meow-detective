@@ -32,8 +32,10 @@ fn resource_access_from_dto(value: &str) -> McpResourceAccess {
 
 fn tool_access_from_dto(value: &str) -> McpToolAccess {
     match value {
+        "allowAll" => McpToolAccess::AllowAll,
         "allowList" => McpToolAccess::AllowList,
-        _ => McpToolAccess::Disabled,
+        "disabled" => McpToolAccess::Disabled,
+        _ => McpToolAccess::AllowAll,
     }
 }
 
@@ -60,6 +62,7 @@ pub(super) fn permissions_from_dto(dto: &McpPermissionProfileDto) -> McpPermissi
         network_policy: network_policy_from_dto(&dto.network_policy),
         allowed_tools: dto.allowed_tools.clone(),
         allowed_commands: dto.allowed_commands.clone(),
+        denied_tools: dto.denied_tools.clone(),
     }
 }
 
@@ -72,6 +75,7 @@ fn resource_access_to_dto(value: &McpResourceAccess) -> String {
 
 fn tool_access_to_dto(value: &McpToolAccess) -> String {
     match value {
+        McpToolAccess::AllowAll => "allowAll".to_string(),
         McpToolAccess::Disabled => "disabled".to_string(),
         McpToolAccess::AllowList => "allowList".to_string(),
     }
@@ -100,6 +104,7 @@ pub(super) fn permissions_to_dto(value: &McpPermissionProfile) -> McpPermissionP
         network_policy: network_policy_to_dto(&value.network_policy),
         allowed_tools: value.allowed_tools.clone(),
         allowed_commands: value.allowed_commands.clone(),
+        denied_tools: value.denied_tools.clone(),
     }
 }
 

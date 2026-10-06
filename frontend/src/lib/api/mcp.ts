@@ -25,10 +25,11 @@ export interface McpServerConfigInput {
 
 export interface McpPermissionProfile {
   resourceAccess: 'readOnly' | 'disabled';
-  toolAccess: 'disabled' | 'allowList';
+  toolAccess: 'allowAll' | 'disabled' | 'allowList';
   promptAccess: 'readOnly' | 'disabled';
   networkPolicy: 'localhostOnly' | 'privateLanAllowed' | 'anyHost';
   allowedTools: string[];
+  deniedTools: string[];
   allowedCommands: string[];
 }
 
@@ -47,6 +48,7 @@ interface McpServerProtocolDto {
     prompt_access?: unknown;
     network_policy?: unknown;
     allowed_tools?: unknown;
+    denied_tools?: unknown;
     allowed_commands?: unknown;
   };
 }
@@ -199,17 +201,18 @@ function normalizePermissions(value: unknown): McpPermissionProfile {
   if (!isRecord(value)) {
     return {
       resourceAccess: 'readOnly',
-      toolAccess: 'disabled',
+      toolAccess: 'allowAll',
       promptAccess: 'readOnly',
       networkPolicy: 'localhostOnly',
       allowedTools: [],
+      deniedTools: [],
       allowedCommands: [],
     };
   }
 
   return {
     resourceAccess: value.resource_access === 'disabled' ? 'disabled' : 'readOnly',
-    toolAccess: value.tool_access === 'allowList' ? 'allowList' : 'disabled',
+    toolAccess: value.tool_access === 'allowList' ? 'allowList' : value.tool_access === 'disabled' ? 'disabled' : 'allowAll',
     promptAccess: value.prompt_access === 'disabled' ? 'disabled' : 'readOnly',
     networkPolicy:
       value.network_policy === 'privateLanAllowed'
@@ -218,6 +221,7 @@ function normalizePermissions(value: unknown): McpPermissionProfile {
           ? 'anyHost'
           : 'localhostOnly',
     allowedTools: normalizeStringArray(value.allowed_tools),
+    deniedTools: normalizeStringArray(value.denied_tools),
     allowedCommands: normalizeStringArray(value.allowed_commands),
   };
 }
@@ -234,10 +238,11 @@ function toProtocolServerConfig(server: McpServerConfigInput): McpServerProtocol
     auto_connect: server.autoConnect,
     permissions: {
       resource_access: server.permissions?.resourceAccess ?? 'readOnly',
-      tool_access: server.permissions?.toolAccess ?? 'disabled',
+      tool_access: server.permissions?.toolAccess ?? 'allowAll',
       prompt_access: server.permissions?.promptAccess ?? 'readOnly',
       network_policy: server.permissions?.networkPolicy ?? 'localhostOnly',
       allowed_tools: server.permissions?.allowedTools ?? [],
+      denied_tools: server.permissions?.deniedTools ?? [],
       allowed_commands: server.permissions?.allowedCommands ?? [],
     },
   };
@@ -420,10 +425,11 @@ export async function testMcpConnection(
       args,
       permissions: {
         resource_access: permissions?.resourceAccess ?? 'readOnly',
-        tool_access: permissions?.toolAccess ?? 'disabled',
+        tool_access: permissions?.toolAccess ?? 'allowAll',
         prompt_access: permissions?.promptAccess ?? 'readOnly',
         network_policy: permissions?.networkPolicy ?? 'localhostOnly',
         allowed_tools: permissions?.allowedTools ?? [],
+        denied_tools: permissions?.deniedTools ?? [],
         allowed_commands: permissions?.allowedCommands ?? [],
       },
     },
