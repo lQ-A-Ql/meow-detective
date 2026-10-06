@@ -22,9 +22,10 @@ export interface McpToolListProps {
   toolAccess?: 'allowAll' | 'disabled' | 'allowList';
   onEnableAll?: () => void;
   onToggleAll?: (disabled: boolean) => void;
+  title?: string;
 }
 
-export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disabledTools = [], onToggleTool, toolAccess = 'allowAll', onEnableAll, onToggleAll }: McpToolListProps) {
+export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disabledTools = [], onToggleTool, toolAccess = 'allowAll', onEnableAll, onToggleAll, title = '可用 Tools' }: McpToolListProps) {
   const [query, setQuery] = useState('');
   const [selectedToolName, setSelectedToolName] = useState<string>();
   const [argumentsText, setArgumentsText] = useState('');
@@ -85,7 +86,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
   return (
     <div className="min-w-0 border border-forensics-border bg-forensics-panel p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[11px] font-light text-forensics-muted">可用 Tools ({tools.length})</div>
+        <div className="text-[11px] font-light text-forensics-muted">{title} ({tools.length})</div>
         <span className="text-[10px] text-forensics-muted">已启用 {Math.max(0, tools.length - disabledCount)}/{tools.length}</span>
         {toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <>
           <Button type="button" variant="forensicsGhost" size="compact" onClick={() => onToggleAll(false)} className="h-6 px-2 text-[10px]">全部启用</Button>

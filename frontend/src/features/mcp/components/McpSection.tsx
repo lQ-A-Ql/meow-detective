@@ -18,6 +18,7 @@ interface McpSectionProps {
   testConnection: ComponentProps<typeof McpServerDialog>['testConnection'];
   resourceList?: ReactNode;
   toolList?: ReactNode;
+  hostToolList?: ReactNode;
 }
 
 export function McpSection({
@@ -33,6 +34,7 @@ export function McpSection({
   testConnection,
   resourceList,
   toolList,
+  hostToolList,
 }: McpSectionProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -50,6 +52,7 @@ export function McpSection({
 
       {expanded && (
         <div className="space-y-4">
+          {hostToolList}
           <div className="bg-forensics-input-bg border border-forensics-border p-3">
             <div className="text-[11px] font-light text-forensics-muted mb-2">
               {t('settings.sections.mcp.connectionTitle')}

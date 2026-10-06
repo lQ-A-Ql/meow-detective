@@ -1,6 +1,7 @@
 import { McpSection } from '@/features/mcp/components/McpSection';
 import { McpResourceListContainer } from '@/features/mcp/containers/McpResourceListContainer';
 import { McpToolListContainer } from '@/features/mcp/containers/McpToolListContainer';
+import { McpHostToolsPanel } from '@/features/mcp/components/McpHostToolsPanel';
 import { useMcpStore } from '@/stores/mcp-store';
 import { useMemo } from 'react';
 
@@ -29,6 +30,7 @@ export function McpSectionContainer() {
       onRemove={(serverId) => void removeServer(serverId)}
       onSelect={selectServer}
       testConnection={testConnection}
+      hostToolList={<McpHostToolsPanel />}
       resourceList={selectedServer ? <McpResourceListContainer serverId={selectedServer.id} /> : undefined}
       toolList={selectedServer ? <McpToolListContainer serverId={selectedServer.id} /> : undefined}
     />
