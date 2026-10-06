@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Loader2, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 
 interface McpServer {
   id: string;
@@ -34,6 +35,7 @@ export function McpServerItem({
   onSelect,
 }: McpServerItemProps) {
   const [loading, setLoading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const handleConnect = async () => {
     setLoading(true);
@@ -61,24 +63,26 @@ export function McpServerItem({
   };
 
   return (
+    <>
     <div
-      className={`flex items-center gap-3 p-2 rounded-none cursor-pointer transition-colors ${
+      className={`flex items-center gap-3 rounded-none border p-2 transition-colors ${
         isSelected
           ? 'bg-forensics-info-bg border border-forensics-info-border'
           : 'hover:bg-forensics-panel border border-transparent'
       }`}
-      onClick={onSelect}
     >
-      <div className={`w-2 h-2 rounded-none ${getStatusColor()}`} />
+      <div className={`h-2 w-2 shrink-0 rounded-none ${getStatusColor()}`} aria-label={getStatusText()} title={getStatusText()} />
 
-      <div className="flex-1 min-w-0">
-        <div className="text-[12px] font-light text-forensics-muted truncate">
+      <Button type="button" variant="forensicsGhost" size="inline" onClick={onSelect} aria-current={isSelected ? 'true' : undefined} className="min-w-0 flex-1 justify-start px-0 text-left">
+        <span className="min-w-0">
+          <span className="block truncate text-[12px] font-light text-forensics-muted">
           {server.name}
-        </div>
-        <div className="text-[10px] text-forensics-muted truncate">
+          </span>
+          <span className="block truncate text-[10px] text-forensics-muted">
           {server.transportType === 'sse' ? server.url : server.command}
-        </div>
-      </div>
+          </span>
+        </span>
+      </Button>
 
       <div className="flex gap-1">
         {server.hasResources && (
@@ -129,7 +133,7 @@ export function McpServerItem({
           size="iconSm"
           onClick={(e) => {
             e.stopPropagation();
-            onRemove();
+            setConfirmRemove(true);
           }}
           title="删除"
         >
@@ -137,5 +141,16 @@ export function McpServerItem({
         </Button>
       </div>
     </div>
+    <ConfirmationDialog
+      open={confirmRemove}
+      onOpenChange={setConfirmRemove}
+      title="删除 MCP 服务器"
+      description={`确定删除“${server.name}”吗？这会移除保存的连接配置。`}
+      cancelLabel="取消"
+      confirmLabel="删除"
+      destructive
+      onConfirm={() => { setConfirmRemove(false); onRemove(); }}
+    />
+    </>
   );
 }

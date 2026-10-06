@@ -41,15 +41,12 @@ export function McpSection({
 
   return (
     <section>
-      <div
-        className="flex items-center gap-2 mb-3 cursor-pointer select-none"
-        onClick={() => setExpanded((value) => !value)}
-      >
+      <Button type="button" variant="forensicsGhost" size="inline" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)} className="mb-3 flex h-auto w-full justify-start gap-2 px-0 text-left">
         <Bot size={14} className="text-forensics-muted-light" />
         <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.mcp.title')}</span>
         {expanded ? <ChevronDown size={14} className="text-forensics-muted-light" /> : <ChevronRight size={14} className="text-forensics-muted-light" />}
         {loading && <span className="text-[10px] text-forensics-info-text">{t('settings.sections.mcp.loading')}</span>}
-      </div>
+      </Button>
 
       {expanded && (
         <div className="space-y-4">
@@ -87,7 +84,7 @@ export function McpSection({
           </div>
 
           {selectedServer && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {resourceList}
               {toolList}
             </div>

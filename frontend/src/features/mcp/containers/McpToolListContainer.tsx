@@ -19,7 +19,7 @@ export function McpToolListContainer({ serverId }: { serverId: string }) {
       loading={loading}
       error={error}
       onRefresh={() => void refreshTools(serverId)}
-      onTestTool={(toolName) => callTool(serverId, toolName, {})}
+      onTestTool={(toolName, args) => callTool(serverId, toolName, args)}
     />
   );
 }

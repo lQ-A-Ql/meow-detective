@@ -1,4 +1,5 @@
-import { FileText, Loader2, RefreshCw } from 'lucide-react';
+import { Check, Copy, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 
 export interface McpResourceListProps {
@@ -13,6 +14,16 @@ export interface McpResourceListProps {
 }
 
 export function McpResourceList({ resources, loading, error, onRefresh }: McpResourceListProps) {
+  const [copiedUri, setCopiedUri] = useState<string>();
+  const copyUri = async (uri: string) => {
+    try {
+      await navigator.clipboard?.writeText(uri);
+      setCopiedUri(uri);
+      window.setTimeout(() => setCopiedUri((current) => current === uri ? undefined : current), 1500);
+    } catch {
+      setCopiedUri(undefined);
+    }
+  };
   return (
     <div className="bg-forensics-panel border border-forensics-border p-3">
       <div className="flex items-center justify-between mb-2">
@@ -47,7 +58,7 @@ export function McpResourceList({ resources, loading, error, onRefresh }: McpRes
               className="flex items-start gap-2 p-2 rounded-none hover:bg-forensics-surface transition-colors"
             >
               <FileText size={12} className="text-forensics-info-text mt-0.5 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-light text-forensics-muted truncate">
                   {resource.name}
                 </div>
@@ -60,6 +71,9 @@ export function McpResourceList({ resources, loading, error, onRefresh }: McpRes
                   </div>
                 )}
               </div>
+              <Button type="button" variant="forensicsGhost" size="iconSm" onClick={() => void copyUri(resource.uri)} title="复制资源 URI" aria-label={`复制 ${resource.name} URI`}>
+                {copiedUri === resource.uri ? <Check size={12} className="text-forensics-success-text" /> : <Copy size={12} className="text-forensics-muted" />}
+              </Button>
             </div>
           ))}
         </div>
