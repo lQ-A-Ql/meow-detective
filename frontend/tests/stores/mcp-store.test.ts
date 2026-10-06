@@ -250,5 +250,8 @@ describe('mcp-store contract baseline', () => {
     expect(saveMcpConfigMock).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ id: 'srv-1', permissions: expect.objectContaining({ deniedTools: ['queryTimeline'] }) }),
     ]));
+
+    await useMcpStore.getState().setAllToolsDisabled('srv-1', ['queryTimeline', 'searchFiles'], true);
+    expect(useMcpStore.getState().servers[0].permissions.deniedTools).toEqual(['queryTimeline', 'searchFiles']);
   });
 });

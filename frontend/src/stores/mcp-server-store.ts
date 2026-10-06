@@ -24,6 +24,7 @@ export interface McpServerSlice {
   loadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
   setToolDisabled: (serverId: string, toolName: string, disabled: boolean) => Promise<void>;
+  setAllToolsDisabled: (serverId: string, toolNames: string[], disabled: boolean) => Promise<void>;
   setToolAccessMode: (serverId: string, toolAccess: McpPermissionProfile['toolAccess']) => Promise<void>;
   addServer: (server: NewMcpServerInput) => Promise<void>;
   removeServer: (id: string) => Promise<void>;
@@ -123,6 +124,21 @@ export const createMcpServerSlice: StateCreator<
       servers: state.servers.map((server) => server.id === serverId
         ? { ...server, permissions: { ...server.permissions, toolAccess } }
         : server),
+    }));
+    await get().saveConfig();
+  },
+
+  setAllToolsDisabled: async (serverId, toolNames, disabled) => {
+    set((state) => ({
+      servers: state.servers.map((server) => {
+        if (server.id !== serverId) return server;
+        const deniedTools = new Set(server.permissions.deniedTools);
+        for (const toolName of toolNames) {
+          if (disabled) deniedTools.add(toolName);
+          else deniedTools.delete(toolName);
+        }
+        return { ...server, permissions: { ...server.permissions, deniedTools: [...deniedTools] } };
+      }),
     }));
     await get().saveConfig();
   },

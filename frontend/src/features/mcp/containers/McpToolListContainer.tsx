@@ -10,6 +10,7 @@ export function McpToolListContainer({ serverId }: { serverId: string }) {
   const refreshTools = useMcpStore((state) => state.refreshTools);
   const callTool = useMcpStore((state) => state.callTool);
   const setToolDisabled = useMcpStore((state) => state.setToolDisabled);
+  const setAllToolsDisabled = useMcpStore((state) => state.setAllToolsDisabled);
   const setToolAccessMode = useMcpStore((state) => state.setToolAccessMode);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export function McpToolListContainer({ serverId }: { serverId: string }) {
       onToggleTool={server?.permissions.toolAccess === 'allowAll' ? (toolName, disabled) => void setToolDisabled(serverId, toolName, disabled) : undefined}
       toolAccess={server?.permissions.toolAccess}
       onEnableAll={() => void setToolAccessMode(serverId, 'allowAll')}
+      onToggleAll={server?.permissions.toolAccess === 'allowAll' ? (disabled) => void setAllToolsDisabled(serverId, tools.map((tool) => tool.name), disabled) : undefined}
     />
   );
 }

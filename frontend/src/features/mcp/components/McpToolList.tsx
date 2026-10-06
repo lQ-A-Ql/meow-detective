@@ -21,9 +21,10 @@ export interface McpToolListProps {
   onToggleTool?: (toolName: string, disabled: boolean) => void;
   toolAccess?: 'allowAll' | 'disabled' | 'allowList';
   onEnableAll?: () => void;
+  onToggleAll?: (disabled: boolean) => void;
 }
 
-export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disabledTools = [], onToggleTool, toolAccess = 'allowAll', onEnableAll }: McpToolListProps) {
+export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disabledTools = [], onToggleTool, toolAccess = 'allowAll', onEnableAll, onToggleAll }: McpToolListProps) {
   const [query, setQuery] = useState('');
   const [selectedToolName, setSelectedToolName] = useState<string>();
   const [argumentsText, setArgumentsText] = useState('');
@@ -42,6 +43,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
   }, [query, tools]);
   const selectedTool = tools.find((tool) => tool.name === selectedToolName) ?? filteredTools[0];
   const isToolDisabled = (toolName: string) => disabledTools.some((name) => name.toLowerCase() === toolName.toLowerCase());
+  const disabledCount = tools.filter((tool) => isToolDisabled(tool.name)).length;
 
   useEffect(() => {
     if (!selectedToolName || tools.some((tool) => tool.name === selectedToolName)) return;
@@ -84,6 +86,11 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
     <div className="min-w-0 border border-forensics-border bg-forensics-panel p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[11px] font-light text-forensics-muted">可用 Tools ({tools.length})</div>
+        <span className="text-[10px] text-forensics-muted">已启用 {Math.max(0, tools.length - disabledCount)}/{tools.length}</span>
+        {toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <>
+          <Button type="button" variant="forensicsGhost" size="compact" onClick={() => onToggleAll(false)} className="h-6 px-2 text-[10px]">全部启用</Button>
+          <Button type="button" variant="forensicsGhost" size="compact" onClick={() => onToggleAll(true)} className="h-6 px-2 text-[10px]">全部禁用</Button>
+        </> : null}
         {toolAccess !== 'allowAll' && onEnableAll ? <Button type="button" variant="forensicsOutline" size="compact" onClick={onEnableAll} className="mr-auto ml-2 h-6 px-2 text-[10px]">{toolAccess === 'disabled' ? '启用工具' : '切换为全部工具'}</Button> : null}
         <Button type="button" variant="forensicsGhost" size="iconSm" onClick={onRefresh} disabled={loading} title="刷新工具">
           {loading ? <Loader2 size={12} className="opacity-70 text-forensics-muted" /> : <RefreshCw size={12} className="text-forensics-muted" />}
