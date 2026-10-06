@@ -41,7 +41,7 @@ export function useSettingsPageModel() {
   const [settingsMessage, setSettingsMessage] = useState('');
   const appSettings = useAppSettings();
   const saveAppSettings = useSaveAppSettings();
-  const { loadConfig } = useMcpStore();
+  const loadConfig = useMcpStore((state) => state.loadConfig);
 
   useEffect(() => {
     loadConfig();

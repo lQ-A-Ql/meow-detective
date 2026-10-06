@@ -1,6 +1,10 @@
 import { GitBranch } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import { useMemo } from 'react';
 import { PanelFrame, SectionHeader } from '@/components/data-display';
+import { VirtualGrid } from '@/components/lists/VirtualGrid';
+import { VirtualList } from '@/components/lists/VirtualList';
+import { keyedItems } from '@/lib/keyed-items';
 import { StatusBadge } from '@/components/status/StatusBadge';
 import type { DataSourceSummary } from '@/types/dataSource';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
@@ -21,29 +25,41 @@ interface EvidenceTopologyPanelProps {
 
 /** One card per evidence source. Scopes are layers inside the source card. */
 export function EvidenceTopologyPanel({ scopes, edges, sourceMetadata, hostFacts, networkFacts, members, t }: EvidenceTopologyPanelProps) {
-  const scopeNames = new Map(scopes.map((scope) => [scope.id, scope.name]));
-  const sourceIds = [...new Set(scopes.flatMap((scope) => scope.memberSourceIds))];
-  const memberMap = new Map(members.map((member) => [member.dataSourceId, member]));
-  const groups = sourceIds.map((sourceId) => sourceGroup(sourceId, scopes, sourceMetadata, hostFacts, networkFacts, memberMap.get(sourceId)));
+  const scopeNames = useMemo(() => new Map(scopes.map((scope) => [scope.id, scope.name])), [scopes]);
+  const groups = useMemo(() => {
+    const sourceIds = [...new Set(scopes.flatMap((scope) => scope.memberSourceIds))];
+    const memberMap = new Map(members.map((member) => [member.dataSourceId, member]));
+    return sourceIds.map((sourceId) => sourceGroup(sourceId, scopes, sourceMetadata, hostFacts, networkFacts, memberMap.get(sourceId)));
+  }, [hostFacts, members, networkFacts, scopes, sourceMetadata]);
+  const topologyEdges = useMemo(() => keyedItems(edges, getTopologyEdgeIdentity), [edges]);
   return (
     <PanelFrame className="bg-forensics-surface">
       <SectionHeader icon={GitBranch} title={t('infrastructure.workspace.topology.title')} subtitle={t('infrastructure.workspace.topology.description')} />
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
-        <div className="grid gap-3 md:grid-cols-2">
-          {groups.map((group) => <SourceTopologyCard key={group.sourceId} group={group} t={t} />)}
-          {groups.length === 0 ? <div className="border border-dashed border-forensics-border-strong p-4 text-xs text-forensics-muted">{t('infrastructure.workspace.topology.noSources')}</div> : null}
+        <div>
+          {groups.length > 0 ? <VirtualGrid items={groups} getItemKey={(group) => group.sourceId}
+            resetKey={groups.map((group) => group.sourceId).join('|')}
+            renderItem={(group) => <SourceTopologyCard group={group} t={t} />} /> :
+            <div className="border border-dashed border-forensics-border-strong p-4 text-xs text-forensics-muted">{t('infrastructure.workspace.topology.noSources')}</div>}
         </div>
         <div className="border border-forensics-border p-3">
           <div className="text-[10px] uppercase tracking-wide text-forensics-muted">{t('infrastructure.workspace.topology.edges')}</div>
-          <div className="mt-2 divide-y divide-forensics-border-light">
-            {edges.map((edge, index) => <div key={`${edge.sourceScopeId}-${edge.targetScopeId}-${edge.kind}-${index}`} className="grid gap-1 py-2 text-[11px]"><div className="flex items-center gap-2 text-forensics-text"><span className="truncate">{scopeNames.get(edge.sourceScopeId) ?? edge.sourceScopeId}</span><span className="text-forensics-muted">→</span><span className="truncate">{scopeNames.get(edge.targetScopeId) ?? edge.targetScopeId}</span></div><div className="flex flex-wrap gap-2 text-[10px] text-forensics-muted"><span>{t(`infrastructure.workspace.topology.edgeKinds.${edge.kind}`, { defaultValue: edge.kind })}</span><span>{edge.confidence}</span></div></div>)}
-            {edges.length === 0 ? <div className="py-4 text-xs text-forensics-muted">{t('infrastructure.workspace.topology.noEdges')}</div> : null}
-          </div>
+          {topologyEdges.length > 0 ? <VirtualList items={topologyEdges} getItemKey={(row) => row.key} estimateSize={62}
+            style={{ height: 'min(60vh, 540px)' }} viewportClassName="mt-2"
+            renderItem={({ item: edge }) => <div className="grid gap-1 border-b border-forensics-border-light py-2 text-[11px]"><div className="flex items-center gap-2 text-forensics-text"><span className="truncate">{scopeNames.get(edge.sourceScopeId) ?? edge.sourceScopeId}</span><span className="text-forensics-muted">→</span><span className="truncate">{scopeNames.get(edge.targetScopeId) ?? edge.targetScopeId}</span></div><div className="flex flex-wrap gap-2 text-[10px] text-forensics-muted"><span>{t(`infrastructure.workspace.topology.edgeKinds.${edge.kind}`, { defaultValue: edge.kind })}</span><span>{edge.confidence}</span></div></div>} /> :
+            <div className="py-4 text-xs text-forensics-muted">{t('infrastructure.workspace.topology.noEdges')}</div>}
         </div>
       </div>
     </PanelFrame>
   );
 }
+
+const getTopologyEdgeIdentity = (edge: LinuxTopologyEdgeSummary) => JSON.stringify([
+  edge.sourceScopeId,
+  edge.targetScopeId,
+  edge.kind,
+  edge.confidence,
+]);
 
 interface SourceTopologyGroup {
   sourceId: string;

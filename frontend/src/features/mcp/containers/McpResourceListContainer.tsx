@@ -3,7 +3,9 @@ import { McpResourceList } from '@/features/mcp/components/McpResourceList';
 import { useMcpStore } from '@/stores/mcp-store';
 
 export function McpResourceListContainer({ serverId }: { serverId: string }) {
-  const { resources, loading, refreshResources } = useMcpStore();
+  const resources = useMcpStore((state) => state.resources);
+  const loading = useMcpStore((state) => state.loading);
+  const refreshResources = useMcpStore((state) => state.refreshResources);
 
   useEffect(() => {
     void refreshResources(serverId);

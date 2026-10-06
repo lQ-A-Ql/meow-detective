@@ -1,11 +1,11 @@
-import { memo, useCallback, type Ref } from 'react';
+import { memo, useCallback, useMemo, type Ref } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import { FileTreeDataSourceNode } from '@/features/files/components/FileTreeDataSourceNode';
+import { VirtualFileTree } from '@/features/files/components/VirtualFileTree';
 import type { DataSourceSummary, FileTreeNode } from '@/types/models';
 
 export interface FileTreePanelProps {
@@ -115,6 +115,31 @@ export function FileTreePanel({
   dataSources,
   FILE_BROWSER_PAGE_LIMIT,
 }: FileTreePanelProps) {
+  const sourceMap = useMemo(() => new Map((dataSources ?? []).map((source) => [source.id, source])), [dataSources]);
+  const virtualNodes = useMemo(() => filteredTreeNodes.map((node) => ({
+    ...node,
+    active: node.id === activeDirectoryId,
+    expanded: expandedIds.has(node.id),
+  })), [activeDirectoryId, expandedIds, filteredTreeNodes]);
+  const renderNode = useCallback((node: FileTreeNode & { active?: boolean; expanded?: boolean }, isLast: boolean) => {
+    const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
+    if (isDataSourceNode) {
+      return <FileTreeDataSourceNode
+        node={node}
+        expanded={Boolean(node.expanded)}
+        dataSource={sourceMap.get(dataSourceIdFromNodeId(node.id))}
+        onClick={() => toggleDirectory(node)}
+      />;
+    }
+    return <TreeNodeRow
+      node={node}
+      active={Boolean(node.active)}
+      expanded={Boolean(node.expanded)}
+      isLast={isLast}
+      displayNodeName={displayNodeName}
+      onToggle={toggleDirectory}
+    />;
+  }, [displayNodeName, sourceMap, toggleDirectory]);
   return (
     <div
       className="border-r border-forensics-border bg-forensics-panel flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
@@ -131,12 +156,7 @@ export function FileTreePanel({
         目录树
       </div>
       <TreeSearch onFilter={setFilterQuery} />
-      <ScrollArea
-        className="min-h-0 flex-1"
-        viewportRef={treeContainerRef}
-        viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
-        viewportProps={{ tabIndex: 0 }}
-      >
+      <div className="flex min-h-0 flex-1 flex-col">
         {treeLoading ? (
           <div className="px-3 py-2 text-forensics-muted-light">正在加载目录树...</div>
         ) : null}
@@ -150,39 +170,16 @@ export function FileTreePanel({
             当前目录子目录很多，仅加载前 {activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT} 个；请用右侧列表或搜索继续定位。
           </div>
         ) : null}
-        {filteredTreeNodes.map((node, index) => {
-          const isLast =
-            index === filteredTreeNodes.length - 1 ||
-            (filteredTreeNodes[index + 1]?.depth ?? 0) < node.depth;
-          const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
-
-          if (isDataSourceNode) {
-            const ds = dataSources?.find(
-              (d) => d.id === dataSourceIdFromNodeId(node.id),
-            );
-            return (
-              <FileTreeDataSourceNode
-                key={node.id}
-                node={node}
-                expanded={expandedIds.has(node.id)}
-                dataSource={ds}
-                onClick={() => toggleDirectory(node)}
-              />
-            );
-          }
-
-          return (
-            <TreeNodeRow
-              key={node.id}
-              node={node}
-              active={node.id === activeDirectoryId}
-              expanded={expandedIds.has(node.id)}
-              isLast={isLast}
-              displayNodeName={displayNodeName}
-              onToggle={toggleDirectory}
-            />
-          );
-        })}
+        {filteredTreeNodes.length > 0 ? <VirtualFileTree
+          nodes={virtualNodes}
+          onNodeClick={toggleDirectory}
+          scrollContainerRef={treeContainerRef}
+          renderNode={renderNode}
+          viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
+          viewportTabIndex={0}
+          itemSize={28}
+          overscan={10}
+        /> : null}
         {canLoadMoreTreeChildren ? (
           <div className="px-2 py-2">
             <div className="flex items-center justify-between rounded-none border border-forensics-border bg-forensics-surface px-2 py-1.5 text-[10px] text-forensics-muted">
@@ -202,7 +199,7 @@ export function FileTreePanel({
             </div>
           </div>
         ) : null}
-      </ScrollArea>
+      </div>
     </div>
   );
 }

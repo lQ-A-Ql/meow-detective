@@ -30,7 +30,7 @@ vi.mock('@/features/settings/hooks', () => ({
 }));
 
 vi.mock('@/stores/mcp-store', () => ({
-  useMcpStore: () => mocks.mcpState,
+  useMcpStore: (selector: (state: typeof mocks.mcpState) => unknown) => selector(mocks.mcpState),
 }));
 
 vi.mock('@/features/mcp/components/McpServerItem', () => ({

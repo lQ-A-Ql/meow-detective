@@ -19,7 +19,7 @@ export function TimelineHistogram({ bars, onSelectRange }: TimelineHistogramProp
         const hasRange = Boolean(bar.startTs && bar.endTs);
         const rangeLabel = hasRange ? `${bar.startTs} - ${bar.endTs}` : '无时间区间';
         return (
-          <div key={`${bar.startTs ?? 'empty'}-${index}`} className="h-full min-w-0 flex-1">
+          <div key={hasRange ? JSON.stringify([bar.startTs, bar.endTs]) : `empty-${index}`} className="h-full min-w-0 flex-1">
             <Button
               type="button"
               variant="viewerControl"

@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import {
   getAndroidDeviceInfo,
   getAndroidPackageSummary,
@@ -64,9 +65,10 @@ export function useAndroidPackageSummary(request: OptionalAnalysisPageRequest = 
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
+  const data = useMemo(() => mergeAndroidPackagePages(query.data?.pages ?? []), [query.data?.pages]);
   return {
     ...query,
-    data: mergeAndroidPackagePages(query.data?.pages ?? []),
+    data,
   };
 }
 

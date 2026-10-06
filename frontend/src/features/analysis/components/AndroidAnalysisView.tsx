@@ -11,6 +11,7 @@ import {
 } from '@/app/components/ui/card';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { EmptyState, KeyValueField, PanelFrame, SectionHeader } from '@/components/data-display';
+import { VirtualGrid } from '@/components/lists/VirtualGrid';
 import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
@@ -35,6 +36,9 @@ interface AndroidAnalysisViewProps {
   onRetry: () => void;
   onLoadMore: () => void;
 }
+
+const getPackageKey = (item: AndroidPackageSummary['packages'][number]) => JSON.stringify([item.packageName, item.userId]);
+const renderPackage = (item: AndroidPackageSummary['packages'][number]) => <AndroidPackageCard item={item} />;
 
 export function AndroidAnalysisView({
   deviceInfo,
@@ -156,11 +160,7 @@ function AndroidPackagesPanel({
       {packages.length === 0 ? (
         <EmptyState>{t('analysis.android.noPackages')}</EmptyState>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-          {packages.map((item) => (
-            <AndroidPackageCard key={item.packageName} item={item} />
-          ))}
-        </div>
+        <VirtualGrid items={packages} getItemKey={getPackageKey} renderItem={renderPackage} />
       )}
       {hasMore ? (
         <div className="flex justify-center">

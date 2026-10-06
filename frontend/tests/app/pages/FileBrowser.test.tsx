@@ -536,7 +536,10 @@ describe('FileBrowser media preview', () => {
     await waitFor(() =>
       expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true),
     );
-    expect(screen.getByText('System Volume Information')).toBeDefined();
+    const treeViewport = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+    treeViewport.scrollTop = 501 * 28;
+    fireEvent.scroll(treeViewport);
+    await waitFor(() => expect(screen.getByText('System Volume Information')).toBeDefined());
   });
 
   it('renders deleted and hidden states as icon overlays', () => {

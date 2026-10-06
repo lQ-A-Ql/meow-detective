@@ -79,6 +79,8 @@ export function useTimelineWorkspaceModel() {
     eventType: eventType || undefined,
     bucketCount,
   });
+  const { fetchNextPage, refetch: refetchTimeline } = timelineQuery;
+  const { refetch: refetchFacets } = facetsQuery;
   const loadContextKey = JSON.stringify([
     normalizedTimeStart ?? null,
     normalizedTimeEnd ?? null,
@@ -177,12 +179,12 @@ export function useTimelineWorkspaceModel() {
     [setSelectedTimelineId],
   );
   const loadNextPage = useCallback(() => {
-    void timelineQuery.fetchNextPage();
-  }, [timelineQuery]);
+    void fetchNextPage();
+  }, [fetchNextPage]);
   const retry = useCallback(() => {
-    void timelineQuery.refetch();
-    void facetsQuery.refetch();
-  }, [facetsQuery, timelineQuery]);
+    void refetchTimeline();
+    void refetchFacets();
+  }, [refetchFacets, refetchTimeline]);
 
   return {
     bars,

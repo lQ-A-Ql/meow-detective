@@ -2,21 +2,20 @@ import { McpSection } from '@/features/mcp/components/McpSection';
 import { McpResourceListContainer } from '@/features/mcp/containers/McpResourceListContainer';
 import { McpToolListContainer } from '@/features/mcp/containers/McpToolListContainer';
 import { useMcpStore } from '@/stores/mcp-store';
+import { useMemo } from 'react';
 
 export function McpSectionContainer() {
-  const {
-    servers,
-    selectedServerId,
-    loading,
-    error,
-    addServer,
-    removeServer,
-    connectServer,
-    disconnectServer,
-    testConnection,
-    selectServer,
-  } = useMcpStore();
-  const selectedServer = servers.find((server) => server.id === selectedServerId);
+  const servers = useMcpStore((state) => state.servers);
+  const selectedServerId = useMcpStore((state) => state.selectedServerId);
+  const loading = useMcpStore((state) => state.loading);
+  const error = useMcpStore((state) => state.error);
+  const addServer = useMcpStore((state) => state.addServer);
+  const removeServer = useMcpStore((state) => state.removeServer);
+  const connectServer = useMcpStore((state) => state.connectServer);
+  const disconnectServer = useMcpStore((state) => state.disconnectServer);
+  const testConnection = useMcpStore((state) => state.testConnection);
+  const selectServer = useMcpStore((state) => state.selectServer);
+  const selectedServer = useMemo(() => servers.find((server) => server.id === selectedServerId), [servers, selectedServerId]);
 
   return (
     <McpSection

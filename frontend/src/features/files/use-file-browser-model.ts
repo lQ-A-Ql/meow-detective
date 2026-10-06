@@ -49,8 +49,10 @@ export function useFileBrowserModel() {
     setSelectedTimelineId,
   } = useFileSelection();
 
-  const partitions: DataSourcePartition[] =
-    dataSources?.flatMap((source) => source.partitions ?? []) ?? [];
+  const partitions: DataSourcePartition[] = useMemo(
+    () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
+    [dataSources],
+  );
 
   const tree = useFileTree({
     showHidden,

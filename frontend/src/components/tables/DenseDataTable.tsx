@@ -164,11 +164,13 @@ export function DenseDataTable<T>({
     resetKey: loadContextKey,
   });
   const visibleRows = filter.visibleRows;
+  const getItemKey = useCallback((index: number) => getRowKey(visibleRows[index]), [getRowKey, visibleRows]);
   const rowVirtualizer = useVirtualizer({
     count: visibleRows.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => DENSE_TABLE_ROW_HEIGHT,
     overscan: OVERSCAN_ROWS,
+    getItemKey,
     initialRect: { width: 0, height: DEFAULT_CONTAINER_HEIGHT },
     observeElementRect: observeTableViewport,
   });

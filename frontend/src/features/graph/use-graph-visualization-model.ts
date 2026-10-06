@@ -7,7 +7,8 @@ import {
   useProvenanceChain,
 } from '@/features/graph/hooks';
 import { ALL_EDGE_TYPES, buildEdgeMap, buildNodeMap } from '@/features/graph/logic/graph-utils';
-import type { EdgeType, GraphEdge, GraphNode } from '@/types/models';
+import { MAX_GRAPH_EDGES, MAX_GRAPH_NODES, mergeGraphData, type GraphData } from '@/features/graph/logic/graph-data';
+import type { EdgeType } from '@/types/models';
 
 const MAX_SEEDS = 6;
 
@@ -19,9 +20,10 @@ export function useGraphVisualizationModel() {
   const [maxDepth, setMaxDepth] = useState(2);
   const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<EdgeType[]>([...ALL_EDGE_TYPES]);
   const [running, setRunning] = useState(true);
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({
+  const [graphData, setGraphData] = useState<GraphData>({
     nodes: [],
     edges: [],
+    truncated: false,
   });
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>();
@@ -39,7 +41,7 @@ export function useGraphVisualizationModel() {
 
   useEffect(() => {
     setSeedIds([]);
-    setGraphData({ nodes: [], edges: [] });
+    setGraphData({ nodes: [], edges: [], truncated: false });
     setSelectedNodeId(undefined);
     setSelectedEdgeId(undefined);
   }, [caseId]);
@@ -50,14 +52,20 @@ export function useGraphVisualizationModel() {
 
   useEffect(() => {
     if (hasSelectedEdgeTypes) return;
-    setGraphData({ nodes: [], edges: [] });
+    setGraphData({ nodes: [], edges: [], truncated: false });
     setSelectedNodeId(undefined);
     setSelectedEdgeId(undefined);
   }, [hasSelectedEdgeTypes]);
 
   useEffect(() => {
     if (!initialQuery.data) return;
-    setGraphData({ nodes: initialQuery.data.nodes, edges: initialQuery.data.edges });
+    setGraphData({
+      nodes: initialQuery.data.nodes.slice(0, MAX_GRAPH_NODES),
+      edges: initialQuery.data.edges.slice(0, MAX_GRAPH_EDGES),
+      truncated: initialQuery.data.truncated
+        || initialQuery.data.nodes.length > MAX_GRAPH_NODES
+        || initialQuery.data.edges.length > MAX_GRAPH_EDGES,
+    });
     setSelectedNodeId(undefined);
     setSelectedEdgeId(undefined);
   }, [initialQuery.data]);
@@ -86,7 +94,7 @@ export function useGraphVisualizationModel() {
     snapshot: snapshot.data,
     provenance: provenance.data,
     provenanceLoading: provenance.isLoading,
-    truncated: initialQuery.data?.truncated ?? false,
+    truncated: graphData.truncated,
     hasNodes: graphData.nodes.length > 0,
     isLoadingGraph: snapshot.isLoading || (hasSelectedEdgeTypes && initialQuery.isLoading),
     setMaxDepth,
@@ -112,6 +120,7 @@ export function useGraphVisualizationModel() {
       setSelectedEdgeId(undefined);
     },
     expandNode(nodeId: string, depth: number) {
+      if (graphData.nodes.length >= MAX_GRAPH_NODES || graphData.edges.length >= MAX_GRAPH_EDGES) return;
       setExpandTarget({ nodeId, depth });
     },
     async refresh() {
@@ -119,30 +128,6 @@ export function useGraphVisualizationModel() {
       if (hasSelectedEdgeTypes && seedIds.length > 0) await initialQuery.refetch();
     },
   };
-}
-
-function mergeGraphData(
-  previous: { nodes: GraphNode[]; edges: GraphEdge[] },
-  newNodes: GraphNode[],
-  newEdges: GraphEdge[],
-) {
-  const nodeMap = buildNodeMap(previous.nodes);
-  const edgeMap = buildEdgeMap(previous.edges);
-  const nodes = [...previous.nodes];
-  const edges = [...previous.edges];
-  for (const node of newNodes) {
-    if (!nodeMap.has(node.id)) {
-      nodeMap.set(node.id, node);
-      nodes.push(node);
-    }
-  }
-  for (const edge of newEdges) {
-    if (!edgeMap.has(edge.id)) {
-      edgeMap.set(edge.id, edge);
-      edges.push(edge);
-    }
-  }
-  return { nodes, edges };
 }
 
 export type GraphVisualizationModel = ReturnType<typeof useGraphVisualizationModel>;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { keyedItems } from '@/lib/keyed-items';
 import {
   AlertTriangle,
   CheckCircle,
@@ -231,10 +232,10 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
                 {/* Warnings */}
                 {pack.warnings.length > 0 && (
                   <div className="mt-2 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-3 py-1.5 text-[10px] text-forensics-warning-text">
-                    {pack.warnings.slice(0, 2).map((w, i) => (
-                      <div key={i} className="flex items-start gap-1">
+                    {keyedItems(pack.warnings.slice(0, 2), (warning) => warning).map(({ item: warning, key }) => (
+                      <div key={key} className="flex items-start gap-1">
                         <AlertTriangle size={10} className="mt-0.5 shrink-0" />
-                        <span>{w}</span>
+                        <span>{warning}</span>
                       </div>
                     ))}
                     {pack.warnings.length > 2 && (
@@ -248,10 +249,10 @@ export function RulePackManager({ model }: { model: RulePackManagerModel }) {
                 {/* Errors */}
                 {pack.errors.length > 0 && (
                   <div className="mt-2 rounded-none border border-forensics-error-border bg-forensics-error-bg px-3 py-1.5 text-[10px] text-forensics-error-text">
-                    {pack.errors.slice(0, 3).map((e, i) => (
-                      <div key={i} className="flex items-start gap-1">
+                    {keyedItems(pack.errors.slice(0, 3), (error) => error).map(({ item: error, key }) => (
+                      <div key={key} className="flex items-start gap-1">
                         <XCircle size={10} className="mt-0.5 shrink-0" />
-                        <span>{e}</span>
+                        <span>{error}</span>
                       </div>
                     ))}
                   </div>

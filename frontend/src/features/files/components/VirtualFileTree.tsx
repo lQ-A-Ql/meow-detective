@@ -5,8 +5,8 @@
  * 只渲染可见区域的节点，大幅提升性能。
  */
 
-import { useRef, useCallback } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useRef, useCallback, useState, type MutableRefObject, type ReactNode, type Ref } from 'react';
+import { useVirtualizer, type Rect, type Virtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -23,6 +23,27 @@ interface VirtualFileTreeProps {
   itemSize?: number;
   /** 预渲染行数 */
   overscan?: number;
+  /** 将列表行交给调用方绘制，用于保留数据源等特殊节点样式。 */
+  renderNode?: (node: FileTreeNode & { active?: boolean; expanded?: boolean }, isLast: boolean) => ReactNode;
+  /** 外部键盘导航使用的滚动容器引用。 */
+  scrollContainerRef?: Ref<HTMLDivElement>;
+  viewportClassName?: string;
+  viewportTabIndex?: number;
+}
+
+function observeTreeViewport(
+  instance: Virtualizer<HTMLDivElement, HTMLDivElement>,
+  onRectChange: (rect: Rect) => void,
+) {
+  const viewport = instance.scrollElement;
+  if (!viewport) return undefined;
+  const update = () => onRectChange({ width: viewport.clientWidth, height: viewport.clientHeight || 600 });
+  update();
+  const ResizeObserverImpl = instance.targetWindow?.ResizeObserver;
+  if (!ResizeObserverImpl) return undefined;
+  const observer = new ResizeObserverImpl(update);
+  observer.observe(viewport);
+  return () => observer.disconnect();
 }
 
 export function VirtualFileTree({
@@ -30,15 +51,38 @@ export function VirtualFileTree({
   onNodeClick,
   itemSize = 28,
   overscan = 10,
+  renderNode,
+  scrollContainerRef,
+  viewportClassName,
+  viewportTabIndex,
 }: VirtualFileTreeProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement | null>(null) as MutableRefObject<HTMLDivElement | null>;
+  const [, setViewportReady] = useState(0);
+  const getItemKey = useCallback(
+    (index: number) => nodes[index]?.id ?? index,
+    [nodes],
+  );
 
   const virtualizer = useVirtualizer({
     count: nodes.length,
     getScrollElement: () => parentRef.current,
+    getItemKey,
     estimateSize: () => itemSize,
     overscan,
+    initialRect: { width: 0, height: 600 },
+    observeElementRect: observeTreeViewport,
   });
+
+  const setViewportRef = useCallback((element: HTMLDivElement | null) => {
+    if (parentRef.current !== element) setViewportReady((value) => value + 1);
+    parentRef.current = element;
+    if (!scrollContainerRef) return;
+    if (typeof scrollContainerRef === 'function') {
+      scrollContainerRef(element);
+    } else {
+      (scrollContainerRef as MutableRefObject<HTMLDivElement | null>).current = element;
+    }
+  }, [scrollContainerRef]);
 
   const handleClick = useCallback(
     (node: FileTreeNode) => {
@@ -50,9 +94,9 @@ export function VirtualFileTree({
   return (
     <ScrollArea
       className="min-h-0 flex-1"
-      viewportRef={parentRef}
-      viewportClassName="overflow-x-hidden"
-      viewportProps={{ style: { contain: 'strict' } }}
+      viewportRef={setViewportRef}
+      viewportClassName={viewportClassName ?? 'overflow-x-hidden'}
+      viewportProps={{ tabIndex: viewportTabIndex, style: { contain: 'strict' } }}
     >
       <div
         style={{
@@ -81,6 +125,7 @@ export function VirtualFileTree({
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
+              {renderNode ? renderNode(node, isLast) : (
               <Button
                 type="button"
                 variant="treeControl"
@@ -128,6 +173,7 @@ export function VirtualFileTree({
                   </span>
                 ) : null}
               </Button>
+              )}
             </div>
           );
         })}
