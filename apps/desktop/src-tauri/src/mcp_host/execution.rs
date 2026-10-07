@@ -1,5 +1,7 @@
 use crate::state::AppState;
-use app_services::mcp_host_service::{execute_tool, tool_catalog, McpHostQueryContext};
+use app_services::mcp_host_service::{
+    execute_file_tool, execute_tool, tool_catalog, McpHostFileQueryContext, McpHostQueryContext,
+};
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use serde_json::json;
 use transport::{
@@ -53,15 +55,26 @@ fn execute_for_active_case(
     let response = if !enabled {
         failure("工具或 MCP 服务已禁用")
     } else {
-        match execute_tool(
-            McpHostQueryContext {
-                connection: &conn,
-                case_root: &active.case_root,
-                case_meta: &active.meta,
-            },
-            &request.name,
-            &request.arguments,
-        ) {
+        let context = McpHostQueryContext {
+            connection: &conn,
+            case_root: &active.case_root,
+            case_meta: &active.meta,
+        };
+        let result = match request.name.as_str() {
+            "forensics.list_files" | "forensics.get_file_metadata" | "forensics.read_file" => {
+                execute_file_tool(
+                    McpHostFileQueryContext {
+                        query: context,
+                        preview_runtime: &state.preview_runtime,
+                        bitlocker_runtime: &state.bitlocker_runtime,
+                    },
+                    &request.name,
+                    &request.arguments,
+                )
+            }
+            _ => execute_tool(context, &request.name, &request.arguments),
+        };
+        match result {
             Ok(data) if data.to_string().len() <= 1024 * 1024 => McpHostToolCallResultDto {
                 success: true,
                 data: Some(data),

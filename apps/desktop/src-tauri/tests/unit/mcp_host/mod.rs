@@ -3,6 +3,8 @@ use crate::state::AppState;
 use serde_json::{json, Value};
 use transport::dto::mcp_host::McpHostToolCallRequestDto;
 
+mod files;
+
 async fn server() -> (AppState, String, tempfile::TempDir) {
     let temporary = tempfile::tempdir().unwrap();
     let state = AppState {
@@ -53,7 +55,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .await
     .unwrap();
     assert_eq!(result["id"], "tool-list");
-    assert_eq!(result["result"]["tools"].as_array().unwrap().len(), 5);
+    assert_eq!(result["result"]["tools"].as_array().unwrap().len(), 8);
     assert_eq!(
         result["result"]["tools"][0]["annotations"]["readOnlyHint"],
         true

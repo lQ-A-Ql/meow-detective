@@ -56,3 +56,60 @@ fn tools_and_calls_preserve_schema_and_arguments() {
             .success
     );
 }
+
+#[test]
+fn file_requests_and_chunks_round_trip_defaults_encodings_and_camel_case() {
+    let list: McpHostListFilesRequestDto =
+        serde_json::from_value(json!({"dataSourceId":"source"})).unwrap();
+    assert_eq!(list.limit, 100);
+    assert_eq!(list.offset, 0);
+    let value = serde_json::to_value(list).unwrap();
+    assert!(value.get("parentId").is_none());
+    let _: McpHostListFilesRequestDto = serde_json::from_value(value).unwrap();
+    let metadata: McpHostFileRequestDto =
+        serde_json::from_value(json!({"fileId":"ds:source:file"})).unwrap();
+    let _: McpHostFileRequestDto =
+        serde_json::from_value(serde_json::to_value(metadata).unwrap()).unwrap();
+    let read: McpHostReadFileRequestDto =
+        serde_json::from_value(json!({"fileId":"ds:source:file"})).unwrap();
+    assert_eq!(read.length, MCP_FILE_CHUNK_LIMIT);
+    assert_eq!(read.encoding, McpHostFileEncodingDto::Auto);
+    let _: McpHostReadFileRequestDto =
+        serde_json::from_value(serde_json::to_value(read).unwrap()).unwrap();
+    for encoding in [
+        McpHostFileEncodingDto::Auto,
+        McpHostFileEncodingDto::Utf8,
+        McpHostFileEncodingDto::Base64,
+    ] {
+        let encoded = serde_json::to_value(encoding).unwrap();
+        assert_eq!(
+            serde_json::from_value::<McpHostFileEncodingDto>(encoded).unwrap(),
+            encoding
+        );
+    }
+    assert!(serde_json::from_value::<McpHostReadFileRequestDto>(
+        json!({"fileId":"x", "path":"private"})
+    )
+    .is_err());
+    let chunk = McpHostFileChunkDto {
+        file_id: "ds:source:file".into(),
+        size: 4,
+        offset: 0,
+        bytes_read: 4,
+        next_offset: 4,
+        eof: true,
+        encoding: McpHostFileEncodingDto::Utf8,
+        content: "test".into(),
+        chunk_sha256: "hash".into(),
+    };
+    let value = serde_json::to_value(chunk).unwrap();
+    assert_eq!(value["bytesRead"], 4);
+    assert_eq!(value["nextOffset"], 4);
+    assert_eq!(value["chunkSha256"], "hash");
+    assert_eq!(
+        serde_json::from_value::<McpHostFileChunkDto>(value)
+            .unwrap()
+            .content,
+        "test"
+    );
+}

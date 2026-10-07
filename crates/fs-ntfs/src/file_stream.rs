@@ -16,18 +16,20 @@ pub struct NtfsFileReader {
 impl NtfsReader {
     /// Whether an inode can use bounded range reads without whole-file decoding.
     pub fn supports_file_stream_by_inode(&self, inode: u64) -> io::Result<bool> {
-        Ok(self
-            .collect_unnamed_data_extents(inode)?
-            .iter()
-            .all(|extent| match extent {
-                DataAttributeExtent::Resident { .. } => true,
-                DataAttributeExtent::NonResident { attr_flags, .. } => attr_flags & 0x0001 == 0,
-            }))
+        let extents = match self.collect_readable_data_extents(inode) {
+            Ok(extents) => extents,
+            Err(error) if error.kind() == io::ErrorKind::Unsupported => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        Ok(extents.iter().all(|extent| match extent {
+            DataAttributeExtent::Resident { .. } => true,
+            DataAttributeExtent::NonResident { attr_flags, .. } => attr_flags & 0x0001 == 0,
+        }))
     }
 
     /// Consume the filesystem reader and open one inode as a bounded stream.
     pub fn into_file_stream_by_inode(self, inode: u64) -> io::Result<NtfsFileReader> {
-        let extents = self.collect_unnamed_data_extents(inode)?;
+        let extents = self.collect_readable_data_extents(inode)?;
         if extents.iter().any(|extent| {
             matches!(
                 extent,

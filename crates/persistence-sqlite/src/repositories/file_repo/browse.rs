@@ -94,7 +94,7 @@ impl FileRepo<'_> {
         limit: u32,
     ) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC, id ASC LIMIT ?2 OFFSET ?3",
         );
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(
@@ -141,7 +141,7 @@ impl FileRepo<'_> {
 
     pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC, id ASC LIMIT ?1 OFFSET ?2",
         );
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;

@@ -83,7 +83,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 5);
+    assert_eq!(catalog.len(), 8);
     for tool in &catalog {
         assert_eq!(tool.input_schema["additionalProperties"], false);
     }

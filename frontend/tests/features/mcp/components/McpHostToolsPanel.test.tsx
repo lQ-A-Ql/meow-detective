@@ -62,4 +62,17 @@ describe('McpHostToolsPanel', () => {
     expect(await screen.findByText('保存配置失败')).toBeInTheDocument();
     expect(screen.getAllByTitle('禁用工具')).toHaveLength(2);
   });
+
+  it('discovers file reading from the backend catalog and displays the returned content', async () => {
+    vi.mocked(listMcpHostTools).mockResolvedValue([
+      { name: 'forensics.read_file', description: '读取文件内容', inputSchema: { type: 'object', properties: { fileId: { type: 'string' }, offset: { type: 'integer' }, length: { type: 'integer' } }, required: ['fileId'] } },
+    ]);
+    vi.mocked(callMcpHostTool).mockResolvedValue({ success: true, data: { content: 'MCP byte proof', encoding: 'utf8', nextOffset: 14, eof: true } });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: /forensics\.read_file/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'forensics.read_file 参数' }), { target: { value: '{"fileId":"ds:source:file","offset":0,"length":64}' } });
+    fireEvent.click(screen.getByRole('button', { name: '测试工具' }));
+    await waitFor(() => expect(callMcpHostTool).toHaveBeenCalledWith('forensics.read_file', { fileId: 'ds:source:file', offset: 0, length: 64 }));
+    expect(await screen.findByText(/MCP byte proof/)).toBeInTheDocument();
+  });
 });

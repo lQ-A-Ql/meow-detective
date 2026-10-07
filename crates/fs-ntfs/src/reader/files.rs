@@ -13,7 +13,7 @@ use crate::{
 impl crate::NtfsReader {
     /// Read the unnamed `$DATA` attribute of a file by MFT inode.
     pub(crate) fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
-        let extents = self.collect_unnamed_data_extents(inode)?;
+        let extents = self.collect_readable_data_extents(inode)?;
         if extents.is_empty() {
             return Ok(Vec::new());
         }
@@ -31,6 +31,7 @@ impl crate::NtfsReader {
         }
         let record = self.read_mft_record(inode)?;
         validate_file_record(&record, inode)?;
+        self.ensure_supported_file_backing(inode, &record)?;
         let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
         if extents.is_empty() {
             return Ok(Vec::new());

@@ -1,6 +1,7 @@
 use super::{
+    arguments::validate_arguments,
     sanitization::{plugin_summary, source_summary},
-    tool_catalog, McpHostServiceError,
+    McpHostServiceError,
 };
 use domain::{CaseMeta, DataSourceId};
 use rusqlite::Connection;
@@ -66,31 +67,6 @@ pub fn execute_tool(
         }
         _ => Err(McpHostServiceError::InvalidInput),
     }
-}
-
-fn validate_arguments(name: &str, arguments: &Value) -> Result<(), McpHostServiceError> {
-    let tool = tool_catalog()
-        .into_iter()
-        .find(|tool| tool.name == name)
-        .ok_or(McpHostServiceError::InvalidInput)?;
-    let fields = arguments
-        .as_object()
-        .ok_or(McpHostServiceError::InvalidInput)?;
-    let properties = &tool.input_schema["properties"];
-    if fields.keys().any(|key| properties.get(key).is_none()) {
-        return Err(McpHostServiceError::InvalidInput);
-    }
-    for key in tool.input_schema["required"]
-        .as_array()
-        .into_iter()
-        .flatten()
-    {
-        required_string(
-            arguments,
-            key.as_str().ok_or(McpHostServiceError::InvalidInput)?,
-        )?;
-    }
-    Ok(())
 }
 
 fn required_string<'a>(arguments: &'a Value, key: &str) -> Result<&'a str, McpHostServiceError> {
