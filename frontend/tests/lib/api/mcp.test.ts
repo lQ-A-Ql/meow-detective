@@ -14,6 +14,7 @@ import {
   saveMcpConfig,
   testMcpConnection,
 } from '@/lib/api/mcp';
+import { getMcpHostStatus, listMcpHostTools, setMcpHostSettings, callMcpHostTool } from '@/lib/api/mcp-host';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
@@ -26,6 +27,22 @@ const requestMock = vi.mocked(apiClient.request);
 describe('mcp API layer', () => {
   beforeEach(() => {
     requestMock.mockReset();
+  });
+
+  it('routes embedded MCP service settings and tools through dedicated Tauri commands', async () => {
+    requestMock.mockResolvedValueOnce({ running: true });
+    await getMcpHostStatus();
+    expect(requestMock).toHaveBeenLastCalledWith('get_mcp_host_status');
+    requestMock.mockResolvedValueOnce([]);
+    await listMcpHostTools();
+    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_host_tools');
+    requestMock.mockResolvedValueOnce({ running: false });
+    const settings = { enabled: false, disabledTools: ['forensics.get_current_case'] };
+    await setMcpHostSettings(settings);
+    expect(requestMock).toHaveBeenLastCalledWith('set_mcp_host_settings', { settings });
+    requestMock.mockResolvedValueOnce({ success: true, data: {} });
+    await callMcpHostTool('forensics.get_data_source', { dataSourceId: 'source-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('call_mcp_host_tool', { request: { name: 'forensics.get_data_source', arguments: { dataSourceId: 'source-1' } } });
   });
 
   it('gets MCP config with the expected command and mock fallback', async () => {

@@ -54,9 +54,10 @@ pub(crate) use crate::commands::{
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     ledger_commands::{get_ledger_proof, get_ledger_snapshot, seal_ledger_batch},
     mcp_commands::{
-        add_mcp_server, call_mcp_tool, connect_mcp_server, disconnect_mcp_server, get_mcp_config,
-        get_mcp_prompt, list_mcp_prompts, list_mcp_resources, list_mcp_tools, remove_mcp_server,
-        save_mcp_config, test_mcp_connection,
+        add_mcp_server, call_mcp_host_tool, call_mcp_tool, connect_mcp_server,
+        disconnect_mcp_server, get_mcp_config, get_mcp_host_status, get_mcp_prompt,
+        list_mcp_host_tools, list_mcp_prompts, list_mcp_resources, list_mcp_tools,
+        remove_mcp_server, save_mcp_config, set_mcp_host_settings, test_mcp_connection,
     },
     mount_commands::{
         get_mount_status, list_mounts, mount_image, mount_physical_image, unmount_image,

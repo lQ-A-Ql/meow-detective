@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 40 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：12 frontend pages、148 Tauri commands、38 source modules、migration scripts (100)、123 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：12 frontend pages、152 Tauri commands、38 source modules、migration scripts (100)、128 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -73,7 +73,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 
 - 全文检索、时间线、实体归并、关联图、Notebook 调查记录、规则包与批处理任务。
 - HTML、CSV、JSON 与证据包报告导出；报告和错误信息遵循脱敏规则。
-- MCP 扩展通道使用受控权限模型，默认最小权限和审计记录。
+- 内置本机 MCP 服务端，随应用启动并监听 `http://127.0.0.1:3001/mcp`，支持设置页启停、连接地址复制及逐项禁用只读工具。当前提供案件、数据源及插件模块查询；工具调用使用当前打开案件并记录审计，原始证据保持只读。外部 MCP 客户端接入功能继续独立管理。
 
 ### 制品查询与分页
 

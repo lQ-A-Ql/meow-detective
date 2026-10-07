@@ -43,7 +43,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
     return tools.filter((tool) => `${tool.name} ${tool.description}`.toLowerCase().includes(normalized));
   }, [query, tools]);
   const selectedTool = tools.find((tool) => tool.name === selectedToolName) ?? filteredTools[0];
-  const isToolDisabled = (toolName: string) => disabledTools.some((name) => name.toLowerCase() === toolName.toLowerCase());
+  const isToolDisabled = (toolName: string) => toolAccess === 'disabled' || disabledTools.some((name) => name.toLowerCase() === toolName.toLowerCase());
   const disabledCount = tools.filter((tool) => isToolDisabled(tool.name)).length;
 
   useEffect(() => {
@@ -61,6 +61,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
   };
 
   const runTool = async (tool: McpTool, rawArguments = tool.name === selectedToolName ? argumentsText : formatArguments(tool.inputSchema)) => {
+    if (testingTool || loading || isToolDisabled(tool.name)) return;
     let args: unknown;
     try {
       args = JSON.parse(rawArguments || '{}');
@@ -78,6 +79,8 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
     try {
       const result = await onTestTool(tool.name, args);
       setTestResult({ toolName: tool.name, ...result });
+    } catch (cause) {
+      setTestResult({ toolName: tool.name, success: false, error: cause instanceof Error ? cause.message : '工具调用失败' });
     } finally {
       setTestingTool(undefined);
     }
@@ -89,8 +92,8 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
         <div className="text-[11px] font-light text-forensics-muted">{title} ({tools.length})</div>
         <span className="text-[10px] text-forensics-muted">已启用 {Math.max(0, tools.length - disabledCount)}/{tools.length}</span>
         {toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <>
-          <Button type="button" variant="forensicsGhost" size="compact" onClick={() => onToggleAll(false)} className="h-6 px-2 text-[10px]">全部启用</Button>
-          <Button type="button" variant="forensicsGhost" size="compact" onClick={() => onToggleAll(true)} className="h-6 px-2 text-[10px]">全部禁用</Button>
+          <Button type="button" variant="forensicsGhost" size="compact" disabled={loading} onClick={() => onToggleAll(false)} className="h-6 px-2 text-[10px]">全部启用</Button>
+          <Button type="button" variant="forensicsGhost" size="compact" disabled={loading} onClick={() => onToggleAll(true)} className="h-6 px-2 text-[10px]">全部禁用</Button>
         </> : null}
         {toolAccess !== 'allowAll' && onEnableAll ? <Button type="button" variant="forensicsOutline" size="compact" onClick={onEnableAll} className="mr-auto ml-2 h-6 px-2 text-[10px]">{toolAccess === 'disabled' ? '启用工具' : '切换为全部工具'}</Button> : null}
         <Button type="button" variant="forensicsGhost" size="iconSm" onClick={onRefresh} disabled={loading} title="刷新工具">
@@ -112,10 +115,10 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
                 <span className="block truncate text-[11px] font-light text-forensics-muted">{tool.name}</span>
                 <span className="block truncate text-[10px] text-forensics-muted" title={tool.description}>{tool.description || '无描述'}</span>
               </button>
-              <Button type="button" variant="forensicsGhost" size="compact" onClick={(event) => { event.stopPropagation(); void runTool(tool); }} disabled={testingTool === tool.name || isToolDisabled(tool.name)} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title="使用当前参数测试">
+              <Button type="button" variant="forensicsGhost" size="compact" onClick={(event) => { event.stopPropagation(); void runTool(tool); }} disabled={Boolean(testingTool) || loading || isToolDisabled(tool.name)} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title="使用当前参数测试">
                 {testingTool === tool.name ? <Loader2 size={10} className="opacity-70" /> : <Play size={10} />}
               </Button>
-              {onToggleTool ? <Button type="button" variant="forensicsGhost" size="compact" aria-pressed={isToolDisabled(tool.name)} onClick={(event) => { event.stopPropagation(); onToggleTool(tool.name, !isToolDisabled(tool.name)); }} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title={isToolDisabled(tool.name) ? '启用工具' : '禁用工具'}>{isToolDisabled(tool.name) ? '启用' : '禁用'}</Button> : null}
+              {onToggleTool ? <Button type="button" variant="forensicsGhost" size="compact" disabled={loading} aria-pressed={isToolDisabled(tool.name)} onClick={(event) => { event.stopPropagation(); onToggleTool(tool.name, !isToolDisabled(tool.name)); }} className="h-5 shrink-0 px-1.5 py-0.5 text-[9px]" title={isToolDisabled(tool.name) ? '启用工具' : '禁用工具'}>{isToolDisabled(tool.name) ? '启用' : '禁用'}</Button> : null}
             </div>
           )} />
       )}
@@ -124,7 +127,7 @@ export function McpToolList({ tools, loading, error, onRefresh, onTestTool, disa
         <div className="mb-1 flex items-center justify-between gap-2"><div className="truncate text-[11px] font-light text-forensics-text">{selectedTool.name} 参数</div><span className="text-[10px] text-forensics-muted">JSON</span></div>
         <Textarea value={argumentsText || formatArguments(selectedTool.inputSchema)} onChange={(event) => { setArgumentsText(event.target.value); setArgumentError(undefined); }} variant="mono" textareaSize="compact" rows={5} spellCheck={false} aria-label={`${selectedTool.name} 参数`} />
         {argumentError ? <div className="mt-1 text-[10px] text-forensics-error-text">{argumentError}</div> : null}
-        <Button type="button" variant="forensicsOutline" size="compact" onClick={() => void runTool(selectedTool)} disabled={testingTool === selectedTool.name} className="mt-2 text-[10px]">
+        <Button type="button" variant="forensicsOutline" size="compact" onClick={() => void runTool(selectedTool)} disabled={Boolean(testingTool) || loading || isToolDisabled(selectedTool.name)} className="mt-2 text-[10px]">
           {testingTool === selectedTool.name ? <Loader2 size={11} className="mr-1 animate-spin" /> : <Play size={11} className="mr-1" />}测试工具
         </Button>
       </div> : null}

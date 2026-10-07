@@ -1,50 +1,65 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
-    getTotalSize: () => count * estimateSize(),
-    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, key: index, size: estimateSize(), start: index * estimateSize() })),
-    scrollToOffset: vi.fn(),
-  }),
-}));
-
-const getDataSourcesMock = vi.hoisted(() => vi.fn());
-const listPluginModulesMock = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api/case', () => ({ getDataSources: getDataSourcesMock }));
-vi.mock('@/lib/api/analysis', () => ({ listPluginModules: listPluginModulesMock }));
-
+import { getMcpHostStatus, listMcpHostTools, callMcpHostTool, setMcpHostSettings } from '@/lib/api/mcp-host';
 import { McpHostToolsPanel } from '@/features/mcp/components/McpHostToolsPanel';
+
+vi.mock('@/lib/api/mcp-host', () => ({ getMcpHostStatus: vi.fn(), listMcpHostTools: vi.fn(), callMcpHostTool: vi.fn(), setMcpHostSettings: vi.fn() }));
+
+const status = { running: true, endpoint: 'http://127.0.0.1:3001/mcp', settings: { enabled: true, disabledTools: [] } };
+function renderPanel() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><McpHostToolsPanel /></QueryClientProvider>);
+}
 
 describe('McpHostToolsPanel', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(getMcpHostStatus).mockResolvedValue(status);
+    vi.mocked(listMcpHostTools).mockResolvedValue([
+      { name: 'forensics.list_data_sources', description: '数据源', inputSchema: { type: 'object' } },
+      { name: 'forensics.list_plugin_modules', description: '插件', inputSchema: { type: 'object', properties: { dataSourceId: { type: 'string' } }, required: ['dataSourceId'] } },
+    ]);
   });
 
-  it('lists sanitized data source information without exposing host paths', async () => {
-    getDataSourcesMock.mockResolvedValueOnce([{
-      id: 'ds-1', name: 'Evidence', kind: 'e01', platform: 'windows', importedAt: '2026-10-06T00:00:00Z',
-      sourcePath: 'C:/private/evidence.E01', fileCount: 12, partitions: [],
-    }]);
-    render(<McpHostToolsPanel />);
-
-    fireEvent.click(screen.getByRole('button', { name: /forensics\.list_data_sources/ }));
+  it('uses the backend tool catalog and sends source/plugin calls to the shared MCP execution route', async () => {
+    vi.mocked(callMcpHostTool).mockResolvedValue({ success: true, data: [{ pluginId: 'plugin.test' }] });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: /forensics\.list_plugin_modules/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'forensics.list_plugin_modules 参数' }), { target: { value: '{"dataSourceId":"source-1"}' } });
     fireEvent.click(screen.getByRole('button', { name: '测试工具' }));
-
-    await waitFor(() => expect(getDataSourcesMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/"id": "ds-1"/)).toBeInTheDocument();
-    expect(screen.queryByText('C:/private/evidence.E01')).not.toBeInTheDocument();
+    await waitFor(() => expect(callMcpHostTool).toHaveBeenCalledWith('forensics.list_plugin_modules', { dataSourceId: 'source-1' }));
+    expect(await screen.findByText(/plugin\.test/)).toBeInTheDocument();
   });
 
-  it('passes dataSourceId to plugin module lookup', async () => {
-    listPluginModulesMock.mockResolvedValueOnce([{ pluginId: 'plugin.test', displayName: 'Test Plugin', totalCount: 2, families: [], warnings: [] }]);
-    render(<McpHostToolsPanel />);
+  it('saves a service stop and copies the actual listener address', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    vi.mocked(setMcpHostSettings).mockResolvedValue({ ...status, running: false, settings: { enabled: false, disabledTools: [] } });
+    renderPanel();
+    await screen.findByText('运行中');
+    fireEvent.click(screen.getByRole('button', { name: '复制连接地址' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(status.endpoint));
+    fireEvent.click(screen.getByRole('checkbox', { name: '启用本机 MCP 服务' }));
+    await waitFor(() => expect(setMcpHostSettings).toHaveBeenCalledWith({ enabled: false, disabledTools: [] }, expect.anything()));
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /forensics\.list_plugin_modules/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'forensics.list_plugin_modules 参数' }), { target: { value: '{"dataSourceId":"ds-1"}' } });
+  it('keeps a disabled tool listed and blocks both call controls', async () => {
+    vi.mocked(getMcpHostStatus).mockResolvedValue({ ...status, settings: { enabled: true, disabledTools: ['forensics.list_data_sources'] } });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: /forensics\.list_data_sources/ }));
+    expect(screen.getByRole('button', { name: '测试工具' })).toBeDisabled();
+    expect(screen.getAllByTitle('使用当前参数测试')[0]).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '测试工具' }));
+    expect(callMcpHostTool).not.toHaveBeenCalled();
+  });
 
-    await waitFor(() => expect(listPluginModulesMock).toHaveBeenCalledWith('ds-1'));
-    expect(screen.getByText(/plugin\.test/)).toBeInTheDocument();
+  it('shows a save failure without changing the confirmed tool policy', async () => {
+    vi.mocked(setMcpHostSettings).mockRejectedValue(new Error('保存配置失败'));
+    renderPanel();
+    await screen.findByText('运行中');
+    fireEvent.click(screen.getAllByTitle('禁用工具')[0]);
+    expect(await screen.findByText('保存配置失败')).toBeInTheDocument();
+    expect(screen.getAllByTitle('禁用工具')).toHaveLength(2);
   });
 });

@@ -38,6 +38,8 @@ pub struct AppState {
     pub mcp_config: Arc<Mutex<McpConfig>>,
     /// MCP config file path
     pub mcp_config_path: PathBuf,
+    /// Embedded loopback MCP listener and persisted tool policy.
+    pub mcp_host: Arc<crate::mcp_host::McpHostRuntime>,
     /// Application settings file path
     pub app_settings_path: PathBuf,
     /// Runtime cache for ephemeral preview and query handles
@@ -74,6 +76,7 @@ impl Default for AppState {
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
             mcp_config_path,
+            mcp_host: Arc::new(crate::mcp_host::McpHostRuntime::default()),
             app_settings_path,
             runtime_cache: Arc::new(Mutex::new(runtime_cache)),
             preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),

@@ -128,6 +128,9 @@ encoding_rs = "0.8"
 csv = "1"
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1" }
+axum = { version = "~0.8", default-features = false, features = ["http1", "tokio"] }
+rmcp = { version = "~3.5", default-features = false, features = ["server", "transport-streamable-http-server"] }
+tokio-util = { version = "~0.7", features = ["rt"] }
 unicode-normalization = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_FileSystem", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
 iscsi-target = "1.0.0"

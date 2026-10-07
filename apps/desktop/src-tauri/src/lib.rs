@@ -7,6 +7,7 @@ mod dokan_runtime;
 mod emulation_backend;
 mod emulation_registry;
 pub mod events;
+mod mcp_host;
 mod media_protocol;
 mod mount_backend;
 mod mount_registry;
@@ -130,6 +131,10 @@ macro_rules! desktop_command_handler {
             load_rule_pack,
             validate_rule_pack,
             get_mcp_config,
+            get_mcp_host_status,
+            set_mcp_host_settings,
+            list_mcp_host_tools,
+            call_mcp_host_tool,
             save_mcp_config,
             add_mcp_server,
             remove_mcp_server,
@@ -171,24 +176,16 @@ macro_rules! desktop_command_handler {
     };
 }
 
+mod desktop_runtime;
 pub fn run() {
-    desktop_builder()
+    let app = desktop_runtime::builder()
         .invoke_handler(desktop_command_handler!())
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
             tracing::error!("Failed to run Tauri application: {error}");
             std::process::exit(1);
         });
-}
-
-fn desktop_builder() -> tauri::Builder<tauri::Wry> {
-    media_protocol::register(tauri::Builder::default())
-        .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-            cache_invalidation::register(app.handle().clone());
-            Ok(())
-        })
-        .manage(state::AppState::default())
+    desktop_runtime::run_app(app);
 }
 
 #[cfg(test)]

@@ -27,6 +27,7 @@ pub mod infrastructure_graph;
 pub mod jobs;
 pub mod ledger;
 pub mod mcp;
+pub mod mcp_host;
 pub mod mount;
 pub mod notebook;
 pub mod recovery;

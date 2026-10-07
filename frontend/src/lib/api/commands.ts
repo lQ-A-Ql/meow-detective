@@ -154,6 +154,10 @@ export const COMMANDS = {
     VALIDATE_RULE_PACK: 'validate_rule_pack',
   },
   mcp: {
+    GET_MCP_HOST_STATUS: 'get_mcp_host_status',
+    SET_MCP_HOST_SETTINGS: 'set_mcp_host_settings',
+    LIST_MCP_HOST_TOOLS: 'list_mcp_host_tools',
+    CALL_MCP_HOST_TOOL: 'call_mcp_host_tool',
     GET_MCP_CONFIG: 'get_mcp_config',
     SAVE_MCP_CONFIG: 'save_mcp_config',
     ADD_MCP_SERVER: 'add_mcp_server',

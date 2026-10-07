@@ -4,6 +4,15 @@
 
 MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权限、可审计、可解释”的受控扩展边界。
 
+## 内置本机服务端
+
+- 应用内置 Streamable HTTP MCP 服务，默认启用，只监听 `127.0.0.1:3001/mcp`；设置页可停止、重新启动、复制地址及逐项禁用工具。退出应用会停止服务并释放端口。
+- 服务与外部 MCP 客户端配置独立，设置保存在应用配置目录的 `mcp-host.json`，使用临时文件与原子替换；配置解析失败不会启动监听。
+- 当前仅提供 `forensics.get_current_case`、`forensics.list_data_sources`、`forensics.get_data_source`、`forensics.list_plugin_modules` 和 `forensics.get_plugin_module`。
+- HTTP 与设置页调用复用同一工具目录和应用服务。每次读取绑定当前案件，原始证据和源数据库保持只读；不返回主机源路径、内部存储路径、凭据或原始插件诊断，插件告警仅返回数量。
+- 工具发现始终返回完整目录，被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
+- 校验 Host，拒绝携带浏览器 Origin 的请求，不提供 CORS；每个请求最多 64 KiB，最多两个同时执行的案件查询，结果上限 1 MiB。工具能力限定为只读查询，不提供任意 IPC、SQL、路径读取或插件执行入口。
+
 V2 安全治理与发布门禁总计划见：
 
 - `docs/documentation-index.md`
