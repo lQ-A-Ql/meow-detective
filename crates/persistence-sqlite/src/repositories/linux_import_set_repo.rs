@@ -1,6 +1,8 @@
 use crate::connection::DbResult;
 use rusqlite::{params, Connection, OptionalExtension};
 
+mod member_source;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxImportSetRecord {
     pub id: String,

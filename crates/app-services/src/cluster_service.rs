@@ -18,7 +18,9 @@ mod kubernetes_yaml;
 mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
+mod member_binding;
 mod network_parser;
+mod phase_ledger;
 pub(crate) mod scope_storage;
 mod summary;
 mod topology_projection;
@@ -61,11 +63,13 @@ pub use linux_import::{
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
+pub use member_binding::get_linux_import_member_source_id;
 pub use network_parser::{
     parse_cni_config, parse_kubernetes_network_resources, CniNetworkSummary,
     KubernetesEndpointSliceSummary, KubernetesIngressSummary, KubernetesNetworkPolicySummary,
     KubernetesNetworkResource, KubernetesNodeNetworkSummary, KubernetesServiceNetworkSummary,
 };
+pub use phase_ledger::{record_linux_import_phase, LinuxImportPhaseInput};
 pub use summary::{get_linux_evidence_set_summary, list_linux_evidence_sets};
 
 #[derive(Debug, Error)]
@@ -80,6 +84,8 @@ pub enum ClusterServiceError {
     InvalidClusterRoot,
     #[error("cluster id is invalid")]
     InvalidClusterId,
+    #[error("Linux import member index is out of range")]
+    InvalidMemberIndex,
     #[error("linux cluster coverage report is invalid")]
     InvalidCoverageReport,
     #[error("linux cluster import did not find supported E01/RAW images in the selected folder")]
@@ -90,6 +96,8 @@ pub enum ClusterServiceError {
     Classification(#[from] datasource_service::DataSourceError),
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
+    #[error("investigation step recording failed: {0}")]
+    Notebook(#[from] crate::notebook_service::NotebookError),
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
     #[error("CephFS presence assessment failed: {0}")]
@@ -110,10 +118,12 @@ impl transport::ServiceErrorCategory for ClusterServiceError {
             | Self::IncompleteImportSet
             | Self::InvalidClusterRoot
             | Self::InvalidClusterId
+            | Self::InvalidMemberIndex
             | Self::InvalidCoverageReport
             | Self::NoSupportedImages => transport::ErrorCategory::Validation,
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Classification(e) => e.category(),
+            Self::Notebook(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Internal,
             Self::CephFsPresence(error) => error.category(),
         }

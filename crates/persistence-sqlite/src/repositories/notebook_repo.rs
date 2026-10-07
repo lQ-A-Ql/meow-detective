@@ -5,6 +5,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
 mod mapping;
+mod phase_attempts;
 
 use mapping::{
     entry_status_str, entry_type_str, node_type_str, row_to_citation, row_to_notebook_entry,

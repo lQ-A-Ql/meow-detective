@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use domain::DataSourceId;
-
 use super::super::schedule_linux_artifact_analysis;
 use super::types::MemberCoordinator;
 
@@ -10,23 +8,24 @@ impl MemberCoordinator<'_, '_> {
         let Some(task_manager) = self.task_manager.as_ref() else {
             return;
         };
-        let source_id = self
-            .connection
-            .query_row(
-                "SELECT data_source_id FROM linux_import_set_members
-                 WHERE import_set_id = ?1 AND member_index = ?2",
-                rusqlite::params![self.job.plan.import_set_id, member_index as u32],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .ok()
-            .flatten()
-            .map(DataSourceId);
-        let Some(source_id) = source_id else {
-            tracing::warn!(
-                member_index,
-                "Linux member has no data source for deferred artifacts"
-            );
-            return;
+        let source_id = match app_services::cluster_service::get_linux_import_member_source_id(
+            self.connection,
+            &self.job.case_id,
+            &self.job.plan.import_set_id,
+            member_index,
+        ) {
+            Ok(Some(source_id)) => source_id,
+            Ok(None) => {
+                tracing::warn!(
+                    member_index,
+                    "Linux member has no data source for deferred artifacts"
+                );
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(member_index, error = %error, "Failed to resolve Linux member for deferred artifacts");
+                return;
+            }
         };
         match schedule_linux_artifact_analysis(
             &self.job.case_root,
