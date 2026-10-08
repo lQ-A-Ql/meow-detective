@@ -5,6 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Checkbox } from '@/app/components/ui/checkbox';
 import type { DataSourcePartition, BitLockerDictionaryBackend } from '@/types/models';
 import type { BitLockerUnlockMethod, BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 
@@ -190,9 +191,9 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
       {status && !status.unlocked && status.supportsPassword ? (
         <div className="space-y-2 border-t border-forensics-border pt-2">
           <label className="flex items-center gap-2 text-[10px] text-forensics-text">
-            <input type="checkbox" checked={dictionaryBackend === 'gpu'}
+            <Checkbox checked={dictionaryBackend === 'gpu'}
               disabled={model.dictionaryAttacking}
-              onChange={(event) => setDictionaryBackend(event.target.checked ? 'gpu' : 'cpu')} />
+              onCheckedChange={(checked) => setDictionaryBackend(checked === true ? 'gpu' : 'cpu')} variant="forensics" />
             {t('fileBrowser.inspector.bitlocker.gpuAcceleration')}
           </label>
           {dictionaryBackend === 'gpu' ? <p className="text-[10px] text-forensics-muted-light">

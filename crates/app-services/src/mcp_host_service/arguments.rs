@@ -30,6 +30,17 @@ pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), Mc
     Ok(())
 }
 
+pub(super) fn required_string<'a>(
+    arguments: &'a Value,
+    key: &str,
+) -> Result<&'a str, McpHostServiceError> {
+    arguments
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty() && value.len() <= 256)
+        .ok_or(McpHostServiceError::InvalidInput)
+}
+
 fn valid_field(value: &Value, schema: &Value) -> bool {
     let valid = match schema["type"].as_str() {
         Some("string") => value.as_str().is_some_and(|text| {

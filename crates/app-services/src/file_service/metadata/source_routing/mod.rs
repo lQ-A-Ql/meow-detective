@@ -2,6 +2,7 @@
 //! per-data-source databases within a case.
 
 mod browse;
+mod data_source_summary;
 mod file_metadata;
 mod file_page;
 mod preview;
@@ -9,9 +10,10 @@ mod read;
 mod shared;
 
 pub use browse::{
-    get_data_sources_for_case, get_file_children_for_case, get_file_jump_context_for_case,
-    get_file_rows_for_case, get_file_tree_for_case,
+    get_file_children_for_case, get_file_jump_context_for_case, get_file_rows_for_case,
+    get_file_tree_for_case,
 };
+pub use data_source_summary::get_data_sources_for_case;
 pub use file_metadata::get_file_metadata_for_case;
 pub use file_page::list_file_entries_page_for_case;
 pub use preview::{

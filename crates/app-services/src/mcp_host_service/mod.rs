@@ -1,8 +1,11 @@
 //! Read-only tool catalog and use cases shared by desktop UI and MCP clients.
 mod arguments;
 mod catalog;
+mod current_case;
+mod data_sources;
 mod files;
 mod list_files;
+mod plugin_modules;
 mod queries;
 mod read_file;
 mod sanitization;

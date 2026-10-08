@@ -24,6 +24,7 @@ function Require-NotContains([string]$name, [string]$content, [string]$needle) {
 
 $tauriConfig = Read-RepoFile "apps/desktop/src-tauri/tauri.conf.json"
 $lib = Read-RepoFile "apps/desktop/src-tauri/src/lib.rs"
+$desktopRuntime = Read-RepoFile "apps/desktop/src-tauri/src/desktop_runtime.rs"
 $mediaProtocol = Read-RepoFile "apps/desktop/src-tauri/src/media_protocol.rs"
 $fileCommands = Read-RepoFile "apps/desktop/src-tauri/src/commands/file_commands/media.rs"
 $viewerDto = Read-RepoFile "crates/transport/src/dto/viewer.rs"
@@ -33,7 +34,7 @@ $frontendFilesHooks = Read-RepoFile "frontend/src/features/files/hooks.ts"
 
 Require-Contains "tauri.conf.json" $tauriConfig "media-src 'self' data: evidence-media:"
 Require-Contains "lib.rs" $lib "mod media_protocol;"
-Require-Contains "lib.rs" $lib "media_protocol::register(tauri::Builder::default())"
+Require-Contains "desktop_runtime.rs" $desktopRuntime "media_protocol::register(tauri::Builder::default())"
 Require-Contains "media_protocol.rs" $mediaProtocol "pub const EVIDENCE_MEDIA_SCHEME: &str = `"evidence-media`";"
 Require-Contains "media_protocol.rs" $mediaProtocol "register_asynchronous_uri_scheme_protocol"
 Require-Contains "media_protocol.rs" $mediaProtocol "MAX_MEDIA_PROTOCOL_READ_BYTES"

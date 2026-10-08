@@ -6,6 +6,20 @@
     "sort": { "name": "Name", "size": "Size", "modifiedAt": "Modified", "extension": "Extension" },
     "fileTypes": { "directory": "Directory", "file": "File", "extension": "{{extension}} file" }
   },
+  "mcpUi": {
+    "host": {
+      "enable": "Enable local MCP service", "running": "Running", "starting": "Not started", "stopped": "Stopped",
+      "copyEndpoint": "Copy endpoint", "copied": "Copied", "copyFailed": "Copy failed; select the address manually.", "retry": "Retry start", "title": "Built-in read-only tools"
+    },
+    "tools": {
+      "title": "Available tools", "enabled": "Enabled {{enabled}}/{{total}}", "enableAll": "Enable all", "disableAll": "Disable all", "enable": "Enable tools", "disable": "Disable tool", "allTools": "Switch to all tools",
+      "refresh": "Refresh tools", "search": "Search tool name or description", "loading": "Loading...", "noMatch": "No matching tools", "empty": "No tools", "noDescription": "No description", "testWithCurrent": "Test with current arguments", "parameter": "Arguments", "json": "JSON", "test": "Test tool", "invalidJson": "Arguments must be valid JSON.", "callFailed": "Tool call failed", "listLabel": "MCP tool list"
+    },
+    "resources": { "title": "Exposed resources", "refresh": "Refresh", "loading": "Loading...", "empty": "No resources", "copy": "Copy resource URI", "copyNamed": "Copy {{name}} URI" },
+    "server": { "connected": "Connected", "error": "Error", "disconnected": "Disconnected", "connect": "Connect", "disconnect": "Disconnect", "delete": "Delete", "resources": "R", "tools": "T", "prompts": "P", "deleteTitle": "Delete MCP server", "deleteDescription": "Delete “{{name}}”? The saved connection configuration will be removed." },
+    "dialog": {
+      "title": "Add MCP server", "name": "Server name", "namePlaceholder": "Example: Claude Desktop", "transport": "Transport", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "Command", "commandPlaceholder": "python -m forensics_mcp", "arguments": "Arguments (space separated)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "Enabled", "autoConnect": "Auto-connect", "permissions": "Access permissions", "resourceAccess": "Resource access", "promptAccess": "Prompt access", "toolAccess": "Tool access", "readOnly": "Read-only", "disabled": "Disabled", "allowAll": "Allow all (tools can be disabled below)", "allowList": "Allow list only", "allowListLabel": "Tool allow list (comma or space separated)", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "Network policy", "localhost": "Localhost only", "privateLan": "Allow private LAN", "anyHost": "Allow any host", "requiredName": "Enter a server name", "requiredUrl": "Enter an SSE URL", "requiredCommand": "Enter a command", "testSuccess": "Connection succeeded", "testFailure": "Connection failed", "testing": "Testing...", "test": "Test connection", "cancel": "Cancel", "saving": "Saving...", "add": "Add", "close": "Close" }
+  },
   "dashboard": {
     "title": "Forensic overview", "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status", "refresh": "Refresh", "loading": "Loading forensic overview...",
     "query": { "loading": "Loading...", "empty": "No data." },

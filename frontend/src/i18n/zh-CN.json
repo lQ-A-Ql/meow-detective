@@ -6,6 +6,20 @@
     "sort": { "name": "名称", "size": "大小", "modifiedAt": "修改时间", "extension": "扩展名" },
     "fileTypes": { "directory": "目录", "file": "文件", "extension": "{{extension}} 文件" }
   },
+  "mcpUi": {
+    "host": {
+      "enable": "启用本机 MCP 服务", "running": "运行中", "starting": "未启动", "stopped": "已停止",
+      "copyEndpoint": "复制连接地址", "copied": "已复制", "copyFailed": "复制失败，可选中地址复制。", "retry": "重试启动", "title": "内置只读工具"
+    },
+    "tools": {
+      "title": "可用 Tools", "enabled": "已启用 {{enabled}}/{{total}}", "enableAll": "全部启用", "disableAll": "全部禁用", "enable": "启用工具", "disable": "禁用工具", "allTools": "切换为全部工具",
+      "refresh": "刷新工具", "search": "搜索工具名称或描述", "loading": "加载中...", "noMatch": "没有匹配的工具", "empty": "暂无工具", "noDescription": "无描述", "testWithCurrent": "使用当前参数测试", "parameter": "参数", "json": "JSON", "test": "测试工具", "invalidJson": "参数必须是有效的 JSON。", "callFailed": "工具调用失败", "listLabel": "MCP 工具列表"
+    },
+    "resources": { "title": "暴露的 Resources", "refresh": "刷新", "loading": "加载中...", "empty": "暂无资源", "copy": "复制资源 URI", "copyNamed": "复制 {{name}} URI" },
+    "server": { "connected": "已连接", "error": "错误", "disconnected": "未连接", "connect": "连接", "disconnect": "断开", "delete": "删除", "resources": "R", "tools": "T", "prompts": "P", "deleteTitle": "删除 MCP 服务器", "deleteDescription": "确定删除“{{name}}”吗？这会移除保存的连接配置。" },
+    "dialog": {
+      "title": "添加 MCP 服务器", "name": "服务器名称", "namePlaceholder": "例如: Claude Desktop", "transport": "传输类型", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "命令", "commandPlaceholder": "python -m forensics_mcp", "arguments": "参数 (空格分隔)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "启用", "autoConnect": "自动连接", "permissions": "访问权限", "resourceAccess": "资源访问", "promptAccess": "Prompt 访问", "toolAccess": "工具访问", "readOnly": "只读", "disabled": "禁用", "allowAll": "全部允许（可在工具列表禁用）", "allowList": "仅允许白名单", "allowListLabel": "工具白名单（逗号或空格分隔）", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "网络策略", "localhost": "仅本机", "privateLan": "允许局域网", "anyHost": "允许任意主机", "requiredName": "请输入服务器名称", "requiredUrl": "请输入 SSE URL", "requiredCommand": "请输入命令", "testSuccess": "连接成功", "testFailure": "连接失败", "testing": "测试中...", "test": "测试连接", "cancel": "取消", "saving": "保存中...", "add": "添加", "close": "关闭" }
+  },
   "dashboard": {
     "title": "取证总览", "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态", "refresh": "刷新", "loading": "正在加载取证总览快照...",
     "query": { "loading": "正在加载...", "empty": "暂无数据。" },

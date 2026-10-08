@@ -1,11 +1,7 @@
-use super::{
-    arguments::validate_arguments,
-    sanitization::{plugin_summary, source_summary},
-    McpHostServiceError,
-};
-use domain::{CaseMeta, DataSourceId};
+use super::{arguments::validate_arguments, McpHostServiceError};
+use domain::CaseMeta;
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::path::Path;
 
 pub struct McpHostQueryContext<'a> {
@@ -21,58 +17,15 @@ pub fn execute_tool(
 ) -> Result<Value, McpHostServiceError> {
     validate_arguments(name, arguments)?;
     match name {
-        "forensics.get_current_case" => Ok(json!({
-            "id": context.case_meta.id.0, "name": context.case_meta.name,
-            "createdAt": context.case_meta.created_at,
-        })),
-        "forensics.list_data_sources" | "forensics.get_data_source" => {
-            let sources = crate::file_service::get_data_sources_for_case(
-                context.connection,
-                context.case_root,
-                &context.case_meta.id,
-            )?;
-            if name == "forensics.get_data_source" {
-                let id = required_string(arguments, "dataSourceId")?;
-                sources
-                    .into_iter()
-                    .find(|source| source.id == id)
-                    .map(source_summary)
-                    .ok_or(McpHostServiceError::NotFound)
-            } else {
-                Ok(Value::Array(
-                    sources.into_iter().map(source_summary).collect(),
-                ))
-            }
+        "forensics.get_current_case" => Ok(super::current_case::get_current_case(&context)),
+        "forensics.list_data_sources" => super::data_sources::list_data_sources(&context),
+        "forensics.get_data_source" => super::data_sources::get_data_source(&context, arguments),
+        "forensics.list_plugin_modules" => {
+            super::plugin_modules::list_plugin_modules(&context, arguments)
         }
-        "forensics.list_plugin_modules" | "forensics.get_plugin_module" => {
-            let id = DataSourceId(required_string(arguments, "dataSourceId")?.into());
-            let modules = crate::analysis_service::get_source_plugin_modules(
-                context.connection,
-                context.case_root,
-                &context.case_meta.id,
-                &id,
-            )?;
-            if name == "forensics.get_plugin_module" {
-                let plugin_id = required_string(arguments, "pluginId")?;
-                modules
-                    .into_iter()
-                    .find(|module| module.plugin_id == plugin_id)
-                    .map(plugin_summary)
-                    .ok_or(McpHostServiceError::NotFound)
-            } else {
-                Ok(Value::Array(
-                    modules.into_iter().map(plugin_summary).collect(),
-                ))
-            }
+        "forensics.get_plugin_module" => {
+            super::plugin_modules::get_plugin_module(&context, arguments)
         }
         _ => Err(McpHostServiceError::InvalidInput),
     }
-}
-
-fn required_string<'a>(arguments: &'a Value, key: &str) -> Result<&'a str, McpHostServiceError> {
-    arguments
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty() && value.len() <= 256)
-        .ok_or(McpHostServiceError::InvalidInput)
 }

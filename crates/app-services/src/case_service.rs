@@ -9,15 +9,17 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 mod close_drain;
+mod create_case;
 mod data_source_deletion;
-mod lifecycle;
+mod delete_case;
 mod metrics;
 mod opening;
 mod platform_compatibility;
 
 pub use close_drain::{close_case_drain, DrainResult};
+pub use create_case::create_case;
 pub use data_source_deletion::{delete_data_source, delete_data_source_in};
-pub use lifecycle::{create_case, delete_case, delete_case_in};
+pub use delete_case::{delete_case, delete_case_in};
 pub use metrics::get_case_metrics_for_case;
 pub use opening::open_case;
 pub use platform_compatibility::ensure_supported_data_source_platforms;

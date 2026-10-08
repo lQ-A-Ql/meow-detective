@@ -1,0 +1,2 @@
+import type { McpPermissionProfile } from '@/lib/api/mcp';
+export interface McpServerDialogProps { onClose: () => void; onAdd: (server: { name: string; transportType: 'sse' | 'stdio'; url?: string; command?: string; args?: string[]; enabled: boolean; autoConnect: boolean; permissions: McpPermissionProfile }) => Promise<void>; testConnection: (transportType: string, url?: string, command?: string, args?: string[], permissions?: McpPermissionProfile) => Promise<{ success: boolean; error?: string }> }

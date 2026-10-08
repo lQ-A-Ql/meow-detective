@@ -1,0 +1,2 @@
+.mcp-motion-spin { animation: mcp-spin 1s linear infinite; }
+@keyframes mcp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
