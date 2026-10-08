@@ -180,7 +180,8 @@ pub use v3_governance::{
     V3GovernanceSnapshotDto,
 };
 pub use viewer::{
-    DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ImagePreviewDto, MediaPreviewModeDto,
-    MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
-    ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
+    DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ImageMetadataDto,
+    ImageMetadataStatusDto, ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto,
+    MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto,
+    ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
 };

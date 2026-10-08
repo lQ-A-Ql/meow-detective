@@ -13,9 +13,11 @@ thiserror.workspace = true
 lz4_flex.workspace = true
 zstd.workspace = true
 xz2.workspace = true
+flate2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
 lz4_flex.workspace = true
 zstd.workspace = true
 xz2.workspace = true
+flate2.workspace = true

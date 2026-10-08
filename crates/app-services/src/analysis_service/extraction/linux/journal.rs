@@ -102,6 +102,10 @@ fn push_entry(
     );
     insert_opt(&mut attrs, "bootId", entry.boot_id.clone());
     insert_opt(&mut attrs, "messageId", entry.message_id.clone());
+    insert_opt(&mut attrs, "transport", entry.transport.clone());
+    insert_opt(&mut attrs, "machineId", entry.machine_id.clone());
+    insert_opt(&mut attrs, "cgroup", entry.cgroup.clone());
+    insert_opt(&mut attrs, "invocationId", entry.invocation_id.clone());
     if let Some(pid) = entry.pid {
         attrs.insert("pid".to_string(), Value::Number(pid.into()));
     }

@@ -5,6 +5,7 @@ mod document;
 mod filesystem;
 mod handle;
 mod image;
+mod image_metadata;
 mod image_open;
 mod io;
 mod media;
@@ -22,6 +23,7 @@ pub use crate::e01_reader_cache::{clear_e01_reader_cache, clear_e01_reader_cache
 pub use document::document_preview_for_file;
 pub use handle::{get_file_path_for_entry, open_file_handle_real};
 pub use image::image_preview_for_file;
+pub use image_metadata::image_metadata_for_file;
 pub use io::skip_reader_bytes;
 pub use media::{media_preview_plan_for_file, media_range_for_file, MediaPreviewPlan};
 pub use path::safe_relative_path;

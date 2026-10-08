@@ -4,6 +4,7 @@ mod clock;
 pub mod cron;
 mod error;
 mod faillog;
+mod git;
 pub mod journal;
 mod lastlog;
 mod mysql;
@@ -20,6 +21,7 @@ pub use clock::{LogClock, LogTimeHint, UtcClock};
 pub use cron::{parse_crontab, parse_crontab_with_source_and_kind, CronJob, CrontabKind};
 pub use error::LinuxArtifactError;
 pub use faillog::{parse_faillog, FaillogRecord};
+pub use git::{parse_git_bytes, parse_git_text, GitRecord};
 pub use journal::{parse_journal, parse_journal_full, JournalEntry, JournalParseOutcome};
 pub use lastlog::{parse_lastlog, LastlogRecord};
 pub use mysql::{

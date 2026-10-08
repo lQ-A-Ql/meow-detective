@@ -40,12 +40,18 @@ pub(super) enum GzipTruncation {
 
 pub(super) fn decode_gzip(
     bytes: &[u8],
+    output_limit: usize,
 ) -> Result<(Vec<u8>, Option<GzipTruncation>), std::io::Error> {
+    // Keep decompression bounded by the route's parser budget.  The previous
+    // implementation always used the global 128 MiB cap, which allowed a
+    // small compressed GitLab or Git metadata file to allocate far more than
+    // the parser can consume (the normal small-file route is 4 MiB).
+    let output_limit = output_limit.clamp(1, MAX_ANALYSIS_SOURCE_BYTES);
     let mut decoder = GzDecoder::new(bytes);
     let mut decoded = Vec::new();
     let read_result = decoder
         .by_ref()
-        .take(MAX_ANALYSIS_SOURCE_BYTES as u64 + 1)
+        .take(output_limit as u64 + 1)
         .read_to_end(&mut decoded);
     if let Err(error) = read_result {
         // A truncated compressed stream still yields a valid decoded prefix;
@@ -56,8 +62,8 @@ pub(super) fn decode_gzip(
         }
         return Ok((decoded, Some(GzipTruncation::TruncatedStream)));
     }
-    if decoded.len() > MAX_ANALYSIS_SOURCE_BYTES {
-        decoded.truncate(MAX_ANALYSIS_SOURCE_BYTES);
+    if decoded.len() > output_limit {
+        decoded.truncate(output_limit);
         return Ok((decoded, Some(GzipTruncation::OutputCap)));
     }
     Ok((decoded, None))

@@ -1,6 +1,7 @@
 mod common;
 mod cron;
 mod dispatch;
+mod git;
 mod journal;
 mod login;
 mod mysql;
@@ -63,12 +64,13 @@ pub(super) fn extract_linux_candidate_with_time(
     let decoded;
     let effective_path = normalized.strip_suffix(".gz").unwrap_or(&normalized);
     let input = if normalized.ends_with(".gz") {
-        match common::decode_gzip(bytes) {
+        let decode_limit = linux_candidate_read_limit(effective_path);
+        match common::decode_gzip(bytes, decode_limit) {
             Ok((data, truncation)) => {
                 decoded = data;
                 match truncation {
                     Some(common::GzipTruncation::OutputCap) => outcome.warnings.push(format!(
-                        "{} gzip decoded output exceeds the 128 MiB analysis cap; decoded content was truncated before parsing",
+                        "{} gzip decoded output exceeds the parser budget; decoded content was truncated before parsing",
                         candidate.path
                     )),
                     Some(common::GzipTruncation::TruncatedStream) => outcome.warnings.push(

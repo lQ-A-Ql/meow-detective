@@ -93,6 +93,27 @@ export interface ImagePreviewResponse {
   size: number;
 }
 
+export type ImageMetadataStatus = 'present' | 'absent' | 'unsupported' | 'corrupt';
+
+export interface ImageMetadata {
+  status: ImageMetadataStatus;
+  format?: string;
+  width?: number;
+  height?: number;
+  orientation?: number;
+  make?: string;
+  model?: string;
+  software?: string;
+  dateTimeOriginal?: string;
+  createDate?: string;
+  modifyDate?: string;
+  lensModel?: string;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  gpsDateTime?: string;
+}
+
 export interface DocumentTable {
   columns: string[];
   rows: string[][];

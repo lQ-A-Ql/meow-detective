@@ -114,6 +114,12 @@ pub struct LinuxJournalEntryDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cmdline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boot_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub systemd_unit: Option<String>,
@@ -122,7 +128,17 @@ pub struct LinuxJournalEntryDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub syslog_identifier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cgroup: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invocation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<u32>,
     /// Log origin discriminator: `journald` for real systemd journal rows,

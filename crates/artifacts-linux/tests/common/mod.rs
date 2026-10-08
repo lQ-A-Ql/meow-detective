@@ -147,6 +147,10 @@ pub fn base_spec() -> JournalSpec {
             DataSpec::plain("CUSTOM_FIELD=custom-value"),
             DataSpec::plain("MESSAGE=Second message"),
             DataSpec::plain("PRIORITY=6"),
+            DataSpec::plain("_TRANSPORT=syslog"),
+            DataSpec::plain("_MACHINE_ID=machine-123"),
+            DataSpec::plain("_SYSTEMD_CGROUP=/system.slice/sshd.service"),
+            DataSpec::plain("_SYSTEMD_INVOCATION_ID=invocation-123"),
         ],
         entries: vec![
             EntrySpec {
@@ -154,7 +158,7 @@ pub fn base_spec() -> JournalSpec {
                 realtime: 1_700_000_000_000_000,
                 monotonic: 42_000_000,
                 boot_id,
-                items: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                items: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18],
             },
             EntrySpec {
                 seqnum: 2,

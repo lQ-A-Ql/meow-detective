@@ -94,6 +94,7 @@ pub(super) fn dispatch_candidate(
         LinuxArtifactRouteKind::PveLog => {
             super::text_log::extract(candidate, bytes, "linux.pve_log", "pve", outcome, log_time)
         }
+        LinuxArtifactRouteKind::Git => super::git::extract(candidate, bytes, outcome),
         LinuxArtifactRouteKind::Unsupported => warn_unsupported_candidate(candidate, outcome),
     }
 }

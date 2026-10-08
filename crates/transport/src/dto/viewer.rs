@@ -128,6 +128,52 @@ pub struct ImagePreviewDto {
     pub size: u64,
 }
 
+/// Bounded image metadata extracted from the evidence bytes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageMetadataDto {
+    pub status: ImageMetadataStatusDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub make: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub software: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_time_original: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub create_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modify_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lens_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub altitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gps_date_time: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImageMetadataStatusDto {
+    Present,
+    Absent,
+    Unsupported,
+    Corrupt,
+}
+
 /// Media URL DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

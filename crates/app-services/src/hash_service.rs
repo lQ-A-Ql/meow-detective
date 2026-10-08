@@ -125,21 +125,18 @@ impl HashService {
             })?;
         let processed = AtomicU64::new(0);
         let pipelined = segments.len() == 1;
+        let context = SegmentHashContext {
+            algorithm,
+            total_bytes,
+            pipelined,
+            cancelled,
+            processed: &processed,
+            progress,
+        };
         let digests = segments
             .par_iter()
             .enumerate()
-            .map(|(index, segment)| {
-                hash_segment(
-                    index,
-                    segment,
-                    algorithm,
-                    total_bytes,
-                    pipelined,
-                    cancelled,
-                    &processed,
-                    progress,
-                )
-            })
+            .map(|(index, segment)| hash_segment(index, segment, &context))
             .collect::<Result<Vec<_>, _>>()?;
         if cancelled.load(Ordering::Acquire) {
             return Err(EvidenceHashError::Cancelled);
@@ -216,15 +213,19 @@ struct SegmentDigest {
     digest: String,
 }
 
-fn hash_segment(
-    index: usize,
-    path: &Path,
+struct SegmentHashContext<'a> {
     algorithm: hashing::HashAlgorithm,
     total_bytes: u64,
     pipelined: bool,
-    cancelled: &AtomicBool,
-    processed: &AtomicU64,
-    progress: &(dyn Fn(u64, u64) + Sync),
+    cancelled: &'a AtomicBool,
+    processed: &'a AtomicU64,
+    progress: &'a (dyn Fn(u64, u64) + Sync),
+}
+
+fn hash_segment(
+    index: usize,
+    path: &Path,
+    context: &SegmentHashContext<'_>,
 ) -> Result<SegmentDigest, EvidenceHashError> {
     let length = std::fs::metadata(path)
         .map_err(|error| io_error("inspect evidence", error))?
@@ -232,15 +233,16 @@ fn hash_segment(
     let previous = AtomicU64::new(0);
     let mut track_progress = |local: u64| {
         let delta = local.saturating_sub(previous.swap(local, Ordering::AcqRel));
-        let completed = processed
+        let completed = context
+            .processed
             .fetch_add(delta, Ordering::AcqRel)
             .saturating_add(delta);
-        progress(completed.min(total_bytes), total_bytes);
+        (context.progress)(completed.min(context.total_bytes), context.total_bytes);
     };
-    let digest = if pipelined && algorithm == hashing::HashAlgorithm::Sha256 {
+    let digest = if context.pipelined && context.algorithm == hashing::HashAlgorithm::Sha256 {
         hashing::sha256_file_pipelined_with_cancel(
             path,
-            &|| cancelled.load(Ordering::Acquire),
+            &|| context.cancelled.load(Ordering::Acquire),
             &mut track_progress,
         )
     } else {
@@ -248,8 +250,8 @@ fn hash_segment(
             std::fs::File::open(path).map_err(|error| io_error("open evidence", error))?;
         hashing::digest_reader_with_cancel(
             &mut file,
-            algorithm,
-            || cancelled.load(Ordering::Acquire),
+            context.algorithm,
+            || context.cancelled.load(Ordering::Acquire),
             &mut track_progress,
         )
     }

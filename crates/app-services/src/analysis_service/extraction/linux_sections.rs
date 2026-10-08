@@ -107,6 +107,7 @@ pub(super) enum LinuxArtifactRouteKind {
     AuthLog,
     TextLog,
     PveLog,
+    Git,
     Unsupported,
 }
 
@@ -194,9 +195,15 @@ fn route_kind(path: &str) -> LinuxArtifactRouteKind {
         LinuxArtifactRouteKind::TextLog
     } else if is_pve_log_path(path) {
         LinuxArtifactRouteKind::PveLog
+    } else if is_git_path(path) {
+        LinuxArtifactRouteKind::Git
     } else {
         LinuxArtifactRouteKind::Unsupported
     }
+}
+
+fn is_git_path(path: &str) -> bool {
+    path.contains("/.git/") || path.contains("/etc/gitlab/") || path.contains("/var/log/gitlab/")
 }
 
 fn route_section(kind: LinuxArtifactRouteKind, path: &str) -> LinuxArtifactSection {
@@ -227,7 +234,8 @@ fn route_section(kind: LinuxArtifactRouteKind, path: &str) -> LinuxArtifactSecti
         | LinuxArtifactRouteKind::SshConfig
         | LinuxArtifactRouteKind::SystemdUnit
         | LinuxArtifactRouteKind::InitScript
-        | LinuxArtifactRouteKind::ProfileScript => LinuxArtifactSection::SystemConfig,
+        | LinuxArtifactRouteKind::ProfileScript
+        | LinuxArtifactRouteKind::Git => LinuxArtifactSection::SystemConfig,
         LinuxArtifactRouteKind::Unsupported if is_ssh_candidate_path(path) => {
             LinuxArtifactSection::SystemConfig
         }

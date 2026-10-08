@@ -20,6 +20,8 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         "LinuxMysqlConfig",
         "LinuxMysqlLogEntry",
         "LinuxMysqlFinding",
+        "GitRepository",
+        "GitLabArtifact",
     ],
     patterns: &[
         EvidencePathPattern::Suffix("/etc/os-release"),
@@ -166,6 +168,9 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Contains("/var/log/mariadb/mariadb.log."),
         EvidencePathPattern::Suffix("/var/log/mysqld.log"),
         EvidencePathPattern::Contains("/var/log/mysqld.log."),
+        EvidencePathPattern::Contains("/.git/"),
+        EvidencePathPattern::Contains("/etc/gitlab/"),
+        EvidencePathPattern::Contains("/var/log/gitlab/"),
     ],
     matcher: None,
 };

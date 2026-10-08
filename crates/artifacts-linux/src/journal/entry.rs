@@ -25,6 +25,8 @@ const DATA_FIXED_LEN_REGULAR: usize = 48;
 const DATA_FIXED_LEN_COMPACT: usize = 56;
 /// systemd's `ENTRY_FIELD_COUNT_MAX` is 1024; allow slack for odd writers.
 const MAX_ENTRY_ITEMS: usize = 4096;
+const MAX_RAW_FIELDS: usize = 256;
+const MAX_RAW_FIELD_VALUE_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct JournalEntry {
@@ -41,6 +43,11 @@ pub struct JournalEntry {
     pub selinux_context: Option<String>,
     pub syslog_identifier: Option<String>,
     pub message_id: Option<String>,
+    /// Structured journald transport and systemd identity fields.
+    pub transport: Option<String>,
+    pub machine_id: Option<String>,
+    pub cgroup: Option<String>,
+    pub invocation_id: Option<String>,
     pub raw_fields: HashMap<String, String>,
     /// Sequence number from the ENTRY object header (monotonic per seqnum_id).
     pub seqnum: Option<u64>,
@@ -213,6 +220,10 @@ fn apply_field(
         "_SELINUX_CONTEXT" => entry.selinux_context = Some(value.to_string()),
         "SYSLOG_IDENTIFIER" => entry.syslog_identifier = Some(value.to_string()),
         "MESSAGE_ID" => entry.message_id = Some(value.to_string()),
+        "_TRANSPORT" => entry.transport = Some(value.to_string()),
+        "_MACHINE_ID" => entry.machine_id = Some(value.to_string()),
+        "_SYSTEMD_CGROUP" => entry.cgroup = Some(value.to_string()),
+        "_SYSTEMD_INVOCATION_ID" => entry.invocation_id = Some(value.to_string()),
         "__REALTIME_TIMESTAMP" => {
             if let Ok(micros) = value.parse::<i64>() {
                 *fallback_ts = Utc.timestamp_micros(micros).single();
@@ -220,7 +231,18 @@ fn apply_field(
         }
         _ => {}
     }
-    entry.raw_fields.insert(name.to_string(), value.to_string());
+    if entry.raw_fields.len() < MAX_RAW_FIELDS {
+        let bounded = if value.len() > MAX_RAW_FIELD_VALUE_BYTES {
+            let mut end = MAX_RAW_FIELD_VALUE_BYTES;
+            while end > 0 && !value.is_char_boundary(end) {
+                end -= 1;
+            }
+            format!("{}…", &value[..end])
+        } else {
+            value.to_string()
+        };
+        entry.raw_fields.insert(name.to_string(), bounded);
+    }
 }
 
 fn micros_to_utc(micros: u64) -> Option<DateTime<Utc>> {

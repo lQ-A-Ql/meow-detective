@@ -25,6 +25,7 @@ import {
   ExtractFileRequest,
   FileExtractionResult,
   NtfsTechnicalFile,
+  ImageMetadata,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -36,6 +37,10 @@ export async function getFileTree(showHidden = false) {
 
 export async function inspectNtfsFile(fileId: string): Promise<NtfsTechnicalFile> {
   return apiClient.request<NtfsTechnicalFile>(COMMANDS.files.INSPECT_NTFS_FILE, { fileId });
+}
+
+export async function getImageMetadata(fileId: string): Promise<ImageMetadata> {
+  return apiClient.request<ImageMetadata>(COMMANDS.files.GET_IMAGE_METADATA, { fileId });
 }
 
 export async function getFileRows(parentId?: string, showHidden = false) {

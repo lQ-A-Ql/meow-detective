@@ -19,8 +19,8 @@ pub use file_metadata::get_file_metadata_for_case;
 pub use file_page::list_file_entries_page_for_case;
 pub use ntfs_inspector::inspect_ntfs_file_for_case;
 pub use preview::{
-    document_preview_for_source_case, image_preview_for_source_case,
-    media_preview_plan_for_source_case, media_range_for_source_case,
+    document_preview_for_source_case, image_metadata_for_source_case,
+    image_preview_for_source_case, media_preview_plan_for_source_case, media_range_for_source_case,
     read_preview_bytes_for_source_case, text_preview_for_source_case,
 };
 pub use read::{open_file_handle_for_case, read_file_range_for_source_case};

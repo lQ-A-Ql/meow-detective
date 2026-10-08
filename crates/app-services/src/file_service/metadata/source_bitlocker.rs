@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use domain::{CaseId, DataSourceId};
 use transport::dto::{
-    DocumentPreviewDto, ImagePreviewDto, TextPreviewDto, ViewerRangeRequestDto,
+    DocumentPreviewDto, ImageMetadataDto, ImagePreviewDto, TextPreviewDto, ViewerRangeRequestDto,
     ViewerRangeResponseDto,
 };
 
@@ -10,7 +10,8 @@ use crate::{
     bitlocker_runtime::BitLockerUnlockRegistry,
     file_service::{
         image_preview_for_file, read_file_range_for_case, text_preview_for_file,
-        viewer::document_preview_for_file, FileServiceError, SourceReadContext,
+        viewer::document_preview_for_file, viewer::image_metadata_for_file, FileServiceError,
+        SourceReadContext,
     },
     source_db::GlobalFileId,
 };
@@ -27,6 +28,27 @@ fn context<'a>(
 ) -> SourceReadContext<'a> {
     SourceReadContext::new(source_conn, case_conn, case_root, case_id, data_source_id)
         .with_bitlocker_runtime(bitlocker_runtime.clone())
+}
+
+pub fn image_metadata_for_source_case_with_bitlocker(
+    bitlocker_runtime: &Arc<BitLockerUnlockRegistry>,
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    file_id: &str,
+) -> Result<ImageMetadataDto, FileServiceError> {
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
+    image_metadata_for_file(
+        context(
+            &source_conn,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+            bitlocker_runtime,
+        ),
+        &global_id.local_id.0,
+    )
 }
 
 pub fn read_file_range_for_source_case_with_bitlocker(

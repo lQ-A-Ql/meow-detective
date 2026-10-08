@@ -54,6 +54,10 @@ fn parses_regular_jenkins_file() {
     assert_eq!(entry.hostname.as_deref(), Some("testhost"));
     assert_eq!(entry.executable.as_deref(), Some("/usr/sbin/sshd"));
     assert_eq!(entry.cmdline.as_deref(), Some("sshd: alice [priv]"));
+    assert_eq!(entry.transport.as_deref(), Some("syslog"));
+    assert_eq!(entry.machine_id.as_deref(), Some("machine-123"));
+    assert_eq!(entry.cgroup.as_deref(), Some("/system.slice/sshd.service"));
+    assert_eq!(entry.invocation_id.as_deref(), Some("invocation-123"));
     assert_eq!(entry.syslog_identifier.as_deref(), Some("sshd"));
     assert_eq!(
         entry.message_id.as_deref(),

@@ -6,13 +6,33 @@ use rusqlite::Connection;
 use crate::{
     file_service::{
         viewer::{
-            image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
-            read_preview_bytes_for_file, text_preview_for_file, MediaPreviewPlan,
+            image_metadata_for_file, image_preview_for_file, media_preview_plan_for_file,
+            media_range_for_file, read_preview_bytes_for_file, text_preview_for_file,
+            MediaPreviewPlan,
         },
         FileServiceError,
     },
     source_db::GlobalFileId,
 };
+
+pub fn image_metadata_for_source_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    file_id: &str,
+) -> Result<transport::dto::ImageMetadataDto, FileServiceError> {
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
+    image_metadata_for_file(
+        scoped_context(
+            &source_conn,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+        ),
+        &global_id.local_id.0,
+    )
+}
 
 use super::shared::{open_source_for_file_id, scoped_context};
 

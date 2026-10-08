@@ -29,8 +29,8 @@ pub use recovery::{
     run_deleted_recovery, search_deleted_recoveries_by_hash,
 };
 pub use viewer::{
-    close_file_handle, get_document_preview, get_image_preview, get_text_preview,
-    open_file_handle_request, read_file_range,
+    close_file_handle, get_document_preview, get_image_metadata, get_image_preview,
+    get_text_preview, open_file_handle_request, read_file_range,
 };
 
 #[cfg(test)]
