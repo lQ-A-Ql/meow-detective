@@ -98,13 +98,84 @@ pub(super) fn extract_systemd_unit_config(
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
 ) {
-    extract_text_config_filtered(
-        candidate,
-        bytes,
-        "linux.systemd_unit",
-        "systemdUnit",
-        Some(is_ini_section_header),
-        outcome,
+    let normalized = normalize_evidence_path(&candidate.path);
+    match artifacts_linux::parse_systemd_unit(&normalized, bytes) {
+        Ok(unit) => {
+            let mut attrs = base_attrs(candidate);
+            attrs.insert(
+                "configKind".to_string(),
+                Value::String("systemdServiceUnit".to_string()),
+            );
+            attrs.insert("line".to_string(), Value::String(unit.name.clone()));
+            attrs.insert("lineNumber".to_string(), Value::Number(1.into()));
+            insert_opt(&mut attrs, "name", Some(unit.name.clone()));
+            insert_opt(&mut attrs, "description", unit.description.clone());
+            insert_opt(&mut attrs, "state", Some(unit.state.clone()));
+            attrs.insert("enabled".to_string(), Value::Bool(unit.enabled));
+            attrs.insert("masked".to_string(), Value::Bool(unit.masked));
+            attrs.insert("static".to_string(), Value::Bool(unit.static_unit));
+            attrs.insert(
+                "unitFile".to_string(),
+                Value::String(unit.unit_file.clone()),
+            );
+            insert_string_array(&mut attrs, "execStart", &unit.exec_start);
+            insert_string_array(&mut attrs, "execStop", &unit.exec_stop);
+            insert_opt(&mut attrs, "user", unit.user.clone());
+            insert_opt(&mut attrs, "group", unit.group.clone());
+            insert_opt(
+                &mut attrs,
+                "workingDirectory",
+                unit.working_directory.clone(),
+            );
+            insert_opt(&mut attrs, "restart", unit.restart.clone());
+            insert_string_array(&mut attrs, "wantedBy", &unit.wanted_by);
+            insert_string_array(&mut attrs, "requiredBy", &unit.required_by);
+            insert_opt(
+                &mut attrs,
+                "enablementSymlink",
+                unit.enablement_symlink.clone(),
+            );
+            let title = unit
+                .description
+                .clone()
+                .unwrap_or_else(|| unit.name.clone());
+            outcome.artifacts.push(make_artifact(
+                "LinuxSystemConfig",
+                format!("systemd unit: {title}"),
+                format!("{} ({})", unit.name, unit.state),
+                candidate,
+                "linux.systemd_unit",
+                attrs,
+            ));
+        }
+        Err(error) => {
+            outcome.warnings.push(format!(
+                "{} systemd unit parse failed: {}; retaining bounded line extraction",
+                candidate.path, error
+            ));
+            extract_text_config_filtered(
+                candidate,
+                bytes,
+                "linux.systemd_unit",
+                "systemdUnit",
+                Some(is_ini_section_header),
+                outcome,
+            );
+        }
+    }
+}
+
+fn insert_string_array(
+    attrs: &mut std::collections::BTreeMap<String, Value>,
+    key: &str,
+    values: &[String],
+) {
+    if values.is_empty() {
+        return;
+    }
+    attrs.insert(
+        key.to_string(),
+        Value::Array(values.iter().cloned().map(Value::String).collect()),
     );
 }
 

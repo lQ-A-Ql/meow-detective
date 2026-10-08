@@ -9,6 +9,7 @@ pub(crate) enum RegistryValue {
 
 #[derive(Debug, Clone)]
 pub(crate) struct NkRecord {
+    pub(crate) cell_offset: u32,
     pub(crate) name: String,
     pub(crate) last_write_time: Option<u64>,
     pub(crate) num_subkeys: u32,

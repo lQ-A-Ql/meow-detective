@@ -20,6 +20,7 @@ export const COMMANDS = {
     DELETE_DATA_SOURCE: 'delete_data_source',
   },
   files: {
+    CALCULATE_EVIDENCE_DIGEST: 'calculate_evidence_digest',
     GET_FILE_TREE_REQUEST: 'get_file_tree_request',
     LIST_LOCAL_DISKS: 'list_local_disks',
     GET_FILE_ROWS_REQUEST: 'get_file_rows_request',
@@ -32,6 +33,7 @@ export const COMMANDS = {
     GET_TEXT_PREVIEW: 'get_text_preview',
     GET_IMAGE_PREVIEW: 'get_image_preview',
     GET_IMAGE_METADATA: 'get_image_metadata',
+    BROWSE_REGISTRY_KEY: 'browse_registry_key',
     GET_DOCUMENT_PREVIEW: 'get_document_preview',
     GET_MEDIA_URL: 'get_media_url',
     READ_MEDIA_RANGE: 'read_media_range',

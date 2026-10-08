@@ -8,8 +8,8 @@ pub use chromium::{
     BrowserVisit,
 };
 pub use firefox::{
-    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_history, parse_firefox_passwords,
-    parse_firefox_session,
+    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_extensions,
+    parse_firefox_history, parse_firefox_passwords, parse_firefox_session, BrowserExtension,
 };
 pub use profile_detect::{detect_browser_profiles, BrowserProfile};
 

@@ -11,11 +11,13 @@ const emptySummary: BrowserHistorySummary = {
   cookieTotal: 0,
   sessionTotal: 0,
   passwordTotal: 0,
+  extensionTotal: 0,
   visits: [],
   downloads: [],
   cookies: [],
   sessions: [],
   passwords: [],
+  extensions: [],
   generatedAt: '2026-06-01T10:00:00Z',
   warnings: [],
 };

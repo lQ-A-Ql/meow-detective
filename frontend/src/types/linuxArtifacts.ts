@@ -98,6 +98,22 @@ export interface LinuxSystemConfig {
   gid?: number;
   home?: string;
   shell?: string;
+  name?: string;
+  description?: string;
+  state?: string;
+  enabled?: boolean;
+  masked?: boolean;
+  staticUnit?: boolean;
+  unitFile?: string;
+  execStart?: string[];
+  execStop?: string[];
+  user?: string;
+  workingDirectory?: string;
+  group?: string;
+  restart?: string;
+  wantedBy?: string[];
+  requiredBy?: string[];
+  enablementSymlink?: string;
 }
 
 /** Linux nginx/apache site record — mirrors Rust `LinuxWebSiteDto`. */

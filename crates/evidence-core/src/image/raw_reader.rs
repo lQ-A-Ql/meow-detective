@@ -30,6 +30,35 @@ impl RawImageReader {
     /// Opens a raw image or a supported monolithic-flat VMDK descriptor.
     pub fn open(path: &Path) -> io::Result<Self> {
         reject_split_raw_member(path)?;
+        if let Some(vhd) = read_vhd_footer(path)? {
+            let file = File::open(path)?;
+            let physical_len = file.metadata()?.len();
+            if vhd.disk_type == 3 || vhd.disk_type == 4 {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "dynamic and differencing VHD images are not supported for read-only import",
+                ));
+            }
+            if vhd.disk_type != 2 {
+                return Err(invalid_data("VHD footer has an unsupported disk type"));
+            }
+            if vhd.virtual_size == 0 || physical_len < vhd.virtual_size {
+                return Err(invalid_data("fixed VHD is truncated"));
+            }
+            return Ok(Self {
+                backend: Backend {
+                    file,
+                    base_offset: 0,
+                },
+                info: ReaderInfo {
+                    path: path.to_path_buf(),
+                    size: vhd.virtual_size,
+                    kind: "vhd-fixed".to_string(),
+                },
+                cursor: 0,
+                backing_paths: vec![path.to_path_buf()],
+            });
+        }
         let descriptor = read_vmdk_descriptor(path)?;
         let (backend, logical_len, kind, backing_paths) = match descriptor {
             Some((extent, sector_count)) => {
@@ -118,6 +147,32 @@ impl RawImageReader {
             backing_paths: self.backing_paths.clone(),
         })
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VhdFooter {
+    disk_type: u32,
+    virtual_size: u64,
+}
+
+fn read_vhd_footer(path: &Path) -> io::Result<Option<VhdFooter>> {
+    let mut file = File::open(path)?;
+    let len = file.metadata()?.len();
+    if len < 512 {
+        return Ok(None);
+    }
+    file.seek(SeekFrom::End(-512))?;
+    let mut footer = [0u8; 512];
+    file.read_exact(&mut footer)?;
+    if &footer[..8] != b"conectix" {
+        return Ok(None);
+    }
+    let disk_type = u32::from_be_bytes(footer[60..64].try_into().expect("fixed slice"));
+    let virtual_size = u64::from_be_bytes(footer[48..56].try_into().expect("fixed slice"));
+    Ok(Some(VhdFooter {
+        disk_type,
+        virtual_size,
+    }))
 }
 
 impl Read for RawImageReader {

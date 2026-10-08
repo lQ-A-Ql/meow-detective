@@ -1,9 +1,37 @@
 use super::cells::allocated_cell_length;
 use super::RegistryHiveReader;
+use crate::registry::lookup::browser::RegistryBrowserValue;
 use crate::registry::lookup::types::{NkRecord, RegistryValue, INVALID_OFFSET, VK_SIGNATURE};
 use crate::registry::lookup::utf16::{decode_name, read_i32, read_u16, read_u32};
 
 impl RegistryHiveReader<'_> {
+    const MAX_BROWSER_RAW_BYTES: usize = 64 * 1024;
+    pub(crate) fn read_browser_values(
+        &self,
+        key: &NkRecord,
+    ) -> Result<Vec<RegistryBrowserValue>, String> {
+        let mut values = Vec::new();
+        for offset in self.raw_value_offsets(key)? {
+            let Some((name, raw)) = self.read_raw_vk(offset)? else {
+                continue;
+            };
+            if raw.len() > Self::MAX_BROWSER_RAW_BYTES {
+                continue;
+            }
+            let Some((_, decoded)) = self.parse_vk(offset)? else {
+                continue;
+            };
+            let (value_type, decoded_text) = super::super::browser::value_text(&decoded);
+            values.push(RegistryBrowserValue {
+                name,
+                value_type: value_type.to_string(),
+                decoded: decoded_text,
+                raw_hex: hex::encode(raw),
+                cell_offset: offset,
+            });
+        }
+        Ok(values)
+    }
     pub(crate) fn read_value(
         &self,
         key: &NkRecord,

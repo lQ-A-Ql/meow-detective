@@ -133,13 +133,53 @@ pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
 
     if has_e01_magic(source_path)? || has_e01_name(source_path) {
         Ok(DataSourceKind::E01)
+    } else if has_vhd_magic(source_path)? {
+        let probe = evidence_core::probe(source_path)
+            .map_err(|error| DataSourceError::Evidence(error.to_string()))?;
+        if probe
+            .candidates
+            .iter()
+            .any(|candidate| candidate == "vhd-fixed")
+        {
+            Ok(DataSourceKind::Raw)
+        } else {
+            Err(DataSourceError::Evidence(
+                "dynamic or differencing VHD is recognized but unsupported".to_string(),
+            ))
+        }
     } else if has_android_sparse_magic(source_path)? {
         Ok(DataSourceKind::AndroidSparse)
     } else if has_archive_magic(source_path)? || has_archive_name(source_path) {
         Ok(DataSourceKind::LogicalArchive)
     } else {
-        Ok(DataSourceKind::Raw)
+        let extension = source_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "dd" | "raw" | "img" | "bin" | "001"
+        ) {
+            Ok(DataSourceKind::Raw)
+        } else {
+            Err(DataSourceError::Evidence(
+                "unrecognized evidence container; raw type must be explicit".to_string(),
+            ))
+        }
     }
+}
+
+fn has_vhd_magic(source_path: &Path) -> Result<bool> {
+    let metadata = std::fs::metadata(source_path)?;
+    if metadata.len() < 512 {
+        return Ok(false);
+    }
+    let mut file = std::fs::File::open(source_path)?;
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::End(-512))?;
+    let mut footer = [0u8; 8];
+    file.read_exact(&mut footer)?;
+    Ok(&footer == b"conectix")
 }
 
 fn has_e01_magic(source_path: &Path) -> Result<bool> {

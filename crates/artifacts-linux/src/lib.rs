@@ -12,6 +12,7 @@ mod shadow_edit;
 mod stats;
 mod sudo;
 mod system;
+mod systemd;
 mod web;
 mod wtmp;
 
@@ -34,6 +35,7 @@ pub use shadow_edit::{
 pub use stats::{LogLineStats, WebAccessLogStats};
 pub use sudo::{parse_auth_log_sudo, SudoEvent};
 pub use system::{parse_os_release, parse_passwd, OsReleaseInfo, PasswdAccount};
+pub use systemd::{parse_systemd_unit, LinuxServiceUnit};
 pub use web::{
     detect_web_findings, detect_web_shell, parse_apache_config, parse_nginx_config,
     parse_web_access_log, parse_web_access_log_with_stats, parse_web_error_log,

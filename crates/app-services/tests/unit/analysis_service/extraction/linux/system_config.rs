@@ -26,7 +26,7 @@ fn artifact_lines(outcome: &ExtractionOutcome) -> Vec<&str> {
 }
 
 #[test]
-fn systemd_unit_extraction_skips_section_headers() {
+fn systemd_unit_extraction_emits_structured_service() {
     let candidate = test_candidate("etc/systemd/system/demo.service");
     let unit = "[Unit]\n\
                 Description=Demo service\n\
@@ -42,21 +42,25 @@ fn systemd_unit_extraction_skips_section_headers() {
 
     extract_systemd_unit_config(&candidate, unit.as_bytes(), &mut outcome);
 
-    let lines = artifact_lines(&outcome);
+    assert_eq!(outcome.artifacts.len(), 1);
+    let attrs = &outcome.artifacts[0].attrs;
     assert_eq!(
-        lines,
-        vec![
-            "Description=Demo service",
-            "After=network.target",
-            "ExecStart=/usr/bin/demo --serve",
-            "WantedBy=multi-user.target",
-        ],
-        "section headers and comments must not produce records"
+        attrs.get("configKind").and_then(Value::as_str),
+        Some("systemdServiceUnit")
     );
-    assert!(outcome
-        .artifacts
-        .iter()
-        .all(|artifact| artifact.attrs.contains_key("key")));
+    assert_eq!(
+        attrs.get("description").and_then(Value::as_str),
+        Some("Demo service")
+    );
+    assert_eq!(attrs.get("state").and_then(Value::as_str), Some("disabled"));
+    assert_eq!(attrs.get("enabled").and_then(Value::as_bool), Some(false));
+    assert_eq!(
+        attrs
+            .get("execStart")
+            .and_then(Value::as_array)
+            .map(|v| v.len()),
+        Some(1)
+    );
     assert!(outcome
         .artifacts
         .iter()
@@ -65,22 +69,20 @@ fn systemd_unit_extraction_skips_section_headers() {
 }
 
 #[test]
-fn systemd_unit_extraction_preserves_line_numbers() {
+fn systemd_unit_extraction_uses_source_line_anchor() {
     let candidate = test_candidate("usr/lib/systemd/system/demo.service");
     let unit = "[Unit]\nDescription=Demo service\n[Service]\nExecStart=/usr/bin/demo\n";
     let mut outcome = ExtractionOutcome::default();
 
     extract_systemd_unit_config(&candidate, unit.as_bytes(), &mut outcome);
 
-    let line_numbers: Vec<u64> = outcome
-        .artifacts
-        .iter()
-        .filter_map(|artifact| artifact.attrs.get("lineNumber").and_then(Value::as_u64))
-        .collect();
+    assert_eq!(outcome.artifacts.len(), 1);
     assert_eq!(
-        line_numbers,
-        vec![2, 4],
-        "skipped section headers must not renumber real records"
+        outcome.artifacts[0]
+            .attrs
+            .get("lineNumber")
+            .and_then(Value::as_u64),
+        Some(1)
     );
 }
 

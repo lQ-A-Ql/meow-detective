@@ -16,6 +16,7 @@ impl RegistryHiveReader<'_> {
         let name_start = absolute + 0x50;
         self.require(name_start, name_length)?;
         Ok(NkRecord {
+            cell_offset,
             name: decode_name(
                 &self.bytes[name_start..name_start + name_length],
                 flags & 0x20 != 0,

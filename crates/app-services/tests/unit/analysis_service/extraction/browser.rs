@@ -1,6 +1,5 @@
 use super::sqlite::with_temp_sqlite;
 use super::ExtractionOutcome;
-
 fn temp_files(prefix: &str) -> Vec<std::path::PathBuf> {
     let expected_prefix = format!("forensics-{prefix}-");
     std::fs::read_dir(std::env::temp_dir())

@@ -11,13 +11,38 @@ pub struct BrowserHistorySummaryDto {
     pub cookie_total: u64,
     pub session_total: u64,
     pub password_total: u64,
+    pub extension_total: u64,
     pub visits: Vec<BrowserVisitDto>,
     pub downloads: Vec<BrowserDownloadDto>,
     pub cookies: Vec<BrowserCookieDto>,
     pub sessions: Vec<BrowserSessionTabDto>,
     pub passwords: Vec<BrowserPasswordDto>,
+    pub extensions: Vec<BrowserExtensionDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserExtensionDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub browser: String,
+    pub profile: String,
+    pub source_profile: String,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub active: bool,
+    pub user_disabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signed_state: Option<String>,
+    pub permissions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +68,8 @@ pub struct BrowserDownloadDto {
     pub source_path: String,
     pub browser: String,
     pub profile: String,
+    #[serde(default)]
+    pub source_profile: String,
     pub url: String,
     pub target_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]

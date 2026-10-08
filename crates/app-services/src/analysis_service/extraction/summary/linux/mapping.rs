@@ -295,6 +295,22 @@ fn map_system_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSystemConfigDt
             gid: optional_u32_attr(&row.attrs, "gid"),
             home: optional_string_attr(&row.attrs, "home"),
             shell: optional_string_attr(&row.attrs, "shell"),
+            name: optional_string_attr(&row.attrs, "name"),
+            description: optional_string_attr(&row.attrs, "description"),
+            state: optional_string_attr(&row.attrs, "state"),
+            enabled: optional_bool_attr(&row.attrs, "enabled"),
+            masked: optional_bool_attr(&row.attrs, "masked"),
+            static_unit: optional_bool_attr(&row.attrs, "static"),
+            unit_file: optional_string_attr(&row.attrs, "unitFile"),
+            exec_start: string_vec_attr(&row.attrs, "execStart"),
+            exec_stop: string_vec_attr(&row.attrs, "execStop"),
+            user: optional_string_attr(&row.attrs, "user"),
+            group: optional_string_attr(&row.attrs, "group"),
+            working_directory: optional_string_attr(&row.attrs, "workingDirectory"),
+            restart: optional_string_attr(&row.attrs, "restart"),
+            wanted_by: string_vec_attr(&row.attrs, "wantedBy"),
+            required_by: string_vec_attr(&row.attrs, "requiredBy"),
+            enablement_symlink: optional_string_attr(&row.attrs, "enablementSymlink"),
         })
         .collect()
 }

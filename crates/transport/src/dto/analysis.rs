@@ -8,8 +8,8 @@ pub use crate::dto::analysis_base::{
     AnalysisProvenanceDto,
 };
 pub use crate::dto::analysis_browser::{
-    BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserPasswordDto,
-    BrowserSessionTabDto, BrowserVisitDto,
+    BrowserCookieDto, BrowserDownloadDto, BrowserExtensionDto, BrowserHistorySummaryDto,
+    BrowserPasswordDto, BrowserSessionTabDto, BrowserVisitDto,
 };
 pub use crate::dto::analysis_classification::{
     AnalysisClassifiedFileDto, AnalysisFileClassificationDto, ClassificationGroupDto,

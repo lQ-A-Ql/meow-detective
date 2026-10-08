@@ -8,6 +8,7 @@ mod file_page;
 mod ntfs_inspector;
 mod preview;
 mod read;
+mod registry_browser;
 mod shared;
 
 pub use browse::{
@@ -24,6 +25,7 @@ pub use preview::{
     read_preview_bytes_for_source_case, text_preview_for_source_case,
 };
 pub use read::{open_file_handle_for_case, read_file_range_for_source_case};
+pub use registry_browser::browse_registry_key_for_case;
 pub(crate) use shared::open_source_for_file_id;
 
 #[cfg(test)]

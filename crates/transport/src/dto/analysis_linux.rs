@@ -259,6 +259,39 @@ pub struct LinuxSystemConfigDto {
     pub home: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
+    /// Structured fields populated for `systemdServiceUnit` records.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub masked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub static_unit: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit_file: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exec_start: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exec_stop: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wanted_by: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_by: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enablement_symlink: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

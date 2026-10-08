@@ -62,6 +62,7 @@ describe('AnalysisPanels sub-components', () => {
         cookieTotal: 0,
         sessionTotal: 0,
         passwordTotal: 0,
+        extensionTotal: 0,
         generatedAt: '2026-06-01T10:00:00Z',
         warnings: [],
         visits: [{ artifactId: 'v1', fileId: 'f1', sourcePath: '/path', browser: 'Chrome', profile: 'Default', url: 'https://example.com', title: 'Example', visitTime: '2026-06-01T10:00:00Z', visitCount: 1 }],
@@ -69,6 +70,7 @@ describe('AnalysisPanels sub-components', () => {
         cookies: [],
         sessions: [],
         passwords: [],
+        extensions: [],
       };
       render(createElement(BrowserHistoryPanel, { summary }));
       expect(screen.getByText('Example')).toBeDefined();

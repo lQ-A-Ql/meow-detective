@@ -1,6 +1,7 @@
 import type {
   BrowserCookie,
   BrowserDownload,
+  BrowserExtension,
   BrowserHistorySummary,
   BrowserPassword,
   BrowserSessionTab,
@@ -75,7 +76,16 @@ const passwordColumns: DenseColumn<BrowserPassword>[] = [
   { key: 'timesUsed', title: t('browser.columns.timesUsed'), className: 'w-[90px]', render: (row) => row.timesUsed.toString() },
   { key: 'decryptionStatus', title: t('browser.columns.decryptionStatus'), className: 'w-[110px]', render: (row) => row.decryptionStatus ?? t('common.unknown') },
 ];
-return { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns };
+const extensionColumns: DenseColumn<BrowserExtension>[] = [
+  { key: 'name', title: t('browser.columns.extensionName'), className: 'min-w-[200px]', render: (row) => row.name || row.id },
+  { key: 'version', title: t('browser.columns.version'), className: 'w-[110px]', render: (row) => row.version || '-' },
+  { key: 'profile', title: t('browser.columns.profile'), className: 'w-[150px]', render: (row) => row.profile || '-' },
+  { key: 'active', title: t('browser.columns.active'), className: 'w-[90px]', render: (row) => row.active ? t('common.yes') : t('common.no') },
+  { key: 'userDisabled', title: t('browser.columns.userDisabled'), className: 'w-[110px]', render: (row) => row.userDisabled ? t('common.yes') : t('common.no') },
+  { key: 'signedState', title: t('browser.columns.signedState'), className: 'w-[110px]', render: (row) => row.signedState ?? '-' },
+  { key: 'permissions', title: t('browser.columns.permissions'), className: 'min-w-[240px]', render: (row) => row.permissions.join(', ') || '-' },
+];
+return { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns, extensionColumns };
 }
 
 export function BrowserHistoryPanel({
@@ -84,7 +94,7 @@ export function BrowserHistoryPanel({
   summary?: BrowserHistorySummary;
 }) {
   const { t } = useTranslation();
-  const { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns } = browserColumns(t);
+  const { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns, extensionColumns } = browserColumns(t);
   const info = summary ?? {
     status: 'unavailable' as const,
     visitTotal: 0,
@@ -92,11 +102,13 @@ export function BrowserHistoryPanel({
     cookieTotal: 0,
     sessionTotal: 0,
     passwordTotal: 0,
+    extensionTotal: 0,
     visits: [],
     downloads: [],
     cookies: [],
     sessions: [],
     passwords: [],
+    extensions: [],
     generatedAt: '',
     warnings: [t('browser.unavailable')],
   };
@@ -106,6 +118,8 @@ export function BrowserHistoryPanel({
   const cookieGroups = groupByBrowser(info.cookies);
   const sessionGroups = groupByBrowser(info.sessions);
   const passwordGroups = groupByBrowser(info.passwords);
+  const extensionRows = info.extensions ?? [];
+  const extensionGroups = groupByBrowser(extensionRows);
 
   return (
     <ExtractionTableSection
@@ -119,6 +133,7 @@ export function BrowserHistoryPanel({
         [t('browser.stats.cookies'), info.cookieTotal.toString()],
         [t('browser.stats.sessions'), info.sessionTotal.toString()],
         [t('browser.stats.passwords'), info.passwordTotal.toString()],
+        [t('browser.stats.extensions'), (info.extensionTotal ?? extensionRows.length).toString()],
         [t('browser.stats.browsers'), Object.keys(visitGroups).sort(browserOrder).join(' / ') || '-'],
       ]}
     >
@@ -278,6 +293,28 @@ export function BrowserHistoryPanel({
                     emptyTitle={t('browser.empty.passwords')}
                     emptyDescription=""
                   />
+                </DenseDataTableFrame>
+              ))
+          )}
+        </TableBlock>
+
+        <TableBlock title={t('browser.sections.extensions')}>
+          {extensionRows.length === 0 ? (
+            <DenseDataTableFrame rowCount={0}>
+              <DenseDataTable
+                rows={[]}
+                columns={extensionColumns}
+                getRowKey={() => 'empty'}
+                emptyTitle={t('browser.empty.extensions')}
+                emptyDescription={t('browser.empty.extensionsDescription')}
+              />
+            </DenseDataTableFrame>
+          ) : (
+            Object.entries(extensionGroups)
+              .sort(([a], [b]) => browserOrder(a, b))
+              .map(([browser, rows]) => (
+                <DenseDataTableFrame key={`extensions-${browser}`} rowCount={rows.length} header={<div className="px-3 py-2 text-[12px] font-light text-forensics-text">{browser}</div>}>
+                  <DenseDataTable rows={rows} columns={extensionColumns} getRowKey={(row) => row.artifactId} emptyTitle={t('browser.empty.extensions')} emptyDescription="" />
                 </DenseDataTableFrame>
               ))
           )}

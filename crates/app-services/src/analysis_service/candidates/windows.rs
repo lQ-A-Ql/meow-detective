@@ -148,6 +148,7 @@ pub(super) const BROWSER_HISTORY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Suffix("/previous.jsonlz4"),
         EvidencePathPattern::Suffix("/sessionstore.jsonlz4"),
         EvidencePathPattern::Suffix("/places.sqlite"),
+        EvidencePathPattern::Suffix("/extensions.json"),
     ],
     matcher: Some(is_browser_history_path),
 };
@@ -171,7 +172,8 @@ pub(crate) fn is_browser_history_path(normalized: &str) -> bool {
             || normalized.ends_with("/logins.json")
             || normalized.ends_with("/recovery.jsonlz4")
             || normalized.ends_with("/previous.jsonlz4")
-            || normalized.ends_with("/sessionstore.jsonlz4");
+            || normalized.ends_with("/sessionstore.jsonlz4")
+            || normalized.ends_with("/extensions.json");
     }
     false
 }

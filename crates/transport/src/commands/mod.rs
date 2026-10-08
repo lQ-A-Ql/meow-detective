@@ -1,6 +1,7 @@
 mod analysis;
 mod artifacts;
 mod case;
+mod digest;
 mod files;
 mod import;
 mod platform;
@@ -23,6 +24,7 @@ pub use case::{
     CreateCaseRequest, DeleteCaseRequest, DeleteDataSourceRequest, OpenCaseRequest,
     RenameDataSourceRequest,
 };
+pub use digest::CalculateEvidenceDigestRequest;
 pub use files::{
     ExportDeletedRecoveryRequest, ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto,
     GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest,

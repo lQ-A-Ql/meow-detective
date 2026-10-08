@@ -14,7 +14,8 @@ pub use browser::chromium::{
     BrowserDownload, BrowserSessionTab, BrowserVisit,
 };
 pub use browser::firefox::{
-    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_history, parse_firefox_session,
+    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_extensions,
+    parse_firefox_history, parse_firefox_session, BrowserExtension,
 };
 pub use browser::profile_detect::{detect_browser_profiles, BrowserProfile};
 pub use evtx::capability::{
@@ -36,7 +37,7 @@ pub use registry::lookup::lsa::{
     decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecret, LsaDecryptedSecrets, TbalSecret,
 };
 pub use registry::lookup::{
-    extract_amcache_entries, extract_appcompat_layers_from_ntuser_hive,
+    browse_registry_hive, extract_amcache_entries, extract_appcompat_layers_from_ntuser_hive,
     extract_appcompat_layers_from_software_hive, extract_cached_credentials_from_security_hive,
     extract_installed_software, extract_lsa_packages_from_system_hive,
     extract_lsa_secrets_from_security_hive, extract_machine_run_keys_from_software_hive,
@@ -53,10 +54,10 @@ pub use registry::lookup::{
     AmcacheApplicationFileEntry, AmcacheInfo, AppCompatLayerEntry, CachedCredentialEntry,
     InstalledSoftwareInfo, LastVisitedMruEntry, LsaPackages, LsaSecretEntry, MountedDeviceEntry,
     MuiCacheEntry, NetworkAdapterInfo, NetworkProfileEntry, NtuserInfo, OpenSaveMruEntry,
-    ParsedRegistryField, RegistryRunKey, RunMruEntry, SamGroup, SamInfo, SamUser,
-    SecurityPolicyEntry, ServiceStartType, ServiceType, ShellbagEntry, ShimCacheEntry,
-    ShutdownTimeEntry, SoftwareHiveInfo, SystemHiveInfo, SystemServiceEntry, SystemServiceInfo,
-    UsbDeviceHistoryEntry, UserAssistEntry, WinlogonConfig,
+    ParsedRegistryField, RegistryBrowserKey, RegistryBrowserValue, RegistryRunKey, RunMruEntry,
+    SamGroup, SamInfo, SamUser, SecurityPolicyEntry, ServiceStartType, ServiceType, ShellbagEntry,
+    ShimCacheEntry, ShutdownTimeEntry, SoftwareHiveInfo, SystemHiveInfo, SystemServiceEntry,
+    SystemServiceInfo, UsbDeviceHistoryEntry, UserAssistEntry, WinlogonConfig,
 };
 pub use registry::recovery::{
     scan_deleted_registry_cells, RecoverResult, RecoveredKey, RecoveredValue,

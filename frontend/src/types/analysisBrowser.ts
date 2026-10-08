@@ -9,13 +9,33 @@ export interface BrowserHistorySummary {
   cookieTotal: number;
   sessionTotal: number;
   passwordTotal: number;
+  extensionTotal?: number;
   visits: BrowserVisit[];
   downloads: BrowserDownload[];
   cookies: BrowserCookie[];
   sessions: BrowserSessionTab[];
   passwords: BrowserPassword[];
+  extensions?: BrowserExtension[];
   generatedAt: string;
   warnings: string[];
+}
+
+export interface BrowserExtension {
+  artifactId: string;
+  fileId: string;
+  sourcePath: string;
+  browser: BrowserKind;
+  profile: string;
+  sourceProfile?: string;
+  id: string;
+  name: string;
+  version: string;
+  active: boolean;
+  userDisabled: boolean;
+  installDate?: string;
+  updateDate?: string;
+  signedState?: string;
+  permissions: string[];
 }
 
 export interface BrowserVisit {

@@ -26,6 +26,7 @@ import {
   FileExtractionResult,
   NtfsTechnicalFile,
   ImageMetadata,
+  RegistryBrowserKey,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -41,6 +42,10 @@ export async function inspectNtfsFile(fileId: string): Promise<NtfsTechnicalFile
 
 export async function getImageMetadata(fileId: string): Promise<ImageMetadata> {
   return apiClient.request<ImageMetadata>(COMMANDS.files.GET_IMAGE_METADATA, { fileId });
+}
+
+export async function browseRegistryKey(fileId: string, keyPath = ''): Promise<RegistryBrowserKey> {
+  return apiClient.request<RegistryBrowserKey>(COMMANDS.files.BROWSE_REGISTRY_KEY, { fileId, keyPath });
 }
 
 export async function getFileRows(parentId?: string, showHidden = false) {

@@ -1,5 +1,8 @@
 import type { AnalysisParseStatus } from './analysis';
 
+export interface RegistryBrowserValue { name: string; valueType: string; decoded: string; rawHex: string; cellOffset: number; }
+export interface RegistryBrowserKey { path: string; name: string; cellOffset: number; lastWriteTime?: number; subkeyCount: number; valueCount: number; values: RegistryBrowserValue[]; subkeys: string[]; }
+
 export interface RegistryExtractionSummary {
   status: AnalysisParseStatus;
   total: number;

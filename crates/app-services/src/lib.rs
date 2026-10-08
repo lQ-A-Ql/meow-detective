@@ -24,6 +24,7 @@ pub mod datasource_service;
 pub mod deleted_recovery;
 mod derived_source_catalog;
 pub mod derived_source_service;
+pub mod digest_service;
 mod e01_reader_cache;
 pub mod emulation_bypass;
 pub mod emulation_cow_reader;

@@ -5,6 +5,7 @@
 
 mod cookies;
 mod downloads;
+mod extensions;
 mod history;
 mod passwords;
 mod session;
@@ -13,6 +14,7 @@ mod time;
 
 pub use cookies::parse_firefox_cookies;
 pub use downloads::parse_firefox_downloads;
+pub use extensions::{parse_firefox_extensions, BrowserExtension};
 pub use history::parse_firefox_history;
 pub use passwords::parse_firefox_passwords;
 pub use session::parse_firefox_session;

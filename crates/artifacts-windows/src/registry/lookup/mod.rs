@@ -1,4 +1,5 @@
 pub mod amcache;
+mod browser;
 mod fields;
 pub mod lsa;
 pub mod muicache;
@@ -16,6 +17,7 @@ pub(crate) mod utf16;
 mod value;
 
 pub use amcache::{extract_amcache_entries, AmcacheInfo};
+pub use browser::{browse_registry_hive, RegistryBrowserKey, RegistryBrowserValue};
 pub use muicache::extract_muicache_from_usrclass_hive;
 pub use ntuser::{
     extract_appcompat_layers_from_ntuser_hive, extract_ntuser_fields,

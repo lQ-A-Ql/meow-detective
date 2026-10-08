@@ -5,12 +5,14 @@ use crate::analysis_service::candidates::{
 };
 
 mod chromium;
+mod extensions;
 mod firefox;
 mod profile;
 mod records;
 mod sqlite;
 
 use chromium::extract_chromium_history;
+use extensions::extract_firefox_extensions;
 use firefox::extract_firefox_history;
 use profile::browser_profile_from_path;
 use records::{extract_browser_cookies, extract_browser_passwords, extract_browser_sessions};
@@ -33,6 +35,18 @@ pub(super) fn extract_browser_candidate(
     }
 
     let (browser, profile) = browser_profile_from_path(&normalized);
+    if normalized.ends_with("/extensions.json") {
+        return match extract_firefox_extensions(candidate, bytes, &profile) {
+            Ok(outcome) => outcome,
+            Err(err) => ExtractionOutcome {
+                warnings: vec![format!(
+                    "{} browser extension parse failed: {}",
+                    candidate.path, err
+                )],
+                ..ExtractionOutcome::default()
+            },
+        };
+    }
     let decryptor = browser_preload.decryptor_for(candidate);
     let parse_result = if normalized.ends_with("/places.sqlite") {
         with_temp_sqlite(bytes, "browser-history", |db| {

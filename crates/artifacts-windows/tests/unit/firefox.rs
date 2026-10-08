@@ -455,3 +455,32 @@ fn is_likely_encrypted_binary_blob() {
 fn is_likely_encrypted_short_value() {
     assert!(!is_likely_encrypted("\x00\x01\x02"));
 }
+
+#[test]
+fn parse_firefox_extensions_extracts_stable_metadata() {
+    let json = br#"{
+      "addons": [
+        {"id":"u@example","name":"Useful","version":"2.1","active":true,
+         "userDisabled":false,"installDate":1700000000000,"updateDate":1701000000000,
+         "signedState":2,"permissions":["storage","tabs"],"defaultLocale":{"name":"ignored"}},
+        {"id":"theme@example","defaultLocale":{"name":"Theme"},"version":"1",
+         "active":false,"userDisabled":true,"permissions":[]}
+      ]
+    }"#;
+    let extensions = parse_firefox_extensions(json).expect("extensions");
+    assert_eq!(extensions.len(), 2);
+    assert_eq!(extensions[0].id, "u@example");
+    assert_eq!(extensions[0].name, "Useful");
+    assert_eq!(extensions[0].signed_state.as_deref(), Some("2"));
+    assert_eq!(extensions[0].permissions, vec!["storage", "tabs"]);
+    assert!(extensions[0].install_date.is_some());
+    assert_eq!(extensions[1].name, "Theme");
+    assert!(extensions[1].user_disabled);
+}
+
+#[test]
+fn parse_firefox_extensions_rejects_missing_registry_and_oversized_input() {
+    assert!(parse_firefox_extensions(br#"{"schema":33}"#).is_err());
+    let oversized = vec![b' '; 16 * 1024 * 1024 + 1];
+    assert!(parse_firefox_extensions(&oversized).is_err());
+}

@@ -3,13 +3,14 @@ use crate::analysis_service::extraction::artifact_query::{
     count_artifacts_by_type, query_artifact_rows, status_from_total, AnalysisArtifactRow,
 };
 use crate::analysis_service::extraction::attr_mapping::{
-    bool_attr, i32_attr, optional_i64_attr, optional_string_attr, string_attr, u64_attr,
+    bool_attr, i32_attr, optional_i64_attr, optional_string_attr, string_attr, string_vec_attr,
+    u64_attr,
 };
 use chrono::Utc;
 use rusqlite::Connection;
 use transport::dto::{
-    BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserPasswordDto,
-    BrowserSessionTabDto, BrowserVisitDto,
+    BrowserCookieDto, BrowserDownloadDto, BrowserExtensionDto, BrowserHistorySummaryDto,
+    BrowserPasswordDto, BrowserSessionTabDto, BrowserVisitDto,
 };
 
 pub fn get_browser_history_summary(
@@ -48,6 +49,12 @@ pub fn get_browser_history_summary(
         offset,
         limit,
     )?);
+    let extensions = map_extensions(query_artifact_rows(
+        conn,
+        &["BrowserExtension"],
+        offset,
+        limit,
+    )?);
     Ok(BrowserHistorySummaryDto {
         status: status_from_total(totals.total()),
         visit_total: totals.visits,
@@ -55,11 +62,13 @@ pub fn get_browser_history_summary(
         cookie_total: totals.cookies,
         session_total: totals.sessions,
         password_total: totals.passwords,
+        extension_total: totals.extensions,
         visits,
         downloads,
         cookies,
         sessions,
         passwords,
+        extensions,
         generated_at: Utc::now().to_rfc3339(),
         warnings: Vec::new(),
     })
@@ -71,6 +80,7 @@ struct BrowserTotals {
     cookies: u64,
     sessions: u64,
     passwords: u64,
+    extensions: u64,
 }
 
 impl BrowserTotals {
@@ -81,11 +91,17 @@ impl BrowserTotals {
             cookies: count_artifacts_by_type(conn, "BrowserCookie")?,
             sessions: count_artifacts_by_type(conn, "BrowserSessionTab")?,
             passwords: count_artifacts_by_type(conn, "BrowserPassword")?,
+            extensions: count_artifacts_by_type(conn, "BrowserExtension")?,
         })
     }
 
     fn total(&self) -> u64 {
-        self.visits + self.downloads + self.cookies + self.sessions + self.passwords
+        self.visits
+            + self.downloads
+            + self.cookies
+            + self.sessions
+            + self.passwords
+            + self.extensions
     }
 }
 
@@ -113,6 +129,7 @@ fn map_downloads(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserDownloadDto> {
             source_path: string_attr(&row.attrs, "sourcePath"),
             browser: string_attr(&row.attrs, "browser"),
             profile: string_attr(&row.attrs, "profile"),
+            source_profile: string_attr(&row.attrs, "sourceProfile"),
             url: string_attr(&row.attrs, "url"),
             target_path: string_attr(&row.attrs, "targetPath"),
             start_time: optional_string_attr(&row.attrs, "startTime"),
@@ -174,6 +191,28 @@ fn map_passwords(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserPasswordDto> {
             times_used: u64_attr(&row.attrs, "timesUsed"),
             decryption_status: optional_string_attr(&row.attrs, "decryptionStatus"),
             decryption_detail: optional_string_attr(&row.attrs, "decryptionDetail"),
+        })
+        .collect()
+}
+
+fn map_extensions(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserExtensionDto> {
+    rows.into_iter()
+        .map(|row| BrowserExtensionDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: string_attr(&row.attrs, "profile"),
+            source_profile: string_attr(&row.attrs, "sourceProfile"),
+            id: string_attr(&row.attrs, "id"),
+            name: string_attr(&row.attrs, "name"),
+            version: string_attr(&row.attrs, "version"),
+            active: bool_attr(&row.attrs, "active"),
+            user_disabled: bool_attr(&row.attrs, "userDisabled"),
+            install_date: optional_string_attr(&row.attrs, "installDate"),
+            update_date: optional_string_attr(&row.attrs, "updateDate"),
+            signed_state: optional_string_attr(&row.attrs, "signedState"),
+            permissions: string_vec_attr(&row.attrs, "permissions"),
         })
         .collect()
 }

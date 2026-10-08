@@ -15,6 +15,7 @@ export * from './linuxCluster';
 export * from './pluginArtifacts';
 export * from './governance';
 export * from './files';
+export * from './digest';
 export * from './recovery';
 export * from './viewer';
 export * from './timeline';
