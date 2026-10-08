@@ -2,7 +2,9 @@ pub mod extractor;
 pub mod highlighter;
 pub mod indexer;
 
-pub use extractor::{extract_text, ExtractedText};
+pub use extractor::{
+    classify_text_bytes, extract_text, ExtractedText, TextContentStatus, CONTENT_SNIFF_BYTES,
+};
 pub use highlighter::highlight;
 pub use indexer::{
     ChunkedIndexStats, FileEntryTypeFilter, FileSearchAfterKey, FileSearchHit, FileSearchOptions,

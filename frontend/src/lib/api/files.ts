@@ -24,6 +24,7 @@ import {
   BitLockerVolumeStatus,
   ExtractFileRequest,
   FileExtractionResult,
+  NtfsTechnicalFile,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -31,6 +32,10 @@ import { apiClient } from './client';
 
 export async function getFileTree(showHidden = false) {
   return apiClient.request<FileTreeNode[]>(COMMANDS.files.GET_FILE_TREE_REQUEST, { request: { showHidden } });
+}
+
+export async function inspectNtfsFile(fileId: string): Promise<NtfsTechnicalFile> {
+  return apiClient.request<NtfsTechnicalFile>(COMMANDS.files.INSPECT_NTFS_FILE, { fileId });
 }
 
 export async function getFileRows(parentId?: string, showHidden = false) {

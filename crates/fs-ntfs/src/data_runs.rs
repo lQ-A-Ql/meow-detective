@@ -62,6 +62,78 @@ pub(crate) fn parse_data_runs_ext(mut data: &[u8]) -> io::Result<Vec<DataRun>> {
     Ok(runs)
 }
 
+/// Parse data runs while preserving the encoded fields required for forensic inspection.
+pub(crate) fn parse_data_runs_forensic(
+    data: &[u8],
+    cluster_size: u64,
+    volume_offset: u64,
+) -> io::Result<Vec<crate::ForensicDataRun>> {
+    const MAX_DATA_RUNS: usize = 100_000;
+    let mut remaining = data;
+    let mut previous_lcn = 0i64;
+    let mut logical_offset = 0u64;
+    let mut runs = Vec::new();
+    while !remaining.is_empty() && remaining[0] != 0 {
+        if runs.len() >= MAX_DATA_RUNS {
+            return Err(invalid_fs_data("too many data runs"));
+        }
+        let header = remaining[0];
+        let length_field_size = header & 0x0f;
+        let offset_field_size = header >> 4;
+        if length_field_size == 0 || length_field_size > 8 || offset_field_size > 8 {
+            return Err(invalid_fs_data("invalid NTFS data run header"));
+        }
+        let body_len = 1usize + usize::from(length_field_size) + usize::from(offset_field_size);
+        if remaining.len() < body_len {
+            return Err(invalid_fs_data("truncated NTFS data run"));
+        }
+        let raw = remaining[..body_len].to_vec();
+        let cluster_count = read_sized_le(&remaining[1..1 + usize::from(length_field_size)]);
+        if cluster_count == 0 {
+            return Err(invalid_fs_data("zero-length NTFS data run"));
+        }
+        let relative_lcn = (offset_field_size != 0).then(|| {
+            read_sized_le_signed(&remaining[1 + usize::from(length_field_size)..body_len])
+        });
+        let absolute_lcn = relative_lcn.map(|delta| {
+            if runs.is_empty() {
+                delta
+            } else {
+                previous_lcn.checked_add(delta).unwrap_or(i64::MIN)
+            }
+        });
+        if absolute_lcn == Some(i64::MIN) {
+            return Err(invalid_fs_data("NTFS data run LCN overflow"));
+        }
+        let physical_offset = absolute_lcn
+            .and_then(|lcn| u64::try_from(lcn).ok())
+            .and_then(|lcn| lcn.checked_mul(cluster_size))
+            .and_then(|offset| volume_offset.checked_add(offset));
+        let run_bytes = cluster_count
+            .checked_mul(cluster_size)
+            .ok_or_else(|| invalid_fs_data("NTFS data run size overflow"))?;
+        runs.push(crate::ForensicDataRun {
+            header,
+            length_field_size,
+            offset_field_size,
+            cluster_count,
+            relative_lcn,
+            absolute_lcn,
+            logical_offset,
+            raw,
+            physical_offset,
+        });
+        logical_offset = logical_offset
+            .checked_add(run_bytes)
+            .ok_or_else(|| invalid_fs_data("NTFS data run logical offset overflow"))?;
+        if let Some(lcn) = absolute_lcn {
+            previous_lcn = lcn;
+        }
+        remaining = &remaining[body_len..];
+    }
+    Ok(runs)
+}
+
 /// Total logical size covered by a list of data runs.
 pub(crate) fn data_runs_logical_size(runs: &[DataRun], cluster_size: u64) -> io::Result<u64> {
     let mut size = 0u64;

@@ -2,7 +2,35 @@ use domain::{DataSourcePlatform, FileEntry};
 
 use super::ContentBudget;
 
-const TEXT_EXTENSIONS: &[&str] = &["txt", "log", "csv", "json", "xml", "html", "htm", "md"];
+#[cfg(test)]
+pub(super) fn should_index_file(file: &FileEntry, platform: DataSourcePlatform) -> bool {
+    matches!(text_candidate(file, platform), TextCandidate::KnownText)
+}
+
+const TEXT_EXTENSIONS: &[&str] = &[
+    "txt",
+    "log",
+    "csv",
+    "json",
+    "xml",
+    "html",
+    "htm",
+    "md",
+    "sql",
+    "conf",
+    "cfg",
+    "ini",
+    "yaml",
+    "yml",
+    "toml",
+    "properties",
+    "rb",
+    "py",
+    "sh",
+    "ps1",
+    "bat",
+    "cmd",
+];
 const LINUX_FORENSIC_TEXT_BASENAMES: &[&str] = &[
     "crypttab",
     "fstab",
@@ -22,15 +50,56 @@ const LINUX_FORENSIC_TEXT_BASENAMES: &[&str] = &[
     "sudoers",
 ];
 
-pub(super) fn should_index_file(file: &FileEntry, platform: DataSourcePlatform) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TextCandidate {
+    KnownText,
+    Sniff,
+    Oversized,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TextSkipReason {
+    Binary,
+    Oversized,
+    UnsupportedEncoding,
+}
+
+pub(super) fn text_candidate(file: &FileEntry, platform: DataSourcePlatform) -> TextCandidate {
     let Some(size) = file.size else {
-        return false;
+        return TextCandidate::Unknown;
     };
     if size > infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES {
-        return false;
+        return TextCandidate::Oversized;
     }
+    if is_text_extension(file) || is_linux_forensic_text_basename(file, platform) {
+        TextCandidate::KnownText
+    } else {
+        TextCandidate::Sniff
+    }
+}
 
-    is_text_extension(file) || is_linux_forensic_text_basename(file, platform)
+pub(super) fn should_read_text_index(file: &FileEntry, platform: DataSourcePlatform) -> bool {
+    !matches!(text_candidate(file, platform), TextCandidate::Unknown)
+}
+
+pub(super) fn classify_text_content(
+    bytes: &[u8],
+    file: &FileEntry,
+    platform: DataSourcePlatform,
+) -> Result<search::TextContentStatus, TextSkipReason> {
+    if matches!(text_candidate(file, platform), TextCandidate::Oversized) {
+        return Err(TextSkipReason::Oversized);
+    }
+    let mime = mime_hint_for_entry(file, platform);
+    let status = search::classify_text_bytes(bytes, mime);
+    match status {
+        search::TextContentStatus::TextUtf8
+        | search::TextContentStatus::TextUtf16Le
+        | search::TextContentStatus::TextUtf16Be => Ok(status),
+        search::TextContentStatus::Binary => Err(TextSkipReason::Binary),
+        search::TextContentStatus::UnsupportedEncoding => Err(TextSkipReason::UnsupportedEncoding),
+    }
 }
 
 pub(super) fn search_budget_allows_file(
@@ -44,6 +113,7 @@ pub(super) fn search_budget_allows_file(
             .iter()
             .any(|allowed| allowed.eq_ignore_ascii_case(normalized_extension(file)))
         || is_linux_forensic_text_basename(file, platform)
+        || matches!(text_candidate(file, platform), TextCandidate::Sniff)
 }
 
 pub(super) fn mime_hint_for_entry(

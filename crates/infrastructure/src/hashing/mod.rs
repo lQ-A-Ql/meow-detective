@@ -6,7 +6,10 @@
 use sha2::{Digest, Sha256};
 use std::io::{self, Read};
 
+mod algorithms;
 mod pipeline;
+
+pub use algorithms::{digest_bytes, digest_reader_with_cancel, HashAlgorithm};
 
 pub use pipeline::{sha256_file_pipelined_with_cancel, sha256_pipeline_worker_threads};
 

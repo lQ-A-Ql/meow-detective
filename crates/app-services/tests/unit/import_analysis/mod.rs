@@ -3,7 +3,7 @@ use super::*;
 use super::{
     extractor_policy::registry_supports_file,
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
-    search_policy::should_index_file,
+    search_policy::{classify_text_content, should_index_file, text_candidate, TextCandidate},
     task_feed::{analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page},
     worker_runtime::{reserve_content_budget, SharedAnalysisState},
 };
@@ -769,8 +769,69 @@ fn analysis_indexing_skips_large_or_unknown_extension_files() {
     assert!(should_index_file(&small_text, DataSourcePlatform::Linux));
     assert!(!should_index_file(&large_text, DataSourcePlatform::Linux));
     assert!(!should_index_file(&unknown, DataSourcePlatform::Linux));
+    assert_eq!(
+        text_candidate(&unknown, DataSourcePlatform::Linux),
+        TextCandidate::Sniff
+    );
     assert!(should_index_file(&passwd, DataSourcePlatform::Linux));
     assert!(!should_index_file(&passwd, DataSourcePlatform::Windows));
+}
+
+#[test]
+fn analysis_text_policy_supports_server_configs_and_bounded_sniffing() {
+    let mut file = FileEntry {
+        id: FileEntryId("config".to_string()),
+        parent_id: None,
+        data_source_id: DataSourceId("ds".to_string()),
+        path: "etc/service.conf".to_string(),
+        name: "service.conf".to_string(),
+        entry_type: EntryType::File,
+        size: Some(12),
+        ext: Some("conf".to_string()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    };
+    for extension in [
+        "sql",
+        "cfg",
+        "ini",
+        "yaml",
+        "yml",
+        "toml",
+        "properties",
+        "rb",
+        "py",
+        "sh",
+        "ps1",
+        "bat",
+        "cmd",
+    ] {
+        file.ext = Some(extension.to_string());
+        file.name = format!("service.{extension}");
+        assert!(
+            should_index_file(&file, DataSourcePlatform::Windows),
+            "{extension}"
+        );
+    }
+    file.ext = Some("dat".to_string());
+    file.name = "config.dat".to_string();
+    file.size = Some(64 * 1024);
+    assert_eq!(
+        classify_text_content(b"key: value\n", &file, DataSourcePlatform::Windows)
+            .expect("UTF-8 sniff"),
+        search::TextContentStatus::TextUtf8
+    );
+    assert!(classify_text_content(&[0, 1, 2, 0, 4], &file, DataSourcePlatform::Windows).is_err());
 }
 
 #[test]

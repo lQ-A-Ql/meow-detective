@@ -137,16 +137,12 @@ impl TextService {
 
     /// 检查文件是否可能是文本文件
     pub fn is_likely_text(data: &[u8]) -> bool {
-        if data.is_empty() {
-            return true;
-        }
-
-        // 检查前 8KB 是否包含过多 null 字节
-        let check_len = data.len().min(8192);
-        let null_count = data[..check_len].iter().filter(|&&b| b == 0).count();
-
-        // 如果 null 字节超过 10%，可能是二进制文件
-        (null_count as f64 / check_len as f64) < 0.1
+        matches!(
+            search::classify_text_bytes(data, None),
+            search::TextContentStatus::TextUtf8
+                | search::TextContentStatus::TextUtf16Le
+                | search::TextContentStatus::TextUtf16Be
+        )
     }
 
     /// 提取文本预览
@@ -159,10 +155,18 @@ impl TextService {
         buffer.truncate(bytes_read);
 
         // 检查是否是二进制文件
-        if !Self::is_likely_text(&buffer) {
+        let text_status = search::classify_text_bytes(&buffer, None);
+        if matches!(
+            text_status,
+            search::TextContentStatus::Binary | search::TextContentStatus::UnsupportedEncoding
+        ) {
             return Ok(TextPreview {
                 content: String::new(),
-                encoding: "binary".to_string(),
+                encoding: if text_status == search::TextContentStatus::Binary {
+                    "binary".to_string()
+                } else {
+                    "unsupported_encoding".to_string()
+                },
                 is_truncated: false,
                 line_count: 0,
                 is_binary: true,

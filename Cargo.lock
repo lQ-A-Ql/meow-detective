@@ -2676,8 +2676,10 @@ dependencies = [
  "anyhow",
  "chrono",
  "hex",
+ "md-5 0.10.6",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.9",
  "thiserror 2.0.18",
 ]

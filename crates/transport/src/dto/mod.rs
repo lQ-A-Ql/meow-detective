@@ -18,6 +18,7 @@ pub mod bitlocker;
 pub mod bitlocker_dictionary;
 pub mod case;
 pub mod correlation;
+pub mod digest;
 pub mod emulation;
 pub mod files;
 mod governance;
@@ -30,6 +31,7 @@ pub mod mcp;
 pub mod mcp_host;
 pub mod mount;
 pub mod notebook;
+pub mod ntfs;
 pub mod recovery;
 pub mod registry;
 pub mod reports;
@@ -98,6 +100,7 @@ pub use correlation::{
     CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
+pub use digest::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
 pub use emulation::{
     EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
     EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
@@ -148,6 +151,7 @@ pub use notebook::{
     ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
     UpdateNotebookEntryRequest,
 };
+pub use ntfs::{ForensicDataRunDto, NtfsTechnicalAttributeDto, NtfsTechnicalFileDto};
 pub use recovery::{
     DeletedFileRecoveryDto, DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto,
     DeletedRecoveryFailureDto, DeletedRecoveryHashSearchDto, DeletedRecoveryPageDto,

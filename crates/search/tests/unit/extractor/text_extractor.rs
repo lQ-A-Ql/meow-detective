@@ -44,3 +44,32 @@ fn test_extracted_text_fields() {
     assert_eq!(result.file_id, "file-1");
     assert_eq!(result.byte_count, 4);
 }
+
+#[test]
+fn classify_text_bytes_is_bounded_and_rejects_binary() {
+    assert_eq!(
+        classify_text_bytes(b"name: value\n", None),
+        TextContentStatus::TextUtf8
+    );
+    assert_eq!(
+        classify_text_bytes(&[0xFF, 0xFE, b'a', 0, b'\n', 0], None),
+        TextContentStatus::TextUtf16Le
+    );
+    assert_eq!(
+        classify_text_bytes(&[0, 1, 2, 0, 3, 4], None),
+        TextContentStatus::Binary
+    );
+    let mut large = vec![b'a'; CONTENT_SNIFF_BYTES + 10];
+    large[CONTENT_SNIFF_BYTES] = 0;
+    assert_eq!(
+        classify_text_bytes(&large, None),
+        TextContentStatus::TextUtf8
+    );
+}
+
+#[test]
+fn extract_text_reports_unsupported_encoding_without_lossy_replacement() {
+    let result = extract_text(Cursor::new([0xFF, 0x80, 0xFE]), "file-unsupported", None);
+    assert!(!result.extractable);
+    assert_eq!(result.encoding, "unsupported_encoding");
+}

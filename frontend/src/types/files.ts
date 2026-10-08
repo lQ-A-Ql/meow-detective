@@ -124,6 +124,41 @@ export interface FileJumpContext {
   requiresShowHidden: boolean;
 }
 
+export interface ForensicDataRun {
+  header: number;
+  lengthFieldSize: number;
+  offsetFieldSize: number;
+  clusterCount: number;
+  relativeLcn?: number;
+  absoluteLcn?: number;
+  logicalOffset: number;
+  raw: number[];
+  physicalOffset?: number;
+}
+
+export interface NtfsTechnicalAttribute {
+  attributeType: number;
+  name?: string;
+  instance: number;
+  nonResident: boolean;
+  allocatedSize?: number;
+  realSize?: number;
+  initializedSize?: number;
+  raw: number[];
+  dataRuns: ForensicDataRun[];
+}
+
+export interface NtfsTechnicalFile {
+  inode: number;
+  sequenceNumber: number;
+  flags: number;
+  parentReference?: number;
+  recordOffset: number;
+  recordSize: number;
+  recordRaw: number[];
+  attributes: NtfsTechnicalAttribute[];
+}
+
 export type ImportTargetPlatform = 'windows' | 'linux' | 'android';
 export type ImportSourceKind = 'auto' | 'linuxEvidenceSet' | 'localDisk';
 

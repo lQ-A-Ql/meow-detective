@@ -35,6 +35,24 @@ pub struct EvidenceHashResult {
 pub struct HashService;
 
 impl HashService {
+    pub fn digest_reader(
+        reader: &mut dyn Read,
+        algorithm: hashing::HashAlgorithm,
+        cancelled: impl Fn() -> bool,
+        progress: impl FnMut(u64),
+    ) -> io::Result<Option<String>> {
+        hashing::digest_reader_with_cancel(reader, algorithm, cancelled, progress)
+    }
+
+    pub fn digest_file(path: &Path, algorithm: hashing::HashAlgorithm) -> io::Result<String> {
+        let mut file = std::fs::File::open(path)?;
+        hashing::digest_reader_with_cancel(&mut file, algorithm, || false, |_| {}).and_then(
+            |digest| {
+                digest.ok_or_else(|| io::Error::new(io::ErrorKind::Interrupted, "digest cancelled"))
+            },
+        )
+    }
+
     pub fn sha256_reader(reader: &mut dyn Read) -> io::Result<String> {
         hashing::sha256_reader(reader)
     }
@@ -61,8 +79,24 @@ impl HashService {
         cancelled: &AtomicBool,
         progress: &(dyn Fn(u64, u64) + Sync),
     ) -> Result<EvidenceHashResult, EvidenceHashError> {
+        Self::hash_evidence_with_algorithm(
+            path,
+            kind,
+            hashing::HashAlgorithm::Sha256,
+            cancelled,
+            progress,
+        )
+    }
+
+    pub fn hash_evidence_with_algorithm(
+        path: &Path,
+        kind: &DataSourceKind,
+        algorithm: hashing::HashAlgorithm,
+        cancelled: &AtomicBool,
+        progress: &(dyn Fn(u64, u64) + Sync),
+    ) -> Result<EvidenceHashResult, EvidenceHashError> {
         if *kind == DataSourceKind::LocalDisk {
-            return hash_local_disk(path, cancelled, progress);
+            return hash_local_disk(path, algorithm, cancelled, progress);
         }
         let segments = match kind {
             DataSourceKind::E01 => volumes::discover_e01_segments(path)
@@ -98,6 +132,7 @@ impl HashService {
                 hash_segment(
                     index,
                     segment,
+                    algorithm,
                     total_bytes,
                     pipelined,
                     cancelled,
@@ -117,18 +152,25 @@ impl HashService {
                 use std::fmt::Write;
                 let _ = writeln!(
                     manifest,
-                    "segment={:08};length={};sha256={}",
-                    segment.index, segment.length, segment.digest
+                    "segment={:08};length={};{}={}",
+                    segment.index,
+                    segment.length,
+                    algorithm.label(),
+                    segment.digest
                 );
             }
-            hashing::sha256_bytes(manifest.as_bytes())
+            hashing::digest_bytes(manifest.as_bytes(), algorithm)
         };
         Ok(EvidenceHashResult {
             digest,
             bytes_processed: total_bytes,
-            acceleration: Self::sha256_acceleration(),
+            acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
+                Self::sha256_acceleration()
+            } else {
+                "portable"
+            },
             parallel_segments: digests.len(),
-            worker_threads: if pipelined {
+            worker_threads: if pipelined && algorithm == hashing::HashAlgorithm::Sha256 {
                 hashing::sha256_pipeline_worker_threads()
             } else {
                 digests.len().min(rayon::current_num_threads()).max(1)
@@ -139,14 +181,16 @@ impl HashService {
 
 fn hash_local_disk(
     path: &Path,
+    algorithm: hashing::HashAlgorithm,
     cancelled: &AtomicBool,
     progress: &(dyn Fn(u64, u64) + Sync),
 ) -> Result<EvidenceHashResult, EvidenceHashError> {
     let mut reader = evidence_core::LocalDiskReader::open(path)
         .map_err(|error| io_error("open local physical disk", error))?;
     let total_bytes = reader.len();
-    let digest = hashing::sha256_reader_with_cancel(
+    let digest = hashing::digest_reader_with_cancel(
         &mut reader,
+        algorithm,
         || cancelled.load(Ordering::Acquire),
         |processed| progress(processed.min(total_bytes), total_bytes),
     )
@@ -155,7 +199,11 @@ fn hash_local_disk(
     Ok(EvidenceHashResult {
         digest,
         bytes_processed: total_bytes,
-        acceleration: HashService::sha256_acceleration(),
+        acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
+            HashService::sha256_acceleration()
+        } else {
+            "portable"
+        },
         parallel_segments: 1,
         worker_threads: 1,
     })
@@ -171,6 +219,7 @@ struct SegmentDigest {
 fn hash_segment(
     index: usize,
     path: &Path,
+    algorithm: hashing::HashAlgorithm,
     total_bytes: u64,
     pipelined: bool,
     cancelled: &AtomicBool,
@@ -188,7 +237,7 @@ fn hash_segment(
             .saturating_add(delta);
         progress(completed.min(total_bytes), total_bytes);
     };
-    let digest = if pipelined {
+    let digest = if pipelined && algorithm == hashing::HashAlgorithm::Sha256 {
         hashing::sha256_file_pipelined_with_cancel(
             path,
             &|| cancelled.load(Ordering::Acquire),
@@ -197,8 +246,9 @@ fn hash_segment(
     } else {
         let mut file =
             std::fs::File::open(path).map_err(|error| io_error("open evidence", error))?;
-        hashing::sha256_reader_with_cancel(
+        hashing::digest_reader_with_cancel(
             &mut file,
+            algorithm,
             || cancelled.load(Ordering::Acquire),
             &mut track_progress,
         )

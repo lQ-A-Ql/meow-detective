@@ -12,4 +12,6 @@ chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 sha2.workspace = true
+sha1.workspace = true
+md-5.workspace = true
 hex.workspace = true

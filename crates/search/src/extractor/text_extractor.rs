@@ -9,26 +9,73 @@ pub struct ExtractedText {
     pub byte_count: u64,
 }
 
+/// Bounded content classification shared by indexing and preview callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextContentStatus {
+    TextUtf8,
+    TextUtf16Le,
+    TextUtf16Be,
+    Binary,
+    UnsupportedEncoding,
+}
+
+pub const CONTENT_SNIFF_BYTES: usize = 64 * 1024;
+
+pub fn classify_text_bytes(data: &[u8], mime_hint: Option<&str>) -> TextContentStatus {
+    let binary_hint = mime_hint.is_some_and(|mime| {
+        !mime.starts_with("text/")
+            && mime != "application/json"
+            && mime != "application/xml"
+            && mime != "application/javascript"
+    });
+    if binary_hint {
+        return TextContentStatus::Binary;
+    }
+    if data.starts_with(&[0xFF, 0xFE]) {
+        return if valid_utf16(&data[..data.len().min(CONTENT_SNIFF_BYTES)], true) {
+            TextContentStatus::TextUtf16Le
+        } else {
+            TextContentStatus::UnsupportedEncoding
+        };
+    }
+    if data.starts_with(&[0xFE, 0xFF]) {
+        return if valid_utf16(&data[..data.len().min(CONTENT_SNIFF_BYTES)], false) {
+            TextContentStatus::TextUtf16Be
+        } else {
+            TextContentStatus::UnsupportedEncoding
+        };
+    }
+    let sample = &data[..data.len().min(CONTENT_SNIFF_BYTES)];
+    if sample.iter().filter(|byte| **byte == 0).count() * 10 > sample.len() {
+        return TextContentStatus::Binary;
+    }
+    if std::str::from_utf8(sample).is_ok() {
+        TextContentStatus::TextUtf8
+    } else {
+        TextContentStatus::UnsupportedEncoding
+    }
+}
+
+fn valid_utf16(data: &[u8], little_endian: bool) -> bool {
+    let sample_len = data.len().min(CONTENT_SNIFF_BYTES);
+    let bytes = &data[2..sample_len - (sample_len.saturating_sub(2) % 2)];
+    if !bytes.len().is_multiple_of(2) {
+        return false;
+    }
+    let mut units = Vec::with_capacity(bytes.len() / 2);
+    for chunk in bytes.chunks_exact(2) {
+        units.push(if little_endian {
+            u16::from_le_bytes([chunk[0], chunk[1]])
+        } else {
+            u16::from_be_bytes([chunk[0], chunk[1]])
+        });
+    }
+    String::from_utf16(&units).is_ok()
+}
+
 const MAX_TEXT_BYTES: u64 = 10 * 1024 * 1024;
 
 pub fn extract_text(reader: impl Read, file_id: &str, mime_hint: Option<&str>) -> ExtractedText {
-    let is_binary = mime_hint.is_some_and(|m| {
-        !m.starts_with("text/")
-            && m != "application/json"
-            && m != "application/xml"
-            && m != "application/javascript"
-    });
-
-    if is_binary {
-        return ExtractedText {
-            file_id: file_id.to_string(),
-            content: String::new(),
-            encoding: "binary".to_string(),
-            extractable: false,
-            byte_count: 0,
-        };
-    }
-
     let mut buf = Vec::new();
     match reader.take(MAX_TEXT_BYTES).read_to_end(&mut buf) {
         Ok(_) => {}
@@ -44,17 +91,43 @@ pub fn extract_text(reader: impl Read, file_id: &str, mime_hint: Option<&str>) -
     }
 
     let byte_count = buf.len() as u64;
+    let status = classify_text_bytes(&buf, mime_hint);
+    if matches!(
+        status,
+        TextContentStatus::Binary | TextContentStatus::UnsupportedEncoding
+    ) {
+        return ExtractedText {
+            file_id: file_id.to_string(),
+            content: String::new(),
+            encoding: if status == TextContentStatus::Binary {
+                "binary".to_string()
+            } else {
+                "unsupported_encoding".to_string()
+            },
+            extractable: false,
+            byte_count,
+        };
+    }
+    if status == TextContentStatus::TextUtf8 && std::str::from_utf8(&buf).is_err() {
+        return ExtractedText {
+            file_id: file_id.to_string(),
+            content: String::new(),
+            encoding: "unsupported_encoding".to_string(),
+            extractable: false,
+            byte_count,
+        };
+    }
 
     if buf.len() >= 2 {
-        if buf[0] == 0xFF && buf[1] == 0xFE {
+        if status == TextContentStatus::TextUtf16Le {
             return extract_utf16_le(file_id, &buf, byte_count);
         }
-        if buf[0] == 0xFE && buf[1] == 0xFF {
+        if status == TextContentStatus::TextUtf16Be {
             return extract_utf16_be(file_id, &buf, byte_count);
         }
     }
 
-    let content = String::from_utf8_lossy(&buf).into_owned();
+    let content = std::str::from_utf8(&buf).unwrap_or_default().to_string();
 
     ExtractedText {
         file_id: file_id.to_string(),

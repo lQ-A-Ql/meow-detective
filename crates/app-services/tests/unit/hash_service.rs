@@ -11,6 +11,37 @@ fn sha256_reader_basic() {
 }
 
 #[test]
+fn digest_file_supports_all_configured_algorithms() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("evidence.bin");
+    std::fs::write(&path, b"abc").unwrap();
+    let cases = [
+        (
+            infrastructure::hashing::HashAlgorithm::Md5,
+            "900150983cd24fb0d6963f7d28e17f72",
+        ),
+        (
+            infrastructure::hashing::HashAlgorithm::Sha1,
+            "a9993e364706816aba3e25717850c26c9cd0d89d",
+        ),
+        (
+            infrastructure::hashing::HashAlgorithm::Sha256,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+        (
+            infrastructure::hashing::HashAlgorithm::Sm3,
+            "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0",
+        ),
+    ];
+    for (algorithm, expected) in cases {
+        assert_eq!(
+            HashService::digest_file(&path, algorithm).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn sha256_bytes_hello_world() {
     let hash = HashService::sha256_bytes(b"hello world");
     assert_eq!(

@@ -55,10 +55,10 @@ pub(crate) use metadata::source_extraction::extract_file_to_managed_destination_
 pub use metadata::source_routing::{
     document_preview_for_source_case, get_data_sources_for_case, get_file_children_for_case,
     get_file_jump_context_for_case, get_file_metadata_for_case, get_file_rows_for_case,
-    get_file_tree_for_case, image_preview_for_source_case, list_file_entries_page_for_case,
-    media_preview_plan_for_source_case, media_range_for_source_case, open_file_handle_for_case,
-    read_file_range_for_source_case, read_preview_bytes_for_source_case,
-    text_preview_for_source_case,
+    get_file_tree_for_case, image_preview_for_source_case, inspect_ntfs_file_for_case,
+    list_file_entries_page_for_case, media_preview_plan_for_source_case,
+    media_range_for_source_case, open_file_handle_for_case, read_file_range_for_source_case,
+    read_preview_bytes_for_source_case, text_preview_for_source_case,
 };
 pub use mft::{
     add_entry_to_path_map, enumerate_filesystem_mft, enumerate_filesystem_mft_with_partition,

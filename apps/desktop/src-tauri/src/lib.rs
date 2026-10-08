@@ -62,6 +62,7 @@ macro_rules! desktop_command_handler {
             get_text_preview,
             get_image_preview,
             get_document_preview,
+            inspect_ntfs_file,
             get_media_url,
             read_media_range,
             search_files_request,

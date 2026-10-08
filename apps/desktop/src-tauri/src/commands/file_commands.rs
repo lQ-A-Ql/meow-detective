@@ -5,6 +5,7 @@ mod browse;
 mod extract;
 mod extract_progress;
 mod media;
+mod ntfs;
 mod recovery;
 mod support;
 mod viewer;
@@ -22,6 +23,7 @@ pub use browse::{
 };
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
+pub use ntfs::inspect_ntfs_file;
 pub use recovery::{
     export_deleted_recovery, list_deleted_recoveries, read_deleted_recovery_range,
     run_deleted_recovery, search_deleted_recoveries_by_hash,

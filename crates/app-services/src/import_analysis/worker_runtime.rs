@@ -3,7 +3,8 @@ use super::error::ImportAnalysisError;
 use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
 use super::search_policy::{
-    mime_hint_for_entry, normalized_extension, search_budget_allows_file, should_index_file,
+    classify_text_content, mime_hint_for_entry, normalized_extension, search_budget_allows_file,
+    should_read_text_index, text_candidate, TextCandidate, TextSkipReason,
 };
 use super::source_reader::AnalysisSourceReader;
 use super::worker_model::WorkerStats;
@@ -229,7 +230,7 @@ impl AnalysisWorkerRuntime {
         shared: &SharedAnalysisState,
     ) {
         if options.enable_text_indexing
-            && should_index_file(file, options.platform)
+            && should_read_text_index(file, options.platform)
             && options.analysis_mode.allows_content()
             && search_budget_allows_file(&options.content_budget, file, options.platform)
             && reserve_content_quota(&options.content_budget, file, shared)
@@ -239,6 +240,13 @@ impl AnalysisWorkerRuntime {
             if let Ok(bytes) =
                 read_text_index_bytes(&mut self.source_reader, &self.main_conn, &file.id)
             {
+                if let Err(reason) = classify_text_content(&bytes, file, options.platform) {
+                    self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
+                    if matches!(reason, TextSkipReason::UnsupportedEncoding) {
+                        self.stats.warning_count = self.stats.warning_count.saturating_add(1);
+                    }
+                    return;
+                }
                 let mime = mime_hint_for_entry(file, options.platform);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
                 if text.extractable && !text.content.is_empty() {
@@ -259,6 +267,13 @@ impl AnalysisWorkerRuntime {
                 self.stats.warning_count = self.stats.warning_count.saturating_add(1);
                 self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
             }
+        } else if options.enable_text_indexing
+            && matches!(
+                text_candidate(file, options.platform),
+                TextCandidate::Oversized
+            )
+        {
+            self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
         }
     }
 

@@ -36,6 +36,7 @@ export const COMMANDS = {
     READ_MEDIA_RANGE: 'read_media_range',
     EXTRACT_FILE: 'extract_file',
     GET_FILE_JUMP_CONTEXT: 'get_file_jump_context',
+    INSPECT_NTFS_FILE: 'inspect_ntfs_file',
     LIST_DELETED_RECOVERIES: 'list_deleted_recoveries',
     SEARCH_DELETED_RECOVERIES_BY_HASH: 'search_deleted_recoveries_by_hash',
     RUN_DELETED_RECOVERY: 'run_deleted_recovery',
