@@ -460,16 +460,16 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 - 全前端原生控件架构门禁；
 - 媒体协议门禁入口同步；
 - MCP 查询、数据源摘要、案件创建/删除用例拆分；
-- NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
+  - NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
+  - Stage 1：多算法 Hash Scope（不支持 scope 明确 fail-closed）、NTFS Technical Inspector、全文索引 content sniffing。
+  - Stage 2：EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip、Firefox Extensions。
+  - Stage 3：Fixed VHD 只读读取、动态/差分 VHD 明确拒绝、Registry Browser source-bound 查询。
 
-待开发：
+  当前限制：
 
-- Hash Scope 与 MD5/SHA1/SM3；
-- NTFS Technical Inspector；
-- 全文索引 Content Sniffing；
-- EXIF、Structured systemd、Git/GitLab、Firefox Extensions；
-- VHD/Nested Evidence；
-- Registry Browser。
+  - Hash Scope 的 LogicalDisk、Partition、DerivedEvidence 当前返回 typed Unsupported，避免伪造 digest。
+  - VHDX、QCOW/QCOW2、动态/差分 VHD 仍 fail-closed；当前支持 Fixed VHD。
+  - Registry Browser 提供 Base hive 只读树和值查询；LOG1/LOG2 overlay 仍由既有定向 extractor 处理，浏览器查询不会伪造合并状态。
 
 ## 15. 长耗时计算与流程调度设计
 
