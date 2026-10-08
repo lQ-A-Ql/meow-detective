@@ -3,7 +3,6 @@ use crate::analysis_service::artifact_builders::{base_attrs, make_artifact};
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::extraction::ExtractionOutcome;
 use serde_json::Value;
-
 pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/os-release")
         || normalized.ends_with("/usr/lib/os-release")
@@ -20,14 +19,11 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
         || normalized.ends_with("/etc/machine-id")
         || normalized.ends_with("/etc/login.defs")
         || normalized.ends_with("/etc/anacrontab")
-        // cron.{hourly,daily,weekly,monthly} hold executable scripts, not
-        // crontabs; they are audited as generic text config lines.
         || normalized.contains("/etc/cron.hourly/")
         || normalized.contains("/etc/cron.daily/")
         || normalized.contains("/etc/cron.weekly/")
         || normalized.contains("/etc/cron.monthly/")
 }
-
 pub(in crate::analysis_service::extraction) fn is_sudoers_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/sudoers") || normalized.contains("/etc/sudoers.d/")
 }
@@ -89,10 +85,6 @@ pub(super) fn extract_text_config(
     extract_text_config_filtered(candidate, bytes, parser, config_kind, None, outcome);
 }
 
-/// systemd unit files are INI-style: `[Unit]` / `[Service]` / `[Install]`
-/// section headers carry no key/value content and would surface as keyless
-/// `-` rows in the UI, so they are filtered out here. Only the systemdUnit
-/// route uses this; every other text config keeps section-like lines.
 pub(super) fn extract_systemd_unit_config(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
@@ -212,8 +204,6 @@ fn extract_text_config_filtered(
     }
 }
 
-/// A trimmed line that is exactly one INI section header (`[Unit]`), with no
-/// nested brackets inside.
 fn is_ini_section_header(line: &str) -> bool {
     let Some(inner) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) else {
         return false;
