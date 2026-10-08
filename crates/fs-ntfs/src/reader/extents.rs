@@ -17,7 +17,7 @@ impl crate::NtfsReader {
         self.collect_unnamed_data_extents_from_base(inode, &record)
     }
 
-    pub(super) fn collect_unnamed_data_extents_from_base(
+    pub(crate) fn collect_unnamed_data_extents_from_base(
         &self,
         inode: u64,
         record: &[u8],

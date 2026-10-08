@@ -13,7 +13,14 @@ use crate::{
 impl crate::NtfsReader {
     /// Read the unnamed `$DATA` attribute of a file by MFT inode.
     pub(crate) fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
-        let extents = self.collect_readable_data_extents(inode)?;
+        let record = self.read_mft_record(inode)?;
+        if let Some(wof) = self.wof_stream_from_record(inode, &record)? {
+            if wof.logical_size > MAX_BUFFERED_FILE_BYTES as u64 {
+                return Err(fs_out_of_memory("WOF file exceeds buffering limit"));
+            }
+            return wof.read_range(self, 0, wof.logical_size as usize);
+        }
+        let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
         if extents.is_empty() {
             return Ok(Vec::new());
         }
@@ -31,7 +38,9 @@ impl crate::NtfsReader {
         }
         let record = self.read_mft_record(inode)?;
         validate_file_record(&record, inode)?;
-        self.ensure_supported_file_backing(inode, &record)?;
+        if let Some(wof) = self.wof_stream_from_record(inode, &record)? {
+            return wof.read_range(self, offset, length);
+        }
         let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
         if extents.is_empty() {
             return Ok(Vec::new());

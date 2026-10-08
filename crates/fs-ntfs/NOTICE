@@ -1,9 +1,9 @@
-MIT License
+WOF WIM-LZX format reference and algorithm adaptation:
+https://github.com/Microsoft/go-winio/tree/v0.6.2/wim/lzx
 
-Copyright (c) 2026 lQ-A-Ql
+The MIT License (MIT)
 
-Portions of the WOF WIM-LZX implementation:
-Copyright (c) 2015 Microsoft (see crates/fs-ntfs/NOTICE).
+Copyright (c) 2015 Microsoft
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

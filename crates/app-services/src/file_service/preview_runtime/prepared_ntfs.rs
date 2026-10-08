@@ -1,8 +1,8 @@
 use crate::file_service::FileServiceError;
+use std::io::{Read, Seek, SeekFrom};
 
 pub(crate) struct PreparedNtfsFile {
-    filesystem: fs_ntfs::NtfsReader,
-    inode: u64,
+    stream: fs_ntfs::NtfsFileReader,
 }
 
 impl PreparedNtfsFile {
@@ -12,18 +12,22 @@ impl PreparedNtfsFile {
         inode: u64,
     ) -> Result<Self, FileServiceError> {
         Ok(Self {
-            filesystem: fs_ntfs::NtfsReader::open(reader, filesystem_offset)?,
-            inode,
+            stream: fs_ntfs::NtfsReader::open(reader, filesystem_offset)?
+                .into_file_stream_by_inode(inode)?,
         })
     }
 
     pub(crate) fn read_range(
-        &self,
+        &mut self,
         offset: u64,
         length: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
-        self.filesystem
-            .read_file_range_by_inode(self.inode, offset, length)
-            .map_err(Into::into)
+        self.stream.seek(SeekFrom::Start(offset))?;
+        let mut bytes = Vec::new();
+        self.stream
+            .by_ref()
+            .take(length as u64)
+            .read_to_end(&mut bytes)?;
+        Ok(bytes)
     }
 }

@@ -20,6 +20,7 @@ mod path;
 mod reader;
 mod recovery;
 mod utils;
+mod wof;
 mod write_map;
 
 pub use attribute::{AttributeListEntry, DataAttributeExtent};

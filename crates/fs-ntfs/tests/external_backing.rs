@@ -37,21 +37,21 @@ fn filesystem(tag: Option<&[u8]>) -> (NtfsReader, tempfile::TempDir) {
 }
 
 #[test]
-fn wof_backing_rejects_range_buffered_and_stream_reads_without_losing_metadata() {
+fn truncated_wof_header_is_not_treated_as_readable_content() {
     let (fs, _temporary) = filesystem(Some(&0x8000_0017u32.to_le_bytes()));
     assert_eq!(fs.file_size_by_inode(6).unwrap(), Some(10));
     assert_eq!(
         fs.read_file_range_by_inode(6, 0, 2).unwrap_err().kind(),
-        io::ErrorKind::Unsupported
+        io::ErrorKind::InvalidData
     );
     assert_eq!(
         fs.open_file("mft:6").err().unwrap().kind(),
-        io::ErrorKind::Unsupported
+        io::ErrorKind::InvalidData
     );
-    assert!(!fs.supports_file_stream_by_inode(6).unwrap());
+    assert!(fs.supports_file_stream_by_inode(6).is_err());
     assert_eq!(
         fs.into_file_stream_by_inode(6).err().unwrap().kind(),
-        io::ErrorKind::Unsupported
+        io::ErrorKind::InvalidData
     );
 }
 

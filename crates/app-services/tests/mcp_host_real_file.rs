@@ -114,13 +114,15 @@ fn imported_e01_file_is_read_losslessly_through_mcp_in_bounded_chunks() {
 }
 
 #[test]
-#[ignore = "requires an explicitly selected private case and WOF-backed file"]
-fn imported_wof_file_reports_unsupported_instead_of_successful_zero_bytes() {
+#[ignore = "requires a private WOF-backed PE file and independently verified plaintext hash"]
+fn imported_wof_file_matches_independent_plaintext_oracle() {
     let root = PathBuf::from(
         std::env::var_os("FORENSICS_MCP_CASE_ROOT").expect("set FORENSICS_MCP_CASE_ROOT"),
     );
     let file_id =
         std::env::var("FORENSICS_MCP_WOF_FILE_ID").expect("set FORENSICS_MCP_WOF_FILE_ID");
+    let expected_hash = std::env::var("FORENSICS_MCP_WOF_EXPECTED_SHA256")
+        .expect("set FORENSICS_MCP_WOF_EXPECTED_SHA256 from an independent decoder");
     let meta: CaseMeta =
         serde_json::from_slice(&std::fs::read(root.join("case.json")).unwrap()).unwrap();
     let conn = rusqlite::Connection::open_with_flags(
@@ -130,23 +132,44 @@ fn imported_wof_file_reports_unsupported_instead_of_successful_zero_bytes() {
     .unwrap();
     let registry = PreviewRuntimeRegistry::default();
     let bitlocker = Arc::new(BitLockerUnlockRegistry::default());
-    let result = execute_file_tool(
-        McpHostFileQueryContext {
-            query: McpHostQueryContext {
-                connection: &conn,
-                case_root: &root,
-                case_meta: &meta,
+    let mut plaintext = Vec::new();
+    let mut blocks = 0;
+    loop {
+        let result = execute_file_tool(
+            McpHostFileQueryContext {
+                query: McpHostQueryContext {
+                    connection: &conn,
+                    case_root: &root,
+                    case_meta: &meta,
+                },
+                preview_runtime: &registry,
+                bitlocker_runtime: &bitlocker,
             },
-            preview_runtime: &registry,
-            bitlocker_runtime: &bitlocker,
-        },
-        "forensics.read_file",
-        &json!({"fileId":file_id}),
-    );
-    assert!(matches!(
-        result,
-        Err(app_services::mcp_host_service::McpHostServiceError::UnsupportedFile)
-    ));
+            "forensics.read_file",
+            &json!({"fileId":file_id,"offset":plaintext.len(),"encoding":"base64"}),
+        )
+        .unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(result["content"].as_str().unwrap())
+            .unwrap();
+        assert!(!bytes.is_empty() && bytes.len() <= 65536);
+        plaintext.extend(bytes);
+        blocks += 1;
+        assert_eq!(result["nextOffset"], plaintext.len());
+        assert_eq!(registry.stats().unwrap().session_count, 0);
+        if result["eof"] == true {
+            break;
+        }
+        assert!((plaintext.len() as u64) < result["size"].as_u64().unwrap());
+    }
+    assert_eq!(&plaintext[..2], b"MZ");
+    let pe_offset = u32::from_le_bytes(plaintext[60..64].try_into().unwrap()) as usize;
+    assert_eq!(&plaintext[pe_offset..pe_offset + 4], b"PE\0\0");
+    let hash = hex::encode(Sha256::digest(&plaintext));
+    assert_eq!(hash, expected_hash.to_lowercase());
     assert_eq!(registry.stats().unwrap().session_count, 0);
-    println!("WOF MCP read rejected with typed Unsupported; handles=0");
+    println!(
+        "WOF MCP PE verified: bytes={}, blocks={blocks}, sha256={hash}, handles=0",
+        plaintext.len()
+    );
 }
