@@ -90,6 +90,8 @@
   --scrollbar-glow-core: #ffffff;
   --scrollbar-glow-mid: var(--forensics-250);
   --scrollbar-glow-outer: var(--forensics-400);
+  --motion-scrollbar-duration: 180ms;
+  --motion-spinner-duration: 1s;
 
   /* Forensics GQL syntax tokens */
   --forensics-gql-keyword: #303030;

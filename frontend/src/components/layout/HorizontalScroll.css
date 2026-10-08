@@ -1,10 +1,3 @@
-:root {
-  --scrollbar-line: var(--forensics-300, #e0e0e0);
-  --scrollbar-glow-core: rgba(255, 255, 255, 0.95);
-  --scrollbar-glow-mid: rgba(240, 240, 240, 0.65);
-  --scrollbar-glow-outer: rgba(204, 204, 204, 0.35);
-}
-
 .scrollbar-thin-glow {
   position: relative;
   width: 100%;
@@ -74,7 +67,7 @@
 .scrollbar-thin-glow--reveal-on-hover .scrollbar-thin-glow-thumb {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 1000ms ease;
+  transition: opacity var(--motion-scrollbar-duration) ease;
 }
 
 .scrollbar-thin-glow--reveal-on-hover:hover .scrollbar-thin-glow-track-line,

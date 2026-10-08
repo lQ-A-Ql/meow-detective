@@ -4,16 +4,20 @@ import * as React from "react";
 import { useTranslation } from 'react-i18next';
 
 import { cn } from "../utils";
+import { Button } from "../button";
 import { useSidebar } from "./sidebar-provider";
 
-function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+function SidebarRail({ className, ...props }: React.ComponentProps<typeof Button>) {
   const { t } = useTranslation();
   const { toggleSidebar } = useSidebar();
 
   return (
-    <button
+    <Button
       data-sidebar="rail"
       data-slot="sidebar-rail"
+      type="button"
+      variant="ghost"
+      size="icon"
       aria-label={t('sidebar.toggleSidebar')}
       tabIndex={-1}
       onClick={toggleSidebar}

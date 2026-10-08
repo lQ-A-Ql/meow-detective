@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { JsonSchema, McpTool } from '@/lib/api/mcp';
+import type { JsonSchema, McpTool } from '@/lib/api/mcp-protocol';
 
 export interface McpToolResult { toolName: string; success: boolean; data?: unknown; error?: string }
 

@@ -8,7 +8,7 @@ import {
   type McpPrompt,
   type McpResource,
   type McpTool,
-} from '@/lib/api/mcp';
+} from '@/lib/api/mcp-resources';
 import { formatError } from './mcp-error-utils';
 import type { McpToolCallResult } from './mcp-types';
 

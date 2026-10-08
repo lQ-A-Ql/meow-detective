@@ -31,12 +31,10 @@ function scan(root) {
     const rel = relative(root, file);
     const text = fs.readFileSync(file, 'utf8');
     const isUiPrimitive = rel.startsWith('frontend/src/app/components/ui/');
-    // The repository contains pre-existing native controls outside the current
-    // migration slice. Enforce the new rule on MCP and the two audited high-risk
-    // panels first; expanding this scope is a follow-up migration with its own
-    // component tests.
-    const isMigrationSlice = rel.startsWith('frontend/src/features/mcp/');
-    if (!isUiPrimitive && isMigrationSlice) {
+    // Every feature component must consume the shared primitives. Native
+    // controls are only allowed inside the primitive implementation itself;
+    // this keeps keyboard, focus and visual behavior consistent across pages.
+    if (!isUiPrimitive) {
       for (const match of text.matchAll(nativePattern)) {
         violations.push(`${rel}:${lineAt(text, match.index)} native <${match[1].toLowerCase()}> must use a shared UI primitive`);
       }

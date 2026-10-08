@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { McpPermissionProfile } from '@/lib/api/mcp';
+import type { McpPermissionProfile } from '@/lib/api/mcp-protocol';
 import { defaultPermissions, formatError } from '@/stores/mcp-error-utils';
 
 export function useMcpServerDialogModel(testConnection: McpServerDialogTest) {

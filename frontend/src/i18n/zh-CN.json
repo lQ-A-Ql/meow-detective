@@ -20,6 +20,14 @@
     "dialog": {
       "title": "添加 MCP 服务器", "name": "服务器名称", "namePlaceholder": "例如: Claude Desktop", "transport": "传输类型", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "命令", "commandPlaceholder": "python -m forensics_mcp", "arguments": "参数 (空格分隔)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "启用", "autoConnect": "自动连接", "permissions": "访问权限", "resourceAccess": "资源访问", "promptAccess": "Prompt 访问", "toolAccess": "工具访问", "readOnly": "只读", "disabled": "禁用", "allowAll": "全部允许（可在工具列表禁用）", "allowList": "仅允许白名单", "allowListLabel": "工具白名单（逗号或空格分隔）", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "网络策略", "localhost": "仅本机", "privateLan": "允许局域网", "anyHost": "允许任意主机", "requiredName": "请输入服务器名称", "requiredUrl": "请输入 SSE URL", "requiredCommand": "请输入命令", "testSuccess": "连接成功", "testFailure": "连接失败", "testing": "测试中...", "test": "测试连接", "cancel": "取消", "saving": "保存中...", "add": "添加", "close": "关闭" }
   },
+  "notebook": {
+    "citation": {
+      "title": "引用选择器", "description": "搜索并选择图谱节点作为引用来源", "searchPlaceholder": "按名称、摘要或标签搜索...", "allTypes": "全部类型", "empty": "未找到匹配的节点", "selected": "已选 {{count}} 个节点", "cancel": "取消", "confirm": "确认 ({{count}})"
+    },
+    "entryForm": {
+      "replyTitle": "回复", "newTitle": "新建笔记", "titlePlaceholder": "笔记标题", "bodyPlaceholder": "使用 Markdown 格式记录分析笔记...", "type": "类型:", "tagsPlaceholder": "输入标签后回车添加...", "cancel": "取消", "save": "保存", "collapse": "折叠条目", "expand": "展开条目", "replies": "{{count}} 回复"
+    }
+  },
   "dashboard": {
     "title": "取证总览", "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态", "refresh": "刷新", "loading": "正在加载取证总览快照...",
     "query": { "loading": "正在加载...", "empty": "暂无数据。" },

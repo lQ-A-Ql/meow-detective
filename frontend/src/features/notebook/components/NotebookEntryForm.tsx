@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Loader2,
   MessageSquare,
@@ -65,6 +66,7 @@ export function CitationPicker({
   loading,
   onConfirm,
 }: CitationPickerProps) {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedNodeIds));
@@ -118,9 +120,9 @@ export function CitationPicker({
     <Dialog open={open} onOpenChange={handleCancel}>
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">引用选择器</DialogTitle>
+          <DialogTitle className="text-[15px]">{t('notebook.citation.title')}</DialogTitle>
           <DialogDescription className="text-[11px]">
-            搜索并选择图谱节点作为引用来源
+            {t('notebook.citation.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -132,7 +134,7 @@ export function CitationPicker({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="按名称、摘要或标签搜索..."
+              placeholder={t('notebook.citation.searchPlaceholder')}
               variant="forensics"
               inputSize="compact"
               className="pl-8"
@@ -146,7 +148,7 @@ export function CitationPicker({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL_TYPES_FILTER}>全部类型</SelectItem>
+              <SelectItem value={ALL_TYPES_FILTER}>{t('notebook.citation.allTypes')}</SelectItem>
               {nodeTypes.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}
@@ -164,7 +166,7 @@ export function CitationPicker({
             </div>
           ) : filteredNodes.length === 0 ? (
             <div className="flex h-32 items-center justify-center text-[12px] text-forensics-muted-lighter">
-              未找到匹配的节点
+              {t('notebook.citation.empty')}
             </div>
           ) : (
             <div>
@@ -217,7 +219,7 @@ export function CitationPicker({
 
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] text-forensics-muted-lighter">
-            已选 {tempSelected.size} 个节点
+            {t('notebook.citation.selected', { count: tempSelected.size })}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -226,14 +228,14 @@ export function CitationPicker({
               onClick={handleCancel}
               className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
             >
-              取消
+              {t('notebook.citation.cancel')}
             </Button>
             <Button
               type="button"
               onClick={handleConfirm}
               className="h-7 rounded-none border border-forensics-text bg-forensics-text px-3 text-[11px] text-white hover:bg-forensics-text-secondary"
             >
-              确认 ({tempSelected.size})
+              {t('notebook.citation.confirm', { count: tempSelected.size })}
             </Button>
           </div>
         </div>
@@ -259,6 +261,7 @@ export function EntryEditor({
   error,
   onCreate,
 }: EntryEditorProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [bodyMarkdown, setBodyMarkdown] = useState('');
   const [entryType, setEntryType] = useState<NotebookEntryType>('observation');
@@ -295,7 +298,7 @@ export function EntryEditor({
     <Card className="mb-4 border-forensics-text bg-forensics-panel">
       <CardHeader className="pb-2">
         <CardTitle className="text-[13px]">
-          {parentId ? '回复' : '新建笔记'}
+          {parentId ? t('notebook.entryForm.replyTitle') : t('notebook.entryForm.newTitle')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -304,7 +307,7 @@ export function EntryEditor({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="笔记标题"
+            placeholder={t('notebook.entryForm.titlePlaceholder')}
             variant="forensics"
             inputSize="compact"
           />
@@ -314,7 +317,7 @@ export function EntryEditor({
           <Textarea
             value={bodyMarkdown}
             onChange={(e) => setBodyMarkdown(e.target.value)}
-            placeholder="使用 Markdown 格式记录分析笔记..."
+            placeholder={t('notebook.entryForm.bodyPlaceholder')}
             rows={6}
             variant="mono"
             textareaSize="compact"
@@ -324,7 +327,7 @@ export function EntryEditor({
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <label className="text-[11px] text-forensics-muted">类型:</label>
+            <label className="text-[11px] text-forensics-muted">{t('notebook.entryForm.type')}</label>
             <Select value={entryType} onValueChange={(value) => setEntryType(value as NotebookEntryType)}>
               <SelectTrigger size="xs" variant="forensics" className="w-32">
                 <SelectValue />
@@ -354,7 +357,7 @@ export function EntryEditor({
                   handleAddTag();
                 }
               }}
-              placeholder="输入标签后回车添加..."
+              placeholder={t('notebook.entryForm.tagsPlaceholder')}
               variant="forensics"
               inputSize="inline"
               className="flex-1"
@@ -393,7 +396,7 @@ export function EntryEditor({
             onClick={onCancel}
             className="h-7 rounded-none border-forensics-border bg-forensics-surface px-3 text-[11px] hover:bg-forensics-panel-strong"
           >
-            取消
+              {t('notebook.entryForm.cancel')}
           </Button>
           <Button
             type="button"
@@ -406,7 +409,7 @@ export function EntryEditor({
             ) : (
               <Plus size={12} />
             )}
-            保存
+            {t('notebook.entryForm.save')}
           </Button>
         </div>
       </CardContent>
@@ -427,6 +430,7 @@ export function EntryTreeItem({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const children = allItems.filter((i) => i.parentId === item.id);
   const [expanded, setExpanded] = useState(depth < 1);
   const isSelected = selectedId === item.id;
@@ -450,7 +454,7 @@ export function EntryTreeItem({
               setExpanded(!expanded);
             }}
             className="shrink-0 text-forensics-muted-lighter hover:text-forensics-muted"
-            aria-label={expanded ? '折叠条目' : '展开条目'}
+            aria-label={expanded ? t('notebook.entryForm.collapse') : t('notebook.entryForm.expand')}
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </Button>
@@ -476,7 +480,7 @@ export function EntryTreeItem({
             <span>{formatTimestampShort(item.updatedAt)}</span>
             {item.replyCount > 0 && (
               <span className="text-forensics-muted-lighter">
-                {item.replyCount} 回复
+                {t('notebook.entryForm.replies', { count: item.replyCount })}
               </span>
             )}
           </div>

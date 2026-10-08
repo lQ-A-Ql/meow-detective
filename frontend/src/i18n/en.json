@@ -20,6 +20,14 @@
     "dialog": {
       "title": "Add MCP server", "name": "Server name", "namePlaceholder": "Example: Claude Desktop", "transport": "Transport", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "Command", "commandPlaceholder": "python -m forensics_mcp", "arguments": "Arguments (space separated)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "Enabled", "autoConnect": "Auto-connect", "permissions": "Access permissions", "resourceAccess": "Resource access", "promptAccess": "Prompt access", "toolAccess": "Tool access", "readOnly": "Read-only", "disabled": "Disabled", "allowAll": "Allow all (tools can be disabled below)", "allowList": "Allow list only", "allowListLabel": "Tool allow list (comma or space separated)", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "Network policy", "localhost": "Localhost only", "privateLan": "Allow private LAN", "anyHost": "Allow any host", "requiredName": "Enter a server name", "requiredUrl": "Enter an SSE URL", "requiredCommand": "Enter a command", "testSuccess": "Connection succeeded", "testFailure": "Connection failed", "testing": "Testing...", "test": "Test connection", "cancel": "Cancel", "saving": "Saving...", "add": "Add", "close": "Close" }
   },
+  "notebook": {
+    "citation": {
+      "title": "Citation picker", "description": "Search and select graph nodes as citation sources", "searchPlaceholder": "Search by name, summary or tag...", "allTypes": "All types", "empty": "No matching nodes", "selected": "{{count}} nodes selected", "cancel": "Cancel", "confirm": "Confirm ({{count}})"
+    },
+    "entryForm": {
+      "replyTitle": "Reply", "newTitle": "New note", "titlePlaceholder": "Note title", "bodyPlaceholder": "Record analysis notes in Markdown...", "type": "Type:", "tagsPlaceholder": "Enter a tag and press Enter to add...", "cancel": "Cancel", "save": "Save", "collapse": "Collapse entry", "expand": "Expand entry", "replies": "{{count}} replies"
+    }
+  },
   "dashboard": {
     "title": "Forensic overview", "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status", "refresh": "Refresh", "loading": "Loading forensic overview...",
     "query": { "loading": "Loading...", "empty": "No data." },

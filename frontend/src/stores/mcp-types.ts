@@ -1,4 +1,4 @@
-import type { McpPermissionProfile } from '@/lib/api/mcp';
+import type { McpPermissionProfile } from '@/lib/api/mcp-protocol';
 
 export interface McpServer {
   id: string;

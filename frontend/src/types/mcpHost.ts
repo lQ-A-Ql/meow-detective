@@ -1,4 +1,4 @@
-import type { JsonSchema } from '@/lib/api/mcp';
+import type { JsonSchema } from '@/lib/api/mcp-protocol';
 
 export interface McpHostSettings {
   enabled: boolean;
