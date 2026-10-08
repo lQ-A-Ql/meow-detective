@@ -1,1 +1,2 @@
 path,owner,reason,expires
+crates/app-services/src/analysis_service/extraction/linux/system_config.rs,stage2-systemd,temporary exception while structured systemd extraction is split from legacy Linux config extraction,2026-12-31
