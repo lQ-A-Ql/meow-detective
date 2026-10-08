@@ -40,6 +40,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | 错误模型 | `docs/error-taxonomy.md`、`docs/error-classification-manual.md` |
 | 导出与媒体安全 | `docs/export-and-media-safety.md` |
 | MCP 安全模型 | `docs/mcp-security-model.md` |
+| 磁盘取证优化开发文档 | `docs/disk-forensics-optimization-development.md` |
 | 依赖治理 | `docs/dependency-advisory-policy.md`、`docs/dependency-decisions.md` |
 | EVTX 依赖决策 | `docs/evtx-dependency-decision.md` |
 | BitLocker 依赖决策 | `docs/bitlocker-dependency-decision.md` |
