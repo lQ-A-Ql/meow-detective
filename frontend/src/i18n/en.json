@@ -208,10 +208,14 @@
         "timestamps": "Timestamps (MACB)",
         "summary": "Summary",
         "imageMetadata": "Image EXIF / media metadata",
+        "hash": "File hashes",
+        "ntfsTechnical": "NTFS technical structure",
         "status": "Object Status",
         "actions": "Actions"
       },
       "imageMetadata": { "loading": "Reading image metadata…", "retry": "Retry", "status": "Status", "format": "Format", "dimensions": "Dimensions", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time", "gps": "GPS", "statuses": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" } },
+      "hash": { "loading": "Calculating…" },
+      "ntfs": { "inode": "MFT inode", "recordOffset": "Record offset", "attributes": "Attributes", "run": "Data run" },
       "timestamp": {
         "modified": "M",
         "accessed": "A",

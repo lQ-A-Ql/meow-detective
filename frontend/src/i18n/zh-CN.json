@@ -208,10 +208,14 @@
         "timestamps": "时间戳 (MACB)",
         "summary": "摘要字段",
         "imageMetadata": "图片 EXIF / 媒体元数据",
+        "hash": "文件哈希",
+        "ntfsTechnical": "NTFS 技术结构",
         "status": "对象状态",
         "actions": "操作"
       },
       "imageMetadata": { "loading": "正在读取图片元数据…", "retry": "重试", "status": "状态", "format": "格式", "dimensions": "尺寸", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间", "gps": "GPS", "statuses": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" } },
+      "hash": { "loading": "正在计算…" },
+      "ntfs": { "inode": "MFT inode", "recordOffset": "记录偏移", "attributes": "属性数", "run": "数据运行" },
       "timestamp": {
         "modified": "M",
         "accessed": "A",

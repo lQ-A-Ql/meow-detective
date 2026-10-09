@@ -17,6 +17,10 @@ import {
   openFileHandle,
   readFileRange,
 } from '@/lib/api/files';
+import { calculateEvidenceDigest } from '@/lib/api/digest';
+import { inspectNtfsFile } from '@/lib/api/files';
+import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
+import type { NtfsTechnicalFile } from '@/types/files';
 import {
   FileHexViewerState,
   HexByteWindowLines,
@@ -408,6 +412,23 @@ export function useImageMetadata(fileId?: string, enabled = true) {
       return await getImageMetadata(fileId);
     },
   });
+}
+
+export function useNtfsTechnicalFile(fileId?: string, enabled = true) {
+  return useQuery<NtfsTechnicalFile>({
+    queryKey: ['files', 'ntfs-technical', fileId],
+    enabled: Boolean(fileId) && enabled,
+    retry: false,
+    staleTime: PREVIEW_STALE_TIME,
+    queryFn: () => inspectNtfsFile(fileId!),
+  });
+}
+
+export function useFileDigest(fileId?: string) {
+  const mutation = useMutation<EvidenceDigest, unknown, DigestAlgorithm>({
+    mutationFn: (algorithm) => calculateEvidenceDigest({ scope: 'file', algorithm, fileId }),
+  });
+  return mutation;
 }
 
 /**

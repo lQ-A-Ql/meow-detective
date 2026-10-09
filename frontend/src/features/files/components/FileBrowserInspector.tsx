@@ -12,6 +12,10 @@ import { formatUnixMode } from '@/features/files/components/FileListPanel';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';
 import { ImageMetadataInspector } from '@/features/files/components/ImageMetadataInspector';
+import { NtfsTechnicalInspector } from '@/features/files/components/NtfsTechnicalInspector';
+import { FileDigestInspector } from '@/features/files/components/FileDigestInspector';
+import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
+import type { NtfsTechnicalFile } from '@/types/files';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -26,6 +30,11 @@ interface FileBrowserInspectorProps {
   imageMetadataLoading?: boolean;
   imageMetadataError?: ApiErrorDto | null;
   onRetryImageMetadata?: () => void;
+  ntfsTechnical?: NtfsTechnicalFile;
+  fileDigest?: EvidenceDigest;
+  fileDigestLoading?: boolean;
+  fileDigestError?: unknown;
+  calculateFileDigest: (algorithm: DigestAlgorithm) => void;
 }
 
 export function FileBrowserInspector({
@@ -41,6 +50,11 @@ export function FileBrowserInspector({
   imageMetadataLoading,
   imageMetadataError,
   onRetryImageMetadata,
+  ntfsTechnical,
+  fileDigest,
+  fileDigestLoading,
+  fileDigestError,
+  calculateFileDigest,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
 
@@ -99,6 +113,9 @@ export function FileBrowserInspector({
         <InspectorSection title={t('fileBrowser.inspector.sections.summary')}>
           <InspectorValue value={selectedFile?.hashSha256 ?? '-'} mono />
         </InspectorSection>
+
+        <FileDigestInspector digest={fileDigest} loading={Boolean(fileDigestLoading)} error={fileDigestError instanceof Error ? fileDigestError.message : undefined} onCalculate={calculateFileDigest} />
+        <NtfsTechnicalInspector technical={ntfsTechnical} />
 
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
           <ImageMetadataInspector

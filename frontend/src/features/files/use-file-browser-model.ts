@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { useFileJumpContext } from '@/features/files/hooks';
+import { useFileDigest, useFileJumpContext, useNtfsTechnicalFile } from '@/features/files/hooks';
 import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
@@ -186,6 +186,8 @@ export function useFileBrowserModel() {
     selectedFile,
     viewerTab,
   });
+  const ntfsTechnicalQuery = useNtfsTechnicalFile(selectedFile?.id, Boolean(selectedFile?.id?.startsWith('mft:')));
+  const digestMutation = useFileDigest(selectedFile?.id);
 
   const onViewTimeline = () => {
     if (!selectedFile) return;
@@ -244,6 +246,13 @@ export function useFileBrowserModel() {
     imageMetadataLoading: preview.imageMetadataLoading,
     imageMetadataError: preview.imageMetadataError,
     onRetryImageMetadata: preview.onRetryImageMetadata,
+    ntfsTechnical: ntfsTechnicalQuery.data,
+    ntfsTechnicalLoading: ntfsTechnicalQuery.isLoading,
+    ntfsTechnicalError: ntfsTechnicalQuery.error,
+    fileDigest: digestMutation.data,
+    fileDigestLoading: digestMutation.isPending,
+    fileDigestError: digestMutation.error,
+    calculateFileDigest: digestMutation.mutate,
     mediaUrl: preview.mediaUrl,
     documentPreview: preview.documentPreview,
     previewError: preview.previewError,
