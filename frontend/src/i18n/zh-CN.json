@@ -547,7 +547,7 @@
     "actions": { "save": "保存", "cancel": "取消", "delete": "删除", "deleteCase": "删除案件", "deleteDataSource": "删除数据源" },
     "recentTasks": { "title": "最近任务", "summary": "完成 {{completed}} / 部分 {{partial}} / 运行 {{running}}" },
     "jobStates": { "partial": "部分完成", "warnings": "警告 {{count}}", "skipped": "跳过 {{count}}", "failed": "失败 {{count}}" },
-    "dataSources": { "title": "已有数据源", "sha256": "证据 SHA-256", "objects": "对象", "partitions": "分区结构", "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。" },
+    "dataSources": { "title": "已有数据源", "sha256": "证据 SHA-256", "physicalDiskHash": "原始物理磁盘哈希", "physicalDiskHashHint": "直接读取原始物理磁盘扇区，不计算 E01 镜像文件。", "physicalDiskHashRunning": "正在读取原始物理磁盘…", "objects": "对象", "partitions": "分区结构", "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。" },
     "hash": { "waiting": "等待计算", "running": "后台计算中", "auto": "导入完成后自动计算", "completed": "已完成", "failed": "计算失败", "unavailable": "当前数据源不可计算" },
     "processing": { "pending": "等待处理", "running": "处理中", "ready": "处理完成", "failed": "处理失败", "deferred": "部分延后", "phase": "阶段 {{ready}}/{{total}}", "deferredCount": "延后 {{count}}" },
     "partitions": { "supported": "可浏览", "locked": "需要解锁", "unsupported": "暂不支持", "offsetLength": "偏移 {{offset}} / 长度 {{length}}" },

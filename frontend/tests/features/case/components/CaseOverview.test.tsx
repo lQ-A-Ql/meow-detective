@@ -95,4 +95,23 @@ describe('DataSourcesPanel', () => {
 
     expect(screen.getByText('计算失败')).toBeTruthy();
   });
+
+  it('offers original physical disk hashing only for local disks', async () => {
+    const onCalculate = vi.fn();
+    render(
+      <DataSourcesPanel
+        dataSources={[{ ...dataSource, id: 'physical-0', kind: 'local_disk', sourcePath: '\\\\.\\PhysicalDrive0' }]}
+        editingDataSourceId={undefined}
+        editingDataSourceName=""
+        setEditingDataSourceId={vi.fn()}
+        setEditingDataSourceName={vi.fn()}
+        onRename={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onCalculateLogicalDiskDigest={onCalculate}
+      />,
+    );
+    expect(screen.getByText('原始物理磁盘哈希')).toBeTruthy();
+    screen.getByRole('button', { name: 'SHA256' }).click();
+    expect(onCalculate).toHaveBeenCalledWith('physical-0', 'sha256');
+  });
 });

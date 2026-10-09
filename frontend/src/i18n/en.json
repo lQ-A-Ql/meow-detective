@@ -547,7 +547,7 @@
     "actions": { "save": "Save", "cancel": "Cancel", "delete": "Delete", "deleteCase": "Delete case", "deleteDataSource": "Delete data source" },
     "recentTasks": { "title": "Recent tasks", "summary": "Completed {{completed}} / Partial {{partial}} / Running {{running}}" },
     "jobStates": { "partial": "Partial", "warnings": "Warnings {{count}}", "skipped": "Skipped {{count}}", "failed": "Failed {{count}}" },
-    "dataSources": { "title": "Data sources", "sha256": "Evidence SHA-256", "objects": "objects", "partitions": "Partition structure", "empty": "Imported evidence sources for this case will appear here and can be renamed." },
+    "dataSources": { "title": "Data sources", "sha256": "Evidence SHA-256", "physicalDiskHash": "Original physical disk hash", "physicalDiskHashHint": "Reads original physical disk sectors directly; this does not hash an E01 image file.", "physicalDiskHashRunning": "Reading original physical disk…", "objects": "objects", "partitions": "Partition structure", "empty": "Imported evidence sources for this case will appear here and can be renamed." },
     "hash": { "waiting": "Waiting to calculate", "running": "Calculating in background", "auto": "Calculated automatically after import", "completed": "Completed", "failed": "Calculation failed", "unavailable": "This data source cannot be calculated" },
     "processing": { "pending": "Pending", "running": "Processing", "ready": "Completed", "failed": "Failed", "deferred": "Deferred", "phase": "Phase {{ready}}/{{total}}", "deferredCount": "Deferred {{count}}" },
     "partitions": { "supported": "Browsable", "locked": "Unlock required", "unsupported": "Unsupported", "offsetLength": "Offset {{offset}} / Length {{length}}" },

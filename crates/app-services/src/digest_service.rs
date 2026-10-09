@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use domain::{CaseId, DataSourceId};
+use domain::{CaseId, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use transport::dto::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
@@ -32,6 +32,11 @@ pub struct DigestTarget<'a> {
     pub data_source_id: Option<&'a str>,
     pub file_id: Option<&'a str>,
     pub partition_index: Option<u32>,
+}
+
+pub struct DigestExecution<'a> {
+    pub cancelled: &'a AtomicBool,
+    pub progress: &'a (dyn Fn(u64, u64) + Sync),
 }
 
 impl From<persistence_sqlite::DbError> for DigestServiceError {
@@ -76,6 +81,34 @@ pub fn calculate_evidence_digest(
     algorithm: DigestAlgorithmDto,
     target: DigestTarget<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let cancelled = AtomicBool::new(false);
+    calculate_evidence_digest_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        scope,
+        algorithm,
+        target,
+        DigestExecution {
+            cancelled: &cancelled,
+            progress: &|_, _| {},
+        },
+    )
+}
+
+/// Calculates a digest while allowing a task manager to cancel the read and
+/// observe byte progress.  The `LogicalDisk` scope is intentionally restricted
+/// to `DataSourceKind::LocalDisk`; image containers must use `ContainerSet` so
+/// their container bytes are never confused with physical-disk bytes.
+pub fn calculate_evidence_digest_with_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    scope: DigestScopeDto,
+    algorithm: DigestAlgorithmDto,
+    target: DigestTarget<'_>,
+    execution: DigestExecution<'_>,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
     let algorithm = map_algorithm(algorithm);
     match scope {
         DigestScopeDto::ContainerFile => {
@@ -99,13 +132,12 @@ pub fn calculate_evidence_digest(
         }
         DigestScopeDto::ContainerSet => {
             let source = load_source(case_conn, case_id, target.data_source_id)?;
-            let cancelled = AtomicBool::new(false);
             let result = HashService::hash_evidence_with_algorithm(
                 Path::new(&source.source_path),
                 &source.kind,
                 algorithm,
-                &cancelled,
-                &|_, _| {},
+                execution.cancelled,
+                execution.progress,
             )
             .map_err(DigestServiceError::Hash)?;
             Ok(completed(
@@ -117,11 +149,29 @@ pub fn calculate_evidence_digest(
         }
         DigestScopeDto::File => {
             let file_id = target.file_id.ok_or(DigestServiceError::InvalidInput)?;
-            digest_file(case_conn, case_root, case_id, file_id, algorithm)
+            digest_file(case_conn, case_root, case_id, file_id, algorithm, execution)
         }
-        DigestScopeDto::LogicalDisk
-        | DigestScopeDto::Partition
-        | DigestScopeDto::DerivedEvidence => {
+        DigestScopeDto::LogicalDisk => {
+            let source = load_source(case_conn, case_id, target.data_source_id)?;
+            if source.kind != DataSourceKind::LocalDisk {
+                return Err(DigestServiceError::Unsupported);
+            }
+            let result = HashService::hash_evidence_with_algorithm(
+                Path::new(&source.source_path),
+                &DataSourceKind::LocalDisk,
+                algorithm,
+                execution.cancelled,
+                execution.progress,
+            )
+            .map_err(DigestServiceError::Hash)?;
+            Ok(completed(
+                DigestScopeDto::LogicalDisk,
+                algorithm,
+                result.digest,
+                result.bytes_processed,
+            ))
+        }
+        DigestScopeDto::Partition | DigestScopeDto::DerivedEvidence => {
             let _ = (target.data_source_id, target.partition_index);
             Err(DigestServiceError::Unsupported)
         }
@@ -134,6 +184,7 @@ fn digest_file(
     case_id: &CaseId,
     file_id: &str,
     algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
     let (global_id, source_conn) =
         file_service::open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
@@ -149,9 +200,10 @@ fn digest_file(
     let digest = HashService::digest_reader(
         reader.as_mut(),
         algorithm,
-        || false,
+        || execution.cancelled.load(Ordering::Acquire),
         |amount| {
             processed.store(amount, Ordering::Release);
+            (execution.progress)(amount, 0);
         },
     )
     .map_err(|error| {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   useCaseMetrics,
@@ -14,6 +15,8 @@ import {
   useRenameDataSource,
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
+import { calculateEvidenceDigest } from '@/lib/api/digest';
+import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { useAppSettings } from '@/features/settings/hooks';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
@@ -38,6 +41,9 @@ export function useCaseHomeModel() {
   const warningsQuery = useWarnings();
   const appSettingsQuery = useAppSettings();
   const importMutation = useImportDataSource();
+  const logicalDiskDigestMutation = useMutation<EvidenceDigest, unknown, { dataSourceId: string; algorithm: DigestAlgorithm }>({
+    mutationFn: ({ dataSourceId, algorithm }) => calculateEvidenceDigest({ scope: 'logicalDisk', dataSourceId, algorithm }),
+  });
   const createCaseMutation = useCreateCase();
   const openCaseMutation = useOpenCase();
   const renameDataSourceMutation = useRenameDataSource();
@@ -126,11 +132,19 @@ export function useCaseHomeModel() {
       },
     });
   }, [importMutation]);
+  const calculateLogicalDiskDigest = useCallback((dataSourceId: string, algorithm: DigestAlgorithm) => {
+    logicalDiskDigestMutation.mutate({ dataSourceId, algorithm });
+  }, [logicalDiskDigestMutation]);
 
   return {
     caseName,
     caseRoot,
     completedJobs,
+    logicalDiskDigest: logicalDiskDigestMutation.data,
+    logicalDiskDigestSourceId: logicalDiskDigestMutation.variables?.dataSourceId,
+    logicalDiskDigestLoading: logicalDiskDigestMutation.isPending,
+    logicalDiskDigestError: logicalDiskDigestMutation.error,
+    calculateLogicalDiskDigest,
     createCase,
     createCaseError: mutationError(createCaseMutation.error),
     createCasePending: createCaseMutation.isPending,

@@ -8,6 +8,7 @@ import { InlineProgressRow } from '@/components/status/InlineProgressRow';
 import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
 import type { DataSourceSummary, DataSourcePartition, JobSnapshot, RecentObject } from '@/types/models';
 import type { EvidenceHashJobView } from '../types';
+import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 
 // ── Shared helper ──
 
@@ -137,6 +138,11 @@ export interface DataSourcesPanelProps {
   setEditingDataSourceName: (name: string) => void;
   onRename: (dataSourceId: string, name: string) => void;
   onRequestDelete: (source: DataSourceSummary) => void;
+  logicalDiskDigest?: EvidenceDigest;
+  logicalDiskDigestSourceId?: string;
+  logicalDiskDigestLoading?: boolean;
+  logicalDiskDigestError?: string;
+  onCalculateLogicalDiskDigest?: (dataSourceId: string, algorithm: DigestAlgorithm) => void;
 }
 
 export function DataSourcesPanel({
@@ -148,6 +154,11 @@ export function DataSourcesPanel({
   setEditingDataSourceName,
   onRename,
   onRequestDelete,
+  logicalDiskDigest,
+  logicalDiskDigestSourceId,
+  logicalDiskDigestLoading = false,
+  logicalDiskDigestError,
+  onCalculateLogicalDiskDigest,
 }: DataSourcesPanelProps) {
   const { t } = useTranslation();
   return (
@@ -259,6 +270,25 @@ export function DataSourcesPanel({
                         <div className="mt-1.5 text-[10px] text-forensics-muted">{t('caseHome.hash.waiting')}</div>
                       )}
                     </div>
+                    {source.kind === 'local_disk' ? (
+                      <div className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2.5 py-2" data-testid={`physical-disk-hash-${source.id}`}>
+                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-warning-text">
+                          <Hash size={11} />
+                          <span>{t('caseHome.dataSources.physicalDiskHash')}</span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-forensics-muted">{t('caseHome.dataSources.physicalDiskHashHint')}</div>
+                        <div className="mt-2 grid grid-cols-2 gap-1">
+                          {(['md5', 'sha1', 'sha256', 'sm3'] as DigestAlgorithm[]).map((algorithm) => (
+                            <Button key={algorithm} type="button" size="xs" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, algorithm)}>
+                              {algorithm.toUpperCase()}
+                            </Button>
+                          ))}
+                        </div>
+                        {logicalDiskDigestLoading && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-info-text">{t('caseHome.dataSources.physicalDiskHashRunning')}</div> : null}
+                        {logicalDiskDigestError && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-error-text">{logicalDiskDigestError}</div> : null}
+                        {logicalDiskDigest && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>{logicalDiskDigest.algorithm.toUpperCase()} · {logicalDiskDigest.byteLength} bytes</div><div className="break-all text-forensics-text" data-testid={`physical-disk-digest-${source.id}`}>{logicalDiskDigest.value}</div></div> : null}
+                      </div>
+                    ) : null}
                     {source.processing ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                         <span
