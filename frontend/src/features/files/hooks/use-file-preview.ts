@@ -76,8 +76,7 @@ export function useFilePreview({
   const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled);
   const imageMetadataQuery = useImageMetadata(
     selectedFile?.id,
-    Boolean(selectedFile?.id) && selectedFilePreviewKind === 'image' &&
-      (viewerTab === 'metadata' || imagePreviewEnabled),
+    Boolean(selectedFile?.id) && selectedFilePreviewKind === 'image',
   );
   const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
   const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
