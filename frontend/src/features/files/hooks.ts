@@ -9,6 +9,7 @@ import {
   getFileTree,
   getTextPreview,
   getImagePreview,
+  getImageMetadata,
   getDocumentPreview,
   getMediaUrl,
   readMediaRange,
@@ -390,6 +391,21 @@ export function useImagePreview(fileId?: string, enabled = true) {
     queryFn: async () => {
       if (!fileId) return null;
       return await getImagePreview(fileId);
+    },
+  });
+}
+
+/** Load bounded EXIF/GPS metadata through the source-bound backend reader. */
+export function useImageMetadata(fileId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['files', 'image-metadata', fileId],
+    enabled: Boolean(fileId) && enabled,
+    retry: false,
+    staleTime: PREVIEW_STALE_TIME,
+    gcTime: 60_000,
+    queryFn: async () => {
+      if (!fileId) return null;
+      return await getImageMetadata(fileId);
     },
   });
 }

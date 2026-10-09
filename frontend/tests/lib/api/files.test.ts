@@ -10,6 +10,7 @@ import {
   getFileRowsPage,
   getFileTree,
   getImagePreview,
+  getImageMetadata,
   getMediaUrl,
   getTextPreview,
   exportDeletedRecovery,
@@ -304,6 +305,14 @@ describe('files API', () => {
     await getImagePreview('file-2');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.GET_IMAGE_PREVIEW, {
       fileId: 'file-2',
+    });
+  });
+
+  it('getImageMetadata sends fileId', async () => {
+    requestMock.mockResolvedValueOnce({ status: 'absent' } as never);
+    await getImageMetadata('file-image');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.GET_IMAGE_METADATA, {
+      fileId: 'file-image',
     });
   });
 

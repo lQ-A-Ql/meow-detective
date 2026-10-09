@@ -207,9 +207,11 @@
         "path": "Source Path",
         "timestamps": "Timestamps (MACB)",
         "summary": "Summary",
+        "imageMetadata": "Image EXIF / media metadata",
         "status": "Object Status",
         "actions": "Actions"
       },
+      "imageMetadata": { "loading": "Reading image metadata…", "retry": "Retry", "status": "Status", "format": "Format", "dimensions": "Dimensions", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time", "gps": "GPS", "statuses": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" } },
       "timestamp": {
         "modified": "M",
         "accessed": "A",
@@ -229,6 +231,7 @@
         "button": "Extract File"
       },
       "viewTimeline": "View in Timeline",
+      "image": { "loading": "Reading image metadata…", "retry": "Retry", "fields": { "format": "Format", "dimensions": "Dimensions", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time" }, "status": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" }, "statusDescription": { "absent": "No parseable EXIF or media metadata was found.", "unsupported": "This image format does not support metadata parsing.", "corrupt": "The image metadata structure is corrupt; no fields were returned." } },
       "bitlocker": {
         "title": "BitLocker volume",
         "refresh": "Inspect BitLocker volume again",
@@ -280,6 +283,17 @@
         "copyRecoveryPassword": "Copy recovery password",
         "recoveryPasswordCopied": "Copied",
         "error": "BitLocker operation failed. See the error drawer for details."
+      },
+      "preview": {
+        "imageMetadata": {
+          "loading": "Reading image metadata…",
+          "status": "Status",
+          "states": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" },
+          "fields": { "format": "Format", "width": "Width", "height": "Height", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time" },
+          "absent": "No readable EXIF or media metadata was found.",
+          "unsupported": "This image format does not support metadata parsing.",
+          "corrupt": "The image metadata structure is corrupt; no fields were returned."
+        }
       }
     }
   },

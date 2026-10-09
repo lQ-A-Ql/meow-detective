@@ -207,9 +207,11 @@
         "path": "来源路径",
         "timestamps": "时间戳 (MACB)",
         "summary": "摘要字段",
+        "imageMetadata": "图片 EXIF / 媒体元数据",
         "status": "对象状态",
         "actions": "操作"
       },
+      "imageMetadata": { "loading": "正在读取图片元数据…", "retry": "重试", "status": "状态", "format": "格式", "dimensions": "尺寸", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间", "gps": "GPS", "statuses": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" } },
       "timestamp": {
         "modified": "M",
         "accessed": "A",
@@ -229,6 +231,7 @@
         "button": "提取文件"
       },
       "viewTimeline": "在时间线中查看",
+      "image": { "loading": "正在读取图片元数据…", "retry": "重试", "fields": { "format": "格式", "dimensions": "尺寸", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间" }, "status": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" }, "statusDescription": { "absent": "未发现可解析的 EXIF 或媒体元数据。", "unsupported": "当前格式不支持图片元数据解析。", "corrupt": "图片元数据结构损坏，未返回字段。" } },
       "bitlocker": {
         "title": "BitLocker 分区",
         "refresh": "重新检查 BitLocker 分区",
@@ -280,6 +283,17 @@
         "copyRecoveryPassword": "复制恢复密码",
         "recoveryPasswordCopied": "已复制",
         "error": "BitLocker 操作失败，请查看错误抽屉中的详细信息。"
+      },
+      "preview": {
+        "imageMetadata": {
+          "loading": "正在读取图片元数据…",
+          "status": "状态",
+          "states": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" },
+          "fields": { "format": "格式", "width": "宽度", "height": "高度", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间" },
+          "absent": "未发现可解析的 EXIF 或媒体元数据。",
+          "unsupported": "当前图片格式不支持元数据解析。",
+          "corrupt": "图片元数据结构损坏，未返回字段。"
+        }
       }
     }
   },

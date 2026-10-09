@@ -10,6 +10,8 @@ import type { DataSourcePartition } from '@/types/models';
 import { BitLockerVolumePanel } from '@/features/files/components/BitLockerVolumePanel';
 import { formatUnixMode } from '@/features/files/components/FileListPanel';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
+import type { ApiErrorDto, ImageMetadata } from '@/types/models';
+import { ImageMetadataInspector } from '@/features/files/components/ImageMetadataInspector';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -20,6 +22,10 @@ interface FileBrowserInspectorProps {
   onViewTimeline: () => void;
   bitLockerPartition?: DataSourcePartition;
   bitLocker?: BitLockerVolumeModel;
+  imageMetadata?: ImageMetadata | null;
+  imageMetadataLoading?: boolean;
+  imageMetadataError?: ApiErrorDto | null;
+  onRetryImageMetadata?: () => void;
 }
 
 export function FileBrowserInspector({
@@ -31,6 +37,10 @@ export function FileBrowserInspector({
   onViewTimeline,
   bitLockerPartition,
   bitLocker,
+  imageMetadata,
+  imageMetadataLoading,
+  imageMetadataError,
+  onRetryImageMetadata,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
 
@@ -89,6 +99,15 @@ export function FileBrowserInspector({
         <InspectorSection title={t('fileBrowser.inspector.sections.summary')}>
           <InspectorValue value={selectedFile?.hashSha256 ?? '-'} mono />
         </InspectorSection>
+
+        {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
+          <ImageMetadataInspector
+            metadata={imageMetadata}
+            loading={Boolean(imageMetadataLoading)}
+            error={imageMetadataError}
+            onRetry={onRetryImageMetadata}
+          />
+        ) : null}
 
         <InspectorSection title={t('fileBrowser.inspector.sections.status')}>
           <div className="font-mono text-[11px] grid grid-cols-[60px_1fr] gap-1">

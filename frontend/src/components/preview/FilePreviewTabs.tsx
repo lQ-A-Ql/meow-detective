@@ -13,6 +13,7 @@ import { ViewerError } from '@/components/viewers/ViewerError';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { BrandWatermark } from '@/components/brand';
+import { ImageMetadataPanel } from '@/components/preview/ImageMetadataPanel';
 import type {
   ApiErrorDto,
   DocumentPreviewResponse,
@@ -20,6 +21,7 @@ import type {
   FileEntryRow,
   FileHexViewerState,
   ImagePreviewResponse,
+  ImageMetadata,
   MediaPreview,
   TextPreviewResponse,
   ViewerHandle,
@@ -41,6 +43,7 @@ export interface FilePreviewTabsProps {
   onLoadPreviousHexRange: () => Promise<void> | void;
   textPreview: TextPreviewResponse | null | undefined;
   imagePreview: ImagePreviewResponse | null | undefined;
+  imageMetadata?: ImageMetadata | null;
   mediaUrl: MediaPreview | null | undefined;
   documentPreview: DocumentPreviewResponse | null | undefined;
   selectedFile: FileEntryRow | undefined;
@@ -400,6 +403,7 @@ export function FilePreviewTabs({
   onLoadPreviousHexRange,
   textPreview,
   imagePreview,
+  imageMetadata,
   mediaUrl,
   documentPreview,
   selectedFile,
@@ -478,6 +482,7 @@ export function FilePreviewTabs({
                   </div>
                   <div>mime: {fileHandle?.mime ?? viewer?.handle.mime ?? '-'}</div>
                   <div>path: {selectedFile?.path ?? '-'}</div>
+                  {previewKind === 'image' ? <ImageMetadataPanel metadata={imageMetadata} /> : null}
                 </div>
               ),
             },

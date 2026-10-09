@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import {
-  useFileHandle, useFileViewer, useImagePreview, useMediaUrl,
+  useFileHandle, useFileViewer, useImagePreview, useImageMetadata, useMediaUrl,
   useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
 import type { ApiErrorDto, FileEntryRow } from '@/types/models';
@@ -74,6 +74,11 @@ export function useFilePreview({
   } = viewerQuery;
   const textQuery = useTextPreview(selectedFile?.id, textPreviewEnabled);
   const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled);
+  const imageMetadataQuery = useImageMetadata(
+    selectedFile?.id,
+    Boolean(selectedFile?.id) && selectedFilePreviewKind === 'image' &&
+      (viewerTab === 'metadata' || imagePreviewEnabled),
+  );
   const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
   const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
   const activePreviewQuery =
@@ -104,6 +109,12 @@ export function useFilePreview({
     loadPreviousRange,
     textPreview: textQuery.data,
     imagePreview: imageQuery.data,
+    imageMetadata: imageMetadataQuery.data,
+    imageMetadataLoading: imageMetadataQuery.isLoading,
+    imageMetadataError: normalizePreviewError(imageMetadataQuery.error),
+    onRetryImageMetadata: imageMetadataQuery.isError
+      ? () => { void imageMetadataQuery.refetch(); }
+      : undefined,
     mediaUrl: mediaQuery.data,
     documentPreview: documentQuery.data,
     previewError,
