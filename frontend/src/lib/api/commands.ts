@@ -12,6 +12,7 @@ export const COMMANDS = {
     GET_RECENT_CASES: 'get_recent_cases',
     GET_DATA_SOURCES: 'get_data_sources',
     GET_NESTED_EVIDENCE_LINEAGE: 'get_nested_evidence_lineage',
+    MATERIALIZE_NESTED_EVIDENCE: 'materialize_nested_evidence',
     CREATE_CASE: 'create_case',
     OPEN_CASE: 'open_case',
     CLOSE_CASE: 'close_case',

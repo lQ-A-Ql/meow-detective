@@ -145,6 +145,14 @@ pub struct NestedEvidenceLineageDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NestedEvidenceMaterializedDto {
+    pub lineage: NestedEvidenceLineageDto,
+    pub derived_data_source_id: String,
+    pub import_state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecentCaseDto {
     pub case_root: String,
     pub name: String,

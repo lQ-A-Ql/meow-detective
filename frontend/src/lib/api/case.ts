@@ -3,6 +3,7 @@ import {
   CaseSummary,
   DataSourceSummary,
   NestedEvidenceLineage,
+  NestedEvidenceMaterialized,
   RecentCase,
   RecentObject,
 } from '@/types/models';
@@ -31,6 +32,10 @@ export async function getDataSources(): Promise<DataSourceSummary[]> {
 
 export async function getNestedEvidenceLineage(parentDataSourceId: string): Promise<NestedEvidenceLineage[]> {
   return apiClient.request(COMMANDS.case.GET_NESTED_EVIDENCE_LINEAGE, { request: { parentDataSourceId } });
+}
+
+export async function materializeNestedEvidence(parentDataSourceId: string, fileEntryId: string): Promise<NestedEvidenceMaterialized> {
+  return apiClient.request(COMMANDS.case.MATERIALIZE_NESTED_EVIDENCE, { request: { parentDataSourceId, fileEntryId } });
 }
 
 export async function createCase(caseRoot: string, name: string, examiner?: string): Promise<CaseSummary> {

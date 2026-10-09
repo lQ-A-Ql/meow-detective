@@ -49,6 +49,25 @@ pub struct GetNestedEvidenceLineageRequest {
     pub parent_data_source_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializeNestedEvidenceRequest {
+    pub parent_data_source_id: String,
+    pub file_entry_id: String,
+}
+
+impl MaterializeNestedEvidenceRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.parent_data_source_id.trim().is_empty() {
+            return Err("parentDataSourceId is required".to_string());
+        }
+        if self.file_entry_id.trim().is_empty() {
+            return Err("fileEntryId is required".to_string());
+        }
+        Ok(())
+    }
+}
+
 impl GetNestedEvidenceLineageRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.parent_data_source_id.trim().is_empty() {

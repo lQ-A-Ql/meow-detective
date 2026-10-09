@@ -1,7 +1,12 @@
 use tauri::State;
 use transport::{
-    commands::{GetNestedEvidenceLineageRequest, RenameDataSourceRequest},
-    dto::{CaseMetricsDto, DataSourceSummaryDto, NestedEvidenceLineageDto, RecentObjectDto},
+    commands::{
+        GetNestedEvidenceLineageRequest, MaterializeNestedEvidenceRequest, RenameDataSourceRequest,
+    },
+    dto::{
+        CaseMetricsDto, DataSourceSummaryDto, NestedEvidenceLineageDto,
+        NestedEvidenceMaterializedDto, RecentObjectDto,
+    },
     CommandError,
 };
 
@@ -65,6 +70,41 @@ pub async fn get_nested_evidence_lineage(
             &conn,
             &case_id,
             &request.parent_data_source_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
+pub async fn materialize_nested_evidence(
+    state: State<'_, AppState>,
+    request: MaterializeNestedEvidenceRequest,
+) -> Result<NestedEvidenceMaterializedDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (db_path, case_root, case_id) = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            (
+                active.db_path(),
+                active.case_root.clone(),
+                active.meta.id.clone(),
+            )
+        };
+        let conn = app_services::connection::open_case_db(&db_path)
+            .map_err(CommandError::from_typed_service_error)?;
+        app_services::nested_evidence_service::materialize_fixed_vhd(
+            &conn,
+            &case_root,
+            &case_id,
+            &request.parent_data_source_id,
+            &request.file_entry_id,
         )
         .map_err(CommandError::from_typed_service_error)
     })

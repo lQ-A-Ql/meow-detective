@@ -41,6 +41,12 @@ export interface NestedEvidenceLineage {
   probeKind: string;
 }
 
+export interface NestedEvidenceMaterialized {
+  lineage: NestedEvidenceLineage;
+  derivedDataSourceId: string;
+  importState: string;
+}
+
 export interface DataSourceProcessingSummary {
   state: 'pending' | 'running' | 'ready' | 'failed' | 'deferred';
   totalCount: number;

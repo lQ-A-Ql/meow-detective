@@ -5,12 +5,17 @@ use thiserror::Error;
 use transport::dto::NestedEvidenceLineageDto;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
+mod materialize;
+pub use materialize::materialize_fixed_vhd;
+
 #[derive(Debug, Error)]
 pub enum NestedEvidenceError {
     #[error("database error: {0}")]
     Database(#[from] persistence_sqlite::DbError),
     #[error("parent data source is not part of the active case")]
     WrongCase,
+    #[error("nested evidence materialization failed: {0}")]
+    Materialization(String),
 }
 
 impl ServiceErrorCategory for NestedEvidenceError {
@@ -18,6 +23,7 @@ impl ServiceErrorCategory for NestedEvidenceError {
         match self {
             Self::Database(_) => ErrorCategory::Io,
             Self::WrongCase => ErrorCategory::Security,
+            Self::Materialization(_) => ErrorCategory::Unsupported,
         }
     }
 }

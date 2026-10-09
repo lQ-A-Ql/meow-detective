@@ -22,7 +22,7 @@ pub use analysis::{
 pub use artifacts::{GetArtifactByIdRequest, GetArtifactRowsRequest};
 pub use case::{
     CreateCaseRequest, DeleteCaseRequest, DeleteDataSourceRequest, GetNestedEvidenceLineageRequest,
-    OpenCaseRequest, RenameDataSourceRequest,
+    MaterializeNestedEvidenceRequest, OpenCaseRequest, RenameDataSourceRequest,
 };
 pub use digest::CalculateEvidenceDigestRequest;
 pub use files::{

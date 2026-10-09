@@ -16,8 +16,8 @@ pub use close::close_case;
 pub use create::create_case;
 pub use current::get_current_case;
 pub use deletion::{delete_case, delete_data_source};
-pub use metrics::get_nested_evidence_lineage;
 pub use metrics::{get_case_metrics, get_data_sources, get_recent_objects, rename_data_source};
+pub use metrics::{get_nested_evidence_lineage, materialize_nested_evidence};
 pub use open::open_case;
 pub use recent::{get_recent_cases, remove_case_from_list};
 

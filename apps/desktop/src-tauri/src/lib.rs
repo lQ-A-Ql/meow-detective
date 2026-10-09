@@ -30,6 +30,7 @@ macro_rules! desktop_command_handler {
             get_recent_cases,
             get_data_sources,
             get_nested_evidence_lineage,
+            materialize_nested_evidence,
             rename_data_source,
             delete_case,
             delete_data_source,
