@@ -13,6 +13,9 @@ pub struct RegistryBrowserValueDto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryBrowserKeyDto {
+    pub overlay_source: RegistryOverlaySourceDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overlay_warning: Option<String>,
     pub path: String,
     pub name: String,
     pub cell_offset: u32,
@@ -21,4 +24,12 @@ pub struct RegistryBrowserKeyDto {
     pub value_count: u32,
     pub values: Vec<RegistryBrowserValueDto>,
     pub subkeys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RegistryOverlaySourceDto {
+    Base,
+    Recovered,
+    Merged,
 }

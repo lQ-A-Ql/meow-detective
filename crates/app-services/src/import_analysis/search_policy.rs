@@ -2,11 +2,6 @@ use domain::{DataSourcePlatform, FileEntry};
 
 use super::ContentBudget;
 
-#[cfg(test)]
-pub(super) fn should_index_file(file: &FileEntry, platform: DataSourcePlatform) -> bool {
-    matches!(text_candidate(file, platform), TextCandidate::KnownText)
-}
-
 const TEXT_EXTENSIONS: &[&str] = &[
     "txt",
     "log",

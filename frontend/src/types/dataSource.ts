@@ -32,6 +32,15 @@ export interface DataSourceSummary {
   partitions?: DataSourcePartition[];
 }
 
+export interface NestedEvidenceLineage {
+  parentDataSourceId: string;
+  nestedFilePath: string;
+  derivedDataSourceId?: string;
+  offset: number;
+  length: number;
+  probeKind: string;
+}
+
 export interface DataSourceProcessingSummary {
   state: 'pending' | 'running' | 'ready' | 'failed' | 'deferred';
   totalCount: number;

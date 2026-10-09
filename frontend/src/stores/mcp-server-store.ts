@@ -11,7 +11,7 @@ import {
   type McpPermissionProfile,
   type McpServer as ApiMcpServer,
   type McpServerStatus,
-} from '@/lib/api/mcp-server';
+} from '@/lib/api/mcp';
 import { defaultPermissions, formatError } from './mcp-error-utils';
 import type { McpResourceSlice } from './mcp-resource-store';
 import type { McpServer, NewMcpServerInput } from './mcp-types';

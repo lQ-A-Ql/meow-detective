@@ -49,6 +49,7 @@ pub mod ledger_service;
 pub mod linux_artifact_job;
 pub mod mcp_host_service;
 pub mod mount_service;
+pub mod nested_evidence_service;
 pub mod notebook_service;
 pub mod parallel_enum;
 mod partition_capabilities;

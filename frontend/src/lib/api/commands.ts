@@ -11,6 +11,7 @@ export const COMMANDS = {
     GET_RECENT_OBJECTS: 'get_recent_objects',
     GET_RECENT_CASES: 'get_recent_cases',
     GET_DATA_SOURCES: 'get_data_sources',
+    GET_NESTED_EVIDENCE_LINEAGE: 'get_nested_evidence_lineage',
     CREATE_CASE: 'create_case',
     OPEN_CASE: 'open_case',
     CLOSE_CASE: 'close_case',

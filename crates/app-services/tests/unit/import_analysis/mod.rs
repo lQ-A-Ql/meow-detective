@@ -3,7 +3,7 @@ use super::*;
 use super::{
     extractor_policy::registry_supports_file,
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
-    search_policy::{classify_text_content, should_index_file, text_candidate, TextCandidate},
+    search_policy::{classify_text_content, text_candidate, TextCandidate},
     task_feed::{analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page},
     worker_runtime::{reserve_content_budget, SharedAnalysisState},
 };
@@ -766,15 +766,30 @@ fn analysis_indexing_skips_large_or_unknown_extension_files() {
         ..small_text.clone()
     };
 
-    assert!(should_index_file(&small_text, DataSourcePlatform::Linux));
-    assert!(!should_index_file(&large_text, DataSourcePlatform::Linux));
-    assert!(!should_index_file(&unknown, DataSourcePlatform::Linux));
+    assert!(matches!(
+        text_candidate(&small_text, DataSourcePlatform::Linux),
+        TextCandidate::KnownText
+    ));
+    assert!(!matches!(
+        text_candidate(&large_text, DataSourcePlatform::Linux),
+        TextCandidate::KnownText
+    ));
+    assert!(!matches!(
+        text_candidate(&unknown, DataSourcePlatform::Linux),
+        TextCandidate::KnownText
+    ));
     assert_eq!(
         text_candidate(&unknown, DataSourcePlatform::Linux),
         TextCandidate::Sniff
     );
-    assert!(should_index_file(&passwd, DataSourcePlatform::Linux));
-    assert!(!should_index_file(&passwd, DataSourcePlatform::Windows));
+    assert!(matches!(
+        text_candidate(&passwd, DataSourcePlatform::Linux),
+        TextCandidate::KnownText
+    ));
+    assert!(!matches!(
+        text_candidate(&passwd, DataSourcePlatform::Windows),
+        TextCandidate::KnownText
+    ));
 }
 
 #[test]
@@ -819,7 +834,10 @@ fn analysis_text_policy_supports_server_configs_and_bounded_sniffing() {
         file.ext = Some(extension.to_string());
         file.name = format!("service.{extension}");
         assert!(
-            should_index_file(&file, DataSourcePlatform::Windows),
+            matches!(
+                text_candidate(&file, DataSourcePlatform::Windows),
+                TextCandidate::KnownText
+            ),
             "{extension}"
         );
     }

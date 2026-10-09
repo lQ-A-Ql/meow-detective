@@ -57,64 +57,14 @@ pub fn parse_systemd_unit(
         .unwrap_or(unit_file)
         .to_string();
     let masked = text.trim() == "/dev/null";
-    let mut section = String::new();
-    let mut description = None;
-    let mut exec_start = Vec::new();
-    let mut exec_stop = Vec::new();
-    let mut user = None;
-    let mut group = None;
-    let mut working_directory = None;
-    let mut restart = None;
-    let mut wanted_by = Vec::new();
-    let mut required_by = Vec::new();
-    let mut has_install_section = false;
-    let mut line_count = 0usize;
-
-    for raw_line in text.lines() {
-        line_count += 1;
-        if line_count > MAX_UNIT_LINES {
-            return Err(LinuxArtifactError::ParseError {
-                parser: "systemd.unit",
-                message: "unit file exceeds line limit".to_string(),
-            });
-        }
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-            continue;
-        }
-        if let Some(section_name) = line.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-            section.clear();
-            section.push_str(section_name.trim());
-            has_install_section = section == "Install" || has_install_section;
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        let value = value.trim();
-        if value.len() > MAX_VALUE_BYTES {
-            continue;
-        }
-        match (section.as_str(), key.trim()) {
-            ("Unit", "Description") => description = non_empty(value),
-            ("Service", "ExecStart") => push_value(&mut exec_start, value),
-            ("Service", "ExecStop") => push_value(&mut exec_stop, value),
-            ("Service", "User") => user = non_empty(value),
-            ("Service", "Group") => group = non_empty(value),
-            ("Service", "WorkingDirectory") => working_directory = non_empty(value),
-            ("Service", "Restart") => restart = non_empty(value),
-            ("Install", "WantedBy") => extend_words(&mut wanted_by, value),
-            ("Install", "RequiredBy") => extend_words(&mut required_by, value),
-            _ => {}
-        }
-    }
+    let fields = parse_unit_fields(text)?;
 
     let enablement_symlink = infer_enablement_symlink(unit_file);
     // `[Install]` describes how a unit *can* be enabled; only a concrete
     // `.wants/` or `.requires/` evidence path proves it is enabled in the
     // captured image.
     let enabled = enablement_symlink.is_some();
-    let static_unit = !masked && !has_install_section;
+    let static_unit = !masked && !fields.has_install_section;
     let state = if masked {
         "masked"
     } else if enabled {
@@ -128,22 +78,89 @@ pub fn parse_systemd_unit(
 
     Ok(LinuxServiceUnit {
         name,
-        description,
+        description: fields.description,
         state,
         enabled,
         masked,
         static_unit,
         unit_file: unit_file.to_string(),
-        exec_start,
-        exec_stop,
-        user,
-        group,
-        working_directory,
-        restart,
-        wanted_by,
-        required_by,
+        exec_start: fields.exec_start,
+        exec_stop: fields.exec_stop,
+        user: fields.user,
+        group: fields.group,
+        working_directory: fields.working_directory,
+        restart: fields.restart,
+        wanted_by: fields.wanted_by,
+        required_by: fields.required_by,
         enablement_symlink,
     })
+}
+
+struct UnitFields {
+    description: Option<String>,
+    exec_start: Vec<String>,
+    exec_stop: Vec<String>,
+    user: Option<String>,
+    group: Option<String>,
+    working_directory: Option<String>,
+    restart: Option<String>,
+    wanted_by: Vec<String>,
+    required_by: Vec<String>,
+    has_install_section: bool,
+}
+
+fn parse_unit_fields(text: &str) -> Result<UnitFields, LinuxArtifactError> {
+    let mut fields = UnitFields {
+        description: None,
+        exec_start: Vec::new(),
+        exec_stop: Vec::new(),
+        user: None,
+        group: None,
+        working_directory: None,
+        restart: None,
+        wanted_by: Vec::new(),
+        required_by: Vec::new(),
+        has_install_section: false,
+    };
+    let mut section = String::new();
+    for (index, raw_line) in text.lines().enumerate() {
+        if index == MAX_UNIT_LINES {
+            return Err(LinuxArtifactError::ParseError {
+                parser: "systemd.unit",
+                message: "unit file exceeds line limit".to_string(),
+            });
+        }
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if let Some(section_name) = line.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+            section.clear();
+            section.push_str(section_name.trim());
+            fields.has_install_section |= section == "Install";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        if value.len() > MAX_VALUE_BYTES {
+            continue;
+        }
+        match (section.as_str(), key.trim()) {
+            ("Unit", "Description") => fields.description = non_empty(value),
+            ("Service", "ExecStart") => push_value(&mut fields.exec_start, value),
+            ("Service", "ExecStop") => push_value(&mut fields.exec_stop, value),
+            ("Service", "User") => fields.user = non_empty(value),
+            ("Service", "Group") => fields.group = non_empty(value),
+            ("Service", "WorkingDirectory") => fields.working_directory = non_empty(value),
+            ("Service", "Restart") => fields.restart = non_empty(value),
+            ("Install", "WantedBy") => extend_words(&mut fields.wanted_by, value),
+            ("Install", "RequiredBy") => extend_words(&mut fields.required_by, value),
+            _ => {}
+        }
+    }
+    Ok(fields)
 }
 
 fn push_value(values: &mut Vec<String>, value: &str) {

@@ -43,6 +43,7 @@ pub mod linux_topology_artifact_repo;
 pub mod linux_topology_edge_repo;
 pub mod linux_topology_membership_repo;
 pub mod linux_topology_scope_repo;
+pub mod nested_evidence_repo;
 pub mod notebook_repo;
 pub mod partition_repo;
 pub mod processing_phase_repo;

@@ -4,8 +4,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use domain::CaseId;
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
-use transport::dto::{RegistryBrowserKeyDto, RegistryBrowserValueDto};
+use transport::dto::{RegistryBrowserKeyDto, RegistryBrowserValueDto, RegistryOverlaySourceDto};
 
 use crate::bitlocker_runtime::BitLockerUnlockRegistry;
 use crate::file_service::{FileServiceError, SourceReadContext};
@@ -38,10 +39,13 @@ pub fn browse_registry_key_for_case(
         ));
     }
     let bytes = context.read_file_header_by_id(&global.local_id, MAX_REGISTRY_HIVE_BYTES)?;
+    let overlay_warning = registry_overlay_warning(&source_conn, &global.local_id.0);
     let key = artifacts_windows::browse_registry_hive(&bytes, key_path)
         .map_err(FileServiceError::integrity)?;
     Ok(RegistryBrowserKeyDto {
         path: key.path,
+        overlay_source: RegistryOverlaySourceDto::Base,
+        overlay_warning: Some(overlay_warning),
         name: key.name,
         cell_offset: key.cell_offset,
         last_write_time: key.last_write_time,
@@ -60,4 +64,25 @@ pub fn browse_registry_key_for_case(
             .collect(),
         subkeys: key.subkeys,
     })
+}
+
+fn registry_overlay_warning(source_conn: &Connection, file_id: &str) -> String {
+    let repo = FileRepo::new(source_conn);
+    let has_transaction_logs = repo
+        .find_by_id(&domain::FileEntryId(file_id.to_string()))
+        .ok()
+        .flatten()
+        .and_then(|entry| entry.parent_id)
+        .and_then(|parent| repo.find_children(&parent).ok())
+        .is_some_and(|siblings| {
+            siblings.iter().any(|entry| {
+                let name = entry.name.to_ascii_lowercase();
+                name.ends_with(".log1") || name.ends_with(".log2")
+            })
+        });
+    if has_transaction_logs {
+        "LOG1/LOG2 transaction logs detected but not merged in this browser view; use the registry extractor for recovered values".to_string()
+    } else {
+        "Browser view reads the base hive; no LOG1/LOG2 transaction logs were detected beside this hive".to_string()
+    }
 }

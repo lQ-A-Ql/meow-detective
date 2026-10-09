@@ -21,8 +21,8 @@ pub use analysis::{
 };
 pub use artifacts::{GetArtifactByIdRequest, GetArtifactRowsRequest};
 pub use case::{
-    CreateCaseRequest, DeleteCaseRequest, DeleteDataSourceRequest, OpenCaseRequest,
-    RenameDataSourceRequest,
+    CreateCaseRequest, DeleteCaseRequest, DeleteDataSourceRequest, GetNestedEvidenceLineageRequest,
+    OpenCaseRequest, RenameDataSourceRequest,
 };
 pub use digest::CalculateEvidenceDigestRequest;
 pub use files::{
@@ -41,8 +41,8 @@ pub use timeline::{GetTimelineEventByIdRequest, GetTimelineFacetsRequest, GetTim
 pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
-    JobSnapshotDto, RecentCaseDto, RecentObjectDto, ReportHistoryItemDto, ReportTemplateDto,
-    SearchFileResultPageDto, SearchResultPageDto, TimelineEventDto, TraceItemDto,
-    V2GovernanceSnapshotDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
-    WarningItemDto,
+    JobSnapshotDto, NestedEvidenceLineageDto, RecentCaseDto, RecentObjectDto, ReportHistoryItemDto,
+    ReportTemplateDto, SearchFileResultPageDto, SearchResultPageDto, TimelineEventDto,
+    TraceItemDto, V2GovernanceSnapshotDto, ViewerHandleDto, ViewerRangeRequestDto,
+    ViewerRangeResponseDto, WarningItemDto,
 };

@@ -43,6 +43,22 @@ pub struct RenameDataSourceRequest {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetNestedEvidenceLineageRequest {
+    pub parent_data_source_id: String,
+}
+
+impl GetNestedEvidenceLineageRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.parent_data_source_id.trim().is_empty() {
+            Err("parentDataSourceId is required".to_string())
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl RenameDataSourceRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.data_source_id.trim().is_empty() {

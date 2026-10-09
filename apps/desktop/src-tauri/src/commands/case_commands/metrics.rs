@@ -1,7 +1,7 @@
 use tauri::State;
 use transport::{
-    commands::RenameDataSourceRequest,
-    dto::{CaseMetricsDto, DataSourceSummaryDto, RecentObjectDto},
+    commands::{GetNestedEvidenceLineageRequest, RenameDataSourceRequest},
+    dto::{CaseMetricsDto, DataSourceSummaryDto, NestedEvidenceLineageDto, RecentObjectDto},
     CommandError,
 };
 
@@ -43,6 +43,30 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
             timeline_event_count: metrics.timeline_event_count,
             artifact_count: metrics.artifact_count,
         })
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
+pub async fn get_nested_evidence_lineage(
+    state: State<'_, AppState>,
+    request: GetNestedEvidenceLineageRequest,
+) -> Result<Vec<NestedEvidenceLineageDto>, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some((db_path, _, case_id)) = active_case_query_context(&app_state)? else {
+            return Ok(vec![]);
+        };
+        let conn = app_services::connection::open_case_db(&db_path)
+            .map_err(CommandError::from_typed_service_error)?;
+        app_services::nested_evidence_service::list_for_parent(
+            &conn,
+            &case_id,
+            &request.parent_data_source_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

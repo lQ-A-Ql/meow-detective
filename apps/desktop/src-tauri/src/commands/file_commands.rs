@@ -6,6 +6,7 @@ mod extract;
 mod extract_progress;
 mod media;
 mod ntfs;
+mod preview;
 mod recovery;
 mod registry;
 mod support;
@@ -25,15 +26,13 @@ pub use browse::{
 pub use extract::extract_file;
 pub use media::{get_media_url, read_media_range};
 pub use ntfs::inspect_ntfs_file;
+pub use preview::{get_document_preview, get_image_metadata, get_image_preview, get_text_preview};
 pub use recovery::{
     export_deleted_recovery, list_deleted_recoveries, read_deleted_recovery_range,
     run_deleted_recovery, search_deleted_recoveries_by_hash,
 };
 pub use registry::browse_registry_key;
-pub use viewer::{
-    close_file_handle, get_document_preview, get_image_metadata, get_image_preview,
-    get_text_preview, open_file_handle_request, read_file_range,
-};
+pub use viewer::{close_file_handle, open_file_handle_request, read_file_range};
 
 #[cfg(test)]
 #[path = "../../tests/unit/commands/file_commands/mod.rs"]

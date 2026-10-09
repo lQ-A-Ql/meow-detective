@@ -23,8 +23,8 @@ pub(crate) use crate::commands::{
     },
     case_commands::{
         close_case, create_case, delete_case, delete_data_source, get_case_metrics,
-        get_current_case, get_data_sources, get_recent_cases, get_recent_objects, open_case,
-        remove_case_from_list, rename_data_source,
+        get_current_case, get_data_sources, get_nested_evidence_lineage, get_recent_cases,
+        get_recent_objects, open_case, remove_case_from_list, rename_data_source,
     },
     digest_commands::calculate_evidence_digest,
     emulation_commands::{

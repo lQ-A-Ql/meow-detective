@@ -3,6 +3,7 @@ use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
     DataSourceProvenance, DataSourceProvenanceStatus,
 };
+use evidence_core::EvidenceReader;
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::io::Read;
 use std::path::Path;

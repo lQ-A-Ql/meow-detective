@@ -2,6 +2,8 @@ pub mod artifact;
 pub mod batch;
 pub mod case;
 pub mod datasource;
+mod nested_evidence;
+pub use nested_evidence::NestedEvidenceLineage;
 pub mod error;
 pub mod file_entry;
 pub mod fingerprint;

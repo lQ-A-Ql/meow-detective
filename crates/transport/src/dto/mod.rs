@@ -94,7 +94,8 @@ pub use bitlocker::{
 pub use bitlocker_dictionary::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
-    DataSourceProcessingSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto,
+    DataSourceProcessingSummaryDto, DataSourceSummaryDto, NestedEvidenceLineageDto, RecentCaseDto,
+    RecentObjectDto,
 };
 pub use correlation::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,
@@ -161,7 +162,9 @@ pub use recovery::{
     RecoveryProvenanceRangeDto, RecoveryScanStateDto,
 };
 pub use registry::RegistryRunKeyDto;
-pub use registry_browser::{RegistryBrowserKeyDto, RegistryBrowserValueDto};
+pub use registry_browser::{
+    RegistryBrowserKeyDto, RegistryBrowserValueDto, RegistryOverlaySourceDto,
+};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
 pub use search::{
