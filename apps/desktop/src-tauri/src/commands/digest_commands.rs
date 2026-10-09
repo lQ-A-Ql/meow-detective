@@ -20,9 +20,11 @@ pub async fn calculate_evidence_digest(
             &active.meta.id,
             request.scope,
             request.algorithm,
-            request.data_source_id.as_deref(),
-            request.file_id.as_deref(),
-            request.partition_index,
+            app_services::digest_service::DigestTarget {
+                data_source_id: request.data_source_id.as_deref(),
+                file_id: request.file_id.as_deref(),
+                partition_index: request.partition_index,
+            },
         )
         .map_err(CommandError::from_typed_service_error)
     })

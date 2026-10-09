@@ -28,6 +28,12 @@ pub enum DigestServiceError {
     Hash(#[source] EvidenceHashError),
 }
 
+pub struct DigestTarget<'a> {
+    pub data_source_id: Option<&'a str>,
+    pub file_id: Option<&'a str>,
+    pub partition_index: Option<u32>,
+}
+
 impl From<persistence_sqlite::DbError> for DigestServiceError {
     fn from(error: persistence_sqlite::DbError) -> Self {
         Self::Database(error)
@@ -68,14 +74,12 @@ pub fn calculate_evidence_digest(
     case_id: &CaseId,
     scope: DigestScopeDto,
     algorithm: DigestAlgorithmDto,
-    data_source_id: Option<&str>,
-    file_id: Option<&str>,
-    partition_index: Option<u32>,
+    target: DigestTarget<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
     let algorithm = map_algorithm(algorithm);
     match scope {
         DigestScopeDto::ContainerFile => {
-            let source = load_source(case_conn, case_id, data_source_id)?;
+            let source = load_source(case_conn, case_id, target.data_source_id)?;
             let digest = HashService::digest_file(Path::new(&source.source_path), algorithm)
                 .map_err(|error| {
                     DigestServiceError::Hash(EvidenceHashError::Io {
@@ -94,7 +98,7 @@ pub fn calculate_evidence_digest(
             Ok(completed(scope, algorithm, digest, byte_length))
         }
         DigestScopeDto::ContainerSet => {
-            let source = load_source(case_conn, case_id, data_source_id)?;
+            let source = load_source(case_conn, case_id, target.data_source_id)?;
             let cancelled = AtomicBool::new(false);
             let result = HashService::hash_evidence_with_algorithm(
                 Path::new(&source.source_path),
@@ -112,13 +116,13 @@ pub fn calculate_evidence_digest(
             ))
         }
         DigestScopeDto::File => {
-            let file_id = file_id.ok_or(DigestServiceError::InvalidInput)?;
+            let file_id = target.file_id.ok_or(DigestServiceError::InvalidInput)?;
             digest_file(case_conn, case_root, case_id, file_id, algorithm)
         }
         DigestScopeDto::LogicalDisk
         | DigestScopeDto::Partition
         | DigestScopeDto::DerivedEvidence => {
-            let _ = (data_source_id, partition_index);
+            let _ = (target.data_source_id, target.partition_index);
             Err(DigestServiceError::Unsupported)
         }
     }

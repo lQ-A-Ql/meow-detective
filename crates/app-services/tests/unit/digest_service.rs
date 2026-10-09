@@ -1,4 +1,4 @@
-use crate::digest_service::{calculate_evidence_digest, DigestServiceError};
+use crate::digest_service::{calculate_evidence_digest, DigestServiceError, DigestTarget};
 use domain::CaseId;
 use rusqlite::Connection;
 use std::path::Path;
@@ -13,9 +13,11 @@ fn unsupported_partition_scope_fails_closed() {
         &CaseId("case".into()),
         DigestScopeDto::Partition,
         DigestAlgorithmDto::Sha256,
-        Some("source"),
-        None,
-        Some(0),
+        DigestTarget {
+            data_source_id: Some("source"),
+            file_id: None,
+            partition_index: Some(0),
+        },
     );
     assert!(matches!(result, Err(DigestServiceError::Unsupported)));
 }
