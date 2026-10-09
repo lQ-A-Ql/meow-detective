@@ -26,7 +26,7 @@ export function ImageMetadataInspector({ metadata, loading, error, onRetry }: Im
   const statusLabel = status ? t(`fileBrowser.inspector.imageMetadata.statuses.${status}`) : undefined;
 
   return (
-    <InspectorSection title={t('fileBrowser.inspector.sections.image')}>
+    <InspectorSection title={t('fileBrowser.inspector.sections.imageMetadata')}>
       {loading ? <div className="text-[11px] text-forensics-muted">{t('fileBrowser.inspector.imageMetadata.loading')}</div> : null}
       {!loading && error ? (
         <div className="space-y-2">

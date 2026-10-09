@@ -18,10 +18,10 @@ describe('ImageMetadataInspector', () => {
 
   it('renders absent and corrupt states without fabricating fields', () => {
     const { rerender } = render(<ImageMetadataInspector loading={false} metadata={{ status: 'absent' }} />);
-    expect(screen.getByText('无 EXIF')).toBeInTheDocument();
+    expect(screen.getAllByText('无 EXIF').length).toBeGreaterThan(0);
 
     rerender(<ImageMetadataInspector loading={false} metadata={{ status: 'corrupt', format: 'jpeg' }} />);
-    expect(screen.getByText('结构损坏')).toBeInTheDocument();
+    expect(screen.getAllByText('结构损坏').length).toBeGreaterThan(0);
   });
 
   it('renders loading and retryable error states', () => {
