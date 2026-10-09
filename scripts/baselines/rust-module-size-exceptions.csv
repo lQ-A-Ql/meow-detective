@@ -1,1 +1,2 @@
 path,owner,reason,expires
+crates/persistence-sqlite/src/migrations/runner.rs,review,temporary migration registry exception pending module split,2026-12-31
