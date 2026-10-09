@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 40 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：12 frontend pages、156 Tauri commands、39 source modules、migration scripts (100)、128 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：12 frontend pages、157 Tauri commands、40 source modules、migration scripts (101)、128 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 > [!IMPORTANT]
 > **Windows 权限与系统服务特别说明**：发布版桌面应用使用 Windows manifest 的
@@ -367,3 +367,4 @@ cargo tauri build
 | [winbindex](https://github.com/m417z/winbindex) | GPL-3.0 | ntoskrnl 各 build 元数据索引，作为内嵌内核符号注册表的采集入口（配合微软公共符号服务器 PDB），见 `crates/memory-windows/symbols/README.md`；仅消费其公开索引数据，未复用其源码 |
 
 此外，DPAPI / TBAL 离线恢复链路参考了公开研究（[TBAL: an (accidental?) DPAPI Backdoor for local users](https://vztekoverflow.com/2018/07/31/tbal-dpapi-backdoor/) 与 [pypykatz](https://github.com/skelsec/pypykatz) 的算法说明），仅作算法对照，未复用其代码。仿真取证的绕密与维护引导设计（SAM/Utilman 绕密、OSDATA 命名空间处理、Linux `/etc/shadow` 编辑与 GRUB 单用户路线）参考了公开技术资料中的通用技术原理，实现为本项目独立代码。
+
