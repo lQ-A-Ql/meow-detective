@@ -27,7 +27,7 @@
 2. NTFS 解析丢弃部分 DataRun 原始字段，缺少技术检查视图。
 3. 全文索引白名单小于预览文本范围，容易漏掉服务器配置和脚本。
 4. 图片、systemd、Git/GitLab、Firefox 扩展缺少结构化结果。
-5. VHD/Nested Evidence 和 Registry Browser 尚未形成通用调查链。
+5. VHD/Nested Evidence 和 Registry Browser 需要统一 provenance 与恢复状态展示。
 6. 前端部分页面曾把数据请求、业务编排和 JSX 放在同一文件；UI 原语、文案、图标和动效需要集中治理。
 
 因此优先级按“证据语义准确性 → 技术结构可见性 → 高频落盘证据 → 复杂嵌套证据”推进。
@@ -464,12 +464,14 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
   - Stage 1：多算法 Hash Scope（不支持 scope 明确 fail-closed）、NTFS Technical Inspector、全文索引 content sniffing。
   - Stage 2：EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip、Firefox Extensions。
   - Stage 3：Fixed VHD 只读读取、动态/差分 VHD 明确拒绝、Registry Browser source-bound 查询。
+  - Stage 3 闭环：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名。
 
   当前限制：
 
   - Hash Scope 的 LogicalDisk、Partition、DerivedEvidence 当前返回 typed Unsupported，避免伪造 digest。
   - VHDX、QCOW/QCOW2、动态/差分 VHD 仍 fail-closed；当前支持 Fixed VHD。
-  - Registry Browser 提供 Base hive 只读树和值查询；LOG1/LOG2 overlay 仍由既有定向 extractor 处理，浏览器查询不会伪造合并状态。
+  - Registry Browser 提供 Base hive 只读树和值查询；检测到 LOG1/LOG2 时返回明确提示，浏览器查询不会伪造合并状态。
+  - Hash、嵌套证据物化目前在 Tauri blocking worker 执行；后续可统一接入 TaskManager 的可恢复任务句柄。
 
 ## 15. 长耗时计算与流程调度设计
 
@@ -688,3 +690,4 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 4. 统一 Bottom Drawer 任务卡、取消/暂停/重试交互。
 5. 增加资源预算、排队等待和吞吐指标的回归测试。
 6. 最后接入 GPU 作为可选资源类，保持 CPU 回退路径和相同结果校验。
+
