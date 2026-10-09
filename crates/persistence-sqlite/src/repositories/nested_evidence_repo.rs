@@ -36,8 +36,20 @@ impl<'a> NestedEvidenceRepo<'a> {
                 parent_data_source_id: DataSourceId(row.get(0)?),
                 nested_file_path: row.get(1)?,
                 derived_data_source_id: row.get::<_, Option<String>>(2)?.map(DataSourceId),
-                offset: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
-                length: u64::try_from(row.get::<_, i64>(4)?).unwrap_or(0),
+                offset: u64::try_from(row.get::<_, i64>(3)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Integer,
+                        Box::new(error),
+                    )
+                })?,
+                length: u64::try_from(row.get::<_, i64>(4)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Integer,
+                        Box::new(error),
+                    )
+                })?,
                 probe_kind: row.get(5)?,
             })
         })?;

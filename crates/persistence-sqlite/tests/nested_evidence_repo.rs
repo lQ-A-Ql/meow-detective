@@ -19,3 +19,19 @@ fn lineage_round_trips_proved_range() {
     let rows = repo.find_by_parent(&value.parent_data_source_id).unwrap();
     assert_eq!(rows, vec![value]);
 }
+
+#[test]
+fn lineage_rejects_negative_ranges_in_legacy_schema() {
+    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE nested_evidence_lineage (parent_data_source_id TEXT NOT NULL, nested_file_path TEXT NOT NULL, derived_data_source_id TEXT, offset INTEGER NOT NULL, length INTEGER NOT NULL, probe_kind TEXT NOT NULL, PRIMARY KEY(parent_data_source_id,nested_file_path));").unwrap();
+    conn.execute(
+        "INSERT INTO nested_evidence_lineage VALUES ('parent','disk.vhd',NULL,-1,4096,'vhd-fixed')",
+        [],
+    )
+    .unwrap();
+    let error =
+        persistence_sqlite::repositories::nested_evidence_repo::NestedEvidenceRepo::new(&conn)
+            .find_by_parent(&DataSourceId("parent".into()))
+            .unwrap_err();
+    assert!(error.to_string().contains("out of range"));
+}

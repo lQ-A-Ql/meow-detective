@@ -41,6 +41,19 @@ fn rejects_dynamic_vhd_and_does_not_probe_as_raw() {
 }
 
 #[test]
+fn rejects_fixed_vhd_that_claims_bytes_beyond_data_before_footer() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("truncated.vhd");
+    fixed_vhd(&path, b"payload", 2);
+    let mut bytes = std::fs::read(&path).unwrap();
+    let footer = bytes.len() - 512;
+    bytes[footer + 48..footer + 56].copy_from_slice(&(4096u64).to_be_bytes());
+    std::fs::write(&path, bytes).unwrap();
+    let error = RawImageReader::open(&path).unwrap_err();
+    assert!(error.to_string().contains("fixed VHD is truncated"));
+}
+
+#[test]
 fn unknown_extension_is_not_guessed_as_raw() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("unknown.container");

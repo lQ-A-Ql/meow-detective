@@ -42,7 +42,14 @@ impl RawImageReader {
             if vhd.disk_type != 2 {
                 return Err(invalid_data("VHD footer has an unsupported disk type"));
             }
-            if vhd.virtual_size == 0 || physical_len < vhd.virtual_size {
+            // A fixed VHD stores the footer after the virtual disk bytes.  Do
+            // not compare against the complete host file length: accepting
+            // `virtual_size == physical_len` would expose the footer as disk
+            // data and would allow truncated images to pass validation.
+            let data_len = physical_len
+                .checked_sub(512)
+                .ok_or_else(|| invalid_data("fixed VHD is missing its footer"))?;
+            if vhd.virtual_size == 0 || data_len < vhd.virtual_size {
                 return Err(invalid_data("fixed VHD is truncated"));
             }
             return Ok(Self {
