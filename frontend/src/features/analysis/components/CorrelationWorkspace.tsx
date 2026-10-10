@@ -225,7 +225,7 @@ export function CorrelationWorkspace({
             size="sm"
             onClick={onRefresh}
             className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"
-          ><ActionIcon name="refresh" /></Button></Tooltip>
+           disabled={refreshing}><ActionIcon name="refresh" /></Button></Tooltip>
         ) : null}
       </div>
 

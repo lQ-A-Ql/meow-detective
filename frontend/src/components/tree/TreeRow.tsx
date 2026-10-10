@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
 
@@ -83,8 +84,10 @@ export function TreeRow({
   style?: CSSProperties;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="forensicsGhost"
+      shape="row"
       role="treeitem"
       aria-label={ariaLabel}
       aria-disabled={disabled || undefined}
@@ -128,6 +131,6 @@ export function TreeRow({
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {meta}
-    </button>
+    </Button>
   );
 }

@@ -28,8 +28,7 @@ export function ConfirmationDialog({
   onOpenChange,
   title,
   description,
-  cancelLabel,
-  confirmLabel,
+
   onConfirm,
   pending = false,
   destructive = false,

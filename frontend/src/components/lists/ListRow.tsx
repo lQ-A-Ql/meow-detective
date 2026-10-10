@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { Button } from '@/app/components/ui/button';
 import { cn } from '@/app/components/ui/utils';
 
 /**
@@ -32,8 +33,10 @@ export function ListRow({
   testId?: string;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="forensicsGhost"
+      shape="row"
       aria-label={ariaLabel}
       aria-current={ariaCurrent ? 'true' : undefined}
       aria-selected={selected}
@@ -52,6 +55,6 @@ export function ListRow({
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {meta}
-    </button>
+    </Button>
   );
 }
