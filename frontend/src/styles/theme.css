@@ -152,7 +152,7 @@
   --forensics-viz-environment: #f1efec;
   --forensics-viz-storage: #efece8;
   --forensics-viz-analysis: #f4f2f0;
-  --forensics-viz-font-family: ui-sans-serif, system-ui, sans-serif;
+  --forensics-viz-font-family: 'Maple Mono NF CN', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --forensics-graph-node-file: #3b3835;
   --forensics-graph-node-artifact: #c8102e;
   --forensics-graph-node-timeline-event: #7a1622;
@@ -372,7 +372,7 @@
     background: var(--background);
     margin: 0;
     min-height: 100vh;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: var(--font-weight-normal);
     letter-spacing: 0;
   }
@@ -392,7 +392,7 @@
 
   h1 {
     font-size: var(--text-2xl);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: var(--font-weight-normal);
     letter-spacing: 0.04em;
     line-height: 1.5;
@@ -400,7 +400,7 @@
 
   h2 {
     font-size: var(--text-xl);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: var(--font-weight-normal);
     letter-spacing: 0.04em;
     line-height: 1.5;
@@ -408,7 +408,7 @@
 
   h3 {
     font-size: var(--text-lg);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: var(--font-weight-normal);
     letter-spacing: 0.04em;
     line-height: 1.5;
@@ -416,7 +416,7 @@
 
   h4 {
     font-size: var(--text-base);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: var(--font-weight-normal);
     letter-spacing: 0.04em;
     line-height: 1.5;

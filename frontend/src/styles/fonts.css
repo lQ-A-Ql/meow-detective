@@ -1,84 +1,48 @@
-/* ── 自定义字体声明 ── */
+/* ── 字体：全局统一 Maple Mono NF CN（含 CJK 与 Nerd Font 图标） ── */
+/* 单字重字体：为项目用到的每个字重登记同一份字面，避免浏览器合成加粗。 */
 
-/* 正文字体：毛笔楷行远 */
 @font-face {
-  font-family: 'MaoKenWangXingYuan';
-  src: url('../ttf/MaoKenWangXingYuan/MaoKenWangXingYuan-2.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* 文件预览区等宽字体：JetBrains Mono */
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Regular-2.ttf') format('truetype');
-  font-weight: 400;
+  font-family: 'Maple Mono NF CN';
+  src: url('../ttf/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf') format('truetype');
+  font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Medium-3.ttf') format('truetype');
+  font-family: 'Maple Mono NF CN';
+  src: url('../ttf/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Maple Mono NF CN';
+  src: url('../ttf/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Bold-7.ttf') format('truetype');
+  font-family: 'Maple Mono NF CN';
+  src: url('../ttf/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Maple Mono NF CN';
+  src: url('../ttf/MapleMono-NF-CN/MapleMono-NF-CN-Regular.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-ExtraBold-6.ttf') format('truetype');
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Italic-5.ttf') format('truetype');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Medium-Italic-4.ttf') format('truetype');
-  font-weight: 500;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Bold-Italic-8.ttf') format('truetype');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
-
-/* 英文主标题字体：Playlist Script */
-@font-face {
-  font-family: 'Playlist Script';
-  src: url('../ttf/Playlist-Script/Playlist-Script-2.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* ── Tailwind 主题变量 ── */
 @theme {
-  --font-sans: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
-  --font-display: 'Playlist Script', cursive;
-  --font-serif: 'MaoKenWangXingYuan', 'Noto Serif CJK SC', 'Source Han Serif SC', SimSun, serif;
+  --font-sans: 'Maple Mono NF CN', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: 'Maple Mono NF CN', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-serif: 'Maple Mono NF CN', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
