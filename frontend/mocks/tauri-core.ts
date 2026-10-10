@@ -172,7 +172,9 @@ export async function invoke<T>(command: string, payload?: MockCommandPayload): 
     }
     case 'get_file_rows_request': {
       const request = (payload?.request ?? payload) as { parentId?: string | null; showHidden?: boolean } | undefined;
-      const all = ((tree.rows as Record<string, unknown>)[request?.parentId ?? ''] ?? []) as { hidden?: boolean; system?: boolean }[];
+      const candidate = (tree.rows as Record<string, unknown>)[request?.parentId ?? ''];
+      // Only a directory id maps to rows; anything else is an empty listing, never a bare row.
+      const all = (Array.isArray(candidate) ? candidate : []) as { hidden?: boolean; system?: boolean }[];
       const rows = request?.showHidden === false ? all.filter((row) => !row.hidden && !row.system) : all;
       return { rows, totalCount: rows.length, offset: 0, limit: 500, truncated: false } as T;
     }
