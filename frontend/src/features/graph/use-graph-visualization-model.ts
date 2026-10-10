@@ -47,7 +47,7 @@ export function useGraphVisualizationModel() {
   }, [caseId]);
 
   useEffect(() => {
-    setSeedIds(snapshot.data?.seedIds.slice(0, MAX_SEEDS) ?? []);
+    setSeedIds((snapshot.data?.seedIds ?? []).slice(0, MAX_SEEDS));
   }, [snapshot.data?.seedIds]);
 
   useEffect(() => {
@@ -59,12 +59,14 @@ export function useGraphVisualizationModel() {
 
   useEffect(() => {
     if (!initialQuery.data) return;
+    const nodes = initialQuery.data.nodes ?? [];
+    const edges = initialQuery.data.edges ?? [];
     setGraphData({
-      nodes: initialQuery.data.nodes.slice(0, MAX_GRAPH_NODES),
-      edges: initialQuery.data.edges.slice(0, MAX_GRAPH_EDGES),
+      nodes: nodes.slice(0, MAX_GRAPH_NODES),
+      edges: edges.slice(0, MAX_GRAPH_EDGES),
       truncated: initialQuery.data.truncated
-        || initialQuery.data.nodes.length > MAX_GRAPH_NODES
-        || initialQuery.data.edges.length > MAX_GRAPH_EDGES,
+        || nodes.length > MAX_GRAPH_NODES
+        || edges.length > MAX_GRAPH_EDGES,
     });
     setSelectedNodeId(undefined);
     setSelectedEdgeId(undefined);

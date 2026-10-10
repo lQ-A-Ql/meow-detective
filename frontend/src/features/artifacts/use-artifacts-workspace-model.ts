@@ -22,7 +22,7 @@ export function useArtifactsWorkspaceModel() {
   const artifactFamilyCounts = useArtifactFamilyCounts();
   const artifactRowsQuery = useInfiniteArtifactRows(selectedArtifactFamily);
   const rows = useMemo(
-    () => artifactRowsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    () => (artifactRowsQuery.data?.pages ?? []).flatMap((page) => page?.items ?? []),
     [artifactRowsQuery.data],
   );
   const totalRows = artifactRowsQuery.data?.pages[0]?.total ?? 0;
@@ -46,7 +46,7 @@ export function useArtifactsWorkspaceModel() {
   }, [rows, selectedArtifactQuery.data]);
   const selectedArtifact =
     selectedArtifactQuery.data
-    ?? tableRows.find((row) => row.id === selectedArtifactId)
+    ?? tableRows.find((row) => row?.id === selectedArtifactId)
     ?? tableRows[0];
   const families = useMemo(() => {
     const counts = new Map(artifactFamilyCounts.data?.map((entry) => [entry.family, entry.count]));

@@ -38,11 +38,11 @@ export function useReportsWorkspaceModel() {
   });
   const history = historyQuery.data;
   const runningCount = useMemo(
-    () => history?.filter((entry) => entry.status === 'running').length ?? 0,
+    () => (Array.isArray(history) ? history.filter((entry) => entry.status === 'running').length : 0),
     [history],
   );
   const completedCount = useMemo(
-    () => history?.filter((entry) => entry.status === 'completed').length ?? 0,
+    () => (Array.isArray(history) ? history.filter((entry) => entry.status === 'completed').length : 0),
     [history],
   );
   const evidenceHashStatus = useMemo(

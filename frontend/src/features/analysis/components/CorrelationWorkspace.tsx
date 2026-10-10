@@ -21,7 +21,7 @@ import { LeadDetailPanel } from './LeadDetail';
 import { ClusterCard } from './ClusterView';
 
 export function CorrelationWorkspace({
-  snapshot,
+  snapshot: rawSnapshot,
   onRefresh,
   refreshing = false,
   onJumpToTarget,
@@ -32,6 +32,21 @@ export function CorrelationWorkspace({
   onJumpToTarget?: (route: string, targetId: string) => void;
 }) {
   const { t } = useTranslation();
+  // A partial payload (older backend, preview harness) must not blank the whole analysis route:
+  // the rest of this view indexes straight into these collections.
+  const snapshot: CorrelationSnapshot = {
+    ...rawSnapshot,
+    leads: rawSnapshot.leads ?? [],
+    nodes: rawSnapshot.nodes ?? [],
+    edges: rawSnapshot.edges ?? [],
+    clusters: rawSnapshot.clusters ?? [],
+    familyCoverage: rawSnapshot.familyCoverage ?? [],
+    leadCount: rawSnapshot.leadCount ?? 0,
+    clusterCount: rawSnapshot.clusterCount ?? 0,
+    nodeCount: rawSnapshot.nodeCount ?? 0,
+    edgeCount: rawSnapshot.edgeCount ?? 0,
+    generatedAt: rawSnapshot.generatedAt ?? '',
+  };
   const [selectedLeadId, setSelectedLeadId] = useState<string | undefined>(snapshot.leads[0]?.id);
   const [leadSearch, setLeadSearch] = useState('');
   const [focusMode, setFocusMode] = useState<'all' | 'highConfidence' | 'review'>('all');

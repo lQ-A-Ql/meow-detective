@@ -87,7 +87,7 @@ export function useTimelineWorkspaceModel() {
     eventType || null,
   ]);
   const events = useMemo(
-    () => timelineQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    () => (timelineQuery.data?.pages ?? []).flatMap((page) => page?.items ?? []),
     [timelineQuery.data],
   );
   const totalEvents = facetsQuery.data?.totalEvents ?? 0;
@@ -116,7 +116,7 @@ export function useTimelineWorkspaceModel() {
     () => (facetsQuery.data?.eventTypes ?? []).map((entry) => entry.value),
     [facetsQuery.data?.eventTypes],
   );
-  const sourceCount = facetsQuery.data?.dataSources.length ?? 0;
+  const sourceCount = facetsQuery.data?.dataSources?.length ?? 0;
   const bars = useMemo(
     () => buildTimelineBars(facetsQuery.data?.histogram ?? [], bucketCount),
     [bucketCount, facetsQuery.data?.histogram],
@@ -212,7 +212,7 @@ export function useTimelineWorkspaceModel() {
     selectEventType,
     selectTimeBucket,
     sourceCount,
-    middleTimestamp: facetsQuery.data?.histogram.length
+    middleTimestamp: facetsQuery.data?.histogram?.length
       ? formatTimestamp(facetsQuery.data.histogram[Math.floor(facetsQuery.data.histogram.length / 2)].startTs)
       : '',
     tableEvents,

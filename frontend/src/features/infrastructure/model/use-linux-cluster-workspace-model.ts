@@ -26,7 +26,7 @@ export function useLinuxClusterWorkspaceModel() {
     queryKey: ['linux-evidence-set-summary', currentCase.data?.id ?? null, selectedSetId ?? null],
     queryFn: () => getLinuxEvidenceSetSummary(selectedSetId as string),
     enabled: Boolean(selectedSetId),
-    refetchInterval: (query) => query.state.data?.members.some((member) => member.hashStatus === 'pending') ? 2_000 : false,
+    refetchInterval: (query) => (query.state.data?.members ?? []).some((member) => member.hashStatus === 'pending') ? 2_000 : false,
   });
   const events = useQuery({
     queryKey: ['linux-evidence-set-events', currentCase.data?.id ?? null, selectedSetId ?? null],
@@ -34,7 +34,7 @@ export function useLinuxClusterWorkspaceModel() {
     enabled: Boolean(selectedSetId),
   });
   const selectedMember = useMemo(
-    () => summary.data?.members.find((member) => member.memberIndex === selectedMemberIndex),
+    () => (summary.data?.members ?? []).find((member) => member.memberIndex === selectedMemberIndex),
     [selectedMemberIndex, summary.data],
   );
   const sourceMetadata = useMemo(

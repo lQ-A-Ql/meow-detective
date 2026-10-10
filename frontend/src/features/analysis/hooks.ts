@@ -37,10 +37,10 @@ function mergeEvtxPages(pages: EvtxEventSummary[]): EvtxEventSummary | undefined
   if (!first) return undefined;
   return {
     ...first,
-    bootEvents: pages.flatMap((page) => page.bootEvents),
-    securityEvents: pages.flatMap((page) => page.securityEvents),
-    applicationEvents: pages.flatMap((page) => page.applicationEvents),
-    warnings: [...new Set(pages.flatMap((page) => page.warnings))],
+    bootEvents: pages.flatMap((page) => page.bootEvents ?? []),
+    securityEvents: pages.flatMap((page) => page.securityEvents ?? []),
+    applicationEvents: pages.flatMap((page) => page.applicationEvents ?? []),
+    warnings: [...new Set(pages.flatMap((page) => page.warnings ?? []))],
   };
 }
 
@@ -248,17 +248,13 @@ export function useEvtxEventSummary(
     }),
     initialPageParam: request.offset ?? 0,
     getNextPageParam: (lastPage, pages) => {
-      const lastPageItemCount = lastPage.bootEvents.length
-        + lastPage.securityEvents.length
-        + lastPage.applicationEvents.length;
+      const pageItemCount = (page: EvtxEventSummary) =>
+        (page.bootEvents?.length ?? 0)
+        + (page.securityEvents?.length ?? 0)
+        + (page.applicationEvents?.length ?? 0);
+      const lastPageItemCount = pageItemCount(lastPage);
       if (lastPageItemCount === 0) return undefined;
-      const loaded = pages.reduce(
-        (total, page) => total
-          + page.bootEvents.length
-          + page.securityEvents.length
-          + page.applicationEvents.length,
-        0,
-      );
+      const loaded = pages.reduce((total, page) => total + pageItemCount(page), 0);
       return loaded < lastPage.pageTotal ? (request.offset ?? 0) + loaded : undefined;
     },
     enabled: currentCase.isSuccess
