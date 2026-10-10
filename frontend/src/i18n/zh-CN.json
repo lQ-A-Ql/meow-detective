@@ -2466,7 +2466,8 @@
       "subtitle": "可信验证 / 支持矩阵 / Benchmark / 安全治理 / 发布评分卡",
       "loadingSnapshot": "正在加载 V2 治理快照...",
       "loadingCorrelation": "正在加载关联分析快照...",
-      "snapshotUnavailable": "当前案件尚未返回治理快照。"
+      "snapshotUnavailable": "当前案件尚未返回治理快照。",
+      "refresh": "刷新"
     },
     "scorecard": {
       "title": "发布评分卡",

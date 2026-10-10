@@ -2466,7 +2466,8 @@
       "subtitle": "Trusted Verification / Support Matrix / Benchmark / Security Governance / Release Scorecard",
       "loadingSnapshot": "Loading the V2 governance snapshot...",
       "loadingCorrelation": "Loading the correlation snapshot...",
-      "snapshotUnavailable": "This case has not returned a governance snapshot yet."
+      "snapshotUnavailable": "This case has not returned a governance snapshot yet.",
+      "refresh": "Refresh"
     },
     "scorecard": {
       "title": "Release Scorecard",
