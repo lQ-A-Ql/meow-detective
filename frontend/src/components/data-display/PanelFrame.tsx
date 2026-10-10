@@ -3,7 +3,12 @@ import { cn } from '@/app/components/ui/utils';
 
 export function PanelFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn('rounded-none border border-forensics-border bg-transparent p-5 transition-colors', className)}>
+    <section
+      className={cn(
+        'min-w-0 border-b border-forensics-divider bg-transparent p-4 last:border-b-0',
+        className,
+      )}
+    >
       {children}
     </section>
   );
@@ -27,8 +32,8 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn('rounded-none border border-dashed border-forensics-border-strong bg-transparent p-6 text-center text-[12px] text-forensics-muted-light', className)}>
-      {title ? <div className="text-[13px] text-forensics-text">{title}</div> : null}
+    <div className={cn('bg-transparent p-6 text-center text-[12px] text-forensics-ink-3', className)}>
+      {title ? <div className="text-[13px] text-forensics-ink">{title}</div> : null}
       {description ? <div className="mt-1 leading-5">{description}</div> : null}
       {children}
       {action ? <div className="mt-3 flex justify-center gap-2">{action}</div> : null}

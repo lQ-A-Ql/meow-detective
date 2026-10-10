@@ -59,7 +59,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
     <>
     <Dialog open={model.dialogOpen} onOpenChange={model.setDialogOpen}>
       <DialogContent className="max-h-[min(720px,calc(100vh-2rem))] overflow-y-auto p-0 sm:max-w-2xl">
-        <div className="border-b border-forensics-border bg-forensics-panel-strong px-5 py-4">
+        <div className="border-b border-forensics-divider bg-forensics-panel-strong px-5 py-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[16px]">
               <ShieldCheck className="size-4 text-forensics-primary-blue" />
@@ -99,7 +99,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
 
           <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(220px,1fr)]">
             <section className="space-y-4 border border-forensics-border bg-forensics-surface p-4">
-              <div className="flex items-center justify-between gap-3 border-b border-forensics-border pb-3">
+              <div className="flex items-center justify-between gap-3 border-b border-forensics-divider pb-3">
                 <div className="flex items-center gap-2 text-[12px] text-forensics-text">
                   <HardDrive className="size-4 text-forensics-muted" />
                   {t('fileBrowser.mount.sourceSection')}
@@ -164,7 +164,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
             </section>
 
             <section className="space-y-4 border border-forensics-border bg-forensics-panel p-4">
-              <div className="flex items-center gap-2 border-b border-forensics-border pb-3 text-[12px] text-forensics-text">
+              <div className="flex items-center gap-2 border-b border-forensics-divider pb-3 text-[12px] text-forensics-text">
                 <HardDrive className="size-4 text-forensics-muted" />
                 {t('fileBrowser.mount.optionsSection')}
               </div>

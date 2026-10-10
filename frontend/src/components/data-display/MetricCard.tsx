@@ -27,21 +27,21 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'rounded-none border border-forensics-border bg-transparent transition-colors',
-        size === 'sm' && 'px-2 py-1.5',
-        size === 'md' && 'p-3',
-        size === 'lg' && 'p-4',
+        'min-w-0 bg-transparent',
+        size === 'sm' && 'px-3 py-1.5',
+        size === 'md' && 'px-3 py-2',
+        size === 'lg' && 'px-4 py-3',
         align === 'center' && 'text-center',
         className,
       )}
     >
       <div className={cn('flex items-center justify-between gap-2', align === 'center' && 'justify-center')}>
-        <div className="text-[10px] tracking-wide text-forensics-muted-light">{label}</div>
-        {Icon ? <Icon size={16} className="text-forensics-muted-lighter" /> : null}
+        <div className="text-[10px] tracking-[0.08em] text-forensics-ink-3">{label}</div>
+        {Icon ? <Icon size={14} className="text-forensics-ink-3" /> : null}
       </div>
       <div
         className={cn(
-          'mt-1 break-words font-light text-forensics-text',
+          'mt-0.5 break-words font-light text-forensics-ink',
           mono && 'font-mono',
           size === 'sm' && 'text-[11px]',
           size === 'md' && 'text-[15px]',
@@ -50,7 +50,7 @@ export function MetricCard({
       >
         {value}
       </div>
-      {subtitle ? <div className="mt-0.5 text-[11px] text-forensics-muted">{subtitle}</div> : null}
+      {subtitle ? <div className="mt-0.5 text-[11px] text-forensics-ink-3">{subtitle}</div> : null}
     </div>
   );
 }
@@ -80,10 +80,16 @@ export function StatGrid({
   const hidden = items.length - rendered.length;
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4', className)}>
+    <div
+      className={cn(
+        // 指标行：区块内的竖金线分隔，不再使用卡片
+        'flex flex-wrap items-stretch [&>*+*]:border-l [&>*+*]:border-forensics-divider',
+        className,
+      )}
+    >
       {rendered}
       {hidden > 0 && hiddenNote ? (
-        <div className="col-span-full text-[10px] text-forensics-muted-lighter">{hiddenNote(hidden)}</div>
+        <div className="w-full px-3 py-1 text-[10px] text-forensics-ink-3">{hiddenNote(hidden)}</div>
       ) : null}
     </div>
   );

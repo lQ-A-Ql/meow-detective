@@ -180,8 +180,8 @@ export function FileListPanel({
   );
 
   return (
-    <div className="flex-1 flex flex-col border-b border-forensics-border bg-forensics-surface min-h-0">
-      <div className="shrink-0 flex items-center gap-2 border-b border-forensics-border bg-forensics-panel px-3 py-1.5">
+    <div className="flex-1 flex flex-col border-b border-forensics-divider bg-forensics-surface min-h-0">
+      <div className="shrink-0 flex items-center gap-2 border-b border-forensics-divider bg-forensics-panel px-3 py-1.5">
         <Button
           type="button"
           variant="outline"

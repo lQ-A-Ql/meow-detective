@@ -12,7 +12,7 @@ export function NtfsTechnicalInspector({ technical }: { technical?: NtfsTechnica
         <InspectorValue value={`${t('fileBrowser.inspector.ntfs.recordOffset')}: ${technical.recordOffset}`} mono />
         <InspectorValue value={`${t('fileBrowser.inspector.ntfs.attributes')}: ${technical.attributes.length}`} mono />
         {technical.attributes.flatMap((attribute) => attribute.dataRuns).slice(0, 32).map((run, index) => (
-          <div key={`${run.logicalOffset}-${index}`} className="border-l border-forensics-border pl-2">
+          <div key={`${run.logicalOffset}-${index}`} className="border-l border-forensics-divider pl-2">
             <div>{t('fileBrowser.inspector.ntfs.run')} {index + 1}</div>
             <div>LCN {run.absoluteLcn ?? '-'} · {run.clusterCount} clusters</div>
             <div>raw {run.raw.map((value) => value.toString(16).padStart(2, '0')).join(' ')}</div>

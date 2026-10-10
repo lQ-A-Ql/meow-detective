@@ -144,7 +144,7 @@ export function FileTreePanel({
   }, [displayNodeName, sourceMap, toggleDirectory]);
   return (
     <div
-      className="border-r border-forensics-border bg-forensics-panel flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
+      className="border-r border-forensics-divider bg-forensics-panel flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
       style={{ width: `${treeWidth}px`, minWidth: `${treeWidth}px`, maxWidth: `${treeWidth}px` }}
     >
       <div
