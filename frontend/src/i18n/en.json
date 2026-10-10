@@ -694,7 +694,8 @@
         }
       },
       "hash": {
-        "loading": "Calculating…"
+        "loading": "Calculating…",
+        "run": "Calculate {algorithm}"
       },
       "ntfs": {
         "inode": "MFT inode",
