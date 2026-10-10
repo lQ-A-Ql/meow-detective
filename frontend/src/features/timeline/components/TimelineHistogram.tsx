@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/app/components/ui/button';
+import { HistogramBar } from '@/components/charts/HistogramBar';
+
 
 export interface TimelineHistogramBar {
   count: number;
@@ -22,24 +23,14 @@ export function TimelineHistogram({ bars, onSelectRange }: TimelineHistogramProp
         const rangeLabel = hasRange ? `${bar.startTs} - ${bar.endTs}` : t('timeline.histogram.noRange');
         return (
           <div key={hasRange ? JSON.stringify([bar.startTs, bar.endTs]) : `empty-${index}`} className="h-full min-w-0 flex-1">
-            <Button
-              type="button"
-              variant="viewerControl"
-              size="inline"
-              className="group h-full w-full cursor-crosshair items-end p-0"
+            <HistogramBar
+              heightPercent={bar.height}
+              filled={bar.count > 0}
+              label={t('timeline.histogram.selectRange', { count: bar.count })}
               title={t('timeline.histogram.barTitle', { range: rangeLabel, count: bar.count })}
-              aria-label={t('timeline.histogram.selectRange', { count: bar.count })}
               disabled={!hasRange}
-              onClick={() => onSelectRange(bar)}
-            >
-              <span
-                aria-hidden="true"
-                className={`min-h-px w-full transition-colors group-hover:bg-forensics-sakura-500 ${
-                  bar.count > 0 ? 'bg-forensics-text' : 'bg-forensics-250'
-                }`}
-                style={{ height: `${bar.height}%` }}
-              />
-            </Button>
+              onSelect={() => onSelectRange(bar)}
+            />
           </div>
         );
       })}

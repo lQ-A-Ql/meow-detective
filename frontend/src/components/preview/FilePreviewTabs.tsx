@@ -147,9 +147,10 @@ function HexPreviewContent({
         <Button
           type="button"
           variant="forensicsGhost"
-          size="xs"
+          shape="row"
+          aria-expanded={inspectorExpanded}
           onClick={() => setInspectorExpanded((value) => !value)}
-          className="h-auto w-full justify-between px-3 py-2 text-left text-[10px]"
+          className="h-auto w-full justify-between gap-3 rounded-none px-3 py-2 text-left text-[10px]"
         >
           <div className="flex min-w-0 items-center gap-3">
             <span className="font-light text-forensics-text">

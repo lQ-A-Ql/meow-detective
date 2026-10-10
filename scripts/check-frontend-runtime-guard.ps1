@@ -153,6 +153,34 @@ function Assert-NoRawButtonsOutsideAllowedCases {
   }
 }
 
+function Assert-NoTextInsideActionButtons {
+  param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
+
+  # A button that carries content is a row, a card, a chart hotspot or a tab; the circular action
+  # shape must stay icon-only. asChild renders the primitive as a link, which may keep its label.
+  $violations = @()
+  foreach ($file in $Files) {
+    $relative = Get-RelativePath $file.FullName
+    $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    foreach ($match in [regex]::Matches($content, '<Button\b((?:[^<>{}]|\{[^{}]*\})*?)>([\s\S]*?)</Button>')) {
+      $openTag = $match.Groups[1].Value
+      if ($openTag -match 'asChild') { continue }
+      if ($openTag -match 'shape="(row|card|bar|tab)"') { continue }
+      $body = $match.Groups[2].Value
+      $body = [regex]::Replace($body, '<Badge\b[\s\S]*?</Badge>', '')
+      $body = [regex]::Replace($body, '<[A-Za-z][^>]*?/>', '')
+      if ($body -match "t\('") {
+        $lineNumber = ($content.Substring(0, $match.Index) -split "`n").Count
+        $violations += "{0}:{1}: action button carries text" -f $relative, $lineNumber
+      }
+    }
+  }
+
+  if ($violations.Count -gt 0) {
+    throw "Frontend action buttons must be icon-only; content belongs to row/card/tab shapes`n$($violations -join "`n")"
+  }
+}
+
 function Assert-DenseDataTableViewportFrames {
   param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
 
@@ -527,6 +555,7 @@ Assert-NoRuntimeImportsMatching `
 
 Assert-NoRawControlsOutsideAllowedCases -Files $runtimeFiles
 Assert-NoRawButtonsOutsideAllowedCases -Files $runtimeFiles
+Assert-NoTextInsideActionButtons -Files $runtimeFiles
 Assert-DenseDataTableViewportFrames -Files $runtimeFiles
 
 Assert-NoMatchesInRuntimeFiles `

@@ -1,17 +1,5 @@
 import type { StateCreator } from 'zustand';
-import {
-  addMcpServer,
-  connectMcpServer,
-  disconnectMcpServer,
-  getMcpConfig,
-  removeMcpServer,
-  saveMcpConfig,
-  testMcpConnection,
-  type McpConfig,
-  type McpPermissionProfile,
-  type McpServer as ApiMcpServer,
-  type McpServerStatus,
-} from '@/lib/api/mcp';
+import { addMcpServer, connectMcpServer, disconnectMcpServer, getMcpConfig, removeMcpServer, saveMcpConfig, testMcpConnection, type McpConfig, type McpPermissionProfile, type McpServerStatus, type McpServer as ApiMcpServer } from '@/lib/api/mcp';
 import { defaultPermissions, formatError } from './mcp-error-utils';
 import type { McpResourceSlice } from './mcp-resource-store';
 import type { McpServer, NewMcpServerInput } from './mcp-types';

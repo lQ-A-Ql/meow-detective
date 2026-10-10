@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
@@ -18,7 +19,6 @@ import {
   releaseEmulation,
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
-import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
 import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationLinuxAccount, EmulationNetworkMode, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
 
 const ACTIVE_STATES = new Set<EmulationState>([

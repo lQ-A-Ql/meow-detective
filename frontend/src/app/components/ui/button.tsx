@@ -12,6 +12,10 @@ const buttonVariants = cva(
       shape: {
         circle: "size-7 rounded-full",
         row: "h-[22px] w-full justify-start gap-1.5 rounded-none px-2 text-left",
+        /** Selectable surface in a grid or list: full-width card with a status edge. */
+        card: "h-auto w-full items-start justify-between gap-3 rounded-none border-l-2 border-l-transparent p-3 text-left",
+        /** Chart hotspot: fills its slot, no padding, no text. */
+        bar: "h-full w-full cursor-crosshair items-end rounded-none p-0",
       },
       variant: {
         default: "border border-forensics-primary-blue text-forensics-primary-blue hover:bg-forensics-hover",

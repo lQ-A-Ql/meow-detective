@@ -277,10 +277,11 @@ function EmailDetailCard({
       {message.headers.length > 0 ? (
         <div className="border-t border-forensics-line p-3">
           <Button
-            variant="ghost"
-            size="sm"
+            variant="forensicsGhost"
+            shape="row"
+            aria-expanded={showHeaders}
             onClick={onToggleHeaders}
-            className="h-7 gap-1 px-2 text-[11px] text-forensics-text-tertiary"
+            className="h-7 gap-1 text-[11px] text-forensics-ink-3"
           >
             {showHeaders ? (
               <ChevronUp className="size-3" />
