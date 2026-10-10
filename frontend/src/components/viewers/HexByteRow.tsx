@@ -45,7 +45,7 @@ export const HexByteRow = memo(function HexByteRow({
   const byteCellClass = (absoluteOffset: number, widthClass: string) => {
     const selected = isSelected(absoluteOffset);
     return cn(
-      'inline-flex shrink-0 cursor-crosshair select-none items-center justify-center font-mono text-[11px] leading-none tracking-normal transition-none',
+      'inline-flex shrink-0 cursor-crosshair select-none items-center justify-center font-mono text-[12px] leading-none tracking-normal transition-none',
       widthClass,
       highlightedOffset === absoluteOffset || selected
         ? 'bg-[var(--forensics-selection-bg)] text-[var(--forensics-selection-text)]'
@@ -100,7 +100,7 @@ export const HexByteRow = memo(function HexByteRow({
       </div>
       <div
         role="presentation"
-        className="flex w-[18ch] shrink-0 items-center whitespace-pre border-l border-forensics-border-light pl-2 text-forensics-muted"
+        className="flex w-[20ch] shrink-0 items-center gap-[0ch] whitespace-pre border-l border-forensics-border-light pl-2 pr-1 text-forensics-muted"
       >
         {cells.map((cell) => (
           <span
@@ -108,7 +108,10 @@ export const HexByteRow = memo(function HexByteRow({
             role="gridcell"
             aria-label={`offset 0x${formatOffset(cell.absoluteOffset)}，ASCII ${cell.ascii}`}
             aria-selected={isSelected(cell.absoluteOffset)}
-            className={byteCellClass(cell.absoluteOffset, 'w-[1ch]')}
+            className={cn(
+              byteCellClass(cell.absoluteOffset, 'w-[1ch]'),
+              cell.byteIndex === 7 && cells.length > 8 ? 'mr-[1ch]' : '',
+            )}
             data-byte-offset={cell.absoluteOffset}
             data-byte-side="ascii"
             data-highlighted={

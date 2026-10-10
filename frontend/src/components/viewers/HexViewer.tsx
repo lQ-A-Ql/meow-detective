@@ -69,7 +69,7 @@ export function HexViewer({
   rawBytes,
   baseOffset,
   fileSize,
-  lineHeight = 20,
+  lineHeight = 24,
   activeOffset,
   loadedRanges,
   onNeedMoreRange,
@@ -366,11 +366,11 @@ export function HexViewer({
   const selectionEnd = selection ? Math.max(selection.anchor, selection.focus) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[11px]">
+    <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[12px]">
       <div
         ref={containerRef}
         data-testid="hex-scroll-container"
-        className="min-h-0 flex-1 touch-pan-y select-none overflow-auto"
+        className="forensics-scrollbar min-h-0 flex-1 touch-pan-y select-none overflow-auto"
         role="grid"
         tabIndex={rowCount > 0 ? 0 : -1}
         aria-label={t('viewer.hex.ariaLabel')}
