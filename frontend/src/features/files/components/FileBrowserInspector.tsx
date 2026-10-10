@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { Download, History } from 'lucide-react';
+import { IconButton } from '@/components/controls/IconButton';
 import { Button } from '@/app/components/ui/button';
 import {
   InspectorPane,
@@ -143,32 +145,26 @@ export function FileBrowserInspector({
         </InspectorSection>
 
         <InspectorSection title={t('fileBrowser.inspector.sections.actions')}>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
+          <div className="flex items-center gap-2">
+            <IconButton
+              label={
+                extractionPending
+                  ? t('fileBrowser.inspector.extract.pending')
+                  : t('fileBrowser.inspector.extract.button')
+              }
               variant="forensicsSurface"
-              size="xs"
               onClick={() => {
                 if (selectedFile) {
                   onExtractFile(selectedFile);
                 }
               }}
               disabled={!selectedFile || extractionPending}
-              className="w-full font-light"
             >
-              {extractionPending
-                ? t('fileBrowser.inspector.extract.pending')
-                : t('fileBrowser.inspector.extract.button')}
-            </Button>
-            <Button
-              type="button"
-              variant="forensicsLink"
-              size="xs"
-              onClick={onViewTimeline}
-              className="w-full"
-            >
-              {t('fileBrowser.inspector.viewTimeline')}
-            </Button>
+              <Download size={14} />
+            </IconButton>
+            <IconButton label={t('fileBrowser.inspector.viewTimeline')} onClick={onViewTimeline}>
+              <History size={14} />
+            </IconButton>
           </div>
         </InspectorSection>
       </div>

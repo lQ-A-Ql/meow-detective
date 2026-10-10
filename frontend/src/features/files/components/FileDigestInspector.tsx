@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/app/components/ui/button';
+import { Hash } from 'lucide-react';
+import { IconButton } from '@/components/controls/IconButton';
 import { InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 
@@ -10,8 +11,19 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
   return (
     <InspectorSection title={t('fileBrowser.inspector.sections.hash')}>
       <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-1">
-          {ALGORITHMS.map((algorithm) => <Button key={algorithm} type="button" size="xs" variant="forensicsOutline" disabled={loading} onClick={() => onCalculate(algorithm)}>{algorithm.toUpperCase()}</Button>)}
+        <div className="flex flex-wrap items-center gap-1">
+          {ALGORITHMS.map((algorithm) => (
+            <IconButton
+              key={algorithm}
+              label={algorithm.toUpperCase()}
+              size="iconSm"
+              variant="forensicsOutline"
+              disabled={loading}
+              onClick={() => onCalculate(algorithm)}
+            >
+              <Hash size={13} />
+            </IconButton>
+          ))}
         </div>
         {loading ? <InspectorValue value={t('fileBrowser.inspector.hash.loading')} /> : null}
         {error ? <div className="text-[10px] text-forensics-error-text">{error}</div> : null}
