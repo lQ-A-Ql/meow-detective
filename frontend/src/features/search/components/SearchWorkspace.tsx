@@ -1,4 +1,4 @@
-import { AlertTriangle, File, Folder, Search, X } from 'lucide-react';
+import { AlertTriangle, File, Folder, Search } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -93,8 +93,11 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-forensics-surface">
       <ContextBar>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 focus-within:border-forensics-sakura-500">
-            <Search size={14} className="mr-2 shrink-0 text-forensics-muted" />
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5">
+            <Search size={14} className="shrink-0 text-forensics-ink-3" />
+            {model.queryInput ? null : (
+              <span aria-hidden="true" className="forensics-caret h-4 w-[7px] shrink-0 bg-forensics-red" />
+            )}
             <Input
               autoFocus
               value={model.queryInput}
@@ -104,14 +107,16 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
               }}
               variant="search"
               inputSize="compact"
-              className="w-full font-mono text-[13px] text-forensics-text"
+              className={`h-6 min-w-0 flex-1 py-0 font-mono text-[13px] leading-6 text-forensics-ink ${model.queryInput ? '' : 'caret-transparent'}`}
               placeholder={t('search.inputPlaceholder')}
               aria-label={t('search.inputLabel')}
             />
             {model.queryInput ? (
-              <Button type="button" variant="forensicsGhost" size="iconXs" onClick={model.clearQuery} title={t('search.clearQuery')}>
-                <X size={13} />
-              </Button>
+              <Tooltip content={t('search.clearQuery')}>
+                <Button type="button" variant="forensicsGhost" aria-label={t('search.clearQuery')} onClick={model.clearQuery}>
+                  <ActionIcon name="close" />
+                </Button>
+              </Tooltip>
             ) : null}
           </div>
           <Tooltip content={t('search.pathToggle')}><Button aria-label={t('search.pathToggle')}
