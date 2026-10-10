@@ -1,7 +1,7 @@
 import { Button } from '@/app/components/ui/button';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { Play } from 'lucide-react';
+
 import { Checkbox } from '@/app/components/ui/checkbox';
 import type { McpHostStatus } from '@/types/models';
 import type { TFunction } from 'i18next';

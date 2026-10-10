@@ -1,4 +1,4 @@
-import { CircleCheck, Disc3, FolderOpen, HardDrive, LoaderCircle, LogOut, Play, ShieldCheck, TriangleAlert, X } from 'lucide-react';
+import { CircleCheck, Disc3, FolderOpen, HardDrive, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

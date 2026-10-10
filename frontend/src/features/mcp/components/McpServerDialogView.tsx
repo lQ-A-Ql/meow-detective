@@ -1,7 +1,7 @@
 import { Button } from '@/app/components/ui/button';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { X } from 'lucide-react';
+
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Field, FieldLabel } from '@/app/components/ui/field';

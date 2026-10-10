@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { X, CircleDot, History } from 'lucide-react';
+
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {

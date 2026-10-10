@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { RunAnalysisAction } from '@/components/layout/EmptyStateActions';
-import { AppWindow, RefreshCw } from 'lucide-react';
+import { AppWindow } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';

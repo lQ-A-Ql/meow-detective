@@ -1,4 +1,4 @@
-import { Copy, KeyRound, LockKeyhole, MemoryStick, RefreshCw, ShieldCheck, Unlock, X, Trash2 } from 'lucide-react';
+import { Copy, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useCallback, useEffect, useRef, useState } from 'react';

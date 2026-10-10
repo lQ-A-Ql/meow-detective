@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Puzzle } from 'lucide-react';
+import { Puzzle } from 'lucide-react';
 import { TreeRow } from '@/components/tree/TreeRow';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -49,14 +49,22 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
       (source.platform === 'windows' ? model.activeWindowsTab === 'plugin' : model.activeLinuxTab === 'plugin');
     return (
       <div className="ml-4 border-l border-forensics-border-light pl-1">
-        <Button type="button" variant="forensicsGhost" size="inline" disabled={model.disabled}
-          aria-label={`${source.name} / ${module.displayName}`} aria-current={active ? 'true' : undefined}
-          onClick={() => { if (!selected) model.onSelectDataSource(source.id); model.onSelectPluginModule?.(module.pluginId); }}
-          className={cn('h-7 w-full min-w-0 justify-start gap-1 px-1 text-left text-[11px] text-forensics-muted hover:text-forensics-text',
-            active && 'bg-forensics-surface text-forensics-text')}>
-          <TreeConnector depth={1} isLast={row.isLast} /><Puzzle size={12} />
-          <span className="min-w-0 flex-1 truncate" title={module.displayName}>{`${module.displayName}(${module.totalCount})`}</span>
-        </Button>
+        <TreeRow
+          depth={1}
+          active={active}
+          selected={active}
+          disabled={model.disabled}
+          ariaLabel={`${source.name} / ${module.displayName}`}
+          connector={<TreeConnector depth={1} isLast={row.isLast} />}
+          icon={<Puzzle size={12} className="shrink-0" />}
+          label={module.displayName}
+          meta={<span className="font-mono text-[10px] text-forensics-ink-3">({module.totalCount})</span>}
+          onActivate={() => {
+            if (!selected) model.onSelectDataSource(source.id);
+            model.onSelectPluginModule?.(module.pluginId);
+          }}
+          className="h-7 text-[11px]"
+        />
       </div>
     );
   }

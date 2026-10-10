@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
+import { CheckCircle2, CircleDashed, FileText } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

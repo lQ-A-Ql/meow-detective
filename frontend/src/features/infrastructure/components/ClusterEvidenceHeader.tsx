@@ -1,4 +1,4 @@
-import { Activity, ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
+import { ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { TFunction } from 'i18next';

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { CircleDot } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';

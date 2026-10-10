@@ -95,8 +95,8 @@ describe('AnalysisSourceSidebar plugin group', () => {
     });
 
     expect(screen.getByText('应用插件')).toBeDefined();
-    expect(screen.getByText('微信(12)')).toBeDefined();
-    expect(screen.getByText('QQ(3)')).toBeDefined();
+    expect(screen.getByRole('treeitem', { name: 'Win10-C盘 / 微信' }).textContent).toContain('(12)');
+    expect(screen.getByRole('treeitem', { name: /QQ/ }).textContent).toContain('(3)');
   });
 
   it('hides plugin modules whose evidence platform does not match the source', () => {
@@ -107,8 +107,8 @@ describe('AnalysisSourceSidebar plugin group', () => {
       ],
     });
 
-    expect(screen.getByText('微信(12)')).toBeDefined();
-    expect(screen.queryByText('Bash 历史(12)')).toBeNull();
+    expect(screen.getByRole('treeitem', { name: 'Win10-C盘 / 微信' }).textContent).toContain('(12)');
+    expect(screen.queryByRole('treeitem', { name: /Bash 历史/ })).toBeNull();
   });
 
   it('renders linux-platform plugins under a linux data source', () => {
@@ -122,7 +122,7 @@ describe('AnalysisSourceSidebar plugin group', () => {
     });
 
     expect(screen.queryByText('微信(12)')).toBeNull();
-    expect(screen.getByText('Bash 历史(12)')).toBeDefined();
+    expect(screen.getByRole('treeitem', { name: /Bash 历史/ }).textContent).toContain('(12)');
   });
 
   it('does not render the plugin group when no module matches', () => {
@@ -134,7 +134,7 @@ describe('AnalysisSourceSidebar plugin group', () => {
   it('notifies plugin selection with the plugin id', () => {
     const props = renderSidebar({ pluginModules: [pluginModule()] });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Win10-C盘 / 微信' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'Win10-C盘 / 微信' }));
 
     expect(props.onSelectPluginModule).toHaveBeenCalledWith('plugin-wechat');
   });

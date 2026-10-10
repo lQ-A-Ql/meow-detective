@@ -1,7 +1,7 @@
 import { Button } from '@/app/components/ui/button';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { CircleDot } from 'lucide-react';
+
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { ScrollArea } from '@/app/components/ui/scroll-area';

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Download, History } from 'lucide-react';
 import { IconButton } from '@/components/controls/IconButton';
-import { Button } from '@/app/components/ui/button';
+
 import {
   InspectorPane,
   InspectorSection,

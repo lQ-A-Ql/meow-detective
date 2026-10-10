@@ -4,7 +4,7 @@ import { Tooltip } from '@/app/components/ui/tooltip';
 import { AssetSlot } from '@/app/components/AssetSlot';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { CircleDot, GitBranch, HardDrive, History, Upload } from 'lucide-react';
+import { CircleDot, GitBranch, HardDrive } from 'lucide-react';
 import { useNavigate, type NavigateFunction } from 'react-router';
 import { EmptyState } from '@/components/data-display';
 import { StatusBadge } from '@/components/status/StatusBadge';

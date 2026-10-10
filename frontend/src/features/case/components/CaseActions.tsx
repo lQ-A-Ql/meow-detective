@@ -1,4 +1,4 @@
-import { FolderOpen, Trash2, Plus, CircleDot, Upload, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

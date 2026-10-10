@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle, Save, X } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';

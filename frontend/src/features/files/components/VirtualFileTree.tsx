@@ -6,9 +6,10 @@
  */
 
 import { useRef, useCallback, useState, type MutableRefObject, type ReactNode, type Ref } from 'react';
+import { TreeRow } from '@/components/tree/TreeRow';
 import { useVirtualizer, type Rect, type Virtualizer } from '@tanstack/react-virtual';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
+
+
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
@@ -126,63 +127,40 @@ export function VirtualFileTree({
               }}
             >
               {renderNode ? renderNode(node, isLast) : (
-              <Button
-                type="button"
-                variant="treeControl"
-                size="treeRow"
-                onClick={() => handleClick(node)}
-                data-active={node.active ? 'true' : undefined}
-                className="h-full max-w-full"
+              <TreeRow
+                depth={node.depth}
+                expanded={node.expanded}
+                hasChildren={node.hasChildren}
+                selected={node.active}
+                active={node.active}
+                ariaLabel={node.name}
+                onActivate={() => handleClick(node)}
+                onToggle={() => handleClick(node)}
+                toggleLabel={node.name}
+                className="h-full"
                 style={{ paddingLeft: `${8 + node.depth * 16}px` }}
-              >
-                {/*
-                 * 层级连接线
-                 */}
-                {node.depth > 0 && (
-                  <TreeConnector depth={node.depth} isLast={isLast} />
-                )}
-
-                {/*
-                 * 展开/折叠箭头
-                 */}
-                {node.hasChildren ? (
-                  node.expanded ? (
-                    <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
-                  ) : (
-                    <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
-                  )
-                ) : (
-                  <span className="w-3 shrink-0" />
-                )}
-
-                {/*
-                 * 文件类型图标
-                 */}
-                <FileIconWithStatusOverlay
-                  name={node.name}
-                  entryType={node.entryType}
-                  status={node.status}
-                  expanded={node.expanded}
-                  deleted={node.deleted}
-                  hidden={node.hidden}
-                  system={node.system}
-                  size={12}
-                />
-
-                {/*
-                 * 文件名
-                 */}
-                <span className="min-w-0 flex-1 truncate">{node.name}</span>
-
-                {/*
-                 * 状态标签
-                 */}
-                {node.status && node.status !== 'ready' ? (
-                  <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
-                    {node.status}
-                  </span>
-                ) : null}
-              </Button>
+                connector={node.depth > 0 ? <TreeConnector depth={node.depth} isLast={isLast} /> : null}
+                icon={
+                  <FileIconWithStatusOverlay
+                    name={node.name}
+                    entryType={node.entryType}
+                    status={node.status}
+                    expanded={node.expanded}
+                    deleted={node.deleted}
+                    hidden={node.hidden}
+                    system={node.system}
+                    size={12}
+                  />
+                }
+                label={node.name}
+                meta={
+                  node.status && node.status !== 'ready' ? (
+                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-ink-3">
+                      {node.status}
+                    </span>
+                  ) : null
+                }
+              />
               )}
             </div>
           );

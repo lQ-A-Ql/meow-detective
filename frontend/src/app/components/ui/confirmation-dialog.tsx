@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { X, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Button } from './button';
 import {
   Dialog,

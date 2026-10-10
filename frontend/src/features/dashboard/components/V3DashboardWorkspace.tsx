@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';

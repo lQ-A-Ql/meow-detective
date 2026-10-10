@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
-import { Monitor, Server, Smartphone, FolderOpen, HardDrive, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Monitor, Server, Smartphone, HardDrive } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Loader2, Play, RefreshCw } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { errorMessage } from '@/lib/errors';

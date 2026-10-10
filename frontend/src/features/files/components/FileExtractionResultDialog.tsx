@@ -1,4 +1,4 @@
-import { AlertTriangle, CircleCheck, CircleDot } from 'lucide-react';
+import { AlertTriangle, CircleCheck } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

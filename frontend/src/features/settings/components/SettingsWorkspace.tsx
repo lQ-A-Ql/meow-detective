@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { Save } from 'lucide-react';
+
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Button } from '@/app/components/ui/button';
 import { ActionBar } from '@/components/layout/ActionBar';

@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { RefreshCw, Undo2 } from 'lucide-react';
+
 import { withTranslation, type WithTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 

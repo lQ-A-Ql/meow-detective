@@ -1,7 +1,7 @@
 import { Button } from '@/app/components/ui/button';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { ChevronDown, X } from 'lucide-react';
+
 import { NODE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
 import { useTranslation } from 'react-i18next';
 import type { GraphEdge, GraphNode, NodeType } from '@/types/models';

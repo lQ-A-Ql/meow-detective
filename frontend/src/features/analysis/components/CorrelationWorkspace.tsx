@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useEffect, useMemo, useState } from 'react';
-import { GitBranch, Link2, ListFilter, Network, Search, TimerReset } from 'lucide-react';
+import { GitBranch, Link2, ListFilter, Network, Search } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {

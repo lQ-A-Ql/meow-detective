@@ -12,7 +12,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 

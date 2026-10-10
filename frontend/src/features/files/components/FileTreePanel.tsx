@@ -3,7 +3,7 @@ import { TreeRow } from '@/components/tree/TreeRow';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+
 import { Button } from '@/app/components/ui/button';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';

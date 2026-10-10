@@ -1,4 +1,4 @@
-import { Clock, Monitor, Network, RefreshCw, Shield, CircleDot } from 'lucide-react';
+import { Clock, Monitor, Network, RefreshCw } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';

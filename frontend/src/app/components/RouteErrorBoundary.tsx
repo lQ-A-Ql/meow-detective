@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { RefreshCw } from 'lucide-react';
+
 import { isRouteErrorResponse, useRouteError } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 
