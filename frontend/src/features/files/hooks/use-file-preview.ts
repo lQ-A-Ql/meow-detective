@@ -9,8 +9,9 @@ import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/Fil
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import { getFilePreviewKind } from '@/features/files/preview-file-kind';
 
-function getPreviewKindFromMime(mime?: string): FilePreviewKind | undefined {
-  const normalized = mime?.toLowerCase() ?? '';
+function getPreviewKindFromMime(mime?: unknown): FilePreviewKind | undefined {
+  // The transport is untrusted at runtime: a malformed handle must not crash the preview pane.
+  const normalized = typeof mime === 'string' ? mime.toLowerCase() : '';
   if (normalized.startsWith('image/')) return 'image';
   if (normalized.startsWith('video/')) return 'video';
   if (normalized.startsWith('audio/')) return 'audio';

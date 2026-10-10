@@ -1,0 +1,338 @@
+{
+ "infrastructureGraph": {
+  "nodes": [
+   {
+    "id": "inf-host-win",
+    "domain": "environment",
+    "kind": "host",
+    "name": "WIN-FORENSICS-01",
+    "status": "online",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"registry\"}",
+    "version": "Windows 11 26100"
+   },
+   {
+    "id": "inf-host-pve01",
+    "domain": "environment",
+    "kind": "host",
+    "name": "pve01",
+    "status": "online",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"cluster.conf\"}",
+    "version": "PVE 8.1"
+   },
+   {
+    "id": "inf-host-pve02",
+    "domain": "environment",
+    "kind": "host",
+    "name": "pve02",
+    "status": "degraded",
+    "confidence": "medium",
+    "provenanceJson": "{\"source\":\"cluster.conf\"}",
+    "version": "PVE 8.1"
+   },
+   {
+    "id": "inf-host-pve03",
+    "domain": "environment",
+    "kind": "host",
+    "name": "pve03",
+    "status": "unknown",
+    "confidence": "low",
+    "provenanceJson": "{\"source\":\"syslog\"}",
+    "version": "PVE 8.0"
+   },
+   {
+    "id": "inf-host-pixel",
+    "domain": "environment",
+    "kind": "device",
+    "name": "Pixel 8",
+    "status": "offline",
+    "confidence": "medium",
+    "provenanceJson": "{\"source\":\"build.prop\"}",
+    "version": "Android 14"
+   },
+   {
+    "id": "inf-disk-win",
+    "domain": "storage",
+    "kind": "physical_disk",
+    "name": "Samsung SSD 990 PRO 1TB",
+    "status": "mounted",
+    "confidence": "high",
+    "provenanceJson": "{\"serial\":\"S6Z1NJ0T\"}",
+    "version": "1 TB"
+   },
+   {
+    "id": "inf-disk-winpart",
+    "domain": "storage",
+    "kind": "volume",
+    "name": "[P1] Windows",
+    "status": "mounted",
+    "confidence": "high",
+    "provenanceJson": "{\"partition\":\"GPT\"}",
+    "version": "476 GB"
+   },
+   {
+    "id": "inf-disk-pve",
+    "domain": "storage",
+    "kind": "volume_group",
+    "name": "vg-pve",
+    "status": "imported",
+    "confidence": "medium",
+    "provenanceJson": "{\"lvm\":true}",
+    "version": "3.6 TB"
+   },
+   {
+    "id": "inf-disk-usb",
+    "domain": "storage",
+    "kind": "removable",
+    "name": "SanDisk Ultra 128GB",
+    "status": "removed",
+    "confidence": "high",
+    "provenanceJson": "{\"usbstor\":true}",
+    "version": "128 GB"
+   },
+   {
+    "id": "inf-svc-index",
+    "domain": "analysis",
+    "kind": "service",
+    "name": "search-index",
+    "status": "ready",
+    "confidence": "high",
+    "provenanceJson": "{\"indexed\":246120}",
+    "version": "tantivy"
+   },
+   {
+    "id": "inf-svc-artifacts",
+    "domain": "analysis",
+    "kind": "service",
+    "name": "artifact-extraction",
+    "status": "ready",
+    "confidence": "high",
+    "provenanceJson": "{\"rows\":963}",
+    "version": "0.5.0"
+   },
+   {
+    "id": "inf-svc-graph",
+    "domain": "analysis",
+    "kind": "service",
+    "name": "case-graph",
+    "status": "ready",
+    "confidence": "medium",
+    "provenanceJson": "{\"nodes\":18,\"edges\":15}",
+    "version": "case_graph_001"
+   },
+   {
+    "id": "inf-svc-timeline",
+    "domain": "analysis",
+    "kind": "service",
+    "name": "timeline-projection",
+    "status": "running",
+    "confidence": "high",
+    "provenanceJson": "{\"events\":18420}",
+    "version": "2.1.0"
+   },
+   {
+    "id": "inf-svc-mcp",
+    "domain": "analysis",
+    "kind": "service",
+    "name": "mcp-host",
+    "status": "ready",
+    "confidence": "high",
+    "provenanceJson": "{\"port\":3001}",
+    "version": "127.0.0.1:3001/mcp"
+   }
+  ],
+  "edges": [
+   {
+    "sourceId": "inf-host-win",
+    "targetId": "inf-disk-win",
+    "relationKind": "contains",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"registry\"}"
+   },
+   {
+    "sourceId": "inf-disk-win",
+    "targetId": "inf-disk-winpart",
+    "relationKind": "partitions_into",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"gpt\"}"
+   },
+   {
+    "sourceId": "inf-host-pve01",
+    "targetId": "inf-disk-pve",
+    "relationKind": "mounts",
+    "confidence": "medium",
+    "provenanceJson": "{\"source\":\"lvm\"}"
+   },
+   {
+    "sourceId": "inf-host-pve02",
+    "targetId": "inf-disk-pve",
+    "relationKind": "mounts",
+    "confidence": "medium",
+    "provenanceJson": "{\"source\":\"lvm\"}"
+   },
+   {
+    "sourceId": "inf-host-win",
+    "targetId": "inf-disk-usb",
+    "relationKind": "attached_once",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"usbstor\"}"
+   },
+   {
+    "sourceId": "inf-disk-winpart",
+    "targetId": "inf-svc-artifacts",
+    "relationKind": "extracted_by",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"jobs\"}"
+   },
+   {
+    "sourceId": "inf-svc-artifacts",
+    "targetId": "inf-svc-graph",
+    "relationKind": "projects_into",
+    "confidence": "medium",
+    "provenanceJson": "{\"source\":\"jobs\"}"
+   },
+   {
+    "sourceId": "inf-svc-artifacts",
+    "targetId": "inf-svc-timeline",
+    "relationKind": "projects_into",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"jobs\"}"
+   },
+   {
+    "sourceId": "inf-svc-index",
+    "targetId": "inf-svc-mcp",
+    "relationKind": "serves",
+    "confidence": "high",
+    "provenanceJson": "{\"source\":\"mcp_host\"}"
+   }
+  ],
+  "networkFacts": [
+   {
+    "sourceId": "inf-host-win",
+    "targetId": "inf-host-pve01",
+    "relationKind": "connects_to",
+    "confidence": "medium",
+    "provenanceJson": "{\"dst\":\"10.20.8.30:22\"}"
+   },
+   {
+    "sourceId": "inf-host-pve01",
+    "targetId": "inf-host-pve02",
+    "relationKind": "connects_to",
+    "confidence": "medium",
+    "provenanceJson": "{\"dst\":\"10.20.8.31:22\"}"
+   }
+  ],
+  "networkDiagnostics": [
+   "1 个连接来自未登记资产，已标记为待确认。"
+  ]
+ },
+ "reportTemplates": [
+  {
+   "id": "template-full",
+   "name": "全量取证报告",
+   "description": "案件概览、数据源、时间线、痕迹与图谱的完整报告"
+  },
+  {
+   "id": "template-timeline",
+   "name": "时间线专项报告",
+   "description": "仅导出时间线事件与筛选条件"
+  },
+  {
+   "id": "template-artifacts",
+   "name": "痕迹专项报告",
+   "description": "按痕迹家族导出的证据清单"
+  },
+  {
+   "id": "template-correlation",
+   "name": "关联分析报告",
+   "description": "线索、聚类与家族覆盖矩阵"
+  }
+ ],
+ "reportHistory": [
+  {
+   "id": "report-001",
+   "fileName": "case-2026-MOCK-001-full.html",
+   "createdBy": "Meow Lab",
+   "createdAt": "2026-10-10T06:30:00.000Z",
+   "status": "completed",
+   "progress": 100
+  },
+  {
+   "id": "report-002",
+   "fileName": "case-2026-MOCK-001-timeline.csv",
+   "createdBy": "Meow Lab",
+   "createdAt": "2026-10-10T05:00:00.000Z",
+   "status": "completed",
+   "progress": 100
+  },
+  {
+   "id": "report-003",
+   "fileName": "case-2026-MOCK-001-artifacts.json",
+   "createdBy": "analyst",
+   "createdAt": "2026-10-10T03:40:00.000Z",
+   "status": "completed",
+   "progress": 100
+  },
+  {
+   "id": "report-004",
+   "fileName": "case-2026-MOCK-001-correlation.csv",
+   "createdBy": "analyst",
+   "createdAt": "2026-10-10T07:54:00.000Z",
+   "status": "running",
+   "progress": 42
+  }
+ ],
+ "traceItems": [
+  {
+   "id": "trace-001",
+   "ts": "2026-10-10T07:48:00.000Z",
+   "message": "jobs: Evidence import 更新 64% → 71%"
+  },
+  {
+   "id": "trace-002",
+   "ts": "2026-10-10T07:46:00.000Z",
+   "message": "search: 索引批次 118 提交，新增 4,120 条"
+  },
+  {
+   "id": "trace-003",
+   "ts": "2026-10-10T07:42:00.000Z",
+   "message": "artifacts: 提取完成 browser 家族 3 条"
+  },
+  {
+   "id": "trace-004",
+   "ts": "2026-10-10T07:39:00.000Z",
+   "message": "graph: 写入节点 18 / 边 15"
+  },
+  {
+   "id": "trace-005",
+   "ts": "2026-10-10T07:34:00.000Z",
+   "message": "timeline: 投影窗口前移 5 分钟"
+  },
+  {
+   "id": "trace-006",
+   "ts": "2026-10-10T07:29:00.000Z",
+   "message": "mcp: 主机服务监听 127.0.0.1:3001"
+  },
+  {
+   "id": "trace-007",
+   "ts": "2026-10-10T07:22:00.000Z",
+   "message": "mount: 只读挂载句柄 3 个"
+  },
+  {
+   "id": "trace-008",
+   "ts": "2026-10-10T07:15:00.000Z",
+   "message": "case: 自动保存完成（2 个视图状态）"
+  }
+ ],
+ "searchCoverage": {
+  "readySourceCount": 2,
+  "indexedSourceCount": 2,
+  "expectedEntryCount": 248631,
+  "indexedEntryCount": 246120,
+  "missingSourceIds": [
+   "source-mock-android"
+  ],
+  "complete": false
+ }
+}

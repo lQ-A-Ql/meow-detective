@@ -1,0 +1,1254 @@
+{
+ "artifacts": [
+  {
+   "id": "art-001",
+   "artifactType": "browser_history",
+   "title": "edge://downloads",
+   "summary": "下载 psexec.exe 与 chrome_installer.exe",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-09T22:00:00.000Z",
+   "extractorId": "artifacts-windows/browser",
+   "extractorVersion": "mock-1",
+   "confidence": 0.93,
+   "attrs": {
+    "url": "https://files.example.net/psexec.exe",
+    "visits": 3
+   }
+  },
+  {
+   "id": "art-002",
+   "artifactType": "browser_download",
+   "title": "psexec.exe",
+   "summary": "来自 files.example.net，大小 372 KB",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-09T22:02:00.000Z",
+   "extractorId": "artifacts-windows/browser",
+   "extractorVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "size": 372736
+   }
+  },
+  {
+   "id": "art-003",
+   "artifactType": "browser_cookie",
+   "title": "session_token (example.net)",
+   "summary": "持久 Cookie，过期时间 2026-12-01",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-09T22:10:00.000Z",
+   "extractorId": "artifacts-windows/browser",
+   "extractorVersion": "mock-1",
+   "confidence": 0.88,
+   "attrs": {
+    "domain": "example.net"
+   }
+  },
+  {
+   "id": "art-004",
+   "artifactType": "evtx_logon",
+   "title": "4624 网络登录",
+   "summary": "analyst 从 10.20.8.14 登录",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/Security.evtx",
+   "createdAt": "2026-10-09T22:52:00.000Z",
+   "extractorId": "artifacts-windows/evtx",
+   "extractorVersion": "mock-1",
+   "confidence": 0.97,
+   "attrs": {
+    "logonType": 3
+   }
+  },
+  {
+   "id": "art-005",
+   "artifactType": "evtx_logon_failed",
+   "title": "4625 登录失败",
+   "summary": "root 爆破尝试 9 次",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/Security.evtx",
+   "createdAt": "2026-10-09T22:59:00.000Z",
+   "extractorId": "artifacts-windows/evtx",
+   "extractorVersion": "mock-1",
+   "confidence": 0.96,
+   "attrs": {
+    "attempts": 9
+   }
+  },
+  {
+   "id": "art-006",
+   "artifactType": "evtx_service",
+   "title": "7045 服务安装",
+   "summary": "新增服务 WinRing0Helper",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/System.evtx",
+   "createdAt": "2026-10-09T23:28:00.000Z",
+   "extractorId": "artifacts-windows/evtx",
+   "extractorVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "service": "WinRing0Helper"
+   }
+  },
+  {
+   "id": "art-007",
+   "artifactType": "evtx_powershell",
+   "title": "4104 脚本块",
+   "summary": "出现 -EncodedCommand 解码后的下载执行",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/Microsoft-Windows-PowerShell%4Operational.evtx",
+   "createdAt": "2026-10-09T23:40:00.000Z",
+   "extractorId": "artifacts-windows/evtx",
+   "extractorVersion": "mock-1",
+   "confidence": 0.92,
+   "attrs": {
+    "scriptBlocks": 12
+   }
+  },
+  {
+   "id": "art-008",
+   "artifactType": "prefetch_execution",
+   "title": "POWERSHELL.EXE",
+   "summary": "执行 7 次，最近一次带编码参数",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/POWERSHELL.EXE-1A2B3C4D.pf",
+   "createdAt": "2026-10-09T22:29:00.000Z",
+   "extractorId": "artifacts-windows/prefetch",
+   "extractorVersion": "mock-1",
+   "confidence": 0.95,
+   "attrs": {
+    "runCount": 7
+   }
+  },
+  {
+   "id": "art-009",
+   "artifactType": "prefetch_execution",
+   "title": "MIMIKATZ.EXE",
+   "summary": "Prefetch 残留，可执行文件已删除",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/MIMIKATZ.EXE-DEADBEEF.pf",
+   "createdAt": "2026-10-09T23:26:00.000Z",
+   "extractorId": "artifacts-windows/prefetch",
+   "extractorVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "runCount": 2
+   }
+  },
+  {
+   "id": "art-010",
+   "artifactType": "registry_run",
+   "title": "Run 键持久化",
+   "summary": "HKCU Run 新增 OneDriveHelper",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/NTUSER.DAT",
+   "createdAt": "2026-10-09T23:44:00.000Z",
+   "extractorId": "artifacts-windows/registry",
+   "extractorVersion": "mock-1",
+   "confidence": 0.87,
+   "attrs": {
+    "hive": "NTUSER.DAT"
+   }
+  },
+  {
+   "id": "art-011",
+   "artifactType": "registry_shellbag",
+   "title": "Shellbag 可移动介质",
+   "summary": "E:\\ 访问记录",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/AppData/Local/UsrClass.dat",
+   "createdAt": "2026-10-09T23:54:00.000Z",
+   "extractorId": "artifacts-windows/registry",
+   "extractorVersion": "mock-1",
+   "confidence": 0.8,
+   "attrs": {
+    "volume": "E:"
+   }
+  },
+  {
+   "id": "art-012",
+   "artifactType": "registry_amcache",
+   "title": "Amcache 程序清单",
+   "summary": "记录 psexec.exe 与 7z.exe 的 SHA1",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/config/SOFTWARE",
+   "createdAt": "2026-10-10T00:10:00.000Z",
+   "extractorId": "artifacts-windows/registry",
+   "extractorVersion": "mock-1",
+   "confidence": 0.86,
+   "attrs": {
+    "entries": 214
+   }
+  },
+  {
+   "id": "art-013",
+   "artifactType": "registry_usb",
+   "title": "USBSTOR 设备历史",
+   "summary": "SanDisk Ultra 0781:5581",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/config/SYSTEM",
+   "createdAt": "2026-10-10T00:10:00.000Z",
+   "extractorId": "artifacts-windows/registry",
+   "extractorVersion": "mock-1",
+   "confidence": 0.85,
+   "attrs": {
+    "vid": "0781"
+   }
+  },
+  {
+   "id": "art-014",
+   "artifactType": "lnk_recent",
+   "title": "powershell.lnk",
+   "summary": "指向 PowerShell，卷序列号匹配系统盘",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Recent/powershell.lnk",
+   "createdAt": "2026-10-10T00:28:00.000Z",
+   "extractorId": "artifacts-windows/lnk",
+   "extractorVersion": "mock-1",
+   "confidence": 0.79,
+   "attrs": {
+    "target": "powershell.exe"
+   }
+  },
+  {
+   "id": "art-015",
+   "artifactType": "lnk_recent",
+   "title": "Mimikatz.lnk",
+   "summary": "目标已删除",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Desktop/Mimikatz.lnk",
+   "createdAt": "2026-10-10T00:32:00.000Z",
+   "extractorId": "artifacts-windows/lnk",
+   "extractorVersion": "mock-1",
+   "confidence": 0.76,
+   "attrs": {
+    "deleted": true
+   }
+  },
+  {
+   "id": "art-016",
+   "artifactType": "jumplist",
+   "title": "7-Zip 跳转列表",
+   "summary": "最近打开 D:\\tools\\recon.7z",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-10T00:40:00.000Z",
+   "extractorId": "artifacts-windows/jumplist",
+   "extractorVersion": "mock-1",
+   "confidence": 0.74,
+   "attrs": {
+    "app": "7zFM.exe"
+   }
+  },
+  {
+   "id": "art-017",
+   "artifactType": "recyclebin",
+   "title": "$I 记录删除",
+   "summary": "删除 DumpStack.log.tmp",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-10T00:50:00.000Z",
+   "extractorId": "artifacts-windows/recyclebin",
+   "extractorVersion": "mock-1",
+   "confidence": 0.7,
+   "attrs": {
+    "originalPath": "C:\\DumpStack.log.tmp"
+   }
+  },
+  {
+   "id": "art-018",
+   "artifactType": "sru_network",
+   "title": "SRU 网络用量",
+   "summary": "psexec.exe 产生 12.4 MB 出站流量",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-10T01:00:00.000Z",
+   "extractorId": "artifacts-windows/sru",
+   "extractorVersion": "mock-1",
+   "confidence": 0.83,
+   "attrs": {
+    "bytes": 13002342
+   }
+  },
+  {
+   "id": "art-019",
+   "artifactType": "scheduled_task",
+   "title": "OneDriveStandaloneUpdater",
+   "summary": "登录触发，动作指向用户目录脚本",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-10T03:24:00.000Z",
+   "extractorId": "artifacts-windows/tasks",
+   "extractorVersion": "mock-1",
+   "confidence": 0.83,
+   "attrs": {
+    "trigger": "logon"
+   }
+  },
+  {
+   "id": "art-020",
+   "artifactType": "usb_device",
+   "title": "USB 首次接入",
+   "summary": "setupapi 记录 SanDisk Ultra",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/INF/setupapi.dev.log",
+   "createdAt": "2026-10-10T00:10:00.000Z",
+   "extractorId": "artifacts-windows/usb",
+   "extractorVersion": "mock-1",
+   "confidence": 0.86,
+   "attrs": {
+    "firstInstall": true
+   }
+  },
+  {
+   "id": "art-021",
+   "artifactType": "linux_auth",
+   "title": "SSH 登录 root@pve01",
+   "summary": "密钥认证，来源 10.20.8.30",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log",
+   "createdAt": "2026-10-10T00:50:00.000Z",
+   "extractorId": "artifacts-linux/auth",
+   "extractorVersion": "mock-1",
+   "confidence": 0.94,
+   "attrs": {
+    "user": "root"
+   }
+  },
+  {
+   "id": "art-022",
+   "artifactType": "linux_auth",
+   "title": "SSH 爆破尝试",
+   "summary": "14 次失败登录后成功",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log",
+   "createdAt": "2026-10-10T00:55:00.000Z",
+   "extractorId": "artifacts-linux/auth",
+   "extractorVersion": "mock-1",
+   "confidence": 0.93,
+   "attrs": {
+    "attempts": 14
+   }
+  },
+  {
+   "id": "art-023",
+   "artifactType": "linux_history",
+   "title": "Bash 历史横向移动",
+   "summary": "ssh pve02 / scp 到 pve03",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/root/.bash_history",
+   "createdAt": "2026-10-10T01:10:00.000Z",
+   "extractorId": "artifacts-linux/history",
+   "extractorVersion": "mock-1",
+   "confidence": 0.88,
+   "attrs": {
+    "commands": 42
+   }
+  },
+  {
+   "id": "art-024",
+   "artifactType": "linux_cron",
+   "title": "Cron 持久化",
+   "summary": "每分钟回连 10.20.8.77",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/etc/crontab",
+   "createdAt": "2026-10-10T01:18:00.000Z",
+   "extractorId": "artifacts-linux/cron",
+   "extractorVersion": "mock-1",
+   "confidence": 0.91,
+   "attrs": {
+    "target": "10.20.8.77"
+   }
+  },
+  {
+   "id": "art-025",
+   "artifactType": "linux_journal",
+   "title": "journal 单元异常",
+   "summary": "pve-proxy-helper.service 反复重启",
+   "sourceObjectId": "mock:/PVE evidence set/pve02/var/log/syslog",
+   "createdAt": "2026-10-10T01:32:00.000Z",
+   "extractorId": "artifacts-linux/journal",
+   "extractorVersion": "mock-1",
+   "confidence": 0.77,
+   "attrs": {
+    "restarts": 6
+   }
+  },
+  {
+   "id": "art-026",
+   "artifactType": "linux_accounts",
+   "title": "新增账户 support",
+   "summary": "UID 1002，可登录 shell",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/etc/passwd",
+   "createdAt": "2026-10-10T01:46:00.000Z",
+   "extractorId": "artifacts-linux/accounts",
+   "extractorVersion": "mock-1",
+   "confidence": 0.89,
+   "attrs": {
+    "uid": 1002
+   }
+  },
+  {
+   "id": "art-027",
+   "artifactType": "linux_web",
+   "title": "Nginx 目录穿越",
+   "summary": "GET /../../etc/passwd 返回 200",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/nginx/access.log",
+   "createdAt": "2026-10-10T02:00:00.000Z",
+   "extractorId": "artifacts-linux/web",
+   "extractorVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "status": 200
+   }
+  },
+  {
+   "id": "art-028",
+   "artifactType": "email_message",
+   "title": "钓鱼邮件：发票核对",
+   "summary": "附件 invoice_2026.xlsm 含宏",
+   "sourceObjectId": "source-mock-e01",
+   "createdAt": "2026-10-10T02:10:00.000Z",
+   "extractorId": "containers-pst",
+   "extractorVersion": "mock-1",
+   "confidence": 0.85,
+   "attrs": {
+    "from": "billing@examp1e.net"
+   }
+  },
+  {
+   "id": "art-029",
+   "artifactType": "android_package",
+   "title": "com.tencent.mm",
+   "summary": "版本 8.0.48，首次安装 2026-09-02",
+   "sourceObjectId": "mock:/Pixel 8 sparse image/data/system/packages.xml",
+   "createdAt": "2026-10-10T02:30:00.000Z",
+   "extractorId": "android/packages",
+   "extractorVersion": "mock-1",
+   "confidence": 0.87,
+   "attrs": {
+    "version": "8.0.48"
+   }
+  },
+  {
+   "id": "art-030",
+   "artifactType": "android_device",
+   "title": "Pixel 8 设备指纹",
+   "summary": "Android 14 / SDK 34",
+   "sourceObjectId": "mock:/Pixel 8 sparse image/system/etc/build.prop",
+   "createdAt": "2026-10-10T02:38:00.000Z",
+   "extractorId": "android/build",
+   "extractorVersion": "mock-1",
+   "confidence": 0.99,
+   "attrs": {
+    "sdk": 34
+   }
+  }
+ ],
+ "artifactFamilies": [
+  "browser",
+  "evtx",
+  "prefetch",
+  "registry",
+  "lnk",
+  "recyclebin",
+  "jumplist",
+  "sru",
+  "usb",
+  "scheduled_task",
+  "email",
+  "linux",
+  "android"
+ ],
+ "artifactFamilyCounts": [
+  {
+   "family": "prefetch_execution",
+   "count": 2
+  },
+  {
+   "family": "lnk_recent",
+   "count": 2
+  },
+  {
+   "family": "linux_auth",
+   "count": 2
+  },
+  {
+   "family": "browser_history",
+   "count": 1
+  },
+  {
+   "family": "browser_download",
+   "count": 1
+  },
+  {
+   "family": "browser_cookie",
+   "count": 1
+  },
+  {
+   "family": "evtx_logon",
+   "count": 1
+  },
+  {
+   "family": "evtx_logon_failed",
+   "count": 1
+  },
+  {
+   "family": "evtx_service",
+   "count": 1
+  },
+  {
+   "family": "evtx_powershell",
+   "count": 1
+  },
+  {
+   "family": "registry_run",
+   "count": 1
+  },
+  {
+   "family": "registry_shellbag",
+   "count": 1
+  },
+  {
+   "family": "registry_amcache",
+   "count": 1
+  },
+  {
+   "family": "registry_usb",
+   "count": 1
+  },
+  {
+   "family": "jumplist",
+   "count": 1
+  },
+  {
+   "family": "recyclebin",
+   "count": 1
+  },
+  {
+   "family": "sru_network",
+   "count": 1
+  },
+  {
+   "family": "scheduled_task",
+   "count": 1
+  },
+  {
+   "family": "usb_device",
+   "count": 1
+  },
+  {
+   "family": "linux_history",
+   "count": 1
+  },
+  {
+   "family": "linux_cron",
+   "count": 1
+  },
+  {
+   "family": "linux_journal",
+   "count": 1
+  },
+  {
+   "family": "linux_accounts",
+   "count": 1
+  },
+  {
+   "family": "linux_web",
+   "count": 1
+  },
+  {
+   "family": "email_message",
+   "count": 1
+  },
+  {
+   "family": "android_package",
+   "count": 1
+  },
+  {
+   "family": "android_device",
+   "count": 1
+  }
+ ],
+ "classificationBoard": {
+  "status": "ready",
+  "generatedAt": "2026-10-10T06:00:00.000Z",
+  "totalFiles": 248631,
+  "totalSize": 512110427136,
+  "magicClassifiedCount": 214388,
+  "metadataClassifiedCount": 34243,
+  "groups": [
+   {
+    "category": "documents",
+    "displayName": "文档",
+    "fileCount": 48210,
+    "totalSize": 21474836480,
+    "subcategories": [
+     {
+      "category": "docx",
+      "displayName": "Word 文档",
+      "fileCount": 12040,
+      "totalSize": 7516192768
+     }
+    ]
+   },
+   {
+    "category": "images",
+    "displayName": "图片",
+    "fileCount": 62140,
+    "totalSize": 128849018880,
+    "subcategories": [
+     {
+      "category": "jpg",
+      "displayName": "JPEG 图片",
+      "fileCount": 41020,
+      "totalSize": 85899345920
+     }
+    ]
+   },
+   {
+    "category": "archives",
+    "displayName": "压缩包",
+    "fileCount": 8120,
+    "totalSize": 34359738368,
+    "subcategories": [
+     {
+      "category": "zip",
+      "displayName": "ZIP 压缩包",
+      "fileCount": 4210,
+      "totalSize": 17179869184
+     }
+    ]
+   },
+   {
+    "category": "executables",
+    "displayName": "可执行文件",
+    "fileCount": 9304,
+    "totalSize": 51539607552,
+    "subcategories": [
+     {
+      "category": "exe",
+      "displayName": "Windows 可执行",
+      "fileCount": 6102,
+      "totalSize": 40802189312
+     }
+    ]
+   },
+   {
+    "category": "databases",
+    "displayName": "数据库",
+    "fileCount": 412,
+    "totalSize": 12884901888,
+    "subcategories": [
+     {
+      "category": "sqlite",
+      "displayName": "SQLite 数据库",
+      "fileCount": 388,
+      "totalSize": 8589934592
+     }
+    ]
+   },
+   {
+    "category": "email",
+    "displayName": "邮件容器",
+    "fileCount": 96,
+    "totalSize": 21474836480,
+    "subcategories": [
+     {
+      "category": "pst",
+      "displayName": "PST 归档",
+      "fileCount": 42,
+      "totalSize": 17179869184
+     }
+    ]
+   }
+  ],
+  "warnings": [
+   "3 个源尚未完成分类，统计为部分结果。"
+  ]
+ },
+ "graphSnapshot": {
+  "nodes": [
+   {
+    "id": "entity:analyst",
+    "nodeType": "entity",
+    "label": "analyst",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "entity:10.20.8.14",
+    "nodeType": "entity",
+    "label": "10.20.8.14",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "entity:10.20.8.30",
+    "nodeType": "entity",
+    "label": "10.20.8.30",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "entity:pve01",
+    "nodeType": "entity",
+    "label": "pve01",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "entity:pve02",
+    "nodeType": "entity",
+    "label": "pve02",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "artifact:psexec",
+    "nodeType": "artifact",
+    "label": "psexec.exe",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/psexec.exe"
+   },
+   {
+    "id": "artifact:mimikatz",
+    "nodeType": "artifact",
+    "label": "Mimikatz.exe",
+    "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/MIMIKATZ.EXE-DEADBEEF.pf"
+   },
+   {
+    "id": "artifact:sam",
+    "nodeType": "artifact",
+    "label": "SAM 配置单元",
+    "sourceObjectId": "mock:/[P1] Windows/Windows/System32/config/SAM"
+   },
+   {
+    "id": "artifact:authlog",
+    "nodeType": "artifact",
+    "label": "auth.log",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log"
+   },
+   {
+    "id": "artifact:crontab",
+    "nodeType": "artifact",
+    "label": "crontab",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/etc/crontab"
+   },
+   {
+    "id": "artifact:usb",
+    "nodeType": "artifact",
+    "label": "SanDisk Ultra",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:4624",
+    "nodeType": "timeline",
+    "label": "4624 登录",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:4104",
+    "nodeType": "timeline",
+    "label": "4104 脚本块",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:sshd",
+    "nodeType": "timeline",
+    "label": "SSH 登录",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "file:beacon",
+    "nodeType": "file",
+    "label": "beacon_payload.bin",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/beacon_payload.bin"
+   },
+   {
+    "id": "file:passwords",
+    "nodeType": "file",
+    "label": "passwords.xlsx",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Documents/passwords.xlsx"
+   },
+   {
+    "id": "file:shadow",
+    "nodeType": "file",
+    "label": "shadow",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/etc/shadow"
+   },
+   {
+    "id": "file:packages",
+    "nodeType": "file",
+    "label": "packages.xml",
+    "sourceObjectId": "mock:/Pixel 8 sparse image/data/system/packages.xml"
+   }
+  ],
+  "edges": [
+   {
+    "sourceId": "entity:analyst",
+    "targetId": "artifact:psexec",
+    "edgeType": "executed",
+    "confidence": 0.9
+   },
+   {
+    "sourceId": "entity:analyst",
+    "targetId": "file:passwords",
+    "edgeType": "accessed",
+    "confidence": 0.8
+   },
+   {
+    "sourceId": "entity:10.20.8.14",
+    "targetId": "timeline:4624",
+    "edgeType": "authenticated_from",
+    "confidence": 0.97
+   },
+   {
+    "sourceId": "entity:10.20.8.14",
+    "targetId": "artifact:psexec",
+    "edgeType": "downloaded",
+    "confidence": 0.88
+   },
+   {
+    "sourceId": "artifact:psexec",
+    "targetId": "timeline:4104",
+    "edgeType": "precedes",
+    "confidence": 0.82
+   },
+   {
+    "sourceId": "artifact:mimikatz",
+    "targetId": "artifact:sam",
+    "edgeType": "touches",
+    "confidence": 0.83
+   },
+   {
+    "sourceId": "artifact:mimikatz",
+    "targetId": "file:beacon",
+    "edgeType": "derives_from",
+    "confidence": 0.7
+   },
+   {
+    "sourceId": "entity:10.20.8.30",
+    "targetId": "timeline:sshd",
+    "edgeType": "authenticated_from",
+    "confidence": 0.94
+   },
+   {
+    "sourceId": "entity:10.20.8.30",
+    "targetId": "entity:pve01",
+    "edgeType": "logged_into",
+    "confidence": 0.92
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "artifact:authlog",
+    "edgeType": "produced",
+    "confidence": 0.9
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "artifact:crontab",
+    "edgeType": "persisted_via",
+    "confidence": 0.91
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "file:shadow",
+    "edgeType": "accessed",
+    "confidence": 0.85
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "entity:pve02",
+    "edgeType": "correlates_with",
+    "confidence": 0.72
+   },
+   {
+    "sourceId": "artifact:usb",
+    "targetId": "file:beacon",
+    "edgeType": "staged_on",
+    "confidence": 0.65
+   },
+   {
+    "sourceId": "file:packages",
+    "targetId": "artifact:usb",
+    "edgeType": "correlates_with",
+    "confidence": 0.6
+   }
+  ],
+  "nodeCountByType": {
+   "entity": 5,
+   "artifact": 6,
+   "timeline": 3,
+   "file": 4
+  },
+  "edgeCountByType": {
+   "executed": 1,
+   "accessed": 2,
+   "authenticated_from": 2,
+   "downloaded": 1,
+   "precedes": 1,
+   "touches": 1,
+   "derives_from": 1,
+   "logged_into": 1,
+   "produced": 1,
+   "persisted_via": 1,
+   "correlates_with": 2,
+   "staged_on": 1
+  },
+  "totalNodes": 18,
+  "totalEdges": 15,
+  "density": 0.098,
+  "largestComponentSize": 14
+ },
+ "correlationSnapshot": {
+  "leads": [
+   {
+    "id": "lead-001",
+    "title": "凭据窃取后横向移动",
+    "summary": "psexec 下载 → 4104 脚本块 → 4624 网络登录",
+    "families": [
+     "credential_access",
+     "lateral_movement"
+    ],
+    "signalCount": 6,
+    "score": 0.93,
+    "evidence": [
+     "art-002",
+     "art-007",
+     "art-004"
+    ]
+   },
+   {
+    "id": "lead-002",
+    "title": "Linux 集群持久化",
+    "summary": "SSH 登录后写入 crontab 每分钟回连",
+    "families": [
+     "persistence",
+     "command_and_control"
+    ],
+    "signalCount": 5,
+    "score": 0.91,
+    "evidence": [
+     "art-021",
+     "art-024"
+    ]
+   },
+   {
+    "id": "lead-003",
+    "title": "可移动介质数据外带",
+    "summary": "USB 首次接入后出现隐藏载荷",
+    "families": [
+     "exfiltration"
+    ],
+    "signalCount": 4,
+    "score": 0.78,
+    "evidence": [
+     "art-020",
+     "art-027"
+    ]
+   },
+   {
+    "id": "lead-004",
+    "title": "Web 目录穿越尝试",
+    "summary": "Nginx 日志 200 响应 + 后续账户创建",
+    "families": [
+     "initial_access"
+    ],
+    "signalCount": 3,
+    "score": 0.74,
+    "evidence": [
+     "art-027",
+     "art-026"
+    ]
+   },
+   {
+    "id": "lead-005",
+    "title": "安全防护被削弱",
+    "summary": "Defender 排除项新增 D:\\tools",
+    "families": [
+     "defense_evasion"
+    ],
+    "signalCount": 2,
+    "score": 0.69,
+    "evidence": [
+     "art-010"
+    ]
+   },
+   {
+    "id": "lead-006",
+    "title": "移动端应用安装异常",
+    "summary": "Pixel 8 上微信安装时间与案件窗口一致",
+    "families": [
+     "collection"
+    ],
+    "signalCount": 2,
+    "score": 0.58,
+    "evidence": [
+     "art-029"
+    ]
+   }
+  ],
+  "clusters": [
+   {
+    "id": "cluster-001",
+    "title": "Windows 端点入侵",
+    "leadIds": [
+     "lead-001",
+     "lead-003",
+     "lead-005"
+    ],
+    "families": [
+     "credential_access",
+     "lateral_movement",
+     "defense_evasion"
+    ],
+    "size": 3
+   },
+   {
+    "id": "cluster-002",
+    "title": "PVE 集群失陷",
+    "leadIds": [
+     "lead-002",
+     "lead-004"
+    ],
+    "families": [
+     "persistence",
+     "initial_access"
+    ],
+    "size": 2
+   },
+   {
+    "id": "cluster-003",
+    "title": "移动设备关联",
+    "leadIds": [
+     "lead-006"
+    ],
+    "families": [
+     "collection"
+    ],
+    "size": 1
+   }
+  ],
+  "nodes": [
+   {
+    "id": "entity:analyst",
+    "nodeType": "entity",
+    "label": "analyst",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "entity:10.20.8.14",
+    "nodeType": "entity",
+    "label": "10.20.8.14",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "entity:10.20.8.30",
+    "nodeType": "entity",
+    "label": "10.20.8.30",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "entity:pve01",
+    "nodeType": "entity",
+    "label": "pve01",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "entity:pve02",
+    "nodeType": "entity",
+    "label": "pve02",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "artifact:psexec",
+    "nodeType": "artifact",
+    "label": "psexec.exe",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/psexec.exe"
+   },
+   {
+    "id": "artifact:mimikatz",
+    "nodeType": "artifact",
+    "label": "Mimikatz.exe",
+    "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/MIMIKATZ.EXE-DEADBEEF.pf"
+   },
+   {
+    "id": "artifact:sam",
+    "nodeType": "artifact",
+    "label": "SAM 配置单元",
+    "sourceObjectId": "mock:/[P1] Windows/Windows/System32/config/SAM"
+   },
+   {
+    "id": "artifact:authlog",
+    "nodeType": "artifact",
+    "label": "auth.log",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log"
+   },
+   {
+    "id": "artifact:crontab",
+    "nodeType": "artifact",
+    "label": "crontab",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/etc/crontab"
+   },
+   {
+    "id": "artifact:usb",
+    "nodeType": "artifact",
+    "label": "SanDisk Ultra",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:4624",
+    "nodeType": "timeline",
+    "label": "4624 登录",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:4104",
+    "nodeType": "timeline",
+    "label": "4104 脚本块",
+    "sourceObjectId": "source-mock-e01"
+   },
+   {
+    "id": "timeline:sshd",
+    "nodeType": "timeline",
+    "label": "SSH 登录",
+    "sourceObjectId": "source-mock-linux"
+   },
+   {
+    "id": "file:beacon",
+    "nodeType": "file",
+    "label": "beacon_payload.bin",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/beacon_payload.bin"
+   },
+   {
+    "id": "file:passwords",
+    "nodeType": "file",
+    "label": "passwords.xlsx",
+    "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Documents/passwords.xlsx"
+   },
+   {
+    "id": "file:shadow",
+    "nodeType": "file",
+    "label": "shadow",
+    "sourceObjectId": "mock:/PVE evidence set/pve01/etc/shadow"
+   },
+   {
+    "id": "file:packages",
+    "nodeType": "file",
+    "label": "packages.xml",
+    "sourceObjectId": "mock:/Pixel 8 sparse image/data/system/packages.xml"
+   }
+  ],
+  "edges": [
+   {
+    "sourceId": "entity:analyst",
+    "targetId": "artifact:psexec",
+    "edgeType": "executed",
+    "confidence": 0.9
+   },
+   {
+    "sourceId": "entity:analyst",
+    "targetId": "file:passwords",
+    "edgeType": "accessed",
+    "confidence": 0.8
+   },
+   {
+    "sourceId": "entity:10.20.8.14",
+    "targetId": "timeline:4624",
+    "edgeType": "authenticated_from",
+    "confidence": 0.97
+   },
+   {
+    "sourceId": "entity:10.20.8.14",
+    "targetId": "artifact:psexec",
+    "edgeType": "downloaded",
+    "confidence": 0.88
+   },
+   {
+    "sourceId": "artifact:psexec",
+    "targetId": "timeline:4104",
+    "edgeType": "precedes",
+    "confidence": 0.82
+   },
+   {
+    "sourceId": "artifact:mimikatz",
+    "targetId": "artifact:sam",
+    "edgeType": "touches",
+    "confidence": 0.83
+   },
+   {
+    "sourceId": "artifact:mimikatz",
+    "targetId": "file:beacon",
+    "edgeType": "derives_from",
+    "confidence": 0.7
+   },
+   {
+    "sourceId": "entity:10.20.8.30",
+    "targetId": "timeline:sshd",
+    "edgeType": "authenticated_from",
+    "confidence": 0.94
+   },
+   {
+    "sourceId": "entity:10.20.8.30",
+    "targetId": "entity:pve01",
+    "edgeType": "logged_into",
+    "confidence": 0.92
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "artifact:authlog",
+    "edgeType": "produced",
+    "confidence": 0.9
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "artifact:crontab",
+    "edgeType": "persisted_via",
+    "confidence": 0.91
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "file:shadow",
+    "edgeType": "accessed",
+    "confidence": 0.85
+   },
+   {
+    "sourceId": "entity:pve01",
+    "targetId": "entity:pve02",
+    "edgeType": "correlates_with",
+    "confidence": 0.72
+   },
+   {
+    "sourceId": "artifact:usb",
+    "targetId": "file:beacon",
+    "edgeType": "staged_on",
+    "confidence": 0.65
+   },
+   {
+    "sourceId": "file:packages",
+    "targetId": "artifact:usb",
+    "edgeType": "correlates_with",
+    "confidence": 0.6
+   }
+  ],
+  "familyCoverage": [
+   {
+    "family": "credential_access",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "lateral_movement",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "persistence",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "command_and_control",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "exfiltration",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "initial_access",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "defense_evasion",
+    "leadCount": 1,
+    "clusterCount": 1
+   },
+   {
+    "family": "collection",
+    "leadCount": 1,
+    "clusterCount": 1
+   }
+  ],
+  "leadCount": 6,
+  "clusterCount": 3,
+  "nodeCount": 18,
+  "edgeCount": 15,
+  "generatedAt": "2026-10-10T07:25:00.000Z"
+ }
+}

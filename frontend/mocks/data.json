@@ -1,0 +1,672 @@
+{
+ "timelineEvents": [
+  {
+   "id": "tl-001",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/lsass.exe",
+   "eventType": "process_exec",
+   "ts": "2026-10-09T21:48:00.000Z",
+   "title": "lsass.exe 启动",
+   "description": "登录进程初始化，随后出现异常句柄读取",
+   "parserId": "evtx",
+   "parserVersion": "mock-1",
+   "confidence": 0.92,
+   "attrs": {
+    "pid": 684,
+    "user": "SYSTEM"
+   }
+  },
+  {
+   "id": "tl-002",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/psexec.exe",
+   "eventType": "file_created",
+   "ts": "2026-10-09T22:02:00.000Z",
+   "title": "下载目录写入 psexec.exe",
+   "description": "浏览器下载完成后落盘，来源为外部地址",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.88,
+   "attrs": {
+    "size": 372736
+   }
+  },
+  {
+   "id": "tl-003",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/POWERSHELL.EXE-1A2B3C4D.pf",
+   "eventType": "program_executed",
+   "ts": "2026-10-09T22:29:00.000Z",
+   "title": "PowerShell 执行记录",
+   "description": "Prefetch 记录首次执行，参数包含 -EncodedCommand",
+   "parserId": "prefetch",
+   "parserVersion": "mock-1",
+   "confidence": 0.95,
+   "attrs": {
+    "runCount": 7
+   }
+  },
+  {
+   "id": "tl-004",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/Security.evtx",
+   "eventType": "logon",
+   "ts": "2026-10-09T22:52:00.000Z",
+   "title": "4624 登录成功（网络）",
+   "description": "来自 10.20.8.14 的管理员登录",
+   "parserId": "evtx",
+   "parserVersion": "mock-1",
+   "confidence": 0.97,
+   "attrs": {
+    "logonType": 3,
+    "ip": "10.20.8.14"
+   }
+  },
+  {
+   "id": "tl-005",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/winevt/Logs/Security.evtx",
+   "eventType": "logon_failed",
+   "ts": "2026-10-09T22:59:00.000Z",
+   "title": "4625 登录失败 ×9",
+   "description": "同一来源的暴力破解尝试",
+   "parserId": "evtx",
+   "parserVersion": "mock-1",
+   "confidence": 0.96,
+   "attrs": {
+    "attempts": 9,
+    "ip": "10.20.8.14"
+   }
+  },
+  {
+   "id": "tl-006",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/config/SAM",
+   "eventType": "registry_accessed",
+   "ts": "2026-10-09T23:20:00.000Z",
+   "title": "SAM 配置单元被读取",
+   "description": "疑似凭据导出，进程为 rundll32.exe",
+   "parserId": "registry",
+   "parserVersion": "mock-1",
+   "confidence": 0.83,
+   "attrs": {
+    "hive": "SAM"
+   }
+  },
+  {
+   "id": "tl-007",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/Prefetch/MIMIKATZ.EXE-DEADBEEF.pf",
+   "eventType": "program_executed",
+   "ts": "2026-10-09T23:26:00.000Z",
+   "title": "Mimikatz 执行痕迹（已删除）",
+   "description": "Prefetch 残留指向已删除的凭据窃取工具",
+   "parserId": "prefetch",
+   "parserVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "deleted": true
+   }
+  },
+  {
+   "id": "tl-008",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Desktop/collect_evidence.ps1",
+   "eventType": "file_modified",
+   "ts": "2026-10-09T23:42:00.000Z",
+   "title": "采集脚本被修改",
+   "description": "脚本增加远程回传分支",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.75,
+   "attrs": {
+    "size": 20480
+   }
+  },
+  {
+   "id": "tl-009",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/AppData/Local/UsrClass.dat",
+   "eventType": "shellbag",
+   "ts": "2026-10-09T23:54:00.000Z",
+   "title": "Shellbag 记录可移动介质",
+   "description": "用户访问过 E:\\ 卷",
+   "parserId": "registry",
+   "parserVersion": "mock-1",
+   "confidence": 0.8,
+   "attrs": {
+    "volume": "E:"
+   }
+  },
+  {
+   "id": "tl-010",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/INF/setupapi.dev.log",
+   "eventType": "usb_connected",
+   "ts": "2026-10-10T00:10:00.000Z",
+   "title": "USB 设备接入",
+   "description": "SanDisk Ultra 首次插入并完成驱动安装",
+   "parserId": "setupapi",
+   "parserVersion": "mock-1",
+   "confidence": 0.86,
+   "attrs": {
+    "vid": "0781",
+    "pid": "5581"
+   }
+  },
+  {
+   "id": "tl-011",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Recent/powershell.lnk",
+   "eventType": "lnk_accessed",
+   "ts": "2026-10-10T00:28:00.000Z",
+   "title": "LNK 指向 PowerShell",
+   "description": "最近使用记录，卷序列号匹配系统盘",
+   "parserId": "lnk",
+   "parserVersion": "mock-1",
+   "confidence": 0.79,
+   "attrs": {
+    "target": "powershell.exe"
+   }
+  },
+  {
+   "id": "tl-012",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/ProgramData/Microsoft/Windows Defender",
+   "eventType": "defender_event",
+   "ts": "2026-10-10T00:43:00.000Z",
+   "title": "Defender 排除项新增",
+   "description": "新增路径排除：D:\\tools",
+   "parserId": "evtx",
+   "parserVersion": "mock-1",
+   "confidence": 0.84,
+   "attrs": {
+    "path": "D:\\tools"
+   }
+  },
+  {
+   "id": "tl-013",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log",
+   "eventType": "ssh_login",
+   "ts": "2026-10-10T00:50:00.000Z",
+   "title": "SSH 登录成功 root@pve01",
+   "description": "来自跳板机 10.20.8.30，使用密钥认证",
+   "parserId": "linux-auth",
+   "parserVersion": "mock-1",
+   "confidence": 0.94,
+   "attrs": {
+    "user": "root",
+    "ip": "10.20.8.30"
+   }
+  },
+  {
+   "id": "tl-014",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/auth.log",
+   "eventType": "ssh_login_failed",
+   "ts": "2026-10-10T00:55:00.000Z",
+   "title": "SSH 失败登录 ×14",
+   "description": "针对 root 的密码爆破",
+   "parserId": "linux-auth",
+   "parserVersion": "mock-1",
+   "confidence": 0.93,
+   "attrs": {
+    "attempts": 14
+   }
+  },
+  {
+   "id": "tl-015",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/root/.bash_history",
+   "eventType": "command_history",
+   "ts": "2026-10-10T01:10:00.000Z",
+   "title": "Bash 历史包含横向移动",
+   "description": "ssh/scp 到 pve02、pve03",
+   "parserId": "linux-history",
+   "parserVersion": "mock-1",
+   "confidence": 0.88,
+   "attrs": {
+    "commands": 42
+   }
+  },
+  {
+   "id": "tl-016",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/etc/crontab",
+   "eventType": "persistence",
+   "ts": "2026-10-10T01:18:00.000Z",
+   "title": "计划任务新增持久化",
+   "description": "每分钟回连 10.20.8.77",
+   "parserId": "linux-cron",
+   "parserVersion": "mock-1",
+   "confidence": 0.91,
+   "attrs": {
+    "schedule": "* * * * *"
+   }
+  },
+  {
+   "id": "tl-017",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve02/var/log/syslog",
+   "eventType": "service_restart",
+   "ts": "2026-10-10T01:32:00.000Z",
+   "title": "systemd 服务重启",
+   "description": "可疑单元 pve-proxy-helper.service",
+   "parserId": "linux-journal",
+   "parserVersion": "mock-1",
+   "confidence": 0.77,
+   "attrs": {
+    "unit": "pve-proxy-helper.service"
+   }
+  },
+  {
+   "id": "tl-018",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/etc/passwd",
+   "eventType": "account_modified",
+   "ts": "2026-10-10T01:46:00.000Z",
+   "title": "新增本地账户 support",
+   "description": "UID 1002，登录 shell 为 /bin/bash",
+   "parserId": "linux-accounts",
+   "parserVersion": "mock-1",
+   "confidence": 0.89,
+   "attrs": {
+    "uid": 1002
+   }
+  },
+  {
+   "id": "tl-019",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve01/var/log/nginx/access.log",
+   "eventType": "web_access",
+   "ts": "2026-10-10T02:00:00.000Z",
+   "title": "Web 访问包含目录穿越",
+   "description": "GET /../../etc/passwd 返回 200",
+   "parserId": "linux-web",
+   "parserVersion": "mock-1",
+   "confidence": 0.9,
+   "attrs": {
+    "status": 200
+   }
+  },
+  {
+   "id": "tl-020",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/cluster.conf",
+   "eventType": "config_changed",
+   "ts": "2026-10-10T02:12:00.000Z",
+   "title": "集群配置被修改",
+   "description": "新增成员 pve04（未授权）",
+   "parserId": "linux-config",
+   "parserVersion": "mock-1",
+   "confidence": 0.82,
+   "attrs": {
+    "member": "pve04"
+   }
+  },
+  {
+   "id": "tl-021",
+   "dataSourceId": "source-mock-android",
+   "sourceObjectId": "mock:/Pixel 8 sparse image/data/system/packages.xml",
+   "eventType": "package_installed",
+   "ts": "2026-10-10T02:30:00.000Z",
+   "title": "安装应用 com.tencent.mm",
+   "description": "Android 包管理记录首次安装时间",
+   "parserId": "android-packages",
+   "parserVersion": "mock-1",
+   "confidence": 0.87,
+   "attrs": {
+    "version": "8.0.48"
+   }
+  },
+  {
+   "id": "tl-022",
+   "dataSourceId": "source-mock-android",
+   "sourceObjectId": "mock:/Pixel 8 sparse image/system/etc/build.prop",
+   "eventType": "device_info",
+   "ts": "2026-10-10T02:38:00.000Z",
+   "title": "设备指纹读取",
+   "description": "Pixel 8 / Android 14 / 构建 UQ1A.240205.004",
+   "parserId": "android-build",
+   "parserVersion": "mock-1",
+   "confidence": 0.99,
+   "attrs": {
+    "sdk": 34
+   }
+  },
+  {
+   "id": "tl-023",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/Temp/update_cache.dat",
+   "eventType": "file_created",
+   "ts": "2026-10-10T03:00:00.000Z",
+   "title": "临时目录写入缓存文件",
+   "description": "文件名随机但大小为固定块",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.7,
+   "attrs": {
+    "size": 1048576
+   }
+  },
+  {
+   "id": "tl-024",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Documents/passwords.xlsx",
+   "eventType": "file_encrypted",
+   "ts": "2026-10-10T03:12:00.000Z",
+   "title": "文档带密码保护",
+   "description": "Office 加密容器，无法直接读取",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.8,
+   "attrs": {
+    "encrypted": true
+   }
+  },
+  {
+   "id": "tl-025",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Windows/System32/Tasks/OneDriveStandaloneUpdater",
+   "eventType": "scheduled_task",
+   "ts": "2026-10-10T03:24:00.000Z",
+   "title": "计划任务注册",
+   "description": "任务动作指向用户目录脚本",
+   "parserId": "registry",
+   "parserVersion": "mock-1",
+   "confidence": 0.83,
+   "attrs": {
+    "trigger": "logon"
+   }
+  },
+  {
+   "id": "tl-026",
+   "dataSourceId": "source-mock-linux",
+   "sourceObjectId": "mock:/PVE evidence set/pve03/var/log/auth.log",
+   "eventType": "sudo_used",
+   "ts": "2026-10-10T03:36:00.000Z",
+   "title": "sudo 提权执行",
+   "description": "support 用户执行 /usr/bin/apt",
+   "parserId": "linux-auth",
+   "parserVersion": "mock-1",
+   "confidence": 0.85,
+   "attrs": {
+    "command": "/usr/bin/apt"
+   }
+  },
+  {
+   "id": "tl-027",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/Users/analyst/Downloads/beacon_payload.bin",
+   "eventType": "file_created",
+   "ts": "2026-10-10T03:48:00.000Z",
+   "title": "隐藏载荷写入",
+   "description": "隐藏属性 + 无扩展名关联",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.78,
+   "attrs": {
+    "hidden": true
+   }
+  },
+  {
+   "id": "tl-028",
+   "dataSourceId": "source-mock-e01",
+   "sourceObjectId": "mock:/[P1] Windows/$UsnJrnl:$J",
+   "eventType": "usn_record",
+   "ts": "2026-10-10T04:00:00.000Z",
+   "title": "USN 日志记录批量删除",
+   "description": "短时间内删除 128 个文件",
+   "parserId": "ntfs",
+   "parserVersion": "mock-1",
+   "confidence": 0.81,
+   "attrs": {
+    "deletions": 128
+   }
+  }
+ ],
+ "timelineFacets": {
+  "totalEvents": 18420,
+  "startTs": "2026-10-09T08:00:00.000Z",
+  "endTs": "2026-10-10T08:00:00.000Z",
+  "eventTypes": [
+   {
+    "value": "file_created",
+    "count": 3
+   },
+   {
+    "value": "program_executed",
+    "count": 2
+   },
+   {
+    "value": "process_exec",
+    "count": 1
+   },
+   {
+    "value": "logon",
+    "count": 1
+   },
+   {
+    "value": "logon_failed",
+    "count": 1
+   },
+   {
+    "value": "registry_accessed",
+    "count": 1
+   },
+   {
+    "value": "file_modified",
+    "count": 1
+   },
+   {
+    "value": "shellbag",
+    "count": 1
+   },
+   {
+    "value": "usb_connected",
+    "count": 1
+   },
+   {
+    "value": "lnk_accessed",
+    "count": 1
+   },
+   {
+    "value": "defender_event",
+    "count": 1
+   },
+   {
+    "value": "ssh_login",
+    "count": 1
+   },
+   {
+    "value": "ssh_login_failed",
+    "count": 1
+   },
+   {
+    "value": "command_history",
+    "count": 1
+   },
+   {
+    "value": "persistence",
+    "count": 1
+   },
+   {
+    "value": "service_restart",
+    "count": 1
+   },
+   {
+    "value": "account_modified",
+    "count": 1
+   },
+   {
+    "value": "web_access",
+    "count": 1
+   },
+   {
+    "value": "config_changed",
+    "count": 1
+   },
+   {
+    "value": "package_installed",
+    "count": 1
+   },
+   {
+    "value": "device_info",
+    "count": 1
+   },
+   {
+    "value": "file_encrypted",
+    "count": 1
+   },
+   {
+    "value": "scheduled_task",
+    "count": 1
+   },
+   {
+    "value": "sudo_used",
+    "count": 1
+   },
+   {
+    "value": "usn_record",
+    "count": 1
+   }
+  ],
+  "dataSources": [
+   {
+    "value": "source-mock-e01",
+    "count": 17
+   },
+   {
+    "value": "source-mock-linux",
+    "count": 9
+   },
+   {
+    "value": "source-mock-android",
+    "count": 2
+   }
+  ],
+  "histogram": [
+   {
+    "startTs": "2026-10-09T09:00:00.000Z",
+    "endTs": "2026-10-09T10:00:00.000Z",
+    "count": 18
+   },
+   {
+    "startTs": "2026-10-09T10:00:00.000Z",
+    "endTs": "2026-10-09T11:00:00.000Z",
+    "count": 12
+   },
+   {
+    "startTs": "2026-10-09T11:00:00.000Z",
+    "endTs": "2026-10-09T12:00:00.000Z",
+    "count": 9
+   },
+   {
+    "startTs": "2026-10-09T12:00:00.000Z",
+    "endTs": "2026-10-09T13:00:00.000Z",
+    "count": 7
+   },
+   {
+    "startTs": "2026-10-09T13:00:00.000Z",
+    "endTs": "2026-10-09T14:00:00.000Z",
+    "count": 6
+   },
+   {
+    "startTs": "2026-10-09T14:00:00.000Z",
+    "endTs": "2026-10-09T15:00:00.000Z",
+    "count": 8
+   },
+   {
+    "startTs": "2026-10-09T15:00:00.000Z",
+    "endTs": "2026-10-09T16:00:00.000Z",
+    "count": 22
+   },
+   {
+    "startTs": "2026-10-09T16:00:00.000Z",
+    "endTs": "2026-10-09T17:00:00.000Z",
+    "count": 96
+   },
+   {
+    "startTs": "2026-10-09T17:00:00.000Z",
+    "endTs": "2026-10-09T18:00:00.000Z",
+    "count": 240
+   },
+   {
+    "startTs": "2026-10-09T18:00:00.000Z",
+    "endTs": "2026-10-09T19:00:00.000Z",
+    "count": 410
+   },
+   {
+    "startTs": "2026-10-09T19:00:00.000Z",
+    "endTs": "2026-10-09T20:00:00.000Z",
+    "count": 520
+   },
+   {
+    "startTs": "2026-10-09T20:00:00.000Z",
+    "endTs": "2026-10-09T21:00:00.000Z",
+    "count": 488
+   },
+   {
+    "startTs": "2026-10-09T21:00:00.000Z",
+    "endTs": "2026-10-09T22:00:00.000Z",
+    "count": 356
+   },
+   {
+    "startTs": "2026-10-09T22:00:00.000Z",
+    "endTs": "2026-10-09T23:00:00.000Z",
+    "count": 470
+   },
+   {
+    "startTs": "2026-10-09T23:00:00.000Z",
+    "endTs": "2026-10-10T00:00:00.000Z",
+    "count": 540
+   },
+   {
+    "startTs": "2026-10-10T00:00:00.000Z",
+    "endTs": "2026-10-10T01:00:00.000Z",
+    "count": 512
+   },
+   {
+    "startTs": "2026-10-10T01:00:00.000Z",
+    "endTs": "2026-10-10T02:00:00.000Z",
+    "count": 430
+   },
+   {
+    "startTs": "2026-10-10T02:00:00.000Z",
+    "endTs": "2026-10-10T03:00:00.000Z",
+    "count": 322
+   },
+   {
+    "startTs": "2026-10-10T03:00:00.000Z",
+    "endTs": "2026-10-10T04:00:00.000Z",
+    "count": 246
+   },
+   {
+    "startTs": "2026-10-10T04:00:00.000Z",
+    "endTs": "2026-10-10T05:00:00.000Z",
+    "count": 198
+   },
+   {
+    "startTs": "2026-10-10T05:00:00.000Z",
+    "endTs": "2026-10-10T06:00:00.000Z",
+    "count": 232
+   },
+   {
+    "startTs": "2026-10-10T06:00:00.000Z",
+    "endTs": "2026-10-10T07:00:00.000Z",
+    "count": 386
+   },
+   {
+    "startTs": "2026-10-10T07:00:00.000Z",
+    "endTs": "2026-10-10T08:00:00.000Z",
+    "count": 512
+   },
+   {
+    "startTs": "2026-10-10T08:00:00.000Z",
+    "endTs": "2026-10-10T09:00:00.000Z",
+    "count": 268
+   }
+  ]
+ }
+}
