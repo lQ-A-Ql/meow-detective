@@ -70,9 +70,8 @@ describe('FileTreeDataSourceNode', () => {
         onClick: vi.fn(),
       }),
     );
-    // ChevronDown should be present, ChevronRight should not
-    const container = document.querySelector('[role="button"]')!;
-    expect(container.innerHTML).toContain('lucide-chevron-down');
+    const node = screen.getByRole('button', { name: /Win10-C盘/ });
+    expect(node).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('shows collapsed chevron when node is not expanded', () => {
@@ -84,8 +83,8 @@ describe('FileTreeDataSourceNode', () => {
         onClick: vi.fn(),
       }),
     );
-    const container = document.querySelector('[role="button"]')!;
-    expect(container.innerHTML).toContain('lucide-chevron-right');
+    const node = screen.getByRole('button', { name: /Win10-C盘/ });
+    expect(node).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('calls onClick when clicked', () => {

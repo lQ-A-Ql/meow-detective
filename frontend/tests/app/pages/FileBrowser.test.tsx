@@ -909,11 +909,11 @@ describe('FileBrowser media preview', () => {
     );
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
   });
-});
 
-describe('FileBrowser render', () => {
-  it('renders without crashing when a case is active', () => {
-    const { container } = renderPage();
-    expect(container).toBeTruthy();
+  it('renders the file tree when a case is active', async () => {
+    renderPage();
+    // The root node appears in both the tree and the breadcrumb, so assert presence
+    // rather than a single match.
+    expect((await screen.findAllByText('Root')).length).toBeGreaterThan(0);
   });
 });

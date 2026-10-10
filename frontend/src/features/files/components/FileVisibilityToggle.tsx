@@ -17,7 +17,7 @@ export function FileVisibilityToggle({
         onCheckedChange={(value) => onCheckedChange(value === true)}
         variant="forensics"
         checkboxSize="compact"
-        aria-label="toggle-hidden-files"
+        aria-label={t('fileBrowser.status.showHidden')}
         data-testid="file-visibility-toggle"
       />
       <EyeOff size={12} />

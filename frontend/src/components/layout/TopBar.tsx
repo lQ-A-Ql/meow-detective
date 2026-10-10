@@ -8,7 +8,7 @@ import type { TopBarModel } from '@/features/shell/use-top-bar-model';
 
 const iconByPage: Record<TopBarModel['links'][number]['page'], SidebarIconName> = {
   home: 'home', files: 'files', emulation: 'emulation', analysis: 'analysis',
-  infrastructure: 'infrastructure', v2: 'v2', v3: 'v3', graph: 'v3', search: 'search',
+  infrastructure: 'infrastructure', v2: 'v2', v3: 'v3', search: 'search',
   timeline: 'timeline', artifacts: 'artifacts', reports: 'reports',
 };
 

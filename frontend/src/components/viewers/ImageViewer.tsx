@@ -280,7 +280,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           <img
             ref={imgRef}
             src={src}
-            alt={fileName || 'Preview'}
+            alt={fileName || t('viewer.image.altFallback')}
             onLoad={handleLoad}
             onError={handleError}
             className="max-w-full max-h-full object-contain select-none"

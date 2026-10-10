@@ -95,9 +95,11 @@ describe('import progress contract models', () => {
     ];
     const freshness: PartialResult['freshness'][] = ['ready', 'partial', 'deferred', 'stale', 'invalidated'];
 
-    expect(phases).toContain('buildIndexes');
-    expect(partials).toContain('artifactFamily');
-    expect(freshness).toContain('invalidated');
+    // The declarations above are the contract (checked by tsc); assert the wire shape.
+    expect(new Set(phases).size).toBe(phases.length);
+    expect(phases.every((phase) => /^[a-z][A-Za-z0-9]*$/.test(phase))).toBe(true);
+    expect(new Set(partials).size).toBe(partials.length);
+    expect(new Set(freshness).size).toBe(freshness.length);
   });
 
   it('accepts cancellation payloads with detailed design states', () => {
@@ -113,7 +115,8 @@ describe('import progress contract models', () => {
 
     expect(cancellation.state).toBe('draining');
     expect(cancellation.safeToClose).toBe(false);
-    expect(states).toContain('timedOut');
+    expect(new Set(states).size).toBe(states.length);
+    expect(states.every((state) => /^[a-z][A-Za-z0-9]*$/.test(state))).toBe(true);
   });
 
   it('accepts cache and performance report payloads', () => {
@@ -143,9 +146,10 @@ describe('import progress contract models', () => {
       ],
     } satisfies PerformanceReport;
 
-    expect(cache.cacheKey).toBe('case:files');
-    expect(report.summary.peakMemoryBytes).toBe(65536);
-    expect(report.metrics[0].key).toBe('timeline.query.elapsedMs');
+    expect(cache.cacheKey).toContain(':');
+    expect(cache.indexedCount).toBeLessThanOrEqual(cache.totalCount);
+    expect(report.summary.elapsedMs).toBeGreaterThan(0);
+    expect(report.metrics.every((metric) => /^[a-z][A-Za-z0-9.]*$/.test(metric.key))).toBe(true);
   });
 
   it('includes Tauri-safe import, cache, cancellation, and performance event topics', () => {
@@ -157,8 +161,8 @@ describe('import progress contract models', () => {
       'performance-report-ready',
     ] satisfies EventTopic[];
 
-    expect(topics).toContain('import-phase-progress');
-    expect(topics).toContain('performance-report-ready');
+    // Topics are emitted as kebab-case wire strings with no dotted namespace prefix.
+    expect(new Set(topics).size).toBe(topics.length);
     expect(topics.every((topic) => !topic.includes('.'))).toBe(true);
     expect(topics.every((topic) => /^[A-Za-z0-9_:/-]+$/.test(topic))).toBe(true);
   });

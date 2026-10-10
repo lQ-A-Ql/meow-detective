@@ -25,6 +25,7 @@ export const FileTreeDataSourceNode = memo(function FileTreeDataSourceNode({
       style={{ paddingLeft: 8 }}
       onClick={onClick}
       role="button"
+      aria-expanded={node.hasChildren ? expanded : undefined}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

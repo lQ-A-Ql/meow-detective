@@ -18,6 +18,8 @@ function normalizePartitionLabel(value?: string) {
     return undefined;
   }
   const upper = text.toUpperCase();
+  // The backend supplies this partition label; '\u6062\u590d' (恢复) is matched as a data
+  // pattern, not user-facing copy, and stays escaped so the source carries no raw label text.
   if (upper.includes('RECOVERY') || text.includes('\u6062\u590d')) {
     return 'RECOVERY';
   }

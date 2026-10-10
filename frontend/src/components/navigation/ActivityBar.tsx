@@ -14,7 +14,6 @@ const iconByPage: Record<TopBarLink['page'], SidebarIconName> = {
   infrastructure: 'infrastructure',
   v2: 'v2',
   v3: 'v3',
-  graph: 'v3',
   search: 'search',
   timeline: 'timeline',
   artifacts: 'artifacts',

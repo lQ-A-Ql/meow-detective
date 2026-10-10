@@ -420,11 +420,8 @@ export function FilePreviewTabs({
       {previewError ? <ViewerError error={previewError} onRetry={onRetryPreview} /> : null}
       {!previewError && selectedFile?.encrypted ? (
         <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-3 py-1.5 text-[11px] text-forensics-warning-text">
-          <span className="font-light">EFS Encrypted</span>
-          <span className="text-forensics-warning-text">
-            This file is encrypted with NTFS Encrypting File System. Content cannot be decrypted
-            without the private key.
-          </span>
+          <span className="font-light">{t('viewer.hex.efsTitle')}</span>
+          <span className="text-forensics-warning-text">{t('viewer.hex.efsDetail')}</span>
         </div>
       ) : null}
       <div className="min-h-0 flex-1">

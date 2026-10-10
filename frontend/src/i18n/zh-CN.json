@@ -303,7 +303,12 @@
     "hex": {
       "ariaLabel": "Hex 与 ASCII 字节预览",
       "empty": "选择文件后显示十六进制预览",
-      "loadedRanges": "已加载区间"
+      "loadedRanges": "已加载区间",
+      "efsTitle": "EFS 加密",
+      "efsDetail": "该文件使用 NTFS 加密文件系统加密，缺少私钥时无法解密内容。"
+    },
+    "image": {
+      "altFallback": "预览"
     }
   },
   "media": {
@@ -392,7 +397,8 @@
       "username": "用户名",
       "passwordPreview": "密码预览",
       "createdAt": "创建时间",
-      "timesUsed": "使用次数"
+      "timesUsed": "使用次数",
+      "url": "URL"
     },
     "empty": {
       "visits": "暂无浏览历史",
@@ -1855,7 +1861,13 @@
         "driveLetter": "盘符",
         "fileSystem": "文件系统",
         "capacity": "容量",
-        "firstConnected": "首次连接"
+        "firstConnected": "首次连接",
+        "hivePath": "注册表文件",
+        "keyPath": "注册表项",
+        "valueName": "值名称",
+        "valueType": "类型",
+        "data": "数据",
+        "parser": "解析器"
       },
       "empty": {
         "usersTitle": "暂无用户账户数据",
@@ -2782,7 +2794,14 @@
       "tabPlain": "纯文本",
       "rawHeaders": "原始头字段 ({{count}})",
       "noBody": "无正文内容",
-      "noHtml": "无 HTML 内容"
+      "noHtml": "无 HTML 内容",
+      "columns": {
+        "from": "发件人",
+        "to": "收件人",
+        "cc": "抄送",
+        "bcc": "密送",
+        "subject": "主题"
+      }
     },
     "bootLabels": {
       "operatingSystemStarted": "操作系统启动完成",
@@ -2794,6 +2813,9 @@
     },
     "wechat": {
       "unknownType": "未知类型"
+    },
+    "events": {
+      "summaryUnavailable": "事件日志摘要不可用。"
     }
   },
   "preview": {
@@ -2842,5 +2864,57 @@
   "caseActions": {
     "deleteCaseFailed": "删除案件失败: {{message}}",
     "deleteDataSourceFailed": "删除数据源失败: {{message}}"
+  },
+  "jobs": {
+    "import": {
+      "phase": {
+        "idle": "空闲",
+        "queued": "队列中",
+        "attach": "挂载中",
+        "probe": "探测中",
+        "enumerate": "枚举中",
+        "mergeEnumeration": "合并文件",
+        "analyze": "分析中",
+        "mergeAnalysis": "合并分析",
+        "hashEvidence": "计算证据哈希",
+        "buildIndexes": "构建索引",
+        "finalize": "收尾"
+      },
+      "phaseState": {
+        "waiting": "等待中",
+        "pending": "待处理",
+        "running": "运行中",
+        "completed": "已完成",
+        "skipped": "已跳过",
+        "cancelling": "取消中",
+        "cancelled": "已取消",
+        "failed": "失败",
+        "partial": "部分完成"
+      },
+      "partialKind": {
+        "fileTree": "文件树",
+        "fileRows": "文件列表",
+        "partition": "分区",
+        "timelineEvents": "时间线",
+        "timelineBuckets": "时间线分桶",
+        "artifactFamily": "工件",
+        "searchIndex": "搜索",
+        "evidenceHash": "证据哈希"
+      },
+      "freshness": {
+        "ready": "就绪",
+        "partial": "部分就绪",
+        "deferred": "延迟",
+        "stale": "过期",
+        "invalidated": "已失效"
+      },
+      "evidenceHashStatus": {
+        "pending": "待处理",
+        "ready": "就绪",
+        "failed": "失败",
+        "unavailable": "不可用",
+        "deferred": "延迟"
+      }
+    }
   }
 }

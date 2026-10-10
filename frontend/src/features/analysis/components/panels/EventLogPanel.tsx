@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import type {
   EvtxApplicationEvent,
   EvtxBootEvent,
@@ -73,7 +74,7 @@ export function EventLogPanel({
     bootEvents: [],
     securityEvents: [],
     applicationEvents: [],
-    warnings: ['Event log summary unavailable.'],
+    warnings: [i18n.t('analysisPanels.events.summaryUnavailable')],
     generatedAt: '',
   };
   const tableLoadContextKey = JSON.stringify([

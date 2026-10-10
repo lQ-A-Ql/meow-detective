@@ -93,12 +93,12 @@ export function createRegistryColumns(t: Translate) {
   ];
 
   const rawColumns: DenseColumn<RegistryValue>[] = [
-    { key: 'hivePath', title: 'Hive', className: 'w-[110px]', render: (row) => row.hivePath || emptyValue },
-    { key: 'keyPath', title: 'Key', className: 'min-w-[260px]', render: (row) => row.keyPath || emptyValue },
-    { key: 'valueName', title: 'Value', className: 'w-[180px]', render: (row) => row.valueName || emptyValue },
-    { key: 'valueType', title: 'Type', className: 'w-[90px]', render: (row) => row.valueType || emptyValue },
-    { key: 'data', title: 'Data', className: 'min-w-[220px]', render: (row) => row.data || emptyValue },
-    { key: 'parser', title: 'Parser', className: 'w-[150px]', render: (row) => row.parser || emptyValue },
+    { key: 'hivePath', title: t('analysis.registry.columns.hivePath'), className: 'w-[110px]', render: (row) => row.hivePath || emptyValue },
+    { key: 'keyPath', title: t('analysis.registry.columns.keyPath'), className: 'min-w-[260px]', render: (row) => row.keyPath || emptyValue },
+    { key: 'valueName', title: t('analysis.registry.columns.valueName'), className: 'w-[180px]', render: (row) => row.valueName || emptyValue },
+    { key: 'valueType', title: t('analysis.registry.columns.valueType'), className: 'w-[90px]', render: (row) => row.valueType || emptyValue },
+    { key: 'data', title: t('analysis.registry.columns.data'), className: 'min-w-[220px]', render: (row) => row.data || emptyValue },
+    { key: 'parser', title: t('analysis.registry.columns.parser'), className: 'w-[150px]', render: (row) => row.parser || emptyValue },
   ];
 
   return { samColumns, userAssistColumns, networkColumns, adapterColumns, softwareColumns, usbColumns, rawColumns };

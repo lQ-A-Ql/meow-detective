@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import i18n from '@/i18n';
 import { subscribeToEvent } from '@/lib/events/subscribers';
 import type {
   DataSourceSummary,
@@ -43,55 +44,57 @@ const freshnessPriority: Record<ResultFreshness, number> = {
   ready: 4,
 };
 
-const phaseLabels: Record<ImportPhase, string> = {
-  queued: 'Queued',
-  attach: 'Attach',
-  probe: 'Probe',
-  enumerate: 'Enumerate',
-  mergeEnumeration: 'Merge Files',
-  analyze: 'Analyze',
-  mergeAnalysis: 'Merge Analysis',
-  hashEvidence: 'Hash Evidence',
-  buildIndexes: 'Build Indexes',
-  finalize: 'Finalize',
+// Key paths, not literals: the label is resolved when it is rendered so a language
+// change takes effect without reloading the module.
+const phaseLabelKeys: Record<ImportPhase, string> = {
+  queued: 'jobs.import.phase.queued',
+  attach: 'jobs.import.phase.attach',
+  probe: 'jobs.import.phase.probe',
+  enumerate: 'jobs.import.phase.enumerate',
+  mergeEnumeration: 'jobs.import.phase.mergeEnumeration',
+  analyze: 'jobs.import.phase.analyze',
+  mergeAnalysis: 'jobs.import.phase.mergeAnalysis',
+  hashEvidence: 'jobs.import.phase.hashEvidence',
+  buildIndexes: 'jobs.import.phase.buildIndexes',
+  finalize: 'jobs.import.phase.finalize',
 };
 
-const phaseStateLabels: Record<ImportPhaseState, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  completed: 'Done',
-  skipped: 'Skipped',
-  cancelling: 'Cancelling',
-  cancelled: 'Cancelled',
-  failed: 'Failed',
-  partial: 'Partial',
+const phaseStateLabelKeys: Record<ImportPhaseState, string> = {
+  pending: 'jobs.import.phaseState.pending',
+  running: 'jobs.import.phaseState.running',
+  completed: 'jobs.import.phaseState.completed',
+  skipped: 'jobs.import.phaseState.skipped',
+  cancelling: 'jobs.import.phaseState.cancelling',
+  cancelled: 'jobs.import.phaseState.cancelled',
+  failed: 'jobs.import.phaseState.failed',
+  partial: 'jobs.import.phaseState.partial',
 };
 
-const partialKindLabels: Record<PartialResultKind, string> = {
-  fileTree: 'File Tree',
-  fileRows: 'File Rows',
-  partition: 'Partitions',
-  timelineEvents: 'Timeline',
-  timelineBuckets: 'Timeline Buckets',
-  artifactFamily: 'Artifacts',
-  searchIndex: 'Search',
-  evidenceHash: 'Evidence Hash',
+const partialKindLabelKeys: Record<PartialResultKind, string> = {
+  fileTree: 'jobs.import.partialKind.fileTree',
+  fileRows: 'jobs.import.partialKind.fileRows',
+  partition: 'jobs.import.partialKind.partition',
+  timelineEvents: 'jobs.import.partialKind.timelineEvents',
+  timelineBuckets: 'jobs.import.partialKind.timelineBuckets',
+  artifactFamily: 'jobs.import.partialKind.artifactFamily',
+  searchIndex: 'jobs.import.partialKind.searchIndex',
+  evidenceHash: 'jobs.import.partialKind.evidenceHash',
 };
 
-const freshnessLabels: Record<ResultFreshness, string> = {
-  ready: 'Ready',
-  partial: 'Partial',
-  deferred: 'Deferred',
-  stale: 'Stale',
-  invalidated: 'Invalidated',
+const freshnessLabelKeys: Record<ResultFreshness, string> = {
+  ready: 'jobs.import.freshness.ready',
+  partial: 'jobs.import.freshness.partial',
+  deferred: 'jobs.import.freshness.deferred',
+  stale: 'jobs.import.freshness.stale',
+  invalidated: 'jobs.import.freshness.invalidated',
 };
 
-const evidenceHashStatusLabels: Record<EvidenceHashStatus, string> = {
-  pending: 'Pending',
-  ready: 'Ready',
-  failed: 'Failed',
-  unavailable: 'Unavailable',
-  deferred: 'Deferred',
+const evidenceHashStatusLabelKeys: Record<EvidenceHashStatus, string> = {
+  pending: 'jobs.import.evidenceHashStatus.pending',
+  ready: 'jobs.import.evidenceHashStatus.ready',
+  failed: 'jobs.import.evidenceHashStatus.failed',
+  unavailable: 'jobs.import.evidenceHashStatus.unavailable',
+  deferred: 'jobs.import.evidenceHashStatus.deferred',
 };
 
 const evidenceHashStatusPriority: Record<EvidenceHashStatus, number> = {
@@ -290,23 +293,23 @@ export function resetImportEventStateForTests() {
 }
 
 export function getImportPhaseLabel(phase?: ImportPhase) {
-  return phase ? phaseLabels[phase] : 'Idle';
+  return i18n.t(phase ? phaseLabelKeys[phase] : 'jobs.import.phase.idle');
 }
 
 export function getImportPhaseStateLabel(state?: ImportPhaseState) {
-  return state ? phaseStateLabels[state] : 'Waiting';
+  return i18n.t(state ? phaseStateLabelKeys[state] : 'jobs.import.phaseState.waiting');
 }
 
 export function getPartialKindLabel(kind: PartialResultKind) {
-  return partialKindLabels[kind];
+  return i18n.t(partialKindLabelKeys[kind]);
 }
 
 export function getFreshnessLabel(freshness: ResultFreshness) {
-  return freshnessLabels[freshness];
+  return i18n.t(freshnessLabelKeys[freshness]);
 }
 
 export function getEvidenceHashStatusLabel(status: EvidenceHashStatus) {
-  return evidenceHashStatusLabels[status];
+  return i18n.t(evidenceHashStatusLabelKeys[status]);
 }
 
 export function getEvidenceHashCaveatText(status: EvidenceHashStatus) {

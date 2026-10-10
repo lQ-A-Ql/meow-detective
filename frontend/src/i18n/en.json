@@ -303,7 +303,12 @@
     "hex": {
       "ariaLabel": "Hex and ASCII byte preview",
       "empty": "Select a file to preview hexadecimal data",
-      "loadedRanges": "Loaded ranges"
+      "loadedRanges": "Loaded ranges",
+      "efsTitle": "EFS Encrypted",
+      "efsDetail": "This file is encrypted with NTFS Encrypting File System. Content cannot be decrypted without the private key."
+    },
+    "image": {
+      "altFallback": "Preview"
     }
   },
   "media": {
@@ -392,7 +397,8 @@
       "username": "Username",
       "passwordPreview": "Password preview",
       "createdAt": "Created",
-      "timesUsed": "Uses"
+      "timesUsed": "Uses",
+      "url": "URL"
     },
     "empty": {
       "visits": "No browsing history",
@@ -1855,7 +1861,13 @@
         "driveLetter": "Drive letter",
         "fileSystem": "Filesystem",
         "capacity": "Capacity",
-        "firstConnected": "First connected"
+        "firstConnected": "First connected",
+        "hivePath": "Hive",
+        "keyPath": "Key",
+        "valueName": "Value",
+        "valueType": "Type",
+        "data": "Data",
+        "parser": "Parser"
       },
       "empty": {
         "usersTitle": "No user account data",
@@ -2782,7 +2794,14 @@
       "tabPlain": "Plain text",
       "rawHeaders": "Raw headers ({{count}})",
       "noBody": "No body content",
-      "noHtml": "No HTML content"
+      "noHtml": "No HTML content",
+      "columns": {
+        "from": "From",
+        "to": "To",
+        "cc": "Cc",
+        "bcc": "Bcc",
+        "subject": "Subject"
+      }
     },
     "bootLabels": {
       "operatingSystemStarted": "Operating system started",
@@ -2794,6 +2813,9 @@
     },
     "wechat": {
       "unknownType": "Unknown type"
+    },
+    "events": {
+      "summaryUnavailable": "Event log summary unavailable."
     }
   },
   "preview": {
@@ -2842,5 +2864,57 @@
   "caseActions": {
     "deleteCaseFailed": "Failed to delete case: {{message}}",
     "deleteDataSourceFailed": "Failed to delete data source: {{message}}"
+  },
+  "jobs": {
+    "import": {
+      "phase": {
+        "idle": "Idle",
+        "queued": "Queued",
+        "attach": "Attach",
+        "probe": "Probe",
+        "enumerate": "Enumerate",
+        "mergeEnumeration": "Merge Files",
+        "analyze": "Analyze",
+        "mergeAnalysis": "Merge Analysis",
+        "hashEvidence": "Hash Evidence",
+        "buildIndexes": "Build Indexes",
+        "finalize": "Finalize"
+      },
+      "phaseState": {
+        "waiting": "Waiting",
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Done",
+        "skipped": "Skipped",
+        "cancelling": "Cancelling",
+        "cancelled": "Cancelled",
+        "failed": "Failed",
+        "partial": "Partial"
+      },
+      "partialKind": {
+        "fileTree": "File Tree",
+        "fileRows": "File Rows",
+        "partition": "Partitions",
+        "timelineEvents": "Timeline",
+        "timelineBuckets": "Timeline Buckets",
+        "artifactFamily": "Artifacts",
+        "searchIndex": "Search",
+        "evidenceHash": "Evidence Hash"
+      },
+      "freshness": {
+        "ready": "Ready",
+        "partial": "Partial",
+        "deferred": "Deferred",
+        "stale": "Stale",
+        "invalidated": "Invalidated"
+      },
+      "evidenceHashStatus": {
+        "pending": "Pending",
+        "ready": "Ready",
+        "failed": "Failed",
+        "unavailable": "Unavailable",
+        "deferred": "Deferred"
+      }
+    }
   }
 }

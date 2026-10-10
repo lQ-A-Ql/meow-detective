@@ -39,20 +39,20 @@ function browserOrder(a: string, b: string): number {
 function browserColumns(t: ReturnType<typeof useTranslation>['t']) {
 const visitColumns: DenseColumn<BrowserVisit>[] = [
   { key: 'visitTime', title: t('browser.columns.time'), className: 'w-[170px]', render: (row) => row.visitTime ?? '-' },
-  { key: 'profile', title: 'Profile', className: 'w-[130px]', render: (row) => row.profile || '-' },
+  { key: 'profile', title: t('browser.columns.profile'), className: 'w-[130px]', render: (row) => row.profile || '-' },
   { key: 'title', title: t('browser.columns.title'), className: 'min-w-[220px]', render: (row) => row.title || '-' },
-  { key: 'url', title: 'URL', className: 'min-w-[300px]', render: (row) => row.url },
+  { key: 'url', title: t('browser.columns.url'), className: 'min-w-[300px]', render: (row) => row.url },
   { key: 'visitCount', title: t('browser.columns.count'), className: 'w-[70px]', render: (row) => row.visitCount.toString() },
 ];
 const downloadColumns: DenseColumn<BrowserDownload>[] = [
   { key: 'startTime', title: t('browser.columns.time'), className: 'w-[170px]', render: (row) => row.startTime ?? '-' },
-  { key: 'profile', title: 'Profile', className: 'w-[130px]', render: (row) => row.profile || '-' },
+  { key: 'profile', title: t('browser.columns.profile'), className: 'w-[130px]', render: (row) => row.profile || '-' },
   { key: 'targetPath', title: t('browser.columns.targetPath'), className: 'min-w-[260px]', render: (row) => row.targetPath || '-' },
-  { key: 'url', title: 'URL', className: 'min-w-[260px]', render: (row) => row.url || '-' },
+  { key: 'url', title: t('browser.columns.url'), className: 'min-w-[260px]', render: (row) => row.url || '-' },
   { key: 'totalBytes', title: t('browser.columns.size'), className: 'w-[110px]', render: (row) => formatSize(row.totalBytes) },
 ];
 const cookieColumns: DenseColumn<BrowserCookie>[] = [
-  { key: 'profile', title: 'Profile', className: 'w-[120px]', render: (row) => row.profile || '-' },
+  { key: 'profile', title: t('browser.columns.profile'), className: 'w-[120px]', render: (row) => row.profile || '-' },
   { key: 'domain', title: t('browser.columns.domain'), className: 'min-w-[220px]', render: (row) => row.domain },
   { key: 'name', title: t('browser.columns.name'), className: 'min-w-[180px]', render: (row) => row.name },
   { key: 'valuePreview', title: t('browser.columns.valuePreview'), className: 'min-w-[220px]', render: (row) => row.valuePreview ?? '-' },
@@ -63,7 +63,7 @@ const cookieColumns: DenseColumn<BrowserCookie>[] = [
 ];
 const sessionColumns: DenseColumn<BrowserSessionTab>[] = [
   { key: 'title', title: t('browser.columns.title'), className: 'min-w-[220px]', render: (row) => row.title ?? '-' },
-  { key: 'url', title: 'URL', className: 'min-w-[300px]', render: (row) => row.url },
+  { key: 'url', title: t('browser.columns.url'), className: 'min-w-[300px]', render: (row) => row.url },
   { key: 'windowIndex', title: t('browser.columns.window'), className: 'w-[70px]', render: (row) => row.windowIndex.toString() },
   { key: 'tabIndex', title: t('browser.columns.tab'), className: 'w-[70px]', render: (row) => row.tabIndex.toString() },
   { key: 'lastActive', title: t('browser.columns.lastActive'), className: 'w-[170px]', render: (row) => row.lastActive ?? '-' },
