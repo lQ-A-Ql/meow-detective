@@ -35,7 +35,25 @@ pub fn probe(path: &Path) -> ProberResult {
 
     if let Some(kind) = detect_vhd(path)? {
         candidates.push(kind.to_string());
-        can_read_sectors = kind == "vhd-fixed";
+        can_read_sectors = matches!(kind, "vhd-fixed" | "vhd-dynamic" | "vhd-differencing");
+        return Ok(ProbeResult {
+            candidates,
+            size,
+            can_read_sectors,
+        });
+    }
+    if detect_qcow2(path)? {
+        candidates.push("qcow2".to_string());
+        can_read_sectors = true;
+        return Ok(ProbeResult {
+            candidates,
+            size,
+            can_read_sectors,
+        });
+    }
+    if detect_vhdx(path)? {
+        candidates.push("vhdx".to_string());
+        can_read_sectors = true;
         return Ok(ProbeResult {
             candidates,
             size,
@@ -71,6 +89,20 @@ pub fn probe(path: &Path) -> ProberResult {
         size,
         can_read_sectors,
     })
+}
+
+fn detect_qcow2(path: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut magic = [0u8; 4];
+    Ok(file.read_exact(&mut magic).is_ok() && &magic == b"QFI\xfb")
+}
+
+fn detect_vhdx(path: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut magic = [0u8; 8];
+    Ok(file.read_exact(&mut magic).is_ok() && &magic == b"vhdxfile")
 }
 
 /// Returns a VHD capability label when the footer has the VHD cookie.

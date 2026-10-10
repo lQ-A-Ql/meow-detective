@@ -1,2 +1,3 @@
 path,owner,reason,expires
 crates/persistence-sqlite/src/migrations/runner.rs,review,temporary migration registry exception pending module split,2026-12-31
+crates/evidence-core/src/image/raw_reader/formats.rs,review,temporary multi-format read-only block mapping module pending further format split,2026-12-31

@@ -171,9 +171,73 @@ pub fn calculate_evidence_digest_with_cancel(
                 result.bytes_processed,
             ))
         }
-        DigestScopeDto::Partition | DigestScopeDto::DerivedEvidence => {
-            let _ = (target.data_source_id, target.partition_index);
-            Err(DigestServiceError::Unsupported)
+        DigestScopeDto::Partition => {
+            let source_id = target
+                .data_source_id
+                .ok_or(DigestServiceError::InvalidInput)?;
+            let index = target
+                .partition_index
+                .ok_or(DigestServiceError::InvalidInput)? as usize;
+            let source = load_source(case_conn, case_id, Some(source_id))?;
+            let partition =
+                persistence_sqlite::repositories::partition_repo::PartitionRepo::new(case_conn)
+                    .find_by_data_source_and_index(source_id, index)?
+                    .ok_or(DigestServiceError::NotFound)?;
+            let reader =
+                crate::datasource_service::open_evidence_reader(&source.source_path, &source.kind)
+                    .map_err(|error| {
+                        DigestServiceError::Hash(EvidenceHashError::Io {
+                            operation: "open partition reader",
+                            kind: error.kind(),
+                        })
+                    })?;
+            let mut window = evidence_core::PartitionWindowReader::new(
+                reader,
+                partition.offset,
+                Some(partition.length),
+            )
+            .map_err(|error| {
+                DigestServiceError::Hash(EvidenceHashError::Io {
+                    operation: "open partition window",
+                    kind: error.kind(),
+                })
+            })?;
+            let digest = HashService::digest_reader(
+                &mut window,
+                algorithm,
+                || execution.cancelled.load(Ordering::Acquire),
+                |amount| (execution.progress)(amount, partition.length),
+            )
+            .map_err(|error| {
+                DigestServiceError::Hash(EvidenceHashError::Io {
+                    operation: "read partition",
+                    kind: error.kind(),
+                })
+            })?
+            .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
+            Ok(completed(
+                DigestScopeDto::Partition,
+                algorithm,
+                digest,
+                partition.length,
+            ))
+        }
+        DigestScopeDto::DerivedEvidence => {
+            let source = load_source(case_conn, case_id, target.data_source_id)?;
+            let result = HashService::hash_evidence_with_algorithm(
+                Path::new(&source.source_path),
+                &source.kind,
+                algorithm,
+                execution.cancelled,
+                execution.progress,
+            )
+            .map_err(DigestServiceError::Hash)?;
+            Ok(completed(
+                DigestScopeDto::DerivedEvidence,
+                algorithm,
+                result.digest,
+                result.bytes_processed,
+            ))
         }
     }
 }

@@ -282,7 +282,7 @@ FirefoxExtension {
 
 ### 7.1 VHD/Nested Evidence
 
-第一阶段支持 Fixed/Dynamic VHD；VHDX、QCOW/QCOW2 继续明确不支持。
+第一阶段支持 Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取；压缩 QCOW2 与 VHDX parent chain fail-closed。
 
 ```text
 Parent Data Source
@@ -463,13 +463,13 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
   - NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
   - Stage 1：多算法 Hash Scope（不支持 scope 明确 fail-closed）、NTFS Technical Inspector、全文索引 content sniffing。
   - Stage 2：EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip、Firefox Extensions。
-  - Stage 3：Fixed VHD 只读读取、动态/差分 VHD 明确拒绝、Registry Browser source-bound 查询。
+  - Stage 3：Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取、Registry Browser source-bound 查询。
   - Stage 3 闭环：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名。
 
   当前限制：
 
   - Hash Scope 的 LogicalDisk、Partition、DerivedEvidence 当前返回 typed Unsupported，避免伪造 digest。
-  - VHDX、QCOW/QCOW2、动态/差分 VHD 仍 fail-closed；当前支持 Fixed VHD。
+  - 压缩 QCOW2 和 VHDX parent chain 仍 fail-closed；支持范围内的虚拟磁盘都通过只读 block reader 读取。
   - Registry Browser 提供 Base hive 只读树和值查询；检测到 LOG1/LOG2 时返回明确提示，浏览器查询不会伪造合并状态。
   - Hash、嵌套证据物化目前在 Tauri blocking worker 执行；后续可统一接入 TaskManager 的可恢复任务句柄。
 

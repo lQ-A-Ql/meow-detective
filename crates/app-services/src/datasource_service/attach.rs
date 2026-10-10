@@ -147,6 +147,8 @@ pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
                 "dynamic or differencing VHD is recognized but unsupported".to_string(),
             ))
         }
+    } else if has_qcow2_magic(source_path)? || has_vhdx_magic(source_path)? {
+        Ok(DataSourceKind::Raw)
     } else if has_android_sparse_magic(source_path)? {
         Ok(DataSourceKind::AndroidSparse)
     } else if has_archive_magic(source_path)? || has_archive_name(source_path) {
@@ -180,6 +182,18 @@ fn has_vhd_magic(source_path: &Path) -> Result<bool> {
     let mut footer = [0u8; 8];
     file.read_exact(&mut footer)?;
     Ok(&footer == b"conectix")
+}
+
+fn has_qcow2_magic(source_path: &Path) -> Result<bool> {
+    let mut file = std::fs::File::open(source_path)?;
+    let mut magic = [0u8; 4];
+    Ok(file.read_exact(&mut magic).is_ok() && &magic == b"QFI\xfb")
+}
+
+fn has_vhdx_magic(source_path: &Path) -> Result<bool> {
+    let mut file = std::fs::File::open(source_path)?;
+    let mut magic = [0u8; 8];
+    Ok(file.read_exact(&mut magic).is_ok() && &magic == b"vhdxfile")
 }
 
 fn has_e01_magic(source_path: &Path) -> Result<bool> {

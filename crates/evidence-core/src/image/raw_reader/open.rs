@@ -1,31 +1,13 @@
-use crate::reader::{EvidenceReader, ReaderInfo};
+use super::formats::{
+    clone_backend, open_dynamic_vhd, open_qcow2, open_vhdx, read_vhd_footer, read_vhd_parent_name,
+    resolve_vhd_parent_path,
+};
+use super::*;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
-
 const VMDK_SECTOR_SIZE: u64 = 512;
 const MAX_DESCRIPTOR_BYTES: u64 = 1024 * 1024;
-
-#[derive(Debug)]
-struct Backend {
-    file: File,
-    base_offset: u64,
-}
-
-/// Read-only reader for raw/dd images and supported monolithic-flat VMDKs.
-///
-/// VMDK support intentionally covers descriptor files which reference one
-/// zero-offset `FLAT` extent (`createType="monolithicFlat"`). Sparse,
-/// compressed, snapshot and parent-chain descriptors are rejected rather than
-/// guessed. The descriptor path remains the provenance path in `ReaderInfo`.
-#[derive(Debug)]
-pub struct RawImageReader {
-    backend: Backend,
-    info: ReaderInfo,
-    cursor: u64,
-    backing_paths: Vec<PathBuf>,
-}
-
 impl RawImageReader {
     /// Opens a raw image or a supported monolithic-flat VMDK descriptor.
     pub fn open(path: &Path) -> io::Result<Self> {
@@ -33,7 +15,39 @@ impl RawImageReader {
         if let Some(vhd) = read_vhd_footer(path)? {
             let file = File::open(path)?;
             let physical_len = file.metadata()?.len();
-            if vhd.disk_type == 3 || vhd.disk_type == 4 {
+            if vhd.disk_type == 3 {
+                let backend = open_dynamic_vhd(file, &vhd, None)?;
+                return Ok(Self {
+                    backend,
+                    info: ReaderInfo {
+                        path: path.to_path_buf(),
+                        size: vhd.virtual_size,
+                        kind: "vhd-dynamic".into(),
+                    },
+                    cursor: 0,
+                    backing_paths: vec![path.to_path_buf()],
+                });
+            }
+            if vhd.disk_type == 4 {
+                let parent_name = read_vhd_parent_name(path)?;
+                let parent_path = resolve_vhd_parent_path(path, &parent_name)?;
+                let parent_reader = Self::open(&parent_path)?;
+                if parent_reader.len() < vhd.virtual_size {
+                    return Err(invalid_data("VHD parent is smaller than child"));
+                }
+                let backend = open_dynamic_vhd(file, &vhd, Some(Box::new(parent_reader.backend)))?;
+                return Ok(Self {
+                    backend,
+                    info: ReaderInfo {
+                        path: path.to_path_buf(),
+                        size: vhd.virtual_size,
+                        kind: "vhd-differencing".into(),
+                    },
+                    cursor: 0,
+                    backing_paths: vec![path.to_path_buf(), parent_path],
+                });
+            }
+            if vhd.disk_type == 3 {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
                     "dynamic and differencing VHD images are not supported for read-only import",
@@ -53,7 +67,7 @@ impl RawImageReader {
                 return Err(invalid_data("fixed VHD is truncated"));
             }
             return Ok(Self {
-                backend: Backend {
+                backend: Backend::Flat {
                     file,
                     base_offset: 0,
                 },
@@ -61,6 +75,30 @@ impl RawImageReader {
                     path: path.to_path_buf(),
                     size: vhd.virtual_size,
                     kind: "vhd-fixed".to_string(),
+                },
+                cursor: 0,
+                backing_paths: vec![path.to_path_buf()],
+            });
+        }
+        if let Some((backend, virtual_size)) = open_qcow2(path)? {
+            return Ok(Self {
+                backend,
+                info: ReaderInfo {
+                    path: path.to_path_buf(),
+                    size: virtual_size,
+                    kind: "qcow2".into(),
+                },
+                cursor: 0,
+                backing_paths: vec![path.to_path_buf()],
+            });
+        }
+        if let Some((backend, virtual_size)) = open_vhdx(path)? {
+            return Ok(Self {
+                backend,
+                info: ReaderInfo {
+                    path: path.to_path_buf(),
+                    size: virtual_size,
+                    kind: "vhdx".into(),
                 },
                 cursor: 0,
                 backing_paths: vec![path.to_path_buf()],
@@ -83,7 +121,7 @@ impl RawImageReader {
                     )));
                 }
                 (
-                    Backend {
+                    Backend::Flat {
                         file,
                         base_offset: 0,
                     },
@@ -102,7 +140,7 @@ impl RawImageReader {
                     )));
                 }
                 (
-                    Backend {
+                    Backend::Flat {
                         file,
                         base_offset: 0,
                     },
@@ -145,83 +183,11 @@ impl RawImageReader {
     /// Creates an independent handle with its own logical cursor.
     pub fn try_clone(&self) -> io::Result<Self> {
         Ok(Self {
-            backend: Backend {
-                file: self.backend.file.try_clone()?,
-                base_offset: self.backend.base_offset,
-            },
+            backend: clone_backend(&self.backend)?,
             info: self.info.clone(),
             cursor: self.cursor,
             backing_paths: self.backing_paths.clone(),
         })
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct VhdFooter {
-    disk_type: u32,
-    virtual_size: u64,
-}
-
-fn read_vhd_footer(path: &Path) -> io::Result<Option<VhdFooter>> {
-    let mut file = File::open(path)?;
-    let len = file.metadata()?.len();
-    if len < 512 {
-        return Ok(None);
-    }
-    file.seek(SeekFrom::End(-512))?;
-    let mut footer = [0u8; 512];
-    file.read_exact(&mut footer)?;
-    if &footer[..8] != b"conectix" {
-        return Ok(None);
-    }
-    let disk_type = u32::from_be_bytes(footer[60..64].try_into().expect("fixed slice"));
-    let virtual_size = u64::from_be_bytes(footer[48..56].try_into().expect("fixed slice"));
-    Ok(Some(VhdFooter {
-        disk_type,
-        virtual_size,
-    }))
-}
-
-impl Read for RawImageReader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.cursor >= self.info.size || buf.is_empty() {
-            return Ok(0);
-        }
-        let available = self.info.size - self.cursor;
-        let requested = available.min(buf.len() as u64) as usize;
-        let physical = self
-            .backend
-            .base_offset
-            .checked_add(self.cursor)
-            .ok_or_else(|| invalid_data("image read offset overflows u64"))?;
-        self.backend.file.seek(SeekFrom::Start(physical))?;
-        let read = self.backend.file.read(&mut buf[..requested])?;
-        self.cursor = self.cursor.saturating_add(read as u64);
-        Ok(read)
-    }
-}
-
-impl Seek for RawImageReader {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        let next = match pos {
-            SeekFrom::Start(offset) => i128::from(offset),
-            SeekFrom::Current(offset) => i128::from(self.cursor) + i128::from(offset),
-            SeekFrom::End(offset) => i128::from(self.info.size) + i128::from(offset),
-        };
-        if next < 0 || next > i128::from(u64::MAX) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "seek position is outside the addressable image range",
-            ));
-        }
-        self.cursor = next as u64;
-        Ok(self.cursor)
-    }
-}
-
-impl EvidenceReader for RawImageReader {
-    fn info(&self) -> &ReaderInfo {
-        &self.info
     }
 }
 
@@ -464,7 +430,3 @@ fn resolve_extent_path(descriptor: &Path, extent_name: &str) -> io::Result<PathB
 fn invalid_data(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
-
-#[cfg(test)]
-#[path = "../../tests/unit/image/raw_reader.rs"]
-mod tests;

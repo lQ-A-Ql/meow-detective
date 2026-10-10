@@ -92,7 +92,7 @@ fn materialize_inner(
         return Err(MaterializeError::NotFile);
     }
     let size = entry.size.ok_or(MaterializeError::UnsupportedFormat)?;
-    if size < 512 || size > MAX_VHD_BYTES {
+    if !(512..=MAX_VHD_BYTES).contains(&size) {
         return Err(MaterializeError::TooLarge);
     }
     let mut reader = crate::file_service::SourceReadContext::new(
@@ -200,7 +200,7 @@ fn validate_fixed_vhd_footer(footer: &[u8], size: u64) -> Result<(), Materialize
     // A fixed VHD footer occupies the final 512 bytes and the virtual disk
     // payload must fit entirely before it.  Allowing `virtual_size == size`
     // would register a source whose logical reader exposes footer bytes.
-    let payload_len = size.checked_sub(512).unwrap_or_default();
+    let payload_len = size.saturating_sub(512);
     if disk_type != 2 || virtual_size == 0 || virtual_size > payload_len {
         return Err(MaterializeError::UnsupportedFormat);
     }

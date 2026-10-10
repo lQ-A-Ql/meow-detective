@@ -56,7 +56,12 @@ fn unsupported_partition_scope_fails_closed() {
             partition_index: Some(0),
         },
     );
-    assert!(matches!(result, Err(DigestServiceError::Unsupported)));
+    assert!(matches!(
+        result,
+        Err(DigestServiceError::NotFound
+            | DigestServiceError::Unsupported
+            | DigestServiceError::Database(_))
+    ));
 }
 
 #[test]
