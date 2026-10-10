@@ -27,7 +27,7 @@ const railItemClass =
 const railDiscClass =
   'flex size-8 items-center justify-center rounded-full transition-colors group-hover:bg-forensics-hover group-hover:text-forensics-text group-focus-visible:ring-2 group-focus-visible:ring-forensics-red';
 const railActiveDiscClass =
-  'bg-forensics-rail-active text-white group-hover:bg-forensics-rail-active group-hover:text-white';
+  'bg-forensics-rail-active text-forensics-red-ink group-hover:bg-forensics-rail-active group-hover:text-forensics-red-ink';
 
 function RailItem({ link, model }: { link: NavigationLink; model: NavigationModel }) {
   const { t } = useTranslation();
@@ -43,7 +43,7 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
         onClick={() => model.selectPage(link.page)}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
-        className={cn(railItemClass, 'focus-visible:outline-none', isActive && 'text-white')}
+        className={cn(railItemClass, 'focus-visible:outline-none', isActive && 'text-forensics-red-ink')}
       >
         <span className={cn(railDiscClass, isActive && railActiveDiscClass)}>
           <SidebarIcon name={iconByPage[link.page]} className="size-[21px]" />
