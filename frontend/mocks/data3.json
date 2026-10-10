@@ -209,18 +209,74 @@
   ],
   "networkFacts": [
    {
-    "sourceId": "inf-host-win",
-    "targetId": "inf-host-pve01",
-    "relationKind": "connects_to",
-    "confidence": "medium",
-    "provenanceJson": "{\"dst\":\"10.20.8.30:22\"}"
+    "id": "nf-001",
+    "dataSourceId": "source-mock-linux",
+    "environmentObjectId": "inf-host-pve01",
+    "fileId": "mock:/PVE evidence set/pve01/etc/kubernetes/kubelet.conf",
+    "sourcePath": "/etc/kubernetes/kubelet.conf",
+    "lineNumber": 12,
+    "factKind": "kubernetes_pod",
+    "subject": "kube-system/coredns-5d78c9869d-x2p7q",
+    "value": "10.20.9.14/24 on cni0",
+    "assertionKind": "observed",
+    "confidence": "high",
+    "parser": "linux-config"
    },
    {
-    "sourceId": "inf-host-pve01",
-    "targetId": "inf-host-pve02",
-    "relationKind": "connects_to",
+    "id": "nf-002",
+    "dataSourceId": "source-mock-linux",
+    "environmentObjectId": "inf-host-pve01",
+    "fileId": "mock:/PVE evidence set/pve01/etc/kubernetes/admin.conf",
+    "sourcePath": "/etc/kubernetes/admin.conf",
+    "lineNumber": 8,
+    "factKind": "kubernetes_service",
+    "subject": "kubernetes.default.svc",
+    "value": "10.20.9.1:443",
+    "assertionKind": "observed",
+    "confidence": "high",
+    "parser": "linux-config"
+   },
+   {
+    "id": "nf-003",
+    "dataSourceId": "source-mock-linux",
+    "environmentObjectId": "inf-host-pve02",
+    "fileId": "mock:/PVE evidence set/pve02/etc/cni/net.d/10-flannel.conflist",
+    "sourcePath": "/etc/cni/net.d/10-flannel.conflist",
+    "lineNumber": 4,
+    "factKind": "cni_network",
+    "subject": "flannel.1",
+    "value": "10.42.0.0/16",
+    "assertionKind": "observed",
     "confidence": "medium",
-    "provenanceJson": "{\"dst\":\"10.20.8.31:22\"}"
+    "parser": "linux-config"
+   },
+   {
+    "id": "nf-004",
+    "dataSourceId": "source-mock-linux",
+    "environmentObjectId": "inf-host-pve01",
+    "fileId": "mock:/PVE evidence set/pve01/etc/hosts",
+    "sourcePath": "/etc/hosts",
+    "lineNumber": 3,
+    "factKind": "dns_record",
+    "subject": "pve01.pve.local",
+    "value": "10.20.8.30",
+    "assertionKind": "declared",
+    "confidence": "medium",
+    "parser": "linux-config"
+   },
+   {
+    "id": "nf-005",
+    "dataSourceId": "source-mock-e01",
+    "environmentObjectId": "inf-host-win",
+    "fileId": "mock:/[P1] Windows/Windows/System32/drivers/etc/hosts",
+    "sourcePath": "C:/Windows/System32/drivers/etc/hosts",
+    "lineNumber": 11,
+    "factKind": "dns_record",
+    "subject": "files.example.net",
+    "value": "203.0.113.44",
+    "assertionKind": "observed",
+    "confidence": "high",
+    "parser": "ntfs"
    }
   ],
   "networkDiagnostics": [
