@@ -22,7 +22,7 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
               key={algorithm}
               className="flex min-w-0 items-center gap-2 px-1 py-1"
             >
-              <span className="min-w-0 truncate font-mono text-[13px] text-forensics-ink">
+              <span className="w-[6ch] shrink-0 font-mono text-[13px] text-forensics-ink">
                 {algorithm.toUpperCase()}
               </span>
               <Tooltip content={t('fileBrowser.inspector.hash.run', { algorithm: algorithm.toUpperCase() })}>
