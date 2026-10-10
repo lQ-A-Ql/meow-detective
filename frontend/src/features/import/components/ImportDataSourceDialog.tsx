@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StepRail } from '@/components/wizard/StepRail';
 import { useTranslation } from 'react-i18next';
 import { HardDrive, Monitor, Server, Smartphone } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -220,29 +221,12 @@ export function ImportDataSourceDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-[164px_1fr]">
-          <nav
-            aria-label={t('importDataSource.stepperLabel')}
-            className="flex flex-col gap-1 border-r border-forensics-line bg-forensics-soft p-2"
-          >
-            {STEP_ORDER.map((entry, index) => {
-              const reachable = STEP_ORDER.indexOf(step) >= index;
-              return (
-                <Button
-                  key={entry}
-                  type="button"
-                  variant="forensicsGhost"
-                  shape="row"
-                  aria-current={step === entry ? 'step' : undefined}
-                  disabled={!reachable}
-                  onClick={() => goToStep(entry)}
-                  className="h-8 gap-2 text-[11px] data-[active=true]:text-forensics-red-ink"
-                >
-                  <span className="font-mono text-[10px] text-forensics-ink-3">{String(index + 1).padStart(2, '0')}</span>
-                  <span>{t(STEP_LABEL[entry])}</span>
-                </Button>
-              );
-            })}
-          </nav>
+          <StepRail
+            ariaLabel={t('importDataSource.stepperLabel')}
+            currentId={step}
+            onSelect={(id) => goToStep(id as Step)}
+            steps={STEP_ORDER.map((entry) => ({ id: entry, label: t(STEP_LABEL[entry]) }))}
+          />
 
           <div className="min-h-[268px] p-5">
             {step === 'platform' ? (
@@ -354,12 +338,12 @@ export function ImportDataSourceDialog({
                     )}
                     <Tooltip content={t('importDataSource.buttons.file')}>
                       <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.file')} onClick={() => void pickFile()}>
-                        <ActionIcon name="folder-open" />
+                        <ActionIcon name="file" />
                       </Button>
                     </Tooltip>
                     <Tooltip content={t('importDataSource.buttons.directory')}>
                       <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.directory')} onClick={() => void pickDirectory()}>
-                        <ActionIcon name="folder-open" />
+                        <ActionIcon name="folder" />
                       </Button>
                     </Tooltip>
                     {platform === 'linux' ? (

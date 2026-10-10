@@ -20,6 +20,8 @@ import eye from './eye.svg';
 import eyeOff from './eye-off.svg';
 import hardDrive from './hard-drive.svg';
 import folderOpen from './folder-open.svg';
+import folder from './folder.svg';
+import file from './file.svg';
 import hash from './hash.svg';
 import filter from './filter.svg';
 import history from './history.svg';
@@ -72,6 +74,8 @@ export const actionIconAssets = {
   'eye-off': eyeOff,
   'hard-drive': hardDrive,
   'folder-open': folderOpen,
+  folder,
+  file,
   hash,
   filter,
   history,

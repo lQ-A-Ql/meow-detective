@@ -264,4 +264,26 @@ describe('ImportDataSourceDialog', () => {
     expect(screen.getByLabelText('单源镜像')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText('本地物理磁盘')).toBeNull();
   });
+
+  it('renders the step navigation as its own vertical tablist, not as action buttons', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(4);
+    expect(tabs.map((tab) => tab.getAttribute('data-state'))).toEqual(['current', 'todo', 'todo', 'todo']);
+    expect(tabs.filter((tab) => tab.getAttribute('tabindex') === '0')).toHaveLength(1);
+    // A step must span the rail: reusing the circular action shape squeezed the labels vertically.
+    expect(tabs[0].className).toContain('w-full');
+    expect(tabs[0].className).not.toContain('size-7');
+  });
+
+  it('gives the file and directory pickers different artwork', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    advanceToConfig();
+
+    const fileButton = screen.getByRole('button', { name: '文件' });
+    const directoryButton = screen.getByRole('button', { name: '目录' });
+    expect(fileButton.innerHTML).not.toBe(directoryButton.innerHTML);
+  });
 });
