@@ -1,4 +1,5 @@
 import { Clock, Monitor, Network, RefreshCw, Shield, CircleDot } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
@@ -151,13 +152,13 @@ export function AnalysisHeader({
             onClick={onRefresh}
             disabled={!hasCase || loading || !selectedDataSourceId}
             className="rounded-ctl border border-forensics-line-2 bg-transparent text-[12px] hover:bg-forensics-hover"
-          ><RefreshCw size={15} /></Button></Tooltip>
+          ><ActionIcon name="refresh" /></Button></Tooltip>
           <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
             type="button"
             onClick={onRunExtraction}
             disabled={!hasCase || extractionPending || !selectedDataSourceId}
             className="rounded-ctl border border-forensics-red-ink bg-forensics-red-ink text-[12px] text-white hover:opacity-90"
-          ><RefreshCw size={15} /></Button></Tooltip>
+          ><ActionIcon name="play" /></Button></Tooltip>
         </div>
       </div>
     </ContextBar>
@@ -193,7 +194,7 @@ export function AnalysisErrorBanner({
         variant="outline"
         onClick={onRetry}
         className="shrink-0 rounded-none border-forensics-error-border bg-forensics-surface text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
-      ><CircleDot size={15} /></Button></Tooltip>
+      ><ActionIcon name="refresh" /></Button></Tooltip>
     </div>
   );
 }

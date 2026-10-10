@@ -1,4 +1,5 @@
 import { Download, FileText, RefreshCw, Shield } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -53,7 +54,7 @@ export function EvidenceClassificationPanel({
           onClick={onRun}
           disabled={pending}
           className="rounded-none border border-forensics-text bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
-        ><RefreshCw size={15} /></Button></Tooltip>
+        ><ActionIcon name="play" /></Button></Tooltip>
       </div>
 
       <SummaryStrip
@@ -142,7 +143,7 @@ export function AnalysisReportPanel({
         onClick={onDownload}
         disabled={pending}
         className="rounded-none bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
-      ><RefreshCw size={15} /></Button></Tooltip>
+      ><ActionIcon name="download" /></Button></Tooltip>
     </div>
   );
 }

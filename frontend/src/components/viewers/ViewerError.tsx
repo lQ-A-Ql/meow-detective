@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { AlertCircle, Copy, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -54,15 +55,15 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
             size="xs"
             onClick={handleCopy}
             aria-label={t('viewer.error.copyDetails')}
-          ><Copy size={15} /></Button></Tooltip>
+          ><ActionIcon name="copy" /></Button></Tooltip>
           {error.recoverable && onRetry && (
-            <Tooltip content={t('viewer.error.retry')}><Button
+            <Tooltip content={t('viewer.error.retryPreview')}><Button
               type="button"
               variant="forensicsPrimary"
               size="xs"
               onClick={onRetry}
               aria-label={t('viewer.error.retryPreview')}
-            ><RefreshCw size={15} /></Button></Tooltip>
+            ><ActionIcon name="refresh" /></Button></Tooltip>
           )}
         </div>
       </div>

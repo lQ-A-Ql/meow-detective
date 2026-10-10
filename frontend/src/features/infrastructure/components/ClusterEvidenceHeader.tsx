@@ -1,4 +1,5 @@
 import { Activity, ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { TFunction } from 'i18next';
 import { Button } from '@/app/components/ui/button';
@@ -48,7 +49,7 @@ export function ClusterEvidenceHeader({
               <SelectContent>{sets.map((item) => <SelectItem key={item.importSetId} value={item.importSetId}>{item.name} · {item.state}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <Tooltip content={t('infrastructure.workspace.openTimeline')}><Button aria-label={t('infrastructure.workspace.openTimeline')} type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><Activity size={15} /></Button></Tooltip>
+          <Tooltip content={t('infrastructure.workspace.openTimeline')}><Button aria-label={t('infrastructure.workspace.openTimeline')} type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><ActionIcon name="history" /></Button></Tooltip>
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-4 xl:grid-cols-9">

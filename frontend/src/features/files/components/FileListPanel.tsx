@@ -1,4 +1,5 @@
 import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, type ReactElement } from 'react';
@@ -190,7 +191,7 @@ export function FileListPanel({
           className="text-[11px]"
           disabled={!parentDirectory}
           onClick={goToParentDirectory}
-        ><ArrowUp size={15} /></Button></Tooltip>
+        ><ActionIcon name="arrow-up" /></Button></Tooltip>
         {visibilityToggle}
         {mountControl}
         {canGoToPreviousRows || canGoToNextRows ? (
@@ -229,7 +230,7 @@ export function FileListPanel({
         renderRowContextMenu={renderRowContextMenu}
         emptyTitle={t('fileBrowser.list.emptyTitle')}
         emptyAction={parentDirectory ? (
-          <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')} type="button" variant="outline" size="sm" onClick={goToParentDirectory}><ArrowUp size={15} /></Button></Tooltip>
+          <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')} type="button" variant="outline" size="sm" onClick={goToParentDirectory}><ActionIcon name="arrow-up" /></Button></Tooltip>
         ) : undefined}
         emptyDescription={
           rowsPage?.truncated

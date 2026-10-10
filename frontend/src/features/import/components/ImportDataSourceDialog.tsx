@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Monitor, Server, Smartphone, FolderOpen, HardDrive, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -235,7 +236,7 @@ export function ImportDataSourceDialog({
             </ToggleGroup>
             <div className="flex items-center justify-between border-t border-forensics-border pt-4">
               <span className="text-[11px] text-forensics-muted">{t('importDataSource.platformHint')}</span>
-              <Tooltip content={t('importDataSource.buttons.next')}><Button aria-label={t('importDataSource.buttons.next')} onClick={goNext} size="sm" variant="forensicsPrimary"><ChevronRight size={15} /></Button></Tooltip>
+              <Tooltip content={t('importDataSource.buttons.next')}><Button aria-label={t('importDataSource.buttons.next')} onClick={goNext} size="sm" variant="forensicsPrimary"><ActionIcon name="upload" /></Button></Tooltip>
             </div>
           </div>
         ) : (
@@ -336,12 +337,12 @@ export function ImportDataSourceDialog({
                 />
                 {sourceKind !== 'localDisk' ? (
                   <>
-                    <Tooltip content={t('importDataSource.buttons.file')}><Button aria-label={t('importDataSource.buttons.file')} type="button" variant="forensicsOutline" size="sm" onClick={pickFile} className="shrink-0"><FolderOpen size={15} /></Button></Tooltip>
-                    <Tooltip content={t('importDataSource.buttons.directory')}><Button aria-label={t('importDataSource.buttons.directory')} type="button" variant="forensicsOutline" size="sm" onClick={pickDirectory} className="shrink-0"><FolderOpen size={15} /></Button></Tooltip>
+                    <Tooltip content={t('importDataSource.buttons.file')}><Button aria-label={t('importDataSource.buttons.file')} type="button" variant="forensicsOutline" size="sm" onClick={pickFile} className="shrink-0"><ActionIcon name="upload" /></Button></Tooltip>
+                    <Tooltip content={t('importDataSource.buttons.directory')}><Button aria-label={t('importDataSource.buttons.directory')} type="button" variant="forensicsOutline" size="sm" onClick={pickDirectory} className="shrink-0"><ActionIcon name="upload" /></Button></Tooltip>
                   </>
                 ) : null}
                 {platform === 'linux' ? (
-                  <Tooltip content={t('importDataSource.buttons.clusterDirectory')}><Button aria-label={t('importDataSource.buttons.clusterDirectory')} type="button" variant="forensicsOutline" size="sm" onClick={pickLinuxEvidenceSetDirectory} className="shrink-0"><FolderOpen size={15} /></Button></Tooltip>
+                  <Tooltip content={t('importDataSource.buttons.clusterDirectory')}><Button aria-label={t('importDataSource.buttons.clusterDirectory')} type="button" variant="forensicsOutline" size="sm" onClick={pickLinuxEvidenceSetDirectory} className="shrink-0"><ActionIcon name="upload" /></Button></Tooltip>
                 ) : null}
               </div>
               {error ? (
@@ -350,14 +351,14 @@ export function ImportDataSourceDialog({
             </div>
 
             <DialogFooter className="gap-2 border-t border-forensics-border pt-4">
-              <Tooltip content={t('importDataSource.buttons.back')}><Button aria-label={t('importDataSource.buttons.back')} type="button" variant="forensicsGhost" size="sm" onClick={goBack}><ChevronLeft size={15} /></Button></Tooltip>
+              <Tooltip content={t('importDataSource.buttons.back')}><Button aria-label={t('importDataSource.buttons.back')} type="button" variant="forensicsGhost" size="sm" onClick={goBack}><ActionIcon name="arrow-up" /></Button></Tooltip>
               <Tooltip content={t('importDataSource.buttons.import')}><Button aria-label={t('importDataSource.buttons.import')}
                 type="button"
                 variant="forensicsPrimary"
                 size="sm"
                 onClick={handleImport}
                 disabled={importPending}
-              ><Loader2 size={15} /></Button></Tooltip>
+              ><ActionIcon name="upload" /></Button></Tooltip>
             </DialogFooter>
           </div>
         )}

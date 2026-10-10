@@ -1,4 +1,5 @@
 import { Button } from '@/app/components/ui/button';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { X } from 'lucide-react';
 import { EDGE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
@@ -48,7 +49,7 @@ export function GraphEdgeDetails({ edge, nodeMap, provenance, provenanceLoading,
         ) : null}
         {!provenanceLoading && !provenance?.length ? <div className="text-forensics-muted">{t('graph.details.noProvenance')}</div> : null}
       </div>
-      <Tooltip content={t('graph.actions.close')}><Button aria-label={t('graph.actions.close')} type="button" size="sm" variant="ghost" onClick={onClose} className="text-[10px]"><X size={15} /></Button></Tooltip>
+      <Tooltip content={t('graph.actions.close')}><Button aria-label={t('graph.actions.close')} type="button" size="sm" variant="ghost" onClick={onClose} className="text-[10px]"><ActionIcon name="close" /></Button></Tooltip>
     </div>
   );
 }

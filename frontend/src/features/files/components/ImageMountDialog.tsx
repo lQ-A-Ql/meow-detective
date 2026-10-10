@@ -1,4 +1,5 @@
 import { CircleCheck, Disc3, FolderOpen, HardDrive, LoaderCircle, LogOut, Play, ShieldCheck, TriangleAlert, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
@@ -246,7 +247,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                 size="xs"
                 onClick={() => void model.unmount(selectedMount.target.mountId)}
                 disabled={model.isSubmitting}
-              ><LoaderCircle size={15} /></Button></Tooltip>
+              ><ActionIcon name="hard-drive" /></Button></Tooltip>
             </div>
           ) : null}
 
@@ -264,7 +265,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                 size="xs"
                 onClick={() => void model.releaseEmulation(selectedEmulation.sessionId)}
                 disabled={model.isSubmitting}
-              ><LoaderCircle size={15} /></Button></Tooltip>
+              ><ActionIcon name="hard-drive" /></Button></Tooltip>
             </div>
           ) : null}
 
@@ -287,8 +288,8 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
               variant="forensicsGhost"
               onClick={() => model.setDialogOpen(false)}
               disabled={model.isSubmitting}
-            ><X size={15} /></Button></Tooltip>
-            <Tooltip content={t('fileBrowser.mount.startEmulation')}><Button aria-label={t('fileBrowser.mount.startEmulation')} type="submit" variant="forensicsPrimary" disabled={!canSubmit}><LoaderCircle size={15} /></Button></Tooltip>
+            ><ActionIcon name="hard-drive" /></Button></Tooltip>
+            <Tooltip content={t('fileBrowser.mount.startEmulation')}><Button aria-label={t('fileBrowser.mount.startEmulation')} type="submit" variant="forensicsPrimary" disabled={!canSubmit}><ActionIcon name="hard-drive" /></Button></Tooltip>
           </DialogFooter>
         </form>
       </DialogContent>

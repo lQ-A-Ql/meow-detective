@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, type Ref } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
@@ -198,7 +199,7 @@ export function FileTreePanel({
                 className="text-[10px]"
                 onClick={loadMoreActiveTreeChildren}
                 data-testid="load-more-tree-children"
-              ><RefreshCw size={15} /></Button></Tooltip>
+              ><ActionIcon name="folder-open" /></Button></Tooltip>
             </div>
           </div>
         ) : null}

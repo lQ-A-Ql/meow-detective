@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { RunAnalysisAction } from '@/components/layout/EmptyStateActions';
 import { AppWindow, RefreshCw } from 'lucide-react';
@@ -162,7 +163,7 @@ function AndroidPackagesPanel({
       )}
       {hasMore ? (
         <div className="flex justify-center">
-          <Tooltip content={t('analysis.android.loadMore')}><Button aria-label={t('analysis.android.loadMore')} type="button" variant="outline" onClick={onLoadMore} disabled={loadingMore}><RefreshCw size={15} /></Button></Tooltip>
+          <Tooltip content={t('analysis.android.loadMore')}><Button aria-label={t('analysis.android.loadMore')} type="button" variant="outline" onClick={onLoadMore} disabled={loadingMore}><ActionIcon name="refresh" /></Button></Tooltip>
         </div>
       ) : null}
     </div>

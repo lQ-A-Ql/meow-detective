@@ -1,4 +1,5 @@
 import { FolderOpen, LoaderCircle, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -67,7 +68,7 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
                 size="sm"
                 onClick={() => void model.browseDestination()}
                 disabled={model.isExtracting}
-              ><FolderOpen size={15} /></Button></Tooltip>
+              ><ActionIcon name="download" /></Button></Tooltip>
             </FieldRow>
             <FieldHint>{t('fileBrowser.extraction.noOverwriteHint')}</FieldHint>
             {model.validationError ? <FieldError>{model.validationError}</FieldError> : null}
@@ -97,8 +98,8 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
               variant="forensicsGhost"
               onClick={() => model.setFormOpen(false)}
               disabled={model.isExtracting}
-            ><X size={15} /></Button></Tooltip>
-            <Tooltip content={t('fileBrowser.extraction.start')}><Button aria-label={t('fileBrowser.extraction.start')} type="submit" variant="forensicsPrimary" disabled={model.isExtracting}><LoaderCircle size={15} /></Button></Tooltip>
+            ><ActionIcon name="close" /></Button></Tooltip>
+            <Tooltip content={t('fileBrowser.extraction.start')}><Button aria-label={t('fileBrowser.extraction.start')} type="submit" variant="forensicsPrimary" disabled={model.isExtracting}><ActionIcon name="download" /></Button></Tooltip>
           </DialogFooter>
         </form>
       </DialogContent>

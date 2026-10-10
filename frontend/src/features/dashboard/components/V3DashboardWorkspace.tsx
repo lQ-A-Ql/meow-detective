@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +27,7 @@ export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
       <ContextBar align="end">
-        <Tooltip content={t('dashboard.refresh')}><Button aria-label={t('dashboard.refresh')} type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={15} /></Button></Tooltip>
+        <Tooltip content={t('dashboard.refresh')}><Button aria-label={t('dashboard.refresh')} type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"><ActionIcon name="refresh" /></Button></Tooltip>
       </ContextBar>
       {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text={t('dashboard.loading')} /> : (
         <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">

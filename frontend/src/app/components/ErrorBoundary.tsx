@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { RefreshCw, Undo2 } from 'lucide-react';
 import { withTranslation, type WithTranslation } from 'react-i18next';
@@ -57,13 +58,13 @@ class ErrorBoundaryBase extends Component<Props, State> {
                 variant="forensicsSurface"
                 size="sm"
                 onClick={this.handleReload}
-              ><RefreshCw size={15} /></Button></Tooltip>
+              ><ActionIcon name="refresh" /></Button></Tooltip>
               <Tooltip content={t('errorBoundary.recover')}><Button aria-label={t('errorBoundary.recover')}
                 type="button"
                 variant="forensicsLink"
                 size="sm"
                 onClick={this.handleReset}
-              ><Undo2 size={15} /></Button></Tooltip>
+              ><ActionIcon name="restore" /></Button></Tooltip>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useEffect, useMemo, useState } from 'react';
 import { GitBranch, Link2, ListFilter, Network, Search, TimerReset } from 'lucide-react';
@@ -224,7 +225,7 @@ export function CorrelationWorkspace({
             size="sm"
             onClick={onRefresh}
             className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"
-          ><TimerReset size={15} /></Button></Tooltip>
+          ><ActionIcon name="refresh" /></Button></Tooltip>
         ) : null}
       </div>
 

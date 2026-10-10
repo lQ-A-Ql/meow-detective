@@ -10,6 +10,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -211,7 +212,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
           onClick={resetView}
           className="text-[10px]"
           title={t('media.controls.reset')}
-        ><X size={15} /></Button></Tooltip>
+        ><ActionIcon name="close" /></Button></Tooltip>
 
         <div className="flex-1" />
 

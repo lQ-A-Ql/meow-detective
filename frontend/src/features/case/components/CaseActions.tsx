@@ -1,4 +1,5 @@
 import { FolderOpen, Trash2, Plus, CircleDot, Upload, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -79,7 +80,7 @@ export function CaseWelcomeForms({
             size="xs"
             onClick={onCreateCase}
             disabled={createPending || !caseRoot || !caseName}
-          ><Plus size={15} /></Button></Tooltip>
+          ><ActionIcon name="plus" /></Button></Tooltip>
           {createError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{createError}</div>
           ) : null}
@@ -103,7 +104,7 @@ export function CaseWelcomeForms({
             size="xs"
             onClick={() => onOpenCase(openCasePath)}
             disabled={openPending || !openCasePath}
-          ><CircleDot size={15} /></Button></Tooltip>
+          ><ActionIcon name="list" /></Button></Tooltip>
           {openError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{openError}</div>
           ) : null}
@@ -211,7 +212,7 @@ export function ImportSection({
               setImportPath(path);
             }
           }}
-        ><FolderOpen size={15} /></Button></Tooltip>
+        ><ActionIcon name="upload" /></Button></Tooltip>
         <Tooltip content={t('caseHome.import.directory')}><Button aria-label={t('caseHome.import.directory')}
           type="button"
           variant="forensicsOutline"
@@ -222,14 +223,14 @@ export function ImportSection({
               setImportPath(path);
             }
           }}
-        ><FolderOpen size={15} /></Button></Tooltip>
+        ><ActionIcon name="upload" /></Button></Tooltip>
         <Tooltip content={t('caseHome.import.action')}><Button aria-label={t('caseHome.import.action')}
           type="button"
           variant="forensicsPrimary"
           size="xs"
           onClick={onImport}
           disabled={importPending || Boolean(importJob)}
-        ><Upload size={15} /></Button></Tooltip>
+        ><ActionIcon name="upload" /></Button></Tooltip>
         <Tooltip content={t('caseHome.actions.cancel')}><Button aria-label={t('caseHome.actions.cancel')}
           type="button"
           variant="forensicsGhost"
@@ -237,7 +238,7 @@ export function ImportSection({
           onClick={() => {
             onClose();
           }}
-        ><X size={15} /></Button></Tooltip>
+        ><ActionIcon name="close" /></Button></Tooltip>
       </div>
       {importPending ? (
         <div className="mt-2 flex items-center gap-2 text-[11px] text-forensics-muted">
@@ -255,7 +256,7 @@ export function ImportSection({
             onClick={onCancelImport}
             disabled={cancelImportPending}
             className="mt-1 text-[10px] text-forensics-error-text hover:text-forensics-error-text"
-          ><Upload size={15} /></Button></Tooltip>
+          ><ActionIcon name="upload" /></Button></Tooltip>
         </div>
       ) : null}
       {importSuccess ? (

@@ -1,4 +1,5 @@
 import { CircleAlert, Disc3, FolderOpen, HardDrive, LoaderCircle, Play, ShieldCheck, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -250,7 +251,7 @@ export function StartButton({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
     <>
-      <Tooltip content={t('emulationPage.actions.start')}><Button aria-label={t('emulationPage.actions.start')} type="button" variant="forensicsPrimary"  onClick={() => void model.start()} disabled={!model.canStart}><LoaderCircle size={15} /></Button></Tooltip>
+      <Tooltip content={t('emulationPage.actions.start')}><Button aria-label={t('emulationPage.actions.start')} type="button" variant="forensicsPrimary"  onClick={() => void model.start()} disabled={!model.canStart}><ActionIcon name="play" /></Button></Tooltip>
       <ConfirmationDialog
         open={model.directBootConfirmationOpen}
         onOpenChange={(open) => { if (!open) model.cancelDirectBoot(); }}

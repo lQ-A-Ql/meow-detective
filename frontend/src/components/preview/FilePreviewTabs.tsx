@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, CircleDot } from 'lucide-react';
@@ -183,7 +184,7 @@ function HexPreviewContent({
                 onClick={() => {
                   void onHexJump();
                 }}
-              ><CircleDot size={15} /></Button></Tooltip>
+              ><ActionIcon name="chevron-left" /></Button></Tooltip>
             </div>
             <div className="mt-2">
               {viewer.mode === 'chunked'

@@ -1,4 +1,5 @@
 import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle, Save, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -194,7 +195,7 @@ export function DataSourcesPanel({
                           variant="forensicsOutline"
                           size="compact"
                           onClick={() => onRename(source.id, editingDataSourceName.trim())}
-                        ><Save size={15} /></Button></Tooltip>
+                        ><ActionIcon name="save" /></Button></Tooltip>
                         <Tooltip content={t('caseHome.actions.cancel')}><Button aria-label={t('caseHome.actions.cancel')}
                           type="button"
                           variant="forensicsGhost"
@@ -203,7 +204,7 @@ export function DataSourcesPanel({
                             setEditingDataSourceId(undefined);
                             setEditingDataSourceName('');
                           }}
-                        ><X size={15} /></Button></Tooltip>
+                        ><ActionIcon name="close" /></Button></Tooltip>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">

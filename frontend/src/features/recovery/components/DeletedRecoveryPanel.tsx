@@ -1,4 +1,5 @@
 import { Download, Eye, LoaderCircle, RefreshCw, Search, X, CircleDot } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -113,7 +114,7 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
             variant="forensicsOutline"
             disabled={model.reading || model.selectedRangeOrdinal === undefined}
             onClick={model.readSelectedRange}
-          ><LoaderCircle size={15} /></Button></Tooltip>
+          ><ActionIcon name="restore" /></Button></Tooltip>
         </div>
       ) : (
         <EmptyState className="p-3">{t('recovery.noVerifiedRange')}</EmptyState>
@@ -140,7 +141,7 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
         variant="forensicsPrimary"
         disabled={recovery.completeness !== 'complete' || model.exporting}
         onClick={model.exportSelected}
-      ><LoaderCircle size={15} /></Button></Tooltip>
+      ><ActionIcon name="restore" /></Button></Tooltip>
 
       {model.lastExport ? (
         <div className="space-y-1 border border-forensics-success-border bg-forensics-success-bg p-2 text-[10px] text-forensics-success-text">
@@ -234,7 +235,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             variant="forensicsPrimary"
             disabled={model.scanning || model.selectedPartitionIndex === undefined}
             onClick={model.runScan}
-          ><LoaderCircle size={15} /></Button></Tooltip>
+          ><ActionIcon name="play" /></Button></Tooltip>
           {model.page ? (
             <div className="ml-auto flex items-center gap-2 text-[11px] text-forensics-muted">
               <Badge variant="outline">{model.page.scan.filesystemType.toUpperCase()}</Badge>
@@ -295,7 +296,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             type="button"
             variant="forensicsOutline"
             onClick={model.runHashSearch}
-          ><LoaderCircle size={15} /></Button></Tooltip>
+          ><ActionIcon name="hash" /></Button></Tooltip>
           {model.hashSearch ? (
             <Badge variant="outline" className="mt-1">
               {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}
@@ -344,8 +345,8 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
                   : t('recovery.pagination.range', { start: model.page?.offset ?? 0, end: (model.page?.offset ?? 0) + model.recoveries.length, total: model.total })}
               </span>
               <div className="flex gap-1">
-                <Tooltip content={t('recovery.pagination.previous')}><Button aria-label={t('recovery.pagination.previous')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}><CircleDot size={15} /></Button></Tooltip>
-                <Tooltip content={t('recovery.pagination.next')}><Button aria-label={t('recovery.pagination.next')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}><CircleDot size={15} /></Button></Tooltip>
+                <Tooltip content={t('recovery.pagination.previous')}><Button aria-label={t('recovery.pagination.previous')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}><ActionIcon name="chevron-left" /></Button></Tooltip>
+                <Tooltip content={t('recovery.pagination.next')}><Button aria-label={t('recovery.pagination.next')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}><ActionIcon name="chevron-right" /></Button></Tooltip>
               </div>
             </div>
           </div>

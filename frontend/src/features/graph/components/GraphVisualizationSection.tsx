@@ -1,4 +1,5 @@
 import { Pause, Play, RefreshCw, CircleDot } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
@@ -50,14 +51,14 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
             onClick={model.toggleRunning}
             disabled={!model.hasNodes}
             className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
-          ><Pause size={15} /></Button></Tooltip>
+          ><ActionIcon name="pause" /></Button></Tooltip>
           <Tooltip content={t('graph.refresh')}><Button aria-label={t('graph.refresh')}
             type="button"
             variant="outline"
             onClick={model.refresh}
             disabled={model.isLoadingGraph}
             className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
-          ><RefreshCw size={15} /></Button></Tooltip>
+          ><ActionIcon name="refresh" /></Button></Tooltip>
         </div>
       </div>
 

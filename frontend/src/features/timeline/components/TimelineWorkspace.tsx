@@ -1,4 +1,5 @@
 import { ChevronRight, Clock, ZoomIn, ZoomOut, Check, X } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -60,7 +61,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
               <Input type="datetime-local" step={1} value={model.draftTimeEnd} onChange={(event) => model.setDraftTimeEnd(event.target.value)} variant="mono" inputSize="inline" className={model.draftDatesValid ? '' : 'border-forensics-error-border'} />
             </label>
             {!model.draftDatesValid ? <span className="text-[11px] text-forensics-error-text">{t('timeline.invalidDate')}</span> : null}
-            <Tooltip content={t('timeline.apply')}><Button aria-label={t('timeline.apply')} type="button" variant="forensicsOutline" size="compact" onClick={model.applyDateRange} disabled={!model.draftDatesValid}><Check size={15} /></Button></Tooltip>
+            <Tooltip content={t('timeline.apply')}><Button aria-label={t('timeline.apply')} type="button" variant="forensicsOutline" size="compact" onClick={model.applyDateRange} disabled={!model.draftDatesValid}><ActionIcon name="history" /></Button></Tooltip>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               {t('timeline.type')}
               <Select value={model.eventType} onValueChange={model.selectEventType}>
@@ -71,7 +72,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
                 </SelectContent>
               </Select>
             </label>
-            <Tooltip content={t('timeline.clear')}><Button aria-label={t('timeline.clear')} type="button" variant="forensicsOutline" size="compact" onClick={model.clearFilters}><X size={15} /></Button></Tooltip>
+            <Tooltip content={t('timeline.clear')}><Button aria-label={t('timeline.clear')} type="button" variant="forensicsOutline" size="compact" onClick={model.clearFilters}><ActionIcon name="history" /></Button></Tooltip>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomOut} disabled={!model.canZoomOut} aria-label={t('graph.controls.zoomOut')}><ZoomOut size={14} /></Button>
@@ -102,7 +103,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             onRowClick={model.onEventRowClick}
             emptyTitle={t('timeline.emptyTitle')}
             emptyAction={(
-              <Tooltip content={t('timeline.clear')}><Button aria-label={t('timeline.clear')} type="button" variant="outline" size="sm" onClick={model.clearFilters}><X size={15} /></Button></Tooltip>
+              <Tooltip content={t('timeline.clear')}><Button aria-label={t('timeline.clear')} type="button" variant="outline" size="sm" onClick={model.clearFilters}><ActionIcon name="history" /></Button></Tooltip>
             )}
             emptyDescription={t('timeline.emptyDescription')}
             columns={columns}

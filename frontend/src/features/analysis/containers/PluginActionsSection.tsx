@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Loader2, Play, RefreshCw } from 'lucide-react';
@@ -77,7 +78,7 @@ function RecoveryResult({
           size="xs"
           disabled={rerunPending}
           onClick={onRerun}
-        ><Loader2 size={15} /></Button></Tooltip>
+        ><ActionIcon name="play" /></Button></Tooltip>
         {rerunDone && !rerunPending ? (
           <span className="text-forensics-success-text">{t('pluginModule.actions.rerunDone')}</span>
         ) : null}
@@ -167,7 +168,7 @@ function PluginActionCard({
             onClick={() => {
               void handlePickFile();
             }}
-          ><FolderOpen size={15} /></Button></Tooltip>
+          ><ActionIcon name="plug" /></Button></Tooltip>
         </div>
       ) : null}
       <div className="mt-2 flex items-center gap-2">
@@ -179,7 +180,7 @@ function PluginActionCard({
           onClick={() => {
             void handleRun();
           }}
-        ><Loader2 size={15} /></Button></Tooltip>
+        ><ActionIcon name="play" /></Button></Tooltip>
         {!supported ? (
           <span className="text-[11px] text-forensics-muted">
             {t('pluginModule.actions.unsupported')}
