@@ -2836,5 +2836,15 @@
     "file": "File object",
     "timelineEvent": "Timeline event",
     "artifact": "Artifact"
+  },
+  "commandPalette": {
+    "label": "Command palette",
+    "placeholder": "Search pages or commands…",
+    "empty": "No matching command",
+    "hint": "↑↓ select · Enter run · Esc close",
+    "group": {
+      "goTo": "Go to",
+      "view": "View"
+    }
   }
 }

@@ -2836,5 +2836,15 @@
     "file": "文件对象",
     "timelineEvent": "时间线事件",
     "artifact": "痕迹对象"
+  },
+  "commandPalette": {
+    "label": "命令面板",
+    "placeholder": "搜索页面或命令…",
+    "empty": "没有匹配的命令",
+    "hint": "↑↓ 选择 · Enter 执行 · Esc 关闭",
+    "group": {
+      "goTo": "前往",
+      "view": "视图"
+    }
   }
 }

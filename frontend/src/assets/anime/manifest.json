@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "note": "Fill a slot with a project-relative path under src/assets/anime/ to activate it. Empty slots render the quiet fallback pattern.",
+  "slots": {
+    "brand-mark": null,
+    "archive-scene": null,
+    "investigator-portrait": null,
+    "evidence-motif": null,
+    "texture": null
+  }
+}

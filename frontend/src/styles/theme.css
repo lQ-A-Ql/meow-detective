@@ -432,3 +432,15 @@
     }
   }
 }
+
+/* Decoration fallback: a quiet hatch derived from the structural line token, used whenever an
+   asset slot has no supplied artwork. Colour stays centralised here, never in component source. */
+@layer utilities {
+  .asset-slot-fallback {
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 6px,
+      color-mix(in oklab, var(--forensics-border-strong) 22%, transparent) 6px 7px
+    );
+  }
+}

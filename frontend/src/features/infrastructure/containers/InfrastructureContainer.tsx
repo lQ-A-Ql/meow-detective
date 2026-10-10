@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { AssetSlot } from '@/app/components/AssetSlot';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { CircleDot, GitBranch, HardDrive } from 'lucide-react';
@@ -81,7 +82,7 @@ function LegacyInfrastructurePage({ model, caseName, navigate, t }: { model: Ret
   if (graph.isLoading) return <EmptyState className="flex flex-1 items-center justify-center">{t('common.loading')}</EmptyState>;
   if (!graph.data || nodes.length === 0) return (
     <EmptyState className="flex flex-1 flex-col items-center justify-center"
-      title={t('infrastructure.empty')}
+      title={<><AssetSlot role="evidence-motif" className="mx-auto mb-2 size-12" />{t('infrastructure.empty')}</>}
       description={t('infrastructure.emptyHint')}
       action={<>
         <Button type="button" variant="outline" size="sm" onClick={() => navigate('/analysis')}>{t('common.emptyGoToAnalysis')}</Button>
