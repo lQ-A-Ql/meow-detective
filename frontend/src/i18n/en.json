@@ -1037,6 +1037,7 @@
     "workspaceLabel": "Workspace title bar",
     "pageNavLabel": "Page navigation",
     "case": {
+      "return": "Back to case entry",
       "number": "Case #{{number}}",
       "noCase": "No case selected",
       "examiner": "Examiner {{examiner}}",

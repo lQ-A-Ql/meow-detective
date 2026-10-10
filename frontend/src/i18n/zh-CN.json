@@ -1037,6 +1037,7 @@
     "workspaceLabel": "工作区标题栏",
     "pageNavLabel": "页面导航",
     "case": {
+      "return": "返回案件入口",
       "number": "案件 #{{number}}",
       "noCase": "未选择案件",
       "examiner": "检验人 {{examiner}}",
