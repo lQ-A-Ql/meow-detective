@@ -21,7 +21,13 @@ const iconByPage: Record<NavigationLink['page'], SidebarIconName> = {
   reports: 'reports',
 };
 
-const railItemClass = 'group relative flex h-11 w-14 items-center justify-center border-l-2 border-transparent text-forensics-muted transition-colors';
+const railItemClass =
+  'group relative flex size-11 items-center justify-center rounded-full text-forensics-muted transition-colors';
+/** 可见的 32px 圆；外层 44px 保留点击面积。 */
+const railDiscClass =
+  'flex size-8 items-center justify-center rounded-full transition-colors group-hover:bg-forensics-hover group-hover:text-forensics-text group-focus-visible:ring-2 group-focus-visible:ring-forensics-red';
+const railActiveDiscClass =
+  'bg-forensics-rail-active text-white group-hover:bg-forensics-rail-active group-hover:text-white';
 
 function RailItem({ link, model }: { link: NavigationLink; model: NavigationModel }) {
   const { t } = useTranslation();
@@ -37,13 +43,11 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
         onClick={() => model.selectPage(link.page)}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
-        className={cn(
-          railItemClass,
-          'hover:bg-forensics-hover hover:text-forensics-text focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forensics-primary-blue/40',
-          isActive && 'border-forensics-primary-blue bg-white text-forensics-primary-blue',
-        )}
+        className={cn(railItemClass, 'focus-visible:outline-none', isActive && 'text-white')}
       >
-        <SidebarIcon name={iconByPage[link.page]} className="size-[21px]" />
+        <span className={cn(railDiscClass, isActive && railActiveDiscClass)}>
+          <SidebarIcon name={iconByPage[link.page]} className="size-[21px]" />
+        </span>
       </NavLink>
     </Tooltip>
   );
@@ -62,11 +66,11 @@ export function ActivityBar({
   const densityLabel = density === 'compact' ? t('navigation.density.comfortable') : t('navigation.density.compact');
   const jobsLabel = t('navigation.jobsRunning', { count: model.runningCount });
   return (
-    <aside className="relative z-20 flex w-14 shrink-0 flex-col items-center border-r border-forensics-border bg-white" aria-label={t('navigation.appNavLabel')}>
+    <aside className="relative z-20 flex w-12 shrink-0 flex-col items-center bg-forensics-base" aria-label={t('navigation.appNavLabel')}>
       <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 pb-3 pt-4" aria-label={t('navigation.workspaceNavLabel')}>
         {model.links.map((link) => <RailItem key={link.to} link={link} model={model} />)}
       </nav>
-      <div className="mt-2 flex w-full flex-col items-center gap-1.5 border-t border-forensics-border px-1 pb-3 pt-3">
+      <div className="mt-2 flex w-full flex-col items-center gap-1.5 px-1 pb-3 pt-3">
         <Tooltip content={jobsLabel}>
           <Button
             type="button"
@@ -76,7 +80,9 @@ export function ActivityBar({
             onClick={model.toggleDrawer}
             className={railItemClass}
           >
-            <SidebarIcon name="jobs" className="size-[21px]" />
+            <span className={railDiscClass}>
+              <SidebarIcon name="jobs" className="size-[21px]" />
+            </span>
             {model.runningCount > 0 ? <span className="absolute right-2 top-1.5 min-w-3 rounded-full bg-forensics-primary-blue px-1 text-center text-[9px] leading-3 text-white">{model.runningCount}</span> : null}
           </Button>
         </Tooltip>
@@ -89,7 +95,9 @@ export function ActivityBar({
             onClick={onToggleDensity}
             className={railItemClass}
           >
-            <Rows3 size={18} />
+            <span className={railDiscClass}>
+              <Rows3 size={18} />
+            </span>
           </Button>
         </Tooltip>
         <Tooltip content={t('settings.title')}>
