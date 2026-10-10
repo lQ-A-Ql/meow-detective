@@ -1,12 +1,4 @@
-import {
-  Download,
-  Eye,
-  LoaderCircle,
-  RefreshCw,
-  Search,
-  ScanSearch,
-  X,
-} from 'lucide-react';
+import { Download, Eye, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
@@ -20,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import { EmptyState, KeyValueField, SectionHeader } from '@/components/data-display';
+import { EmptyState, KeyValueField } from '@/components/data-display';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { HexViewer } from '@/components/viewers/HexViewer';
@@ -218,11 +210,6 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
   );
   return (
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
-      <SectionHeader
-        icon={ScanSearch}
-        title={t('recovery.title')}
-        subtitle={t('recovery.subtitle')}
-      />
 
       {model.partitions.length === 0 ? (
         <EmptyState>{t('recovery.noPartitions')}</EmptyState>

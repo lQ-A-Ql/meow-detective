@@ -1,7 +1,6 @@
 import type { TFunction } from 'i18next';
-import { HardDrive } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
-import { PanelFrame, SectionHeader } from '@/components/data-display';
+import { PanelFrame } from '@/components/data-display';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { StatusBadge } from '@/components/status/StatusBadge';
@@ -25,7 +24,6 @@ export function InfrastructureInventoryPanel({ nodes, selectedId, onSelect, t }:
 
   return (
     <PanelFrame className="flex min-h-0 flex-col overflow-hidden bg-forensics-surface p-0">
-      <SectionHeader icon={HardDrive} title={t('infrastructure.sections.inventory')} subtitle={t('infrastructure.inventoryDescription', { count: nodes.length })} className="px-4 py-3" />
       <DenseDataTableFrame rowCount={nodes.length} maxHeight="compact" variant="plain">
         <DenseDataTable
           columns={columns}

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AppWindow, Smartphone } from 'lucide-react';
+import { AppWindow } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/app/components/ui/card';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { EmptyState, KeyValueField, PanelFrame, SectionHeader } from '@/components/data-display';
+import { EmptyState, KeyValueField, PanelFrame } from '@/components/data-display';
 import { VirtualGrid } from '@/components/lists/VirtualGrid';
 import {
   AnalysisErrorBanner,
@@ -110,11 +110,6 @@ function AndroidDevicePanel({ deviceInfo }: { deviceInfo?: AndroidDeviceInfo }) 
   ];
   return (
     <div className="space-y-5">
-      <SectionHeader
-        icon={Smartphone}
-        title={t('analysis.android.deviceTitle')}
-        subtitle={t('analysis.android.deviceDescription')}
-      />
       <PanelFrame>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {fields.map((field) => {
@@ -152,11 +147,6 @@ function AndroidPackagesPanel({
 
   return (
     <div className="space-y-5">
-      <SectionHeader
-        icon={AppWindow}
-        title={t('analysis.android.packagesTitle')}
-        subtitle={t('analysis.android.packagesDescription')}
-      />
       {packages.length === 0 ? (
         <EmptyState>{t('analysis.android.noPackages')}</EmptyState>
       ) : (

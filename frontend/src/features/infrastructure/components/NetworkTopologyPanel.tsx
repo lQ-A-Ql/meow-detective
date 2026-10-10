@@ -1,6 +1,6 @@
 import { ChevronRight, Network } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { EmptyState, PanelFrame, SectionHeader } from '@/components/data-display';
+import { EmptyState, PanelFrame } from '@/components/data-display';
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import { NetworkTopologyCanvas } from './NetworkTopologyCanvas';
@@ -39,7 +39,6 @@ export function NetworkTopologyPanel({
 
 function NetworkFactList({ facts, t }: { facts: InfrastructureNetworkFact[]; t: TFunction }) {
   return <PanelFrame className="min-h-0 overflow-hidden bg-forensics-surface p-0">
-    <SectionHeader icon={Network} title={t('infrastructure.networkFacts.title')} subtitle={t('infrastructure.networkFacts.description')} className="px-4 py-3" />
     {facts.length === 0 ? <EmptyState>{t('infrastructure.networkFacts.empty')}</EmptyState> :
       <VirtualList items={facts} getItemKey={getFactKey} estimateSize={100} style={{ height: 'min(45vh, 360px)' }}
         renderItem={(fact) => <div className="border-b border-forensics-border px-4 py-3 text-[11px]">
@@ -58,7 +57,6 @@ export function RelationEvidenceList({ edges, nodeNames, t }: { edges: Infrastru
   const rows = useMemo(() => keyedItems(edges, getRelationKey), [edges]);
   return (
     <PanelFrame className="min-h-0 overflow-hidden bg-forensics-surface p-0">
-      <SectionHeader icon={Network} title={t('infrastructure.sections.relations')} subtitle={t('infrastructure.relationsDescription')} className="px-4 py-3" />
       {rows.length > 0 ? <VirtualList items={rows} getItemKey={getKeyedRelationKey} estimateSize={80}
         style={{ height: 'min(60vh, 540px)' }} renderItem={({ item: edge }) => (
           <div className="grid gap-2 border-b border-forensics-border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">

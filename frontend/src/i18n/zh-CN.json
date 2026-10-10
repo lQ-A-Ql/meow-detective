@@ -169,15 +169,11 @@
       "unknown": "未知"
     },
     "artifacts": {
-      "title": "痕迹统计",
-      "subtitle": "按痕迹家族汇总",
       "familyCount": "家族数量",
       "recordCount": "记录总量",
       "details": "家族明细"
     },
     "batch": {
-      "title": "批处理状态",
-      "subtitle": "批量导入、批量提取、批量报告",
       "active": "进行中",
       "completed": "已完成",
       "failed": "失败",
@@ -186,15 +182,11 @@
       "empty": "暂无批处理作业。"
     },
     "timeline": {
-      "title": "时间线概览",
-      "subtitle": "跨数据源事件总量与就绪状态",
       "total": "事件总量",
       "ready": "时间线就绪",
       "status": "时间线状态"
     },
     "correlation": {
-      "title": "关联统计",
-      "subtitle": "关联分析快照",
       "nodes": "关联节点",
       "edges": "关联边",
       "clusters": "聚合簇",
@@ -204,8 +196,6 @@
       "clusterCount": "{{count}} 簇"
     },
     "sources": {
-      "title": "数据源覆盖",
-      "subtitle": "导入来源及分区",
       "count": "数据源数量",
       "partitions": "分区总数",
       "e01": "E01 源",
@@ -218,8 +208,6 @@
       "empty": "当前案件没有数据源。"
     },
     "platforms": {
-      "title": "平台覆盖",
-      "subtitle": "痕迹家族按目标平台分布",
       "windows": "Windows",
       "linux": "Linux",
       "crossPlatform": "跨平台",
@@ -228,8 +216,6 @@
       "details": "家族明细"
     },
     "rulePacks": {
-      "title": "规则包状态",
-      "subtitle": "规则版本、覆盖率、执行状态",
       "loaded": "已加载规则包",
       "totalRules": "规则总数",
       "definitionStatus": "定义状态",
@@ -412,8 +398,6 @@
     }
   },
   "graph": {
-    "title": "关系图谱",
-    "subtitle": "案件级跨数据源实体与证据邻域",
     "depth": "深度",
     "pause": "暂停",
     "resume": "继续",
@@ -1020,8 +1004,6 @@
     "toggleSidebar": "切换侧边栏"
   },
   "recovery": {
-    "title": "删除文件恢复",
-    "subtitle": "NTFS MFT / EXT4 journal / XFS log",
     "targetPartition": "目标分区",
     "selectPartition": "选择 NTFS/EXT4/XFS 分区",
     "startScan": "开始扫描",
@@ -1138,9 +1120,7 @@
       "hostLinks": "主机连接"
     },
     "sections": {
-      "layers": "三层结构",
-      "relations": "对象关系",
-      "inventory": "基础设施对象"
+      "layers": "三层结构"
     },
     "columns": {
       "name": "名称",
@@ -1202,8 +1182,6 @@
       "failed": "失败"
     },
     "layersDescription": "对象按其在基础设施中的职责分层，避免把虚拟化、操作系统、容器和存储混为一类。",
-    "relationsDescription": "关系来自拓扑投影和证据来源；候选关系不会被标记为实时状态。",
-    "inventoryDescription": "共 {{count}} 个对象，可按名称、类型或层级检索。",
     "topologyHint": "连接反映检材中可证实的承载、运行、管理与存储关系；虚线表示由共同基础设施推导出的候选主机关系。",
     "topologyCanvasLabel": "Linux 集群三层拓扑图",
     "topologyHiddenEvidence": "拓扑图已折叠 {{count}} 个分析证据对象，完整列表请打开“对象清单”。",
@@ -1221,31 +1199,21 @@
       "close": "关闭详情"
     },
     "clusterInfo": {
-      "title": "集群基础信息",
-      "description": "只展示镜像和已解析工件可支持的主机、平台与版本证据。",
       "types": "发现的平台",
       "hosts": "主机数量",
       "relations": "关系数量",
       "identity": "身份状态",
       "host": "主机",
       "hostname": "主机名证据",
-      "version": "版本证据",
-      "hostEvidence": "各主机操作系统与内核版本证据",
-      "hostEvidenceDescription": "来自 /etc/hostname、os-release 和内核映像或模块目录；未解析字段不会被推测。"
+      "version": "版本证据"
     },
     "workloads": {
-      "title": "工作负载与服务证据",
-      "description": "容器、Pod、运行时配置与日志作为离线证据展示，不宣称其为镜像采集时的实时状态。",
       "empty": "未发现可归类的容器或服务证据。"
     },
     "kubernetesEvidence": {
-      "title": "Kubernetes 网络与服务证据",
-      "description": "从节点、Service、EndpointSlice、Ingress、NetworkPolicy 和 CNI 配置中读取的离线事实。",
       "empty": "未发现 Kubernetes 网络或服务证据。"
     },
     "storage": {
-      "title": "存储系统证据",
-      "description": "Ceph、RBD、CephFS 和虚拟磁盘等存储对象及其已证实状态。",
       "empty": "未发现存储系统证据。"
     },
     "networkTopology": {
@@ -1254,8 +1222,6 @@
       "canvasLabel": "Linux 集群主机网络拓扑"
     },
     "networkFacts": {
-      "title": "网络配置证据",
-      "description": "来自主机配置文件和 Kubernetes 资源的地址、解析器、服务与集群链路。",
       "empty": "尚未发现网络配置证据。",
       "kinds": {
         "hostname_mapping": "主机名映射",
@@ -1318,8 +1284,6 @@
         "provenance": "限制与 Provenance"
       },
       "trust": {
-        "title": "证据可信度链路",
-        "description": "证据生命周期状态；部分状态会限制集群级结论和报告发布。",
         "stages": {
           "manifest": "清单",
           "hash": "源哈希",
@@ -1330,8 +1294,6 @@
         }
       },
       "capabilities": {
-        "title": "能力矩阵",
-        "description": "能力等级与证据状态分开显示，避免把仅元数据误认为可浏览文件树。",
         "kind": "能力",
         "level": "可用等级",
         "status": "证据状态",
@@ -1355,8 +1317,6 @@
         }
       },
       "members": {
-        "title": "成员证据",
-        "description": "按清单成员展示导入、文件数量、主机身份、内核、地址和角色；选中行后打开右侧证据检查器。",
         "member": "成员",
         "kind": "来源类型",
         "import": "导入",
@@ -1373,8 +1333,6 @@
         "empty": "当前 Evidence Set 没有成员。"
       },
       "topology": {
-        "title": "证据拓扑",
-        "description": "每个 E01/RAW 数据源只显示一次，下面展开 Host → OS → PVE/Ceph/Kubernetes 证据层。",
         "source": "数据源",
         "layers": "证据层级",
         "noSources": "没有可聚合的数据源。",
@@ -1432,8 +1390,6 @@
         "empty": "当前没有额外的集群级发现。"
       },
       "provenance": {
-        "title": "限制与 Provenance",
-        "description": "报告发布前必须检查 hash、manifest、source DB、派生 lineage 和 phase ledger。",
         "reportState": "报告状态",
         "details": {
           "manifest": "manifest canonical digest 和递归扫描边界由后端记录。",
@@ -1445,7 +1401,6 @@
         }
       },
       "inspector": {
-        "title": "成员证据检查器",
         "close": "关闭证据检查器",
         "source": "来源",
         "kind": "来源类型",
@@ -1820,8 +1775,6 @@
       "report": "报告"
     },
     "sidebar": {
-      "title": "数据源",
-      "description": "按来源展开提取结果",
       "treeLabel": "数据源树",
       "collapseSource": "收起数据源",
       "expandSource": "展开数据源",
@@ -1917,10 +1870,6 @@
     "android": {
       "deviceTab": "手机信息",
       "packagesTab": "已安装包",
-      "deviceTitle": "手机信息",
-      "deviceDescription": "标准系统属性与 SettingsProvider 证据",
-      "packagesTitle": "已安装包",
-      "packagesDescription": "PackageManager packages.xml 记录",
       "notAnalyzed": "当前数据源尚未运行 Android 分析。",
       "noPackages": "未从已解析的 PackageManager 记录中发现安装包。",
       "loadMore": "加载更多",

@@ -34,6 +34,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
         />
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AnalysisHeader
           loading={model.loading}
           hasCase={model.hasCase}
@@ -114,6 +115,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           />
         ) : null}
       </div>
+        </div>
     </div>
   );
 }

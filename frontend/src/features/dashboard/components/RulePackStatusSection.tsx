@@ -1,14 +1,13 @@
 import { Activity, BarChart3, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard, SectionHeader } from '@/components/data-display';
+import { MetricCard } from '@/components/data-display';
 import type { RulePackStatus } from '@/types/models';
 
 export function RulePackStatusSection({ data, isLoading, isError, error }: { data: RulePackStatus | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
   const { t } = useTranslation();
   return (
     <section>
-      <SectionHeader icon={Shield} title={t('dashboard.rulePacks.title')} subtitle={t('dashboard.rulePacks.subtitle')} />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       {data ? (
         <>

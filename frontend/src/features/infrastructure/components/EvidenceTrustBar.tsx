@@ -1,13 +1,12 @@
-import { Check, CircleAlert, Minus, Waves } from 'lucide-react';
+import { Check, CircleAlert, Minus } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { PanelFrame, SectionHeader } from '@/components/data-display';
+import { PanelFrame } from '@/components/data-display';
 import { statusLabel, statusVariant, type EvidenceStatus } from '../model/cluster-status-map';
 import { StatusBadge } from '@/components/status/StatusBadge';
 
 export function EvidenceTrustBar({ stages, t }: { stages: Array<{ key: string; status: EvidenceStatus }>; t: TFunction }) {
   return (
     <PanelFrame className="bg-forensics-surface">
-      <SectionHeader icon={Waves} title={t('infrastructure.workspace.trust.title')} subtitle={t('infrastructure.workspace.trust.description')} />
       <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {stages.map((stage) => {
           const Icon = stage.status === 'complete' ? Check : stage.status === 'indeterminate' || stage.status === 'unknown' ? Minus : CircleAlert;

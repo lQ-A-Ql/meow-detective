@@ -1,11 +1,11 @@
-import { GitBranch, Pause, Play, RefreshCw } from 'lucide-react';
+import { Pause, Play, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { SectionHeader } from '@/components/data-display';
+
 import { ColorSwatch } from '@/components/data-display';
 import { ForceGraph } from '@/features/graph/visualization/ForceGraph';
 import { GraphEdgeDetails } from '@/features/graph/components/GraphEdgeDetails';
@@ -31,7 +31,6 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeader icon={GitBranch} title={t('graph.title')} subtitle={t('graph.subtitle')} />
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="text-forensics-muted">{t('graph.depth')}</span>

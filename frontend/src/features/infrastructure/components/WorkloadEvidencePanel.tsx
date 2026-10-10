@@ -1,7 +1,7 @@
-import { Boxes, Server } from 'lucide-react';
+import { Server } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '@/app/components/ui/button';
-import { EmptyState, PanelFrame, SectionHeader } from '@/components/data-display';
+import { EmptyState, PanelFrame } from '@/components/data-display';
 import type { InfrastructureGraphNode } from '@/types/models';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import { kindLabel, stateLabel } from '../logic/labels';
@@ -25,7 +25,6 @@ export function WorkloadEvidencePanel({
     <div className="space-y-4">
       <KubernetesEvidencePanel facts={networkFacts} t={t} />
       <PanelFrame className="bg-forensics-surface">
-        <SectionHeader icon={Boxes} title={t('infrastructure.workloads.title')} subtitle={t('infrastructure.workloads.description')} />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {groups.map(([kind, items]) => (
             <div key={kind} className="border border-forensics-border bg-forensics-panel px-3 py-3">

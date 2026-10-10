@@ -1,14 +1,13 @@
-import { Activity, BarChart3, GitBranch, Shield } from 'lucide-react';
+import { Activity, GitBranch, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard, SectionHeader } from '@/components/data-display';
+import { MetricCard } from '@/components/data-display';
 import type { CorrelationOverview } from '@/types/models';
 
 export function CorrelationStatsSection({ data, isLoading, isError, error }: { data: CorrelationOverview | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
   const { t } = useTranslation();
   return (
     <section>
-      <SectionHeader icon={BarChart3} title={t('dashboard.correlation.title')} subtitle={t('dashboard.correlation.subtitle')} />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <MetricCard label={t('dashboard.correlation.nodes')} value={data?.nodeCount ?? 0} icon={GitBranch} size="lg" />

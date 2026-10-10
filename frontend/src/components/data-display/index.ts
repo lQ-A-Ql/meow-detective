@@ -1,4 +1,4 @@
-export { EmptyState, PanelFrame, SectionHeader } from './PanelFrame';
+export { EmptyState, PanelFrame } from './PanelFrame';
 export { KeyValueField } from './KeyValueField';
 export { MetricCard, StatGrid } from './MetricCard';
 export { TokenIcon } from './TokenIcon';

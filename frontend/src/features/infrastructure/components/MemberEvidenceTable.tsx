@@ -1,7 +1,6 @@
-import { HardDrive } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { SummaryTable, type SummaryTableColumn, type SummaryTableRow } from '@/components/tables/SummaryTable';
-import { EmptyState, PanelFrame, SectionHeader } from '@/components/data-display';
+import { EmptyState, PanelFrame } from '@/components/data-display';
 import { StatusBadge } from '@/components/status/StatusBadge';
 import type { LinuxEvidenceSetMemberSummary, LinuxTopologyScopeSummary } from '@/types/linuxCluster';
 import type { DataSourceSummary } from '@/types/dataSource';
@@ -49,7 +48,6 @@ export function MemberEvidenceTable({ members, sourceMetadata, scopes, hostFacts
   });
   return (
     <PanelFrame className="overflow-hidden bg-forensics-surface p-0">
-      <SectionHeader icon={HardDrive} title={t('infrastructure.workspace.members.title')} subtitle={t('infrastructure.workspace.members.description')} className="px-4 py-3" />
       <div className="overflow-x-auto">
         <SummaryTable columns={columns} rows={rows} minWidthClass="min-w-[1060px]" />
       </div>

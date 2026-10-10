@@ -212,7 +212,6 @@ describe('V3Dashboard', () => {
   it('shows data source coverage section', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('数据源覆盖')).toBeDefined();
     expect(screen.getByText('源明细')).toBeDefined();
     expect(screen.getByText('sample.e01')).toBeDefined();
     expect(screen.getByText('disk.raw')).toBeDefined();
@@ -221,14 +220,13 @@ describe('V3Dashboard', () => {
   it('shows timeline overview section', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('时间线概览')).toBeDefined();
     expect(screen.getByText('3200')).toBeDefined();
   });
 
   it('shows artifact stats section', () => {
     render(<V3Dashboard />);
 
-    const artifactSection = screen.getByText('痕迹统计').closest('section');
+    const artifactSection = screen.getAllByText('家族明细')[0].closest('section');
     expect(artifactSection).not.toBeNull();
     expect(within(artifactSection as HTMLElement).getByText('家族明细')).toBeDefined();
     // LNK appears in both artifact family and correlation family coverage
@@ -239,7 +237,6 @@ describe('V3Dashboard', () => {
   it('shows correlation stats section', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('关联统计')).toBeDefined();
     expect(screen.getByText('家族覆盖')).toBeDefined();
     // Covered/Missing status text appears as direct text nodes in status badges
     expect(screen.getAllByText('已覆盖').length).toBeGreaterThan(0);
@@ -249,7 +246,6 @@ describe('V3Dashboard', () => {
   it('shows platform coverage from the overview snapshot', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('平台覆盖')).toBeDefined();
     expect(screen.getAllByText('Windows').length).toBeGreaterThan(0);
     expect(screen.getByText('未分类')).toBeDefined();
   });
@@ -257,7 +253,6 @@ describe('V3Dashboard', () => {
   it('separates rule definition and case execution state', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('规则包状态')).toBeDefined();
     expect(screen.getByText('定义状态')).toBeDefined();
     expect(screen.getByText('本案执行')).toBeDefined();
     expect(screen.getByText('not_executed')).toBeDefined();
@@ -266,7 +261,6 @@ describe('V3Dashboard', () => {
   it('shows an empty but successfully loaded batch status', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('批处理状态')).toBeDefined();
     expect(screen.getByText('进行中')).toBeDefined();
     expect(screen.getByText('排队中')).toBeDefined();
   });

@@ -1,6 +1,5 @@
-import { CircleDot, Server } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { KeyValueField, PanelFrame, SectionHeader } from '@/components/data-display';
+import { KeyValueField, PanelFrame } from '@/components/data-display';
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import type { InfrastructureHostFact } from '../types';
@@ -25,7 +24,6 @@ export function ClusterOverviewPanel({
   return (
     <div className="space-y-4">
       <PanelFrame className="bg-forensics-surface">
-        <SectionHeader icon={CircleDot} title={t('infrastructure.clusterInfo.title')} subtitle={t('infrastructure.clusterInfo.description')} />
         <div className="mt-4 grid gap-3 text-xs sm:grid-cols-4">
           <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.types')} value={platforms.join(' / ') || t('infrastructure.values.unavailable')} />
           <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.hosts')} value={presentation.hosts.length.toString()} />
@@ -34,7 +32,6 @@ export function ClusterOverviewPanel({
         </div>
       </PanelFrame>
       <PanelFrame className="overflow-hidden bg-forensics-surface p-0">
-        <SectionHeader icon={Server} title={t('infrastructure.clusterInfo.hostEvidence')} subtitle={t('infrastructure.clusterInfo.hostEvidenceDescription')} className="px-4 py-3" />
         <div className="overflow-x-auto">
           <div className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wide text-forensics-muted">
             <span>{t('infrastructure.clusterInfo.host')}</span><span>{t('infrastructure.clusterInfo.hostname')}</span><span>{t('infrastructure.clusterInfo.version')}</span><span>{t('infrastructure.clusterInfo.identity')}</span>

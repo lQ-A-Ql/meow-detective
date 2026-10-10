@@ -1,7 +1,6 @@
-import { GitBranch } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { useMemo } from 'react';
-import { PanelFrame, SectionHeader } from '@/components/data-display';
+import { PanelFrame } from '@/components/data-display';
 import { VirtualGrid } from '@/components/lists/VirtualGrid';
 import { VirtualList } from '@/components/lists/VirtualList';
 import { keyedItems } from '@/lib/keyed-items';
@@ -34,7 +33,6 @@ export function EvidenceTopologyPanel({ scopes, edges, sourceMetadata, hostFacts
   const topologyEdges = useMemo(() => keyedItems(edges, getTopologyEdgeIdentity), [edges]);
   return (
     <PanelFrame className="bg-forensics-surface">
-      <SectionHeader icon={GitBranch} title={t('infrastructure.workspace.topology.title')} subtitle={t('infrastructure.workspace.topology.description')} />
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.85fr)]">
         <div>
           {groups.length > 0 ? <VirtualGrid items={groups} getItemKey={(group) => group.sourceId}

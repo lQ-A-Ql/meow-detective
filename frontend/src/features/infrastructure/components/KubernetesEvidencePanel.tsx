@@ -1,6 +1,5 @@
-import { Boxes } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { EmptyState, PanelFrame, SectionHeader } from '@/components/data-display';
+import { EmptyState, PanelFrame } from '@/components/data-display';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import { kindLabel } from '../logic/labels';
 
@@ -9,7 +8,6 @@ export function KubernetesEvidencePanel({ facts, t }: { facts: InfrastructureNet
   const groups = [...new Set(evidence.map((fact) => fact.factKind))].sort();
   return (
     <PanelFrame className="bg-forensics-surface">
-      <SectionHeader icon={Boxes} title={t('infrastructure.kubernetesEvidence.title')} subtitle={t('infrastructure.kubernetesEvidence.description')} />
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((kind) => {
           const items = evidence.filter((fact) => fact.factKind === kind);

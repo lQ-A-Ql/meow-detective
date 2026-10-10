@@ -1,7 +1,7 @@
 import { GitBranch, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard, SectionHeader } from '@/components/data-display';
+import { MetricCard } from '@/components/data-display';
 import type { DataSourceSummary } from '@/types/models';
 
 export function DataSourceCoverageSection({
@@ -18,7 +18,6 @@ export function DataSourceCoverageSection({
   const { t } = useTranslation();
   return (
     <section>
-      <SectionHeader icon={Layers} title={t('dashboard.sources.title')} subtitle={t('dashboard.sources.subtitle')} />
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={dataSources !== undefined}>
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <MetricCard label={t('dashboard.sources.count')} value={dataSources?.length ?? 0} icon={Layers} size="lg" />
