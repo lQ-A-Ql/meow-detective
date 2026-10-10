@@ -36,7 +36,8 @@ function Assert-NoMatchesInRuntimeFiles {
     [Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files,
     [Parameter(Mandatory = $true)][string]$Pattern,
     [Parameter(Mandatory = $true)][string]$Message,
-    [string[]]$AllowedRelativePaths = @()
+    [string[]]$AllowedRelativePaths = @(),
+    [switch]$SkipTypeOnlyImports
   )
 
   $violations = @()
@@ -51,6 +52,9 @@ function Assert-NoMatchesInRuntimeFiles {
     foreach ($match in $matches) {
       $lineNumber = ($content.Substring(0, $match.Index) -split "`n").Count
       $line = ($content -split "`n")[$lineNumber - 1].Trim()
+      if ($SkipTypeOnlyImports -and $line -match '^import\s+type\s') {
+        continue
+      }
       $violations += "{0}:{1}: {2}" -f $relative, $lineNumber, $line
     }
   }
@@ -264,11 +268,17 @@ function Assert-NoRuntimeImportsMatching {
   }
 }
 
-$runtimeFiles = @(Get-ChildItem -LiteralPath $frontendSrc -Recurse -File -Include *.ts,*.tsx |
-  Where-Object { -not (Is-TestOrFixtureFile $_) })
+function Get-SourceFiles {
+  # -Include is ignored for a non-wildcard -LiteralPath, which silently pulled binary
+  # assets (*.svg, *.webp) into the content scans. Filter on the extension explicitly.
+  param([Parameter(Mandatory = $true)][string]$Root)
+  return @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object {
+    ($_.Extension -eq '.ts' -or $_.Extension -eq '.tsx') -and -not (Is-TestOrFixtureFile $_)
+  })
+}
+$runtimeFiles = Get-SourceFiles -Root $frontendSrc
 
-$pageRuntimeFiles = @(Get-ChildItem -LiteralPath $pagesPath -Recurse -File -Include *.ts,*.tsx |
-  Where-Object { -not (Is-TestOrFixtureFile $_) })
+$pageRuntimeFiles = Get-SourceFiles -Root $pagesPath
 
 Assert-PageShellComposition -Files $pageRuntimeFiles
 
@@ -282,6 +292,8 @@ $featureAdapterRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontend
       $relative -match '^frontend/src/features/[^/]+/hooks/' -or
       $relative -match '^frontend/src/features/[^/]+/containers/' -or
       $relative -match '^frontend/src/features/[^/]+/use-[^/]+-model\.ts$' -or
+      $relative -match '^frontend/src/features/[^/]+/model/' -or
+      $relative -match '^frontend/src/features/[^/]+/[a-z0-9-]*hooks\.ts$' -or
       $relative -in @(
         'frontend/src/features/analysis/extraction-runner.ts',
         'frontend/src/features/analysis/refresh.ts',
@@ -311,6 +323,14 @@ $storeRuntimeRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSr
   Where-Object { -not (Is-TestOrFixtureFile $_) } |
   ForEach-Object { Get-RelativePath $_.FullName })
 
+$apiModuleRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "lib/api") -Recurse -File -Include *.ts,*.tsx |
+  Where-Object { -not (Is-TestOrFixtureFile $_) } |
+  ForEach-Object { Get-RelativePath $_.FullName })
+
+$sharedTableRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc "components/tables") -Recurse -File -Include *.ts,*.tsx |
+  Where-Object { -not (Is-TestOrFixtureFile $_) } |
+  ForEach-Object { Get-RelativePath $_.FullName })
+
 $sharedComponentAdapterAllowedPaths = @(
   'frontend/src/components/layout/AppShell.tsx',
   'frontend/src/components/layout/BottomDrawer.tsx',
@@ -318,7 +338,7 @@ $sharedComponentAdapterAllowedPaths = @(
   'frontend/src/lib/api/client.ts',
   'frontend/src/lib/events/tauri-bridge.ts',
   'frontend/src/lib/platform/dialog.ts'
-) + $featureAdapterRelativePaths + $storeRuntimeRelativePaths
+) + $featureAdapterRelativePaths + $storeRuntimeRelativePaths + $apiModuleRelativePaths
 
 $apiClient = Get-Content -LiteralPath $apiClientPath -Raw -Encoding UTF8
 Assert-Matches `
@@ -370,7 +390,8 @@ Assert-NoMatchesInRuntimeFiles `
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/lib/api/(?!client['""]|mcp['""])[^'""]+['""]" `
-  -AllowedRelativePaths $featureAdapterRelativePaths `
+  -AllowedRelativePaths ($featureAdapterRelativePaths + $apiModuleRelativePaths) `
+  -SkipTypeOnlyImports `
   -Message "Frontend runtime code must import business API modules only from feature hooks, models, or containers"
 
 Assert-NoMatchesInRuntimeFiles `
@@ -431,6 +452,7 @@ Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/(?:lib/api|lib/platform|stores)/|from\s+['""]@tauri-apps/" `
   -AllowedRelativePaths $sharedComponentAdapterAllowedPaths `
+  -SkipTypeOnlyImports `
   -Message "Shared components and pages must not import API, platform adapters, stores, or Tauri directly; move containers to feature layer"
 
 Assert-NoMatchesInRuntimeFiles `
@@ -455,10 +477,7 @@ Assert-DenseDataTableViewportFrames -Files $runtimeFiles
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/app/components/ui/table['""]" `
-  -AllowedRelativePaths @(
-    'frontend/src/components/tables/DenseDataTable.tsx',
-    'frontend/src/components/tables/DenseDataTableRow.tsx'
-  ) `
+  -AllowedRelativePaths $sharedTableRelativePaths `
   -Message "Feature/page code must not import low-level Table primitives directly; use DenseDataTable or a semantic summary component"
 
 Assert-NoMatchesInRuntimeFiles `
@@ -479,7 +498,9 @@ Assert-NoMatchesInRuntimeFiles `
     'frontend/src/components/tree/TreeContextMenu.tsx',
     'frontend/src/components/tree/TreeSearch.tsx',
     'frontend/src/features/cache-invalidation.ts',
-    'frontend/src/features/search/use-search-workspace-model.ts'
+    'frontend/src/features/search/use-search-workspace-model.ts',
+    'frontend/src/components/tables/useDenseTableFilter.ts',
+    'frontend/src/features/mcp/use-mcp-clipboard.ts'
   ) `
   -Message "Frontend runtime code must not fake business latency with setTimeout"
 
@@ -493,5 +514,105 @@ Assert-NoMatchesInRuntimeFiles `
     'frontend/src/lib/saved-queries.ts'
   ) `
   -Message "Frontend runtime code must not use Math.random for business/mock data"
+
+$styleExemptRuntimeFiles = @($runtimeFiles | Where-Object {
+  (Get-RelativePath $_.FullName) -notmatch '^frontend/src/(styles|design)/'
+})
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $styleExemptRuntimeFiles `
+  -Pattern '#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\s*\(' `
+  -Message "UI colours must come from the central theme tokens (frontend/src/styles/theme.css), not literal colour values in source"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $styleExemptRuntimeFiles `
+  -Pattern '@keyframes\b|animation-duration\s*:' `
+  -Message "Motion must be defined centrally (frontend/src/styles), not as keyframes inside feature source"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '<svg\b' `
+  -AllowedRelativePaths @('frontend/src/features/graph/visualization/ForceGraph.tsx') `
+  -Message "SVG assets must live under frontend/src/assets; inline SVG is only allowed for reviewed data-driven canvases"
+
+# Hardcoded-copy baseline: these files still carry user-facing text outside i18n. The list
+# may only shrink; any file not listed here that carries hardcoded copy fails the guard.
+$hardcodedCopyBaseline = @(
+  'frontend/src/components/preview/FilePreviewDialog.tsx',
+  'frontend/src/components/preview/FilePreviewTabs.tsx',
+  'frontend/src/components/tables/DenseDataTable.tsx',
+  'frontend/src/components/tree/TreeConnector.tsx',
+  'frontend/src/components/tree/TreeSearch.tsx',
+  'frontend/src/components/viewers/AudioViewer.tsx',
+  'frontend/src/components/viewers/ImageViewer.tsx',
+  'frontend/src/components/viewers/TextViewer.tsx',
+  'frontend/src/components/viewers/VideoViewer.tsx',
+  'frontend/src/features/analysis/components/AnalysisProgressDrawer.tsx',
+  'frontend/src/features/analysis/components/ClusterView.tsx',
+  'frontend/src/features/analysis/components/CorrelationPanel.tsx',
+  'frontend/src/features/analysis/components/CorrelationWorkspace.tsx',
+  'frontend/src/features/analysis/components/LeadDetail.tsx',
+  'frontend/src/features/analysis/components/LeadList.tsx',
+  'frontend/src/features/analysis/components/LimitationsPanel.tsx',
+  'frontend/src/features/analysis/components/panels/ClassificationPanel.tsx',
+  'frontend/src/features/analysis/components/panels/ClassificationSubcategoryTable.tsx',
+  'frontend/src/features/analysis/components/panels/EmailExtractionPanel.tsx',
+  'frontend/src/features/analysis/components/panels/EventLogPanel.tsx',
+  'frontend/src/features/analysis/components/panels/FileClassificationBoard.tsx',
+  'frontend/src/features/analysis/components/panels/helpers.tsx',
+  'frontend/src/features/analysis/components/panels/SystemInfoPanel.tsx',
+  'frontend/src/features/analysis/components/V2GovernancePanels.tsx',
+  'frontend/src/features/analysis/components/V2WorkbenchWorkspace.tsx',
+  'frontend/src/features/analysis/components/VerificationPanel.tsx',
+  'frontend/src/features/analysis/wechat/mappers.ts',
+  'frontend/src/features/case/hooks.ts',
+  'frontend/src/features/files/components/FileEntryContextMenu.tsx',
+  'frontend/src/features/files/components/FileExtractionDialog.tsx',
+  'frontend/src/features/files/components/FileExtractionResultDialog.tsx',
+  'frontend/src/features/files/components/FileIconWithStatusOverlay.tsx',
+  'frontend/src/features/files/components/FileListPanel.tsx',
+  'frontend/src/features/files/components/FilePreviewPanel.tsx',
+  'frontend/src/features/files/components/FileTreePanel.tsx',
+  'frontend/src/features/files/components/FileVisibilityToggle.tsx',
+  'frontend/src/features/files/components/VirtualFileTree.tsx',
+  'frontend/src/features/files/hooks/use-bitlocker-volume.ts',
+  'frontend/src/features/files/hooks/use-file-extraction.ts',
+  'frontend/src/features/files/hooks/use-file-preview.ts',
+  'frontend/src/features/files/hooks/use-image-mount-model.ts',
+  'frontend/src/features/infrastructure/model/cluster-status-map.ts',
+  'frontend/src/features/jobs/components/BottomDrawer.tsx',
+  'frontend/src/features/recovery/hooks.ts',
+  'frontend/src/features/reports/components/ReportsWorkspace.tsx',
+  'frontend/src/features/reports/use-reports-workspace-model.ts',
+  'frontend/src/features/search/components/SearchWorkspace.tsx',
+  'frontend/src/features/timeline/components/TimelineHistogram.tsx',
+  'frontend/src/features/timeline/components/TimelineWorkspace.tsx',
+  'frontend/src/lib/api/client.ts',
+  'frontend/src/lib/file-icons.ts',
+  'frontend/src/lib/partition-display.ts',
+  'frontend/src/stores/mcp-error-utils.ts'
+)
+
+$hardcodedCopyViolations = @()
+foreach ($file in $styleExemptRuntimeFiles) {
+  $relative = Get-RelativePath $file.FullName
+  if ($hardcodedCopyBaseline -contains $relative) {
+    continue
+  }
+  $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+  foreach ($line in ($content -split "\r?\n")) {
+    $trimmed = $line.Trim()
+    if ($trimmed.StartsWith('//') -or $trimmed.StartsWith('*') -or $trimmed.StartsWith('/*')) {
+      continue
+    }
+    if ($trimmed -match '[\u4e00-\u9fff]') {
+      $hardcodedCopyViolations += "${relative}: $trimmed"
+      break
+    }
+  }
+}
+if ($hardcodedCopyViolations.Count -gt 0) {
+  throw "User-facing copy must go through i18n keys; these files carry hardcoded text outside the tracked baseline`n$($hardcodedCopyViolations -join "`n")"
+}
 
 Write-Host "Frontend runtime guard passed: invoke boundary, runtime mock/demo residue, fake latency, and business random data are locked"

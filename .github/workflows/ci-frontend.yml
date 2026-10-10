@@ -26,6 +26,17 @@ jobs:
         run: pnpm --dir frontend typecheck
       - name: Lint
         run: pnpm --dir frontend lint
+      - name: Frontend architecture guard (layering, UI primitives, centralised assets)
+        shell: pwsh
+        run: ./scripts/check-frontend-runtime-guard.ps1
+      - name: IPC contract guards (DTO mirror, event topics)
+        shell: pwsh
+        run: |
+          ./scripts/check-dto-drift.ps1
+          ./scripts/check-event-topic-drift.ps1
+      - name: Media protocol guard
+        shell: pwsh
+        run: ./scripts/check-media-protocol-guard.ps1
       - name: Build
         run: pnpm --dir frontend build
       - name: Test

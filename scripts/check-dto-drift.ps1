@@ -98,16 +98,32 @@ Get-ChildItem -LiteralPath $typesDir -Filter '*.ts' -File |
   ForEach-Object {
     $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
 
-    $ifaceMatches = [regex]::Matches($content, '(?s)export\s+interface\s+(\w+)\s*\{(.*?)\n\}')
+    # Brace-counted so a one-line interface (e.g. `export interface X { a: string; }`) no
+    # longer swallows the following interfaces into its captured body - that bug produced
+    # a phantom drift report for RegistryBrowserValueDto.
+    $ifaceMatches = [regex]::Matches($content, 'export\s+interface\s+(\w+)\s*\{')
     foreach ($m in $ifaceMatches) {
       $ifaceName = $m.Groups[1].Value
-      $body = $m.Groups[2].Value
+      $bodyStart = $m.Index + $m.Length
+      $depth = 1
+      $cursor = $bodyStart
+      while ($cursor -lt $content.Length -and $depth -gt 0) {
+        $ch = $content[$cursor]
+        if ($ch -eq '{') { $depth++ } elseif ($ch -eq '}') { $depth-- }
+        $cursor++
+      }
+      $bodyLength = [Math]::Max(0, $cursor - $bodyStart - 1)
+      $body = $content.Substring($bodyStart, $bodyLength)
+
+      # Comments may contain "word:" prose (e.g. "Log origin: ..."), which would be read as
+      # a phantom field, so strip them before scanning.
+      $body = [regex]::Replace($body, '/\*[\s\S]*?\*/|//[^\n]*', '')
 
       $fields = New-Object System.Collections.Generic.List[string]
-      foreach ($line in ($body -split "`r?`n")) {
-        if ($line -match '^\s*(\w+)\??\s*:') {
-          $fields.Add($matches[1])
-        }
+      # Field scan over the whole body, not per line: one-line interfaces (all fields on a
+      # single line) are valid and must contribute every field, not just the first.
+      foreach ($fm in [regex]::Matches($body, '(?:^|[\s;{])(\w+)\??\s*:')) {
+        $fields.Add($fm.Groups[1].Value)
       }
 
       if ($fields.Count -gt 0) {
