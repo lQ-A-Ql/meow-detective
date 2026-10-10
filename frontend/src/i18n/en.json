@@ -898,13 +898,39 @@
     "openButton": "Import Data Source",
     "title": "Import Data Source",
     "steps": {
-      "platform": "Step 1/2: Select target platform",
-      "form": "Step 2/2: Enter data source details"
+      "platform": "Step 1/4: Select target platform",
+      "source": "Step 2/4: Select source type",
+      "config": "Step 3/4: Path and configuration",
+      "confirm": "Step 4/4: Confirm the import"
     },
     "stepperLabel": "Import steps",
     "stepper": {
       "platform": "Platform",
-      "source": "Source"
+      "source": "Source",
+      "config": "Config",
+      "confirm": "Confirm"
+    },
+    "sourceTitle": "Source Type",
+    "configTitle": "Path and Configuration",
+    "confirmTitle": "Import Confirmation",
+    "confirmRows": {
+      "platform": "Platform",
+      "sourceType": "Source type",
+      "path": "Evidence path",
+      "size": "Estimated size",
+      "readOnly": "Read-only",
+      "partitions": "Contains partitions",
+      "stages": "Expected import stages"
+    },
+    "confirmValues": {
+      "sizeUnknown": "Determined after the image header is read",
+      "readOnlyYes": "Yes - opened read-only, the original evidence is never written",
+      "partitionsSingle": "Yes - each volume is parsed from the partition table",
+      "partitionsSet": "Each member image is parsed on its own",
+      "partitionsDisk": "Yes - the physical disk partition table",
+      "stages": "Catalog -> Graph -> Platform analysis -> Artifacts -> Timeline -> Search",
+      "notSelected": "Not selected",
+      "notFilled": "Not filled"
     },
     "platformHint": "Select an evidence platform to continue configuring the source",
     "fields": {

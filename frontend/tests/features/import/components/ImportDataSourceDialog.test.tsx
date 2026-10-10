@@ -24,7 +24,7 @@ describe('ImportDataSourceDialog', () => {
     mocks.pickDirectoryPath.mockResolvedValue(undefined);
   });
 
-  function advanceToForm() {
+  function clickNext() {
     fireEvent.click(screen.getByRole('button', { name: /下一步/ }));
   }
 
@@ -33,7 +33,23 @@ describe('ImportDataSourceDialog', () => {
   }
 
   function clickImport() {
-    fireEvent.click(screen.getByRole('button', { name: /^导入$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^导入$|导入中/ }));
+  }
+
+  /** Platform -> source. */
+  function advanceToSource() {
+    clickNext();
+  }
+
+  /** Platform -> source -> path/config. */
+  function advanceToConfig() {
+    clickNext();
+    clickNext();
+  }
+
+  /** path/config -> confirmation (the path must already be filled). */
+  function advanceToConfirm() {
+    clickNext();
   }
 
   it('renders the platform selection step on open', () => {
@@ -41,6 +57,7 @@ describe('ImportDataSourceDialog', () => {
 
     expect(screen.getByLabelText('Windows')).toBeDefined();
     expect(screen.getByLabelText('Linux')).toBeDefined();
+    expect(screen.getByLabelText('Android')).toBeDefined();
   });
 
   it('preserves the shared dialog fixed viewport positioning', () => {
@@ -51,18 +68,22 @@ describe('ImportDataSourceDialog', () => {
     expect(content?.classList.contains('relative')).toBe(false);
   });
 
-  it('advances to the form step when clicking next', () => {
+  it('advances to the source step, then to the path and configuration step', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToSource();
+    expect(screen.getByLabelText('单源镜像')).toBeDefined();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
 
+    advanceToConfig();
     expect(screen.getAllByRole('textbox')).toHaveLength(2);
   });
 
-  it('goes back to platform step from form step', () => {
+  it('goes back to the platform step from the form step', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToConfig();
+    clickBack();
     clickBack();
 
     expect(screen.getByLabelText('Windows')).toBeDefined();
@@ -71,8 +92,8 @@ describe('ImportDataSourceDialog', () => {
   it('shows error when importing with empty path', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
-    clickImport();
+    advanceToConfig();
+    clickNext();
 
     expect(screen.getByText('请选择数据源路径')).toBeDefined();
     expect(baseProps.onImport).not.toHaveBeenCalled();
@@ -82,10 +103,11 @@ describe('ImportDataSourceDialog', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
     fireEvent.click(screen.getByLabelText('Linux'));
-    advanceToForm();
+    advanceToConfig();
     const [nameInput, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(nameInput, { target: { value: '  ubuntu-server  ' } });
     fireEvent.change(pathInput, { target: { value: '  /path/to/source  ' } });
+    advanceToConfirm();
     clickImport();
 
     expect(baseProps.onImport).toHaveBeenCalledWith({
@@ -99,11 +121,13 @@ describe('ImportDataSourceDialog', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
     fireEvent.click(screen.getByLabelText('Linux'));
-    advanceToForm();
+    advanceToSource();
     fireEvent.click(screen.getByLabelText('Linux 证据集合'));
+    advanceToConfig();
     const [nameInput, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(nameInput, { target: { value: '  pve-cluster  ' } });
     fireEvent.change(pathInput, { target: { value: '  D:/pve/images  ' } });
+    advanceToConfirm();
     clickImport();
 
     expect(baseProps.onImport).toHaveBeenCalledWith({
@@ -117,9 +141,10 @@ describe('ImportDataSourceDialog', () => {
   it('omits profile when the optional profile field is blank', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToConfig();
     const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(pathInput, { target: { value: 'C:/evidence/win.E01' } });
+    advanceToConfirm();
     clickImport();
 
     expect(baseProps.onImport).toHaveBeenCalledWith({
@@ -129,10 +154,30 @@ describe('ImportDataSourceDialog', () => {
     });
   });
 
+  it('shows the confirmation summary before the import starts', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    advanceToConfig();
+    const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
+    fireEvent.change(pathInput, { target: { value: 'C:/evidence/win.E01' } });
+    advanceToConfirm();
+
+    expect(screen.getByText('证据路径')).toBeDefined();
+    expect(screen.getAllByText('C:/evidence/win.E01').length).toBeGreaterThan(0);
+    expect(screen.getByText('预计大小')).toBeDefined();
+    expect(screen.getByText('是否只读')).toBeDefined();
+    expect(screen.getByText('是否包含分区')).toBeDefined();
+    expect(screen.getByText('预计导入阶段')).toBeDefined();
+    expect(screen.getByText('单源镜像')).toBeDefined();
+  });
+
   it('shows loading state when import is pending', () => {
     render(createElement(ImportDataSourceDialog, { ...baseProps, importPending: true }));
 
-    advanceToForm();
+    advanceToConfig();
+    const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
+    fireEvent.change(pathInput, { target: { value: 'C:/evidence/win.E01' } });
+    advanceToConfirm();
 
     expect(screen.getByRole('button', { name: /^导入$|导入中/ })).toHaveProperty('disabled', true);
   });
@@ -140,11 +185,11 @@ describe('ImportDataSourceDialog', () => {
   it('preserves form values when going back and forward between steps', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToConfig();
     const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(pathInput, { target: { value: '/test/path' } });
     clickBack();
-    advanceToForm();
+    clickNext();
 
     expect((screen.getAllByRole('textbox')[1] as HTMLInputElement).value).toBe('/test/path');
   });
@@ -158,7 +203,7 @@ describe('ImportDataSourceDialog', () => {
   it('calls native file picker when file button is clicked', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToConfig();
     fireEvent.click(screen.getByRole('button', { name: '文件' }));
 
     expect(mocks.pickSourcePath).toHaveBeenCalledWith('数据源');
@@ -167,7 +212,7 @@ describe('ImportDataSourceDialog', () => {
   it('calls native directory picker when directory button is clicked', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToConfig();
     fireEvent.click(screen.getByRole('button', { name: '目录' }));
 
     expect(mocks.pickDirectoryPath).toHaveBeenCalledOnce();
@@ -177,7 +222,7 @@ describe('ImportDataSourceDialog', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
     fireEvent.click(screen.getByLabelText('Linux'));
-    advanceToForm();
+    advanceToConfig();
 
     expect(screen.getByRole('button', { name: '集群目录' })).toBeDefined();
   });
@@ -188,13 +233,16 @@ describe('ImportDataSourceDialog', () => {
     ]);
     render(createElement(ImportDataSourceDialog, { ...baseProps, listLocalDisks }));
 
-    advanceToForm();
+    advanceToSource();
     fireEvent.click(screen.getByLabelText('本地物理磁盘'));
+    advanceToConfig();
     const selector = await screen.findByRole('combobox', { name: '本地物理磁盘' });
 
     expect(listLocalDisks).toHaveBeenCalledOnce();
-    expect(selector).toHaveTextContent('\\\\.\\PhysicalDrive0');
+    expect(selector).toHaveTextContent('PhysicalDrive0');
 
+    advanceToConfirm();
+    expect(screen.getByText(/GB/)).toBeDefined();
     clickImport();
     expect(baseProps.onImport).toHaveBeenCalledWith({
       sourcePath: '\\\\.\\PhysicalDrive0',
@@ -207,11 +255,11 @@ describe('ImportDataSourceDialog', () => {
   it('resets a Windows-only mode when switching to Linux', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
-    advanceToForm();
+    advanceToSource();
     fireEvent.click(screen.getByLabelText('本地物理磁盘'));
-    fireEvent.click(screen.getByRole('button', { name: /上一步/ }));
+    clickBack();
     fireEvent.click(screen.getByLabelText('Linux'));
-    advanceToForm();
+    advanceToSource();
 
     expect(screen.getByLabelText('单源镜像')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText('本地物理磁盘')).toBeNull();

@@ -290,8 +290,10 @@ describe('CaseHome page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '导入数据源' }));
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
     const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(pathInput, { target: { value: 'D:/evidence/disk.E01' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
     fireEvent.click(screen.getByRole('button', { name: '导入' }));
 
     expect(mutate).toHaveBeenCalledWith(
@@ -302,7 +304,7 @@ describe('CaseHome page', () => {
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
-    await waitFor(() => expect(screen.queryByText('步骤 2/2：填写数据源信息')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('步骤 4/4：确认导入信息')).toBeNull());
   });
 
   it('formats partition names with the shared partition display formatter', async () => {

@@ -898,13 +898,39 @@
     "openButton": "导入数据源",
     "title": "导入数据源",
     "steps": {
-      "platform": "步骤 1/2：选择目标平台",
-      "form": "步骤 2/2：填写数据源信息"
+      "platform": "步骤 1/4：选择目标平台",
+      "source": "步骤 2/4：选择来源类型",
+      "config": "步骤 3/4：填写路径与配置",
+      "confirm": "步骤 4/4：确认导入信息"
     },
     "stepperLabel": "导入步骤",
     "stepper": {
       "platform": "平台",
-      "source": "来源"
+      "source": "来源",
+      "config": "配置",
+      "confirm": "确认"
+    },
+    "sourceTitle": "来源类型",
+    "configTitle": "路径与配置",
+    "confirmTitle": "导入确认",
+    "confirmRows": {
+      "platform": "平台",
+      "sourceType": "来源类型",
+      "path": "证据路径",
+      "size": "预计大小",
+      "readOnly": "是否只读",
+      "partitions": "是否包含分区",
+      "stages": "预计导入阶段"
+    },
+    "confirmValues": {
+      "sizeUnknown": "读取镜像头后确定",
+      "readOnlyYes": "是 · 只读打开，原始证据不写入",
+      "partitionsSingle": "是 · 按分区表逐卷解析",
+      "partitionsSet": "逐个成员镜像独立解析",
+      "partitionsDisk": "是 · 物理磁盘分区表",
+      "stages": "目录 → 图谱 → 平台分析 → 痕迹提取 → 时间线 → 索引",
+      "notSelected": "未选择",
+      "notFilled": "未填写"
     },
     "platformHint": "选择证据平台后继续配置来源",
     "fields": {
