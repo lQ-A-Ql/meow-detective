@@ -1,14 +1,18 @@
 import { Activity, BarChart3, GitBranch, Layers, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { GraphVisualizationContainer } from '@/features/graph/containers/GraphVisualizationContainer';
-import { MetricCard } from '@/components/data-display';
+import { MetricCard, StatGrid } from '@/components/data-display';
 import type { GraphSnapshot } from '@/types/models';
 
 export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined }) {
   const { t } = useTranslation();
   return (
     <section>
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+      <StatGrid
+        collapseZeros
+        hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })}
+        className="mt-3 grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5"
+      >
         {data ? (
           <>
             <MetricCard label={t('dashboard.graph.nodes')} value={data.totalNodes} icon={GitBranch} size="lg" />
@@ -23,7 +27,7 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
             <MetricCard label={t('dashboard.graph.nodeTypes')} value={Object.keys(data.nodeCountByType ?? {}).length} icon={Shield} size="lg" />
           </>
         ) : null}
-      </div>
+      </StatGrid>
       {data ? (
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>

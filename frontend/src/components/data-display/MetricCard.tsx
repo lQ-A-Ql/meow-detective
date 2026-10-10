@@ -1,3 +1,4 @@
+import { Children, isValidElement } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
@@ -54,10 +55,36 @@ export function MetricCard({
   );
 }
 
-export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
+export function StatGrid({
+  children,
+  className,
+  collapseZeros = false,
+  hiddenNote,
+}: {
+  children: ReactNode;
+  className?: string;
+  /**
+   * Hide zero-valued tiles when the grid also carries real values, and say how many were
+   * hidden. A grid where everything is zero still renders every tile, so a board section can
+   * never become an empty shell.
+   */
+  collapseZeros?: boolean;
+  hiddenNote?: (hidden: number) => ReactNode;
+}) {
+  const items = Children.toArray(children);
+  const valueOf = (node: ReactNode) => (isValidElement(node) ? (node.props as { value?: ReactNode }).value : undefined);
+  const isZero = (value: ReactNode) => value === 0 || value === '0';
+  const nonZero = items.filter((node) => !isZero(valueOf(node)));
+  const collapse = collapseZeros && nonZero.length > 0;
+  const rendered = collapse ? nonZero : items;
+  const hidden = items.length - rendered.length;
+
   return (
     <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4', className)}>
-      {children}
+      {rendered}
+      {hidden > 0 && hiddenNote ? (
+        <div className="col-span-full text-[10px] text-forensics-muted-lighter">{hiddenNote(hidden)}</div>
+      ) : null}
     </div>
   );
 }

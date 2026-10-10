@@ -1,22 +1,15 @@
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import type { LocalSettings } from '@/lib/settings';
 
 interface UiDebugSectionProps {
   devEventTrace: boolean;
-  savingSettings: boolean;
-  settingsMessage: string;
   setSettings: React.Dispatch<React.SetStateAction<LocalSettings>>;
-  onSave: () => void;
 }
 
 export function UiDebugSection({
   devEventTrace,
-  savingSettings,
-  settingsMessage,
   setSettings,
-  onSave,
 }: UiDebugSectionProps) {
   const { t } = useTranslation();
 
@@ -39,18 +32,6 @@ export function UiDebugSection({
           />
           {t('settings.sections.uiDebug.devEventTrace')}
         </label>
-        <Button
-          type="button"
-          variant="forensicsPrimary"
-          size="sm"
-          onClick={onSave}
-          disabled={savingSettings}
-        >
-          {savingSettings ? t('settings.saving') : t('settings.save')}
-        </Button>
-        {settingsMessage ? (
-          <span className="text-[11px] text-forensics-muted">{settingsMessage}</span>
-        ) : null}
       </div>
     </section>
   );

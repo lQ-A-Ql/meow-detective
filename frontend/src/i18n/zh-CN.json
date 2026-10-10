@@ -234,7 +234,8 @@
       "nodeTypes": "节点类型数",
       "byNodeType": "按节点类型",
       "byEdgeType": "按边类型"
-    }
+    },
+    "metricsHidden": "其余 {{count}} 项均为 0"
   },
   "rulePacks": {
     "title": "规则包管理",
@@ -1001,6 +1002,18 @@
         "fullTextIndex": "全文索引",
         "mcpProtocol": "MCP 协议"
       }
+    },
+    "anchors": {
+      "label": "设置分区",
+      "storage": "存储路径",
+      "performance": "导入性能",
+      "preview": "预览",
+      "ui": "界面与调试",
+      "mcp": "AI 助手（MCP）",
+      "system": "系统信息"
+    },
+    "actions": {
+      "save": "保存设置"
     }
   },
   "sidebar": {

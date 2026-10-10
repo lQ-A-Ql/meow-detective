@@ -234,7 +234,8 @@
       "nodeTypes": "Node types",
       "byNodeType": "By node type",
       "byEdgeType": "By edge type"
-    }
+    },
+    "metricsHidden": "{{count}} remaining metrics are zero"
   },
   "rulePacks": {
     "title": "Rule-pack management",
@@ -1001,6 +1002,18 @@
         "fullTextIndex": "full-text index",
         "mcpProtocol": "MCP Protocol"
       }
+    },
+    "anchors": {
+      "label": "Settings sections",
+      "storage": "Storage paths",
+      "performance": "Import performance",
+      "preview": "Preview",
+      "ui": "Interface and debugging",
+      "mcp": "AI assistant (MCP)",
+      "system": "System information"
+    },
+    "actions": {
+      "save": "Save settings"
     }
   },
   "sidebar": {
