@@ -80,7 +80,7 @@ export function VerificationDashboard({ snapshot }: { snapshot: import('@/types/
                 <div className="text-[13px] font-light text-forensics-text">{chain.displayName}</div>
                 <div className="mt-1 font-mono text-[10px] text-forensics-muted">{chain.chain}</div>
               </div>
-              <span className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
+              <span className="rounded-none bg-transparent px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
                 {resultLabel(chain.result, t)}
               </span>
             </div>
@@ -116,7 +116,7 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
         <Gauge size={16} />
         {t('v2Governance.benchmark.title')}
       </div>
-      <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+      <div className="rounded-none bg-transparent p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Metric label={t('v2Governance.benchmark.hostProfile')} value={benchmark.hostProfile} />
           <Metric label={t('browser.columns.version')} value={benchmark.baselineVersion} />
@@ -129,7 +129,7 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
           {benchmark.scenarios.map((scenario) => (
-            <div key={`${scenario.datasetLevel}-${scenario.scenario}`} className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+            <div key={`${scenario.datasetLevel}-${scenario.scenario}`} className="bg-transparent py-3">
               <div className="text-[12px] font-light text-forensics-text">{scenario.scenario}</div>
               <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{scenario.datasetLevel}</div>
               <div className="mt-3 text-[22px] font-light text-forensics-text">{scenario.p95Ms}ms</div>
@@ -141,7 +141,7 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
             </div>
           ))}
         </div>
-        <div className="mt-4 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+        <div className="mt-4 bg-transparent py-3">
           <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Required Checks</div>
           <div className="space-y-2">
             {benchmark.requiredChecks.map((check) => (
@@ -168,24 +168,24 @@ export function SupportMatrixPanel({ entries }: { entries: ParserSupportMatrixEn
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {entries.map((entry) => (
-          <div key={entry.chain} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div key={entry.chain} className="rounded-none bg-transparent p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[13px] font-light text-forensics-text">{entry.chain}</div>
                 <div className="mt-1 text-[11px] text-forensics-muted">{entry.baseline}</div>
               </div>
-              <span className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
+              <span className="rounded-none bg-transparent px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
                 {maturityLabel(entry.maturity)}
               </span>
             </div>
-            <div className="mt-3 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+            <div className="mt-3 py-2 text-[11px] text-forensics-text-tertiary">
               {entry.guaranteeSummary}
             </div>
             <div className="mt-3">
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Verified Samples</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {entry.verifiedSamples.map((sample) => (
-                  <span key={`${entry.chain}-${sample}`} className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span key={`${entry.chain}-${sample}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
                     {sample}
                   </span>
                 ))}
@@ -239,7 +239,7 @@ function BenchmarkRequiredCheckRow({ check }: { check: BenchmarkRequiredCheck })
       : t('v2Governance.benchmark.notMeasured');
 
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+    <div className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="font-light text-forensics-text">{check.scenario}</div>

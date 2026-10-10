@@ -20,7 +20,7 @@ interface LaunchPanelProps {
 export function LaunchPanelShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
-    <section className="border-b border-forensics-border p-5 xl:border-b-0 xl:border-r">
+    <section className="border-b border-forensics-divider p-5 xl:border-b-0 xl:border-r">
       <div className="mb-5 flex items-center gap-2">
         <Disc3 className="size-4 text-forensics-primary-blue" />
         <h2 className="text-[14px] text-forensics-text">{t('emulationPage.launch.title')}</h2>

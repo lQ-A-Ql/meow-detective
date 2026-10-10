@@ -27,7 +27,7 @@ export function WorkloadEvidencePanel({
       <PanelFrame className="bg-forensics-surface">
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {groups.map(([kind, items]) => (
-            <div key={kind} className="border border-forensics-border bg-forensics-panel px-3 py-3">
+            <div key={kind} className="bg-transparent px-3 py-3">
               <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-xs text-forensics-text"><Server size={14} />{kindLabel(kind, t)}</div><span className="font-mono text-[11px] text-forensics-muted">{items.length}</span></div>
               <div className="mt-3 space-y-1">
                 {items.slice(0, 4).map((node) => <Button key={node.id} type="button" variant="forensicsGhost" size="inline" onClick={() => onSelect(node.id)} data-active={selectedId === node.id} className="h-auto w-full justify-between gap-3 border-l-2 border-transparent py-1 text-left text-[11px] data-[active=true]:border-forensics-primary-blue data-[active=true]:bg-forensics-hover"><span className="min-w-0 truncate">{node.name}</span><span className="shrink-0 text-[10px] text-forensics-muted">{stateLabel(node.status, t)}</span></Button>)}

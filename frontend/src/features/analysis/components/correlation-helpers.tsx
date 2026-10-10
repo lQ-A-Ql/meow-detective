@@ -117,7 +117,7 @@ export function FamilyPills({ families, testId }: { families: string[]; testId: 
       {families.map((family) => (
         <span
           key={`${testId}-${family}`}
-          className="rounded-none border border-forensics-border-strong bg-forensics-surface px-2 py-1 text-[10px] font-mono text-forensics-text-secondary"
+          className="bg-transparent px-2 py-1 text-[10px] font-mono text-forensics-text-secondary"
         >
           {family}
         </span>

@@ -7,7 +7,7 @@ export function WeChatLoadFooter({ state }: { state: WeChatLoadState }) {
   const { t } = useTranslation();
   if (state.total === 0 && !state.failed) return null;
   return (
-    <div className="flex min-h-9 items-center justify-between gap-3 border-t border-forensics-border bg-forensics-panel px-3 py-1.5 text-[11px]">
+    <div className="flex min-h-9 items-center justify-between gap-3 border-t border-forensics-line bg-forensics-panel px-3 py-1.5 text-[11px]">
       <span className="font-mono text-forensics-muted">
         {t('wechatWorkspace.loaded', { loaded: state.loaded, total: state.total })}
       </span>

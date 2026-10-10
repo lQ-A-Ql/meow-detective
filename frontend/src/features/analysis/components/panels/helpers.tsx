@@ -215,7 +215,7 @@ export function ExtractionTableSection({
         </div>
       </div>
       {notes && notes.length > 0 ? (
-        <div className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] leading-5 text-forensics-muted">
+        <div className="rounded-none bg-transparent px-3 py-2 text-[11px] leading-5 text-forensics-muted">
           {notes.map((note) => (
             <div key={note}>{note}</div>
           ))}
@@ -264,7 +264,7 @@ export function ProvenancePanel({
       {provenance.length > 0 ? (
         <div className="space-y-2">
           {provenance.map((item, index) => (
-            <div key={`${item.parser}-${item.artifactPath}-${index}`} className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-muted">
+            <div key={`${item.parser}-${item.artifactPath}-${index}`} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-muted">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={item.status} />
                 <span className="font-mono text-forensics-text-secondary">{item.parser || '-'}</span>

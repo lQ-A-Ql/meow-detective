@@ -24,7 +24,7 @@ function WindowsBypassFieldset({ model }: WindowsLaunchPanelProps) {
   const samInstalls = (model.preflight?.installs ?? []).filter((install) => install.samPresent);
   if (samInstalls.length === 0) return null;
   return (
-    <fieldset className="space-y-2 border-b border-forensics-border py-3">
+    <fieldset className="space-y-2 border-b border-forensics-divider py-3">
       <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.title')}</legend>
       <Select
         value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
@@ -129,7 +129,7 @@ function MaintenanceToolRow({ model }: WindowsLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.preflight) return null;
   return (
-    <div className="flex items-center gap-2 border-b border-forensics-border py-3 text-[11px]">
+    <div className="flex items-center gap-2 border-b border-forensics-divider py-3 text-[11px]">
       <Badge variant={model.preflight.maintenanceToolAvailable ? 'default' : 'secondary'}>
         {t(model.preflight.maintenanceToolAvailable
           ? 'emulationPage.maintenance.toolAvailable'
@@ -157,7 +157,7 @@ export function WindowsLaunchPanel({ model }: WindowsLaunchPanelProps) {
       <WindowsPreflightList model={model} />
       <MaintenanceToolRow model={model} />
       {model.recoveryIsoPath && model.preflight?.maintenanceToolAvailable === false ? (
-        <div className="border-b border-forensics-border py-3 text-[11px] text-forensics-warning-text">
+        <div className="border-b border-forensics-divider py-3 text-[11px] text-forensics-warning-text">
           {t('emulationPage.maintenance.peWithoutTool')}
         </div>
       ) : null}

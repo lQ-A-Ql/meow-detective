@@ -72,7 +72,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
         {info.networkAdapters.length > 0 ? (
           <div className="space-y-2">
             {info.networkAdapters.map((adapter) => (
-              <div key={adapter.name} className="rounded-none border border-forensics-border bg-forensics-panel p-3">
+              <div key={adapter.name} className="rounded-none bg-transparent p-3">
                 <div className="text-[12px] font-light">{adapter.name}</div>
                 <div className="mt-1 font-mono text-[11px] text-forensics-muted">
                   MAC: {adapter.macAddress ?? '-'}
@@ -96,7 +96,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
         {info.bootHistory.length > 0 ? (
           <div className="space-y-1">
             {info.bootHistory.map((boot) => (
-              <div key={`${boot.timestamp}-${boot.source}`} className="rounded-none border border-forensics-border bg-forensics-panel p-3 text-[12px]">
+              <div key={`${boot.timestamp}-${boot.source}`} className="rounded-none bg-transparent p-3 text-[12px]">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-mono text-forensics-muted">{boot.timestamp}</span>
                   <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 text-[10px]">

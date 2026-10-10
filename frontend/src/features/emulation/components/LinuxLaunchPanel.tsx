@@ -24,7 +24,7 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
   const linuxInstalls = (model.preflight?.installs ?? []).filter((install) => install.platform === 'linux');
   if (linuxInstalls.length === 0) return null;
   return (
-    <fieldset className="space-y-2 border-b border-forensics-border py-3">
+    <fieldset className="space-y-2 border-b border-forensics-divider py-3">
       <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.titleLinux')}</legend>
       <Select
         value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
@@ -189,7 +189,7 @@ function EfiFallbackRow({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.needsEfiFallback) return null;
   return (
-    <div className="border-b border-forensics-border py-3">
+    <div className="border-b border-forensics-divider py-3">
       <label className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
         <Checkbox
           checked={model.installEfiFallback}
@@ -209,7 +209,7 @@ function FsRepairRow({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.needsFsRepair) return null;
   return (
-    <div className="border-b border-forensics-border py-3">
+    <div className="border-b border-forensics-divider py-3">
       <label className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
         <Checkbox
           checked={model.repairFilesystems}

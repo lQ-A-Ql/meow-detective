@@ -225,7 +225,7 @@ function MessageStream({ conversation }: { conversation: WeChatConversation }) {
                 <div className={direction === 'outgoing'
                   ? 'border border-forensics-border-strong bg-forensics-800 px-3 py-2 text-white'
                   : direction === 'incoming'
-                    ? 'border border-forensics-border bg-forensics-surface px-3 py-2 text-forensics-text'
+                    ? 'bg-transparent px-3 py-2 text-forensics-text'
                     : 'border border-dashed border-forensics-border-strong bg-forensics-panel px-3 py-2 text-forensics-text'}>
                   <MessageBody message={message} />
                 </div>
@@ -260,8 +260,8 @@ export function WeChatChatsView({
   const { t, i18n } = useTranslation();
   return (
     <div className="grid h-[min(68vh,680px)] min-h-[520px] grid-cols-1 grid-rows-[220px_minmax(0,1fr)] border border-forensics-border lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-1">
-      <aside className="flex min-h-0 flex-col border-b border-forensics-border bg-forensics-panel lg:border-r lg:border-b-0">
-        <div className="flex h-10 items-center gap-2 border-b border-forensics-border px-3">
+      <aside className="flex min-h-0 flex-col border-b border-forensics-divider bg-forensics-panel lg:border-r lg:border-b-0">
+        <div className="flex h-10 items-center gap-2 border-b border-forensics-divider px-3">
           <Search className="size-4 shrink-0 text-forensics-muted" />
           <Input
             variant="search"
@@ -315,7 +315,7 @@ export function WeChatChatsView({
       <section className="flex min-h-0 flex-col bg-forensics-panel-strong">
         {selectedConversation ? (
           <>
-            <header className="flex h-12 shrink-0 items-center gap-3 border-b border-forensics-border bg-forensics-surface px-4">
+            <header className="flex h-12 shrink-0 items-center gap-3 border-b border-forensics-divider bg-forensics-surface px-4">
               <WeChatIdentity name={selectedConversation.displayName} />
               <div className="min-w-0">
                 <div className="truncate text-[12px] text-forensics-text">{selectedConversation.displayName}</div>

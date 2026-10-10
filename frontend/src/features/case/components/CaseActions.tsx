@@ -44,7 +44,7 @@ export function CaseWelcomeForms({
   const { t } = useTranslation();
   return (
     <ScrollArea className="min-h-0 flex-1 bg-forensics-surface" viewportClassName="flex min-h-full flex-col">
-      <div className="border-b border-forensics-border bg-forensics-panel p-8">
+      <div className="border-b border-forensics-divider bg-forensics-panel p-8">
         <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">{BRAND_DISPLAY_NAME}</div>
         <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
           {t('caseHome.welcome.description')}
@@ -52,7 +52,7 @@ export function CaseWelcomeForms({
       </div>
 
       <div className="grid grid-cols-2 gap-6 p-8">
-        <div className="border border-forensics-border bg-forensics-surface p-5">
+        <div className="bg-transparent p-5">
           <div className="text-[13px] font-light text-forensics-text-secondary mb-3">{t('caseHome.welcome.create.title')}</div>
           <div className="space-y-2 mb-3">
             <Input
@@ -86,7 +86,7 @@ export function CaseWelcomeForms({
           ) : null}
         </div>
 
-        <div className="border border-forensics-border bg-forensics-surface p-5">
+        <div className="bg-transparent p-5">
           <div className="text-[13px] font-light text-forensics-text-secondary mb-3">{t('caseHome.welcome.open.title')}</div>
           <div className="space-y-2 mb-3">
             <Input
@@ -114,8 +114,8 @@ export function CaseWelcomeForms({
       </div>
 
       <div className="px-8 pb-8">
-        <div className="border border-forensics-border bg-forensics-surface">
-          <div className="border-b border-forensics-border bg-forensics-panel px-5 py-3 flex items-center justify-between">
+        <div className="bg-transparent">
+          <div className="border-b border-forensics-divider bg-forensics-panel px-5 py-3 flex items-center justify-between">
             <div className="text-[13px] font-light text-forensics-text-secondary">{t('caseHome.welcome.recent.title')}</div>
             <div className="text-[10px] font-mono text-forensics-muted-light">{t('caseHome.count', { count: recentCases.length })}</div>
           </div>
@@ -193,7 +193,7 @@ export function ImportSection({
 }: ImportSectionProps) {
   const { t } = useTranslation();
   return (
-    <div className="border-b border-forensics-border bg-forensics-panel p-4 shrink-0">
+    <div className="border-b border-forensics-divider bg-forensics-panel p-4 shrink-0">
       <div className="flex items-center gap-3">
         <Input
           type="text"

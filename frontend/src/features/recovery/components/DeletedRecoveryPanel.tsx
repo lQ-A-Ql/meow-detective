@@ -348,7 +348,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               emptyDescription={t('recovery.empty.noCandidatesDescription')}
               />
             </DenseDataTableFrame>
-            <div className="flex shrink-0 items-center justify-between border-t border-forensics-border px-2 py-1 text-[10px] text-forensics-muted">
+            <div className="flex shrink-0 items-center justify-between border-t border-forensics-line px-2 py-1 text-[10px] text-forensics-muted">
               <span>
                 {model.hashSearch
                   ? t('recovery.pagination.hashMatches', { shown: model.recoveries.length, total: model.total })

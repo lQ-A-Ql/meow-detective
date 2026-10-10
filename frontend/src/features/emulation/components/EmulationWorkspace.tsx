@@ -94,9 +94,9 @@ function MetricsBand({ model }: EmulationWorkspaceProps) {
     ['failed', model.metrics.failedCount],
   ] as const;
   return (
-    <div className="grid grid-cols-2 border-b border-forensics-border bg-forensics-panel md:grid-cols-4">
+    <div className="grid grid-cols-2 border-b border-forensics-divider bg-forensics-panel md:grid-cols-4">
       {metrics.map(([key, value]) => (
-        <div key={key} className="min-w-0 border-r border-forensics-border px-5 py-3 last:border-r-0 even:border-r-0 md:even:border-r md:last:border-r-0">
+        <div key={key} className="min-w-0 border-r border-forensics-divider px-5 py-3 last:border-r-0 even:border-r-0 md:even:border-r md:last:border-r-0">
           <div className="font-mono text-lg text-forensics-text">{value}</div>
           <div className="mt-0.5 truncate text-[10px] uppercase text-forensics-muted">
             {t(`emulationPage.metrics.${key}`)}
@@ -129,7 +129,7 @@ function SessionsPanel({ model }: EmulationWorkspaceProps) {
         </div>
       ) : (
         <div className="overflow-x-auto border border-forensics-border">
-          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1.4fr)_140px_120px_minmax(180px,1fr)_52px] border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[10px] uppercase text-forensics-muted">
+          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1.4fr)_140px_120px_minmax(180px,1fr)_52px] border-b border-forensics-divider bg-forensics-panel px-4 py-2 text-[10px] uppercase text-forensics-muted">
             <span>{t('emulationPage.sessions.columns.source')}</span>
             <span>{t('emulationPage.sessions.columns.state')}</span>
             <span>{t('emulationPage.sessions.columns.size')}</span>

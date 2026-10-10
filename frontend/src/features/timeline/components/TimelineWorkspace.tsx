@@ -79,7 +79,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
         </div>
       </ContextBar>
 
-      <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-border bg-forensics-panel p-2">
+      <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-divider bg-forensics-panel p-2">
         <TimelineHistogram bars={model.bars} onSelectRange={model.selectTimeBucket} />
         <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-forensics-muted-light">
           <span>{model.timeRange.start}</span>

@@ -77,7 +77,7 @@ export function EvidenceClassificationPanel({
             const Icon = CATEGORY_ICONS[category.category] || Shield;
             const color = CATEGORY_COLORS[category.category] || 'var(--forensics-text-secondary)';
             return (
-              <section key={category.category} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+              <section key={category.category} className="rounded-none bg-transparent p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <TokenIcon icon={Icon} size={17} color={color} />
@@ -101,7 +101,7 @@ export function EvidenceClassificationPanel({
                 {category.sources.length > 0 ? (
                   <div className="space-y-2">
                     {category.sources.slice(0, 4).map((source) => (
-                      <div key={source.fileId} className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+                      <div key={source.fileId} className="bg-transparent px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="truncate font-mono text-[11px] text-forensics-text-secondary">{source.path}</div>
                           <span className="shrink-0 text-[10px] text-forensics-muted">{statusLabel(source.status)}</span>

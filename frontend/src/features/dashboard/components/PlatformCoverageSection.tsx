@@ -17,7 +17,7 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
             <MetricCard label={t('dashboard.platforms.crossPlatform')} value={data.crossPlatformArtifactFamilies} subtitle={t('dashboard.platforms.familyUnit')} icon={Globe} size="lg" />
             <MetricCard label={t('dashboard.platforms.unknown')} value={data.unknownArtifactFamilies} subtitle={t('dashboard.platforms.familyUnit')} icon={Layers} size="lg" />
           </StatGrid>
-          <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="mt-3 rounded-none bg-transparent p-4">
             <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.platforms.details')}</div>
             <div className="space-y-3">
               {data.windowsFamilies.length > 0 && (
@@ -27,7 +27,7 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.windowsFamilies.map((f) => (
-                      <span key={f} className="rounded-none border border-forensics-border bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
+                      <span key={f} className="rounded-none bg-transparent-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
                         {f}
                       </span>
                     ))}
@@ -41,7 +41,7 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.crossPlatformFamilies.map((f) => (
-                      <span key={f} className="rounded-none border border-forensics-border bg-forensics-info-bg px-2 py-0.5 font-mono text-[10px] text-forensics-info-text">
+                      <span key={f} className="rounded-badge border border-forensics-line-2 px-2 py-0.5 font-mono text-[10px] text-forensics-info-text">
                         {f}
                       </span>
                     ))}
@@ -55,7 +55,7 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.linuxFamilies.map((f) => (
-                      <span key={f} className="rounded-none border border-forensics-border bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
+                      <span key={f} className="rounded-none bg-transparent-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
                         {f}
                       </span>
                     ))}
@@ -66,7 +66,7 @@ export function PlatformCoverageSection({ data, isLoading, isError, error }: { d
                 <div>
                   <div className="mb-1 flex items-center gap-1.5 text-[11px] font-light text-forensics-text-tertiary"><Layers size={12} /> {t('dashboard.platforms.unknown')}</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {data.unknownFamilies.map((f) => <span key={f} className="rounded-none border border-forensics-border bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">{f}</span>)}
+                    {data.unknownFamilies.map((f) => <span key={f} className="rounded-none bg-transparent-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">{f}</span>)}
                   </div>
                 </div>
               )}

@@ -57,7 +57,7 @@ export function WeChatContactsView({
     : contacts;
   return (
     <div className="flex h-[min(68vh,680px)] min-h-[520px] flex-col border border-forensics-border">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-forensics-border bg-forensics-panel px-3">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-forensics-divider bg-forensics-panel px-3">
         <Search className="size-4 text-forensics-muted" />
         <Input
           variant="search"
@@ -196,7 +196,7 @@ export function WeChatMomentsView({
                   </div>
                 ) : null}
                 {moment.comments.map((comment, index) => (
-                  <div key={comment.commentId ?? `${comment.username}-${index}`} className="mt-1 border-l border-forensics-border pl-2 text-[10px] text-forensics-text-secondary">
+                  <div key={comment.commentId ?? `${comment.username}-${index}`} className="mt-1 border-l border-forensics-divider pl-2 text-[10px] text-forensics-text-secondary">
                     <span className="text-forensics-muted">
                       {comment.nickname ?? comment.username ?? t('wechatWorkspace.unknownSource')}
                       {comment.replyNickname ?? comment.replyUsername
@@ -281,7 +281,7 @@ export function WeChatFavoritesView({
             className="flex gap-3 border-b border-forensics-border-light px-4 py-3"
             title={`${favorite.sourcePath}\n${favorite.artifactId}`}
           >
-            <div className="flex size-10 shrink-0 items-center justify-center border border-forensics-border bg-forensics-panel">
+            <div className="flex size-10 shrink-0 items-center justify-center bg-transparent">
               <Bookmark className="size-4 text-forensics-muted" />
             </div>
             <div className="min-w-0 flex-1">

@@ -77,7 +77,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
           {model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? t('graph.selectAll') : t('graph.clearAll')}
         </Button>
         {ALL_EDGE_TYPES.map((type) => (
-          <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
+          <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none bg-transparent px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
             <Checkbox
               checked={model.selectedEdgeTypes.includes(type)}
               onCheckedChange={() => model.toggleEdgeType(type)}
@@ -90,7 +90,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
         ))}
       </div>
 
-      <div className="mt-3 flex h-[420px] overflow-hidden rounded-none border border-forensics-border bg-forensics-panel">
+      <div className="mt-3 flex h-[420px] overflow-hidden rounded-none bg-transparent">
         <div ref={canvasRef} className="relative flex-1">
           {!model.hasNodes && !model.isLoadingGraph ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-forensics-muted">
@@ -114,14 +114,14 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
           )}
           {model.isLoadingGraph ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
-              <div className="flex items-center gap-2 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] shadow-sm">
+              <div className="flex items-center gap-2 rounded-none bg-transparent px-3 py-2 text-[11px] shadow-sm">
                 <RefreshCw size={12} className="opacity-70" />{t('graph.loading')}
               </div>
             </div>
           ) : null}
         </div>
 
-        <ScrollArea className="min-h-0 w-64 shrink-0 border-l border-forensics-border bg-forensics-surface" viewportClassName="p-3">
+        <ScrollArea className="min-h-0 w-64 shrink-0 border-l border-forensics-divider bg-forensics-surface" viewportClassName="p-3">
           {model.selectedNode ? (
             <GraphNodeDetails
               node={model.selectedNode}
@@ -153,7 +153,7 @@ function GraphSummary({ model }: { model: GraphVisualizationModel }) {
       <p>{t('graph.help.selection')}</p>
       <p>{t('graph.help.navigation')}</p>
       {model.snapshot ? (
-        <div className="space-y-1 rounded-none border border-forensics-border bg-forensics-surface p-2">
+        <div className="space-y-1 rounded-none bg-transparent p-2">
           {[
             [t('graph.stats.dataSources'), model.snapshot.dataSourceCount],
             [t('graph.stats.crossSourceEntities'), model.snapshot.crossSourceEntityCount],

@@ -27,13 +27,13 @@ export function DataSourceCoverageSection({
         <MetricCard label={t('dashboard.sources.raw')} value={dataSources?.filter((ds) => ds.kind === 'raw').length ?? 0} subtitle={t('dashboard.sources.rawSubtitle')} size="lg" />
       </StatGrid>
       {dataSources && dataSources.length > 0 ? (
-        <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
+        <div className="mt-3 rounded-none bg-transparent p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.sources.details')}</div>
           <div className="space-y-2">
             {dataSources.map((ds) => (
               <div
                 key={ds.id}
-                className="flex items-center justify-between border-b border-forensics-hover pb-2 text-xs last:border-none last:pb-0"
+                className="flex items-center justify-between border-b border-forensics-line pb-2 text-xs last:border-none last:pb-0"
               >
                 <div className="min-w-0 flex-1 truncate">
                   <span className="font-mono text-forensics-text">{ds.name}</span>

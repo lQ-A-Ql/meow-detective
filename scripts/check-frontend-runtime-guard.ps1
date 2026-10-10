@@ -408,6 +408,33 @@ Assert-NoMatchesInRuntimeFiles `
   -AllowedRelativePaths @('frontend/src/app/components/AssetSlot.tsx') `
   -Message "Supplied artwork must be mounted through app/components/AssetSlot.tsx"
 
+# ---- v3.1 single-sheet visual contract ----
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '\brounded-(sm|md|lg|xl|2xl|3xl)\b' `
+  -Message "v3.1 radius ladder: use rounded-shell (20px, bottom-left), rounded-ctl (6px) or rounded-badge (4px)"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '\brounded-full\b' `
+  -AllowedRelativePaths @('frontend/src/components/navigation/ActivityBar.tsx') `
+  -Message "v3.1 radius ladder: the circular rail selection is the only rounded-full in the product"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '\b(bg|text|border|from|to|via|ring|fill|stroke)-[a-z-]*(gold|amber)' `
+  -Message "v3.1 removes gold: the only gold in the product is the 1px 40% section divider token"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern 'text-forensics-red(?!-(ink|deep|tint))\b|text-\[#ff0000\]|text-\[color:var\(--forensics-red\)\]' `
+  -Message "v3.1: pure red may not carry text; red text uses --forensics-red-ink or --forensics-red-deep"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files @('frontend/src/components/navigation/ActivityBar.tsx') `
+  -Pattern 'border-r' `
+  -Message "v3.1: the rail and the bottom bar share one base layer - no divider may be drawn between them"
+
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/lib/api/(?!client['""]|mcp['""])[^'""]+['""]" `

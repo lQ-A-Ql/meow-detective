@@ -48,7 +48,7 @@ export function ReleaseScorecardPanel({
         {t('v2Governance.scorecard.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-        <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+        <div className="rounded-none bg-transparent p-4">
           <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('v2Governance.scorecard.overall')}</div>
           <div className="mt-2 flex items-end gap-3">
             <div className="text-[40px] font-light text-forensics-text">{scorecard.totalScore}</div>
@@ -65,7 +65,7 @@ export function ReleaseScorecardPanel({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Database size={14} />
               {t('v2Governance.scorecard.runtimeSignals')}
@@ -87,18 +87,18 @@ export function ReleaseScorecardPanel({
               <Metric label={t('v2Governance.scorecard.failedJobs')} value={runtimeSummary.failedJobCount.toString()} />
               <Metric label={t('v2Governance.scorecard.warningDataSources')} value={runtimeSummary.warningDataSourceCount.toString()} />
             </div>
-            <div className="mt-3 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+            <div className="mt-3 bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
               {t('v2Governance.scorecard.snapshotStatus', {
                 status: runtimeSummary.correlationSnapshotAvailable
                   ? t('v2Governance.scorecard.snapshotGenerated')
                   : t('v2Governance.scorecard.snapshotNotGenerated'),
               })}
             </div>
-            <div className="mt-4 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+            <div className="mt-4 bg-transparent p-3">
               <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Correlation Family Coverage</div>
               <div className="space-y-2">
                 {runtimeSummary.correlationFamilyCoverage.map((item) => (
-                  <div key={item.family} className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+                  <div key={item.family} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-light text-forensics-text">{item.displayName}</div>
                       <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${coverageTone(item.status)}`}>
@@ -126,11 +126,11 @@ export function ReleaseScorecardPanel({
             </div>
           </div>
 
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 text-[12px] font-light text-forensics-text">{t('v2Governance.scorecard.breakdownTitle')}</div>
             <div className="space-y-3">
               {scorecard.breakdown.map((entry) => (
-                <div key={entry.dimension} className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+                <div key={entry.dimension} className="bg-transparent p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-[12px] font-light text-forensics-text">{entry.dimension}</div>
                     <div className="font-mono text-[11px] text-forensics-text-tertiary">

@@ -23,7 +23,7 @@ export function AppShell({ children }: PropsWithChildren) {
   ], [model, navigate, t]);
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-forensics-base font-sans text-[13px] font-normal text-forensics-ink selection:bg-forensics-red-tint selection:text-forensics-red-ink">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-forensics-base font-sans text-[13px] font-normal text-forensics-ink selection:bg-forensics-red-tint selection:text-forensics-red-deep-ink">
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <ActivityBarContainer />
         {/* 工作区大卡片：仅左下 20px 圆角；左上与右侧齐边全覆盖。 */}

@@ -33,7 +33,7 @@ export function ClusterOverviewPanel({
       </PanelFrame>
       <PanelFrame className="overflow-hidden bg-forensics-surface p-0">
         <div className="overflow-x-auto">
-          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wide text-forensics-muted">
+          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 border-b border-forensics-divider bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wide text-forensics-muted">
             <span>{t('infrastructure.clusterInfo.host')}</span><span>{t('infrastructure.clusterInfo.hostname')}</span><span>{t('infrastructure.clusterInfo.version')}</span><span>{t('infrastructure.clusterInfo.identity')}</span>
           </div>
           <div className="divide-y divide-forensics-border-light">

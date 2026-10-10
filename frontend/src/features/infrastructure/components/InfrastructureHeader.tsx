@@ -21,9 +21,9 @@ export function InfrastructureHeader({
   const workloads = nodes.filter((node) => node.domain === 'analysis').length;
   const infrastructure = nodes.filter((node) => ['pve', 'kubernetes', 'ceph', 'ceph_cluster'].includes(node.kind)).length;
   return (
-    <header className="shrink-0 border-b border-forensics-border bg-forensics-surface px-5 py-4 lg:px-7">
+    <header className="shrink-0 border-b border-forensics-divider bg-forensics-surface px-5 py-4 lg:px-7">
       <div className="flex flex-wrap items-start justify-end gap-4">
-        <div className="max-w-full border-l border-forensics-border pl-3 text-right text-xs text-forensics-text">
+        <div className="max-w-full border-l border-forensics-divider pl-3 text-right text-xs text-forensics-text">
           <div className="text-[10px] uppercase tracking-wide text-forensics-muted">{t('infrastructure.caseLabel')}</div>
           <div className="mt-1 max-w-64 truncate">{caseName}</div>
         </div>

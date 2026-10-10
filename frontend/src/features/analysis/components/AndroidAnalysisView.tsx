@@ -173,7 +173,7 @@ function AndroidPackagesPanel({
 function AndroidPackageCard({ item }: { item: AndroidPackageSummary['packages'][number] }) {
   const { t } = useTranslation();
   return (
-    <Card className="min-w-0 gap-3 rounded-md">
+    <Card className="min-w-0 gap-3 rounded-none">
       <CardHeader className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-4 pt-4">
         <Avatar className="size-10">
           {item.iconDataUrl ? <AvatarImage src={item.iconDataUrl} alt="" /> : null}

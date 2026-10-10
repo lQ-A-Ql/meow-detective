@@ -241,7 +241,7 @@ export function CorrelationWorkspace({
 
       <CorrelationFamilyCoveragePanel items={snapshot.familyCoverage} />
 
-      <div className="flex flex-col gap-3 rounded-none border border-forensics-border bg-forensics-surface p-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-3 rounded-none bg-transparent p-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
           <label className="relative block w-full xl:max-w-[320px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-forensics-muted-light" />
@@ -295,7 +295,7 @@ export function CorrelationWorkspace({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-forensics-text-tertiary">
-          <div className="flex items-center gap-2 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+          <div className="flex items-center gap-2 bg-transparent px-3 py-2">
             <ListFilter size={14} className="text-forensics-muted-light" />
             <span>
               {t('correlation.workspace.summaryCount', {
@@ -304,13 +304,13 @@ export function CorrelationWorkspace({
               })}
             </span>
           </div>
-          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+          <div className="bg-transparent px-3 py-2">
             {t('correlation.workspace.summaryHighConfidence', { count: highConfidenceLeadCount })}
           </div>
-          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+          <div className="bg-transparent px-3 py-2">
             {t('correlation.workspace.summaryReview', { count: reviewLeadCount })}
           </div>
-          <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+          <div className="bg-transparent px-3 py-2">
             {t('correlation.workspace.generatedAt', {
               time: snapshot.generatedAt.slice(0, 19).replace('T', ' '),
             })}
@@ -320,7 +320,7 @@ export function CorrelationWorkspace({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="space-y-4">
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <GitBranch size={14} />
               {t('correlation.workspace.leadsTitle')}
@@ -342,7 +342,7 @@ export function CorrelationWorkspace({
             </div>
           </div>
 
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Link2 size={14} />
               {t('correlation.workspace.clustersTitle')}
@@ -370,16 +370,16 @@ export function CorrelationWorkspace({
               onJump={jumpToTarget}
             />
           ) : (
-            <div className="rounded-none border border-forensics-border bg-forensics-surface p-4 text-[12px] text-forensics-muted">
+            <div className="rounded-none bg-transparent p-4 text-[12px] text-forensics-muted">
               {t('correlation.workspace.detailEmpty')}
             </div>
           )}
 
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.nodesTitle')}</div>
             <div className="space-y-2 text-[11px] text-forensics-text-tertiary">
               {distributionNodes.map((node) => (
-                <div key={node.id} className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
+                <div key={node.id} className="bg-transparent px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="truncate font-light text-forensics-text">{node.title}</div>
                     <span className="font-mono text-[10px] uppercase text-forensics-muted-light">{node.kind}</span>
@@ -390,7 +390,7 @@ export function CorrelationWorkspace({
             </div>
           </div>
 
-          <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div className="rounded-none bg-transparent p-4">
             <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.boundariesTitle')}</div>
             <ul className="space-y-2 text-[11px] text-forensics-text-tertiary">
               <li>{t('correlation.workspace.boundarySourceObject')}</li>

@@ -37,7 +37,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
               [{t('bottomDrawer.jobs.title')}] {model.headline}
             </span>
           </div>
-          <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap border-l border-forensics-border px-3 text-forensics-text-tertiary 2xl:flex">
+          <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap border-l border-forensics-divider px-3 text-forensics-text-tertiary 2xl:flex">
             <span><span className="text-forensics-text">{model.runningJobs.length}</span> {t('bottomDrawer.jobs.running')}</span>
             <span><span className={model.errorIssues.length ? 'text-forensics-error-text' : 'text-forensics-text'}>{model.errorIssues.length}</span> {t('bottomDrawer.issues.errors')}</span>
             <span><span className="text-forensics-text">{model.warningIssues.length}</span> {t('bottomDrawer.jobs.warnings')}</span>
@@ -50,7 +50,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
             <span>{model.drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
             {model.drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </Button>
-          <div className="hidden min-w-0 max-w-72 border-l border-forensics-border pl-3 2xl:flex">
+          <div className="hidden min-w-0 max-w-72 border-l border-forensics-divider pl-3 2xl:flex">
             <span className="shrink-0">{t('bottomDrawer.status.recent')} </span>
             <span className="truncate text-forensics-text">{model.recentScope}</span>
           </div>
@@ -67,7 +67,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
           />
           <div
             data-testid="bottom-drawer-panels"
-            className="grid min-h-0 min-w-0 flex-1 grid-cols-3 overflow-hidden border-t border-forensics-border"
+            className="grid min-h-0 min-w-0 flex-1 grid-cols-3 overflow-hidden border-t border-forensics-line"
           >
             <BottomDrawerJobs model={model} analysisProgress={analysisProgress} />
             <BottomDrawerIssues errorIssues={model.errorIssues} warningIssues={model.warningIssues} />

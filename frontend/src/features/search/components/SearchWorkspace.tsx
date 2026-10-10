@@ -148,7 +148,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
       </ContextBar>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b border-forensics-border bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
+        <div className="flex shrink-0 items-center gap-3 border-b border-forensics-divider bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
           <span>{model.activeQuery ? t('search.meta.found', { count: model.totalHits }) : t('search.meta.idle')}</span>
           {model.activeQuery ? <span>{t('search.meta.took', { ms: model.searchTookMs })}</span> : null}
           {coverage && !coverage.complete ? (

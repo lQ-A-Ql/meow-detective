@@ -44,7 +44,7 @@ function PluginFamilyAttrsDetail({ entry }: { entry: PluginArtifactEntry }) {
   const { t } = useTranslation();
   const attrs = Object.entries(entry.attrs);
   return (
-    <div className="border border-forensics-border bg-forensics-panel px-3 py-2">
+    <div className="bg-transparent px-3 py-2">
       <div className="mb-1 flex min-w-0 items-center gap-2 text-[11px] text-forensics-text">
         <span className="shrink-0 text-forensics-muted">{t('pluginModule.attrsTitle')}</span>
         <span className="min-w-0 truncate" title={entry.title}>{entry.title}</span>

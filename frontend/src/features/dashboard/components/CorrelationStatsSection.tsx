@@ -16,7 +16,7 @@ export function CorrelationStatsSection({ data, isLoading, isError, error }: { d
         <MetricCard label={t('dashboard.correlation.leads')} value={data?.leadCount ?? 0} icon={Shield} size="lg" />
       </StatGrid>
       {data?.familyCoverage && data.familyCoverage.length > 0 ? (
-        <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
+        <div className="mt-3 rounded-none bg-transparent p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.correlation.familyCoverage')}</div>
           <div className="space-y-1">
             {data.familyCoverage.map((fc, i) => (

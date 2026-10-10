@@ -34,7 +34,7 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
             <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.graph.byNodeType')}</div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(data.nodeCountByType ?? {}).map(([type, count]) => (
-                <div key={type} className="rounded-none border border-forensics-border bg-forensics-panel px-2 py-1 text-[11px]">
+                <div key={type} className="rounded-none bg-transparent px-2 py-1 text-[11px]">
                   <span className="font-mono text-forensics-text">{type}</span>
                   <span className="ml-1.5 font-mono text-forensics-muted-light">{count}</span>
                 </div>
@@ -45,7 +45,7 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
             <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.graph.byEdgeType')}</div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(data.edgeCountByType ?? {}).map(([type, count]) => (
-                <div key={type} className="rounded-none border border-forensics-border bg-forensics-panel px-2 py-1 text-[11px]">
+                <div key={type} className="rounded-none bg-transparent px-2 py-1 text-[11px]">
                   <span className="font-mono text-forensics-text">{type}</span>
                   <span className="ml-1.5 font-mono text-forensics-muted-light">{count}</span>
                 </div>

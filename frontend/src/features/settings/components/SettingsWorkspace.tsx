@@ -31,7 +31,7 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="hidden w-52 border-r border-forensics-border px-2 py-4 xl:block" />
+        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="hidden w-52 border-r border-forensics-divider px-2 py-4 xl:block" />
         <ScrollArea className="min-h-0 flex-1" viewportClassName="mx-auto w-full max-w-5xl space-y-8 p-6">
     <section id="settings-storage" className="scroll-mt-4">
             <StoragePathsSection caseRoot={settings.caseRoot} imageSearchPaths={settings.imageSearchPaths} setSettings={setSettings} />

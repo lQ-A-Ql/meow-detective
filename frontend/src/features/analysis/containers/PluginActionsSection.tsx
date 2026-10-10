@@ -57,7 +57,7 @@ function RecoveryResult({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="mt-2 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px]">
+    <div className="mt-2 rounded-none bg-transparent px-3 py-2 text-[11px]">
       <div className="flex flex-wrap gap-3 font-mono text-forensics-text-secondary">
         <span>
           {t('pluginModule.actions.candidates')}: {result.candidatesSeen}
@@ -142,7 +142,7 @@ function PluginActionCard({
   }
 
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-panel px-3 py-2">
+    <div className="rounded-none bg-transparent px-3 py-2">
       <div className="text-[12px] font-light text-forensics-text">{action.label}</div>
       {action.description ? (
         <div className="mt-0.5 text-[11px] leading-5 text-forensics-muted">{action.description}</div>

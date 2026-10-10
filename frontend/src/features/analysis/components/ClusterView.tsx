@@ -24,7 +24,7 @@ export function ClusterCard({
       : undefined;
 
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+    <div className="rounded-none bg-transparent p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[13px] font-light text-forensics-text">{cluster.title}</div>

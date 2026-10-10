@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 interface Props { t: TFunction; status?: McpHostStatus; loading: boolean; copied: boolean; copyError: boolean; onEnable: (enabled: boolean) => void; onCopy: () => void; onRetry: () => void; toolList: ReactNode }
 export function McpHostToolsPanelView({ t, status, loading, copied, copyError, onEnable, onCopy, onRetry, toolList }: Props) {
   const settings = status?.settings;
-  return <div className="space-y-2"><div className="flex flex-wrap items-center gap-3 border border-forensics-border bg-forensics-panel p-3">
+  return <div className="space-y-2"><div className="flex flex-wrap items-center gap-3 bg-transparent p-3">
     <label className="flex items-center gap-2 text-[11px] text-forensics-text"><Checkbox aria-label={t('mcpUi.host.enable')} checked={settings?.enabled ?? false} disabled={loading || !settings} onCheckedChange={(checked) => onEnable(checked === true)} variant="forensics" />{t('mcpUi.host.enable')}</label>
     <span className="text-[10px] text-forensics-muted" role="status">{t(status?.running ? 'mcpUi.host.running' : settings?.enabled ? 'mcpUi.host.starting' : 'mcpUi.host.stopped')}</span>
     <code className="min-w-0 break-all text-[10px] text-forensics-muted">{status?.endpoint}</code>

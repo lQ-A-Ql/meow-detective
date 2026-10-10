@@ -37,7 +37,7 @@ export function MessageBlock({
   empty: string;
 }) {
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+    <div className="rounded-none bg-transparent p-4">
       <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
         {icon}
         {title}
@@ -101,13 +101,13 @@ export function SecurityAuditPanel({ security }: { security: SecurityAuditSummar
         <Shield size={16} />
         {t('v2Governance.security.title')}
       </div>
-      <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+      <div className="rounded-none bg-transparent p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {rows.map(([label, value]) => (
             <Metric key={label} label={label} value={value} />
           ))}
         </div>
-        <div className="mt-4 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+        <div className="mt-4 bg-transparent p-3">
           <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Recent Audit Entries</div>
           {security.recentAuditEntries.length > 0 ? (
             <div className="space-y-2">
@@ -142,13 +142,13 @@ export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] 
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {entries.map((entry) => (
-          <div key={entry.category} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div key={entry.category} className="rounded-none bg-transparent p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[13px] font-light text-forensics-text">{entry.category}</div>
                 <div className="mt-1 text-[11px] text-forensics-muted">severity: {entry.severity}</div>
               </div>
-              <span className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
+              <span className="rounded-none bg-transparent px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
                 {entry.recoverable ? 'recoverable' : 'non-recoverable'}
               </span>
             </div>
@@ -160,7 +160,7 @@ export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] 
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Examples</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {entry.examples.map((sample) => (
-                  <span key={`${entry.category}-${sample}`} className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span key={`${entry.category}-${sample}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
                     {sample}
                   </span>
                 ))}
@@ -240,13 +240,13 @@ export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2Governanc
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {snapshot.factSources.map((source) => (
-          <div key={`${source.area}-${source.factFile}`} className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+          <div key={`${source.area}-${source.factFile}`} className="rounded-none bg-transparent p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[13px] font-light text-forensics-text">{source.area}</div>
                 <div className="mt-1 font-mono text-[10px] text-forensics-muted">{source.factFile}</div>
               </div>
-              <span className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
+              <span className="rounded-none bg-transparent px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
                 {source.factKind}
               </span>
             </div>
@@ -257,7 +257,7 @@ export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2Governanc
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Derived Outputs</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {source.derivedOutputs.map((item) => (
-                  <span key={`${source.area}-${item}`} className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span key={`${source.area}-${item}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
                     {item}
                   </span>
                 ))}
@@ -279,7 +279,7 @@ export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2Govern
         <CheckCircle2 size={16} />
         {t('v2Governance.runtimeResults.title')}
       </div>
-      <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
+      <div className="rounded-none bg-transparent p-4">
         <div className="mb-4 text-[11px] text-forensics-muted">
           {t('v2Governance.lastVerifiedAt', { time: snapshot.runtimeResults.checkedAt })}
         </div>
@@ -301,7 +301,7 @@ export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2Govern
               </div>
               <div className="mt-2 text-[11px] opacity-90">{check.detail}</div>
               {check.subChecks.length > 0 ? (
-                <div className="mt-3 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
+                <div className="mt-3 bg-transparent p-3">
                   <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Sub Checks</div>
                   <div className="space-y-2">
                     {check.subChecks.map((subCheck) => (
@@ -341,7 +341,7 @@ export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2Govern
 
 function SecurityAuditRow({ entry }: { entry: SecurityAuditEntry }) {
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+    <div className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] text-forensics-muted-light">{entry.action}</span>
         <span

@@ -114,7 +114,7 @@ export function RecentTasksPanel({
                   <span className="rounded-badge border border-forensics-line-2 px-1.5 py-0.5 text-forensics-ink-3">
                     {t('caseHome.jobStates.skipped', { count: job.skippedCount })}
                   </span>
-                  <span className="rounded-badge border border-forensics-red-deep px-1.5 py-0.5 text-forensics-red-deep">
+                  <span className="rounded-badge border border-forensics-red-deep px-1.5 py-0.5 text-forensics-red-deep-deep">
                     {t('caseHome.jobStates.failed', { count: job.failedCount })}
                   </span>
                 </div>

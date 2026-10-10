@@ -177,8 +177,8 @@ function EmailDetailCard({
   const defaultTab = hasPlain ? 'plain' : hasHtml ? 'html' : 'preview';
 
   return (
-    <div className="mt-4 rounded-none border border-forensics-border bg-forensics-surface">
-      <div className="flex items-start gap-3 border-b border-forensics-border p-3">
+    <div className="mt-4 rounded-none bg-transparent">
+      <div className="flex items-start gap-3 border-b border-forensics-divider p-3">
         <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none bg-forensics-panel-strong">
           <Mail className="size-4 text-forensics-text-tertiary" />
         </div>
@@ -236,7 +236,7 @@ function EmailDetailCard({
       </div>
 
       {message.attachmentDetails.length > 0 ? (
-        <div className="border-b border-forensics-border p-3">
+        <div className="border-b border-forensics-divider p-3">
           <div className="mb-2 text-[11px] font-light text-forensics-text">
             {t('analysisPanels.email.attachmentsTitle', { count: message.attachmentDetails.length })}
           </div>
@@ -275,7 +275,7 @@ function EmailDetailCard({
       </div>
 
       {message.headers.length > 0 ? (
-        <div className="border-t border-forensics-border p-3">
+        <div className="border-t border-forensics-line p-3">
           <Button
             variant="ghost"
             size="sm"
@@ -314,7 +314,7 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
 function BodyPreview({ text }: { text?: string }) {
   const { t } = useTranslation();
   return (
-    <ScrollArea className="max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
+    <ScrollArea className="max-h-[240px] rounded-none bg-transparent" viewportClassName="p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
       {text?.trim() ? text : <span className="text-forensics-muted-lighter">{t('analysisPanels.email.noBody')}</span>}
     </ScrollArea>
   );
@@ -324,13 +324,13 @@ function HtmlPreview({ html }: { html?: string }) {
   const { t } = useTranslation();
   if (!html) {
     return (
-      <div className="rounded-none border border-forensics-border bg-forensics-surface p-3 text-[12px] text-forensics-muted-lighter">
+      <div className="rounded-none bg-transparent p-3 text-[12px] text-forensics-muted-lighter">
         {t('analysisPanels.email.noHtml')}
       </div>
     );
   }
   return (
-    <ScrollArea className="max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-3">
+    <ScrollArea className="max-h-[240px] rounded-none bg-transparent" viewportClassName="p-3">
       <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-forensics-text-secondary">
         {html}
       </pre>
@@ -340,7 +340,7 @@ function HtmlPreview({ html }: { html?: string }) {
 
 function HeaderList({ headers }: { headers: EmailHeader[] }) {
   return (
-    <ScrollArea className="mt-2 max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-2">
+    <ScrollArea className="mt-2 max-h-[240px] rounded-none bg-transparent" viewportClassName="p-2">
       <div className="divide-y divide-forensics-border-light text-[11px]">
         {headers.map((header, index) => (
           <div key={index} className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 py-1">

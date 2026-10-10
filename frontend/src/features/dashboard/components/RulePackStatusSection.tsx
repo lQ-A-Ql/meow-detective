@@ -19,7 +19,7 @@ export function RulePackStatusSection({ data, isLoading, isError, error }: { dat
             <MetricCard label={t('dashboard.rulePacks.executionStatus')} value={data.executionStatus} icon={Activity} size="lg" />
           </StatGrid>
           {data.loadedPacks.length > 0 && (
-            <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
+            <div className="mt-3 rounded-none bg-transparent p-4">
               <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.rulePacks.loaded')}</div>
               <div className="space-y-1">
                 {data.loadedPacks.map((pack) => (

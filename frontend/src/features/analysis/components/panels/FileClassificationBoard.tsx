@@ -67,7 +67,7 @@ export function FileClassificationBoard({
             return (
               <CollapsibleSection
                 key={group.category}
-                className="rounded-none border border-forensics-border bg-forensics-surface p-4"
+                className="rounded-none bg-transparent p-4"
                 contentClassName="mt-3 space-y-3"
                 title={
                   <>

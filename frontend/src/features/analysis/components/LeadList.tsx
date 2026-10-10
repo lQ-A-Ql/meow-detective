@@ -19,7 +19,7 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
   const { t } = useTranslation();
 
   return (
-    <div className="rounded-none border border-forensics-border bg-forensics-surface p-4" data-testid="correlation-family-coverage-panel">
+    <div className="rounded-none bg-transparent p-4" data-testid="correlation-family-coverage-panel">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-light text-forensics-text">{t('correlation.lead.coverageTitle')}</div>
@@ -32,7 +32,7 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
         {items.map((item) => (
           <div
             key={item.family}
-            className="rounded-none border border-forensics-border bg-forensics-surface p-3"
+            className="rounded-none bg-transparent p-3"
             data-testid={`correlation-family-${item.family}`}
           >
             <div className="flex items-center justify-between gap-2">
@@ -51,7 +51,7 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
               <Metric label="Cluster" value={item.clusterCount.toString()} />
             </div>
             {item.sampleSignals.length > 0 ? (
-              <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+              <div className="mt-3 rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
                 <div className="mb-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">Observed Signals</div>
                 <div className="space-y-1">
                   {item.sampleSignals.map((signal) => (
@@ -118,7 +118,7 @@ export function LeadCard({
       </div>
       <FamilyPills families={lead.families} testId={`lead-families-${lead.id}`} />
       {lead.matchSignals.length > 0 ? (
-        <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
+        <div className="mt-3 rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
           <div className="mb-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">Match Signals</div>
           <div className="space-y-1">
             {lead.matchSignals.map((item) => (
@@ -131,7 +131,7 @@ export function LeadCard({
         {lead.provenance.map((item) => (
           <span
             key={`${lead.id}-${item.sourceKind}-${item.sourceRecordId}`}
-            className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-1 text-[10px] text-forensics-text-tertiary"
+            className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary"
           >
             {item.sourceLabel}
           </span>
@@ -159,7 +159,7 @@ export function LeadCard({
           {lead.provenance.slice(0, 3).map((item) => (
             <div
               key={`${lead.id}-${item.sourceKind}-${item.sourceRecordId}`}
-              className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2"
+              className="bg-transparent px-3 py-2"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-light text-forensics-text">{item.sourceLabel}</span>

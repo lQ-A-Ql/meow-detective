@@ -32,7 +32,7 @@ export function ClusterEvidenceHeader({
   t: TFunction;
 }) {
   return (
-    <header className="shrink-0 border-b border-forensics-border bg-forensics-surface px-5 py-4 lg:px-7">
+    <header className="shrink-0 border-b border-forensics-divider bg-forensics-surface px-5 py-4 lg:px-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.16em] text-forensics-muted">{t('infrastructure.workspace.eyebrow')}</div>
