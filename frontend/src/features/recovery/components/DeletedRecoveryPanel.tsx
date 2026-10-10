@@ -1,4 +1,5 @@
 import { LoaderCircle, Search, X } from 'lucide-react';
+import { digestIconNameForHash } from '@/lib/digest-icon';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useCallback } from 'react';
@@ -296,7 +297,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
             type="button"
             variant="forensicsOutline"
             onClick={model.runHashSearch}
-          ><ActionIcon name="hash" /></Button></Tooltip>
+          ><ActionIcon name={digestIconNameForHash(model.hashQuery)} /></Button></Tooltip>
           {model.hashSearch ? (
             <Badge variant="outline" className="mt-1">
               {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}

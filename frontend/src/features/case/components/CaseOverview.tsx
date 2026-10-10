@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, PencilLine, Trash2, XCircle } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
@@ -235,7 +235,7 @@ export function DataSourcesPanel({
                     <div className="mt-1 text-[11px] text-forensics-muted font-mono break-all">{source.sourcePath}</div>
                     <div className="mt-2 py-2">
                       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
-                        <Hash size={11} />
+                        <ActionIcon name="hash-sha256" className="size-[11px]" />
                         <span>{t('caseHome.dataSources.sha256')}</span>
                       </div>
                       {hashJob ? (
@@ -271,7 +271,7 @@ export function DataSourcesPanel({
                     {source.kind === 'local_disk' ? (
                       <div className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2.5 py-2" data-testid={`physical-disk-hash-${source.id}`}>
                         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-warning-text">
-                          <Hash size={11} />
+                          <ActionIcon name="hash-sha256" className="size-[11px]" />
                           <span>{t('caseHome.dataSources.physicalDiskHash')}</span>
                         </div>
                         <div className="mt-1 text-[10px] text-forensics-muted">{t('caseHome.dataSources.physicalDiskHashHint')}</div>

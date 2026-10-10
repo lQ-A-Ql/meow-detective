@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Hash } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { digestIconName } from '@/lib/digest-icon';
 import { IconButton } from '@/components/controls/IconButton';
 import { InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
@@ -21,7 +22,7 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
               disabled={loading}
               onClick={() => onCalculate(algorithm)}
             >
-              <Hash size={13} />
+              <ActionIcon name={digestIconName(algorithm)} />
             </IconButton>
           ))}
         </div>

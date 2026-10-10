@@ -23,6 +23,10 @@ import folderOpen from './folder-open.svg';
 import folder from './folder.svg';
 import file from './file.svg';
 import hash from './hash.svg';
+import hashMd5 from './hash-md5.svg';
+import hashSha1 from './hash-sha1.svg';
+import hashSha256 from './hash-sha256.svg';
+import hashSm3 from './hash-sm3.svg';
 import filter from './filter.svg';
 import history from './history.svg';
 import restore from './restore.svg';
@@ -77,6 +81,10 @@ export const actionIconAssets = {
   folder,
   file,
   hash,
+  'hash-md5': hashMd5,
+  'hash-sha1': hashSha1,
+  'hash-sha256': hashSha256,
+  'hash-sm3': hashSm3,
   filter,
   history,
   restore,
