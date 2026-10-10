@@ -8,47 +8,47 @@
   --card-foreground: #181818;
   --popover: #ffffff;
   --popover-foreground: #181818;
-  --primary: #181818;
+  --primary: #d92d3a;
   --primary-foreground: #ffffff;
   --secondary: #f5f5f5;
   --secondary-foreground: #181818;
   --muted: #f5f5f5;
   --muted-foreground: #666666;
-  --accent: #e9e9e9;
-  --accent-foreground: #181818;
-  --destructive: #383838;
+  --accent: #fff0f1;
+  --accent-foreground: #9f1d27;
+  --destructive: #b4232a;
   --destructive-foreground: #ffffff;
   --input: transparent;
   --input-background: #ffffff;
   --switch-background: #bdbdbd;
   --font-weight-medium: 300;
   --font-weight-normal: 300;
-  --ring: #3d3d3d;
-  --chart-1: #202020;
-  --chart-2: #505050;
-  --chart-3: #787878;
-  --chart-4: #a0a0a0;
-  --chart-5: #c8c8c8;
+  --ring: #c62832;
+  --chart-1: #c62832;
+  --chart-2: #e2555d;
+  --chart-3: #ef8b91;
+  --chart-4: #f6b5b9;
+  --chart-5: #fbe1e3;
   --radius: 0;
   --sidebar: #fafafa;
   --sidebar-foreground: #181818;
-  --sidebar-primary: #181818;
+  --sidebar-primary: #c62832;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #efefef;
   --sidebar-accent-foreground: #181818;
   --sidebar-border: #d8d8d8;
   --sidebar-ring: #3d3d3d;
 
-  /* Neutral compatibility tokens retained for existing utility classes. */
+  /* Red accent scale shared by existing utility classes. */
   --forensics-sakura-50: #ffffff;
-  --forensics-sakura-100: #fafafa;
-  --forensics-sakura-150: #f5f5f5;
-  --forensics-sakura-200: #eeeeee;
-  --forensics-sakura-250: #e4e4e4;
-  --forensics-sakura-300: #d6d6d6;
-  --forensics-sakura-400: #aaaaaa;
-  --forensics-sakura-500: #4d4d4d;
-  --forensics-sakura-600: #282828;
+  --forensics-sakura-100: #fff7f7;
+  --forensics-sakura-150: #fff0f1;
+  --forensics-sakura-200: #ffe5e7;
+  --forensics-sakura-250: #ffd8db;
+  --forensics-sakura-300: #f8b7bc;
+  --forensics-sakura-400: #e87982;
+  --forensics-sakura-500: #d92d3a;
+  --forensics-sakura-600: #a51f2b;
 
   --forensics-50: #ffffff;
   --forensics-100: #fafafa;
@@ -67,17 +67,17 @@
   --forensics-850: #242424;
   --forensics-900: #181818;
 
-  --forensics-panel: #fafafa;
-  --forensics-panel-strong: #f5f5f5;
+  --forensics-panel: #fffafa;
+  --forensics-panel-strong: #fff3f4;
   --forensics-surface: #ffffff;
   --forensics-input-bg: #ffffff;
-  --forensics-highlight: #e9e9e9;
-  --forensics-selection-bg: #dcdcdc;
-  --forensics-selection-text: #111111;
-  --forensics-hover: #eeeeee;
-  --forensics-border: #d8d8d8;
-  --forensics-border-light: #e9e9e9;
-  --forensics-border-strong: #b8b8b8;
+  --forensics-highlight: #ffe5e7;
+  --forensics-selection-bg: #ffcdd2;
+  --forensics-selection-text: #7e1820;
+  --forensics-hover: #fff0f1;
+  --forensics-border: #e9c6c9;
+  --forensics-border-light: #f4dfe1;
+  --forensics-border-strong: #d99ba0;
   --forensics-text: #181818;
   --forensics-text-secondary: #343434;
   --forensics-text-tertiary: #4e4e4e;
@@ -104,18 +104,18 @@
   --forensics-gql-border-error: #bdbdbd;
 
   /* Forensics status / action tokens */
-  --forensics-primary-blue: #181818;
-  --forensics-success: #3d3d3d;
-  --forensics-surface-muted: #f0f0f0;
-  --forensics-text-soft: #575757;
-  --forensics-hover-muted: #e6e6e6;
+  --forensics-primary-blue: #d92d3a;
+  --forensics-success: #b4232a;
+  --forensics-surface-muted: #fff3f4;
+  --forensics-text-soft: #6f3438;
+  --forensics-hover-muted: #ffe5e7;
 
   /* Forensics warning tokens */
-  --forensics-warning: #585858;
-  --forensics-warning-bg: #f0f0f0;
-  --forensics-warning-border: #bdbdbd;
-  --forensics-warning-text: #484848;
-  --forensics-warning-text-strong: #303030;
+  --forensics-warning: #c62832;
+  --forensics-warning-bg: #fff0f1;
+  --forensics-warning-border: #e6aeb2;
+  --forensics-warning-text: #9f1d27;
+  --forensics-warning-text-strong: #7e1820;
 
   /* Forensics success tokens */
   --forensics-success: #3d3d3d;

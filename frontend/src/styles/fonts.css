@@ -77,7 +77,7 @@
 
 /* ── Tailwind 主题变量 ── */
 @theme {
-  --font-sans: 'MaoKenWangXingYuan', 'Noto Serif CJK SC', 'Source Han Serif SC', SimSun, serif;
+  --font-sans: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
   --font-display: 'Playlist Script', cursive;
   --font-serif: 'MaoKenWangXingYuan', 'Noto Serif CJK SC', 'Source Han Serif SC', SimSun, serif;

@@ -19,7 +19,7 @@ vi.mock('@/features/analysis/plugin-action-hooks', () => ({
   useRecoverWeChatKeys: mocks.useRecoverWeChatKeys,
 }));
 
-import { PluginModulePanel, deriveDynamicAttrKeys } from '@/features/analysis/components/panels/PluginModulePanel';
+import { PluginModulePanel, deriveDynamicAttrKeys } from '@/features/analysis/containers/PluginModulePanel';
 import type { PluginArtifactEntry, PluginModule } from '@/types/models';
 
 function entry(artifactId: string, attrs: Record<string, unknown> = {}): PluginArtifactEntry {

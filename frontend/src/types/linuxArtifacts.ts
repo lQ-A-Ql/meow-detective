@@ -7,11 +7,19 @@ export interface LinuxJournalEntry {
   sourcePath: string;
   timestamp?: string;
   message?: string;
+  cmdline?: string;
+  bootId?: string;
+  messageId?: string;
   executable?: string;
   systemdUnit?: string;
   hostname?: string;
   syslogIdentifier?: string;
+  transport?: string;
+  machineId?: string;
+  cgroup?: string;
+  invocationId?: string;
   pid?: number;
+  uid?: number;
   priority?: number;
   /** Log origin: `journald` rows vs text-log fallback labels (syslog/auth/audit/pve/...). */
   logKind?: string;

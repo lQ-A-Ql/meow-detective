@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   forgetPersistedBitLockerKey,
   cancelBitLockerDictionaryAttack,
@@ -90,18 +90,34 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   const [catalogImport, setCatalogImport] = useState<BitLockerCatalogImportLifecycle>();
   const [error, setError] = useState<string>();
 
+  // Each inspect run owns an epoch: a response for a partition the investigator has
+  // already navigated away from must not overwrite the newly selected volume's status.
+  const inspectEpochRef = useRef(0);
+
   const inspect = useCallback(async () => {
     if (!target) {
       return;
     }
+    const epoch = inspectEpochRef.current + 1;
+    inspectEpochRef.current = epoch;
+    const isCurrent = () => inspectEpochRef.current === epoch;
     setLoading(true);
     setError(undefined);
     try {
-      setStatus(await inspectBitLockerVolume(target.dataSourceId, target.partitionIndex));
+      const next = await inspectBitLockerVolume(target.dataSourceId, target.partitionIndex);
+      if (!isCurrent()) {
+        return;
+      }
+      setStatus(next);
     } catch (reason) {
+      if (!isCurrent()) {
+        return;
+      }
       setError(safeErrorMessage(reason));
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        setLoading(false);
+      }
     }
   }, [target]);
 

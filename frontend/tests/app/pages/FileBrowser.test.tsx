@@ -14,6 +14,14 @@ const mocks = vi.hoisted(() => ({
   fileViewer: vi.fn(),
   textPreview: vi.fn(),
   imagePreview: vi.fn(),
+  imageMetadata: vi.fn(() => ({
+    data: undefined,
+    error: null,
+    isLoading: false,
+    isSuccess: true,
+    isFetching: false,
+    refetch: vi.fn(),
+  })),
   mediaUrl: vi.fn(),
   documentPreview: vi.fn(),
   extractOpenForFile: vi.fn(),
@@ -60,18 +68,49 @@ vi.mock('@/features/case/hooks', () => ({
   useDataSources: mocks.dataSources,
 }));
 
-vi.mock('@/features/files/hooks', () => ({
-  useFileChildrenPage: mocks.fileChildren,
-  useFileJumpContext: mocks.fileJumpContext,
-  useFileRowsPage: mocks.fileRows,
-  useFileTree: mocks.fileTree,
-  useFileHandle: mocks.fileHandle,
-  useFileViewer: mocks.fileViewer,
-  useTextPreview: mocks.textPreview,
-  useImagePreview: mocks.imagePreview,
-  useMediaUrl: mocks.mediaUrl,
-  useDocumentPreview: mocks.documentPreview,
-}));
+const inertQueryState = () => ({
+  data: undefined,
+  error: null,
+  isLoading: false,
+  isSuccess: true,
+  isFetching: false,
+  isError: false,
+  refetch: vi.fn(),
+});
+
+// Partial mock: every hook the page can reach is overridden explicitly below, and any
+// other hook exported by the module degrades to an inert, non-fetching query state.
+// Without this, adding one hook to features/files/hooks.ts broke all 16 page tests
+// (the module-level vi.mock factory is a closed list).
+vi.mock('@/features/files/hooks', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const overrides: Record<string, unknown> = {
+    useFileChildrenPage: mocks.fileChildren,
+    useFileJumpContext: mocks.fileJumpContext,
+    useFileRowsPage: mocks.fileRows,
+    useFileTree: mocks.fileTree,
+    useFileHandle: mocks.fileHandle,
+    useFileViewer: mocks.fileViewer,
+    useTextPreview: mocks.textPreview,
+    useImagePreview: mocks.imagePreview,
+    useImageMetadata: mocks.imageMetadata,
+    useMediaUrl: mocks.mediaUrl,
+    useDocumentPreview: mocks.documentPreview,
+  };
+  return new Proxy(actual, {
+    get(target, property, receiver) {
+      if (typeof property === 'string') {
+        if (property in overrides) {
+          return overrides[property];
+        }
+        if (property.startsWith('use') && typeof Reflect.get(target, property, receiver) === 'function') {
+          return inertQueryState;
+        }
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+});
 
 vi.mock('@/features/files/hooks/use-file-extraction', () => ({
   useFileExtractionModel: () => ({

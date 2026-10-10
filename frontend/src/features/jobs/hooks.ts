@@ -57,6 +57,17 @@ function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnaps
     refreshedSettledJobIds.delete(jobId);
     runningJobIds.add(jobId);
   });
+
+  // A settled job that has left the snapshot can never be observed running again, so drop
+  // it to keep this set bounded for the lifetime of the session.
+  if (refreshedSettledJobIds.size > 0) {
+    const visibleJobIds = new Set(jobs.map((job) => job.id));
+    refreshedSettledJobIds.forEach((jobId) => {
+      if (!visibleJobIds.has(jobId)) {
+        refreshedSettledJobIds.delete(jobId);
+      }
+    });
+  }
 }
 
 export function useJobsSnapshot() {

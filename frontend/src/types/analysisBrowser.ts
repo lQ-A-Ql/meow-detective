@@ -56,6 +56,8 @@ export interface BrowserDownload {
   sourcePath: string;
   browser: BrowserKind;
   profile: string;
+  /** Extra profile label carried by the backend (serde `default`, always serialized). */
+  sourceProfile: string;
   url: string;
   targetPath: string;
   startTime?: string;

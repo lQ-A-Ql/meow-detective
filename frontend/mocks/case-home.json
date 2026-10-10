@@ -1,0 +1,66 @@
+{
+  "currentCase": {
+    "id": "case-mock-001",
+    "name": "红队入侵溯源演练",
+    "number": "2026-MOCK-001",
+    "examiner": "Meow Lab",
+    "createdAt": "2026-10-10T09:30:00Z",
+    "updatedAt": "2026-10-10T11:45:00Z"
+  },
+  "metrics": {
+    "dataSourceCount": 3,
+    "indexedFileCount": 248631,
+    "timelineEventCount": 18420,
+    "artifactCount": 963
+  },
+  "dataSources": [
+    {
+      "id": "source-mock-e01",
+      "name": "WIN-FORENSICS-01.E01",
+      "kind": "e01",
+      "sourcePath": "D:/mock-evidence/WIN-FORENSICS-01.E01",
+      "importedAt": "2026-10-10T09:42:00Z",
+      "fileCount": 185204,
+      "platform": "windows",
+      "profile": "Windows 11 企业终端",
+      "importState": "ready",
+      "sourceHash": "mock-sha256-7a9c2d",
+      "hashStatus": "completed",
+      "partitions": [
+        { "index": 0, "name": "EFI System", "kindLabel": "GPT", "status": "supported", "offset": 1048576, "length": 272629760, "filesystem": "FAT32" },
+        { "index": 1, "name": "Windows", "kindLabel": "GPT", "status": "supported", "offset": 273678336, "length": 511705088000, "filesystem": "NTFS" },
+        { "index": 2, "name": "Recovery", "kindLabel": "GPT", "status": "supported", "offset": 511978766336, "length": 1073741824, "filesystem": "NTFS" }
+      ]
+    },
+    {
+      "id": "source-mock-linux",
+      "name": "PVE evidence set",
+      "kind": "logical_directory",
+      "sourcePath": "D:/mock-evidence/pve-cluster",
+      "importedAt": "2026-10-10T10:12:00Z",
+      "fileCount": 62500,
+      "platform": "linux",
+      "profile": "虚拟化集群",
+      "importState": "ready_metadata"
+    },
+    {
+      "id": "source-mock-android",
+      "name": "Pixel 8 sparse image",
+      "kind": "android_sparse",
+      "sourcePath": "D:/mock-evidence/pixel8-super.simg",
+      "importedAt": "2026-10-10T10:35:00Z",
+      "fileCount": 30927,
+      "platform": "android",
+      "profile": "移动设备镜像",
+      "importState": "importing"
+    }
+  ],
+  "recentCases": [
+    { "caseRoot": "D:/mock-cases/incident-2026-009", "name": "邮件钓鱼调查", "openedAt": "2026-10-09T16:20:00Z" },
+    { "caseRoot": "D:/mock-cases/endpoint-2026-008", "name": "终端异常登录", "openedAt": "2026-10-07T08:14:00Z" }
+  ],
+  "jobs": [
+    { "id": "job-mock-import", "name": "Evidence import", "scope": "source-mock-android", "progress": 64, "status": "running", "detail": "Enumerating ext4 metadata", "warningCount": 1, "skippedCount": 0, "failedCount": 0, "partial": true, "currentPartition": "system", "completedPartitions": 2, "totalPartitions": 4, "partitionProgress": 64 },
+    { "id": "job-mock-index", "name": "Search index", "scope": "case-mock-001", "progress": 100, "status": "completed", "detail": "Index ready", "warningCount": 0, "skippedCount": 0, "failedCount": 0, "partial": false }
+  ]
+}

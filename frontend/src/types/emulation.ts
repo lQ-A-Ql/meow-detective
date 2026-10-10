@@ -57,7 +57,7 @@ export interface EmulationSessionStatus {
   controlMode: EmulationControlMode;
   guestPhase?: EmulationGuestPhase;
   maintenanceMedia?: boolean;
-  error?: string;
+  error?: string | null;
 }
 
 export interface EmulationBypassAccount {

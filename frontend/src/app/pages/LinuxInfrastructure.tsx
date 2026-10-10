@@ -1,5 +1,5 @@
-import { InfrastructurePage } from '@/features/infrastructure/components/InfrastructurePage';
+import { InfrastructureContainer } from '@/features/infrastructure/containers/InfrastructureContainer';
 
 export function LinuxInfrastructure() {
-  return <InfrastructurePage />;
+  return <InfrastructureContainer />;
 }

@@ -1,5 +1,5 @@
 import { Copy, KeyRound, LockKeyhole, MemoryStick, RefreshCw, ShieldCheck, Unlock } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -33,12 +33,39 @@ export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelP
     void model.unlock(method, submitted);
   };
 
+  const copyResetTimer = useRef<number>();
+  const clipboardHoldsSecret = useRef(false);
+
+  /**
+   * A recovered BitLocker password must not outlive this panel in the OS clipboard:
+   * Windows clipboard history (Win+V) and cloud clipboard sync would otherwise keep the
+   * plaintext recovery key across app restarts, while every other path keeps secrets in
+   * `Zeroizing` buffers.
+   */
+  const wipeClipboardSecret = useCallback(() => {
+    if (!clipboardHoldsSecret.current) {
+      return;
+    }
+    clipboardHoldsSecret.current = false;
+    void navigator.clipboard?.writeText('').catch(() => undefined);
+  }, []);
+
   const copyRecoveredPassword = (password: string) => {
     void navigator.clipboard?.writeText(password).then(() => {
+      clipboardHoldsSecret.current = true;
       setPasswordCopied(true);
-      window.setTimeout(() => setPasswordCopied(false), 1500);
+      window.clearTimeout(copyResetTimer.current);
+      copyResetTimer.current = window.setTimeout(() => {
+        setPasswordCopied(false);
+        wipeClipboardSecret();
+      }, 1500);
     });
   };
+
+  useEffect(() => () => {
+    window.clearTimeout(copyResetTimer.current);
+    wipeClipboardSecret();
+  }, [wipeClipboardSecret]);
 
   return (
     <section className="border border-forensics-border bg-forensics-surface p-3 space-y-3">

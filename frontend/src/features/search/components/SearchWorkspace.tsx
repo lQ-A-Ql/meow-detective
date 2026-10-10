@@ -156,7 +156,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           <span>{model.activeQuery ? t('search.meta.found', { count: model.totalHits }) : t('search.meta.idle')}</span>
           {model.activeQuery ? <span>{t('search.meta.took', { ms: model.searchTookMs })}</span> : null}
           {coverage && !coverage.complete ? (
-            <span className="flex items-center gap-1 text-forensics-error-text" title={`未就绪数据源: ${coverage.missingSourceIds.join(', ')}`}>
+            <span className="flex items-center gap-1 text-forensics-error-text" title={t('search.coverage.missingTitle', { sources: coverage.missingSourceIds.join(', ') })}>
               <AlertTriangle size={12} />{t('search.coverage.incomplete', { indexed: coverage.indexedEntryCount, expected: coverage.expectedEntryCount })}
             </span>
           ) : coverage ? <span>{t('search.coverage.complete', { indexed: coverage.indexedEntryCount, sources: coverage.readySourceCount })}</span> : null}

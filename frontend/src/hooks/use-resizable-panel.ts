@@ -7,7 +7,7 @@
  * - 平滑拖拽
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseResizablePanelOptions {
   /** 默认宽度 */
@@ -37,23 +37,42 @@ export function useResizablePanel({
 }: UseResizablePanelOptions): UseResizablePanelReturn {
   const [width, setWidth] = useState(() => {
     if (storageKey) {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed)) {
-          return Math.max(minWidth, Math.min(maxWidth, parsed));
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = parseInt(saved, 10);
+          if (!isNaN(parsed)) {
+            return Math.max(minWidth, Math.min(maxWidth, parsed));
+          }
         }
+      } catch {
+        // Storage can be unavailable (disabled or private mode); fall back to the default.
       }
     }
     return defaultWidth;
   });
 
   const [isResizing, setIsResizing] = useState(false);
+  /**
+   * Cleanup for the document listeners installed while dragging. A component that unmounts
+   * mid-drag (panel closed, route change) never receives mouseup, which previously left two
+   * document listeners attached to dead setState callbacks.
+   */
+  const dragCleanupRef = useRef<(() => void) | undefined>(undefined);
+
+  useEffect(() => () => {
+    dragCleanupRef.current?.();
+  }, []);
 
   // 保存宽度
   useEffect(() => {
-    if (storageKey) {
+    if (!storageKey) {
+      return;
+    }
+    try {
       localStorage.setItem(storageKey, width.toString());
+    } catch {
+      // Persistence is best-effort; a blocked write must not break dragging.
     }
   }, [width, storageKey]);
 
@@ -71,14 +90,20 @@ export function useResizablePanel({
         setWidth(newWidth);
       };
 
-      const handleMouseUp = () => {
-        setIsResizing(false);
+      const stopListening = () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        dragCleanupRef.current = undefined;
+      };
+
+      const handleMouseUp = () => {
+        setIsResizing(false);
+        stopListening();
       };
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      dragCleanupRef.current = stopListening;
     },
     [width, minWidth, maxWidth]
   );

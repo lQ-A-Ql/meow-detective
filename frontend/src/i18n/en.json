@@ -308,6 +308,12 @@
       "platform": "Step 1/2: Select target platform",
       "form": "Step 2/2: Enter data source details"
     },
+    "stepperLabel": "Import steps",
+    "stepper": {
+      "platform": "Platform",
+      "source": "Source"
+    },
+    "platformHint": "Select an evidence platform to continue configuring the source",
     "fields": {
       "name": "Data Source Name",
       "mode": "Import Mode",
@@ -417,6 +423,10 @@
     "toggleSidebar": "Toggle sidebar"
   },
   "topBar": {
+    "appNavLabel": "Application navigation",
+    "workspaceNavLabel": "Workspace",
+    "workspaceLabel": "Workspace title bar",
+    "pageNavLabel": "Page navigation",
     "case": { "return": "Back to case entry", "noCase": "No case open" },
     "links": {
       "home": {
@@ -480,7 +490,7 @@
     }
   },
   "recovery": { "title": "Deleted file recovery", "subtitle": "NTFS MFT / EXT4 journal / XFS log", "targetPartition": "Target partition", "selectPartition": "Select an NTFS/EXT4/XFS partition", "startScan": "Start scan", "rescan": "Rescan", "transactions": "{{count}} transactions", "candidates": "{{count}} candidates", "loading": "Reading recovery scan results", "unscanned": "This partition has not been scanned for deleted recovery", "noPartitions": "The current source has no NTFS/EXT4/XFS partitions eligible for deleted recovery", "verifiedRanges": "Verified content ranges", "selectRange": "Select range", "read": "Read", "noVerifiedRange": "This candidate has no readable verified content range", "exportFull": "Export complete recovery file", "exported": "Exported {{bytes}}", "completeness": { "metadata_only": "Metadata only", "partial": "Partial content", "complete": "Complete content" }, "fields": { "completeness": "Completeness", "declaredSize": "Declared size", "recoverable": "Recoverable", "method": "Recovery method", "confidence": "Confidence", "originalPath": "Original path" }, "columns": { "partition": "Partition", "inode": "Inode", "originalPath": "Original path", "size": "Size", "completeness": "Recovery status", "confidence": "Confidence" }, "hashSearch": { "label": "Recovered file hash", "placeholder": "MD5 / SHA-1 / SHA-256", "clear": "Clear hash search", "invalid": "Hash must be 32, 40 or 64 hexadecimal characters", "submit": "Find by hash", "matches": "{{count}} matches" }, "empty": { "selectCandidate": "Select a candidate to view forensic metadata", "noCandidates": "No deleted recovery candidates", "noCandidatesDescription": "The current scan did not reconstruct reportable deleted records." }, "pagination": { "hashMatches": "Hash matches {{shown}} / {{total}}", "range": "Showing {{start}}-{{end}} / {{total}}", "previous": "Previous", "next": "Next" } },
-  "search": { "title": "File search", "inputPlaceholder": "Enter a file, directory or path", "inputLabel": "File name search", "pathToggle": "Path", "allTypes": "All types", "file": "File", "directory": "Directory", "extensionPlaceholder": "Extension", "extensionLabel": "Extension filter", "allSources": "All sources", "meta": { "loaded": "Loaded {{shown}}/{{total}} items", "waiting": "Enter a file name or path to search", "found": "{{count}} results", "idle": "Waiting for input", "took": "Query {{ms}} ms" }, "coverage": { "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}", "complete": "Index covers {{indexed}} entries / {{sources}} sources" }, "truncated": "Result window capped; showing {{count}} items", "columns": { "name": "Name", "path": "Path", "size": "Size", "modifiedAt": "Modified", "source": "Source" }, "empty": { "noMatch": "No matching files", "noMatchDescription": "Try changing the name, path or filters.", "start": "Enter a file name to search", "startDescription": "Search only covers files and directories from imported sources." } },
+  "search": { "title": "File search", "inputPlaceholder": "Enter a file, directory or path", "inputLabel": "File name search", "pathToggle": "Path", "allTypes": "All types", "file": "File", "directory": "Directory", "extensionPlaceholder": "Extension", "extensionLabel": "Extension filter", "allSources": "All sources", "meta": { "loaded": "Loaded {{shown}}/{{total}} items", "waiting": "Enter a file name or path to search", "found": "{{count}} results", "idle": "Waiting for input", "took": "Query {{ms}} ms" }, "coverage": { "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}", "complete": "Index covers {{indexed}} entries / {{sources}} sources", "missingTitle": "Sources not ready: {{sources}}" }, "truncated": "Result window capped; showing {{count}} items", "columns": { "name": "Name", "path": "Path", "size": "Size", "modifiedAt": "Modified", "source": "Source" }, "empty": { "noMatch": "No matching files", "noMatchDescription": "Try changing the name, path or filters.", "start": "Enter a file name to search", "startDescription": "Search only covers files and directories from imported sources." } },
   "infrastructure": {
     "eyebrow": "Infrastructure evidence",
     "title": "Linux Infrastructure Forensics",

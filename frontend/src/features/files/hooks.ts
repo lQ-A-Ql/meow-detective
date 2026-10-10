@@ -187,8 +187,12 @@ export function useFileViewer(fileId?: string, enabled = true) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [viewerError, setViewerError] = useState<string>();
   const rangeLoadInFlight = useRef(false);
+  // Identifies the file that the in-flight chunk read belongs to. A read that resolves
+  // after the investigator switched files must never write into the new file's state.
+  const loadedFileIdRef = useRef(fileId);
 
   useEffect(() => {
+    loadedFileIdRef.current = fileId;
     setLoadedRanges([]);
     setLoadedChunks({});
     setActiveOffset(0);
@@ -267,6 +271,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
       return;
     }
 
+    const requestedFileId = fileId;
     rangeLoadInFlight.current = true;
     setIsLoadingMore(true);
     setViewerError(undefined);
@@ -280,16 +285,24 @@ export function useFileViewer(fileId?: string, enabled = true) {
         offset: alignedOffset,
         length,
       });
+      if (loadedFileIdRef.current !== requestedFileId) {
+        return;
+      }
       setLoadedChunks((current) => ({ ...current, [alignedOffset]: range }));
       setLoadedRanges((current) =>
         mergeLoadedRanges(current, { start: alignedOffset, end: alignedOffset + length }),
       );
       setActiveOffset(clampedOffset);
     } catch (error) {
+      if (loadedFileIdRef.current !== requestedFileId) {
+        return;
+      }
       setViewerError(error instanceof Error ? error.message : 'Hex range load failed');
     } finally {
-      rangeLoadInFlight.current = false;
-      setIsLoadingMore(false);
+      if (loadedFileIdRef.current === requestedFileId) {
+        rangeLoadInFlight.current = false;
+        setIsLoadingMore(false);
+      }
     }
   };
 
@@ -500,12 +513,19 @@ export function useMediaUrl(fileId?: string, enabled = true) {
           byteNumbers[index] = byteCharacters.charCodeAt(index);
         }
         const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
+        const objectUrl = URL.createObjectURL(blob);
+        if (signal.aborted) {
+          // React Query discards an aborted result, so the revoke effect keyed on the query
+          // data would never run and the object URL would leak for the whole session.
+          URL.revokeObjectURL(objectUrl);
+          throw new DOMException('Media preview was aborted', 'AbortError');
+        }
         return {
           ...media,
           mode: media.mode ?? 'rangeFallback',
           previewMode: 'rangeFallback' as const,
           previewBytes: range.bytesRead,
-          url: URL.createObjectURL(blob),
+          url: objectUrl,
         };
       } catch (error) {
         await releasePreviewHandle(owner, media.handleId);

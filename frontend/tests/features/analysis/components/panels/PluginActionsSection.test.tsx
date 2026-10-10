@@ -17,7 +17,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useRunAnalysisExtraction: mocks.useRunAnalysisExtraction,
 }));
 
-import { PluginActionsSection } from '@/features/analysis/components/panels/PluginActionsSection';
+import { PluginActionsSection } from '@/features/analysis/containers/PluginActionsSection';
 import type { PluginActionDescriptor } from '@/types/models';
 
 const FILE_ACTION: PluginActionDescriptor = {

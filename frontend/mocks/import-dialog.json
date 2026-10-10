@@ -1,0 +1,29 @@
+{
+  "platforms": [
+    { "id": "windows", "label": "Windows", "summary": "NTFS / Registry / EVTX" },
+    { "id": "linux", "label": "Linux", "summary": "XFS / LVM / systemd" },
+    { "id": "android", "label": "Android", "summary": "Sparse / ext4 / F2FS / EROFS" }
+  ],
+  "sourceModes": {
+    "windows": [
+      { "id": "auto", "label": "单源镜像" },
+      { "id": "localDisk", "label": "本地物理磁盘" }
+    ],
+    "linux": [
+      { "id": "auto", "label": "单源镜像" },
+      { "id": "linuxEvidenceSet", "label": "Linux 证据集合" }
+    ],
+    "android": [
+      { "id": "auto", "label": "单源镜像" }
+    ]
+  },
+  "localDisks": [
+    { "diskNumber": 0, "path": "\\\\.\\PhysicalDrive0", "size": 512000000000 },
+    { "diskNumber": 1, "path": "\\\\.\\PhysicalDrive1", "size": 1000200000000 }
+  ],
+  "samplePaths": {
+    "windows": "D:/mock-evidence/WIN-FORENSICS-01.E01",
+    "linux": "D:/mock-evidence/pve-cluster",
+    "android": "D:/mock-evidence/pixel8-super.simg"
+  }
+}

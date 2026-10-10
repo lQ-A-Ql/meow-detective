@@ -150,22 +150,35 @@ export function ImportDataSourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="isolate overflow-hidden sm:max-w-md">
+      <DialogContent className="isolate overflow-hidden border-forensics-border bg-white p-0 shadow-[0_18px_60px_rgba(116,22,28,0.16)] sm:max-w-2xl">
         <BrandWatermark
           motif="walking"
-          className="absolute -right-7 top-1 h-24 opacity-[0.045]"
+          className="pointer-events-none absolute -right-7 top-1 h-24 opacity-[0.055]"
         />
-        <DialogHeader>
-          <DialogTitle>{t('importDataSource.title')}</DialogTitle>
-          <DialogDescription>
-            {step === 'platform'
-              ? t('importDataSource.steps.platform')
-              : t('importDataSource.steps.form')}
-          </DialogDescription>
-        </DialogHeader>
+        <div className="border-b border-forensics-border bg-forensics-panel px-6 py-5">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-forensics-text">
+              <span className="flex size-7 items-center justify-center bg-forensics-primary-blue text-[12px] font-semibold text-white">01</span>
+              {t('importDataSource.title')}
+            </DialogTitle>
+            <DialogDescription className="max-w-xl text-[12px] leading-5 text-forensics-muted">
+              {step === 'platform'
+                ? t('importDataSource.steps.platform')
+                : t('importDataSource.steps.form')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-5 flex items-center gap-2" aria-label={t('importDataSource.stepperLabel')}>
+            <span className={`h-1 flex-1 ${step === 'platform' ? 'bg-forensics-primary-blue' : 'bg-forensics-border'}`} />
+            <span className={`h-1 flex-1 ${step === 'form' ? 'bg-forensics-primary-blue' : 'bg-forensics-border'}`} />
+          </div>
+          <div className="mt-2 flex justify-between text-[10px] uppercase tracking-[0.16em] text-forensics-muted-light">
+            <span className={step === 'platform' ? 'text-forensics-primary-blue' : undefined}>{t('importDataSource.stepper.platform')}</span>
+            <span className={step === 'form' ? 'text-forensics-primary-blue' : undefined}>{t('importDataSource.stepper.source')}</span>
+          </div>
+        </div>
 
         {step === 'platform' ? (
-          <div className="py-4 space-y-4">
+          <div className="space-y-5 p-6">
             <ToggleGroup
               type="single"
               value={platform}
@@ -177,58 +190,59 @@ export function ImportDataSourceDialog({
                   setSourceKind('auto');
                 }
               }}
-              className="w-full gap-2"
+              className="grid w-full grid-cols-3 gap-3"
             >
               <ToggleGroupItem
                 value="windows"
                 aria-label="Windows"
-                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
+                className="relative h-24 justify-start overflow-hidden rounded-none border border-forensics-border bg-white px-3 text-left transition-colors hover:border-forensics-primary-blue hover:bg-forensics-sakura-100 data-[state=on]:border-forensics-primary-blue data-[state=on]:bg-forensics-sakura-100"
               >
                 <div className="relative z-10 flex flex-col items-start gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
-                    <Monitor size={20} />
+                  <span className="flex items-center gap-2 text-sm font-semibold text-forensics-text">
+                    <Monitor size={18} className="text-forensics-primary-blue" />
                     Windows
                   </span>
-                  <span className="text-[10px] font-light text-forensics-muted">NTFS / Registry / EVTX</span>
+                  <span className="text-[10px] leading-4 text-forensics-muted">NTFS / Registry / EVTX</span>
                 </div>
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="linux"
                 aria-label="Linux"
-                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
+                className="relative h-24 justify-start overflow-hidden rounded-none border border-forensics-border bg-white px-3 text-left transition-colors hover:border-forensics-primary-blue hover:bg-forensics-sakura-100 data-[state=on]:border-forensics-primary-blue data-[state=on]:bg-forensics-sakura-100"
               >
                 <div className="relative z-10 flex flex-col items-start gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
-                    <Server size={20} />
+                  <span className="flex items-center gap-2 text-sm font-semibold text-forensics-text">
+                    <Server size={18} className="text-forensics-primary-blue" />
                     Linux
                   </span>
-                  <span className="text-[10px] font-light text-forensics-muted">XFS / LVM / systemd</span>
+                  <span className="text-[10px] leading-4 text-forensics-muted">XFS / LVM / systemd</span>
                 </div>
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="android"
                 aria-label="Android"
-                className="relative h-16 flex-1 justify-start overflow-hidden rounded-none border border-forensics-border bg-transparent px-3 text-left transition-colors duration-500 hover:border-forensics-sakura-500 hover:bg-forensics-hover data-[state=on]:border-forensics-sakura-500 data-[state=on]:bg-forensics-highlight"
+                className="relative h-24 justify-start overflow-hidden rounded-none border border-forensics-border bg-white px-3 text-left transition-colors hover:border-forensics-primary-blue hover:bg-forensics-sakura-100 data-[state=on]:border-forensics-primary-blue data-[state=on]:bg-forensics-sakura-100"
               >
                 <div className="relative z-10 flex flex-col items-start gap-0.5">
-                  <span className="flex items-center gap-2 text-sm font-light text-forensics-text">
-                    <Smartphone size={20} />
+                  <span className="flex items-center gap-2 text-sm font-semibold text-forensics-text">
+                    <Smartphone size={18} className="text-forensics-primary-blue" />
                     Android
                   </span>
-                  <span className="text-[10px] font-light text-forensics-muted">Sparse / ext4 / F2FS / EROFS</span>
+                  <span className="text-[10px] leading-4 text-forensics-muted">Sparse / ext4 / F2FS / EROFS</span>
                 </div>
               </ToggleGroupItem>
             </ToggleGroup>
-            <div className="flex justify-end">
-              <Button onClick={goNext} size="sm">
+            <div className="flex items-center justify-between border-t border-forensics-border pt-4">
+              <span className="text-[11px] text-forensics-muted">{t('importDataSource.platformHint')}</span>
+              <Button onClick={goNext} size="sm" variant="forensicsPrimary">
                 {t('importDataSource.buttons.next')}
               </Button>
             </div>
           </div>
         ) : (
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="ds-name">{t('importDataSource.fields.name')}</Label>
+          <div className="space-y-5 p-6">
+            <div className="grid gap-2">
+              <Label htmlFor="ds-name" className="text-[11px] font-semibold uppercase tracking-wider text-forensics-text-secondary">{t('importDataSource.fields.name')}</Label>
               <Input
                 id="ds-name"
                 value={name}
@@ -238,8 +252,8 @@ export function ImportDataSourceDialog({
             </div>
 
             {platform === 'linux' ? (
-              <div className="space-y-2">
-                <Label>{t('importDataSource.fields.mode')}</Label>
+              <div className="grid gap-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-forensics-text-secondary">{t('importDataSource.fields.mode')}</Label>
                 <ToggleGroup
                   type="single"
                   value={sourceKind}
@@ -262,8 +276,8 @@ export function ImportDataSourceDialog({
             ) : null}
 
             {platform === 'windows' ? (
-              <div className="space-y-2">
-                <Label>{t('importDataSource.fields.mode')}</Label>
+              <div className="grid gap-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-forensics-text-secondary">{t('importDataSource.fields.mode')}</Label>
                 <ToggleGroup
                   type="single"
                   value={sourceKind}
@@ -286,8 +300,8 @@ export function ImportDataSourceDialog({
               </div>
             ) : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="ds-path">{t('importDataSource.fields.path')}</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="ds-path" className="text-[11px] font-semibold uppercase tracking-wider text-forensics-text-secondary">{t('importDataSource.fields.path')}</Label>
               {sourceKind === 'localDisk' && disks.length > 0 ? (
                 <Select value={path} onValueChange={setPath} disabled={disksLoading}>
                   <SelectTrigger
@@ -309,7 +323,7 @@ export function ImportDataSourceDialog({
                   </SelectContent>
                 </Select>
               ) : null}
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <Input
                   id="ds-path"
                   value={path}
@@ -323,18 +337,18 @@ export function ImportDataSourceDialog({
                 />
                 {sourceKind !== 'localDisk' ? (
                   <>
-                    <Button variant="outline" size="sm" onClick={pickFile} className="shrink-0 gap-1">
+                    <Button type="button" variant="forensicsOutline" size="sm" onClick={pickFile} className="shrink-0 gap-1">
                       <FolderOpen size={12} />
                       {t('importDataSource.buttons.file')}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={pickDirectory} className="shrink-0 gap-1">
+                    <Button type="button" variant="forensicsOutline" size="sm" onClick={pickDirectory} className="shrink-0 gap-1">
                       <FolderOpen size={12} />
                       {t('importDataSource.buttons.directory')}
                     </Button>
                   </>
                 ) : null}
                 {platform === 'linux' ? (
-                  <Button variant="outline" size="sm" onClick={pickLinuxEvidenceSetDirectory} className="shrink-0 gap-1">
+                  <Button type="button" variant="forensicsOutline" size="sm" onClick={pickLinuxEvidenceSetDirectory} className="shrink-0 gap-1">
                     <FolderOpen size={12} />
                     {t('importDataSource.buttons.clusterDirectory')}
                   </Button>
@@ -345,11 +359,13 @@ export function ImportDataSourceDialog({
               ) : null}
             </div>
 
-            <DialogFooter className="gap-2">
-              <Button variant="outline" size="sm" onClick={goBack}>
+            <DialogFooter className="gap-2 border-t border-forensics-border pt-4">
+              <Button type="button" variant="forensicsGhost" size="sm" onClick={goBack}>
                 {t('importDataSource.buttons.back')}
               </Button>
               <Button
+                type="button"
+                variant="forensicsPrimary"
                 size="sm"
                 onClick={handleImport}
                 disabled={importPending}

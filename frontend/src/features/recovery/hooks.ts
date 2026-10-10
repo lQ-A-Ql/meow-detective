@@ -90,6 +90,12 @@ export function useDeletedRecoveryModel(
   const [hashQuery, setHashQueryState] = useState('');
   const sourceIdRef = useRef(source?.id);
   sourceIdRef.current = source?.id;
+  // A range read that resolves after the investigator selected another recovery (or
+  // another range) must not overwrite the preview with unrelated recovered bytes.
+  const selectedRecoveryIdRef = useRef(selectedRecoveryId);
+  selectedRecoveryIdRef.current = selectedRecoveryId;
+  const selectedRangeOrdinalRef = useRef(selectedRangeOrdinal);
+  selectedRangeOrdinalRef.current = selectedRangeOrdinal;
 
   useEffect(() => {
     setSelectedPartitionIndex(partitions[0]?.index);
@@ -183,8 +189,12 @@ export function useDeletedRecoveryModel(
         verifiedRangeOrdinals: response.verifiedRangeOrdinals,
       };
     },
-    onSuccess: ({ dataSourceId, ...result }) => {
-      if (dataSourceId === sourceIdRef.current) {
+    onSuccess: ({ dataSourceId, ...result }, { recovery, range }) => {
+      if (
+        dataSourceId === sourceIdRef.current &&
+        recovery.id === selectedRecoveryIdRef.current &&
+        range.ordinal === selectedRangeOrdinalRef.current
+      ) {
         setPreview(result satisfies DeletedRecoveryPreviewWindow);
       }
     },

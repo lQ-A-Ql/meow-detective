@@ -9,7 +9,7 @@ export {
 export { EvidenceClassificationPanel, AnalysisReportPanel } from './ClassificationPanel';
 export { FileClassificationBoard } from './FileClassificationBoard';
 export { RegistryExtractionPanel } from './RegistryExtractionPanel';
-export { PluginModulePanel } from './PluginModulePanel';
+export { PluginModulePanel } from '@/features/analysis/containers/PluginModulePanel';
 export { SystemInfoPanel, AnalysisHeader, AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from './SystemInfoPanel';
 export {
   AnalysisExtractionProgress,

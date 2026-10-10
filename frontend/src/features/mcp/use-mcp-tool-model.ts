@@ -1,26 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { JsonSchema, McpTool } from '@/lib/api/mcp-protocol';
-
-export interface McpToolResult { toolName: string; success: boolean; data?: unknown; error?: string }
-
-export function formatMcpArguments(schema: JsonSchema): string { return JSON.stringify(defaultArguments(schema), null, 2); }
-
-function defaultArguments(schema: JsonSchema): unknown {
-  if (schema.type === 'object') {
-    const properties = schema.properties ?? {};
-    const required = new Set(schema.required ?? Object.keys(properties));
-    return Object.fromEntries(Object.entries(properties).filter(([name]) => required.has(name)).map(([name, value]) => [name, defaultArguments(value)]));
-  }
-  if (schema.type === 'array') return [];
-  if (schema.type === 'boolean') return false;
-  if (schema.type === 'number' || schema.type === 'integer') return 0;
-  return '';
-}
-
-export function formatMcpResult(value: unknown): string {
-  if (typeof value === 'string') return value;
-  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
-}
+import type { McpTool } from '@/lib/api/mcp-protocol';
+export { formatMcpArguments, formatMcpResult, type McpToolResult } from './tool-format';
+import { formatMcpArguments } from './tool-format';
+import type { McpToolResult as McpToolResultType } from './tool-format';
 
 export function useMcpToolModel(tools: McpTool[], loading: boolean, onTestTool: (name: string, args: unknown) => Promise<{ success: boolean; data?: unknown; error?: string }>, disabledTools: string[], toolAccess: 'allowAll' | 'disabled' | 'allowList') {
   const [query, setQuery] = useState('');
@@ -28,7 +10,7 @@ export function useMcpToolModel(tools: McpTool[], loading: boolean, onTestTool: 
   const [argumentsText, setArgumentsText] = useState('');
   const [argumentError, setArgumentError] = useState<string>();
   const [testingTool, setTestingTool] = useState<string>();
-  const [testResult, setTestResult] = useState<McpToolResult>();
+  const [testResult, setTestResult] = useState<McpToolResultType>();
   const filteredTools = useMemo(() => { const value = query.trim().toLowerCase(); return value ? tools.filter((tool) => `${tool.name} ${tool.description}`.toLowerCase().includes(value)) : tools; }, [query, tools]);
   const selectedTool = tools.find((tool) => tool.name === selectedToolName) ?? filteredTools[0];
   const isToolDisabled = (name: string) => toolAccess === 'disabled' || disabledTools.some((item) => item.toLowerCase() === name.toLowerCase());

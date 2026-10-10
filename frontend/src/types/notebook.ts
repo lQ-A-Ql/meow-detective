@@ -21,17 +21,13 @@ export interface NotebookEntry {
   updatedAt: string;
 }
 
-export interface NotebookEntryListItem {
-  id: string;
-  parentId?: string;
-  title: string;
-  entryType: NotebookEntryType;
-  status: NotebookEntryStatus;
-  tags: string[];
-  replyCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
+/**
+ * Row shape used by the notebook list/tree. The list command returns full
+ * `NotebookEntryDto` values (not a reduced projection), so this is a view over
+ * NotebookEntry: inventing extra fields here (an earlier revision declared a
+ * `replyCount` the backend never sends) silently desynchronises the IPC contract.
+ */
+export type NotebookEntryListItem = NotebookEntry;
 
 export interface EvidenceCitation {
   id: string;

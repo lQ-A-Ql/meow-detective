@@ -129,11 +129,12 @@ export interface ForensicDataRun {
   lengthFieldSize: number;
   offsetFieldSize: number;
   clusterCount: number;
-  relativeLcn?: number;
-  absoluteLcn?: number;
+  /** Supplied as `null` when the run has no relative LCN (Rust Option without skip_serializing_if). */
+  relativeLcn?: number | null;
+  absoluteLcn?: number | null;
   logicalOffset: number;
   raw: number[];
-  physicalOffset?: number;
+  physicalOffset?: number | null;
 }
 
 export interface NtfsTechnicalAttribute {

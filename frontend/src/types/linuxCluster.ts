@@ -27,7 +27,7 @@ export interface LinuxEvidenceSetListItem {
 
 export interface LinuxEvidenceSetMemberSummary {
   memberIndex: number;
-  dataSourceId?: string;
+  dataSourceId?: string | null;
   sourceName: string;
   sourcePath: string;
   sourceKind: string;
@@ -61,7 +61,7 @@ export interface LinuxTopologyScopeSummary {
 export interface LinuxTopologyMemberSummary {
   dataSourceId: string;
   role: string;
-  memberIndex?: number;
+  memberIndex?: number | null;
   confidence: string;
 }
 
@@ -116,5 +116,5 @@ export interface KubernetesAnalysisRun {
   failedArtifactCount: number;
   diagnostics: string[];
   startedAt: string;
-  finishedAt?: string;
+  finishedAt?: string | null;
 }

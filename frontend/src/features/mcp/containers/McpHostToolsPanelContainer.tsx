@@ -1,4 +1,3 @@
-import '../mcp-motion.css';
 import { useTranslation } from 'react-i18next';
 import { useMcpHostModel } from '../use-mcp-host-model';
 import { useMcpClipboard } from '../use-mcp-clipboard';

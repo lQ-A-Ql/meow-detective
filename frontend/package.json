@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
